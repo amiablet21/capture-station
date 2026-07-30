@@ -1,0 +1,36 @@
+{
+  "name": "capture-station",
+  "version": "0.1.0",
+  "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
+  "main": "src/main/main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "keywords": [],
+  "author": "Digital World Shop",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Capture Station",
+  "build": {
+    "appId": "com.digitalworldshop.capturestation",
+    "productName": "Capture Station",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "dependencies": {
+    "geist": "^1.7.2"
+  }
+}

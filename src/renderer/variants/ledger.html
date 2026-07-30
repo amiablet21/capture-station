@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Variant B — Ledger</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .scanwrap { margin: 0 24px 12px; display: flex; gap: 10px; align-items: center; }
+  .scanwrap .scan-input { flex: 1; }
+  .expect { flex: 0 0 auto; font-size: 12.5px; color: var(--muted); }
+  .expect strong { color: var(--accent-soft-text); }
+
+  .ledger { flex: 1 1 auto; overflow-y: auto; margin: 0 24px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+
+  .l-row {
+    display: grid;
+    grid-template-columns: 5px 56px 1.1fr 1fr 1fr auto;
+    gap: 0 16px;
+    align-items: center;
+    padding: 12px 16px 12px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .l-row:nth-child(even) { background: var(--surface-2); }
+  .l-row:last-child { border-bottom: none; }
+
+  .l-bar { align-self: stretch; border-radius: 0; }
+  .l-bar.ok { background: var(--accent); }
+  .l-bar.wait { background: var(--faint); }
+  .l-bar.fail { background: var(--neg-text); }
+
+  .l-time { font-family: var(--mono); font-size: 12.5px; color: var(--faint); text-align: right; }
+
+  .l-order { min-width: 0; }
+  .l-order .num { font-family: var(--mono); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; display: block; line-height: 1.4; }
+  .l-order .badge { vertical-align: 1px; }
+
+  .l-track { min-width: 0; }
+  .l-label { display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .l-val { font-family: var(--mono); font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .l-val.missing { color: var(--faint); font-family: var(--font); font-size: 12.5px; }
+  .l-val.fail { color: var(--neg-text); font-family: var(--font); font-size: 12px; }
+
+  .serial-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .pill { font-family: var(--mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; }
+  .l-row:nth-child(even) .pill { background: var(--surface); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right">
+      <div class="stat"><span class="stat-num dim">5</span><span class="stat-label">Orders</span></div>
+      <div class="stat"><span class="stat-num">7</span><span class="stat-label">Units today</span></div>
+    </div>
+  </header>
+
+  <div class="scanwrap">
+    <input class="scan-input" placeholder="Scan here" />
+    <span class="expect">Waiting for: <strong>SERIAL 2</strong> · 11912…0391</span>
+  </div>
+
+  <main class="ledger">
+    <div class="l-row">
+      <span class="l-bar wait"></span>
+      <span class="l-time">14:22</span>
+      <div class="l-order"><span class="num">119121297240391</span><span class="badge badge-walmart">Walmart</span></div>
+      <div class="l-track"><span class="l-label">Tracking</span><span class="l-val">UPS 1ZF98W401234567890</span></div>
+      <div><span class="l-label">Serials · 1 of 2</span><div class="serial-pills"><span class="pill">355123450987654</span></div></div>
+      <span class="badge status-pending">Scanning</span>
+    </div>
+    <div class="l-row">
+      <span class="l-bar ok"></span>
+      <span class="l-time">14:10</span>
+      <div class="l-order"><span class="num">02-13457-88190</span><span class="badge badge-ebay">eBay</span></div>
+      <div class="l-track"><span class="l-label">Tracking</span><span class="l-val">USPS 9234890188836109551834</span></div>
+      <div><span class="l-label">Serials</span><div class="serial-pills"><span class="pill">356881120945512</span></div></div>
+      <span class="badge status-captured">Ready</span>
+    </div>
+    <div class="l-row">
+      <span class="l-bar fail"></span>
+      <span class="l-time">13:58</span>
+      <div class="l-order"><span class="num">PO-211-19077242886152</span><span class="badge badge-temu">Temu</span></div>
+      <div class="l-track"><span class="l-label">Tracking</span><span class="l-val missing">no tracking yet</span></div>
+      <div><span class="l-label">Serials</span><span class="l-val missing">none yet</span></div>
+      <span class="badge status-pending">Waiting</span>
+    </div>
+    <div class="l-row">
+      <span class="l-bar ok"></span>
+      <span class="l-time">13:41</span>
+      <div class="l-order"><span class="num">119121297218456</span><span class="badge badge-walmart">Walmart</span></div>
+      <div class="l-track"><span class="l-label">Tracking</span><span class="l-val">UPS 1Z59E67A0311428770</span></div>
+      <div><span class="l-label">Serials · 2</span><div class="serial-pills"><span class="pill">353910442019887</span><span class="pill">353910442019888</span></div></div>
+      <span class="badge status-captured">Ready</span>
+    </div>
+    <div class="l-row">
+      <span class="l-bar ok"></span>
+      <span class="l-time">13:12</span>
+      <div class="l-order"><span class="num">119121297201822</span><span class="badge badge-walmart">Walmart</span></div>
+      <div class="l-track"><span class="l-label">Tracking</span><span class="l-val">FedEx 771234567890</span></div>
+      <div><span class="l-label">Serials</span><div class="serial-pills"><span class="pill">351007743310296</span></div></div>
+      <span class="badge status-captured">Ready</span>
+    </div>
+  </main>
+
+  <footer class="footbar">
+    <button class="btn-secondary">Open CSV folder</button>
+    <span class="sync-status">Saving to capture-2026-07-30.csv</span>
+  </footer>
+</body>
+</html>

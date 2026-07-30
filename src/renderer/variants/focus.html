@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Variant A — Focus</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .scanwrap { margin: 0 24px 12px; }
+
+  /* big current-order panel */
+  .current {
+    margin: 0 24px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--r-card);
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .current-order { font-family: var(--mono); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+  .current-badge { margin-bottom: 6px; }
+  .steps { display: flex; flex-direction: column; gap: 6px; justify-content: center; min-width: 300px; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .step .mono { font-size: 13.5px; }
+  .tick { width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: 0 0 auto; }
+  .tick.done { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .tick.wait { background: var(--surface-2); border: 1px dashed var(--faint); color: var(--faint); }
+  .step.waiting { color: var(--accent-soft-text); font-weight: 600; }
+  .step.dim { color: var(--muted); }
+
+  /* compact history */
+  .history { flex: 1 1 auto; overflow-y: auto; margin: 0 24px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+  .history-head { position: sticky; top: 0; background: var(--surface-2); border-bottom: 1px solid var(--border); padding: 7px 14px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .h-row { display: grid; grid-template-columns: 44px 1fr 1fr auto; gap: 12px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
+  .h-row:last-child { border-bottom: none; }
+  .h-time { color: var(--faint); font-family: var(--mono); }
+  .h-order { font-family: var(--mono); font-weight: 600; }
+  .h-order .badge { margin-right: 6px; }
+  .h-detail { font-family: var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right">
+      <div class="stat"><span class="stat-num dim">5</span><span class="stat-label">Orders</span></div>
+      <div class="stat"><span class="stat-num">7</span><span class="stat-label">Units today</span></div>
+    </div>
+  </header>
+
+  <div class="scanwrap"><input class="scan-input" placeholder="Scan here" /></div>
+
+  <section class="current">
+    <div>
+      <div class="current-badge"><span class="badge badge-walmart">Walmart</span></div>
+      <div class="current-order">119121297240391</div>
+    </div>
+    <div class="steps">
+      <div class="step done"><span class="tick done">✓</span><span>Order captured 14:22</span></div>
+      <div class="step done"><span class="tick done">✓</span><span class="mono">UPS 1ZF98W401234567890</span></div>
+      <div class="step done"><span class="tick done">✓</span><span class="mono">355123450987654</span></div>
+      <div class="step waiting"><span class="tick wait">2</span><span>Waiting for serial 2, or click Next order</span></div>
+    </div>
+  </section>
+
+  <main class="history">
+    <div class="history-head">Earlier today</div>
+    <div class="h-row"><span class="h-time">14:10</span><span class="h-order"><span class="badge badge-ebay">eBay</span>02-13457-88190</span><span class="h-detail">USPS 9234890188836109551834</span><span class="badge status-captured">Ready</span></div>
+    <div class="h-row"><span class="h-time">13:58</span><span class="h-order"><span class="badge badge-temu">Temu</span>PO-211-19077242886152</span><span class="h-detail">no tracking yet</span><span class="badge status-pending">Waiting</span></div>
+    <div class="h-row"><span class="h-time">13:41</span><span class="h-order"><span class="badge badge-walmart">Walmart</span>119121297218456</span><span class="h-detail">UPS 1Z59E67A0311428770 · 2 serials</span><span class="badge status-captured">Ready</span></div>
+    <div class="h-row"><span class="h-time">13:12</span><span class="h-order"><span class="badge badge-walmart">Walmart</span>119121297201822</span><span class="h-detail">FedEx 771234567890 · 351007743310296</span><span class="badge status-captured">Ready</span></div>
+  </main>
+
+  <footer class="footbar">
+    <button class="btn-secondary">Open CSV folder</button>
+    <span class="sync-status">Saving to capture-2026-07-30.csv</span>
+  </footer>
+</body>
+</html>

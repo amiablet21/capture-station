@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Variant C — Cards</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .scanwrap { margin: 0 24px 12px; }
+
+  .grid {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    margin: 0 24px 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 12px 14px;
+  }
+  .card.is-current { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .card-time { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  .card-order { font-family: var(--mono); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .kv { display: grid; grid-template-columns: 62px 1fr; gap: 2px 10px; font-size: 12.5px; }
+  .kv dt { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); line-height: 2; }
+  .kv dd { font-family: var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 2; }
+  .kv dd.missing { color: var(--faint); font-family: var(--font); }
+  .kv dd .pill { display: inline-block; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; margin: 1px 3px 1px 0; font-size: 12px; }
+
+  .card-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right">
+      <div class="stat"><span class="stat-num dim">5</span><span class="stat-label">Orders</span></div>
+      <div class="stat"><span class="stat-num">7</span><span class="stat-label">Units today</span></div>
+    </div>
+  </header>
+
+  <div class="scanwrap"><input class="scan-input" placeholder="Scan here" /></div>
+
+  <main class="grid">
+    <div class="card is-current">
+      <div class="card-head"><span class="badge badge-walmart">Walmart</span><span class="card-time">14:22</span></div>
+      <div class="card-order">119121297240391</div>
+      <dl class="kv">
+        <dt>Tracking</dt><dd>UPS 1ZF98W401234567890</dd>
+        <dt>Serials</dt><dd><span class="pill">355123450987654</span></dd>
+      </dl>
+      <div class="card-foot"><span class="badge status-pending">Scanning serial 2</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="badge badge-ebay">eBay</span><span class="card-time">14:10</span></div>
+      <div class="card-order">02-13457-88190</div>
+      <dl class="kv">
+        <dt>Tracking</dt><dd>USPS 9234890188836109551834</dd>
+        <dt>Serials</dt><dd><span class="pill">356881120945512</span></dd>
+      </dl>
+      <div class="card-foot"><span class="badge status-captured">Ready</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="badge badge-temu">Temu</span><span class="card-time">13:58</span></div>
+      <div class="card-order">PO-211-19077242886152</div>
+      <dl class="kv">
+        <dt>Tracking</dt><dd class="missing">no tracking yet</dd>
+        <dt>Serials</dt><dd class="missing">none yet</dd>
+      </dl>
+      <div class="card-foot"><span class="badge status-pending">Waiting</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="badge badge-walmart">Walmart</span><span class="card-time">13:41</span></div>
+      <div class="card-order">119121297218456</div>
+      <dl class="kv">
+        <dt>Tracking</dt><dd>UPS 1Z59E67A0311428770</dd>
+        <dt>Serials</dt><dd><span class="pill">353910442019887</span><span class="pill">353910442019888</span></dd>
+      </dl>
+      <div class="card-foot"><span class="badge status-captured">Ready</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="badge badge-walmart">Walmart</span><span class="card-time">13:12</span></div>
+      <div class="card-order">119121297201822</div>
+      <dl class="kv">
+        <dt>Tracking</dt><dd>FedEx 771234567890</dd>
+        <dt>Serials</dt><dd><span class="pill">351007743310296</span></dd>
+      </dl>
+      <div class="card-foot"><span class="badge status-captured">Ready</span></div>
+    </div>
+  </main>
+
+  <footer class="footbar">
+    <button class="btn-secondary">Open CSV folder</button>
+    <span class="sync-status">Saving to capture-2026-07-30.csv</span>
+  </footer>
+</body>
+</html>
