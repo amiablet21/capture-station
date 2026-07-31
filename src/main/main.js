@@ -114,7 +114,11 @@ function writeWfsCsv() {
 
 // GetOpenOrders pages through the whole order book, so clicking several SKUs
 // in a row reuses one fetch for a minute instead of re-paging every time.
+// The fetch covers EVERY stock location (stock routing parks orders at the
+// dropship location, and the grid's "In orders" number spans all locations),
+// deduped by orderId and tagged with the location they sit at.
 const OPEN_ORDERS_TTL_MS = 60 * 1000;
+const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 let openOrdersCache = { at: 0, data: null, promise: null };
 
 async function getOpenOrdersCached(cfg) {
@@ -125,7 +129,20 @@ async function getOpenOrdersCached(cfg) {
   openOrdersCache.promise = (async () => {
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      const data = await client.listOpenOrders(cfg.linnworks.locationId);
+      let locations = [];
+      try { locations = await client.getLocations(); } catch { /* fall back to Default only */ }
+      // real locations first (their names win the dedupe), zero-GUID Default last
+      const targets = [...locations, { id: ZERO_GUID, name: 'Default' }];
+      const byOrderId = new Map();
+      for (const loc of targets) {
+        const orders = await client.listOpenOrders(loc.id);
+        for (const o of orders) {
+          if (!byOrderId.has(o.orderId)) {
+            byOrderId.set(o.orderId, { ...o, locationId: loc.id, locationName: loc.name });
+          }
+        }
+      }
+      const data = [...byOrderId.values()];
       openOrdersCache = { at: Date.now(), data, promise: null };
       return data;
     } catch (e) {
@@ -134,6 +151,82 @@ async function getOpenOrdersCached(cfg) {
     }
   })();
   return openOrdersCache.promise;
+}
+
+/* ---------- product image add (download in-app: progress, cancel) ---------- */
+
+let imgAbort = null; // AbortController for the in-flight image download
+
+function sendImgProgress(p) {
+  if (win && !win.isDestroyed()) win.webContents.send('image:progress', p);
+}
+
+// Magic-byte sniff so a 200 OK that is actually an HTML page never gets
+// attached to a stock item as its "image".
+function imageKind(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  if (buf.slice(0, 4).toString('latin1') === 'GIF8') return 'gif';
+  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  return null;
+}
+
+// Download an image URL ourselves (instead of letting Linnworks fetch it):
+// gives real progress, a cancel button, size/type validation, and keeps the
+// raw URL out of the UI. Uploads via the verified Uploader flow afterwards.
+async function addImageFromUrl(cfg, { sku, stockItemId, url }) {
+  let domain = '';
+  try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch { /* fetch will reject it */ }
+  imgAbort = new AbortController();
+  const userSignal = imgAbort.signal;
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      headers: { Accept: 'image/*,*/*;q=0.8' },
+      signal: AbortSignal.any([userSignal, AbortSignal.timeout(30000)]),
+    });
+    if (!res.ok) return { ok: false, error: `Download failed (HTTP ${res.status})` };
+    const total = Number(res.headers.get('content-length')) || 0;
+    const ctype = String(res.headers.get('content-type') || '').toLowerCase();
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    let lastTick = 0;
+    sendImgProgress({ phase: 'downloading', source: domain, received: 0, total });
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(Buffer.from(value));
+      received += value.length;
+      if (received > 8 * 1024 * 1024) {
+        imgAbort.abort();
+        return { ok: false, error: 'Image is larger than 8 MB - use a smaller one.' };
+      }
+      const now = Date.now();
+      if (now - lastTick > 120) {
+        lastTick = now;
+        sendImgProgress({ phase: 'downloading', source: domain, received, total });
+      }
+    }
+    const buf = Buffer.concat(chunks);
+    const kind = imageKind(buf) || (ctype.startsWith('image/') ? ctype.split(';')[0].slice(6) : null);
+    if (!kind) return { ok: false, error: 'That link is not an image.' };
+    sendImgProgress({ phase: 'uploading', source: domain, received: buf.length, total: buf.length });
+    const client = new LinnworksClient(cfg.linnworks);
+    const ext = kind === 'jpeg' ? 'jpg' : kind;
+    const mime = `image/${kind}`;
+    await client.addItemImage(stockItemId, buf, `${sku || 'item'}.${ext}`, mime);
+    return { ok: true, bytes: buf.length, domain, dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
+  } catch (e) {
+    if (userSignal.aborted) return { ok: false, canceled: true };
+    if (e.name === 'TimeoutError' || (e.cause && e.cause.name === 'TimeoutError')) {
+      return { ok: false, error: 'Download timed out after 30s.' };
+    }
+    return { ok: false, error: e.message };
+  } finally {
+    imgAbort = null;
+  }
 }
 
 /* ---------- receiving sessions ---------- */
@@ -561,57 +654,77 @@ function registerIpc() {
       const hits = [];
       for (const o of orders) {
         for (const line of o.items) {
-          if ((line.sku || '').toLowerCase() === wanted) {
-            hits.push({
-              source: o.source,
-              reference: o.reference,
-              channelSku: line.channelSku,
-              quantity: line.quantity,
-              date: o.receivedDate,
-            });
+          if (line.isService) continue; // service lines never reserve stock
+          const base = {
+            source: o.source,
+            reference: o.reference,
+            date: o.receivedDate,
+            locationId: o.locationId || '',
+            locationName: o.locationName || '',
+          };
+          // channel-SKU-mapped AND unlinked lines count: the grid's InOrders does
+          if ((line.sku || '').toLowerCase() === wanted || (line.channelSku || '').toLowerCase() === wanted) {
+            hits.push({ ...base, channelSku: line.channelSku, quantity: line.quantity });
+            continue;
+          }
+          // composite/bundle children: the SKU reserves stock via the parent line
+          for (const child of line.children || []) {
+            if ((child.sku || '').toLowerCase() === wanted || (child.channelSku || '').toLowerCase() === wanted) {
+              hits.push({ ...base, channelSku: child.channelSku, quantity: child.quantity, via: line.sku });
+            }
           }
         }
       }
       hits.sort((a, b) => String(b.date).localeCompare(String(a.date))); // newest first
-      return { ok: true, sku, orders: hits };
+      return {
+        ok: true,
+        sku,
+        orders: hits,
+        primaryLocationId: cfg.linnworks.locationId || '',
+      };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('stock:addImage', async (_e, { sku, stockItemId }) => {
+  // filePath set = drag-and-drop onto the stage; unset = OS file picker
+  ipcMain.handle('stock:addImage', async (_e, { sku, stockItemId, filePath }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: `Choose an image for ${sku}`,
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
-      properties: ['openFile'],
-    });
-    if (canceled || !filePaths[0]) return { ok: false, canceled: true };
+    let fp = filePath ? String(filePath) : '';
+    if (!fp) {
+      const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        title: `Choose an image for ${sku}`,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+        properties: ['openFile'],
+      });
+      if (canceled || !filePaths[0]) return { ok: false, canceled: true };
+      fp = filePaths[0];
+    }
     try {
-      const fp = filePaths[0];
       const buf = fs.readFileSync(fp);
       if (buf.length > 8 * 1024 * 1024) return { ok: false, error: 'Image is larger than 8 MB - use a smaller file.' };
-      const ext = path.extname(fp).toLowerCase().replace('.', '');
-      const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext || 'png'}`;
+      const kind = imageKind(buf);
+      if (!kind) return { ok: false, error: 'That file is not an image.' };
+      const mime = `image/${kind}`;
+      sendImgProgress({ phase: 'uploading', source: path.basename(fp), received: buf.length, total: buf.length });
       const client = new LinnworksClient(cfg.linnworks);
       await client.addItemImage(stockItemId, buf, path.basename(fp), mime);
-      return { ok: true };
+      return { ok: true, bytes: buf.length, dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('stock:addImageUrl', async (_e, { sku, stockItemId, url }) => {
+  ipcMain.handle('stock:addImageUrl', (_e, { sku, stockItemId, url }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'Paste a full image URL starting with http(s)://' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      await client.addItemImageByUrl(sku, stockItemId, String(url));
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    return addImageFromUrl(cfg, { sku, stockItemId, url: String(url) });
+  });
+  ipcMain.handle('stock:cancelImage', () => {
+    if (imgAbort) imgAbort.abort();
+    return { ok: true };
   });
   ipcMain.handle('stock:saveImage', async (_e, { sku, url }) => {
     if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'This SKU has no image yet.' };

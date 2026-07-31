@@ -46,6 +46,7 @@ if (!window.api) {
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
+    cancelStockImage: async () => ({ ok: true }),
     saveStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
@@ -915,7 +916,9 @@ function ioDate(iso) {
 }
 
 // Renders the dialog body; also called directly by the e2e screenshot seed.
-function ioRender(sku, orders) {
+// Orders sitting away from the primary warehouse (e.g. routed to DropShip)
+// get a muted location pill so the count's spread is visible at a glance.
+function ioRender(sku, orders, primaryLocationId) {
   $('ioTitle').textContent = `Open orders — ${sku}`;
   if (!orders.length) {
     $('ioBody').innerHTML = `
@@ -942,13 +945,15 @@ function ioRender(sku, orders) {
         <tbody>${orders.map((o, idx) => `
           <tr>
             <td class="cell-gutter">${idx + 1}</td>
-            <td>${ioChannelCell(o.source)}</td>
+            <td>${ioChannelCell(o.source)}${o.locationName && primaryLocationId && o.locationId !== primaryLocationId
+              ? `<span class="io-loc" title="Order is at ${esc(o.locationName)}, not the primary warehouse">${esc(o.locationName)}</span>` : ''}</td>
             <td class="mono">${o.reference
               ? `<span class="copyable" data-copy="${esc(o.reference)}" title="Click to copy ${esc(o.reference)}">${esc(o.reference)}</span>`
               : '<span class="cell-missing">—</span>'}</td>
             <td class="mono">${o.channelSku
               ? `<span class="copyable" data-copy="${esc(o.channelSku)}" title="Click to copy ${esc(o.channelSku)}">${esc(o.channelSku)}</span>`
-              : '<span class="cell-missing">—</span>'}</td>
+              : '<span class="cell-missing">—</span>'}${o.via
+              ? `<span class="io-via" title="This SKU is inside the bundle ${esc(o.via)} on this order">via ${esc(o.via)}</span>` : ''}</td>
             <td class="num-cell">${o.quantity || 0}</td>
             <td class="mono io-date">${esc(ioDate(o.date))}</td>
           </tr>`).join('')}</tbody>
@@ -966,7 +971,7 @@ async function openOpenOrders(sku) {
     $('ioBody').innerHTML = `<p class="dlg-note test-result is-fail">${esc(res.error || 'Could not load open orders.')}</p>`;
     return;
   }
-  ioRender(sku, res.orders || []);
+  ioRender(sku, res.orders || [], res.primaryLocationId || '');
 }
 
 $('ioBody').addEventListener('click', (e) => {
@@ -977,57 +982,223 @@ $('ioBody').addEventListener('click', (e) => {
 $('ioClose').addEventListener('click', () => $('ioDialog').close());
 $('ioDialog').addEventListener('close', () => focusScan());
 
-/* ---------- image chooser ---------- */
+/* ---------- product image dialog (idle / loading / success / error) ---------- */
 
-let imgTarget = null; // { sku, sid, url }
+let imgTarget = null; // { sku, sid, url (grid image), title, preview (fresh data URL) }
+let imgState = 'idle'; // idle | loading | success | error
+let imgLastTry = null; // { kind: 'url'|'file', url? } - what Retry re-runs
+
+function fmtBytes(bytes) {
+  if (!bytes) return '';
+  const kb = bytes / 1024;
+  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(kb))} KB`;
+}
+
+// idle/loading swap the whole control row state in one place;
+// the stage doubles as the file entry point, disabled while in flight
+function imgControls(enabled) {
+  $('imgUrl').disabled = !enabled;
+  $('imgUrlAdd').disabled = !enabled;
+  $('imgUrlAdd').textContent = enabled ? 'Add' : 'Adding…';
+  $('imgDownload').disabled = !enabled;
+  $('imgClose').textContent = enabled ? 'Close' : 'Cancel';
+  $('imgStage').classList.toggle('is-clickable', enabled);
+  $('imgStage').title = enabled ? 'Click to upload an image' : '';
+}
+
+function imgHint(msg, fail = false) {
+  const el = $('imgFootHint');
+  el.textContent = msg;
+  el.style.color = fail ? 'var(--neg-text)' : '';
+}
+
+function imgStageIdle() {
+  imgState = 'idle';
+  imgControls(true);
+  imgHint('The image saves to this SKU as soon as it is added.');
+  const src = (imgTarget && (imgTarget.preview || imgTarget.url)) || '';
+  $('imgStage').innerHTML = src
+    ? `<img class="img-stage-img" src="${esc(src)}" alt="" />`
+    : `<div class="img-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,24V158.75l-26.07-26.06a20,20,0,0,0-28.28,0L139.31,151,97.66,109.34a20.05,20.05,0,0,0-28.32,0L44,134.69V60ZM44,168.63l39.51-39.52L166.75,212H44Zm168,43.24-55.72-55.73L171.63,140,212,180.36v31.51ZM148,84a16,16,0,1,1,16,16A16,16,0,0,1,148,84Z"/></svg>
+        <div>Click to upload, or drag an image here</div>
+      </div>`;
+}
+
+// The raw URL never shows while in flight: the input is cleared and disabled,
+// the stage line carries the source DOMAIN only (plus size when known).
+function imgStageLoading(label, source) {
+  imgState = 'loading';
+  imgControls(false);
+  imgHint('The image saves to this SKU when the download finishes.');
+  $('imgUrl').value = '';
+  $('imgStage').innerHTML = `
+    <div class="img-shimmer"></div>
+    <div class="img-load">
+      <div class="img-spinner"></div>
+      <b>${esc(label)}</b>
+      <div class="img-bar is-indet"><i></i></div>
+      <span class="img-src">${esc(source || '')}</span>
+    </div>`;
+}
+
+function imgProgressUpdate(p) {
+  if (imgState !== 'loading') return;
+  const stage = $('imgStage');
+  const label = stage.querySelector('.img-load b');
+  const bar = stage.querySelector('.img-bar');
+  const src = stage.querySelector('.img-src');
+  if (label) label.textContent = p.phase === 'uploading' ? 'Saving to Linnworks…' : 'Downloading image…';
+  if (bar) {
+    if (p.total > 0) {
+      bar.classList.remove('is-indet');
+      bar.querySelector('i').style.width = `${Math.min(100, Math.round((p.received / p.total) * 100))}%`;
+    } else {
+      bar.classList.add('is-indet');
+    }
+  }
+  if (src) src.textContent = [p.source, fmtBytes(p.received)].filter(Boolean).join(' · ');
+}
+
+function imgStageError(message) {
+  imgState = 'error';
+  imgControls(true);
+  imgHint('The image saves to this SKU as soon as it is added.');
+  if (imgLastTry && imgLastTry.kind === 'url') $('imgUrl').value = imgLastTry.url; // URL row re-enabled
+  $('imgStage').innerHTML = `
+    <div class="img-err">
+      <b>${esc(message)}</b>
+      <button id="imgRetry" class="btn btn-secondary">Retry</button>
+    </div>`;
+}
+
+function imgStageSuccess(previewUrl) {
+  imgState = 'success';
+  imgControls(true);
+  imgHint('The image saves to this SKU as soon as it is added.');
+  $('imgUrl').value = '';
+  if (previewUrl) imgTarget.preview = previewUrl;
+  const src = imgTarget.preview || imgTarget.url || '';
+  $('imgStage').innerHTML = `
+    ${src ? `<img class="img-stage-img" src="${esc(src)}" alt="" />` : ''}
+    <span class="img-ok">Image added to ${esc(imgTarget.sku)}</span>`;
+}
 
 function openImgDialog(sku, sid, url) {
-  imgTarget = { sku, sid, url: url || '' };
-  $('imgTitle').textContent = `Image for ${sku}`;
+  const item = stockCache && stockCache.items.find(i => i.sku === sku);
+  imgTarget = { sku, sid, url: url || '', title: item ? item.title : '', preview: '' };
+  imgLastTry = null;
+  $('imgSub').textContent = imgTarget.title ? `${sku} · ${imgTarget.title}` : sku;
   $('imgDownload').hidden = !url;
   $('imgUrl').value = '';
-  $('imgResult').hidden = true;
+  imgStageIdle();
   $('imgDialog').showModal();
 }
 
-function imgFeedback(msg, ok) {
-  const el = $('imgResult');
-  el.textContent = msg;
-  el.hidden = false;
-  el.style.color = ok ? '' : 'var(--neg-text)';
+async function imgRunUrl(url) {
+  imgLastTry = { kind: 'url', url };
+  let domain = '';
+  try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch { /* main validates too */ }
+  imgStageLoading('Downloading image…', domain);
+  const res = await api.addStockImageUrl(imgTarget.sku, imgTarget.sid, url);
+  if (!$('imgDialog').open || imgState !== 'loading') return;
+  if (res.canceled) { imgStageIdle(); $('imgUrl').value = url; return; }
+  if (!res.ok) { imgStageError(res.error || 'Could not add the image.'); return; }
+  imgStageSuccess(res.dataUrl || '');
+  toast(`Image added to ${imgTarget.sku}`);
+  loadStock(); // refresh the grid thumbnail
 }
 
-$('imgFromFile').addEventListener('click', async () => {
-  if (!imgTarget) return;
-  const res = await api.addStockImage(imgTarget.sku, imgTarget.sid);
-  if (res.canceled) return;
-  if (!res.ok) { imgFeedback(res.error || 'Upload failed.', false); return; }
+// shared completion for the file/drop paths
+function imgFinishFile(res) {
+  if (!$('imgDialog').open || imgState !== 'loading') return;
+  if (res.canceled) { imgStageIdle(); return; }
+  if (!res.ok) { imgStageError(res.error || 'Upload failed.'); return; }
+  imgStageSuccess(res.dataUrl || '');
   toast(`Image added to ${imgTarget.sku}`);
-  $('imgDialog').close();
   loadStock();
-});
+}
 
-$('imgUrlAdd').addEventListener('click', async () => {
+async function imgRunFile() {
+  imgLastTry = { kind: 'file' };
+  imgStageLoading('Adding image…', '');
+  imgFinishFile(await api.addStockImage(imgTarget.sku, imgTarget.sid));
+}
+
+async function imgRunDrop(filePath) {
+  imgLastTry = { kind: 'drop', path: filePath };
+  imgStageLoading('Adding image…', filePath.split(/[\\/]/).pop());
+  imgFinishFile(await api.addStockImageFile(imgTarget.sku, imgTarget.sid, filePath));
+}
+
+api.on('image:progress', imgProgressUpdate);
+
+$('imgUrlAdd').addEventListener('click', () => {
   if (!imgTarget) return;
   const url = $('imgUrl').value.trim();
-  if (!url) { imgFeedback('Paste an image URL first.', false); return; }
-  imgFeedback('Adding…', true);
-  const res = await api.addStockImageUrl(imgTarget.sku, imgTarget.sid, url);
-  if (!res.ok) { imgFeedback(res.error || 'Failed.', false); return; }
-  toast(`Image added to ${imgTarget.sku}`);
-  $('imgDialog').close();
-  loadStock();
+  if (!/^https?:\/\//i.test(url)) {
+    imgHint('Paste a full image URL starting with http(s)://', true);
+    $('imgUrl').focus();
+    return;
+  }
+  imgRunUrl(url);
+});
+
+$('imgUrl').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('imgUrlAdd').click(); }
+});
+
+// the stage is the file entry point: click to pick (Retry keeps priority),
+// or drop an image file straight onto it. Both disabled while in flight.
+$('imgStage').addEventListener('click', (e) => {
+  if (imgState === 'loading' || !imgTarget) return;
+  if (e.target.closest('#imgRetry') && imgLastTry) {
+    if (imgLastTry.kind === 'url') imgRunUrl(imgLastTry.url);
+    else if (imgLastTry.kind === 'drop') imgRunDrop(imgLastTry.path);
+    else imgRunFile();
+    return;
+  }
+  imgRunFile();
+});
+
+$('imgStage').addEventListener('dragover', (e) => {
+  if (imgState === 'loading') return;
+  e.preventDefault();
+  $('imgStage').classList.add('is-drag');
+});
+
+$('imgStage').addEventListener('dragleave', () => $('imgStage').classList.remove('is-drag'));
+
+$('imgStage').addEventListener('drop', (e) => {
+  e.preventDefault();
+  $('imgStage').classList.remove('is-drag');
+  if (imgState === 'loading' || !imgTarget) return;
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  let filePath = '';
+  try { filePath = api.getDroppedFilePath(file) || ''; } catch { /* not a real file */ }
+  if (!filePath) { imgHint('Drag an image file from your computer (browser images: use the URL box).', true); return; }
+  imgRunDrop(filePath);
 });
 
 $('imgDownload').addEventListener('click', async () => {
   if (!imgTarget || !imgTarget.url) return;
   const res = await api.saveStockImage(imgTarget.sku, imgTarget.url);
   if (res.canceled) return;
-  if (!res.ok) { imgFeedback(res.error || 'Download failed.', false); return; }
+  if (!res.ok) { imgHint(res.error || 'Download failed.', true); return; }
   toast(`Saved ${res.path.split(/[\\/]/).pop()}`);
 });
 
-$('imgClose').addEventListener('click', () => $('imgDialog').close());
+$('imgClose').addEventListener('click', () => {
+  if (imgState === 'loading') { api.cancelStockImage(); return; } // Cancel aborts, stays open
+  $('imgDialog').close();
+});
+
+// Esc / programmatic close while a download runs still aborts it
+$('imgDialog').addEventListener('close', () => {
+  if (imgState === 'loading') api.cancelStockImage();
+  focusScan();
+});
 
 /* ---------- WFS shipments ---------- */
 

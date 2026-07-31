@@ -32,20 +32,25 @@ async function runRouting() {
       return avail.get(id);
     };
 
+    // Routing decisions only make sense for lines linked to a real stock item;
+    // service and unlinked lines have no usable stock item id.
+    const routable = (o) => o.items.filter(it => !it.isService && !it.unlinked);
+
     // 1) primary orders the stock cannot cover -> fallback. Newest first, so
     // the orders that pushed availability negative are the ones that leave.
     const toFallback = [];
     const primaryOrders = await client.listOpenOrders(primary);
     primaryOrders.sort((a, b) => b.numOrderId - a.numOrderId);
     for (const o of primaryOrders) {
-      if (!o.items.length) continue;
+      const items = routable(o);
+      if (!items.length) continue;
       let short = false;
-      for (const it of o.items) {
+      for (const it of items) {
         if ((await availAt(it.stockItemId)) < 0) { short = true; break; }
       }
       if (short) {
         toFallback.push(o);
-        for (const it of o.items) {
+        for (const it of items) {
           avail.set(it.stockItemId, (await availAt(it.stockItemId)) + it.quantity);
         }
       }
@@ -57,14 +62,15 @@ async function runRouting() {
     const fallbackOrders = await client.listOpenOrders(r.fallbackLocationId);
     fallbackOrders.sort((a, b) => a.numOrderId - b.numOrderId);
     for (const o of fallbackOrders) {
-      if (!o.items.length) continue;
+      const items = routable(o);
+      if (!items.length) continue;
       let fits = true;
-      for (const it of o.items) {
+      for (const it of items) {
         if ((await availAt(it.stockItemId)) < it.quantity) { fits = false; break; }
       }
       if (fits) {
         toPrimary.push(o);
-        for (const it of o.items) {
+        for (const it of items) {
           avail.set(it.stockItemId, avail.get(it.stockItemId) - it.quantity);
         }
       }

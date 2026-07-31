@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Image dialog A</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { align-items: center; justify-content: center; }
+  .dlg { width: 480px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 48px rgba(47,52,55,0.12); margin: 40px auto; }
+  .body { padding: 20px; }
+  .t { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+  .sku { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+  .drop { border: 1.5px dashed var(--border); border-radius: var(--r-card); background: var(--surface-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 190px; text-align: center; }
+  .drop .ph { width: 64px; height: 64px; border-radius: 8px; background: linear-gradient(135deg,#E1F3FE,#E3F2EB); }
+  .drop b { font-size: 13.5px; }
+  .drop span { font-size: 12.5px; color: var(--muted); }
+  .drop a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .urlrow { display: flex; gap: 8px; margin-top: 12px; }
+  .urlrow input { flex: 1; font-size: 13px; font-family: var(--mono); padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); }
+  .urlrow button { font-size: 13px; font-weight: 500; padding: 8px 16px; border: none; border-radius: var(--r-ctl); background: var(--accent); color: #fff; }
+  .hint { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+  .foot { display: flex; justify-content: flex-end; padding: 12px 20px; background: var(--surface-2); border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+  .ghost { font-size: 13px; font-weight: 500; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: transparent; color: var(--muted); }
+</style></head>
+<body>
+  <div class="dlg">
+    <div class="body">
+      <div class="t">Product image</div>
+      <div class="sku">X230-256GB-GRAY · Galaxy X230 256GB Gray</div>
+      <div class="drop">
+        <div class="ph"></div>
+        <b>Drop an image here</b>
+        <span><a href="#">Browse files</a> · JPG or PNG</span>
+      </div>
+      <div class="urlrow">
+        <input placeholder="https:// paste an image link from any listing" />
+        <button>Add</button>
+      </div>
+      <div class="hint">Tip: right-click the photo on your Walmart or eBay listing and choose "Copy image address".</div>
+    </div>
+    <div class="foot"><button class="ghost">Close</button></div>
+  </div>
+</body>
+</html>

@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const EVENTS = [
   'state:changed',
@@ -10,6 +10,7 @@ const EVENTS = [
   'tracking:detected',
   'tracking:clipped',
   'sync:progress',
+  'image:progress',
   'sync:done',
   'routing:done',
   'ui:open-settings',
@@ -40,6 +41,10 @@ contextBridge.exposeInMainWorld('api', {
   setStockLevel: (sku, level) => ipcRenderer.invoke('stock:set', { sku, level }),
   addStockImage: (sku, stockItemId) => ipcRenderer.invoke('stock:addImage', { sku, stockItemId }),
   addStockImageUrl: (sku, stockItemId, url) => ipcRenderer.invoke('stock:addImageUrl', { sku, stockItemId, url }),
+  cancelStockImage: () => ipcRenderer.invoke('stock:cancelImage'),
+  addStockImageFile: (sku, stockItemId, filePath) => ipcRenderer.invoke('stock:addImage', { sku, stockItemId, filePath }),
+  // dropped File -> real path (File.path is gone in modern Electron)
+  getDroppedFilePath: (file) => webUtils.getPathForFile(file),
   saveStockImage: (sku, url) => ipcRenderer.invoke('stock:saveImage', { sku, url }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),

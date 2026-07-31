@@ -351,22 +351,21 @@
     </div>
   </dialog>
 
-  <!-- Image chooser for a SKU -->
+  <!-- Product image dialog for a SKU (variants/img-dlg-b-loading.html) -->
   <dialog id="imgDialog" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title" id="imgTitle">Image</h2>
-      <div class="settings-row">
-        <button id="imgFromFile" class="btn btn-secondary">Add from file…</button>
-        <button id="imgDownload" class="btn btn-ghost">Download current image</button>
+      <h2 class="dlg-title">Product image</h2>
+      <div class="img-sub mono" id="imgSub"></div>
+      <div class="img-stage" id="imgStage" title="Click to upload an image"></div>
+      <button id="imgDownload" class="img-save-link" hidden>Save current image…</button>
+      <div class="img-urlrow">
+        <input id="imgUrl" type="text" class="input mono" placeholder="Paste an image URL (from any listing)"
+               autocomplete="off" spellcheck="false" aria-label="Image URL" />
+        <button id="imgUrlAdd" class="btn btn-secondary">Add</button>
       </div>
-      <label class="field">
-        <span class="field-label">Or paste an image URL (from any listing)</span>
-        <input id="imgUrl" type="text" class="input mono" placeholder="https://…" autocomplete="off" spellcheck="false" />
-      </label>
-      <p class="dlg-note" id="imgResult" hidden></p>
-      <div class="dlg-actions">
+      <div class="dlg-actions img-foot">
+        <small id="imgFootHint">The image saves to this SKU when the download finishes.</small>
         <button id="imgClose" class="btn btn-ghost">Close</button>
-        <button id="imgUrlAdd" class="btn btn-primary">Add from URL</button>
       </div>
     </div>
   </dialog>

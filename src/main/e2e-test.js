@@ -228,6 +228,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
       svm);
     check('invalid view regex filters nothing', svm[4] === true, svm[4]);
 
+    // 22. product image handlers: capture-only refusal + cancel safe when idle
+    res = await exec(`api.addStockImageUrl('S25-128GB-NAVY', 'sid', 'https://example.com/x.jpg')`);
+    check('stock:addImageUrl refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec('api.cancelStockImage()');
+    check('stock:cancelImage safe with nothing in flight', res && res.ok === true, res);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);
@@ -263,6 +269,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { source: 'WALMART', reference: '119121297240391', channelSku: 'WM-S25-NVY-128', quantity: 1, date: '2026-07-31T14:12:00Z' },
         { source: 'EBAY', reference: '02-13457-88190', channelSku: 'EB-S25NAVY', quantity: 2, date: '2026-07-31T11:03:00Z' },
         { source: 'TEMU', reference: 'PO-211-19077242886152', channelSku: '', quantity: 1, date: '2026-07-30T22:41:00Z' },
+        { source: 'WALMART', reference: '119121299660484', channelSku: '', quantity: 2, date: '2026-07-30T15:20:00Z', via: 'S25-NAVY-2PACK' },
         { source: 'DIRECT', reference: 'DW-10422', channelSku: 'S25-128GB-NAVY', quantity: 3, date: '2026-07-30T09:15:00Z' },
       ])}); $('ioDialog').showModal();`);
       await sleep(400);
@@ -290,6 +297,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const stockShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-stock.png');
       fs.writeFileSync(stockShot, img.toPNG());
       console.log(`SHOT ${stockShot}`);
+      // product image dialog: idle (no image yet) and loading states
+      await exec(`openImgDialog('S25-128GB-NAVY', 'sid-1', '')`);
+      await sleep(300);
+      img = await win.webContents.capturePage();
+      const imgIdleShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-image-idle.png');
+      fs.writeFileSync(imgIdleShot, img.toPNG());
+      console.log(`SHOT ${imgIdleShot}`);
+      await exec(`imgStageLoading('Downloading image…', 'walmartimages.com');
+        imgProgressUpdate({ phase: 'downloading', source: 'walmartimages.com', received: 421888, total: 678912 });`);
+      await sleep(300);
+      img = await win.webContents.capturePage();
+      const imgLoadShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-image-loading.png');
+      fs.writeFileSync(imgLoadShot, img.toPNG());
+      console.log(`SHOT ${imgLoadShot}`);
+      await exec(`imgState = 'idle'; $('imgDialog').close();`);
     }
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);

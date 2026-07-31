@@ -204,13 +204,28 @@ class LinnworksClient {
           reference: o.GeneralInfo ? o.GeneralInfo.ReferenceNum : '',
           source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
-          items: (o.Items || []).filter(it => !it.IsService && !it.IsUnlinked).map(it => ({
+          // ALL lines are returned, flagged: unlinked lines still reserve stock
+          // (they carry a SKU and count in InOrders), so the Stock page's
+          // per-SKU order list must see them. Consumers that need a live stock
+          // item (the router) filter on the flags themselves.
+          items: (o.Items || []).map(it => ({
             // for open-order items the stock item GUID is ItemId (StockItemId is zeros)
             stockItemId: it.ItemId,
             sku: it.SKU || it.ItemNumber || '',
             channelSku: it.ChannelSKU || '',
             title: it.Title || '',
             quantity: it.Quantity || 1,
+            isService: !!it.IsService,
+            unlinked: !!it.IsUnlinked,
+            // composite/bundle lines carry their children (recursive OrderItem
+            // shape) — a bundle's child SKU reserves stock without ever being
+            // a top-level line, so per-SKU searches must see them
+            children: (it.CompositeSubItems || []).map(c => ({
+              sku: c.SKU || c.ItemNumber || '',
+              channelSku: c.ChannelSKU || '',
+              quantity: c.Quantity || 1,
+              unlinked: !!c.IsUnlinked,
+            })),
           })),
         });
       }

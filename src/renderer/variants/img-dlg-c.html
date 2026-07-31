@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Image dialog C</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .dlg { width: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 48px rgba(47,52,55,0.12); margin: 40px auto; }
+  .body { padding: 20px; display: grid; grid-template-columns: 180px 1fr; gap: 16px; }
+  .head { grid-column: 1 / -1; }
+  .t { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+  .sku { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .preview { border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface-2); height: 180px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+  .preview .cur { width: 120px; height: 120px; border-radius: 8px; background: linear-gradient(160deg,#DCE9F7,#C9D7EA); }
+  .preview span { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .opts { display: flex; flex-direction: column; gap: 10px; }
+  .opt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-card); cursor: pointer; }
+  .opt:hover { background: var(--surface-2); }
+  .opt .ic { width: 34px; height: 34px; border-radius: var(--r-ctl); background: var(--accent-soft); color: var(--accent-soft-text); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .opt b { font-size: 13.5px; display: block; }
+  .opt span { font-size: 12px; color: var(--muted); display: block; }
+  .urlrow { display: flex; gap: 8px; }
+  .urlrow input { flex: 1; font-size: 12.5px; font-family: var(--mono); padding: 8px 10px; border: 1px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); border-radius: var(--r-ctl); }
+  .urlrow button { font-size: 13px; font-weight: 500; padding: 8px 16px; border: none; border-radius: var(--r-ctl); background: var(--accent); color: #fff; }
+  .foot { display: flex; justify-content: flex-end; padding: 12px 20px; background: var(--surface-2); border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+  .ghost { font-size: 13px; font-weight: 500; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: transparent; color: var(--muted); }
+</style></head>
+<body>
+  <div class="dlg">
+    <div class="body">
+      <div class="head"><div class="t">Product image</div><div class="sku">X230-256GB-GRAY · Galaxy X230 256GB Gray</div></div>
+      <div class="preview"><div class="cur"></div><span>Current image</span></div>
+      <div class="opts">
+        <div class="opt"><div class="ic">⤒</div><div><b>Upload from this PC</b><span>JPG or PNG, browse or drag onto the dialog</span></div></div>
+        <div class="opt" style="border-color: var(--accent); background: var(--accent-soft);"><div class="ic" style="background:#fff; font-size:10px;">URL</div><div><b>From a listing URL</b><span>Paste the image address from any marketplace listing</span></div></div>
+        <div class="urlrow"><input placeholder="https://…" /><button>Add</button></div>
+      </div>
+    </div>
+    <div class="foot"><button class="ghost">Close</button></div>
+  </div>
+</body>
+</html>
