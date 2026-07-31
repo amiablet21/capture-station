@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const config = require('./config');
 const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
+const { runRouting } = require('./router');
+const { LinnworksClient } = require('./linnworks');
 
 let win = null;
 let clipboardTimer = null;
@@ -12,7 +14,6 @@ let lastClipboardText = null; // null = not primed yet; prime with current conte
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
 const ignoredLog = []; // debug ring buffer of non-matching clipboard text
-let lastAutoSyncDay = '';
 
 if (process.env.CAPTURE_E2E === '1') {
   // keep compositing while the window is occluded so capturePage works in tests
@@ -38,13 +39,16 @@ function buildState() {
   const current = currentRowId ? db.getRow(currentRowId) : null;
   if (!current) currentRowId = null;
   return {
-    rows: db.todayRows(),
+    // Sync mode: processed rows leave the active list (see History); the list
+    // also carries over unpushed rows from previous days so nothing is missed.
+    // Capture-only mode: plain view of today's captures, as before.
+    rows: cfg.captureOnly ? db.todayRows() : db.activeRows(),
+    todayCount: db.todayRows().length,
     currentRowId,
     expecting: current && !current.tracking ? 'tracking' : null,
     canUndo: undoStack.length > 0,
     lastSync: cfg.lastSync,
     dryRun: !!cfg.dryRun,
-    autoSync: cfg.autoSync,
     syncRunning: isRunning(),
     captureOnly: !!cfg.captureOnly,
     csv: lastCsv,
@@ -86,6 +90,21 @@ function writeDailyCsv() {
   }
 }
 
+// Mirror the WFS shipment log to a CSV beside the daily capture CSVs.
+function writeWfsCsv() {
+  try {
+    const folder = csvFolder();
+    fs.mkdirSync(folder, { recursive: true });
+    const lines = ['date,note,sku,gtin,qty'];
+    for (const s of db.listWfsShipments(1000).slice().reverse()) {
+      for (const it of s.items) {
+        lines.push([s.created_at, s.note, it.sku, it.gtin, it.qty].map(csvEscape).join(','));
+      }
+    }
+    fs.writeFileSync(path.join(folder, 'wfs-shipments.csv'), lines.join('\r\n'), 'utf8');
+  } catch { /* CSV locked in Excel: the DB still has the log */ }
+}
+
 /* ---------- clipboard watcher ---------- */
 
 function matchOrder(text) {
@@ -106,24 +125,53 @@ function startClipboardWatcher() {
     const trimmed = (text || '').trim();
     if (!trimmed || trimmed.length > 200) return;
     const channel = matchOrder(trimmed);
-    if (!channel) {
-      ignoredLog.push({ at: new Date().toISOString(), text: trimmed.slice(0, 120) });
-      if (ignoredLog.length > 200) ignoredLog.shift();
-      if (win && !win.isDestroyed()) win.webContents.send('clipboard:ignored', { text: trimmed.slice(0, 120) });
+    if (channel) {
+      ingestOrder(channel, trimmed);
       return;
     }
-    ingestOrder(channel, trimmed);
+    // Copied tracking fills the open row, so tracking can be copied from the
+    // marketplace page just like the order number (no scanner needed).
+    if (currentRowId) {
+      if (classifyTracking(trimmed)) {
+        const res = handleScan({ text: trimmed, force: false });
+        if (res.ok && win && !win.isDestroyed()) {
+          win.webContents.send('tracking:detected', { row: res.row, carrier: res.carrier });
+        }
+        return;
+      }
+      const clipped = detectClippedTracking(trimmed);
+      if (clipped) {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('tracking:clipped', {
+            message: `POSSIBLE COPY MISTAKE: ${trimmed} ${clipped}. Not saved - copy it again.`,
+          });
+        }
+        return;
+      }
+    }
+    ignoredLog.push({ at: new Date().toISOString(), text: trimmed.slice(0, 120) });
+    if (ignoredLog.length > 200) ignoredLog.shift();
+    if (win && !win.isDestroyed()) win.webContents.send('clipboard:ignored', { text: trimmed.slice(0, 120) });
   };
   clipboardTimer = setInterval(poll, config.load().clipboardPollMs || 300);
 }
 
-function ingestOrder(channel, orderNumber) {
+function ingestOrder(channel, orderNumber, { force = false } = {}) {
   const existing = db.findByOrderNumber(orderNumber);
   if (existing) {
     if (win && !win.isDestroyed()) {
       win.webContents.send('order:duplicate', { orderNumber, existing });
     }
     return;
+  }
+  if (!force) {
+    const similar = db.findSimilarOrder(orderNumber);
+    if (similar) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('order:similar', { channel, orderNumber, similar });
+      }
+      return;
+    }
   }
   const row = db.createRow({ channel, orderNumber });
   currentRowId = row.id;
@@ -142,6 +190,19 @@ function classifyTracking(text) {
   return null;
 }
 
+// A value one character away from a valid tracking format is almost certainly
+// a clipped copy/scan (e.g. "ZF98..." = UPS missing its leading 1), not some
+// unknown carrier. These are rejected outright instead of offering Save anyway.
+function detectClippedTracking(value) {
+  if (value.length < 10 || classifyTracking(value)) return null;
+  const front1 = classifyTracking('1' + value);
+  if (front1) return `looks like ${front1} tracking missing its first character`;
+  const front9 = classifyTracking('9' + value);
+  if (front9) return `looks like ${front9} tracking missing its first character`;
+  if (/^1Z[A-HJ-NP-Z0-9]{15}$/i.test(value)) return 'looks like UPS tracking missing its last character';
+  return null;
+}
+
 function handleScan({ text, force }) {
   const value = String(text || '').trim();
   if (!value) return { ok: false, error: 'Empty scan.' };
@@ -153,6 +214,13 @@ function handleScan({ text, force }) {
 
   const carrier = classifyTracking(value);
   if (!carrier && !force) {
+    const clipped = detectClippedTracking(value);
+    if (clipped) {
+      return {
+        ok: false, clipped: true,
+        error: `POSSIBLE COPY MISTAKE: ${value} ${clipped}. Not saved - copy or scan it again.`,
+      };
+    }
     return {
       ok: false, needsConfirm: true, kind: 'tracking', value,
       reason: 'That does not match any known tracking format (UPS 1Z…, USPS, FedEx). Save it as tracking anyway?',
@@ -210,11 +278,12 @@ async function exportCsv() {
 
 /* ---------- sync ---------- */
 
-async function triggerSync(trigger) {
+async function triggerSync(trigger, ids) {
   if (isRunning()) return { error: 'Sync already running' };
   pushState();
   const summary = await runSync({
     trigger,
+    ids,
     onProgress: (p) => { if (win && !win.isDestroyed()) win.webContents.send('sync:progress', p); },
   });
   if (win && !win.isDestroyed()) win.webContents.send('sync:done', summary);
@@ -222,19 +291,22 @@ async function triggerSync(trigger) {
   return summary;
 }
 
-function startAutoSyncScheduler() {
-  setInterval(() => {
+/* ---------- stock routing scheduler ---------- */
+
+// Periodically move out-of-stock orders to the fallback location and pull
+// them back once the primary is replenished (see router.js). Silent unless
+// something actually moved.
+function startStockRouter() {
+  const tick = async () => {
     const cfg = config.load();
-    if (cfg.captureOnly) return;
-    if (!cfg.autoSync || !cfg.autoSync.enabled) return;
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const today = db.localDay(now);
-    if (hhmm === cfg.autoSync.time && lastAutoSyncDay !== today) {
-      lastAutoSyncDay = today;
-      triggerSync('scheduled');
+    if (cfg.captureOnly || !cfg.stockRouting || !cfg.stockRouting.enabled) return;
+    const res = await runRouting();
+    if (res && (res.movedOut || res.movedBack)) {
+      if (win && !win.isDestroyed()) win.webContents.send('routing:done', res);
     }
-  }, 20000);
+  };
+  setTimeout(tick, 8000); // shortly after launch
+  setInterval(tick, 5 * 60 * 1000);
 }
 
 /* ---------- IPC ---------- */
@@ -245,6 +317,10 @@ function registerIpc() {
   ipcMain.handle('order:next', () => {
     currentRowId = null;
     pushState();
+    return { ok: true };
+  });
+  ipcMain.handle('order:forceAdd', (_e, { channel, orderNumber }) => {
+    ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
   ipcMain.handle('order:open', (_e, id) => {
@@ -274,9 +350,9 @@ function registerIpc() {
     pushState();
     return { ok: true };
   });
-  ipcMain.handle('sync:run', () => {
+  ipcMain.handle('sync:run', (_e, payload) => {
     if (config.load().captureOnly) return { error: 'Capture-only mode: syncing is turned off.' };
-    return triggerSync('manual');
+    return triggerSync('manual', payload && payload.ids);
   });
   ipcMain.handle('csv:openFolder', () => {
     writeDailyCsv();
@@ -311,6 +387,122 @@ function registerIpc() {
     }
   });
   ipcMain.handle('debug:get', () => ignoredLog.slice().reverse());
+  ipcMain.handle('history:get', () => db.historyRows());
+  ipcMain.handle('stock:get', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      return {
+        ok: true,
+        locationId: cfg.linnworks.locationId,
+        locationName: cfg.linnworks.locationName || 'warehouse',
+        items,
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('stock:addImage', async (_e, { sku, stockItemId }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: `Choose an image for ${sku}`,
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const fp = filePaths[0];
+      const buf = fs.readFileSync(fp);
+      if (buf.length > 8 * 1024 * 1024) return { ok: false, error: 'Image is larger than 8 MB - use a smaller file.' };
+      const ext = path.extname(fp).toLowerCase().replace('.', '');
+      const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext || 'png'}`;
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.addItemImage(stockItemId, buf, path.basename(fp), mime);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('stock:addImageUrl', async (_e, { sku, stockItemId, url }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'Paste a full image URL starting with http(s)://' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.addItemImageByUrl(sku, stockItemId, String(url));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('stock:saveImage', async (_e, { sku, url }) => {
+    if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'This SKU has no image yet.' };
+    const ext = (String(url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i) || [, 'jpg'])[1].toLowerCase();
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: `Save image of ${sku}`,
+      defaultPath: path.join(app.getPath('pictures'), `${sku}.${ext}`),
+      filters: [{ name: 'Image', extensions: [ext] }],
+    });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return { ok: false, error: `Download failed (${res.status})` };
+      fs.writeFileSync(filePath, Buffer.from(await res.arrayBuffer()));
+      return { ok: true, path: filePath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('wfs:list', () => db.listWfsShipments());
+  ipcMain.handle('wfs:create', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const note = String((payload && payload.note) || '').slice(0, 500);
+    const items = ((payload && payload.items) || [])
+      .map(i => ({ sku: String(i.sku || '').trim(), gtin: String(i.gtin || '').trim(), qty: Number(i.qty) }))
+      .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
+    if (!items.length) return { ok: false, error: 'Add at least one line with a SKU and quantity.' };
+    try {
+      // stock leaves the physical warehouse; WFS FULFILLED is fed by the
+      // Linnworks WFS connection itself, so only the primary is adjusted
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.changeStockLevels(
+        items.map(i => ({ sku: i.sku, delta: -i.qty })),
+        cfg.linnworks.locationId,
+        'Capture Station WFS shipment'
+      );
+      const id = db.createWfsShipment({ note, items });
+      writeWfsCsv();
+      return { ok: true, id };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('stock:set', async (_e, { sku, level }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const n = Number(level);
+    if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      return { ok: true, ...updated };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('clipboard:copy', (_e, text) => {
+    const value = String(text ?? '');
+    clipboard.writeText(value);
+    // Prime the watcher so copying from inside the app never re-ingests
+    // (which would otherwise flash the duplicate banner at the packer).
+    lastClipboardText = value;
+    return { ok: true };
+  });
 }
 
 /* ---------- window & menu ---------- */
@@ -366,11 +558,11 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
+        { label: 'History', accelerator: 'CmdOrCtrl+H', click: () => win && win.webContents.send('ui:open-history') },
         { label: 'Ignored Clipboard Log', click: () => win && win.webContents.send('ui:open-debug') },
         { type: 'separator' },
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
+        // dev-only tools stay out of installed builds (warehouse machines)
+        ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
         { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
       ],
     },
@@ -386,13 +578,14 @@ app.whenReady().then(() => {
     app.setPath('userData', path.join(app.getPath('temp'), `capture-station-e2e-${Date.now()}`));
     config.save({ csvFolder: path.join(app.getPath('userData'), 'csv') });
   }
+  config.save({}); // re-persist so plaintext credentials migrate to encrypted storage
   db.open();
   writeDailyCsv();
   registerIpc();
   buildMenu();
   createWindow();
   startClipboardWatcher();
-  startAutoSyncScheduler();
+  startStockRouter();
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {

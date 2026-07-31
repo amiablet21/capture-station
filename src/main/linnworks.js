@@ -82,11 +82,14 @@ class LinnworksClient {
   }
 
   // Find one open order whose channel reference number equals `reference`.
+  // fulfilmentCenter is required in practice: without it Linnworks searches the
+  // "Default" location only, so orders held in any other location come back empty.
   // Returns { orderId, numOrderId, reference, items:[{rowId, sku, title, quantity}], shippingInfo } or null.
-  async findOpenOrder(reference) {
+  async findOpenOrder(reference, fulfilmentCenter) {
     const data = await this.call('Orders/GetOpenOrders', {
       entriesPerPage: 10,
       pageNumber: 1,
+      fulfilmentCenter: fulfilmentCenter || '00000000-0000-0000-0000-000000000000',
       filters: {
         TextFields: [{
           FieldCode: 'GENERAL_INFO_REFERENCE_NUMBER',
@@ -132,6 +135,31 @@ class LinnworksClient {
     });
   }
 
+  // Append an internal note to an order. SetOrderNotes overwrites the full
+  // note list, so existing notes are fetched and preserved. Skips if a note
+  // with identical text already exists (safe on sync retries).
+  async addOrderNote(orderId, noteText) {
+    let existing = [];
+    try {
+      existing = await this.call(`Orders/GetOrderNotes?orderId=${encodeURIComponent(orderId)}`, undefined, { method: 'GET' }) || [];
+    } catch { existing = []; }
+    if (existing.some(n => n && n.Note === noteText)) return null;
+    return this.call('Orders/SetOrderNotes', {
+      orderId,
+      orderNotes: [
+        ...existing,
+        {
+          OrderNoteId: '00000000-0000-0000-0000-000000000000',
+          OrderId: orderId,
+          NoteDate: new Date().toISOString(),
+          Internal: true,
+          Note: noteText,
+          CreatedBy: 'Capture Station',
+        },
+      ],
+    });
+  }
+
   // serialsByItem: [{ orderItemRowId, serials: ['355...', ...] }]
   // One inner collection per physical unit; values overwrite, so re-runs are safe.
   async createSerials(serialsByItem) {
@@ -158,6 +186,145 @@ class LinnworksClient {
       message: (data && data.Message) || '',
       raw: data,
     };
+  }
+
+  // All open orders at a location with the minimal item info routing needs.
+  async listOpenOrders(fulfilmentCenter) {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const data = await this.call('Orders/GetOpenOrders', {
+        entriesPerPage: 200, pageNumber: page, fulfilmentCenter,
+      });
+      const hits = (data && data.Data) || [];
+      for (const o of hits) {
+        out.push({
+          orderId: o.OrderId,
+          numOrderId: o.NumOrderId,
+          reference: o.GeneralInfo ? o.GeneralInfo.ReferenceNum : '',
+          items: (o.Items || []).filter(it => !it.IsService && !it.IsUnlinked).map(it => ({
+            // for open-order items the stock item GUID is ItemId (StockItemId is zeros)
+            stockItemId: it.ItemId,
+            sku: it.SKU || it.ItemNumber || '',
+            quantity: it.Quantity || 1,
+          })),
+        });
+      }
+      if (hits.length < 200) return out;
+    }
+  }
+
+  // Full inventory with per-location stock levels and images (paged, 200 per call),
+  // mirroring the columns of Linnworks' My Inventory grid.
+  async listInventory() {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const items = await this.call('Stock/GetStockItemsFull', {
+        keyword: '',
+        loadCompositeParents: false,
+        loadVariationParents: false,
+        entriesPerPage: 200,
+        pageNumber: page,
+        dataRequirements: ['StockLevels', 'Images'],
+        searchTypes: ['SKU', 'Title', 'Barcode'],
+      });
+      for (const it of items || []) {
+        const img = (it.Images || []).find(i => i.IsMain) || (it.Images || [])[0] || null;
+        out.push({
+          stockItemId: it.StockItemId,
+          sku: it.ItemNumber || '',
+          title: it.ItemTitle || '',
+          barcode: it.BarcodeNumber || '',
+          category: it.CategoryName || '',
+          purchasePrice: it.PurchasePrice || 0,
+          retailPrice: it.RetailPrice || 0,
+          image: img ? (img.Source || img.FullSource || '') : '',
+          levels: (it.StockLevels || []).map(l => ({
+            locationId: l.Location && l.Location.StockLocationId,
+            locationName: l.Location && l.Location.LocationName,
+            stockLevel: l.StockLevel || 0,
+            inOrders: l.InOrders || 0,
+            due: l.Due || 0,
+            minimumLevel: l.MinimumLevel || 0,
+            available: l.Available || 0,
+          })),
+        });
+      }
+      if (!items || items.length < 200) return out;
+    }
+  }
+
+  // Available (StockLevel - InOrders) for one stock item at one location.
+  async getAvailableAt(stockItemId, locationId) {
+    const levels = await this.call(`Stock/GetStockLevel?stockItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
+    const row = (levels || []).find(l => l.Location && l.Location.StockLocationId === locationId);
+    return row ? (row.Available || 0) : 0;
+  }
+
+  // Set an absolute stock level for one SKU at one location.
+  // Returns { stockLevel, inOrders, available } from Linnworks' response.
+  async setStockLevel(sku, locationId, level) {
+    const res = await this.call('Stock/SetStockLevel', {
+      stockLevels: [{ SKU: sku, LocationId: locationId, Level: level }],
+      changeSource: 'Capture Station stock page',
+    });
+    const row = (res || [])[0] || {};
+    return {
+      stockLevel: row.StockLevel ?? level,
+      inOrders: row.InOrders ?? 0,
+      available: row.Available ?? Math.max(0, level - (row.InOrders || 0)),
+    };
+  }
+
+  // Upload a local image file to Linnworks' uploader, then attach it to a
+  // stock item. Verified flow: Uploader/UploadFile -> FileId ->
+  // Inventory/UploadImagesToInventoryItem.
+  async addItemImage(stockItemId, fileBuffer, fileName, mimeType) {
+    if (!this.session) await this.auth();
+    await this.throttle();
+    const form = new FormData();
+    form.append('file', new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' }), fileName || 'image.png');
+    const res = await fetch(`${this.session.server}/api/Uploader/UploadFile?type=Image&expiredInHours=24`, {
+      method: 'POST',
+      headers: { Authorization: this.session.token },
+      body: form,
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      throw new LinnworksError(`UploadFile failed (${res.status}): ${trim(body)}`, { status: res.status, endpoint: 'Uploader/UploadFile' });
+    }
+    const up = JSON.parse(body);
+    const fileId = ((Array.isArray(up) ? up[0] : up) || {}).FileId;
+    if (!fileId) throw new LinnworksError('UploadFile returned no FileId');
+    await this.call('Inventory/UploadImagesToInventoryItem', { inventoryItemId: stockItemId, imageIds: [fileId] });
+    return { fileId };
+  }
+
+  // Attach an image by URL: Linnworks downloads it itself (handy for reusing
+  // an existing listing's image). Some deployments expect a `request` wrapper.
+  async addItemImageByUrl(sku, stockItemId, imageUrl) {
+    const payload = { ItemNumber: sku, StockItemId: stockItemId, ImageUrl: imageUrl, IsMain: false };
+    try {
+      return await this.call('Inventory/AddImageToInventoryItem', payload);
+    } catch {
+      return this.call('Inventory/AddImageToInventoryItem', { request: payload });
+    }
+  }
+
+  // Adjust stock levels by a delta per SKU at one location (negative = deduct).
+  async changeStockLevels(entries, locationId, changeSource) {
+    return this.call('Stock/UpdateStockLevelsBySKU', {
+      stockLevels: entries.map(e => ({ SKU: e.sku, LocationId: locationId, Level: e.delta })),
+      changeSource: changeSource || 'Capture Station',
+    });
+  }
+
+  // Unpark orders: parked status is order tag 7; a null tag clears it.
+  async unparkOrders(orderIds) {
+    return this.call('Orders/ChangeOrderTag', { orderIds, tag: null });
+  }
+
+  async moveOrdersToLocation(orderIds, locationId) {
+    return this.call('Orders/MoveToLocation', { orderIds, pkStockLocationId: locationId });
   }
 
   async getLocations() {

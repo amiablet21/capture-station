@@ -45,6 +45,12 @@ function open() {
       row_id INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS wfs_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_serials_serial ON serials(serial);
     CREATE INDEX IF NOT EXISTS idx_serials_row ON serials(row_id);
   `);
@@ -77,8 +83,36 @@ function todayRows() {
     .all(localDay()).map(parseRow);
 }
 
+// Work queue for sync mode: everything not yet pushed to Linnworks, any day,
+// so unprocessed captures from yesterday stay visible until they are dealt with.
+function activeRows() {
+  return open().prepare("SELECT * FROM rows WHERE status != 'synced' ORDER BY id DESC")
+    .all().map(parseRow);
+}
+
+// History shows completed work only: orders actually processed to Linnworks.
+// Unprocessed captures live in the active list until they are dealt with.
+function historyRows(limit = 1000) {
+  return open().prepare("SELECT * FROM rows WHERE status = 'synced' ORDER BY id DESC LIMIT ?")
+    .all(limit).map(parseRow);
+}
+
 function findByOrderNumber(orderNumber) {
   return parseRow(open().prepare('SELECT * FROM rows WHERE order_number = ? ORDER BY id DESC').get(orderNumber));
+}
+
+// Copy-mistake guard: a capture whose number is a fragment of an existing one
+// (or vice versa) is almost certainly a clipped/overshot Ctrl+C, not a new order.
+// Real marketplace numbers are equal length and never contain each other.
+function findSimilarOrder(orderNumber) {
+  const s = String(orderNumber);
+  if (s.length < 10) return null;
+  return parseRow(open().prepare(
+    `SELECT * FROM rows
+     WHERE order_number != ? AND length(order_number) >= 10
+       AND (instr(order_number, ?) > 0 OR instr(?, order_number) > 0)
+     ORDER BY id DESC`
+  ).get(s, s, s));
 }
 
 // Recompute pending/captured after any data change; never demote synced/failed here.
@@ -111,9 +145,15 @@ function updateRow(id, fields) {
   const notes = fields.notes ?? row.notes ?? '';
   d.prepare('UPDATE rows SET order_number = ?, channel = ?, tracking = ?, carrier = ?, notes = ? WHERE id = ?')
     .run(orderNumber, channel, tracking, carrier, notes, id);
-  // any edit re-queues the row for sync (Linnworks writes are idempotent overwrites)
-  const status = tracking ? 'captured' : 'pending';
-  d.prepare("UPDATE rows SET status = ?, fail_reason = '' WHERE id = ?").run(status, id);
+  // Re-queue for sync only when a sync-relevant field changed. A notes-only edit
+  // keeps the current status: a synced order is no longer open in Linnworks, so
+  // re-sending it could only fail.
+  const material = orderNumber !== row.order_number || channel !== row.channel
+    || tracking !== row.tracking || carrier !== row.carrier;
+  if (material) {
+    const status = tracking ? 'captured' : 'pending';
+    d.prepare("UPDATE rows SET status = ?, fail_reason = '' WHERE id = ?").run(status, id);
+  }
   return getRow(id);
 }
 
@@ -139,6 +179,19 @@ function rowsToSync() {
     .all().map(parseRow);
 }
 
+// Internal log of inventory shipped from the warehouse to Walmart WFS.
+// items: [{ sku, gtin, qty }]
+function createWfsShipment({ note, items }) {
+  const res = open().prepare('INSERT INTO wfs_shipments (created_at, note, items) VALUES (?, ?, ?)')
+    .run(new Date().toISOString(), note || '', JSON.stringify(items || []));
+  return Number(res.lastInsertRowid);
+}
+
+function listWfsShipments(limit = 200) {
+  return open().prepare('SELECT * FROM wfs_shipments ORDER BY id DESC LIMIT ?').all(limit)
+    .map(s => ({ ...s, items: JSON.parse(s.items) }));
+}
+
 function close() {
   if (db) { try { db.close(); } catch { /* already closed */ } db = null; }
 }
@@ -159,7 +212,7 @@ function backup() {
 
 module.exports = {
   open, close, backup, dbPath, localDay,
-  createRow, getRow, todayRows, findByOrderNumber,
+  createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed,
-  rowsToSync,
+  rowsToSync, createWfsShipment, listWfsShipments,
 };

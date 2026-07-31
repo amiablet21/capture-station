@@ -13,11 +13,11 @@ if (!window.api) {
       { id: 1, created_at: at(34), channel: 'walmart', order_number: '119121297218456', tracking: '1Z59E67A031142877', carrier: 'UPS', serials: [], notes: 'IMEI 351007743310296', status: 'captured', fail_reason: '', synced_at: '' },
     ],
     currentRowId: 4,
+    todayCount: 4,
     expecting: 'tracking',
     canUndo: true,
     lastSync: { at: at(5), synced: 12, failed: 1, total: 13, dryRun: true, error: null },
     dryRun: true,
-    autoSync: { enabled: true, time: '17:00' },
     syncRunning: false,
     captureOnly: true,
     csv: { path: 'C:\\Users\\packer\\Documents\\Capture Station\\capture-2026-07-30.csv', at: at(0), error: null },
@@ -26,18 +26,28 @@ if (!window.api) {
     getState: async () => demo,
     submitScan: async () => ({ ok: false, error: 'Preview mode, scanning is inert.' }),
     nextOrder: async () => ({ ok: true }),
+    addOrderAnyway: async () => ({ ok: true }),
     reopenRow: async () => ({ ok: true }),
     undo: async () => ({ ok: true, message: 'Preview mode' }),
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, autoSync: { enabled: true, time: '17:00' }, orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
     getDebugLog: async () => [],
+    getHistory: async () => demo.rows,
+    getStock: async () => ({ ok: false, error: 'Preview mode' }),
+    setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
+    addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
+    addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
+    saveStockImage: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsList: async () => [],
+    wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    copyText: async () => ({ ok: true }),
     on: () => {},
   };
 }
@@ -106,20 +116,27 @@ function statusTitle(row) {
 }
 
 function trackingCell(row) {
-  if (!row.tracking) return '<span class="cell-missing">no tracking</span>';
+  if (!row.tracking) {
+    if (state && row.id === state.currentRowId) {
+      return '<span class="tracking-now">Scan tracking now&hellip;</span>'
+        + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking">✕</button>';
+    }
+    return '<button class="tracking-add" data-act="open" title="Click, then scan or type this order\'s tracking">+ Add tracking</button>';
+  }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
-  return `<span title="${esc(row.tracking)}">${label}</span>`;
+  return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>`;
 }
 
 function notesCell(row) {
-  if (!row.notes) return '';
-  return `<span class="note-text" title="${esc(row.notes)}">${esc(row.notes)}</span>`;
+  if (!row.notes) return '<button class="note-add" data-act="note" title="Add a note (serial number, condition, anything)">+ Note</button>';
+  return `<button class="note-text note-btn" data-act="note" title="${esc(row.notes)}&#10;Click to edit">${esc(row.notes)}</button>`;
 }
 
 function render() {
   if (!state) return;
 
-  $('orderCount').textContent = state.rows.length;
+  $('orderCount').textContent = state.todayCount ?? state.rows.length;
+  $('dayCountBox').hidden = activePage !== 'capture'; // capture stat, not a stock stat
   $('nextOrderBtn').disabled = !state.currentRowId;
   $('undoBtn').disabled = !state.canUndo;
   $('dryRunChip').hidden = !state.dryRun;
@@ -135,8 +152,10 @@ function render() {
 
   // footer: capture-only shows the CSV mirror, otherwise the sync controls
   const syncEl = $('syncStatus');
-  $('syncBtn').hidden = state.captureOnly;
+  $('syncBtn').hidden = state.captureOnly || activePage !== 'capture';
+  $('pageTabs').hidden = state.captureOnly;
   $('openCsvBtn').hidden = !state.captureOnly;
+  if (activePage !== 'capture') $('dryRunChip').hidden = true;
   if (state.captureOnly) {
     $('dryRunChip').hidden = true;
     if (state.csv && state.csv.error) {
@@ -178,7 +197,7 @@ function render() {
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${total - idx}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
         <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
-        <span class="order-num">${esc(row.order_number)}</span>${
+        <span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${notesCell(row)}</td>
@@ -228,7 +247,7 @@ async function submitScan(value, force) {
     showWarn({ reason: res.reason, danger: !!res.duplicate });
     return;
   }
-  showWarn({ reason: res.error || 'Scan rejected.', danger: false });
+  showWarn({ reason: res.error || 'Scan rejected.', danger: !!res.clipped, confirmable: false });
 }
 
 scanInput.addEventListener('keydown', (e) => {
@@ -241,11 +260,16 @@ scanInput.addEventListener('keydown', (e) => {
   submitScan(value, false);
 });
 
-$('warnAccept').addEventListener('click', () => {
+$('warnAccept').addEventListener('click', async () => {
   if (!pendingConfirm) return clearWarn();
-  const v = pendingConfirm.value;
+  const pc = pendingConfirm;
   clearWarn();
-  submitScan(v, true);
+  if (pc.kind === 'order') {
+    await api.addOrderAnyway(pc.channel, pc.value);
+    await refresh();
+  } else {
+    submitScan(pc.value, true);
+  }
   focusScan();
 });
 
@@ -274,8 +298,15 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- rows list actions ---------- */
 
+async function copyFromApp(text) {
+  await api.copyText(text);
+  toast(`Copied ${text}`);
+}
+
 $('rowsBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('button[data-act]');
+  const btn = e.target.closest('[data-act]');
+  const copyEl = e.target.closest('[data-copy]');
+  if (!btn && copyEl) { copyFromApp(copyEl.dataset.copy); return; }
   if (!btn) return;
   const card = e.target.closest('tr');
   const id = Number(card.dataset.id);
@@ -286,8 +317,14 @@ $('rowsBody').addEventListener('click', async (e) => {
     await api.reopenRow(id);
     await refresh();
     focusScan();
+  } else if (btn.dataset.act === 'cancelwait') {
+    await api.nextOrder();
+    await refresh();
+    focusScan();
   } else if (btn.dataset.act === 'edit') {
     openEdit(row);
+  } else if (btn.dataset.act === 'note') {
+    openNotes(row);
   } else if (btn.dataset.act === 'del') {
     if (confirm(`Delete capture for order ${row.order_number}?`)) {
       await api.deleteRow(id);
@@ -322,6 +359,27 @@ $('editForm').addEventListener('submit', async (e) => {
 
 $('editDialog').addEventListener('close', () => focusScan());
 
+/* ---------- notes dialog ---------- */
+
+let notesRowId = null;
+
+function openNotes(row) {
+  notesRowId = row.id;
+  $('notesTitle').textContent = `Note for ${row.order_number}`;
+  $('notesText').value = row.notes || '';
+  $('notesDialog').showModal();
+  $('notesText').focus();
+}
+
+$('notesForm').addEventListener('submit', async (e) => {
+  if (e.submitter && e.submitter.value === 'cancel') { notesRowId = null; return; }
+  await api.updateRow(notesRowId, { notes: $('notesText').value.trim() });
+  notesRowId = null;
+  await refresh();
+});
+
+$('notesDialog').addEventListener('close', () => focusScan());
+
 /* ---------- settings dialog ---------- */
 
 function patternsToText(list, key) {
@@ -336,8 +394,45 @@ function textToPatterns(text, key) {
   }).filter(Boolean);
 }
 
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+let settingsUnlocked = false; // stays unlocked for the rest of the session
+let pinExpected = '';
+
+function openPinPrompt() {
+  $('pinInput').value = '';
+  $('pinError').hidden = true;
+  $('pinDialog').showModal();
+  $('pinInput').focus();
+}
+
+$('pinForm').addEventListener('submit', async (e) => {
+  if (e.submitter && e.submitter.value === 'cancel') return;
+  e.preventDefault();
+  const hash = await sha256Hex($('pinInput').value.trim());
+  if (hash !== pinExpected) {
+    $('pinError').hidden = false;
+    $('pinInput').value = '';
+    $('pinInput').focus();
+    return;
+  }
+  settingsUnlocked = true;
+  $('pinDialog').close();
+  openSettings();
+});
+
+$('pinDialog').addEventListener('close', () => focusScan());
+
 async function openSettings() {
   const cfg = await api.getConfig();
+  if (cfg.settingsPinHash && !settingsUnlocked) {
+    pinExpected = cfg.settingsPinHash;
+    openPinPrompt();
+    return;
+  }
   $('setCaptureOnly').checked = !!cfg.captureOnly;
   $('setCsvFolder').textContent = cfg.csvFolder || 'Documents\\Capture Station';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -348,10 +443,16 @@ async function openSettings() {
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
     : '<option value="">Not selected, test connection first</option>';
   $('setDryRun').checked = !!cfg.dryRun;
-  $('setAutoSync').checked = !!(cfg.autoSync && cfg.autoSync.enabled);
-  $('setAutoTime').value = (cfg.autoSync && cfg.autoSync.time) || '17:00';
+  const sr = cfg.stockRouting || {};
+  $('setRouting').checked = !!sr.enabled;
+  const fsel = $('setFallbackLoc');
+  fsel.innerHTML = sr.fallbackLocationId
+    ? `<option value="${esc(sr.fallbackLocationId)}">${esc(sr.fallbackLocationName || sr.fallbackLocationId)}</option>`
+    : '<option value="">Not selected, test connection first</option>';
   $('setOrderPatterns').value = patternsToText(cfg.orderPatterns, 'channel');
   $('setTrackingPatterns').value = patternsToText(cfg.trackingPatterns, 'carrier');
+  $('setPin').value = '';
+  $('setPinClear').checked = false;
   $('testConnResult').textContent = '';
   $('testConnResult').className = 'test-result';
   $('settingsDialog').showModal();
@@ -375,11 +476,13 @@ $('testConnBtn').addEventListener('click', async () => {
   }
   out.textContent = `Connected: ${res.server.replace('https://', '')}`;
   out.classList.add('is-ok');
-  const sel = $('setLocation');
-  const prev = sel.value;
-  sel.innerHTML = res.locations.map(l =>
-    `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
-  if (res.locations.some(l => l.id === prev)) sel.value = prev;
+  for (const id of ['setLocation', 'setFallbackLoc']) {
+    const sel = $(id);
+    const prev = sel.value;
+    sel.innerHTML = res.locations.map(l =>
+      `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
+    if (res.locations.some(l => l.id === prev)) sel.value = prev;
+  }
 });
 
 $('chooseCsvBtn').addEventListener('click', async () => {
@@ -389,7 +492,12 @@ $('chooseCsvBtn').addEventListener('click', async () => {
 
 $('settingsSave').addEventListener('click', async () => {
   const sel = $('setLocation');
+  const pinVal = $('setPin').value.trim();
+  const pinPatch = $('setPinClear').checked
+    ? { settingsPinHash: '' }
+    : (pinVal ? { settingsPinHash: await sha256Hex(pinVal) } : {});
   await api.setConfig({
+    ...pinPatch,
     captureOnly: $('setCaptureOnly').checked,
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -399,7 +507,11 @@ $('settingsSave').addEventListener('click', async () => {
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
     },
     dryRun: $('setDryRun').checked,
-    autoSync: { enabled: $('setAutoSync').checked, time: $('setAutoTime').value || '17:00' },
+    stockRouting: {
+      enabled: $('setRouting').checked,
+      fallbackLocationId: $('setFallbackLoc').value,
+      fallbackLocationName: $('setFallbackLoc').selectedOptions[0] ? $('setFallbackLoc').selectedOptions[0].textContent : '',
+    },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
   });
@@ -432,7 +544,7 @@ function showSyncResults(summary) {
   const list = $('syncDialogList');
   const details = summary.details || [];
   list.innerHTML = details.length === 0
-    ? '<p class="dlg-note">Nothing to sync. Rows sync once they have tracking and at least one serial.</p>'
+    ? '<p class="dlg-note">Nothing to send. Rows are sent to Linnworks once they have a tracking number.</p>'
     : details.map(d => `
       <div class="sync-item ${d.ok ? '' : 'is-fail'}">
         <span class="mono">${esc(d.orderNumber)}</span>
@@ -443,6 +555,474 @@ function showSyncResults(summary) {
 
 $('syncDialogClose').addEventListener('click', () => $('syncDialog').close());
 $('syncDialog').addEventListener('close', () => focusScan());
+
+/* ---------- page tabs: Capture / Stock ---------- */
+
+let activePage = 'capture';
+
+function showPage(page) {
+  activePage = page;
+  $('scanPanel').hidden = page !== 'capture';
+  document.querySelector('main.rows').hidden = page !== 'capture';
+  $('stockPage').hidden = page !== 'stock';
+  $('tabCapture').classList.toggle('is-active', page === 'capture');
+  $('tabStock').classList.toggle('is-active', page === 'stock');
+  if (page === 'stock') {
+    const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
+    $('stockList').style.width = savedW ? `${savedW}px` : '';
+    $('stockSearch').value = '';
+    loadStock().then(() => $('stockSearch').focus());
+  } else {
+    focusScan();
+  }
+  if (state) render(); // footer buttons depend on the active page
+}
+
+$('tabCapture').addEventListener('click', () => showPage('capture'));
+$('tabStock').addEventListener('click', () => showPage('stock'));
+
+/* ---------- stock page ---------- */
+
+let stockCache = null;
+
+// column sort: key + direction, toggled by clicking headers
+const STOCK_COLS = {
+  sku: { label: 'SKU', get: r => r.sku, text: true },
+  stockLevel: { label: 'In stock', get: r => r.l.stockLevel },
+  inOrders: { label: 'In orders', get: r => r.l.inOrders },
+  minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
+  available: { label: 'Available', get: r => r.l.available },
+};
+let stockSort = { key: 'stockLevel', dir: -1 }; // default: highest stock first
+
+// user-adjusted column widths, persisted across sessions
+let stockColWidths = {};
+try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'); } catch { /* fresh start */ }
+
+function stockTh(key, extraClass = '') {
+  const col = STOCK_COLS[key];
+  const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
+  const w = stockColWidths[key];
+  const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
+  return `<th class="sortable ${extraClass}" data-sort="${key}"${style} title="Click to sort · drag edge to resize">${col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+}
+
+async function loadStock() {
+  $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('stockSummary').textContent = '';
+  const res = await api.getStock();
+  if (!res.ok) {
+    $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
+    return;
+  }
+  stockCache = res;
+  renderStock();
+}
+
+function renderStock() {
+  if (!stockCache) return;
+  const q = $('stockSearch').value.trim().toLowerCase();
+  const locId = stockCache.locationId;
+  const rows = stockCache.items
+    .map(it => ({ ...it, l: it.levels.find(x => x.locationId === locId) || { stockLevel: 0, inOrders: 0, due: 0, minimumLevel: 0, available: 0 } }))
+    .filter(it => !q
+      || it.sku.toLowerCase().includes(q)
+      || it.title.toLowerCase().includes(q)
+      || (it.barcode || '').toLowerCase().includes(q)
+      || (it.category || '').toLowerCase().includes(q))
+    .sort((a, b) => {
+      const col = STOCK_COLS[stockSort.key] || STOCK_COLS.stockLevel;
+      const av = col.get(a);
+      const bv = col.get(b);
+      const cmp = col.text ? String(av).localeCompare(String(bv)) : (av - bv);
+      return (cmp * stockSort.dir) || a.sku.localeCompare(b.sku);
+    });
+  const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
+  $('stockSummary').textContent = `${rows.length} SKUs · ${units.toLocaleString()} units`;
+  $('stockList').innerHTML = rows.length === 0
+    ? '<p class="dlg-note">No SKUs match.</p>'
+    : `<table class="stock-table">
+        <thead><tr>
+          <th class="th-gutter">#</th>
+          <th class="th-img"></th>
+          ${stockTh('sku')}
+          ${stockTh('stockLevel', 'num th-level')}
+          ${stockTh('inOrders', 'num')}
+          ${stockTh('minimumLevel', 'num')}
+          ${stockTh('available', 'num')}
+        </tr></thead>
+        <tbody>${rows.map((r, idx) => `
+          <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
+            <td class="cell-gutter">${idx + 1}</td>
+            <td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
+            <td class="mono copyable" data-copy="${esc(r.sku)}" title="${esc(r.title)}&#10;Click to copy">${esc(r.sku)}</td>
+            <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
+            <td class="num">${r.l.inOrders}</td>
+            <td class="num">${r.l.minimumLevel}</td>
+            <td class="num stock-avail">${r.l.available}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+}
+
+// Inline edit of the In stock number: click -> type -> Enter saves to Linnworks.
+function beginStockEdit(btn) {
+  const sku = btn.dataset.sku;
+  const current = btn.textContent.trim();
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  input.value = current;
+  input.className = 'input stock-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (val === '' || Number(val) === Number(current)) { restore(); return; }
+    input.disabled = true;
+    const res = await api.setStockLevel(sku, Number(val));
+    if (!res.ok) {
+      toast(res.error || 'Stock update failed');
+      restore();
+      return;
+    }
+    const item = stockCache && stockCache.items.find(i => i.sku === sku);
+    if (item) {
+      let l = item.levels.find(x => x.locationId === stockCache.locationId);
+      if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
+      l.stockLevel = res.stockLevel;
+      l.inOrders = res.inOrders;
+      l.available = res.available;
+    }
+    renderStock();
+    toast(`${sku}: stock set to ${res.stockLevel}`);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+$('stockRefresh').addEventListener('click', loadStock);
+$('stockSearch').addEventListener('input', renderStock);
+// whole-sheet resize: drag the handle on the right edge of the table
+let sheetDrag = null;
+
+$('sheetGrip').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  sheetDrag = { startX: e.clientX, startW: $('stockList').offsetWidth, w: 0 };
+  $('sheetGrip').classList.add('is-active');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!sheetDrag) return;
+  const w = Math.max(480, sheetDrag.startW + (e.clientX - sheetDrag.startX));
+  sheetDrag.w = w;
+  $('stockList').style.width = `${w}px`;
+});
+
+window.addEventListener('mouseup', () => {
+  if (!sheetDrag) return;
+  if (sheetDrag.w) localStorage.setItem('stockSheetWidth', String(sheetDrag.w));
+  sheetDrag = null;
+  $('sheetGrip').classList.remove('is-active');
+});
+
+$('sheetGrip').addEventListener('dblclick', () => {
+  localStorage.removeItem('stockSheetWidth');
+  $('stockList').style.width = '';
+});
+
+// column resize: drag a header's right edge; double-click the edge to reset
+let gripDrag = null;
+let suppressSortUntil = 0;
+
+$('stockList').addEventListener('mousedown', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  e.preventDefault();
+  const th = grip.closest('th');
+  gripDrag = { key: grip.dataset.grip, startX: e.clientX, startW: th.offsetWidth, th, w: 0 };
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!gripDrag) return;
+  const w = Math.max(50, gripDrag.startW + (e.clientX - gripDrag.startX));
+  gripDrag.w = w;
+  gripDrag.th.style.width = `${w}px`;
+  gripDrag.th.style.minWidth = `${w}px`;
+  gripDrag.th.style.maxWidth = `${w}px`;
+});
+
+window.addEventListener('mouseup', () => {
+  if (!gripDrag) return;
+  if (gripDrag.w) {
+    stockColWidths[gripDrag.key] = gripDrag.w;
+    localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
+    suppressSortUntil = Date.now() + 250;
+  }
+  gripDrag = null;
+});
+
+$('stockList').addEventListener('dblclick', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  delete stockColWidths[grip.dataset.grip];
+  localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
+  suppressSortUntil = Date.now() + 250;
+  renderStock();
+});
+
+$('stockList').addEventListener('click', (e) => {
+  const th = e.target.closest('th[data-sort]');
+  if (th) {
+    if (e.target.closest('.col-grip') || Date.now() < suppressSortUntil) return;
+    const key = th.dataset.sort;
+    if (stockSort.key === key) {
+      stockSort.dir *= -1;
+    } else {
+      stockSort = { key, dir: STOCK_COLS[key].text ? 1 : -1 }; // text A→Z, numbers high→low
+    }
+    renderStock();
+    return;
+  }
+  const numBtn = e.target.closest('button.stock-num-btn');
+  if (numBtn) { beginStockEdit(numBtn); return; }
+  const imgBtn = e.target.closest('button.img-btn');
+  if (imgBtn) {
+    const item = stockCache && stockCache.items.find(i => i.sku === imgBtn.dataset.imgsku);
+    openImgDialog(imgBtn.dataset.imgsku, imgBtn.dataset.sid, item ? item.image : '');
+    return;
+  }
+  const copyEl = e.target.closest('[data-copy]');
+  if (copyEl) copyFromApp(copyEl.dataset.copy);
+});
+
+/* ---------- image chooser ---------- */
+
+let imgTarget = null; // { sku, sid, url }
+
+function openImgDialog(sku, sid, url) {
+  imgTarget = { sku, sid, url: url || '' };
+  $('imgTitle').textContent = `Image for ${sku}`;
+  $('imgDownload').hidden = !url;
+  $('imgUrl').value = '';
+  $('imgResult').hidden = true;
+  $('imgDialog').showModal();
+}
+
+function imgFeedback(msg, ok) {
+  const el = $('imgResult');
+  el.textContent = msg;
+  el.hidden = false;
+  el.style.color = ok ? '' : 'var(--neg-text)';
+}
+
+$('imgFromFile').addEventListener('click', async () => {
+  if (!imgTarget) return;
+  const res = await api.addStockImage(imgTarget.sku, imgTarget.sid);
+  if (res.canceled) return;
+  if (!res.ok) { imgFeedback(res.error || 'Upload failed.', false); return; }
+  toast(`Image added to ${imgTarget.sku}`);
+  $('imgDialog').close();
+  loadStock();
+});
+
+$('imgUrlAdd').addEventListener('click', async () => {
+  if (!imgTarget) return;
+  const url = $('imgUrl').value.trim();
+  if (!url) { imgFeedback('Paste an image URL first.', false); return; }
+  imgFeedback('Adding…', true);
+  const res = await api.addStockImageUrl(imgTarget.sku, imgTarget.sid, url);
+  if (!res.ok) { imgFeedback(res.error || 'Failed.', false); return; }
+  toast(`Image added to ${imgTarget.sku}`);
+  $('imgDialog').close();
+  loadStock();
+});
+
+$('imgDownload').addEventListener('click', async () => {
+  if (!imgTarget || !imgTarget.url) return;
+  const res = await api.saveStockImage(imgTarget.sku, imgTarget.url);
+  if (res.canceled) return;
+  if (!res.ok) { imgFeedback(res.error || 'Download failed.', false); return; }
+  toast(`Saved ${res.path.split(/[\\/]/).pop()}`);
+});
+
+$('imgClose').addEventListener('click', () => $('imgDialog').close());
+
+/* ---------- WFS shipments ---------- */
+
+function wfsLineHtml() {
+  return `
+    <div class="wfs-line">
+      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="SKU" autocomplete="off" spellcheck="false" />
+      <input type="text" class="input mono wfs-gtin" placeholder="GTIN / Walmart ID" autocomplete="off" spellcheck="false" />
+      <input type="number" class="input wfs-qty" min="1" step="1" placeholder="Qty" />
+      <button class="btn-icon is-danger wfs-remove" title="Remove line">✕</button>
+    </div>`;
+}
+
+function wfsAddLine() {
+  $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
+}
+
+async function openWfs() {
+  // SKU suggestions + GTIN autofill come from the loaded stock sheet
+  if (stockCache) {
+    $('skuOptions').innerHTML = stockCache.items.map(i => `<option value="${esc(i.sku)}"></option>`).join('');
+  }
+  $('wfsLines').innerHTML = '';
+  wfsAddLine();
+  $('wfsNote').value = '';
+  $('wfsResult').textContent = '';
+  $('wfsResult').className = 'test-result';
+  await renderWfsPast();
+  $('wfsDialog').showModal();
+}
+
+async function renderWfsPast() {
+  const shipments = await api.wfsList();
+  $('wfsPast').innerHTML = shipments.length === 0
+    ? '<p class="dlg-note">No shipments logged yet.</p>'
+    : shipments.map(s => `
+      <div class="wfs-shipment">
+        <div class="wfs-shipment-head">
+          <span class="mono">${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}</span>
+          ${s.note ? `<span class="wfs-note">${esc(s.note)}</span>` : ''}
+          <span class="wfs-units">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+        </div>
+        ${s.items.map(i => `
+          <div class="wfs-item">
+            <span class="mono">${esc(i.sku)}</span>
+            <span class="mono wfs-gtin-txt">${esc(i.gtin || '—')}</span>
+            <span class="wfs-qty-txt">×${i.qty}</span>
+          </div>`).join('')}
+      </div>`).join('');
+}
+
+$('wfsBtn').addEventListener('click', openWfs);
+$('wfsAddLine').addEventListener('click', wfsAddLine);
+$('wfsClose').addEventListener('click', () => $('wfsDialog').close());
+
+$('wfsLines').addEventListener('click', (e) => {
+  const rm = e.target.closest('.wfs-remove');
+  if (rm) rm.closest('.wfs-line').remove();
+});
+
+// picking a known SKU pre-fills the GTIN from the item's barcode
+$('wfsLines').addEventListener('input', (e) => {
+  const skuInput = e.target.closest('.wfs-sku');
+  if (!skuInput || !stockCache) return;
+  const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
+  if (item) {
+    const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
+    if (!gtin.value.trim()) gtin.value = item.barcode || '';
+  }
+});
+
+$('wfsSave').addEventListener('click', async () => {
+  const out = $('wfsResult');
+  out.className = 'test-result';
+  const items = [...$('wfsLines').querySelectorAll('.wfs-line')].map(line => ({
+    sku: line.querySelector('.wfs-sku').value.trim(),
+    gtin: line.querySelector('.wfs-gtin').value.trim(),
+    qty: Number(line.querySelector('.wfs-qty').value),
+  })).filter(i => i.sku || i.gtin || i.qty);
+  if (!items.length || items.some(i => !i.sku || !Number.isInteger(i.qty) || i.qty <= 0)) {
+    out.textContent = 'Every line needs a SKU and a whole-number quantity.';
+    out.classList.add('is-fail');
+    return;
+  }
+  if (stockCache) {
+    const unknown = items.filter(i => !stockCache.items.some(s => s.sku === i.sku));
+    if (unknown.length) {
+      out.textContent = `Unknown SKU: ${unknown.map(u => u.sku).join(', ')}`;
+      out.classList.add('is-fail');
+      return;
+    }
+  }
+  $('wfsSave').disabled = true;
+  out.textContent = 'Saving…';
+  const res = await api.wfsCreate($('wfsNote').value.trim(), items);
+  $('wfsSave').disabled = false;
+  if (!res.ok) {
+    out.textContent = res.error || 'Failed.';
+    out.classList.add('is-fail');
+    return;
+  }
+  out.textContent = 'Saved — stock deducted.';
+  out.classList.add('is-ok');
+  $('wfsLines').innerHTML = '';
+  wfsAddLine();
+  $('wfsNote').value = '';
+  await renderWfsPast();
+  loadStock(); // show the reduced warehouse counts
+});
+
+/* ---------- history dialog ---------- */
+
+function historyStatusLabel(row) {
+  switch (row.status) {
+    case 'synced': return `Processed ${row.synced_at ? fmtTime(row.synced_at) : ''}`.trim();
+    case 'captured': return 'Ready';
+    case 'pending': return 'No tracking';
+    case 'failed': return 'Failed';
+    default: return row.status;
+  }
+}
+
+let historyCache = [];
+
+async function openHistory() {
+  historyCache = await api.getHistory();
+  $('historyParkedOnly').checked = false;
+  renderHistory();
+  $('historyDialog').showModal();
+}
+
+function renderHistory() {
+  const parkedOnly = $('historyParkedOnly').checked;
+  const rows = parkedOnly
+    ? historyCache.filter(r => (r.notes || '').includes('was parked'))
+    : historyCache;
+  const byDay = new Map();
+  for (const r of rows) {
+    if (!byDay.has(r.day)) byDay.set(r.day, []);
+    byDay.get(r.day).push(r);
+  }
+  $('historyList').innerHTML = rows.length === 0
+    ? `<p class="dlg-note">${parkedOnly ? 'No parked orders on record.' : 'Nothing processed yet. Orders appear here once they are pushed to Linnworks.'}</p>`
+    : [...byDay.entries()].map(([day, list]) => `
+      <div class="history-day">
+        <div class="history-day-head">${esc(day)} &middot; ${list.length} order${list.length === 1 ? '' : 's'}</div>
+        ${list.map(r => `
+          <div class="history-item">
+            <span class="history-time mono">${fmtTime(r.created_at)}</span>
+            <span class="badge badge-${esc(r.channel)}">${esc(channelLabel(r.channel))}</span>
+            <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy">${esc(r.order_number)}</span>
+            ${r.tracking
+              ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
+              : '<span class="mono history-tracking">—</span>'}
+            <span class="history-status st-${esc(r.status)}" title="${esc(r.fail_reason || '')}">${esc(historyStatusLabel(r))}</span>
+            ${r.notes ? `<span class="history-notes" title="${esc(r.notes)}">${esc(r.notes)}</span>` : ''}
+          </div>`).join('')}
+      </div>`).join('');
+}
+
+$('historyParkedOnly').addEventListener('change', renderHistory);
+$('historyBtn').addEventListener('click', openHistory);
+$('historyList').addEventListener('click', (e) => {
+  const copyEl = e.target.closest('[data-copy]');
+  if (copyEl) copyFromApp(copyEl.dataset.copy);
+});
+$('historyClose').addEventListener('click', () => $('historyDialog').close());
+$('historyDialog').addEventListener('close', () => focusScan());
 
 /* ---------- debug dialog ---------- */
 
@@ -464,11 +1044,11 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'settingsDialog', 'syncDialog', 'debugDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog'].some(id => $(id).open);
 }
 
 function focusScan() {
-  if (!anyDialogOpen()) scanInput.focus();
+  if (!anyDialogOpen() && activePage === 'capture') scanInput.focus();
 }
 
 function updateFocusPill() {
@@ -480,14 +1060,14 @@ function updateFocusPill() {
 }
 
 window.addEventListener('click', (e) => {
-  if (anyDialogOpen()) return;
+  if (anyDialogOpen() || activePage !== 'capture') return;
   const tag = e.target.tagName;
   if (['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A', 'LABEL', 'OPTION'].includes(tag)) return;
   focusScan();
 });
 
 setInterval(() => {
-  if (!anyDialogOpen() && document.hasFocus() && document.activeElement !== scanInput) {
+  if (!anyDialogOpen() && activePage === 'capture' && document.hasFocus() && document.activeElement !== scanInput) {
     const a = document.activeElement;
     if (!a || (a.tagName !== 'INPUT' && a.tagName !== 'TEXTAREA' && a.tagName !== 'SELECT' && a.tagName !== 'BUTTON')) {
       scanInput.focus();
@@ -508,6 +1088,26 @@ api.on('state:changed', (s) => { state = s; render(); });
 api.on('order:detected', ({ row }) => {
   clearWarn();
   toast(`New order: ${row.order_number} (${channelLabel(row.channel)})`);
+});
+
+api.on('tracking:detected', ({ row, carrier }) => {
+  clearWarn();
+  toast(`Tracking added: ${carrier} ${shorten(row.tracking, 20)} → ${row.order_number}`);
+});
+
+api.on('tracking:clipped', ({ message }) => {
+  pendingConfirm = null;
+  showWarn({ reason: message, danger: true, confirmable: false });
+});
+
+api.on('order:similar', ({ channel, orderNumber, similar }) => {
+  pendingConfirm = { kind: 'order', channel, value: orderNumber };
+  showWarn({
+    reason: `POSSIBLE COPY MISTAKE: ${orderNumber} looks like a piece of ${similar.order_number} (captured ${fmtTime(similar.created_at)}). Not added. If it really is a different order, Save anyway.`,
+    danger: true,
+  });
+  const card = document.querySelector(`tr[data-id="${similar.id}"]`);
+  if (card) card.scrollIntoView({ block: 'center' });
 });
 
 api.on('order:duplicate', ({ orderNumber, existing }) => {
@@ -531,8 +1131,16 @@ api.on('sync:done', (summary) => {
   refresh();
 });
 
+api.on('routing:done', (res) => {
+  const parts = [];
+  if (res.movedOut) parts.push(`${res.movedOut} order${res.movedOut === 1 ? '' : 's'} → dropship (no stock)`);
+  if (res.movedBack) parts.push(`${res.movedBack} back (restocked)`);
+  if (parts.length) toast(`Stock routing: ${parts.join(', ')}`, 4000);
+});
+
 api.on('ui:open-settings', openSettings);
 api.on('ui:open-debug', openDebug);
+api.on('ui:open-history', openHistory);
 
 /* ---------- boot ---------- */
 

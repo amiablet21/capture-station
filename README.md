@@ -1,8 +1,15 @@
 # Capture Station
 
-Windows Electron app for a packing station. Captures order number (copied from the marketplace page) + tracking number (USB barcode scanner), stores everything in SQLite, and mirrors each day's rows to a CSV. Fully silent; all feedback is visual.
+Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
-Built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. A dormant Linnworks sync (tracking + process order) is included behind a settings toggle for later use.
+## v1.1.0 highlights
+
+- **Process button**: manual push to Linnworks; parked orders are auto-unparked (tag 7 cleared) and stamped "was parked"; dropship orders process at the fallback location.
+- **Stock routing**: every 5 min, open orders the warehouse can't cover move to the DropShip location; they move back when stock is replenished (see `src/main/router.js`).
+- **Stock page**: live inventory grid (sortable, resizable, filterable), inline stock-level corrections, per-SKU image management (file / URL / download), and a WFS shipment log that deducts shipped units from the warehouse (`wfs-shipments.csv`).
+- **Copy-mistake guards**: exact-length order patterns, fragment detection for order and tracking numbers, clipboard tracking capture, click-to-copy without duplicate banners.
+- **History**: processed orders only, with a parked-only filter.
+- **Hardening**: Linnworks credentials encrypted at rest (DPAPI via safeStorage), optional Settings PIN, dev menu items stripped from packaged builds.
 
 ## Modes
 
@@ -46,7 +53,7 @@ Sync per row: find open order by channel reference number (`Orders/GetOpenOrders
 
 ## Configurable patterns (Settings)
 
-- Order numbers: `walmart = ^\d{13,15}$`, `ebay = ^\d{2}-\d{5}-\d{5}$`, `temu = ^PO-\d{3}-\d{5,}$`
+- Order numbers: `walmart = ^\d{15}$` (exactly 15 so clipped copies are rejected), `ebay = ^\d{2}-\d{5}-\d{5}$`, `temu = ^PO-\d{3}-\d{5,}$`
 - Tracking: UPS `^1Z…`, USPS `^9[2345]\d{20,24}$`, FedEx digit formats
 
 Verify the eBay and Temu formats against real orders before relying on them; edit in Settings if they differ.

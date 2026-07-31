@@ -42,13 +42,15 @@ function distributeSerials(items, serials) {
   return { assignments: out, notes };
 }
 
-async function runSync({ onProgress = () => {}, trigger = 'manual' } = {}) {
+async function runSync({ onProgress = () => {}, trigger = 'manual', ids = null } = {}) {
   if (running) return { error: 'Sync already running' };
   running = true;
   try {
     const cfg = config.load();
     const dryRun = !!cfg.dryRun;
-    const rows = db.rowsToSync();
+    // ids: optional subset chosen in the UI; empty/absent means everything eligible
+    const wanted = Array.isArray(ids) && ids.length ? new Set(ids) : null;
+    const rows = db.rowsToSync().filter(r => !wanted || wanted.has(r.id));
     const details = [];
     let synced = 0;
     let failed = 0;
@@ -98,22 +100,34 @@ async function runSync({ onProgress = () => {}, trigger = 'manual' } = {}) {
 }
 
 async function syncRow(client, row, locationId, dryRun) {
-  const order = await client.findOpenOrder(row.order_number);
+  let order = await client.findOpenOrder(row.order_number, locationId);
+  let foundAtFallback = false;
+  // Dropship orders live at the fallback location (stock routing put them
+  // there). They are processed AT that location: the primary warehouse's
+  // stock and history stay untouched, and Linnworks reporting shows which
+  // orders were dropshipped.
+  const fallbackId = (config.load().stockRouting || {}).fallbackLocationId;
+  if (!order && fallbackId && fallbackId !== locationId) {
+    order = await client.findOpenOrder(row.order_number, fallbackId);
+    if (order) foundAtFallback = true;
+  }
   if (!order) {
     // Order may not have downloaded into Linnworks yet, or is already processed.
     if (!dryRun) db.markFailed(row.id, 'Not found in open orders (retries next sync)');
     return { ok: false, message: 'Not found in open orders (retries next sync)' };
   }
+  const processLocationId = foundAtFallback ? fallbackId : locationId;
 
   const { assignments, notes } = distributeSerials(order.items, row.serials);
 
   if (dryRun) {
     const plan = [];
     if (row.tracking) plan.push(`set tracking ${row.tracking}`);
+    if (row.notes) plan.push(`add order note "${row.notes.slice(0, 60)}"`);
     if (assignments.length) {
       plan.push(`attach ${row.serials.length} serial(s) to ${assignments.length} line(s)`);
     }
-    plan.push(`process at location, mark shipped`);
+    plan.push(foundAtFallback ? 'process at DROPSHIP location, mark shipped' : 'process at warehouse, mark shipped');
     const note = notes.length ? ` [${notes.join('; ')}]` : '';
     return { ok: true, dryRun: true, message: `DRY RUN, would: ${plan.join(', then ')}${note}` };
   }
@@ -121,16 +135,35 @@ async function syncRow(client, row, locationId, dryRun) {
   if (row.tracking) {
     await client.setTracking(order.orderId, order.shippingInfo, row.tracking);
   }
+  if (row.notes) {
+    await client.addOrderNote(order.orderId, row.notes);
+  }
   if (assignments.length > 0) {
     await client.createSerials(assignments);
   }
 
-  const proc = await client.processOrder(row.order_number, locationId);
+  let proc = await client.processOrder(row.order_number, processLocationId);
+
+  // Parked orders refuse to process. Unpark, note it on the row so it can be
+  // reviewed later (visible in the Notes column / History / CSV), and retry.
+  if (proc.processedState !== 'PROCESSED' && /parked/i.test(proc.message || '')) {
+    await client.unparkOrders([order.orderId]);
+    const marker = 'was parked';
+    if (!(row.notes || '').includes(marker)) {
+      db.updateRow(row.id, { notes: row.notes ? `${row.notes} | ${marker}` : marker });
+    }
+    proc = await client.processOrder(row.order_number, processLocationId);
+    if (proc.processedState === 'PROCESSED') {
+      db.markSynced(row.id);
+      return { ok: true, message: 'Processed (was parked - unparked automatically)' };
+    }
+  }
+
   switch (proc.processedState) {
     case 'PROCESSED': {
       db.markSynced(row.id);
       const note = notes.length ? ` [${notes.join('; ')}]` : '';
-      return { ok: true, message: `Processed${note}` };
+      return { ok: true, message: `Processed${foundAtFallback ? ' (dropship)' : ''}${note}` };
     }
     case 'NOT_FOUND':
       db.markFailed(row.id, 'Order not found at processing step (retries next sync)');

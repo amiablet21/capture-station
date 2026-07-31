@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self' https: data:" />
   <title>Capture Station</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Capture Station</div>
+    <div class="brand"></div>
+    <nav class="tabs" id="pageTabs" hidden>
+      <button id="tabCapture" class="tab is-active">Capture</button>
+      <button id="tabStock" class="tab">Stock</button>
+    </nav>
     <div class="topbar-right">
-      <div class="daycount">
+      <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
         <span class="daycount-label">Orders today</span>
       </div>
@@ -57,14 +61,29 @@
     </div>
   </main>
 
+  <!-- Stock page: live warehouse inventory with inline level editing -->
+  <section id="stockPage" class="stock-page" hidden>
+    <div class="stock-toolbar">
+      <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
+      <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
+      <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
+    </div>
+    <p class="stock-hint" id="stockHint"><span id="stockSummary"></span><span class="stock-tip"> — click a count to correct it</span></p>
+    <div class="stock-sheet-row">
+      <div id="stockList" class="stock-list"></div>
+      <div id="sheetGrip" class="sheet-grip" title="Drag to widen or narrow the sheet · double-click to reset"></div>
+    </div>
+  </section>
+
   <footer class="footbar">
     <div class="footbar-left">
-      <button id="syncBtn" class="btn btn-primary" hidden>Sync to Linnworks</button>
+      <button id="syncBtn" class="btn btn-primary" hidden>Process</button>
       <span id="dryRunChip" class="chip chip-warn" hidden>Dry run</span>
       <button id="openCsvBtn" class="btn btn-secondary" hidden>Open CSV folder</button>
     </div>
     <div class="footbar-right">
       <span id="syncStatus" class="sync-status">Never synced</span>
+      <button id="historyBtn" class="btn btn-ghost">History</button>
       <button id="settingsBtn" class="btn-icon" title="Settings" aria-label="Settings">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,76a52,52,0,1,0,52,52A52.06,52.06,0,0,0,128,76Zm0,80a28,28,0,1,1,28-28A28,28,0,0,1,128,156Zm92-27.21v-1.58l14-17.51a12,12,0,0,0,2.23-10.59A111.75,111.75,0,0,0,225,71.89,12,12,0,0,0,215.89,66L193.61,63.5l-1.11-1.11L190,40.1A12,12,0,0,0,184.11,31a111.67,111.67,0,0,0-27.23-11.27A12,12,0,0,0,146.3,22L128.79,36h-1.58L109.7,22a12,12,0,0,0-10.59-2.23A111.75,111.75,0,0,0,71.89,31.05,12,12,0,0,0,66,40.11L63.5,62.39,62.39,63.5,40.1,66A12,12,0,0,0,31,71.89,111.67,111.67,0,0,0,19.77,99.12,12,12,0,0,0,22,109.7l14,17.51v1.58L22,146.3a12,12,0,0,0-2.23,10.59,111.75,111.75,0,0,0,11.29,27.22A12,12,0,0,0,40.11,190l22.28,2.48,1.11,1.11L66,215.9A12,12,0,0,0,71.89,225a111.67,111.67,0,0,0,27.23,11.27A12,12,0,0,0,109.7,234l17.51-14h1.58l17.51,14a12,12,0,0,0,10.59,2.23A111.75,111.75,0,0,0,184.11,225a12,12,0,0,0,5.91-9.06l2.48-22.28,1.11-1.11L215.9,190a12,12,0,0,0,9.06-5.91,111.67,111.67,0,0,0,11.27-27.23A12,12,0,0,0,234,146.3Zm-24.12-4.89a70.1,70.1,0,0,1,0,8.2,12,12,0,0,0,2.61,8.22l12.84,16.05A86.47,86.47,0,0,1,207,166.86l-20.43,2.27a12,12,0,0,0-7.65,4,69,69,0,0,1-5.8,5.8,12,12,0,0,0-4,7.65L166.86,207a86.47,86.47,0,0,1-10.49,4.35l-16.05-12.85a12,12,0,0,0-7.5-2.62c-.24,0-.48,0-.72,0a70.1,70.1,0,0,1-8.2,0,12.06,12.06,0,0,0-8.22,2.6L99.63,211.33A86.47,86.47,0,0,1,89.14,207l-2.27-20.43a12,12,0,0,0-4-7.65,69,69,0,0,1-5.8-5.8,12,12,0,0,0-7.65-4L49,166.86a86.47,86.47,0,0,1-4.35-10.49l12.84-16.05a12,12,0,0,0,2.61-8.22,70.1,70.1,0,0,1,0-8.2,12,12,0,0,0-2.61-8.22L44.67,99.63A86.47,86.47,0,0,1,49,89.14l20.43-2.27a12,12,0,0,0,7.65-4,69,69,0,0,1,5.8-5.8,12,12,0,0,0,4-7.65L89.14,49a86.47,86.47,0,0,1,10.49-4.35l16.05,12.85a12.06,12.06,0,0,0,8.22,2.6,70.1,70.1,0,0,1,8.2,0,12,12,0,0,0,8.22-2.6l16.05-12.85A86.47,86.47,0,0,1,166.86,49l2.27,20.43a12,12,0,0,0,4,7.65,69,69,0,0,1,5.8,5.8,12,12,0,0,0,7.65,4L207,89.14a86.47,86.47,0,0,1,4.35,10.49l-12.84,16.05A12,12,0,0,0,195.88,123.9Z"/></svg>
       </button>
@@ -98,6 +117,21 @@
       <div class="dlg-actions">
         <button value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
         <button value="save" class="btn btn-primary" id="editSave">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Quick note dialog -->
+  <dialog id="notesDialog" class="dlg">
+    <form method="dialog" class="dlg-body" id="notesForm">
+      <h2 class="dlg-title" id="notesTitle">Note</h2>
+      <label class="field">
+        <span class="field-label">Notes (serial numbers, condition, anything extra)</span>
+        <textarea id="notesText" class="input" rows="4"></textarea>
+      </label>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
+        <button value="save" class="btn btn-primary">Save</button>
       </div>
     </form>
   </dialog>
@@ -148,8 +182,15 @@
         <label class="check"><input id="setDryRun" type="checkbox" /> Dry run, log actions without writing to Linnworks</label>
       </div>
       <div class="settings-row">
-        <label class="check"><input id="setAutoSync" type="checkbox" /> Auto-sync every day at</label>
-        <input id="setAutoTime" type="time" class="input input-time" value="17:00" />
+        <label class="check"><input id="setRouting" type="checkbox" /> Move open orders with no available stock to</label>
+        <select id="setFallbackLoc" class="input input-inline">
+          <option value="">Not selected, test connection first</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <span class="field-label">Settings PIN (empty = no PIN)</span>
+        <input id="setPin" type="password" class="input input-time mono" inputmode="numeric" autocomplete="off" placeholder="unchanged" />
+        <label class="check"><input id="setPinClear" type="checkbox" /> Remove PIN</label>
       </div>
 
       <h3 class="dlg-section">Patterns, one per line as name = regex</h3>
@@ -178,6 +219,83 @@
       <div id="syncDialogList" class="sync-list"></div>
       <div class="dlg-actions">
         <button id="syncDialogClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- WFS shipments: internal log of inventory sent to Walmart fulfilment -->
+  <dialog id="wfsDialog" class="dlg dlg-wide">
+    <div class="dlg-body">
+      <h2 class="dlg-title">WFS Shipments</h2>
+      <p class="dlg-note">Log a shipment to Walmart Fulfillment Services. Saving deducts the quantities from Digital World Shop; the WFS location updates by itself once Walmart receives the shipment.</p>
+      <h3 class="dlg-section">New shipment</h3>
+      <div id="wfsLines"></div>
+      <div class="settings-row">
+        <button id="wfsAddLine" class="btn btn-ghost">+ Add line</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Note (WFS shipment ID, carrier, anything)</span>
+        <input id="wfsNote" type="text" class="input" autocomplete="off" />
+      </label>
+      <div class="settings-row">
+        <button id="wfsSave" class="btn btn-primary">Save shipment &amp; deduct stock</button>
+        <span id="wfsResult" class="test-result"></span>
+      </div>
+      <h3 class="dlg-section">Past shipments</h3>
+      <div id="wfsPast" class="wfs-past"></div>
+      <div class="dlg-actions">
+        <button id="wfsClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
+  <datalist id="skuOptions"></datalist>
+
+  <!-- Image chooser for a SKU -->
+  <dialog id="imgDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="imgTitle">Image</h2>
+      <div class="settings-row">
+        <button id="imgFromFile" class="btn btn-secondary">Add from file…</button>
+        <button id="imgDownload" class="btn btn-ghost">Download current image</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Or paste an image URL (from any listing)</span>
+        <input id="imgUrl" type="text" class="input mono" placeholder="https://…" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="dlg-note" id="imgResult" hidden></p>
+      <div class="dlg-actions">
+        <button id="imgClose" class="btn btn-ghost">Close</button>
+        <button id="imgUrlAdd" class="btn btn-primary">Add from URL</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- PIN prompt for Settings -->
+  <dialog id="pinDialog" class="dlg">
+    <form method="dialog" class="dlg-body" id="pinForm">
+      <h2 class="dlg-title">Settings PIN</h2>
+      <label class="field">
+        <span class="field-label">Enter the PIN to open Settings</span>
+        <input id="pinInput" type="password" class="input mono" inputmode="numeric" autocomplete="off" />
+      </label>
+      <p class="dlg-note" id="pinError" hidden>Wrong PIN.</p>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
+        <button value="ok" class="btn btn-primary">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- History: all captures, grouped by day -->
+  <dialog id="historyDialog" class="dlg dlg-wide">
+    <div class="dlg-body">
+      <h2 class="dlg-title">History</h2>
+      <div class="settings-row">
+        <label class="check"><input id="historyParkedOnly" type="checkbox" /> Show only orders that were parked</label>
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div class="dlg-actions">
+        <button id="historyClose" class="btn btn-primary">Close</button>
       </div>
     </div>
   </dialog>

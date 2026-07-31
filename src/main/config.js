@@ -1,13 +1,39 @@
 'use strict';
 // Config stored in userData/config.json. Credentials never hardcoded.
-const { app } = require('electron');
+// Linnworks API credentials are encrypted at rest with the OS user's key
+// (Electron safeStorage / Windows DPAPI): config.json holds `linnworksEnc`
+// and is useless if copied to another machine or user account.
+const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+
+const SECRET_FIELDS = ['applicationId', 'applicationSecret', 'token'];
+
+function encryptCreds(linnworks) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const secrets = {};
+    for (const f of SECRET_FIELDS) secrets[f] = linnworks[f] || '';
+    return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+function decryptCreds(b64) {
+  try {
+    return JSON.parse(safeStorage.decryptString(Buffer.from(b64, 'base64')));
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULTS = {
   // Order-number patterns, tested against trimmed clipboard text (full match).
   orderPatterns: [
-    { channel: 'walmart', pattern: '^\\d{13,15}$' },
+    // Exactly 15 digits: a partial highlight (14 digits or fewer) must NOT match,
+    // otherwise a clipped Ctrl+C creates a bogus order that fails at sync time.
+    { channel: 'walmart', pattern: '^\\d{15}$' },
     { channel: 'ebay', pattern: '^\\d{2}-\\d{5}-\\d{5}$' },
     { channel: 'temu', pattern: '^PO-\\d{3}-\\d{5,}$' },
   ],
@@ -28,7 +54,11 @@ const DEFAULTS = {
     locationName: '',
   },
   dryRun: true,
-  autoSync: { enabled: false, time: '17:00' },
+  // Route open orders the primary location can't cover to a fallback
+  // (dropship) location; move them back when the primary is replenished.
+  stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },
+  // SHA-256 hex of the Settings PIN; empty = no PIN required.
+  settingsPinHash: '',
   // Capture-only: hide all Linnworks sync UI; the station just records and
   // mirrors today's rows to a CSV after every change.
   captureOnly: true,
@@ -51,6 +81,11 @@ function load() {
   } catch {
     /* first run or corrupt file: fall back to defaults */
   }
+  if (stored.linnworksEnc) {
+    const secrets = decryptCreds(stored.linnworksEnc);
+    if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
+    delete stored.linnworksEnc;
+  }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
   return cached;
 }
@@ -58,8 +93,14 @@ function load() {
 function save(patch) {
   const cfg = deepMerge(load(), patch || {});
   cached = cfg;
+  const persisted = structuredClone(cfg);
+  const enc = encryptCreds(cfg.linnworks);
+  if (enc) {
+    persisted.linnworksEnc = enc;
+    for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-  fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8');
+  fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');
   return cfg;
 }
 
