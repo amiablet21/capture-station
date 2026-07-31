@@ -20,6 +20,7 @@ if (!window.api) {
     dryRun: true,
     syncRunning: false,
     captureOnly: true,
+    pages: { stock: true, history: true, receiving: false },
     csv: { path: 'C:\\Users\\packer\\Documents\\Capture Station\\capture-2026-07-30.csv', at: at(0), error: null },
   };
   window.api = {
@@ -32,7 +33,7 @@ if (!window.api) {
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     openCsvFolder: async () => ({ ok: true }),
@@ -41,12 +42,16 @@ if (!window.api) {
     getDebugLog: async () => [],
     getHistory: async () => demo.rows,
     getStock: async () => ({ ok: false, error: 'Preview mode' }),
+    getStockOpenOrders: async () => ({ ok: false, error: 'Preview mode' }),
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
     saveStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
+    receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
+    chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
     copyText: async () => ({ ok: true }),
     on: () => {},
   };
@@ -135,6 +140,18 @@ function notesCell(row) {
 function render() {
   if (!state) return;
 
+  // per-install page flags (capture is always on); capture-only wins over all
+  const pages = state.pages || { stock: true, history: true, receiving: false };
+  const pageEnabled = { capture: true, stock: !!pages.stock, receiving: !!pages.receiving };
+  if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
+    showPage('capture'); // showPage re-renders
+    return;
+  }
+  $('tabStock').hidden = !pages.stock;
+  $('tabReceiving').hidden = !pages.receiving;
+  $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.receiving);
+  $('historyBtn').hidden = !pages.history;
+
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
   $('dayCountBox').hidden = activePage !== 'capture'; // capture stat, not a stock stat
   $('nextOrderBtn').disabled = !state.currentRowId;
@@ -153,7 +170,6 @@ function render() {
   // footer: capture-only shows the CSV mirror, otherwise the sync controls
   const syncEl = $('syncStatus');
   $('syncBtn').hidden = state.captureOnly || activePage !== 'capture';
-  $('pageTabs').hidden = state.captureOnly;
   $('openCsvBtn').hidden = !state.captureOnly;
   if (activePage !== 'capture') $('dryRunChip').hidden = true;
   if (state.captureOnly) {
@@ -435,6 +451,13 @@ async function openSettings() {
   }
   $('setCaptureOnly').checked = !!cfg.captureOnly;
   $('setCsvFolder').textContent = cfg.csvFolder || 'Documents\\Capture Station';
+  const pg = cfg.pages || {};
+  $('setPageStock').checked = pg.stock !== false;
+  $('setPageHistory').checked = pg.history !== false;
+  $('setPageReceiving').checked = !!pg.receiving;
+  const rcv = cfg.receiving || {};
+  $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
+  $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
@@ -490,6 +513,11 @@ $('chooseCsvBtn').addEventListener('click', async () => {
   if (res.folder) $('setCsvFolder').textContent = res.folder;
 });
 
+$('chooseRecvBtn').addEventListener('click', async () => {
+  const res = await api.chooseReceivingFolder();
+  if (res.folder) $('setRecvFolder').textContent = res.folder;
+});
+
 $('settingsSave').addEventListener('click', async () => {
   const sel = $('setLocation');
   const pinVal = $('setPin').value.trim();
@@ -499,6 +527,12 @@ $('settingsSave').addEventListener('click', async () => {
   await api.setConfig({
     ...pinPatch,
     captureOnly: $('setCaptureOnly').checked,
+    pages: {
+      stock: $('setPageStock').checked,
+      history: $('setPageHistory').checked,
+      receiving: $('setPageReceiving').checked,
+    },
+    receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
       applicationSecret: $('setAppSecret').value.trim(),
@@ -565,13 +599,18 @@ function showPage(page) {
   $('scanPanel').hidden = page !== 'capture';
   document.querySelector('main.rows').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
+  $('receivingPage').hidden = page !== 'receiving';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
+  $('tabReceiving').classList.toggle('is-active', page === 'receiving');
   if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
     $('stockSearch').value = '';
+    loadStockViews();
     loadStock().then(() => $('stockSearch').focus());
+  } else if (page === 'receiving') {
+    enterReceiving();
   } else {
     focusScan();
   }
@@ -580,10 +619,59 @@ function showPage(page) {
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
+$('tabReceiving').addEventListener('click', () => showPage('receiving'));
 
 /* ---------- stock page ---------- */
 
 let stockCache = null;
+
+/* condition view chips: config-driven filters over SKU/title (AND with search) */
+
+let stockViews = null; // loaded once from config.stockViews
+let stockActiveView = null; // null = All
+
+function stockViewMatch(it, pattern) {
+  try {
+    const re = new RegExp(pattern, 'i');
+    return re.test(it.sku || '') || re.test(it.title || '');
+  } catch {
+    return true; // invalid user regex: filter nothing rather than everything
+  }
+}
+
+async function loadStockViews() {
+  if (stockViews === null) {
+    const cfg = await api.getConfig();
+    stockViews = (Array.isArray(cfg.stockViews) ? cfg.stockViews : [])
+      .filter(v => v && v.label && v.pattern);
+  }
+  renderStockChips();
+}
+
+function renderStockChips() {
+  const box = $('stockChips');
+  const views = stockViews || [];
+  box.hidden = views.length === 0;
+  box.innerHTML = [
+    `<button class="view-chip ${stockActiveView ? '' : 'is-active'}" data-view="">All</button>`,
+    ...views.map((v, i) =>
+      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+  ].join('');
+}
+
+$('stockChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.view-chip');
+  if (!chip) return;
+  stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
+  renderStockChips();
+  renderStock();
+});
+
+// e2e/screenshot helper: seed the stock sheet without Linnworks
+function stockSeed(data) {
+  stockCache = data;
+  renderStock();
+}
 
 // column sort: key + direction, toggled by clicking headers
 const STOCK_COLS = {
@@ -625,6 +713,7 @@ function renderStock() {
   const locId = stockCache.locationId;
   const rows = stockCache.items
     .map(it => ({ ...it, l: it.levels.find(x => x.locationId === locId) || { stockLevel: 0, inOrders: 0, due: 0, minimumLevel: 0, available: 0 } }))
+    .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
     .filter(it => !q
       || it.sku.toLowerCase().includes(q)
       || it.title.toLowerCase().includes(q)
@@ -638,7 +727,8 @@ function renderStock() {
       return (cmp * stockSort.dir) || a.sku.localeCompare(b.sku);
     });
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
-  $('stockSummary').textContent = `${rows.length} SKUs · ${units.toLocaleString()} units`;
+  $('stockSummary').textContent =
+    `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   $('stockList').innerHTML = rows.length === 0
     ? '<p class="dlg-note">No SKUs match.</p>'
     : `<table class="stock-table">
@@ -657,7 +747,7 @@ function renderStock() {
             <td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
             <td class="mono copyable" data-copy="${esc(r.sku)}" title="${esc(r.title)}&#10;Click to copy">${esc(r.sku)}</td>
             <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
-            <td class="num">${r.l.inOrders}</td>
+            <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
             <td class="num">${r.l.minimumLevel}</td>
             <td class="num stock-avail">${r.l.available}</td>
           </tr>`).join('')}</tbody>
@@ -792,6 +882,8 @@ $('stockList').addEventListener('click', (e) => {
     renderStock();
     return;
   }
+  const ioBtn = e.target.closest('button.stock-io-btn');
+  if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
@@ -803,6 +895,87 @@ $('stockList').addEventListener('click', (e) => {
   const copyEl = e.target.closest('[data-copy]');
   if (copyEl) copyFromApp(copyEl.dataset.copy);
 });
+
+/* ---------- open orders per SKU (Stock page drill-down) ---------- */
+
+const IO_CHANNELS = new Set(['walmart', 'ebay', 'temu']);
+
+function ioChannelCell(source) {
+  const s = String(source || '').trim();
+  const key = s.toLowerCase();
+  if (IO_CHANNELS.has(key)) return `<span class="badge badge-${key}">${esc(channelLabel(key))}</span>`;
+  return s ? esc(s) : '<span class="cell-missing">—</span>';
+}
+
+function ioDate(iso) {
+  if (!iso) return '—';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '—';
+  return `${String(iso).slice(0, 10)} ${fmtTime(iso)}`;
+}
+
+// Renders the dialog body; also called directly by the e2e screenshot seed.
+function ioRender(sku, orders) {
+  $('ioTitle').textContent = `Open orders — ${sku}`;
+  if (!orders.length) {
+    $('ioBody').innerHTML = `
+      <div class="io-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>
+        <div class="rows-empty-title">No open orders</div>
+        <div class="rows-empty-hint">No open order currently contains ${esc(sku)}. Orders show up here as soon as Linnworks downloads them.</div>
+      </div>`;
+    return;
+  }
+  const units = orders.reduce((a, o) => a + (o.quantity || 0), 0);
+  $('ioBody').innerHTML = `
+    <p class="dlg-note">${orders.length} order line${orders.length === 1 ? '' : 's'} · ${units} unit${units === 1 ? '' : 's'} reserved</p>
+    <div class="io-sheet">
+      <table class="rows-table">
+        <thead><tr>
+          <th class="th-gutter">#</th>
+          <th>Channel</th>
+          <th>Order #</th>
+          <th>Channel SKU</th>
+          <th class="th-num">Qty</th>
+          <th>Date</th>
+        </tr></thead>
+        <tbody>${orders.map((o, idx) => `
+          <tr>
+            <td class="cell-gutter">${idx + 1}</td>
+            <td>${ioChannelCell(o.source)}</td>
+            <td class="mono">${o.reference
+              ? `<span class="copyable" data-copy="${esc(o.reference)}" title="Click to copy ${esc(o.reference)}">${esc(o.reference)}</span>`
+              : '<span class="cell-missing">—</span>'}</td>
+            <td class="mono">${o.channelSku
+              ? `<span class="copyable" data-copy="${esc(o.channelSku)}" title="Click to copy ${esc(o.channelSku)}">${esc(o.channelSku)}</span>`
+              : '<span class="cell-missing">—</span>'}</td>
+            <td class="num-cell">${o.quantity || 0}</td>
+            <td class="mono io-date">${esc(ioDate(o.date))}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function openOpenOrders(sku) {
+  $('ioTitle').textContent = `Open orders — ${sku}`;
+  $('ioBody').innerHTML = '<div class="stock-loading io-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('ioDialog').showModal();
+  const res = await api.getStockOpenOrders(sku);
+  if (!$('ioDialog').open) return; // closed while the fetch was running
+  if (!res.ok) {
+    $('ioBody').innerHTML = `<p class="dlg-note test-result is-fail">${esc(res.error || 'Could not load open orders.')}</p>`;
+    return;
+  }
+  ioRender(sku, res.orders || []);
+}
+
+$('ioBody').addEventListener('click', (e) => {
+  const copyEl = e.target.closest('[data-copy]');
+  if (copyEl) copyFromApp(copyEl.dataset.copy);
+});
+
+$('ioClose').addEventListener('click', () => $('ioDialog').close());
+$('ioDialog').addEventListener('close', () => focusScan());
 
 /* ---------- image chooser ---------- */
 
@@ -965,6 +1138,478 @@ $('wfsSave').addEventListener('click', async () => {
   loadStock(); // show the reduced warehouse counts
 });
 
+/* ---------- receiving page ---------- */
+
+let recvLines = []; // { sku, title, qty, known }
+let recvItems = null; // full inventory list for the combobox
+let recvBySku = null; // lowercased SKU -> inventory item
+let recvByBarcode = null; // lowercased barcode -> inventory item
+let recvLookup = 'idle'; // idle | loading | ready | unavailable
+let recvPending = null; // { sku, qty } unknown SKU awaiting Add anyway / Discard
+let recvPast = []; // past sessions from receiving:list
+const recvOpenDays = new Set(); // expanded day groups in Past receipts
+const recvOpenSessions = new Set(); // expanded individual receipts
+let recvTrackingRes = null; // compiled tracking patterns for the loose hint
+
+// SKU lookup reuses the same Linnworks inventory fetch as the Stock page.
+async function enterReceiving() {
+  $('recvDate').textContent = `${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · auto`;
+  renderRecv();
+  loadRecvPast();
+  $('recvSku').focus();
+  if (recvTrackingRes === null) {
+    // loose, non-blocking hint on the inbound tracking field
+    const cfg = await api.getConfig();
+    recvTrackingRes = [];
+    for (const p of cfg.trackingPatterns || []) {
+      try { recvTrackingRes.push({ carrier: p.carrier, re: new RegExp(p.pattern, 'i') }); } catch { /* bad user regex */ }
+    }
+  }
+  if (recvLookup === 'idle') {
+    recvLookup = 'loading';
+    recvNote('Loading Linnworks SKUs…');
+    const res = await api.getStock();
+    if (res.ok) {
+      recvItems = res.items;
+      recvBySku = new Map(res.items.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map(res.items.filter(i => i.barcode).map(i => [i.barcode.toLowerCase(), i]));
+      recvLookup = 'ready';
+      recvNote('');
+    } else {
+      recvLookup = 'unavailable';
+      recvNote(`SKU lookup unavailable: ${res.error || 'could not load inventory'}`, false);
+    }
+  }
+}
+
+function recvNote(msg, ok = true) {
+  const el = $('recvNote');
+  el.textContent = msg;
+  el.className = `test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
+}
+
+function clearRecvWarn() {
+  $('recvWarn').hidden = true;
+  recvPending = null;
+}
+
+function recvLookupExact(value) {
+  const key = value.toLowerCase();
+  return (recvBySku && recvBySku.get(key)) || (recvByBarcode && recvByBarcode.get(key)) || null;
+}
+
+function recvAdd(sku, title, known, qty = 1) {
+  const existing = recvLines.find(l => l.sku.toLowerCase() === sku.toLowerCase());
+  if (existing) {
+    existing.qty += qty;
+    if (!existing.title && title) existing.title = title;
+  } else {
+    recvLines.push({ sku, title: title || '', qty, known: known !== false });
+  }
+  renderRecv();
+}
+
+// live entry row: clear inputs and start the next line
+function recvResetEntry() {
+  $('recvSku').value = '';
+  $('recvQty').value = '';
+  closeCombo();
+  recvUpdateEntryTitle();
+  $('recvSku').focus();
+}
+
+// title cell autofills as soon as the typed SKU/barcode resolves
+function recvUpdateEntryTitle() {
+  const el = $('recvEntryTitle');
+  const raw = $('recvSku').value.trim();
+  const item = raw ? recvLookupExact(raw) : null;
+  if (item) {
+    el.textContent = item.title || '—';
+    el.classList.add('is-filled');
+  } else {
+    el.textContent = raw && recvLookup === 'ready' ? 'no exact SKU match yet…' : 'type a SKU, the title autofills…';
+    el.classList.remove('is-filled');
+  }
+}
+
+// Enter in the qty cell commits the line and starts a new entry row.
+function recvCommitEntry() {
+  clearRecvWarn();
+  const raw = $('recvSku').value.trim();
+  if (!raw) { $('recvSku').focus(); return; }
+  const qtyRaw = $('recvQty').value.trim();
+  const qty = qtyRaw === '' ? 1 : Number(qtyRaw); // empty qty = 1, like the placeholder says
+  if (!Number.isInteger(qty) || qty < 1) {
+    recvNote('Quantity must be a whole number of 1 or more.', false);
+    $('recvQty').focus();
+    return;
+  }
+  recvNote('');
+  const item = recvLookupExact(raw);
+  if (item) {
+    recvAdd(item.sku, item.title, true, qty);
+    recvResetEntry();
+    return;
+  }
+  if (recvLookup !== 'ready') {
+    recvAdd(raw, '', true, qty); // no inventory to check against: accept as typed
+    recvResetEntry();
+    return;
+  }
+  recvPending = { sku: raw, qty };
+  $('recvWarnText').textContent = `UNKNOWN SKU: ${raw} is not in Linnworks inventory. Not added - check the label, or Add anyway.`;
+  $('recvWarn').hidden = false;
+}
+
+/* searchable SKU combobox: type to filter the loaded inventory */
+
+let comboMatches = [];
+let comboHl = -1;
+
+function comboFilter(q) {
+  if (!recvItems) return [];
+  q = q.trim().toLowerCase();
+  const out = [];
+  for (const it of recvItems) {
+    if (!q
+      || it.sku.toLowerCase().includes(q)
+      || (it.title || '').toLowerCase().includes(q)
+      || (it.barcode || '').toLowerCase().includes(q)) {
+      out.push(it);
+      if (out.length >= 50) break;
+    }
+  }
+  return out;
+}
+
+function openCombo() {
+  comboMatches = comboFilter($('recvSku').value);
+  comboHl = comboMatches.length ? 0 : -1;
+  renderCombo();
+}
+
+function closeCombo() {
+  $('recvComboList').hidden = true;
+  $('recvSku').setAttribute('aria-expanded', 'false');
+  comboMatches = [];
+  comboHl = -1;
+}
+
+function renderCombo() {
+  const list = $('recvComboList');
+  if (recvLookup === 'loading') {
+    list.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
+  } else if (!comboMatches.length) {
+    list.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
+  } else {
+    list.innerHTML = comboMatches.map((it, i) => `
+      <button class="combo-opt ${i === comboHl ? 'is-hl' : ''}" data-i="${i}" title="${esc(it.sku)} — ${esc(it.title)}">
+        <span class="mono">${esc(it.sku)}</span>
+        <span class="combo-opt-title">${esc(it.title || '')}</span>
+      </button>`).join('');
+  }
+  list.hidden = false;
+  $('recvSku').setAttribute('aria-expanded', 'true');
+  const hl = list.querySelector('.combo-opt.is-hl');
+  if (hl) hl.scrollIntoView({ block: 'nearest' });
+}
+
+function comboPick(item) {
+  $('recvSku').value = item.sku;
+  closeCombo();
+  recvUpdateEntryTitle();
+  $('recvQty').focus();
+  $('recvQty').select();
+}
+
+$('recvSku').addEventListener('input', () => { openCombo(); recvUpdateEntryTitle(); });
+$('recvSku').addEventListener('focus', () => { if ($('recvSku').value.trim()) openCombo(); });
+$('recvSku').addEventListener('blur', () => setTimeout(closeCombo, 150));
+
+$('recvSku').addEventListener('keydown', (e) => {
+  const open = !$('recvComboList').hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) { openCombo(); return; }
+    if (!comboMatches.length) return;
+    comboHl = (comboHl + (e.key === 'ArrowDown' ? 1 : -1) + comboMatches.length) % comboMatches.length;
+    renderCombo();
+    return;
+  }
+  if (e.key === 'Escape') { closeCombo(); return; }
+  if (e.key === 'Tab' && !e.shiftKey) {
+    // Tab moves to the qty cell; a highlighted suggestion is picked on the way
+    if (open && comboHl >= 0 && comboMatches[comboHl] && !recvLookupExact($('recvSku').value.trim())) {
+      e.preventDefault();
+      comboPick(comboMatches[comboHl]);
+      return;
+    }
+    closeCombo();
+    return;
+  }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const raw = $('recvSku').value.trim();
+  if (!raw) return;
+  // Enter moves to the qty cell (picking the highlighted suggestion if the
+  // typed text is not already an exact SKU/barcode); Enter in qty commits.
+  if (!recvLookupExact(raw) && open && comboHl >= 0 && comboMatches[comboHl] && recvLookup === 'ready') {
+    comboPick(comboMatches[comboHl]);
+    return;
+  }
+  closeCombo();
+  recvUpdateEntryTitle();
+  $('recvQty').focus();
+  $('recvQty').select();
+});
+
+// mousedown (not click) so the option wins over the input's blur handler
+$('recvComboList').addEventListener('mousedown', (e) => {
+  const opt = e.target.closest('.combo-opt');
+  if (!opt) return;
+  e.preventDefault();
+  comboPick(comboMatches[Number(opt.dataset.i)]);
+});
+
+$('recvQty').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  recvCommitEntry();
+});
+
+// loose validation hint on the inbound tracking number; never blocks
+$('recvTracking').addEventListener('input', () => {
+  const v = $('recvTracking').value.trim();
+  const hint = $('recvTrackingHint');
+  if (!v) { hint.textContent = ''; hint.classList.remove('is-ok'); return; }
+  const m = (recvTrackingRes || []).find(p => p.re.test(v));
+  hint.textContent = m ? `${m.carrier} format` : 'unrecognized format — saved as typed';
+  hint.classList.toggle('is-ok', !!m);
+});
+
+function renderRecv() {
+  const units = recvLines.reduce((s, l) => s + l.qty, 0);
+  $('recvFinish').disabled = recvLines.length === 0;
+  $('recvSummary').innerHTML =
+    `${recvLines.length} SKU${recvLines.length === 1 ? '' : 's'} · <strong>${units}</strong> unit${units === 1 ? '' : 's'}`;
+  $('recvEntryNum').textContent = recvLines.length + 1; // the live entry row is always next
+  $('recvBody').innerHTML = recvLines.map((l, idx) => `
+    <tr data-idx="${idx}">
+      <td class="cell-gutter ${l.known === false ? 'st-failed' : 'st-captured'}" title="${l.known === false ? 'Not in Linnworks inventory' : 'Matched in Linnworks'}">${idx + 1}</td>
+      <td class="mono cell-recv-sku">${esc(l.sku)}${l.known === false ? '<span class="unknown-note">not in Linnworks</span>' : ''}</td>
+      <td class="cell-recv-title" title="${esc(l.title)}">${l.title ? esc(l.title) : '<span class="cell-missing">—</span>'}</td>
+      <td class="num cell-level"><button class="stock-num-btn recv-qty-btn" data-idx="${idx}" title="Click to edit the quantity">${l.qty}</button></td>
+      <td class="cell-actions">
+        <span class="row-actions">
+          <button class="btn-icon is-danger" data-act="del" data-idx="${idx}" title="Remove line">${ICONS.trash}</button>
+        </span>
+      </td>
+    </tr>`).join('');
+}
+
+// inline qty edit, same interaction as the Stock page's level edit
+function beginRecvQtyEdit(btn) {
+  const idx = Number(btn.dataset.idx);
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.step = '1';
+  input.value = recvLines[idx].qty;
+  input.className = 'input stock-edit recv-qty-btn';
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const v = Number(input.value);
+    if (Number.isInteger(v) && v > 0 && recvLines[idx]) recvLines[idx].qty = v;
+    renderRecv();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; renderRecv(); }
+  });
+  input.addEventListener('blur', commit);
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+$('recvWarnAccept').addEventListener('click', () => {
+  if (recvPending) recvAdd(recvPending.sku, '', false, recvPending.qty);
+  clearRecvWarn();
+  recvResetEntry();
+});
+
+$('recvWarnDiscard').addEventListener('click', () => { clearRecvWarn(); recvResetEntry(); });
+
+$('recvBody').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-act="del"]');
+  if (btn) {
+    recvLines.splice(Number(btn.dataset.idx), 1);
+    renderRecv();
+    return;
+  }
+  const qtyBtn = e.target.closest('button.recv-qty-btn');
+  if (qtyBtn) beginRecvQtyEdit(qtyBtn);
+});
+
+$('recvFinish').addEventListener('click', async () => {
+  if (!recvLines.length) return;
+  clearRecvWarn();
+  $('recvFinish').disabled = true;
+  recvNote('Saving receipt…');
+  const meta = {
+    reference: $('recvRef').value.trim(),
+    trackingNumber: $('recvTracking').value.trim(),
+    notes: $('recvNotes').value.trim(),
+  };
+  const res = await api.receivingFinish(recvLines.map(({ sku, title, qty }) => ({ sku, title, qty })), meta);
+  if (!res.ok) {
+    recvNote(res.error || 'Could not save the receipt.', false);
+    $('recvFinish').disabled = false;
+    return;
+  }
+  const units = recvLines.reduce((s, l) => s + l.qty, 0);
+  recvLines = [];
+  $('recvRef').value = '';
+  $('recvTracking').value = '';
+  $('recvTrackingHint').textContent = '';
+  $('recvTrackingHint').classList.remove('is-ok');
+  $('recvNotes').value = '';
+  renderRecv();
+  toast(`Receipt saved: ${res.lines} SKU${res.lines === 1 ? '' : 's'}, ${units} unit${units === 1 ? '' : 's'}`);
+  if (!res.webhook) recvNote(`Saved to ${res.path.split(/[\\/]/).pop()}`);
+  else if (res.webhook.ok) recvNote('Saved and sent to Make.com');
+  else recvNote(`Saved, but the webhook failed: ${res.webhook.error}`, false);
+  loadRecvPast(); // the finished receipt appears in Past receipts
+  $('recvSku').focus();
+});
+
+/* past receipts: read-only history of finished sessions */
+
+const CARET_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg>';
+
+async function loadRecvPast() {
+  const res = await api.receivingList();
+  recvPast = (res && res.sessions) || [];
+  renderRecvPast();
+}
+
+function recvSessStatus(s) {
+  if (s.webhook) {
+    return s.webhook.ok
+      ? { cls: 'st-synced', label: 'Sent to Make.com', title: '' }
+      : { cls: 'st-failed', label: 'Webhook failed', title: s.webhook.error || '' };
+  }
+  return { cls: 'st-pending', label: 'Saved', title: 'Session file saved; no webhook configured' };
+}
+
+function recvSessUnits(s) {
+  return s.lines.reduce((a, l) => a + l.qty, 0);
+}
+
+function recvDayLabel(key) {
+  const d = new Date(`${key}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? key : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// one receipt's expanded block: shipment meta (when present) + its lines
+function recvSessLinesHtml(s) {
+  const meta = [
+    s.reference ? `<span><span class="recv-past-meta-label">Ref</span><span class="mono">${esc(s.reference)}</span></span>` : '',
+    s.trackingNumber ? `<span><span class="recv-past-meta-label">Tracking</span><span class="mono">${esc(s.trackingNumber)}</span></span>` : '',
+    s.notes ? `<span><span class="recv-past-meta-label">Notes</span>${esc(s.notes)}</span>` : '',
+  ].filter(Boolean).join('');
+  return `
+    <tr><td class="recv-lines-cell" colspan="4"><div class="recv-past-lines">
+      ${meta ? `<div class="recv-past-meta">${meta}</div>` : ''}
+      ${s.lines.map(l => `
+      <div class="recv-past-line">
+        <span class="mono">${esc(l.sku)}</span>
+        <span class="recv-past-line-title">${esc(l.title)}</span>
+        <span class="recv-past-line-qty">×${l.qty}</span>
+      </div>`).join('')}
+    </div></td></tr>`;
+}
+
+function renderRecvPast() {
+  const box = $('recvPastBox');
+  if (!recvPast.length) {
+    box.innerHTML = `
+      <div class="recv-past-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.58l-42-25.2A12,12,0,0,1,112,130.29V80a12,12,0,0,1,24,0Zm-8-52A100.2,100.2,0,0,0,57.91,57.06L48,66.75V56a12,12,0,0,0-24,0V96a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24H65.16l9.53-9.31A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
+        No receipts yet. Finished receipts are saved here for review.
+      </div>`;
+    return;
+  }
+  // group by local day (sessions arrive newest first, so day order holds)
+  const days = new Map();
+  for (const s of recvPast) {
+    const key = String(s.finishedAt).slice(0, 10) || 'unknown';
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(s);
+  }
+  box.innerHTML = `
+    <table class="recv-past-table">
+      <tbody>${[...days.entries()].map(([day, list]) => {
+        const open = recvOpenDays.has(day);
+        const units = list.reduce((a, s) => a + recvSessUnits(s), 0);
+        // aggregated per-SKU preview across the day's receipts
+        const totals = new Map();
+        for (const s of list) for (const l of s.lines) totals.set(l.sku, (totals.get(l.sku) || 0) + l.qty);
+        const parts = [...totals.entries()].slice(0, 3).map(([sku, q]) => `${sku} ×${q}`);
+        const preview = parts.join(', ') + (totals.size > 3 ? ' …' : '');
+        return `
+        <tr class="recv-day ${open ? 'is-open' : ''}" data-day="${esc(day)}" title="Click to ${open ? 'collapse' : 'expand'} this day">
+          <td class="cell-gutter"><span class="recv-caret">${CARET_ICON}</span></td>
+          <td><span class="mono">${esc(recvDayLabel(day))}</span> · ${list.length} receipt${list.length === 1 ? '' : 's'}</td>
+          <td class="recv-day-preview" title="${esc(preview)}">${esc(preview)}</td>
+          <td class="recv-units-cell">${units}</td>
+        </tr>
+        ${open ? list.map(s => {
+          const st = recvSessStatus(s);
+          const sOpen = recvOpenSessions.has(s.file);
+          const detail = [s.reference, s.trackingNumber].filter(Boolean).join(' · ');
+          return `
+          <tr class="recv-sess ${sOpen ? 'is-open' : ''}" data-file="${esc(s.file)}" title="Click to ${sOpen ? 'hide' : 'show'} the lines">
+            <td class="cell-gutter"><span class="recv-caret">${CARET_ICON}</span></td>
+            <td><span class="mono">${s.finishedAt ? fmtTime(s.finishedAt) : '—'}</span> · ${esc(s.station || '—')}
+              <span class="history-status ${st.cls}" title="${esc(st.title)}">${esc(st.label)}</span></td>
+            <td class="recv-sess-meta" title="${esc(detail)}">${detail ? esc(detail) : `${s.lines.length} SKU${s.lines.length === 1 ? '' : 's'}`}</td>
+            <td class="recv-units-cell">${recvSessUnits(s)}</td>
+          </tr>
+          ${sOpen ? recvSessLinesHtml(s) : ''}`;
+        }).join('') : ''}`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+$('recvPastBox').addEventListener('click', (e) => {
+  const sess = e.target.closest('tr.recv-sess');
+  if (sess) {
+    const file = sess.dataset.file;
+    if (recvOpenSessions.has(file)) recvOpenSessions.delete(file);
+    else recvOpenSessions.add(file);
+    renderRecvPast();
+    return;
+  }
+  const day = e.target.closest('tr.recv-day');
+  if (day) {
+    const key = day.dataset.day;
+    if (recvOpenDays.has(key)) recvOpenDays.delete(key);
+    else recvOpenDays.add(key);
+    renderRecvPast();
+  }
+});
+
+// seed helper for automated screenshots and tests (used by the e2e suite)
+function recvSeed(lines) {
+  recvLines = lines.map(l => ({ ...l }));
+  recvNote('');
+  clearRecvWarn();
+  renderRecv();
+}
+
 /* ---------- history dialog ---------- */
 
 function historyStatusLabel(row) {
@@ -1044,7 +1689,7 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog'].some(id => $(id).open);
 }
 
 function focusScan() {

@@ -57,11 +57,21 @@ const DEFAULTS = {
   // Route open orders the primary location can't cover to a fallback
   // (dropship) location; move them back when the primary is replenished.
   stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },
+  // Condition views on the Stock page: filter chips matching SKU or title
+  // against a regex. Extend here (or later in Settings) e.g. with Used.
+  stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX' }],
   // SHA-256 hex of the Settings PIN; empty = no PIN required.
   settingsPinHash: '',
   // Capture-only: hide all Linnworks sync UI; the station just records and
   // mirrors today's rows to a CSV after every change.
   captureOnly: true,
+  // Per-install page flags. Capture is always on; capture-only mode overrides
+  // all of these and shows Capture alone.
+  pages: { stock: true, history: true, receiving: false },
+  // Receiving sessions: local JSON audit trail of goods received; empty
+  // folder = Documents\Capture Station\receiving.
+  // webhookUrl: optional Make.com webhook POSTed on "Finish receiving".
+  receiving: { folder: '', webhookUrl: '' },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
   lastSync: null, // { at, synced, failed, dryRun }

@@ -188,7 +188,8 @@ class LinnworksClient {
     };
   }
 
-  // All open orders at a location with the minimal item info routing needs.
+  // All open orders at a location with the item info routing and the Stock
+  // page's per-SKU order list need.
   async listOpenOrders(fulfilmentCenter) {
     const out = [];
     for (let page = 1; ; page++) {
@@ -201,10 +202,14 @@ class LinnworksClient {
           orderId: o.OrderId,
           numOrderId: o.NumOrderId,
           reference: o.GeneralInfo ? o.GeneralInfo.ReferenceNum : '',
+          source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
+          receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
           items: (o.Items || []).filter(it => !it.IsService && !it.IsUnlinked).map(it => ({
             // for open-order items the stock item GUID is ItemId (StockItemId is zeros)
             stockItemId: it.ItemId,
             sku: it.SKU || it.ItemNumber || '',
+            channelSku: it.ChannelSKU || '',
+            title: it.Title || '',
             quantity: it.Quantity || 1,
           })),
         });

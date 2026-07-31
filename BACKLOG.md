@@ -18,6 +18,10 @@ Implementation notes:
   Linnworks' own low-stock views agree.
 - Email delivery mechanism TBD (owner's mailbox / SMTP).
 
+## 1b. Draft POs from receiving sessions
+
+Follow-up to the Receiving page: create the draft Linnworks PO from a session directly (verified endpoints: `Inventory/GetSuppliers`, `PurchaseOrder/Create_PurchaseOrder_Initial`, `PurchaseOrder/Add_PurchaseOrderItem`; `Cost` there is the line total, unit cost × qty). Dropped from v1.2 — the owner raises POs manually from the webhook notification.
+
 ## 2. Cleaner views for used and open-box listings
 
 SKUs carry condition suffixes (e.g. `S25-128GB-NAVY-OPENBOX`). Add separate or

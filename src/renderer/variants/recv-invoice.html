@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Receiving A — Shipment form</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .wrap { flex: 1; overflow-y: auto; margin: 0 24px 12px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 16px; }
+  .ship-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .ship-title { font-size: 13.5px; font-weight: 600; }
+  .ship-date { font-size: 12.5px; color: var(--muted); }
+  .grid { width: 100%; border-collapse: collapse; }
+  .grid th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .grid td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); font-size: 12.5px; }
+  .grid td:last-child { border-right: none; }
+  .sku { font-family: var(--mono); font-weight: 600; }
+  .title { color: var(--muted); }
+  .qty { font-family: var(--mono); font-weight: 600; text-align: right; width: 60px; }
+  .entry td { background: var(--surface-2); }
+  .entry .input { width: 100%; }
+  .input { font-family: var(--font); font-size: 13px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); }
+  .input.combo { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); font-family: var(--mono); }
+  .add-btn { font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-ctl); border: none; background: var(--accent); color: #fff; }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .total { font-size: 13px; color: var(--muted); }
+  .total strong { font-family: var(--mono); font-size: 16px; color: var(--text); }
+  .btn-finish { font-size: 14px; font-weight: 500; padding: 10px 22px; border-radius: var(--r-ctl); border: none; background: var(--accent); color: #fff; }
+  .hist-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin: 4px 0 6px; }
+  .hist-row { display: flex; gap: 14px; align-items: center; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); font-size: 12.5px; color: var(--muted); }
+  .hist-row .mono { font-weight: 600; color: var(--text); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right"><div class="stat"><span class="stat-num">14</span><span class="stat-label">Units this shipment</span></div></div>
+  </header>
+  <div class="wrap">
+    <section class="card">
+      <div class="ship-head">
+        <span class="ship-title">Shipment in progress</span>
+        <span class="ship-date">Receiving for Jul 31, 2026 · 2:14 PM</span>
+      </div>
+      <table class="grid">
+        <thead><tr><th style="width:200px">SKU</th><th>Product</th><th style="width:60px;text-align:right">Qty</th><th style="width:36px"></th></tr></thead>
+        <tbody>
+          <tr><td class="sku">S25-128GB-NAVY</td><td class="title">Galaxy S25 128GB Navy</td><td class="qty">6</td><td></td></tr>
+          <tr><td class="sku">S25-256GB-BLACK</td><td class="title">Galaxy S25 256GB Black</td><td class="qty">4</td><td></td></tr>
+          <tr><td class="sku">IP15-128GB-BLUE</td><td class="title">iPhone 15 128GB Blue</td><td class="qty">4</td><td></td></tr>
+          <tr class="entry">
+            <td><input class="input combo" value="tab-a9" placeholder="Type SKU or name" /></td>
+            <td class="title">Galaxy <b>Tab A9</b> 64GB — pick from 3 matches…</td>
+            <td><input class="input" style="text-align:right" value="8" /></td>
+            <td><button class="add-btn">Add</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="foot">
+        <span class="total">3 SKUs · <strong>14</strong> units</span>
+        <button class="btn-finish">Finish shipment</button>
+      </div>
+    </section>
+    <div class="hist-title">Past receipts</div>
+    <div class="hist-row"><span>Jul 30 · 4:02 PM</span><span class="mono">5 SKUs · 32 units</span><span class="badge status-captured">Sent to Make.com</span></div>
+    <div class="hist-row"><span>Jul 28 · 11:15 AM</span><span class="mono">2 SKUs · 10 units</span><span class="badge status-captured">Sent to Make.com</span></div>
+  </div>
+  <footer class="footbar"><button class="btn-secondary">Open receiving folder</button><span class="sync-status">Sessions saved to Documents\Capture Station\receiving</span></footer>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Receiving C — PO worksheet</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .wrap { flex: 1; overflow-y: auto; margin: 0 24px 12px; display: flex; flex-direction: column; gap: 12px; }
+  .bar { display: flex; gap: 10px; align-items: center; }
+  .bar .ref { font-size: 13px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); width: 220px; font-family: var(--mono); }
+  .bar .date { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+  .sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface-2); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); font-size: 12.5px; height: 32px; }
+  td:last-child, th:last-child { border-right: none; }
+  .gut { width: 34px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--faint); background: var(--surface-2); border-right: 1px solid var(--border) !important; }
+  .sku { font-family: var(--mono); font-weight: 600; }
+  .name { color: var(--muted); }
+  .qty { font-family: var(--mono); font-weight: 600; text-align: right; width: 56px; }
+  .ghost td { color: var(--faint); font-style: normal; background: var(--surface); }
+  .ghost .sku { color: var(--accent); font-weight: 500; }
+  .cursor { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .total { font-size: 12.5px; color: var(--muted); }
+  .total strong { font-family: var(--mono); font-size: 15px; color: var(--text); }
+  .btn-finish { font-size: 13.5px; font-weight: 500; padding: 9px 18px; border-radius: var(--r-ctl); border: none; background: var(--accent); color: #fff; }
+  .hist-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .hist { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .hist td { font-size: 12.5px; color: var(--muted); }
+  .hist .mono { font-weight: 600; color: var(--text); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right"><div class="stat"><span class="stat-num">14</span><span class="stat-label">Units this receipt</span></div></div>
+  </header>
+  <div class="wrap">
+    <div class="bar">
+      <input class="ref" value="PO-VENDOR-0731" placeholder="Reference (optional)" />
+      <span class="date">Jul 31, 2026 · auto</span>
+    </div>
+    <div class="sheet">
+      <table>
+        <thead><tr><th class="gut">#</th><th style="width:210px">SKU</th><th>Product</th><th style="width:56px;text-align:right">Qty</th></tr></thead>
+        <tbody>
+          <tr><td class="gut">1</td><td class="sku">S25-128GB-NAVY</td><td class="name">Galaxy S25 128GB Navy</td><td class="qty">6</td></tr>
+          <tr><td class="gut">2</td><td class="sku">S25-256GB-BLACK</td><td class="name">Galaxy S25 256GB Black</td><td class="qty">4</td></tr>
+          <tr><td class="gut">3</td><td class="sku">IP15-128GB-BLUE</td><td class="name">iPhone 15 128GB Blue</td><td class="qty">4</td></tr>
+          <tr class="ghost"><td class="gut">4</td><td class="sku cursor">tab-a9|</td><td class="name">type SKU, title autofills…</td><td class="qty"></td></tr>
+        </tbody>
+      </table>
+      <div class="foot">
+        <span class="total">3 SKUs · <strong>14</strong> units</span>
+        <button class="btn-finish">Finish receipt</button>
+      </div>
+    </div>
+    <span class="hist-title">Past receipts · grouped by day</span>
+    <div class="hist">
+      <table>
+        <tbody>
+          <tr><td class="gut">▾</td><td><span class="mono">Jul 30</span> · 2 receipts</td><td class="name">S25-128GB-NAVY ×20, IP15-128GB-BLUE ×8, TAB-A9-64GB ×4 …</td><td class="qty">32</td></tr>
+          <tr><td class="gut">▸</td><td><span class="mono">Jul 28</span> · 1 receipt</td><td class="name">2 SKUs</td><td class="qty">10</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <footer class="footbar"><button class="btn-secondary">Open receiving folder</button><span class="sync-status">Sent to Make.com · Jul 30, 4:02 PM</span></footer>
+</body>
+</html>

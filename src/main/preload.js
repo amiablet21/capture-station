@@ -36,12 +36,16 @@ contextBridge.exposeInMainWorld('api', {
   getDebugLog: () => ipcRenderer.invoke('debug:get'),
   getHistory: () => ipcRenderer.invoke('history:get'),
   getStock: () => ipcRenderer.invoke('stock:get'),
+  getStockOpenOrders: (sku) => ipcRenderer.invoke('stock:openOrders', { sku }),
   setStockLevel: (sku, level) => ipcRenderer.invoke('stock:set', { sku, level }),
   addStockImage: (sku, stockItemId) => ipcRenderer.invoke('stock:addImage', { sku, stockItemId }),
   addStockImageUrl: (sku, stockItemId, url) => ipcRenderer.invoke('stock:addImageUrl', { sku, stockItemId, url }),
   saveStockImage: (sku, url) => ipcRenderer.invoke('stock:saveImage', { sku, url }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
+  receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
+  receivingList: () => ipcRenderer.invoke('receiving:list'),
+  chooseReceivingFolder: () => ipcRenderer.invoke('receiving:chooseFolder'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   on: (channel, cb) => {
     if (!EVENTS.includes(channel)) return;

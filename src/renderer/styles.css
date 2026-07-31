@@ -702,6 +702,28 @@ body {
 
 .stock-toolbar .input { width: 320px; }
 
+/* condition view chips (All / Open Box / …), config-driven */
+
+.stock-chips { display: flex; align-items: center; gap: 6px; }
+
+.view-chip {
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.view-chip:hover { color: var(--text); }
+.view-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.view-chip.is-active { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+
 .stock-hint {
   font-size: 12px;
   color: var(--faint);
@@ -971,6 +993,363 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* receiving page: entry form + current session sheet + past receipts */
+
+.recv-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* the page scrolls as one column so the history is always reachable */
+.recv-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* header bar: reference + inbound tracking + automatic date */
+
+.recv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.recv-ref { width: 220px; }
+.recv-tracking { width: 260px; }
+
+.recv-tracking-hint { font-size: 11.5px; color: var(--muted); }
+.recv-tracking-hint.is-ok { color: var(--accent-soft-text); font-weight: 500; }
+
+.recv-past-head {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.recv-date { margin-left: auto; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+
+/* searchable SKU combobox */
+
+.combo { position: relative; min-width: 0; }
+.combo-input { width: 100%; }
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -11px; /* align with the cell edge (10px padding + 1px gridline) */
+  width: min(480px, 70vw);
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  box-shadow: 0 12px 32px rgba(47, 52, 55, 0.10);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.combo-opt {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.combo-opt .mono { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+
+.combo-opt-title {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo-opt:hover, .combo-opt.is-hl { background: var(--accent-soft); }
+.combo-opt:hover .combo-opt-title, .combo-opt.is-hl .combo-opt-title { color: var(--accent-soft-text); }
+
+.combo-note { padding: 6px 8px; font-size: 12px; color: var(--faint); }
+
+/* the PO worksheet: a spreadsheet whose last row is the live entry row */
+
+.recv-sheet-box {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: visible; /* the SKU suggestion dropdown must escape the sheet */
+}
+
+.recv-sheet-table { width: 100%; border-collapse: collapse; }
+
+.recv-sheet-table th {
+  background: var(--surface-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.recv-sheet-table th:first-child { border-top-left-radius: calc(var(--r-card) - 1px); }
+.recv-sheet-table th:last-child { border-top-right-radius: calc(var(--r-card) - 1px); border-right: none; }
+.recv-sheet-table th.th-gutter { width: 36px; text-align: center; border-right: 1px solid var(--border); }
+.recv-sheet-table th.th-sku { width: 220px; }
+.recv-sheet-table th.th-qty { width: 84px; text-align: right; }
+.recv-sheet-table th.th-actions { width: 40px; border-right: none; }
+.recv-sheet-table th:nth-last-child(2) { border-right: none; }
+
+.recv-sheet-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  height: 34px;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recv-sheet-table td:last-child, .recv-sheet-table td:nth-last-child(2) { border-right: none; }
+.recv-sheet-table tbody tr:hover td:not(.cell-gutter):not(.recv-entry td) { background: var(--surface-2); }
+
+/* the live entry row */
+
+.recv-entry td { background: var(--surface); }
+.recv-entry td:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+.recv-entry-sku { overflow: visible !important; } /* the dropdown anchors here */
+
+.recv-cell-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent);
+  padding: 0;
+}
+
+.recv-cell-input::placeholder { color: var(--faint); font-weight: 400; }
+
+.recv-qty-cell { text-align: right; }
+.recv-qty-cell::-webkit-inner-spin-button, .recv-qty-cell::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.recv-entry-title { color: var(--faint); font-size: 12px; }
+.recv-entry-title.is-filled { color: var(--muted); font-size: 12.5px; }
+
+/* sheet footer: totals + finish */
+
+.recv-sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-card) var(--r-card);
+}
+
+.recv-total { font-size: 12.5px; color: var(--muted); }
+
+.recv-total strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recv-sheet-foot .test-result { margin-left: auto; }
+
+.recv-notes-field { margin-bottom: 0; }
+
+/* past receipts */
+
+.recv-past { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.recv-past-head { padding: 4px 2px 0; }
+
+.recv-past-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.recv-past-table { width: 100%; border-collapse: collapse; }
+
+.recv-past-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  height: 32px;
+  font-size: 12.5px;
+  color: var(--muted);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recv-past-table tr:last-child td { border-bottom: none; }
+.recv-past-table td:last-child { border-right: none; }
+.recv-past-table td .mono { font-weight: 600; color: var(--text); }
+
+.recv-past-table td.cell-gutter { width: 34px; }
+.recv-past-table td.recv-units-cell {
+  width: 64px;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recv-day-preview { max-width: 340px; }
+
+tr.recv-day { cursor: pointer; }
+tr.recv-day:hover td:not(.cell-gutter) { background: var(--surface-2); }
+
+/* individual receipts inside an expanded day */
+tr.recv-sess { cursor: pointer; }
+tr.recv-sess td { background: var(--surface-2); }
+tr.recv-sess td.cell-gutter { background: var(--surface-2); }
+tr.recv-sess td:nth-child(2) { padding-left: 18px; }
+tr.recv-sess:hover td { background: var(--accent-soft); }
+
+.recv-sess-meta { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+.recv-past-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 0 6px;
+}
+
+.recv-past-meta .mono { font-weight: 600; color: var(--text); font-size: 12px; }
+.recv-past-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  margin-right: 4px;
+}
+
+.recv-caret {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  color: var(--faint);
+  transition: transform 150ms var(--ease);
+}
+
+.recv-caret svg { width: 12px; height: 12px; }
+tr.recv-day.is-open .recv-caret, tr.recv-sess.is-open .recv-caret { transform: rotate(90deg); color: var(--accent); }
+
+td.recv-lines-cell { padding: 0 !important; background: var(--surface-2); }
+
+.recv-past-lines { padding: 6px 12px 8px 46px; }
+
+.recv-past-line {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.recv-past-line .mono { font-weight: 600; font-size: 12px; }
+.recv-past-line-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recv-past-line-qty { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.recv-past-empty {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.recv-past-empty svg { width: 24px; height: 24px; color: var(--faint); display: block; margin: 0 auto 8px; }
+
+/* qty edit reuses the stock-level button/input pair */
+.recv-qty-btn { width: 68px; }
+
+.unknown-note {
+  margin-left: 8px;
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--neg-text);
+  background: var(--neg-bg);
+  border-radius: 999px;
+  padding: 1px 8px;
+  vertical-align: 1px;
+}
+
+.cell-recv-sku { font-weight: 600; font-size: 12.5px; max-width: 260px; }
+.cell-recv-title { font-size: 12.5px; color: var(--muted); max-width: 320px; }
+
+@media (max-width: 640px) {
+  .recv-scroll { padding: 0 16px 12px; }
+}
+
+/* open-orders-per-SKU dialog (Stock page drill-down) */
+
+.io-sheet {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.io-sheet .rows-table th.th-num { text-align: right; width: 64px; }
+.io-sheet .rows-table td.num-cell { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.io-sheet .rows-table td { white-space: nowrap; }
+
+.io-date { color: var(--muted); font-size: 12px; }
+
+.io-empty {
+  padding: 36px 24px;
+  text-align: center;
+  max-width: 44ch;
+  margin: 0 auto;
+}
+
+.io-empty svg { width: 28px; height: 28px; color: var(--faint); margin-bottom: 10px; }
+
+.io-loading { min-width: 0; padding: 48px 0; }
 
 /* history dialog */
 

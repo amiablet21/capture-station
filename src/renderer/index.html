@@ -12,6 +12,7 @@
     <nav class="tabs" id="pageTabs" hidden>
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
+      <button id="tabReceiving" class="tab" hidden>Receiving</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -65,6 +66,7 @@
   <section id="stockPage" class="stock-page" hidden>
     <div class="stock-toolbar">
       <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
+      <div id="stockChips" class="stock-chips" hidden></div>
       <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
       <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
     </div>
@@ -72,6 +74,75 @@
     <div class="stock-sheet-row">
       <div id="stockList" class="stock-list"></div>
       <div id="sheetGrip" class="sheet-grip" title="Drag to widen or narrow the sheet · double-click to reset"></div>
+    </div>
+  </section>
+
+  <!-- Receiving page: PO worksheet -> notes -> past receipts (variants/recv-sheet.html) -->
+  <section id="receivingPage" class="recv-page" hidden>
+    <div class="recv-scroll">
+      <div class="recv-bar">
+        <input id="recvRef" class="input mono recv-ref" type="text" placeholder="Reference (optional)"
+               autocomplete="off" spellcheck="false" aria-label="Receipt reference" />
+        <input id="recvTracking" class="input mono recv-tracking" type="text" placeholder="Inbound tracking (optional)"
+               autocomplete="off" spellcheck="false" aria-label="Inbound tracking number" />
+        <span id="recvTrackingHint" class="recv-tracking-hint"></span>
+        <span class="recv-date" id="recvDate"></span>
+      </div>
+
+      <div id="recvWarn" class="warn-banner" hidden>
+        <div id="recvWarnText" class="warn-text"></div>
+        <div class="warn-actions">
+          <button id="recvWarnAccept" class="btn btn-danger">Add anyway</button>
+          <button id="recvWarnDiscard" class="btn btn-ghost">Discard</button>
+        </div>
+      </div>
+
+      <div class="recv-sheet-box" aria-live="polite">
+        <table class="recv-sheet-table" id="recvTable">
+          <thead>
+            <tr>
+              <th class="th-gutter">#</th>
+              <th class="th-sku">SKU</th>
+              <th>Product</th>
+              <th class="th-qty">Qty</th>
+              <th class="th-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="recvBody"></tbody>
+          <tbody>
+            <tr class="recv-entry">
+              <td class="cell-gutter" id="recvEntryNum">1</td>
+              <td class="recv-entry-sku">
+                <div class="combo" id="recvCombo">
+                  <input id="recvSku" class="recv-cell-input mono" type="text" placeholder="Type a SKU…"
+                         autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" />
+                  <div id="recvComboList" class="combo-list" hidden></div>
+                </div>
+              </td>
+              <td class="recv-entry-title" id="recvEntryTitle">type a SKU, the title autofills…</td>
+              <td class="recv-entry-qty"><input id="recvQty" class="recv-cell-input recv-qty-cell mono" type="number"
+                     min="1" step="1" placeholder="1" aria-label="Quantity" /></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="recv-sheet-foot">
+          <span class="recv-total" id="recvSummary">0 SKUs · <strong>0</strong> units</span>
+          <span id="recvNote" class="test-result"></span>
+          <button id="recvFinish" class="btn btn-primary" disabled>Finish receipt</button>
+        </div>
+      </div>
+
+      <label class="field recv-notes-field">
+        <span class="field-label">Notes (optional)</span>
+        <textarea id="recvNotes" class="input" rows="2" spellcheck="false"
+                  placeholder="Carrier, condition, anything about this shipment"></textarea>
+      </label>
+
+      <div class="recv-past">
+        <div class="recv-past-head">Past receipts · grouped by day</div>
+        <div id="recvPastBox" class="recv-past-box"></div>
+      </div>
     </div>
   </section>
 
@@ -150,6 +221,25 @@
         <span id="setCsvFolder" class="test-result mono"></span>
         <button id="chooseCsvBtn" class="btn btn-ghost">Change folder</button>
       </div>
+
+      <h3 class="dlg-section">Pages on this station</h3>
+      <div class="settings-row">
+        <label class="check"><input id="setPageStock" type="checkbox" /> Stock</label>
+        <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
+        <label class="check"><input id="setPageReceiving" type="checkbox" /> Receiving</label>
+      </div>
+      <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone.</p>
+
+      <h3 class="dlg-section">Receiving</h3>
+      <div class="settings-row">
+        <span class="field-label">Session files saved to</span>
+        <span id="setRecvFolder" class="test-result mono"></span>
+        <button id="chooseRecvBtn" class="btn btn-ghost">Change folder</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Make.com webhook URL (optional, receives each finished session)</span>
+        <input id="setRecvWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">
@@ -249,6 +339,17 @@
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>
+
+  <!-- Open orders for a SKU (Stock page "In orders" drill-down) -->
+  <dialog id="ioDialog" class="dlg dlg-wide">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="ioTitle">Open orders</h2>
+      <div id="ioBody" class="io-body"></div>
+      <div class="dlg-actions">
+        <button id="ioClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Image chooser for a SKU -->
   <dialog id="imgDialog" class="dlg">

@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const config = require('./config');
 const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
@@ -15,13 +16,16 @@ let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
 const ignoredLog = []; // debug ring buffer of non-matching clipboard text
 
+// E2E and smoke runs are throwaway test boots that may coexist with a
+// normal instance: isolated userData, no single-instance lock.
+const IS_TEST_RUN = process.env.CAPTURE_E2E === '1' || process.env.CAPTURE_SMOKE === '1';
+
 if (process.env.CAPTURE_E2E === '1') {
   // keep compositing while the window is occluded so capturePage works in tests
   app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 }
 
-// E2E runs against its own userData dir, so it may coexist with a normal instance.
-if (process.env.CAPTURE_E2E !== '1') {
+if (!IS_TEST_RUN) {
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
     app.quit();
@@ -51,6 +55,7 @@ function buildState() {
     dryRun: !!cfg.dryRun,
     syncRunning: isRunning(),
     captureOnly: !!cfg.captureOnly,
+    pages: cfg.pages,
     csv: lastCsv,
   };
 }
@@ -103,6 +108,147 @@ function writeWfsCsv() {
     }
     fs.writeFileSync(path.join(folder, 'wfs-shipments.csv'), lines.join('\r\n'), 'utf8');
   } catch { /* CSV locked in Excel: the DB still has the log */ }
+}
+
+/* ---------- open-orders cache (Stock page per-SKU order list) ---------- */
+
+// GetOpenOrders pages through the whole order book, so clicking several SKUs
+// in a row reuses one fetch for a minute instead of re-paging every time.
+const OPEN_ORDERS_TTL_MS = 60 * 1000;
+let openOrdersCache = { at: 0, data: null, promise: null };
+
+async function getOpenOrdersCached(cfg) {
+  if (openOrdersCache.data && Date.now() - openOrdersCache.at < OPEN_ORDERS_TTL_MS) {
+    return openOrdersCache.data;
+  }
+  if (openOrdersCache.promise) return openOrdersCache.promise; // fetch already in flight
+  openOrdersCache.promise = (async () => {
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const data = await client.listOpenOrders(cfg.linnworks.locationId);
+      openOrdersCache = { at: Date.now(), data, promise: null };
+      return data;
+    } catch (e) {
+      openOrdersCache.promise = null; // failed fetches are not cached
+      throw e;
+    }
+  })();
+  return openOrdersCache.promise;
+}
+
+/* ---------- receiving sessions ---------- */
+
+// A receiving session is the list of goods checked in at the warehouse door.
+// Finishing writes a JSON audit file locally and (optionally) notifies the
+// owner via a Make.com webhook; POs are raised manually in Linnworks from that.
+
+function receivingFolder() {
+  const cfg = config.load();
+  return (cfg.receiving && cfg.receiving.folder)
+    || path.join(app.getPath('documents'), 'Capture Station', 'receiving');
+}
+
+// POST the finished session to the Make.com webhook: 10s timeout, one retry.
+async function postReceivingWebhook(url, session) {
+  let lastError = '';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(session),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) return { ok: true };
+      lastError = `webhook responded ${res.status}`;
+    } catch (e) {
+      lastError = e.name === 'TimeoutError' ? 'webhook timed out after 10s' : e.message;
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+async function finishReceiving(payload) {
+  const lines = ((payload && payload.lines) || [])
+    .map(l => ({
+      sku: String(l.sku || '').trim().slice(0, 100),
+      title: String(l.title || '').trim().slice(0, 300),
+      qty: Number(l.qty),
+    }))
+    .filter(l => l.sku && Number.isInteger(l.qty) && l.qty > 0);
+  if (!lines.length) return { ok: false, error: 'Add at least one line with a SKU and quantity.' };
+
+  const now = new Date();
+  const session = {
+    id: `rcv-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+    station: os.hostname(),
+    finishedAt: now.toISOString(),
+    // shipment-level extras from the worksheet header/notes (empty when unused)
+    reference: String((payload && payload.reference) || '').trim().slice(0, 200),
+    trackingNumber: String((payload && payload.trackingNumber) || '').trim().slice(0, 100),
+    notes: String((payload && payload.notes) || '').trim().slice(0, 1000),
+    lines,
+    status: 'pending',
+  };
+  const folder = receivingFolder();
+  // ISO timestamp in the filename, with ':' swapped out for Windows
+  const file = path.join(folder, `receiving-session-${now.toISOString().replace(/:/g, '-')}.json`);
+  try {
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(session, null, 2), 'utf8');
+  } catch (e) {
+    return { ok: false, error: `Could not save the session file: ${e.message}` };
+  }
+
+  const url = ((config.load().receiving || {}).webhookUrl || '').trim();
+  const webhook = url ? await postReceivingWebhook(url, session) : null; // null = not configured
+  if (webhook) {
+    // audit the webhook outcome into the session file for the history list
+    try {
+      session.webhook = { ...webhook, at: new Date().toISOString() };
+      fs.writeFileSync(file, JSON.stringify(session, null, 2), 'utf8');
+    } catch { /* file already saved; webhook result still returned live */ }
+  }
+  return { ok: true, id: session.id, path: file, lines: lines.length, webhook };
+}
+
+// Past receipts: parse every session file in the folder, newest first.
+// Malformed or unreadable files are skipped rather than breaking the list.
+function listReceivingSessions(limit = 200) {
+  const folder = receivingFolder();
+  let names = [];
+  try {
+    names = fs.readdirSync(folder).filter(f => /^receiving-session-.+\.json$/i.test(f));
+  } catch {
+    return { ok: true, folder, sessions: [] }; // folder missing = nothing received yet
+  }
+  const sessions = [];
+  for (const name of names) {
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(folder, name), 'utf8'));
+      if (!s || typeof s !== 'object') continue;
+      sessions.push({
+        file: name,
+        id: String(s.id || ''),
+        station: String(s.station || ''),
+        finishedAt: String(s.finishedAt || ''),
+        reference: String(s.reference || ''),
+        trackingNumber: String(s.trackingNumber || ''),
+        notes: String(s.notes || ''),
+        status: String(s.status || 'pending'),
+        webhook: s.webhook && typeof s.webhook === 'object'
+          ? { ok: !!s.webhook.ok, error: String(s.webhook.error || '') }
+          : null,
+        lines: (Array.isArray(s.lines) ? s.lines : []).map(l => ({
+          sku: String((l && l.sku) || ''),
+          title: String((l && l.title) || ''),
+          qty: Number(l && l.qty) || 0,
+        })),
+      });
+    } catch { /* malformed JSON: skip this file */ }
+  }
+  sessions.sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)));
+  return { ok: true, folder, sessions: sessions.slice(0, limit) };
 }
 
 /* ---------- clipboard watcher ---------- */
@@ -404,6 +550,34 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // Open orders containing one SKU, for the Stock page's "In orders" drill-down.
+  ipcMain.handle('stock:openOrders', async (_e, { sku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const wanted = String(sku || '').trim().toLowerCase();
+    if (!wanted) return { ok: false, error: 'Missing SKU.' };
+    try {
+      const orders = await getOpenOrdersCached(cfg);
+      const hits = [];
+      for (const o of orders) {
+        for (const line of o.items) {
+          if ((line.sku || '').toLowerCase() === wanted) {
+            hits.push({
+              source: o.source,
+              reference: o.reference,
+              channelSku: line.channelSku,
+              quantity: line.quantity,
+              date: o.receivedDate,
+            });
+          }
+        }
+      }
+      hits.sort((a, b) => String(b.date).localeCompare(String(a.date))); // newest first
+      return { ok: true, sku, orders: hits };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('stock:addImage', async (_e, { sku, stockItemId }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -495,6 +669,21 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // Receiving is file + webhook only (no Linnworks), so it works in any mode;
+  // the page itself is hidden unless pages.receiving is enabled.
+  ipcMain.handle('receiving:finish', (_e, payload) => finishReceiving(payload));
+  ipcMain.handle('receiving:list', () => listReceivingSessions());
+  ipcMain.handle('receiving:chooseFolder', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Choose receiving session folder',
+      defaultPath: receivingFolder(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, folder: receivingFolder() };
+    config.save({ receiving: { folder: filePaths[0] } });
+    pushState();
+    return { ok: true, folder: filePaths[0] };
+  });
   ipcMain.handle('clipboard:copy', (_e, text) => {
     const value = String(text ?? '');
     clipboard.writeText(value);
@@ -573,7 +762,7 @@ function buildMenu() {
 /* ---------- lifecycle ---------- */
 
 app.whenReady().then(() => {
-  if (process.env.CAPTURE_E2E === '1') {
+  if (IS_TEST_RUN) {
     // isolated throwaway data dir for automated tests
     app.setPath('userData', path.join(app.getPath('temp'), `capture-station-e2e-${Date.now()}`));
     config.save({ csvFolder: path.join(app.getPath('userData'), 'csv') });

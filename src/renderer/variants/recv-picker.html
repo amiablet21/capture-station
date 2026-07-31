@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Receiving B — Pick from stock</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  .cols { flex: 1; overflow: hidden; margin: 0 24px 12px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 12px; }
+  .pane { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); display: flex; flex-direction: column; overflow: hidden; }
+  .pane-head { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .pane-title { font-size: 13.5px; font-weight: 600; }
+  .search { flex: 1; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
+  .item .sku { font-family: var(--mono); font-weight: 600; width: 150px; }
+  .item .name { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .plus { width: 26px; height: 26px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: var(--surface); color: var(--accent); font-weight: 700; font-size: 15px; }
+  .item.sel { background: var(--accent-soft); }
+  .line { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
+  .line .sku { font-family: var(--mono); font-weight: 600; flex: 1; }
+  .qtybox { display: flex; align-items: center; gap: 6px; }
+  .qtybtn { width: 24px; height: 24px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: var(--surface); font-weight: 700; }
+  .qtyval { font-family: var(--mono); font-weight: 700; font-size: 15px; width: 30px; text-align: center; }
+  .pane-foot { margin-top: auto; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--surface-2); display: flex; justify-content: space-between; align-items: center; }
+  .total { font-size: 12.5px; color: var(--muted); }
+  .total strong { font-family: var(--mono); font-size: 15px; color: var(--text); }
+  .btn-finish { font-size: 13.5px; font-weight: 500; padding: 9px 18px; border-radius: var(--r-ctl); border: none; background: var(--accent); color: #fff; }
+  .date-chip { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 3px 10px; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Capture Station</div>
+    <div class="topbar-right"><span class="date-chip">Receiving · Jul 31, 2026</span></div>
+  </header>
+  <div class="cols">
+    <section class="pane">
+      <div class="pane-head"><span class="pane-title">Your inventory</span><input class="search" value="s25" placeholder="Search stock" /></div>
+      <div class="item sel"><span class="sku">S25-128GB-NAVY</span><span class="name">Galaxy S25 128GB Navy</span><button class="plus">+</button></div>
+      <div class="item"><span class="sku">S25-256GB-BLACK</span><span class="name">Galaxy S25 256GB Black</span><button class="plus">+</button></div>
+      <div class="item"><span class="sku">S25-128GB-NAVY-OPENBOX</span><span class="name">Galaxy S25 128GB Navy (Open Box)</span><button class="plus">+</button></div>
+      <div class="item"><span class="sku">S25U-512GB-GRAY</span><span class="name">Galaxy S25 Ultra 512GB Gray</span><button class="plus">+</button></div>
+    </section>
+    <section class="pane">
+      <div class="pane-head"><span class="pane-title">This shipment</span><span class="total">3 SKUs</span></div>
+      <div class="line"><span class="sku">S25-128GB-NAVY</span><div class="qtybox"><button class="qtybtn">−</button><span class="qtyval">6</span><button class="qtybtn">+</button></div></div>
+      <div class="line"><span class="sku">S25-256GB-BLACK</span><div class="qtybox"><button class="qtybtn">−</button><span class="qtyval">4</span><button class="qtybtn">+</button></div></div>
+      <div class="line"><span class="sku">IP15-128GB-BLUE</span><div class="qtybox"><button class="qtybtn">−</button><span class="qtyval">4</span><button class="qtybtn">+</button></div></div>
+      <div class="pane-foot">
+        <span class="total"><strong>14</strong> units</span>
+        <button class="btn-finish">Finish shipment</button>
+      </div>
+    </section>
+  </div>
+  <footer class="footbar"><button class="btn-secondary">Past receipts</button><span class="sync-status">Last receipt Jul 30 · 32 units · sent to Make.com</span></footer>
+</body>
+</html>
