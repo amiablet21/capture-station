@@ -285,7 +285,7 @@ function render() {
       const qty = i.qty > 1 ? ` ×${i.qty}` : '';
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
       const info = i.channelSku && i.channelSku !== label
-        ? `<span class="item-info" title="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
+        ? `<span class="item-info" data-tip="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
       return linked
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
         : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
