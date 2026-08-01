@@ -42,10 +42,13 @@
   <div id="channelChips" class="channel-chips" hidden></div>
 
   <div id="findBar" class="find-bar" hidden>
-    <input id="findInput" class="input mono" type="text" placeholder="Search PO#, SKU or tracking…" autocomplete="off" spellcheck="false" />
+    <div class="search-field">
+      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+      <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
+      <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
+    </div>
     <span id="findCount" class="find-count"></span>
     <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
-    <button id="findClose" class="btn-icon" title="Clear (Esc)" aria-label="Clear search">✕</button>
   </div>
 
   <main class="rows" aria-live="polite">

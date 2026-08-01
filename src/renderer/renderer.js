@@ -437,12 +437,14 @@ function openFind() {
 function closeFind() {
   findQuery = '';
   $('findInput').value = '';
+  $('findClose').hidden = true;
   render();
   focusScan();
 }
 
 $('findInput').addEventListener('input', () => {
   findQuery = $('findInput').value.trim();
+  $('findClose').hidden = !$('findInput').value;
   render();
 });
 
