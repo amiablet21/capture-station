@@ -284,11 +284,11 @@ function render() {
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
       const qty = i.qty > 1 ? ` ×${i.qty}` : '';
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
-      const sub = i.channelSku && i.channelSku !== label
-        ? `<span class="item-sub" title="Channel SKU">${esc(i.channelSku)}</span>` : '';
+      const info = i.channelSku && i.channelSku !== label
+        ? `<span class="item-info" title="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
       return linked
-        ? `<span class="item-entry">${thumb}<span class="item-txt"><span>${esc(label)}${qty}</span>${sub}</span></span>`
-        : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}<span class="item-txt"><span>⚠ ${esc(label)}${qty}</span>${sub}</span></span>`;
+        ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
+        : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
     }).join(' ');
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
