@@ -10,12 +10,15 @@ Admin-side only (page toggles). Two moves:
    `ProcessedOrders/SearchProcessedOrders` finds the order (items, customer,
    ship date, tracking) -> per returned unit pick a condition:
    - New -> +1 original SKU at Digital World Shop
-   - Open box -> +1 `SKU-OPENBOX` (existing suffix convention)
-   - Used -> +1 `SKU-USED`
-   - Scrap -> no stock change, log only
-   Stock bump via `Stock/UpdateStockLevelsBySKU` (delta, like WFS). If the
-   condition SKU does not exist in inventory, warn and block that line until
-   it is created/mapped (no silent guessing). Every return writes a local log
+   - Open box / Used / Scrap -> +1 the MAPPED condition listing (the owner
+     already keeps real OPEN BOX / USED / SCRAP listings; grading a return
+     auto-redirects the qty there, making it immediately sellable)
+   Condition map per sold SKU: auto-derived from the live inventory by
+   suffix (`-OPENBOX`, `-USED`, `-SCRAP`); where no suffix match exists,
+   the returns line shows a one-time SKU picker and the chosen mapping is
+   persisted (config/db) and reused for every future return of that SKU.
+   Stock bump via `Stock/UpdateStockLevelsBySKU` (delta, like WFS). Never
+   silently guess a mapping. Every return writes a local log
    (new `returns` table + `returns.csv`, ledger cards grouped by day like
    receipts, condition on the right, scrap in red) and an internal note on
    the original order ("return received - graded open box").
