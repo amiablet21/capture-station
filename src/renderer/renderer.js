@@ -799,7 +799,7 @@ function showPage(page) {
   activePage = page;
   if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
   updateScanPanel();
-  document.querySelector('main.rows').hidden = page !== 'capture';
+  $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
   $('receivingPage').hidden = page !== 'receiving';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
@@ -1089,6 +1089,38 @@ function initCaptureCols() {
   });
 }
 initCaptureCols();
+
+// whole-list resize: drag the handle on the right edge (mirrors the Stock sheet)
+let rowsDrag = null;
+{
+  const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
+  if (savedW) $('rowsMain').style.width = `${savedW}px`;
+}
+
+$('rowsGrip').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  rowsDrag = { startX: e.clientX, startW: $('rowsMain').offsetWidth, w: 0 };
+  $('rowsGrip').classList.add('is-active');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!rowsDrag) return;
+  const w = Math.max(560, rowsDrag.startW + (e.clientX - rowsDrag.startX));
+  rowsDrag.w = w;
+  $('rowsMain').style.width = `${w}px`;
+});
+
+window.addEventListener('mouseup', () => {
+  if (!rowsDrag) return;
+  if (rowsDrag.w) localStorage.setItem('captureSheetWidth', String(rowsDrag.w));
+  rowsDrag = null;
+  $('rowsGrip').classList.remove('is-active');
+});
+
+$('rowsGrip').addEventListener('dblclick', () => {
+  localStorage.removeItem('captureSheetWidth');
+  $('rowsMain').style.width = '';
+});
 
 $('rowsTable').addEventListener('mousedown', (e) => {
   const grip = e.target.closest('.col-grip');

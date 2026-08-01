@@ -50,7 +50,8 @@
     <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
   </div>
 
-  <main class="rows" aria-live="polite">
+  <div class="rows-row" id="rowsRow">
+  <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
       <thead>
         <tr>
@@ -70,6 +71,8 @@
       <div class="rows-empty-hint">Highlight the order number on the marketplace page and press Ctrl+C. It appears here automatically.</div>
     </div>
   </main>
+  <div id="rowsGrip" class="sheet-grip" title="Drag to widen or narrow the list · double-click to reset"></div>
+  </div>
 
   <!-- Stock page: live warehouse inventory with inline level editing -->
   <section id="stockPage" class="stock-page" hidden>
