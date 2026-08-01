@@ -439,6 +439,17 @@ $('findInput').addEventListener('keydown', (e) => {
 
 $('findClose').addEventListener('click', closeFind);
 
+$('ordersRefreshBtn').addEventListener('click', async () => {
+  const btn = $('ordersRefreshBtn');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  await api.refreshOrders();
+  await refresh();
+  btn.disabled = false;
+  btn.textContent = 'Refresh';
+  toast('Orders refreshed from Linnworks');
+});
+
 /* ---------- rows list actions ---------- */
 
 async function copyFromApp(text) {
@@ -2050,6 +2061,27 @@ setInterval(() => {
 }, 1500);
 
 window.addEventListener('focus', focusScan);
+
+/* ---------- floating tooltip for [data-tip] ---------- */
+
+const floatTip = document.createElement('div');
+floatTip.className = 'float-tip';
+floatTip.hidden = true;
+document.body.appendChild(floatTip);
+
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { floatTip.hidden = true; return; }
+  floatTip.textContent = t.dataset.tip;
+  floatTip.hidden = false;
+  const r = t.getBoundingClientRect();
+  const half = floatTip.offsetWidth / 2;
+  const x = Math.max(half + 8, Math.min(r.left + r.width / 2, window.innerWidth - half - 8));
+  floatTip.style.left = `${x}px`;
+  floatTip.style.top = `${r.bottom + 6}px`;
+});
+
+document.addEventListener('mouseleave', () => { floatTip.hidden = true; });
 
 /* ---------- main-process events ---------- */
 

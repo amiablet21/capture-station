@@ -913,25 +913,20 @@ body {
 
 .item-info:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
-/* instant CSS tooltip (native title tooltips are unreliable in this table) */
-.item-info { position: relative; }
-
-.item-info:hover::after {
-  content: attr(data-tip);
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
+/* floating tooltip for [data-tip] elements: fixed-position so no
+   overflow:hidden ancestor (like the items cell) can clip it */
+.float-tip {
+  position: fixed;
   transform: translateX(-50%);
   background: #2F3437;
   color: #F7F6F3;
   font-family: var(--mono);
-  font-style: normal;
   font-size: 11.5px;
   line-height: 1.4;
   padding: 3px 9px;
   border-radius: 4px;
   white-space: nowrap;
-  z-index: 6;
+  z-index: 1000;
   pointer-events: none;
 }
 
