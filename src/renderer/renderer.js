@@ -241,12 +241,23 @@ function render() {
   }
   if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
+  // search bar: always available on the capture list, matches PO#, tracking,
+  // notes, and the order's item SKUs / channel SKUs / titles
+  $('findBar').hidden = activePage !== 'capture' || state.captureOnly && !state.rows.length;
   if (findQuery) {
     const q = findQuery.toLowerCase();
+    const itemMatch = (row) => {
+      const m = (state.orderMeta || {})[row.order_number];
+      return !!(m && m.items && m.items.some(i =>
+        (i.sku || '').toLowerCase().includes(q)
+        || (i.channelSku || '').toLowerCase().includes(q)
+        || (i.title || '').toLowerCase().includes(q)));
+    };
     visible = visible.filter(({ row }) =>
       row.order_number.toLowerCase().includes(q)
       || (row.tracking || '').toLowerCase().includes(q)
-      || (row.notes || '').toLowerCase().includes(q));
+      || (row.notes || '').toLowerCase().includes(q)
+      || itemMatch(row));
     $('findCount').textContent = visible.length === 0 ? 'no matches' : `${visible.length} of ${total}`;
   } else {
     $('findCount').textContent = '';
@@ -266,9 +277,10 @@ function render() {
       const linked = !i.unmapped && i.sku;
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
       const qty = i.qty > 1 ? ` ×${i.qty}` : '';
+      const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
       return linked
-        ? `${esc(label)}${qty}`
-        : `<span class="item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">⚠ ${esc(label)}${qty}</span>`;
+        ? `<span class="item-entry">${thumb}${esc(label)}${qty}</span>`
+        : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}</span>`;
     }).join(', ');
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
@@ -394,7 +406,6 @@ function openFind() {
 function closeFind() {
   findQuery = '';
   $('findInput').value = '';
-  $('findBar').hidden = true;
   render();
   focusScan();
 }
@@ -734,11 +745,7 @@ let activePage = 'capture';
 
 function showPage(page) {
   activePage = page;
-  if (page !== 'capture' && !$('findBar').hidden) {
-    findQuery = '';
-    $('findInput').value = '';
-    $('findBar').hidden = true;
-  }
+  if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
   $('scanPanel').hidden = page !== 'capture';
   document.querySelector('main.rows').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';

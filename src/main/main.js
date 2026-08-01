@@ -558,6 +558,29 @@ async function triggerSync(trigger, ids) {
 // leaves open orders (cancelled / processed elsewhere).
 let orderMeta = {}; // reference -> { source, locationId, locationName, items: [{sku, qty}] }
 
+// sku -> main image URL, from the inventory list (cached 10 min): gives the
+// capture queue its item thumbnails without hammering the API
+let skuImageCache = { at: 0, map: null, promise: null };
+
+async function getSkuImages(cfg) {
+  if (skuImageCache.map && Date.now() - skuImageCache.at < 10 * 60 * 1000) return skuImageCache.map;
+  if (skuImageCache.promise) return skuImageCache.promise;
+  skuImageCache.promise = (async () => {
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const map = {};
+      for (const it of items) if (it.image) map[it.sku] = it.image;
+      skuImageCache = { at: Date.now(), map, promise: null };
+      return map;
+    } catch {
+      skuImageCache.promise = null;
+      return skuImageCache.map || {};
+    }
+  })();
+  return skuImageCache.promise;
+}
+
 function sourceToChannel(source) {
   const s = String(source || '').toLowerCase();
   if (s.includes('walmart')) return 'walmart';
@@ -572,6 +595,7 @@ async function runOrderImport() {
   if (!cfg.linnworks.applicationId) return;
   try {
     const orders = await getOpenOrdersCached(cfg);
+    const skuImages = await getSkuImages(cfg);
     const fallbackId = (cfg.stockRouting || {}).fallbackLocationId || '';
     // orders at excluded locations (e.g. WFS FULFILLED, shipped by Walmart)
     // never enter the queue; leaving them out of openRefs also cleans up any
@@ -599,6 +623,7 @@ async function runOrderImport() {
             title: it.title || '',
             qty: it.quantity || 1,
             unmapped: !linked,
+            img: (it.sku && skuImages[it.sku]) || '',
           };
         }),
       };

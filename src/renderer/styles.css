@@ -892,6 +892,17 @@ body {
 
 .item-unmapped { color: var(--badge-yellow-text); font-weight: 600; }
 
+.item-entry { display: inline-flex; align-items: center; gap: 5px; }
+
+.item-thumb {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--surface-2);
+  flex: 0 0 auto;
+}
+
 .order-link { cursor: pointer; }
 .order-link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
