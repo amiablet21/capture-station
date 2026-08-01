@@ -53,6 +53,9 @@ if (!window.api) {
     addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
     cancelStockImage: async () => ({ ok: true }),
     saveStockImage: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsLookup: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsList: async () => [],
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
@@ -151,15 +154,15 @@ function render() {
   if (!state) return;
 
   // per-install page flags (capture is always on); capture-only wins over all
-  const pages = state.pages || { stock: true, history: true, receiving: false };
-  const pageEnabled = { capture: true, stock: !!pages.stock, receiving: !!pages.receiving };
+  const pages = state.pages || { stock: true, history: true, returns: false };
+  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
   }
   $('tabStock').hidden = !pages.stock;
-  $('tabReceiving').hidden = !pages.receiving;
-  $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.receiving);
+  $('tabReturns').hidden = !pages.returns;
+  $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
@@ -644,7 +647,7 @@ async function openSettings() {
   const pg = cfg.pages || {};
   $('setPageStock').checked = pg.stock !== false;
   $('setPageHistory').checked = pg.history !== false;
-  $('setPageReceiving').checked = !!pg.receiving;
+  $('setPageReturns').checked = !!pg.returns;
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
@@ -720,7 +723,7 @@ $('settingsSave').addEventListener('click', async () => {
     pages: {
       stock: $('setPageStock').checked,
       history: $('setPageHistory').checked,
-      receiving: $('setPageReceiving').checked,
+      returns: $('setPageReturns').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     linnworks: {
@@ -801,18 +804,18 @@ function showPage(page) {
   updateScanPanel();
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
-  $('receivingPage').hidden = page !== 'receiving';
+  $('returnsPage').hidden = page !== 'returns';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
-  $('tabReceiving').classList.toggle('is-active', page === 'receiving');
+  $('tabReturns').classList.toggle('is-active', page === 'returns');
   if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
     $('stockSearch').value = '';
     loadStockViews();
     loadStock().then(() => $('stockSearch').focus());
-  } else if (page === 'receiving') {
-    enterReceiving();
+  } else if (page === 'returns') {
+    enterReturns();
   } else {
     focusScan();
   }
@@ -821,7 +824,14 @@ function showPage(page) {
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
-$('tabReceiving').addEventListener('click', () => showPage('receiving'));
+$('tabReturns').addEventListener('click', () => showPage('returns'));
+
+// receiving lives on the Stock page now, as a dialog
+$('recvBtn').addEventListener('click', () => {
+  $('recvDialog').showModal();
+  enterReceiving();
+});
+$('recvClose').addEventListener('click', () => $('recvDialog').close());
 
 /* ---------- stock page ---------- */
 
@@ -1271,6 +1281,197 @@ $('ioBody').addEventListener('click', (e) => {
 
 $('ioClose').addEventListener('click', () => $('ioDialog').close());
 $('ioDialog').addEventListener('close', () => focusScan());
+
+/* ---------- Returns page: look up order, grade units, stock redirects ---------- */
+
+const RET_CONDS = [
+  { key: 'new', label: 'New' },
+  { key: 'openbox', label: 'Open box' },
+  { key: 'used', label: 'Used' },
+  { key: 'scrap', label: 'Scrap' },
+];
+let retOrder = null; // lookup result: { order, skus }
+
+function enterReturns() {
+  $('retRef').value = '';
+  $('retHint').textContent = '';
+  $('retCard').hidden = true;
+  retOrder = null;
+  loadRetPast();
+  $('retRef').focus();
+}
+
+async function retLookup() {
+  const ref = $('retRef').value.trim();
+  if (!ref) return;
+  $('retHint').textContent = 'Searching…';
+  const res = await api.returnsLookup(ref);
+  if (!res.ok) {
+    $('retHint').textContent = res.error || 'Not found.';
+    $('retCard').hidden = true;
+    retOrder = null;
+    return;
+  }
+  $('retHint').textContent = '';
+  retOrder = res;
+  renderRetCard();
+}
+
+function retCondOptions(it, selected) {
+  return RET_CONDS.map(c =>
+    `<option value="${c.key}" ${c.key === selected ? 'selected' : ''}>${c.label}</option>`).join('');
+}
+
+function renderRetCard() {
+  const o = retOrder.order;
+  const when = o.processedOn ? `${String(o.processedOn).slice(0, 10)}` : '';
+  $('retCard').hidden = false;
+  $('retCard').innerHTML = `
+    <div class="ret-card-head">
+      <span>${esc(o.reference)} · ${esc(channelLabel((o.source || '').toLowerCase()))}${when ? ` · shipped ${esc(when)}` : ''}</span>
+      <span class="ret-stamp">RETURN</span>
+    </div>
+    <div class="ret-card-meta">${esc([o.customer, o.tracking ? `trk ${o.tracking}` : ''].filter(Boolean).join(' · '))}</div>
+    <div class="ret-lines">
+      ${o.items.length === 0 ? '<p class="dlg-note">Could not read the order\'s items - type the SKU below.</p>' : ''}
+      ${o.items.map((it, idx) => `
+      <div class="ret-line" data-idx="${idx}">
+        <span class="mono ret-line-sku" title="${esc(it.title)}">${esc(it.sku)}</span>
+        <input type="number" class="input ret-qty" min="0" max="${it.quantity}" step="1" value="${it.quantity}" title="Units returned" />
+        <select class="input ret-cond">${retCondOptions(it, 'new')}</select>
+        <span class="ret-target mono"></span>
+      </div>`).join('')}
+    </div>
+    <div class="ret-actions">
+      <input id="retNote" class="input" type="text" placeholder="Note (reason, damage, serial…)" autocomplete="off" />
+      <button id="retReceive" class="btn btn-primary">Receive return</button>
+    </div>
+    <p class="dlg-note" id="retResult" hidden></p>`;
+  $('retCard').querySelectorAll('.ret-line').forEach(line => retUpdateTarget(line));
+}
+
+// show where the unit will land; missing mapping -> one-time picker
+function retUpdateTarget(line) {
+  const idx = Number(line.dataset.idx);
+  const it = retOrder.order.items[idx];
+  const cond = line.querySelector('.ret-cond').value;
+  const targetEl = line.querySelector('.ret-target');
+  const known = (it.targets || {})[cond] || (cond === 'new' ? it.sku : '');
+  if (known) {
+    line.dataset.target = known;
+    targetEl.innerHTML = `→ +1 ${esc(known)}`;
+    targetEl.classList.remove('is-missing');
+  } else {
+    line.dataset.target = '';
+    targetEl.innerHTML = `<input type="text" class="input mono ret-pick" list="retSkuOptions"
+      placeholder="Pick the ${esc(cond)} listing…" autocomplete="off" spellcheck="false" />`;
+    targetEl.classList.add('is-missing');
+    $('retSkuOptions').innerHTML = (retOrder.skus || []).map(s => `<option value="${esc(s)}"></option>`).join('');
+  }
+}
+
+$('retFind').addEventListener('click', retLookup);
+$('retRef').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); retLookup(); } });
+
+$('retCard').addEventListener('change', (e) => {
+  const line = e.target.closest('.ret-line');
+  if (line && e.target.classList.contains('ret-cond')) retUpdateTarget(line);
+});
+
+$('retCard').addEventListener('click', async (e) => {
+  if (e.target.id !== 'retReceive') return;
+  const out = $('retResult');
+  out.hidden = true;
+  const items = [];
+  let bad = '';
+  $('retCard').querySelectorAll('.ret-line').forEach(line => {
+    const idx = Number(line.dataset.idx);
+    const it = retOrder.order.items[idx];
+    const qty = Number(line.querySelector('.ret-qty').value);
+    if (!Number.isInteger(qty) || qty <= 0) return; // 0 = not returned, skip
+    const cond = line.querySelector('.ret-cond').value;
+    const pick = line.querySelector('.ret-pick');
+    const target = pick ? pick.value.trim() : line.dataset.target;
+    if (!target) { bad = `Pick the ${cond} listing for ${it.sku}.`; return; }
+    if (pick && !(retOrder.skus || []).includes(target)) { bad = `Unknown SKU: ${target}`; return; }
+    items.push({ sku: it.sku, condition: cond, targetSku: target, qty });
+  });
+  if (bad) { out.textContent = bad; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
+  if (!items.length) { out.textContent = 'Set a returned quantity on at least one line.'; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
+  const btn = $('retReceive');
+  btn.disabled = true;
+  btn.textContent = 'Receiving…';
+  const res = await api.returnsCreate({
+    orderId: retOrder.order.orderId,
+    orderNumber: retOrder.order.reference,
+    source: retOrder.order.source,
+    customer: retOrder.order.customer,
+    note: ($('retNote').value || '').trim(),
+    items,
+  });
+  btn.disabled = false;
+  btn.textContent = 'Receive return';
+  if (!res.ok) { out.textContent = res.error || 'Failed.'; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
+  toast(`Return received: ${items.map(i => `${i.targetSku} +${i.qty}`).join(', ')}`);
+  $('retCard').hidden = true;
+  $('retRef').value = '';
+  retOrder = null;
+  loadRetPast();
+  $('retRef').focus();
+});
+
+async function loadRetPast() {
+  const returns = await api.returnsList();
+  const box = $('retPastBox');
+  if (!returns.length) {
+    box.innerHTML = '<div class="recv-past-empty">No returns yet. Look up an order above to receive one.</div>';
+    return;
+  }
+  const days = new Map();
+  for (const r of returns) {
+    const d = new Date(r.created_at);
+    const key = Number.isNaN(d.getTime()) ? 'unknown'
+      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(r);
+  }
+  box.innerHTML = [...days.entries()].map(([day, list]) => {
+    const open = retOpenDays.has(day);
+    const units = list.reduce((a, r) => a + r.items.reduce((x, i) => x + i.qty, 0), 0);
+    return `
+    <div class="recv-day-row ${open ? 'is-open' : ''}" data-retday="${esc(day)}">
+      <span class="recv-caret">${CARET_ICON}</span>
+      <span class="recv-day-label">${esc(recvDayLabel(day))} · ${list.length} return${list.length === 1 ? '' : 's'}</span>
+      <span class="recv-day-preview"></span>
+      <span class="recv-day-units">${units} unit${units === 1 ? '' : 's'}</span>
+    </div>
+    ${open ? `<div class="recv-cards">${list.map(r => `
+      <div class="recv-card">
+        <div class="recv-card-head">
+          <span>${fmtTime(r.created_at)} · ${esc(r.order_number)}</span>
+          <span class="ret-stamp">RETURN</span>
+        </div>
+        ${r.customer || r.source ? `<div class="recv-card-meta">${esc([channelLabel((r.source || '').toLowerCase()), r.customer].filter(Boolean).join(' · '))}</div>` : ''}
+        <div class="recv-card-lines">
+          ${r.items.map(i => `
+          <div class="recv-card-line">
+            <span class="recv-card-sku">${esc(i.sku)} → ${esc(i.targetSku)} ×${i.qty}</span>
+            <span class="ret-cond-tag ${i.condition === 'scrap' ? 'is-scrap' : ''}">${esc(i.condition)}</span>
+          </div>`).join('')}
+        </div>
+        ${r.note ? `<div class="recv-card-note">${esc(r.note)}</div>` : ''}
+      </div>`).join('')}</div>` : ''}`;
+  }).join('');
+}
+
+const retOpenDays = new Set();
+$('retPastBox').addEventListener('click', (e) => {
+  const day = e.target.closest('[data-retday]');
+  if (!day) return;
+  const key = day.dataset.retday;
+  if (retOpenDays.has(key)) retOpenDays.delete(key); else retOpenDays.add(key);
+  loadRetPast();
+});
 
 /* ---------- linked channel SKUs per stock item ---------- */
 
@@ -2168,7 +2369,7 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog'].some(id => $(id).open);
 }
 
 function focusScan() {

@@ -66,8 +66,9 @@ const DEFAULTS = {
   // mirrors today's rows to a CSV after every change.
   captureOnly: true,
   // Per-install page flags. Capture is always on; capture-only mode overrides
-  // all of these and shows Capture alone.
-  pages: { stock: true, history: true, receiving: false },
+  // all of these and shows Capture alone. (Receiving lives inside the Stock
+  // page; the third tab is Returns.)
+  pages: { stock: true, history: true, returns: false },
   // Receiving sessions: local JSON audit trail of goods received; empty
   // folder = Documents\Capture Station\receiving.
   // webhookUrl: optional Make.com webhook POSTed on "Finish receiving".
@@ -106,6 +107,10 @@ function load() {
     const secrets = decryptCreds(stored.linnworksEnc);
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
+  }
+  // migration: the Receiving tab became Returns (receiving moved into Stock)
+  if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
+    stored.pages.returns = !!stored.pages.receiving;
   }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
   return cached;

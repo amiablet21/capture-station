@@ -127,8 +127,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
 
     // 15. per-install page flags: defaults (capture always on)
     state = await exec('api.getState()');
-    check('pages default: stock+history on, receiving off',
-      !!state.pages && state.pages.stock === true && state.pages.history === true && state.pages.receiving === false,
+    check('pages default: stock+history on, returns off',
+      !!state.pages && state.pages.stock === true && state.pages.history === true && state.pages.returns === false,
       state.pages);
 
     // 16. receiving worksheet entry row: commit lines, merge repeats, empty qty = 1.
@@ -241,8 +241,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       fs.writeFileSync(process.env.CAPTURE_E2E_SHOT, img.toPNG());
       console.log(`SHOT ${process.env.CAPTURE_E2E_SHOT}`);
       // second shot: the PO worksheet with lines, tracking, note + an expanded past day
-      await exec(`api.setConfig(${JSON.stringify({ captureOnly: false, pages: { receiving: true } })})`);
-      await exec(`showPage('receiving')`);
+      await exec(`api.setConfig(${JSON.stringify({ captureOnly: false, pages: { returns: true } })})`);
+      await exec(`$('recvDialog').showModal(); enterReceiving();`);
       await sleep(500); // let the past-receipts list load
       await exec(`recvSeed(${JSON.stringify([
         { sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', qty: 12 },

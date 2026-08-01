@@ -51,6 +51,21 @@ function open() {
       note TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      order_number TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT '',
+      customer TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS condition_map (
+      base_sku TEXT NOT NULL,
+      condition TEXT NOT NULL,
+      target_sku TEXT NOT NULL,
+      PRIMARY KEY (base_sku, condition)
+    );
     CREATE INDEX IF NOT EXISTS idx_serials_serial ON serials(serial);
     CREATE INDEX IF NOT EXISTS idx_serials_row ON serials(row_id);
   `);
@@ -205,6 +220,35 @@ function listWfsShipments(limit = 200) {
     .map(s => ({ ...s, items: JSON.parse(s.items) }));
 }
 
+// Graded customer returns. items: [{ sku, condition, targetSku, qty }]
+function createReturn({ orderNumber, source, customer, note, items }) {
+  const res = open().prepare(
+    'INSERT INTO returns (created_at, order_number, source, customer, note, items) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(new Date().toISOString(), orderNumber, source || '', customer || '', note || '', JSON.stringify(items || []));
+  return Number(res.lastInsertRowid);
+}
+
+function listReturns(limit = 200) {
+  return open().prepare('SELECT * FROM returns ORDER BY id DESC LIMIT ?').all(limit)
+    .map(r => ({ ...r, items: JSON.parse(r.items) }));
+}
+
+// Remembered condition -> listing mappings (one-time picks in the Returns UI).
+function getConditionMap() {
+  const out = {};
+  for (const row of open().prepare('SELECT * FROM condition_map').all()) {
+    (out[row.base_sku] = out[row.base_sku] || {})[row.condition] = row.target_sku;
+  }
+  return out;
+}
+
+function saveConditionMapping(baseSku, condition, targetSku) {
+  open().prepare(
+    'INSERT INTO condition_map (base_sku, condition, target_sku) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(base_sku, condition) DO UPDATE SET target_sku = excluded.target_sku'
+  ).run(baseSku, condition, targetSku);
+}
+
 function close() {
   if (db) { try { db.close(); } catch { /* already closed */ } db = null; }
 }
@@ -228,4 +272,5 @@ module.exports = {
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
+  createReturn, listReturns, getConditionMap, saveConditionMapping,
 };

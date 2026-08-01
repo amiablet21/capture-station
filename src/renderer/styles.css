@@ -601,6 +601,102 @@ body {
 .debug-item .mono { color: var(--muted); word-break: break-all; font-size: 12px; }
 .debug-time { color: var(--faint); flex: 0 0 auto; font-family: var(--mono); }
 
+/* Receiving worksheet as a Stock-page dialog */
+
+.dlg-recv { width: min(900px, 94vw); }
+.dlg-recv .recv-page { padding: 6px 4px 0; }
+.dlg-recv .recv-scroll { max-height: 74vh; overflow-y: auto; }
+.dlg-recv-actions { padding: 10px 4px 2px; }
+
+/* Returns page */
+
+.ret-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: 14px 24px 16px;
+}
+
+.ret-scroll {
+  width: min(680px, 100%);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ret-bar { display: flex; align-items: center; gap: 10px; }
+.ret-ref { width: 300px; }
+.ret-hint { font-size: 12px; color: var(--muted); }
+
+.ret-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ret-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ret-stamp {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--badge-yellow-text);
+  border: 1.5px solid var(--badge-yellow-text);
+  border-radius: 3px;
+  padding: 1px 8px;
+}
+
+.ret-card-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+.ret-lines { border-top: 1px dashed var(--border); margin-top: 10px; padding-top: 6px; }
+
+.ret-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12.5px;
+}
+
+.ret-line:last-child { border-bottom: none; }
+.ret-line-sku { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ret-qty { width: 62px; padding: 3px 8px; text-align: right; font-family: var(--mono); }
+.ret-cond { width: 110px; font-family: var(--font); font-size: 12.5px; padding: 3px 6px; }
+.ret-target { margin-left: auto; font-size: 12px; color: var(--accent-soft-text); white-space: nowrap; }
+.ret-target.is-missing { color: var(--neg-text); }
+.ret-target .ret-pick { width: 220px; padding: 3px 8px; font-size: 12px; }
+
+.ret-actions { display: flex; gap: 10px; margin-top: 12px; font-family: var(--font); }
+.ret-actions .input { flex: 1; }
+
+.ret-cond-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-family: var(--font);
+}
+
+.ret-cond-tag.is-scrap { color: var(--neg-text); background: var(--neg-bg); }
+
 /* linked channel SKUs dialog + clickable stock SKU */
 
 .sku-link { cursor: pointer; }

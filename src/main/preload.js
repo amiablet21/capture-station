@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('api', {
   // dropped File -> real path (File.path is gone in modern Electron)
   getDroppedFilePath: (file) => webUtils.getPathForFile(file),
   saveStockImage: (sku, url) => ipcRenderer.invoke('stock:saveImage', { sku, url }),
+  returnsLookup: (ref) => ipcRenderer.invoke('returns:lookup', { ref }),
+  returnsCreate: (payload) => ipcRenderer.invoke('returns:create', payload),
+  returnsList: () => ipcRenderer.invoke('returns:list'),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),

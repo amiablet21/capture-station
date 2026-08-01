@@ -347,6 +347,21 @@ function listReceivingSessions(limit = 200) {
   return { ok: true, folder, sessions: sessions.slice(0, limit) };
 }
 
+// Mirror the returns ledger to a CSV beside the other exports.
+function writeReturnsCsv() {
+  try {
+    const folder = csvFolder();
+    fs.mkdirSync(folder, { recursive: true });
+    const lines = ['date,order_number,source,customer,sku,condition,target_sku,qty,note'];
+    for (const r of db.listReturns(1000).slice().reverse()) {
+      for (const it of r.items) {
+        lines.push([r.created_at, r.order_number, r.source, r.customer, it.sku, it.condition, it.targetSku, it.qty, r.note].map(csvEscape).join(','));
+      }
+    }
+    fs.writeFileSync(path.join(folder, 'returns.csv'), lines.join('\r\n'), 'utf8');
+  } catch { /* CSV locked in Excel: the DB still has the log */ }
+}
+
 /* ---------- clipboard watcher ---------- */
 
 function matchOrder(text) {
@@ -565,25 +580,37 @@ let orderMeta = {}; // reference -> { source, locationId, locationName, items: [
 
 // sku -> main image URL, from the inventory list (cached 10 min): gives the
 // capture queue its item thumbnails without hammering the API
-let skuImageCache = { at: 0, map: null, promise: null };
+let skuImageCache = { at: 0, map: null, skus: null, promise: null };
 
-async function getSkuImages(cfg) {
-  if (skuImageCache.map && Date.now() - skuImageCache.at < 10 * 60 * 1000) return skuImageCache.map;
+async function loadInventoryCache(cfg) {
+  if (skuImageCache.map && Date.now() - skuImageCache.at < 10 * 60 * 1000) return skuImageCache;
   if (skuImageCache.promise) return skuImageCache.promise;
   skuImageCache.promise = (async () => {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
       const map = {};
-      for (const it of items) if (it.image) map[it.sku] = it.image;
-      skuImageCache = { at: Date.now(), map, promise: null };
-      return map;
+      const skus = [];
+      for (const it of items) {
+        if (it.sku) skus.push(it.sku);
+        if (it.image) map[it.sku] = it.image;
+      }
+      skuImageCache = { at: Date.now(), map, skus, promise: null };
+      return skuImageCache;
     } catch {
       skuImageCache.promise = null;
-      return skuImageCache.map || {};
+      return skuImageCache;
     }
   })();
   return skuImageCache.promise;
+}
+
+async function getSkuImages(cfg) {
+  return (await loadInventoryCache(cfg)).map || {};
+}
+
+async function getInventorySkus(cfg) {
+  return (await loadInventoryCache(cfg)).skus || [];
 }
 
 function sourceToChannel(source) {
@@ -888,6 +915,81 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  ipcMain.handle('returns:lookup', async (_e, { ref }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const reference = String(ref || '').trim();
+    if (!reference) return { ok: false, error: 'Enter the original PO# / order number.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const order = await client.findProcessedOrder(reference);
+      if (!order) return { ok: false, error: 'No processed order found for that number.' };
+      // resolve each item's condition targets: remembered picks first, then
+      // the -OPENBOX/-USED/-SCRAP suffix convention against live inventory
+      const skus = await getInventorySkus(cfg);
+      const bySkuUpper = new Map(skus.map(s => [s.toUpperCase(), s]));
+      const remembered = db.getConditionMap();
+      const SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
+      for (const it of order.items) {
+        const saved = remembered[it.sku] || {};
+        it.targets = { new: it.sku };
+        for (const [cond, suf] of Object.entries(SUFFIX)) {
+          it.targets[cond] = saved[cond] || bySkuUpper.get(`${it.sku}${suf}`.toUpperCase()) || '';
+        }
+      }
+      return { ok: true, order, skus };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('returns:create', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const items = ((payload && payload.items) || [])
+      .map(i => ({
+        sku: String(i.sku || '').trim(),
+        condition: String(i.condition || '').trim(),
+        targetSku: String(i.targetSku || '').trim(),
+        qty: Number(i.qty),
+      }))
+      .filter(i => i.sku && i.targetSku && Number.isInteger(i.qty) && i.qty > 0);
+    if (!items.length) return { ok: false, error: 'Nothing to receive - every line needs a target SKU and quantity.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.changeStockLevels(
+        items.map(i => ({ sku: i.targetSku, delta: i.qty })),
+        cfg.linnworks.locationId,
+        'Capture Station return'
+      );
+      // remember non-new mappings so the next return of this SKU is one click
+      for (const i of items) {
+        if (i.condition !== 'new' && i.targetSku !== i.sku) {
+          db.saveConditionMapping(i.sku, i.condition, i.targetSku);
+        }
+      }
+      const id = db.createReturn({
+        orderNumber: String(payload.orderNumber || ''),
+        source: String(payload.source || ''),
+        customer: String(payload.customer || ''),
+        note: String(payload.note || '').slice(0, 500),
+        items,
+      });
+      writeReturnsCsv();
+      // best effort: stamp the original order (processed orders may refuse)
+      let noted = false;
+      if (payload.orderId) {
+        try {
+          const summary = items.map(i => `${i.sku} -> ${i.condition} (${i.targetSku}) x${i.qty}`).join('; ');
+          await client.addOrderNote(payload.orderId, `Return received: ${summary}${payload.note ? ` | ${payload.note}` : ''}`);
+          noted = true;
+        } catch { /* order note is a bonus, not a requirement */ }
+      }
+      return { ok: true, id, noted };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('returns:list', () => db.listReturns());
   ipcMain.handle('wfs:list', () => db.listWfsShipments());
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();

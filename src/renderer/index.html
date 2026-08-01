@@ -12,7 +12,7 @@
     <nav class="tabs" id="pageTabs" hidden>
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
-      <button id="tabReceiving" class="tab" hidden>Receiving</button>
+      <button id="tabReturns" class="tab" hidden>Returns</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -80,6 +80,7 @@
       <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
       <div id="stockChips" class="stock-chips" hidden></div>
       <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
+      <button id="recvBtn" class="btn btn-secondary">Receiving</button>
       <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
     </div>
     <p class="stock-hint" id="stockHint"><span id="stockSummary"></span><span class="stock-tip"> — click a count to correct it</span></p>
@@ -89,8 +90,27 @@
     </div>
   </section>
 
-  <!-- Receiving page: PO worksheet -> notes -> past receipts (variants/recv-sheet.html) -->
-  <section id="receivingPage" class="recv-page" hidden>
+  <!-- Returns page: look up the processed order, grade each unit, stock
+       auto-redirects to the mapped condition listing -->
+  <section id="returnsPage" class="ret-page" hidden>
+    <div class="ret-scroll">
+      <div class="ret-bar">
+        <input id="retRef" class="input mono ret-ref" type="text" placeholder="Original PO# / order number"
+               autocomplete="off" spellcheck="false" aria-label="Original order number" />
+        <button id="retFind" class="btn btn-secondary">Find order</button>
+        <span id="retHint" class="ret-hint"></span>
+      </div>
+      <div id="retCard" class="ret-card" hidden></div>
+      <div class="recv-past">
+        <div class="recv-past-head">Past returns · grouped by day</div>
+        <div id="retPastBox" class="recv-past-box"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Receiving worksheet: lives on the Stock page as a dialog -->
+  <dialog id="recvDialog" class="dlg dlg-recv">
+  <section id="receivingPage" class="recv-page">
     <div class="recv-scroll">
       <div class="recv-bar">
         <input id="recvRef" class="input mono recv-ref" type="text" placeholder="Reference (optional)"
@@ -157,6 +177,10 @@
       </div>
     </div>
   </section>
+  <div class="dlg-actions dlg-recv-actions">
+    <button id="recvClose" class="btn btn-primary">Close</button>
+  </div>
+  </dialog>
 
   <footer class="footbar">
     <div class="footbar-left">
@@ -239,7 +263,7 @@
       <div class="settings-row">
         <label class="check"><input id="setPageStock" type="checkbox" /> Stock</label>
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
-        <label class="check"><input id="setPageReceiving" type="checkbox" /> Receiving</label>
+        <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
       </div>
       <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone.</p>
 
@@ -352,6 +376,7 @@
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>
+  <datalist id="retSkuOptions"></datalist>
 
   <!-- Open orders for a SKU (Stock page "In orders" drill-down) -->
   <dialog id="ioDialog" class="dlg dlg-wide">

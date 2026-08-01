@@ -330,6 +330,44 @@ class LinnworksClient {
     }
   }
 
+  // Find a PROCESSED order by its channel reference (for returns): search,
+  // then pull the full order for its item lines.
+  async findProcessedOrder(reference) {
+    const search = await this.call('ProcessedOrders/SearchProcessedOrders', {
+      request: {
+        SearchTerm: String(reference),
+        DateField: 'processed',
+        FromDate: '2000-01-01T00:00:00Z',
+        ToDate: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        PageNumber: 1,
+        ResultsPerPage: 20,
+      },
+    });
+    const rows = (search && search.ProcessedOrders && search.ProcessedOrders.Data) || [];
+    const hit = rows.find(o => String(o.cShortOrderId || o.ReferenceNum || '').trim() === String(reference).trim()) || rows[0];
+    if (!hit) return null;
+    const out = {
+      orderId: hit.pkOrderID,
+      numOrderId: hit.nOrderId,
+      reference: String(reference),
+      source: hit.Source || '',
+      customer: hit.cFullName || '',
+      processedOn: hit.dProcessedOn || '',
+      tracking: hit.PostalTrackingNumber || '',
+      items: [],
+    };
+    try {
+      const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [hit.pkOrderID] });
+      const order = (full || [])[0];
+      out.items = ((order && order.Items) || []).filter(it => !it.IsService).map(it => ({
+        sku: it.SKU || it.ItemNumber || '',
+        title: it.Title || '',
+        quantity: it.Quantity || 1,
+      }));
+    } catch { /* items stay empty; the UI lets the user pick the SKU */ }
+    return out;
+  }
+
   // Channel SKUs linked to a stock item (what Channel Mapping points here).
   async getChannelSkus(stockItemId) {
     const data = await this.call(`Inventory/GetInventoryItemChannelSKUs?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
