@@ -1,5 +1,29 @@
 # Backlog
 
+## 0. Returns page (NEXT UP - design approved 2026-08-01, build next session)
+
+Admin-side only (page toggles). Two moves:
+1. The current Receiving worksheet relocates INTO the Stock page (button
+   beside WFS Shipments, same dialog pattern). The third tab becomes
+   **Returns**.
+2. Returns flow: type/scan the original PO# or return tracking ->
+   `ProcessedOrders/SearchProcessedOrders` finds the order (items, customer,
+   ship date, tracking) -> per returned unit pick a condition:
+   - New -> +1 original SKU at Digital World Shop
+   - Open box -> +1 `SKU-OPENBOX` (existing suffix convention)
+   - Used -> +1 `SKU-USED`
+   - Scrap -> no stock change, log only
+   Stock bump via `Stock/UpdateStockLevelsBySKU` (delta, like WFS). If the
+   condition SKU does not exist in inventory, warn and block that line until
+   it is created/mapped (no silent guessing). Every return writes a local log
+   (new `returns` table + `returns.csv`, ledger cards grouped by day like
+   receipts, condition on the right, scrap in red) and an internal note on
+   the original order ("return received - graded open box").
+   Note for build: verify which endpoint attaches notes to PROCESSED orders
+   (open-order SetOrderNotes may not apply).
+   Mockup approved: order card with RETURN stamp (mono ledger style), live
+   "-> +1 SKU-OPENBOX" preview beside the condition dropdown.
+
 Planned features, in the owner's words (2026-07-31). Not started yet.
 
 ## 1. Sales-velocity reorder alerts
