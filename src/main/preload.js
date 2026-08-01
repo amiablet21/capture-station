@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   getStock: () => ipcRenderer.invoke('stock:get'),
   getStockOpenOrders: (sku) => ipcRenderer.invoke('stock:openOrders', { sku }),
   setStockLevel: (sku, level) => ipcRenderer.invoke('stock:set', { sku, level }),
+  getChannelSkus: (stockItemId) => ipcRenderer.invoke('stock:channelSkus', { stockItemId }),
   addStockImage: (sku, stockItemId) => ipcRenderer.invoke('stock:addImage', { sku, stockItemId }),
   addStockImageUrl: (sku, stockItemId, url) => ipcRenderer.invoke('stock:addImageUrl', { sku, stockItemId, url }),
   cancelStockImage: () => ipcRenderer.invoke('stock:cancelImage'),

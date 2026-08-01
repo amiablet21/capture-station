@@ -48,6 +48,7 @@ if (!window.api) {
     getStock: async () => ({ ok: false, error: 'Preview mode' }),
     getStockOpenOrders: async () => ({ ok: false, error: 'Preview mode' }),
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
+    getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
     cancelStockImage: async () => ({ ok: true }),
@@ -946,7 +947,7 @@ function renderStock() {
           <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
             <td class="cell-gutter">${idx + 1}</td>
             <td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-            <td class="mono copyable" data-copy="${esc(r.sku)}" title="${esc(r.title)}&#10;Click to copy">${esc(r.sku)}</td>
+            <td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span></td>
             <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
             <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
             <td class="num">${r.l.minimumLevel}</td>
@@ -1129,6 +1130,8 @@ $('stockList').addEventListener('click', (e) => {
   }
   const ioBtn = e.target.closest('button.stock-io-btn');
   if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
+  const skuLink = e.target.closest('.sku-link');
+  if (skuLink) { openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid); return; }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
@@ -1225,6 +1228,30 @@ $('ioBody').addEventListener('click', (e) => {
 
 $('ioClose').addEventListener('click', () => $('ioDialog').close());
 $('ioDialog').addEventListener('close', () => focusScan());
+
+/* ---------- linked channel SKUs per stock item ---------- */
+
+async function openChannelSkus(sku, stockItemId) {
+  $('chsTitle').textContent = `Channel SKUs linked to ${sku}`;
+  $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('chsDialog').showModal();
+  const res = await api.getChannelSkus(stockItemId);
+  if (!res.ok) {
+    $('chsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load channel SKUs.')}</p>`;
+    return;
+  }
+  $('chsList').innerHTML = res.channels.length === 0
+    ? '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>'
+    : res.channels.map(c => `
+      <div class="chs-row">
+        <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
+        <span class="chs-sub">${esc(c.subSource)}</span>
+        <span class="mono chs-sku">${esc(c.sku)}</span>
+        ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
+      </div>`).join('');
+}
+
+$('chsClose').addEventListener('click', () => $('chsDialog').close());
 
 /* ---------- product image dialog (idle / loading / success / error) ---------- */
 
@@ -2098,7 +2125,7 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog'].some(id => $(id).open);
 }
 
 function focusScan() {

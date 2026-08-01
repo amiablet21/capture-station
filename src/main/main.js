@@ -913,6 +913,16 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  ipcMain.handle('stock:channelSkus', async (_e, { stockItemId }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      return { ok: true, channels: await client.getChannelSkus(stockItemId) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('stock:set', async (_e, { sku, level }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

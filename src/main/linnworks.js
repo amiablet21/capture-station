@@ -330,6 +330,18 @@ class LinnworksClient {
     }
   }
 
+  // Channel SKUs linked to a stock item (what Channel Mapping points here).
+  async getChannelSkus(stockItemId) {
+    const data = await this.call(`Inventory/GetInventoryItemChannelSKUs?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
+    return (data || []).map(c => ({
+      sku: c.SKU || '',
+      source: c.Source || '',
+      subSource: c.SubSource || '',
+      listedQuantity: c.ListedQuantity ?? null,
+      ignoreSync: !!c.IgnoreSync,
+    }));
+  }
+
   // Adjust stock levels by a delta per SKU at one location (negative = deduct).
   async changeStockLevels(entries, locationId, changeSource) {
     return this.call('Stock/UpdateStockLevelsBySKU', {
