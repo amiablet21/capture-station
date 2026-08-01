@@ -172,7 +172,9 @@ function render() {
   const current = state.rows.find(r => r.id === state.currentRowId);
   const expectEl = $('expectLine');
   if (!current || state.expecting !== 'tracking') {
-    expectEl.innerHTML = 'Copy an order number, then scan its label';
+    expectEl.innerHTML = state.captureOnly
+      ? 'Copy an order number, then scan its label'
+      : 'Click a PO# below, then scan or copy its tracking';
   } else {
     expectEl.innerHTML = `Waiting for: <strong>TRACKING</strong> &middot; <span class="mono">${esc(shorten(current.order_number, 18))}</span> ${esc(channelLabel(current.channel))}`;
   }
