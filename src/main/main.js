@@ -359,6 +359,11 @@ function matchOrder(text) {
 
 function startClipboardWatcher() {
   const poll = () => {
+    // Clipboard auto-capture belongs to capture-only stations, where copying
+    // IS the input method. In sync mode the queue is fed by the Linnworks
+    // import and tracking goes into the row's inline box - a background
+    // clipboard reader would only invite accidental captures.
+    if (!config.load().captureOnly) return;
     let text;
     try { text = clipboard.readText(); } catch { return; }
     if (lastClipboardText === null) { lastClipboardText = text; return; } // ignore whatever was copied before launch
