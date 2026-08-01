@@ -1091,11 +1091,20 @@ function initCaptureCols() {
 initCaptureCols();
 
 // whole-list resize: drag the handle on the right edge (mirrors the Stock sheet)
+// the search/chips toolbar tracks the sheet's width so they stay aligned
+function alignCaptureToolbar() {
+  const w = $('rowsMain').offsetWidth;
+  if (w) $('findBar').style.width = `${w}px`;
+}
+
 let rowsDrag = null;
 {
   const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
   if (savedW) $('rowsMain').style.width = `${savedW}px`;
+  requestAnimationFrame(alignCaptureToolbar);
 }
+
+window.addEventListener('resize', () => requestAnimationFrame(alignCaptureToolbar));
 
 $('rowsGrip').addEventListener('mousedown', (e) => {
   e.preventDefault();
@@ -1108,6 +1117,7 @@ window.addEventListener('mousemove', (e) => {
   const w = Math.max(560, rowsDrag.startW + (e.clientX - rowsDrag.startX));
   rowsDrag.w = w;
   $('rowsMain').style.width = `${w}px`;
+  alignCaptureToolbar();
 });
 
 window.addEventListener('mouseup', () => {
@@ -1120,6 +1130,7 @@ window.addEventListener('mouseup', () => {
 $('rowsGrip').addEventListener('dblclick', () => {
   localStorage.removeItem('captureSheetWidth');
   $('rowsMain').style.width = '';
+  requestAnimationFrame(alignCaptureToolbar);
 });
 
 $('rowsTable').addEventListener('mousedown', (e) => {

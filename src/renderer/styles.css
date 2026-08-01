@@ -1019,7 +1019,10 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px 14px;
-  margin: 14px 24px 6px;
+  /* centered and width-synced to the capture sheet (see alignCaptureToolbar) */
+  margin: 14px auto 6px;
+  max-width: calc(100% - 48px);
+  width: 100%;
 }
 
 .search-field {
