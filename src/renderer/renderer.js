@@ -1013,7 +1013,7 @@ $('stockList').addEventListener('mousedown', (e) => {
   if (!grip) return;
   e.preventDefault();
   const th = grip.closest('th');
-  gripDrag = { key: grip.dataset.grip, startX: e.clientX, startW: th.offsetWidth, th, w: 0 };
+  gripDrag = { key: grip.dataset.grip, startX: e.clientX, startW: th.offsetWidth, th, w: 0, storeName: 'stock' };
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -1028,11 +1028,55 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => {
   if (!gripDrag) return;
   if (gripDrag.w) {
-    stockColWidths[gripDrag.key] = gripDrag.w;
-    localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
+    if (gripDrag.storeName === 'capture') {
+      captureColWidths[gripDrag.key] = gripDrag.w;
+      localStorage.setItem('captureColWidths', JSON.stringify(captureColWidths));
+    } else {
+      stockColWidths[gripDrag.key] = gripDrag.w;
+      localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
+    }
     suppressSortUntil = Date.now() + 250;
   }
   gripDrag = null;
+});
+
+/* ---------- capture table column resizing ---------- */
+
+let captureColWidths = {};
+try { captureColWidths = JSON.parse(localStorage.getItem('captureColWidths') || '{}'); } catch { /* fresh start */ }
+
+function applyCaptureWidth(th, key) {
+  const w = captureColWidths[key];
+  th.style.width = w ? `${w}px` : '';
+  th.style.minWidth = w ? `${w}px` : '';
+  th.style.maxWidth = w ? `${w}px` : '';
+}
+
+function initCaptureCols() {
+  const keys = { 1: 'order', 2: 'items', 3: 'tracking', 4: 'notes' };
+  $('rowsTable').querySelectorAll('thead th').forEach((th, i) => {
+    const key = keys[i];
+    if (!key) return;
+    th.insertAdjacentHTML('beforeend', `<span class="col-grip" data-grip="${key}"></span>`);
+    applyCaptureWidth(th, key);
+  });
+}
+initCaptureCols();
+
+$('rowsTable').addEventListener('mousedown', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  e.preventDefault();
+  const th = grip.closest('th');
+  gripDrag = { key: grip.dataset.grip, startX: e.clientX, startW: th.offsetWidth, th, w: 0, storeName: 'capture' };
+});
+
+$('rowsTable').addEventListener('dblclick', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  delete captureColWidths[grip.dataset.grip];
+  localStorage.setItem('captureColWidths', JSON.stringify(captureColWidths));
+  applyCaptureWidth(grip.closest('th'), grip.dataset.grip);
 });
 
 $('stockList').addEventListener('dblclick', (e) => {
