@@ -235,6 +235,81 @@ body {
   margin: 12px 24px;
 }
 
+/* with the marketplace pane docked, the sheet takes the remaining width */
+.rows-row.has-browser { justify-content: stretch; }
+.rows-row.has-browser .rows { flex: 1 1 auto; }
+
+/* embedded marketplace browser pane (native view covers #bView) */
+
+.bdock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.bdock-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.bdock-domain {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+}
+
+.bdock-domain.is-loading { color: var(--accent); }
+
+.bdock-view { flex: 1; min-height: 0; background: var(--surface-2); }
+
+/* pane loading screen: DOM panel under the (hidden) native view */
+
+.bload {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--canvas);
+  padding: 24px;
+  text-align: center;
+}
+
+.bload b { font-size: 13px; font-weight: 600; }
+
+.bload-domain {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.bload-err { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.bload-err b { font-size: 12.5px; font-weight: 600; color: var(--neg-text); max-width: 36ch; }
+
+.bdock-divider { margin-right: 6px; }
+
 .rows {
   width: 100%;
   max-width: calc(100% - 14px);
@@ -354,6 +429,83 @@ body {
   letter-spacing: 0.05em;
   padding: 2px 9px;
   border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* substitution pill: what actually shipped instead of the listed item */
+.sub-pill {
+  display: inline-block;
+  margin-right: 6px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--badge-yellow-text);
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.sub-pill:hover { filter: brightness(0.95); }
+
+.sub-combo { position: relative; flex: 1 1 240px; min-width: 200px; }
+.sub-combo .input { width: 100%; }
+.sub-combo .combo-list { left: 0; width: min(440px, 80vw); }
+.sub-qty { width: 76px; text-align: right; font-family: var(--mono); }
+
+/* clickable badge (the DS chip moves the order back to the warehouse) */
+.badge-btn { border: none; cursor: pointer; font-family: var(--font); transition: filter 120ms var(--ease); }
+.badge-btn:hover { filter: brightness(0.93); }
+.badge-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* multi-unit quantity: loud on purpose - a missed second unit is a refund */
+.qty-chip {
+  display: inline-block;
+  margin-left: 5px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  vertical-align: 1px;
+}
+
+/* despatch-by chips: amber while there is slack, red once the cutoff nears */
+.due-chip {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.due-chip.is-amber { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.due-chip.is-red { background: var(--neg-bg); color: var(--neg-text); }
+
+.chip-filter.chip-due.is-active { background: var(--badge-yellow-bg); border-color: transparent; color: var(--badge-yellow-text); }
+
+.due-header {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--neg-text);
   white-space: nowrap;
 }
 
@@ -614,13 +766,13 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch; /* the worksheet fills the page like the Stock sheet */
   min-height: 0;
   padding: 14px 24px 16px;
 }
 
 .ret-scroll {
-  width: min(680px, 100%);
+  width: 100%;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -696,6 +848,226 @@ body {
 }
 
 .ret-cond-tag.is-scrap { color: var(--neg-text); background: var(--neg-bg); }
+
+/* unmatched-return path */
+
+.ret-map-btn { margin-left: auto; }
+
+.ret-noorder {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ret-card-head .ret-noorder { margin-left: auto; margin-right: 8px; }
+.ret-card-head .ret-noorder + .ret-stamp { margin-left: 0; }
+
+/* returns worksheet (spreadsheet, like the receiving sheet) */
+
+.ret-sheet-scroll { overflow-x: auto; } /* eleven columns: the sheet scrolls sideways, the page never does */
+
+/* fixed layout: columns hold their widths, Customer + Notes flex with the
+   window; below 1100px the sheet scrolls sideways instead of crushing */
+.ret-sheet { table-layout: fixed; width: 100%; min-width: 1100px; }
+.ret-sheet th.th-po { width: 150px; }
+.ret-sheet th.th-trk { width: 130px; }
+.ret-sheet th.th-date { width: 74px; }
+.ret-sheet th.th-rsku { width: 175px; }
+.ret-sheet th.th-price { width: 86px; text-align: right; }
+.ret-sheet th.th-cond { width: 170px; }
+.ret-sheet th.th-by { width: 60px; }
+
+.ret-sheet td { font-size: 12.5px; }
+.ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
+.ret-cell-cust, .ret-cell-note { color: var(--muted); }
+.ret-cell-date { color: var(--muted); font-size: 12px; }
+.ret-cell-price .recv-cell-input { text-align: right; color: var(--text); font-weight: 500; }
+.ret-cell-by .recv-cell-input { color: var(--text); font-weight: 600; text-transform: uppercase; }
+.ret-cell-note .recv-cell-input { font-family: var(--font); color: var(--text); font-weight: 400; }
+
+.ret-cell-cond .ret-cond { width: 100%; padding: 2px 6px; font-size: 12px; }
+
+.ret-cell-target {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent-soft-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.ret-cell-target.is-missing { display: flex; align-items: center; gap: 6px; }
+.ret-cell-target.is-missing .ret-pick { flex: 1; min-width: 0; padding: 2px 6px; font-size: 11px; }
+
+/* "+ new" affordance: create the missing condition listing on the spot */
+.newsku-link {
+  flex: 0 0 auto;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--faint);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-ctl);
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.newsku-link:hover { color: var(--accent); border-color: var(--accent); }
+
+.map-new-sku { margin-left: 6px; vertical-align: middle; }
+
+.ret-sheet-combo { position: relative; min-width: 150px; }
+.ret-sheet-combo .combo-list { left: -11px; width: min(440px, 65vw); }
+
+.ret-entry-po { overflow: visible !important; }
+
+/* the hint must not drive the table's max-content width (it spans 9 columns) */
+.ret-entry-hint {
+  color: var(--faint);
+  font-size: 12px;
+  font-style: normal;
+  white-space: normal;
+  max-width: 0; /* with border-box tables, lets the hint wrap instead of widening */
+  min-width: 300px;
+}
+
+.ret-cell-po .ret-noorder, .ret-h-po .ret-noorder { margin-left: 6px; }
+
+/* history sheet rows inside a day group */
+
+.ret-hist-wrap { overflow-x: auto; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
+
+.ret-hist-table { width: 100%; min-width: max-content; border-collapse: collapse; }
+
+.ret-hist-table td {
+  padding: 5px 10px;
+  height: 30px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.ret-hist-table tr:last-child td { border-bottom: none; }
+.ret-hist-table td:last-child { border-right: none; }
+
+.ret-h-time { color: var(--faint); width: 58px; }
+.ret-h-po { color: var(--text); font-weight: 600; max-width: 170px; }
+.ret-h-cust { max-width: 140px; }
+.ret-h-trk { max-width: 130px; }
+.ret-h-sku { color: var(--text); max-width: 200px; }
+.ret-h-price { text-align: right; width: 70px; font-variant-numeric: tabular-nums; }
+.ret-h-by { width: 46px; text-transform: uppercase; font-weight: 600; }
+.ret-h-note { max-width: 200px; }
+
+/* condition-mapping editor */
+
+.map-search { width: 260px; }
+
+.map-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  max-height: 56vh;
+  overflow-y: auto;
+}
+
+.map-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+.map-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.map-table th:last-child { border-right: none; }
+.map-table th.th-gutter { width: 36px; text-align: center; border-right: 1px solid var(--border); }
+
+.map-table td {
+  padding: 4px 10px;
+  height: 34px;
+  vertical-align: middle;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+}
+
+.map-table td:last-child { border-right: none; }
+.map-table tbody tr:hover td:not(.cell-gutter) { background: var(--surface-2); }
+
+.map-base { font-weight: 600; font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+.map-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.map-val:hover { background: var(--accent-soft); }
+.map-val .mono { font-size: 12px; font-weight: 600; color: var(--text); }
+
+.map-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.map-tag.is-auto { background: var(--surface-2); border: 1px solid var(--border); color: var(--faint); }
+.map-tag.is-manual { background: var(--accent-soft); color: var(--accent-soft-text); }
+
+.map-set {
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--faint);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-ctl);
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.map-set:hover { color: var(--accent); border-color: var(--accent); }
+
+.map-del { width: 20px; height: 20px; font-size: 11px; }
+
+.map-combo { position: relative; display: inline-block; }
+.map-combo .map-edit-input { width: 220px; padding: 3px 8px; font-size: 12px; }
+.map-combo .combo-list { left: 0; width: min(420px, 60vw); }
 
 /* linked channel SKUs dialog + clickable stock SKU */
 
@@ -834,9 +1206,11 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap; /* narrow window: chips drop below the search field */
+  max-width: 100%;
 }
 
-.stock-toolbar .input { width: 320px; }
+.stock-toolbar .input { width: 210px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -859,6 +1233,22 @@ body {
 .view-chip:hover { color: var(--text); }
 .view-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .view-chip.is-active { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+
+/* active condition chips wear their category's muted pastel (same palette as
+   the channel badges; scrap in red per the ledger rule) - inactive stays quiet */
+.view-chip.is-active.tint-blue { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.view-chip.is-active.tint-yellow { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.view-chip.is-active.tint-red { background: var(--badge-red-bg); color: var(--badge-red-text); }
+
+/* right-aligned action group, separated from search + chips by a hairline */
+.stock-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
 
 .stock-hint {
   font-size: 12px;

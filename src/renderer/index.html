@@ -18,6 +18,7 @@
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
         <span class="daycount-label" id="dayCountLabel">Captured today</span>
+        <span id="dueHeader" class="due-header" hidden></span>
       </div>
     </div>
   </header>
@@ -48,9 +49,34 @@
     <span id="findCount" class="find-count"></span>
     <div id="channelChips" class="channel-chips" hidden></div>
     <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
+    <button id="bExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the list">Browser</button>
   </div>
 
   <div class="rows-row" id="rowsRow">
+  <!-- embedded marketplace browser: the native view covers #bView's rectangle -->
+  <div id="bDock" class="bdock" hidden>
+    <div class="bdock-head">
+      <button id="bBack" class="btn-icon" title="Back" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M168.49,199.51a12,12,0,0,1-17,17l-80-80a12,12,0,0,1,0-17l80-80a12,12,0,0,1,17,17L97,128Z"/></svg></button>
+      <button id="bFwd" class="btn-icon" title="Forward" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg></button>
+      <button id="bReload" class="btn-icon" title="Reload"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></button>
+      <span id="bDomain" class="bdock-domain" title="Only the site name shows here, never the full link">—</span>
+      <button id="bPrint" class="btn-icon" title="Print this page (shipping label)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M214,80H196V40a12,12,0,0,0-12-12H72A12,12,0,0,0,60,40V80H42A26,26,0,0,0,16,106v66a26,26,0,0,0,26,26H60v18a12,12,0,0,0,12,12H184a12,12,0,0,0,12-12V198h18a26,26,0,0,0,26-26V106A26,26,0,0,0,214,80ZM84,52h88V80H84ZM172,204H84V164h88Zm44-32a2,2,0,0,1-2,2H196V152a12,12,0,0,0-12-12H72a12,12,0,0,0-12,12v22H42a2,2,0,0,1-2-2V106a2,2,0,0,1,2-2H214a2,2,0,0,1,2,2Z"/></svg></button>
+      <button id="bCollapse" class="btn-icon" title="Collapse the browser pane"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M107.51,136.49a12,12,0,0,1,0-17l72-72a12,12,0,0,1,17,17L133,128l63.51,63.51a12,12,0,0,1-17,17Zm-64,0a12,12,0,0,1,0-17l72-72a12,12,0,0,1,17,17L69,128l63.51,63.51a12,12,0,0,1-17,17Z"/></svg></button>
+    </div>
+    <div id="bView" class="bdock-view">
+      <!-- shown while the native view is hidden during navigation -->
+      <div id="bLoadPanel" class="bload" hidden>
+        <div id="bLoadSpin" class="img-spinner"></div>
+        <b id="bLoadLabel">Loading…</b>
+        <span id="bLoadDomain" class="bload-domain mono"></span>
+        <div id="bLoadErr" class="bload-err" hidden>
+          <b id="bLoadErrText">The page failed to load.</b>
+          <button id="bLoadRetry" class="btn btn-secondary">Retry</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="bDivider" class="sheet-grip bdock-divider" hidden title="Drag to resize the browser pane"></div>
   <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
       <thead>
@@ -79,9 +105,12 @@
     <div class="stock-toolbar">
       <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
       <div id="stockChips" class="stock-chips" hidden></div>
-      <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
-      <button id="recvBtn" class="btn btn-secondary">Receiving</button>
-      <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
+      <div class="stock-actions">
+        <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
+        <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks">New SKU</button>
+        <button id="recvBtn" class="btn btn-secondary">Receiving</button>
+        <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
+      </div>
     </div>
     <p class="stock-hint" id="stockHint"><span id="stockSummary"></span><span class="stock-tip"> — click a count to correct it</span></p>
     <div class="stock-sheet-row">
@@ -90,17 +119,52 @@
     </div>
   </section>
 
-  <!-- Returns page: look up the processed order, grade each unit, stock
-       auto-redirects to the mapped condition listing -->
+  <!-- Returns page: spreadsheet worksheet - the entry row looks up the PO#,
+       expands to one row per unit, grades redirect stock via the mapping engine -->
   <section id="returnsPage" class="ret-page" hidden>
     <div class="ret-scroll">
       <div class="ret-bar">
-        <input id="retRef" class="input mono ret-ref" type="text" placeholder="Original PO# / order number"
-               autocomplete="off" spellcheck="false" aria-label="Original order number" />
-        <button id="retFind" class="btn btn-secondary">Find order</button>
+        <span class="recv-past-head">Returns worksheet</span>
         <span id="retHint" class="ret-hint"></span>
+        <button id="retMapBtn" class="btn btn-ghost ret-map-btn" title="Inspect and adjust the condition listing mappings">Mappings</button>
       </div>
-      <div id="retCard" class="ret-card" hidden></div>
+      <div class="recv-sheet-box">
+        <div class="ret-sheet-scroll">
+        <table class="recv-sheet-table ret-sheet" id="retTable">
+          <thead>
+            <tr>
+              <th class="th-gutter">#</th>
+              <th class="th-po">PO#</th>
+              <th class="th-cust">Customer</th>
+              <th class="th-trk">Tracking #</th>
+              <th class="th-date">Received</th>
+              <th class="th-rsku">Returned SKU</th>
+              <th class="th-price">Price</th>
+              <th class="th-cond">Condition</th>
+              <th class="th-by">By</th>
+              <th class="th-note">Notes / dispute</th>
+              <th class="th-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="retBody"></tbody>
+          <tbody>
+            <tr class="ret-entry">
+              <td class="cell-gutter" id="retEntryNum">1</td>
+              <td class="ret-entry-po">
+                <input id="retPo" class="recv-cell-input mono" type="text" placeholder="Type / paste PO#…"
+                       autocomplete="off" spellcheck="false" aria-label="Original order number" />
+              </td>
+              <td colspan="9" class="ret-entry-hint" id="retEntryHint">Enter looks the order up and fills the row — one row per unit; no match falls back to a SKU pick</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="recv-sheet-foot">
+          <span class="recv-total" id="retSummary">0 units</span>
+          <span id="retFootNote" class="test-result"></span>
+          <button id="retReceiveAll" class="btn btn-primary" disabled>Receive returns</button>
+        </div>
+      </div>
       <div class="recv-past">
         <div class="recv-past-head">Past returns · grouped by day</div>
         <div id="retPastBox" class="recv-past-box"></div>
@@ -315,6 +379,10 @@
         </select>
       </div>
       <div class="settings-row">
+        <span class="field-label">Carrier cutoff (24h) — "Due today" turns red as it nears</span>
+        <input id="setShipCutoff" type="text" class="input input-time mono" placeholder="16:00" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="settings-row">
         <span class="field-label">Settings PIN (empty = no PIN)</span>
         <input id="setPin" type="password" class="input input-time mono" inputmode="numeric" autocomplete="off" placeholder="unchanged" />
         <label class="check"><input id="setPinClear" type="checkbox" /> Remove PIN</label>
@@ -377,6 +445,91 @@
   </dialog>
   <datalist id="skuOptions"></datalist>
   <datalist id="retSkuOptions"></datalist>
+
+  <!-- Shipped different item: substitution intent, applied at process time -->
+  <dialog id="subDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Shipped a different item</h2>
+      <div class="img-sub mono" id="subOrderLine"></div>
+      <div class="settings-row">
+        <div class="combo sub-combo">
+          <input id="subSku" class="input mono" type="text" placeholder="SKU actually shipped…"
+                 autocomplete="off" spellcheck="false" role="combobox" aria-label="Shipped SKU" />
+          <div id="subComboList" class="combo-list" hidden></div>
+        </div>
+        <input id="subQty" class="input sub-qty" type="number" min="1" step="1" value="1" title="Units shipped" aria-label="Quantity" />
+      </div>
+      <label class="field">
+        <span class="field-label">Internal note — stays in this app (Notes / CSV / History), never sent to Linnworks</span>
+        <input id="subNote" class="input" type="text" autocomplete="off" />
+      </label>
+      <p class="dlg-note test-result" id="subResult" hidden></p>
+      <div class="dlg-actions">
+        <button id="subClear" class="btn btn-ghost" hidden>Remove substitution</button>
+        <button id="subCancel" class="btn btn-ghost">Cancel</button>
+        <button id="subSave" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- New SKU: create an inventory item in Linnworks -->
+  <dialog id="skuDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">New SKU</h2>
+      <label class="field">
+        <span class="field-label">SKU</span>
+        <input id="skuSku" class="input mono" type="text" autocomplete="off" spellcheck="false"
+               placeholder="S25-128GB-NAVY-OPENBOX" />
+      </label>
+      <label class="field">
+        <span class="field-label">Title</span>
+        <input id="skuTitle" class="input" type="text" autocomplete="off"
+               placeholder="Samsung Galaxy S25 128GB Navy (Open Box)" />
+      </label>
+      <div class="grid2">
+        <label class="field">
+          <span class="field-label">Barcode (optional)</span>
+          <input id="skuBarcode" class="input mono" type="text" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span class="field-label">Starting quantity at <span id="skuLoc">the warehouse</span></span>
+          <input id="skuQty" class="input" type="number" min="0" step="1" value="0" />
+        </label>
+        <label class="field">
+          <span class="field-label">Retail price (optional)</span>
+          <input id="skuRetail" class="input" type="number" min="0" step="0.01" placeholder="0.00" />
+        </label>
+        <label class="field">
+          <span class="field-label">Purchase price (optional)</span>
+          <input id="skuPurchase" class="input" type="number" min="0" step="0.01" placeholder="0.00" />
+        </label>
+      </div>
+      <p class="dlg-note test-result" id="skuResult" hidden></p>
+      <div class="dlg-actions">
+        <button id="skuCancel" class="btn btn-ghost">Cancel</button>
+        <button id="skuCreate" class="btn btn-primary">Create SKU</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Condition-mapping editor: where each sold SKU's graded returns land -->
+  <dialog id="mapDialog" class="dlg dlg-wide">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Condition mappings</h2>
+      <p class="dlg-note">Where graded returns of each sold SKU land. <strong>auto</strong> = derived from the
+        -OPENBOX / -USED / -SCRAP listing names; <strong>manual</strong> picks override auto everywhere.
+        Click a cell to change it; removing a manual pick falls back to auto.</p>
+      <div class="settings-row">
+        <input id="mapSearch" class="input map-search" type="text" placeholder="Filter by SKU"
+               autocomplete="off" spellcheck="false" />
+        <span id="mapCount" class="test-result"></span>
+      </div>
+      <div id="mapList" class="map-list"></div>
+      <div class="dlg-actions">
+        <button id="mapClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Open orders for a SKU (Stock page "In orders" drill-down) -->
   <dialog id="ioDialog" class="dlg dlg-wide">

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell, WebContentsView, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -60,6 +60,13 @@ function buildState() {
     csv: lastCsv,
     orderMeta,
     orderUrlTemplates: cfg.orderUrlTemplates || {},
+    shipCutoff: cfg.shipCutoff || '16:00',
+    locations: {
+      primaryName: cfg.linnworks.locationName || '',
+      fallbackName: (cfg.stockRouting || {}).fallbackLocationName || '',
+      fallbackSet: !!(cfg.stockRouting || {}).fallbackLocationId
+        && (cfg.stockRouting || {}).fallbackLocationId !== cfg.linnworks.locationId,
+    },
   };
 }
 
@@ -80,7 +87,10 @@ function buildCsvContent(rows) {
   const header = 'time,channel,order_number,tracking,carrier,notes,status,fail_reason,synced_at';
   const lines = rows.slice().reverse().map(r => [
     r.created_at, r.channel, r.order_number, r.tracking, r.carrier,
-    r.notes || '', r.status, r.fail_reason, r.synced_at,
+    // the substitution marker rides in the notes column (internal audit trail)
+    [r.notes || '', r.sub_sku ? `SUB: ${r.sub_note || `shipped ${r.sub_sku}`} (×${r.sub_qty || 1})` : '']
+      .filter(Boolean).join(' | '),
+    r.status, r.fail_reason, r.synced_at,
   ].map(csvEscape).join(','));
   return [header, ...lines].join('\r\n');
 }
@@ -154,6 +164,127 @@ async function getOpenOrdersCached(cfg) {
     }
   })();
   return openOrdersCache.promise;
+}
+
+/* ---------- embedded marketplace browser pane (Capture page) ---------- */
+
+// A WebContentsView docked beside the capture sheet so the packer opens the
+// order's marketplace page (and prints the shipping label) without leaving
+// the app. Own persistent session: seller logins survive restarts. Fully
+// isolated from app internals - no preload, no node, sandboxed.
+const PANE_PARTITION = 'persist:marketplace';
+let paneView = null;
+let paneAttached = false;
+
+function paneUniquePath(dir, name) {
+  const ext = path.extname(name);
+  const base = path.basename(name, ext);
+  let candidate = path.join(dir, name);
+  for (let i = 1; fs.existsSync(candidate); i++) candidate = path.join(dir, `${base} (${i})${ext}`);
+  return candidate;
+}
+
+function sendPaneState() {
+  if (!win || win.isDestroyed() || !paneView) return;
+  const wc = paneView.webContents;
+  let domain = '';
+  try { domain = new URL(wc.getURL()).hostname.replace(/^www\./, ''); } catch { /* about:blank */ }
+  win.webContents.send('browser:state', {
+    domain, // domain only: raw URLs never reach the UI
+    loading: wc.isLoading(),
+    canGoBack: wc.navigationHistory.canGoBack(),
+    canGoForward: wc.navigationHistory.canGoForward(),
+  });
+}
+
+function ensurePane() {
+  if (paneView) return paneView;
+  const ses = session.fromPartition(PANE_PARTITION);
+  // shipping labels: downloads land in Downloads, the renderer gets a toast
+  ses.removeAllListeners('will-download');
+  ses.on('will-download', (_e, item) => {
+    try {
+      item.setSavePath(paneUniquePath(app.getPath('downloads'), item.getFilename() || 'download'));
+    } catch { /* Electron picks a path itself */ }
+    item.once('done', (_ev, dlState) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('browser:download', { file: path.basename(item.getSavePath()), state: dlState });
+      }
+    });
+  });
+  paneView = new WebContentsView({
+    webPreferences: {
+      partition: PANE_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+    },
+  });
+  const wc = paneView.webContents;
+  // marketplace login flows open popups; allow them, same isolated session
+  wc.setWindowOpenHandler(() => ({
+    action: 'allow',
+    overrideBrowserWindowOptions: {
+      autoHideMenuBar: true,
+      webPreferences: { partition: PANE_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    },
+  }));
+  for (const ev of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) {
+    wc.on(ev, sendPaneState);
+  }
+  // loading-screen lifecycle: the renderer swaps the native view for a DOM
+  // panel while a page loads (domain only, never the raw URL)
+  const paneDomain = (u) => {
+    try { return new URL(u || wc.getURL()).hostname.replace(/^www\./, ''); } catch { return ''; }
+  };
+  const sendPane = (channel, payload) => {
+    if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+  };
+  wc.on('did-start-loading', () => sendPane('browser:loadstart', { domain: paneDomain() }));
+  wc.on('did-finish-load', () => sendPane('browser:loadend', { ok: true }));
+  wc.on('did-stop-loading', () => sendPane('browser:loadend', { ok: true, fallback: true }));
+  wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return; // -3 = aborted (redirects, next nav)
+    sendPane('browser:loadfail', { code, desc: String(desc || ''), domain: paneDomain(url) });
+  });
+  // Ctrl+P inside the pane -> Electron print dialog (window.print() from the
+  // page itself already opens it natively)
+  wc.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.meta) && String(input.key).toLowerCase() === 'p') {
+      event.preventDefault();
+      wc.print();
+    }
+  });
+  return paneView;
+}
+
+// The renderer owns the pane's geometry: it reserves layout space and reports
+// the rectangle (and hides the pane while any dialog is open, since a native
+// view always draws above the DOM).
+function layoutPane(b) {
+  if (!win || win.isDestroyed()) return { ok: false };
+  const visible = !!b.visible && !config.load().captureOnly; // sync-mode tool
+  if (!visible) {
+    if (paneView && paneAttached) {
+      win.contentView.removeChildView(paneView);
+      paneAttached = false;
+    }
+    return { ok: true, visible: false };
+  }
+  ensurePane();
+  if (!paneAttached) {
+    win.contentView.addChildView(paneView);
+    paneAttached = true;
+  }
+  paneView.setBounds({
+    x: Math.max(0, Math.round(b.x || 0)),
+    y: Math.max(0, Math.round(b.y || 0)),
+    width: Math.max(0, Math.round(b.width || 0)),
+    height: Math.max(0, Math.round(b.height || 0)),
+  });
+  sendPaneState();
+  return { ok: true, visible: true };
 }
 
 /* ---------- product image add (download in-app: progress, cancel) ---------- */
@@ -352,10 +483,15 @@ function writeReturnsCsv() {
   try {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
-    const lines = ['date,order_number,source,customer,sku,condition,target_sku,qty,note'];
+    const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched'];
     for (const r of db.listReturns(1000).slice().reverse()) {
       for (const it of r.items) {
-        lines.push([r.created_at, r.order_number, r.source, r.customer, it.sku, it.condition, it.targetSku, it.qty, r.note].map(csvEscape).join(','));
+        lines.push([
+          r.created_at, r.order_number, r.source, r.customer, r.tracking || '',
+          it.sku, it.condition, it.targetSku, it.qty,
+          it.price != null ? it.price : '', r.received_by || '',
+          it.note || r.note || '', r.unmatched ? 'yes' : '',
+        ].map(csvEscape).join(','));
       }
     }
     fs.writeFileSync(path.join(folder, 'returns.csv'), lines.join('\r\n'), 'utf8');
@@ -647,6 +783,7 @@ async function runOrderImport() {
         locationId: o.locationId || '',
         locationName: o.locationName || '',
         dropship: !!fallbackId && o.locationId === fallbackId,
+        despatchBy: o.despatchBy || '',
         items: (o.items || []).filter(it => !it.isService).map(it => {
           const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
           return {
@@ -733,6 +870,62 @@ function registerIpc() {
     await runOrderImport();
     return { ok: true };
   });
+  // Per-order location move (same Orders/MoveToLocation call the router uses):
+  // DS chip -> back to the warehouse; row action -> out to the fallback.
+  ipcMain.handle('orders:move', async (_e, { orderNumber, target, force }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const ref = String(orderNumber || '').trim();
+    if (!ref) return { ok: false, error: 'Missing order number.' };
+    const sr = cfg.stockRouting || {};
+    const primaryId = cfg.linnworks.locationId;
+    const toId = target === 'primary' ? primaryId : sr.fallbackLocationId;
+    const toName = target === 'primary'
+      ? (cfg.linnworks.locationName || 'the warehouse')
+      : (sr.fallbackLocationName || 'the fallback location');
+    if (!toId) {
+      return {
+        ok: false,
+        error: target === 'primary'
+          ? 'No stock location selected (Settings).'
+          : 'No fallback location selected (Settings > Sync).',
+      };
+    }
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const orders = await getOpenOrdersCached(cfg);
+      const order = orders.find(o => String(o.reference).trim() === ref);
+      if (!order) return { ok: false, error: 'Order not found in open orders - refresh and retry.' };
+      if (order.locationId === toId) return { ok: false, error: `Order is already at ${toName}.` };
+      // moving back to the warehouse: warn, never block - the owner may have
+      // restocked seconds ago and Linnworks still shows zero
+      if (target === 'primary' && !force) {
+        const short = [];
+        for (const it of order.items) {
+          if (it.isService || it.unlinked || !it.stockItemId || it.stockItemId === ZERO_GUID) continue;
+          const avail = await client.getAvailableAt(it.stockItemId, primaryId);
+          if (avail < it.quantity) short.push(it.sku || it.channelSku || 'item');
+        }
+        if (short.length) {
+          return {
+            ok: false, needsConfirm: true,
+            warn: `${toName} shows no available stock for ${short.join(', ')} — move anyway?`,
+          };
+        }
+      }
+      const res = await client.moveOrdersToLocation([order.orderId], toId);
+      const moved = res && res.OrdersMoved ? res.OrdersMoved.length : 0;
+      if (!moved) {
+        const errs = ((res && res.Errors) || []).join('; ');
+        return { ok: false, error: errs || 'Linnworks did not move the order.' };
+      }
+      openOrdersCache = { at: 0, data: null, promise: null }; // location changed
+      await runOrderImport(); // refresh meta + queue so the chip updates
+      return { ok: true, toName };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('order:open', (_e, id) => {
     const row = db.getRow(id);
     if (!row) return { ok: false, error: 'Row not found' };
@@ -749,6 +942,27 @@ function registerIpc() {
     const row = db.updateRow(id, fields);
     pushState();
     return { ok: !!row, row };
+  });
+  // "Shipped different item": save the substitution intent on the row.
+  // Applied to stock at process time; internal only, never a Linnworks note.
+  ipcMain.handle('rows:substitute', (_e, { id, sku, qty, note, clear }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const row = db.getRow(Number(id));
+    if (!row) return { ok: false, error: 'Row not found.' };
+    if (row.status === 'synced') return { ok: false, error: 'Already processed - the stock has moved.' };
+    if (clear) {
+      const cleared = db.setSubstitution(row.id, '', 0, '');
+      pushState();
+      return { ok: true, row: cleared };
+    }
+    const subSku = String(sku || '').trim();
+    const subQty = Number(qty);
+    if (!subSku) return { ok: false, error: 'Pick the SKU that actually shipped.' };
+    if (!Number.isInteger(subQty) || subQty < 1) return { ok: false, error: 'Quantity must be a whole number of 1 or more.' };
+    const updated = db.setSubstitution(row.id, subSku, subQty, String(note || '').trim().slice(0, 300));
+    pushState();
+    return { ok: true, row: updated };
   });
   ipcMain.handle('rows:delete', (_e, id) => {
     if (currentRowId === id) currentRowId = null;
@@ -924,18 +1138,11 @@ function registerIpc() {
       const client = new LinnworksClient(cfg.linnworks);
       const order = await client.findProcessedOrder(reference);
       if (!order) return { ok: false, error: 'No processed order found for that number.' };
-      // resolve each item's condition targets: remembered picks first, then
-      // the -OPENBOX/-USED/-SCRAP suffix convention against live inventory
+      // resolve each item's condition targets via the shared mapping engine
+      // (manual picks beat the -OPENBOX/-USED/-SCRAP suffix auto-derivation)
       const skus = await getInventorySkus(cfg);
-      const bySkuUpper = new Map(skus.map(s => [s.toUpperCase(), s]));
-      const remembered = db.getConditionMap();
-      const SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
       for (const it of order.items) {
-        const saved = remembered[it.sku] || {};
-        it.targets = { new: it.sku };
-        for (const [cond, suf] of Object.entries(SUFFIX)) {
-          it.targets[cond] = saved[cond] || bySkuUpper.get(`${it.sku}${suf}`.toUpperCase()) || '';
-        }
+        it.targets = db.resolveConditionTargets(it.sku, skus);
       }
       return { ok: true, order, skus };
     } catch (e) {
@@ -951,6 +1158,8 @@ function registerIpc() {
         condition: String(i.condition || '').trim(),
         targetSku: String(i.targetSku || '').trim(),
         qty: Number(i.qty),
+        price: Math.max(0, Math.round((Number(i.price) || 0) * 100) / 100),
+        note: String(i.note || '').trim().slice(0, 300),
       }))
       .filter(i => i.sku && i.targetSku && Number.isInteger(i.qty) && i.qty > 0);
     if (!items.length) return { ok: false, error: 'Nothing to receive - every line needs a target SKU and quantity.' };
@@ -967,13 +1176,19 @@ function registerIpc() {
           db.saveConditionMapping(i.sku, i.condition, i.targetSku);
         }
       }
+      const receivedBy = String(payload.receivedBy || '').trim().slice(0, 60);
       const id = db.createReturn({
         orderNumber: String(payload.orderNumber || ''),
         source: String(payload.source || ''),
         customer: String(payload.customer || ''),
         note: String(payload.note || '').slice(0, 500),
         items,
+        unmatched: !!payload.unmatched, // arrived without a Linnworks order
+        tracking: String(payload.tracking || '').trim().slice(0, 100),
+        receivedBy,
       });
+      // the worksheet's "Received by" remembers the last-used initials
+      if (receivedBy) config.save({ returnsReceivedBy: receivedBy });
       writeReturnsCsv();
       // best effort: stamp the original order (processed orders may refuse)
       let noted = false;
@@ -990,6 +1205,83 @@ function registerIpc() {
     }
   });
   ipcMain.handle('returns:list', () => db.listReturns());
+  // Condition targets for one SKU (the unmatched-return path picks the SKU
+  // first, so it needs the same engine the order lookup uses per item).
+  ipcMain.handle('returns:targets', async (_e, { sku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const base = String(sku || '').trim();
+    if (!base) return { ok: false, error: 'Missing SKU.' };
+    try {
+      const skus = await getInventorySkus(cfg);
+      return { ok: true, targets: db.resolveConditionTargets(base, skus), skus };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // All known mappings for the editor: auto-derived rows from the live
+  // inventory's suffix listings, overlaid with the persisted manual picks.
+  ipcMain.handle('returns:mappings', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const skus = await getInventorySkus(cfg);
+      const bySkuUpper = new Map(skus.map(s => [s.toUpperCase(), s]));
+      const rows = new Map(); // baseSku -> { baseSku, conds: { cond: { sku, source } } }
+      const ensure = (base) => {
+        if (!rows.has(base)) rows.set(base, { baseSku: base, conds: {} });
+        return rows.get(base);
+      };
+      for (const s of skus) {
+        for (const [cond, suf] of Object.entries(db.CONDITION_SUFFIX)) {
+          const t = bySkuUpper.get(`${s}${suf}`.toUpperCase());
+          if (t) ensure(s).conds[cond] = { sku: t, source: 'auto' };
+        }
+      }
+      for (const [base, conds] of Object.entries(db.getConditionMap())) {
+        for (const [cond, target] of Object.entries(conds)) {
+          ensure(base).conds[cond] = { sku: target, source: 'manual' };
+        }
+      }
+      const mappings = [...rows.values()].sort((a, b) => a.baseSku.localeCompare(b.baseSku));
+      return { ok: true, mappings, skus };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('returns:mapSet', async (_e, { baseSku, condition, targetSku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const base = String(baseSku || '').trim();
+    const cond = String(condition || '').trim();
+    const target = String(targetSku || '').trim();
+    if (!base || !target) return { ok: false, error: 'Missing SKU.' };
+    if (!Object.hasOwn(db.CONDITION_SUFFIX, cond)) return { ok: false, error: 'Unknown condition.' };
+    try {
+      // normalize casing against live inventory when it resolves there
+      const skus = await getInventorySkus(cfg);
+      const match = skus.find(s => s.toUpperCase() === target.toUpperCase());
+      db.saveConditionMapping(base, cond, match || target);
+      return { ok: true, targetSku: match || target };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('returns:mapDelete', async (_e, { baseSku, condition }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const base = String(baseSku || '').trim();
+    const cond = String(condition || '').trim();
+    if (!base || !Object.hasOwn(db.CONDITION_SUFFIX, cond)) return { ok: false, error: 'Unknown mapping.' };
+    try {
+      db.deleteConditionMapping(base, cond);
+      const skus = await getInventorySkus(cfg);
+      // report what the mapping falls back to (auto suffix listing, if any)
+      return { ok: true, fallback: db.resolveConditionTargets(base, skus)[cond] || '' };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('wfs:list', () => db.listWfsShipments());
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();
@@ -1011,6 +1303,38 @@ function registerIpc() {
       const id = db.createWfsShipment({ note, items });
       writeWfsCsv();
       return { ok: true, id };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Create a new inventory item, optionally with a starting level at the
+  // primary location (via the existing UpdateStockLevelsBySKU delta path).
+  ipcMain.handle('stock:createSku', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const sku = String((payload && payload.sku) || '').trim().toUpperCase();
+    const title = String((payload && payload.title) || '').trim().slice(0, 300);
+    const barcode = String((payload && payload.barcode) || '').trim().slice(0, 60);
+    const retailPrice = Math.max(0, Math.round((Number(payload && payload.retailPrice) || 0) * 100) / 100);
+    const purchasePrice = Math.max(0, Math.round((Number(payload && payload.purchasePrice) || 0) * 100) / 100);
+    const qty = Number((payload && payload.qty) ?? 0);
+    if (!sku) return { ok: false, error: 'SKU is required.' };
+    if (!/^[A-Z0-9][A-Z0-9\-_./]*$/.test(sku)) return { ok: false, error: 'SKU can only use letters, numbers and - _ . /' };
+    if (!title) return { ok: false, error: 'Title is required.' };
+    if (!Number.isInteger(qty) || qty < 0) return { ok: false, error: 'Starting quantity must be a whole number of 0 or more.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      // second line of defense behind the dialog's live duplicate check
+      const existing = await getInventorySkus(cfg);
+      if (existing.some(s => String(s).toUpperCase() === sku)) {
+        return { ok: false, error: `${sku} already exists in Linnworks.` };
+      }
+      const { stockItemId } = await client.createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice });
+      if (qty > 0) {
+        await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU');
+      }
+      skuImageCache = { at: 0, map: null, skus: null, promise: null }; // inventory changed
+      return { ok: true, sku, stockItemId };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1052,6 +1376,33 @@ function registerIpc() {
     config.save({ receiving: { folder: filePaths[0] } });
     pushState();
     return { ok: true, folder: filePaths[0] };
+  });
+  // embedded marketplace browser pane
+  ipcMain.handle('browser:layout', (_e, b) => layoutPane(b || {}));
+  ipcMain.handle('browser:open', (_e, { orderNumber, channel, url }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    let target = String(url || '');
+    if (!target) {
+      const tpl = (cfg.orderUrlTemplates || {})[channel] || '';
+      if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No marketplace link set for this channel.' };
+      target = tpl.replace('{po}', encodeURIComponent(String(orderNumber)));
+    }
+    if (!/^https:\/\//i.test(target)) return { ok: false, error: 'Only https pages can load here.' };
+    ensurePane().webContents.loadURL(target).catch(() => { /* nav errors show in-pane */ });
+    return { ok: true };
+  });
+  ipcMain.handle('browser:nav', (_e, { action }) => {
+    if (!paneView) return { ok: false };
+    const wc = paneView.webContents;
+    if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+    else if (action === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+    else if (action === 'reload') wc.reload();
+    return { ok: true };
+  });
+  ipcMain.handle('browser:print', () => {
+    if (paneView) paneView.webContents.print();
+    return { ok: true };
   });
   ipcMain.handle('clipboard:copy', (_e, text) => {
     const value = String(text ?? '');

@@ -79,6 +79,24 @@ function open() {
   if (!cols.includes('origin')) {
     db.exec(`ALTER TABLE rows ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: "shipped different item" substitution intent (internal only)
+  if (!cols.includes('sub_sku')) {
+    db.exec(`ALTER TABLE rows ADD COLUMN sub_sku TEXT NOT NULL DEFAULT ''`);
+    db.exec(`ALTER TABLE rows ADD COLUMN sub_qty INTEGER NOT NULL DEFAULT 0`);
+    db.exec(`ALTER TABLE rows ADD COLUMN sub_note TEXT NOT NULL DEFAULT ''`);
+  }
+  // migration: returns not matched to a Linnworks order (arrival-driven log)
+  const retCols = db.prepare(`SELECT name FROM pragma_table_info('returns')`).all().map(c => c.name);
+  if (!retCols.includes('unmatched')) {
+    db.exec(`ALTER TABLE returns ADD COLUMN unmatched INTEGER NOT NULL DEFAULT 0`);
+  }
+  // migration: returns worksheet columns (outbound tracking, receiver initials)
+  if (!retCols.includes('tracking')) {
+    db.exec(`ALTER TABLE returns ADD COLUMN tracking TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!retCols.includes('received_by')) {
+    db.exec(`ALTER TABLE returns ADD COLUMN received_by TEXT NOT NULL DEFAULT ''`);
+  }
   return db;
 }
 
@@ -191,6 +209,15 @@ function deleteRow(id) {
   d.prepare('DELETE FROM rows WHERE id = ?').run(id);
 }
 
+// Substitution intent: what actually shipped instead of the listed item.
+// Stored on the row, applied to stock at process time; internal only
+// (visible in Notes/CSV/history, never sent to Linnworks as an order note).
+function setSubstitution(id, sku, qty, note) {
+  open().prepare('UPDATE rows SET sub_sku = ?, sub_qty = ?, sub_note = ? WHERE id = ?')
+    .run(sku || '', Number(qty) || 0, note || '', id);
+  return getRow(id);
+}
+
 function markSynced(id) {
   open().prepare("UPDATE rows SET status = 'synced', fail_reason = '', synced_at = ? WHERE id = ?")
     .run(new Date().toISOString(), id);
@@ -220,20 +247,23 @@ function listWfsShipments(limit = 200) {
     .map(s => ({ ...s, items: JSON.parse(s.items) }));
 }
 
-// Graded customer returns. items: [{ sku, condition, targetSku, qty }]
-function createReturn({ orderNumber, source, customer, note, items }) {
+// Graded customer returns. items: [{ sku, condition, targetSku, qty, price, note }]
+// unmatched = physically arrived without a Linnworks order behind it
+// (pre-Linnworks sale, WFS removal shipment, missing PO#).
+function createReturn({ orderNumber, source, customer, note, items, unmatched, tracking, receivedBy }) {
   const res = open().prepare(
-    'INSERT INTO returns (created_at, order_number, source, customer, note, items) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(new Date().toISOString(), orderNumber, source || '', customer || '', note || '', JSON.stringify(items || []));
+    'INSERT INTO returns (created_at, order_number, source, customer, note, items, unmatched, tracking, received_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(new Date().toISOString(), orderNumber, source || '', customer || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, tracking || '', receivedBy || '');
   return Number(res.lastInsertRowid);
 }
 
 function listReturns(limit = 200) {
   return open().prepare('SELECT * FROM returns ORDER BY id DESC LIMIT ?').all(limit)
-    .map(r => ({ ...r, items: JSON.parse(r.items) }));
+    .map(r => ({ ...r, items: JSON.parse(r.items), unmatched: !!r.unmatched }));
 }
 
-// Remembered condition -> listing mappings (one-time picks in the Returns UI).
+// Remembered condition -> listing mappings (one-time picks in the Returns UI,
+// or edits made in the Mappings dialog).
 function getConditionMap() {
   const out = {};
   for (const row of open().prepare('SELECT * FROM condition_map').all()) {
@@ -247,6 +277,26 @@ function saveConditionMapping(baseSku, condition, targetSku) {
     'INSERT INTO condition_map (base_sku, condition, target_sku) VALUES (?, ?, ?) ' +
     'ON CONFLICT(base_sku, condition) DO UPDATE SET target_sku = excluded.target_sku'
   ).run(baseSku, condition, targetSku);
+}
+
+// Removing a manual pick falls back to auto-derivation everywhere.
+function deleteConditionMapping(baseSku, condition) {
+  open().prepare('DELETE FROM condition_map WHERE base_sku = ? AND condition = ?').run(baseSku, condition);
+}
+
+// The single condition-mapping engine: manual picks (condition_map) beat
+// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention.
+// Pure given an inventory SKU list, so it is testable offline.
+const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
+
+function resolveConditionTargets(baseSku, inventorySkus) {
+  const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
+  const saved = getConditionMap()[baseSku] || {};
+  const targets = { new: baseSku };
+  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
+    targets[cond] = saved[cond] || bySkuUpper.get(`${baseSku}${suf}`.toUpperCase()) || '';
+  }
+  return targets;
 }
 
 function close() {
@@ -270,7 +320,8 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getConditionMap, saveConditionMapping,
+  deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
 };

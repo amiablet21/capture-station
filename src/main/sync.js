@@ -77,11 +77,16 @@ async function runSync({ onProgress = () => {}, trigger = 'manual', ids = null }
       }
     }
 
+    // The capture queue imports open orders from EVERY stock location, so the
+    // per-row lookup must be able to search them all (fetched once per run).
+    let allLocations = [];
+    try { allLocations = await client.getLocations(); } catch { /* lookup falls back to primary + fallback */ }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       onProgress({ current: i + 1, total: rows.length, message: `Order ${row.order_number}` });
       try {
-        const result = await syncRow(client, row, locationId, dryRun);
+        const result = await syncRow(client, row, locationId, dryRun, allLocations);
         details.push({ id: row.id, orderNumber: row.order_number, ...result });
         if (result.ok) synced++; else failed++;
       } catch (e) {
@@ -99,24 +104,46 @@ async function runSync({ onProgress = () => {}, trigger = 'manual', ids = null }
   }
 }
 
-async function syncRow(client, row, locationId, dryRun) {
+async function syncRow(client, row, locationId, dryRun, allLocations) {
+  // Resolve the order across every stock location. The v1.3 capture queue
+  // imports open orders from ALL locations, so an order sitting at, say,
+  // DropShip is a perfectly normal queue row - the old primary+fallback-only
+  // lookup wrongly failed those with "Not found in open orders".
+  // Search order: primary first, then the routing fallback (keeps the
+  // dropship labeling), then every remaining location.
+  const sr = config.load().stockRouting || {};
+  const fallbackId = sr.fallbackLocationId;
   let order = await client.findOpenOrder(row.order_number, locationId);
-  let foundAtFallback = false;
-  // Dropship orders live at the fallback location (stock routing put them
-  // there). They are processed AT that location: the primary warehouse's
-  // stock and history stay untouched, and Linnworks reporting shows which
-  // orders were dropshipped.
-  const fallbackId = (config.load().stockRouting || {}).fallbackLocationId;
-  if (!order && fallbackId && fallbackId !== locationId) {
-    order = await client.findOpenOrder(row.order_number, fallbackId);
-    if (order) foundAtFallback = true;
+  let foundAt = { id: locationId, name: '' }; // '' = the primary warehouse
+  if (!order) {
+    const seen = new Set([locationId]);
+    const targets = [];
+    if (fallbackId && !seen.has(fallbackId)) {
+      targets.push({ id: fallbackId, name: sr.fallbackLocationName || 'fallback' });
+      seen.add(fallbackId);
+    }
+    for (const l of allLocations || []) {
+      if (!seen.has(l.id)) {
+        targets.push(l);
+        seen.add(l.id);
+      }
+    }
+    for (const t of targets) {
+      order = await client.findOpenOrder(row.order_number, t.id);
+      if (order) { foundAt = t; break; }
+    }
   }
   if (!order) {
     // Order may not have downloaded into Linnworks yet, or is already processed.
     if (!dryRun) db.markFailed(row.id, 'Not found in open orders (retries next sync)');
     return { ok: false, message: 'Not found in open orders (retries next sync)' };
   }
-  const processLocationId = foundAtFallback ? fallbackId : locationId;
+  // Orders are processed AT the location they actually sit at: the primary
+  // warehouse's stock/history stay untouched and Linnworks reporting shows
+  // where each order really shipped from.
+  const foundAtFallback = !!fallbackId && foundAt.id === fallbackId && foundAt.id !== locationId;
+  const processLocationId = foundAt.id;
+  const locLabel = foundAt.id === locationId ? '' : (foundAtFallback ? 'DROPSHIP' : (foundAt.name || 'other location'));
 
   const { assignments, notes } = distributeSerials(order.items, row.serials);
   // serial tracking is retired: rows carry no serials, so serial-count
@@ -130,7 +157,10 @@ async function syncRow(client, row, locationId, dryRun) {
     if (assignments.length) {
       plan.push(`attach ${row.serials.length} serial(s) to ${assignments.length} line(s)`);
     }
-    plan.push(foundAtFallback ? 'process at DROPSHIP location, mark shipped' : 'process at warehouse, mark shipped');
+    plan.push(locLabel ? `process at ${locLabel} location, mark shipped` : 'process at warehouse, mark shipped');
+    if (row.sub_sku && row.sub_qty > 0) {
+      plan.push(`substitution: deduct ${row.sub_qty} × ${row.sub_sku} at the warehouse instead of the listed item`);
+    }
     const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
     return { ok: true, dryRun: true, message: `DRY RUN, would: ${plan.join(', then ')}${note}` };
   }
@@ -158,15 +188,17 @@ async function syncRow(client, row, locationId, dryRun) {
     proc = await client.processOrder(row.order_number, processLocationId);
     if (proc.processedState === 'PROCESSED') {
       db.markSynced(row.id);
-      return { ok: true, message: 'Processed (was parked - unparked automatically)' };
+      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId);
+      return { ok: true, message: `Processed (was parked - unparked automatically)${subMsg}` };
     }
   }
 
   switch (proc.processedState) {
     case 'PROCESSED': {
       db.markSynced(row.id);
+      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId);
       const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
-      return { ok: true, message: `Processed${foundAtFallback ? ' (dropship)' : ''}${note}` };
+      return { ok: true, message: `Processed${foundAtFallback ? ' (dropship)' : (locLabel ? ` (at ${locLabel})` : '')}${subMsg}${note}` };
     }
     case 'NOT_FOUND':
       db.markFailed(row.id, 'Order not found at processing step (retries next sync)');
@@ -177,6 +209,34 @@ async function syncRow(client, row, locationId, dryRun) {
     default:
       db.markFailed(row.id, proc.message || proc.processedState);
       return { ok: false, message: `${proc.processedState}: ${proc.message || 'unknown error'}` };
+  }
+}
+
+// "Shipped different item": after processing, correct the stock movement.
+// Processing at the primary deducted the LISTED lines there - reverse that;
+// processing anywhere else (dropship etc.) deducted nothing at the primary.
+// Either way the substituted SKU is what left the shelf, so deduct it at the
+// primary warehouse via the same UpdateStockLevelsBySKU delta path as WFS.
+async function applySubstitution(client, row, order, primaryLocationId, processLocationId) {
+  if (!row.sub_sku || !(row.sub_qty > 0)) return '';
+  try {
+    if (processLocationId === primaryLocationId) {
+      const reversals = order.items
+        .filter(it => !it.isService && !it.unlinked && it.sku)
+        .map(it => ({ sku: it.sku, delta: it.quantity }));
+      if (reversals.length) {
+        await client.changeStockLevels(reversals, primaryLocationId, 'Capture Station substitution (listed item not shipped)');
+      }
+    }
+    await client.changeStockLevels(
+      [{ sku: row.sub_sku, delta: -row.sub_qty }],
+      primaryLocationId,
+      'Capture Station substitution (item actually shipped)'
+    );
+    return ` (substituted ${row.sub_sku} ×${row.sub_qty})`;
+  } catch (e) {
+    // the order IS processed; only the stock correction failed - say so loudly
+    return ` (SUBSTITUTION STOCK ADJUST FAILED: ${e.message} - fix levels for ${row.sub_sku} by hand)`;
   }
 }
 

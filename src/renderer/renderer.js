@@ -23,6 +23,7 @@ if (!window.api) {
     pages: { stock: true, history: true, receiving: false },
     csv: { path: 'C:\\Users\\packer\\Documents\\Capture Station\\capture-2026-07-30.csv', at: at(0), error: null },
     orderMeta: {},
+    shipCutoff: '16:00',
     orderUrlTemplates: {},
   };
   window.api = {
@@ -31,13 +32,20 @@ if (!window.api) {
     nextOrder: async () => ({ ok: true }),
     addOrderAnyway: async () => ({ ok: true }),
     openOrderPage: async () => ({ ok: false }),
+    browserLayout: async () => ({ ok: true, visible: false }),
+    browserOpen: async () => ({ ok: false, error: 'Preview mode' }),
+    browserOpenUrl: async () => ({ ok: false, error: 'Preview mode' }),
+    browserNav: async () => ({ ok: false }),
+    browserPrint: async () => ({ ok: true }),
     refreshOrders: async () => ({ ok: true }),
+    moveOrder: async () => ({ ok: false, error: 'Preview mode' }),
+    substituteRow: async () => ({ ok: false, error: 'Preview mode' }),
     reopenRow: async () => ({ ok: true }),
     undo: async () => ({ ok: true, message: 'Preview mode' }),
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     openCsvFolder: async () => ({ ok: true }),
@@ -49,6 +57,7 @@ if (!window.api) {
     getStockOpenOrders: async () => ({ ok: false, error: 'Preview mode' }),
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
     getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
+    createSku: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImageUrl: async () => ({ ok: false, error: 'Preview mode' }),
     cancelStockImage: async () => ({ ok: true }),
@@ -56,6 +65,10 @@ if (!window.api) {
     returnsLookup: async () => ({ ok: false, error: 'Preview mode' }),
     returnsCreate: async () => ({ ok: false, error: 'Preview mode' }),
     returnsList: async () => [],
+    returnsTargets: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsMappings: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsMapSet: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsMapDelete: async () => ({ ok: false, error: 'Preview mode' }),
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
@@ -119,6 +132,8 @@ const ICONS = {
   barcode: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,52V92a12,12,0,0,1-24,0V64H180a12,12,0,0,1,0-24h40A12,12,0,0,1,232,52ZM76,192H48V164a12,12,0,0,0-24,0v40a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24Zm144-40a12,12,0,0,0-12,12v28H180a12,12,0,0,0,0,24h40a12,12,0,0,0,12-12V164A12,12,0,0,0,220,152ZM36,104A12,12,0,0,0,48,92V64H76a12,12,0,0,0,0-24H36A12,12,0,0,0,24,52V92A12,12,0,0,0,36,104ZM88,80A12,12,0,0,0,76,92v72a12,12,0,0,0,24,0V92A12,12,0,0,0,88,80Zm92,84V92a12,12,0,0,0-24,0v72a12,12,0,0,0,24,0ZM128,80a12,12,0,0,0-12,12v72a12,12,0,0,0,24,0V92A12,12,0,0,0,128,80Z"/></svg>',
   pencil: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg>',
   trash: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></svg>',
+  swap: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M217,163.51a12,12,0,0,1,0,17l-32,32a12,12,0,0,1-17-17L179.51,184H48a12,12,0,0,1,0-24H179.51L168,148.49a12,12,0,0,1,17-17ZM71,124.49a12,12,0,0,0,17-17L76.49,96H208a12,12,0,0,0,0-24H76.49L88,60.49a12,12,0,1,0-17-17l-32,32a12,12,0,0,0,0,17Z"/></svg>',
+  box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
 };
 
 /* ---------- rendering ---------- */
@@ -148,6 +163,44 @@ function trackingCell(row) {
 function notesCell(row) {
   if (!row.notes) return '<button class="note-add" data-act="note" title="Add a note (serial number, condition, anything)">+ Note</button>';
   return `<button class="note-text note-btn" data-act="note" title="${esc(row.notes)}&#10;Click to edit">${esc(row.notes)}</button>`;
+}
+
+/* ---------- ship-by / due chips ---------- */
+
+function parseCutoffMin(cutoff) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(cutoff || '').trim());
+  if (!m) return 16 * 60; // fall back to the 16:00 default
+  return Math.min(23, Number(m[1])) * 60 + Math.min(59, Number(m[2]));
+}
+
+// '16:00' -> '4:00 PM' for the header line
+function fmtCutoff(cutoff) {
+  const min = parseCutoffMin(cutoff);
+  const h = Math.floor(min / 60);
+  const mm = String(min % 60).padStart(2, '0');
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// Pure so the e2e can pin `now`: null = no chip (no date / future date),
+// otherwise { overdue, urgent, label }. urgent = within an hour of the
+// cutoff or past it - the chip turns red before the carrier leaves.
+function dueInfo(despatchBy, cutoff, now = new Date()) {
+  if (!despatchBy) return null;
+  const d = new Date(despatchBy);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2010) return null; // epoch placeholder = unset
+  const key = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const dayKey = key(d);
+  const nowKey = key(now);
+  if (dayKey < nowKey) return { overdue: true, urgent: true, label: 'Overdue' };
+  if (dayKey > nowKey) return null; // future days stay clean
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return { overdue: false, urgent: nowMin >= parseCutoffMin(cutoff) - 60, label: 'Due today' };
+}
+
+function rowDue(row) {
+  const meta = (state.orderMeta || {})[row.order_number];
+  return meta ? dueInfo(meta.despatchBy, state.shipCutoff) : null;
 }
 
 function render() {
@@ -227,29 +280,50 @@ function render() {
   }
   $('syncBtn').disabled = !!state.syncRunning;
 
-  // rows table, optionally narrowed by the Ctrl+F finder (original row
-  // numbers are kept so a filtered row matches its unfiltered position)
+  // rows table, optionally narrowed by the Ctrl+F finder. Gutter numbers are
+  // assigned AFTER sorting/filtering, by display position: top row carries
+  // the highest number, bottom row is 1, always contiguous.
   const total = state.rows.length;
-  let visible = state.rows.map((row, idx) => ({ row, num: total - idx }));
+  let visible = state.rows.map((row) => ({ row }));
 
-  // marketplace filter chips (shown once there is more than one channel)
+  // overdue first, then due-today, then the rest (stable, so the newest-first
+  // order inside each band survives): what must ship next is always on top
+  const dueRank = ({ row }) => {
+    const due = rowDue(row);
+    return due ? (due.overdue ? 0 : 1) : 2;
+  };
+  visible.sort((a, b) => dueRank(a) - dueRank(b));
+  const dueRows = visible.filter(v => dueRank(v) < 2);
+
+  // header: how many must go out before today's carrier cutoff
+  const dueOpen = dueRows.filter(({ row }) => row.status !== 'synced').length;
+  $('dueHeader').hidden = activePage !== 'capture' || dueOpen === 0;
+  $('dueHeader').textContent = dueOpen ? `${dueOpen} due by ${fmtCutoff(state.shipCutoff)}` : '';
+
+  // marketplace filter chips (shown once there is more than one channel),
+  // plus a "Due today" chip whenever anything must ship today
   const channels = [...new Set(state.rows.map(r => r.channel))];
   const chipBar = $('channelChips');
-  if (activePage === 'capture' && state.rows.length && channels.length > 1) {
-    if (channelFilter !== 'all' && !channels.includes(channelFilter)) channelFilter = 'all';
+  if (activePage === 'capture' && state.rows.length && (channels.length > 1 || dueRows.length)) {
+    if (channelFilter !== 'all' && channelFilter !== 'due' && !channels.includes(channelFilter)) channelFilter = 'all';
+    if (channelFilter === 'due' && !dueRows.length) channelFilter = 'all';
     const counts = {};
     for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
       `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${state.rows.length}</button>`,
-      ...channels.map(c =>
-        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+      ...(dueRows.length
+        ? [`<button class="chip-filter chip-due ${channelFilter === 'due' ? 'is-active' : ''}" data-ch="due" title="Orders with a despatch-by date of today or earlier">Due today · ${dueRows.length}</button>`]
+        : []),
+      ...(channels.length > 1 ? channels.map(c =>
+        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`) : []),
     ].join('');
   } else {
     chipBar.hidden = true;
     channelFilter = 'all';
   }
-  if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
+  if (channelFilter === 'due') visible = visible.filter(v => dueRank(v) < 2);
+  else if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
   // search bar: always available on the capture list, matches PO#, tracking,
   // notes, and the order's item SKUs / channel SKUs / titles
@@ -278,6 +352,9 @@ function render() {
   // a half-typed scan must survive re-renders (state pushes rebuild the tbody)
   const prevInp = activeScanInput();
   const prevScan = prevInp ? { value: prevInp.value, focused: document.activeElement === prevInp } : null;
+  // renumber by final display order: whatever sits on top gets the biggest
+  // number (newest-first aesthetic), regardless of due sorting or filters
+  visible = visible.map((v, i) => ({ ...v, num: visible.length - i }));
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = (state.orderMeta || {})[row.order_number];
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
@@ -292,7 +369,8 @@ function render() {
     const itemsHtml = metaItems.map(i => {
       const linked = !i.unmapped && i.sku;
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
-      const qty = i.qty > 1 ? ` ×${i.qty}` : '';
+      // multi-unit lines wear a loud chip: a missed second unit = a refund
+      const qty = i.qty > 1 ? `<span class="qty-chip" title="${i.qty} units of this item on the order">×${i.qty}</span>` : '';
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
       const info = i.channelSku && i.channelSku !== label
         ? `<span class="item-info" data-tip="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
@@ -305,15 +383,21 @@ function render() {
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
         <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
-        ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
+        ${meta && meta.dropship ? `<button class="badge badge-dropship badge-btn" data-act="moveback" title="At the dropship location - click to move it back to ${esc((state.locations || {}).primaryName || 'the warehouse')}">DS</button>` : ''}
+        ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
-      <td class="cell-notes">${notesCell(row)}</td>
+      <td class="cell-notes">${row.sub_sku
+        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}&#10;Click to edit or remove">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
+          ${!state.captureOnly && meta && !meta.dropship && (state.locations || {}).fallbackSet
+            ? `<button class="btn-icon" data-act="movedropship" title="Move to ${esc((state.locations || {}).fallbackName || 'the dropship location')} (dropship)">${ICONS.swap}</button>` : ''}
+          ${!state.captureOnly && row.status !== 'synced'
+            ? `<button class="btn-icon" data-act="substitute" title="Shipped a different item than listed">${ICONS.box}</button>` : ''}
           <button class="btn-icon" data-act="edit" title="Edit / add notes">${ICONS.pencil}</button>
           <button class="btn-icon is-danger" data-act="del" title="Delete">${ICONS.trash}</button>
         </span>
@@ -335,6 +419,7 @@ function render() {
 async function refresh() {
   state = await api.getState();
   render();
+  if (bReady) applyBrowserPane();
 }
 
 /* ---------- scan flow ---------- */
@@ -478,6 +563,22 @@ $('ordersRefreshBtn').addEventListener('click', async () => {
 
 /* ---------- rows list actions ---------- */
 
+// Per-order location move: warn-not-block when the warehouse shows no stock
+// (the owner may have restocked seconds ago), then move and refresh the queue.
+async function doOrderMove(orderNumber, target) {
+  let res = await api.moveOrder(orderNumber, target, false);
+  if (res.needsConfirm && res.warn) {
+    if (!confirm(res.warn)) return;
+    res = await api.moveOrder(orderNumber, target, true);
+  }
+  if (!res.ok) {
+    toast(res.error || 'Move failed.');
+    return;
+  }
+  toast(`Moved ${orderNumber} to ${res.toName}`);
+  await refresh(); // the DS chip / row action flips with the fresh meta
+}
+
 async function copyFromApp(text) {
   await api.copyText(text);
   toast(`Copied ${text}`);
@@ -502,7 +603,17 @@ $('rowsBody').addEventListener('click', async (e) => {
       await api.reopenRow(row.id);
       await refresh();
     }
-    api.openOrderPage(link.dataset.po, link.dataset.ch);
+    // pane open -> the order loads beside the list; collapsed -> external browser
+    if (!$('bDock').hidden) {
+      bShowLoading(`Opening order ${link.dataset.po}`);
+      const opened = await api.browserOpen(link.dataset.po, link.dataset.ch);
+      if (!opened.ok) {
+        bHideLoading();
+        if (opened.error) toast(opened.error);
+      }
+    } else {
+      api.openOrderPage(link.dataset.po, link.dataset.ch);
+    }
     return;
   }
   const btn = e.target.closest('[data-act]');
@@ -514,6 +625,20 @@ $('rowsBody').addEventListener('click', async (e) => {
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
+  if (btn.dataset.act === 'substitute') {
+    openSubDialog(row);
+    return;
+  }
+  if (btn.dataset.act === 'moveback') {
+    const name = (state.locations || {}).primaryName || 'the warehouse';
+    if (confirm(`Move ${row.order_number} to ${name}?`)) await doOrderMove(row.order_number, 'primary');
+    return;
+  }
+  if (btn.dataset.act === 'movedropship') {
+    const name = (state.locations || {}).fallbackName || 'the dropship location';
+    if (confirm(`Move ${row.order_number} to ${name} (dropship)?`)) await doOrderMove(row.order_number, 'fallback');
+    return;
+  }
   if (btn.dataset.act === 'open') {
     await api.reopenRow(id);
     await refresh();
@@ -659,6 +784,7 @@ async function openSettings() {
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
     : '<option value="">Not selected, test connection first</option>';
   $('setDryRun').checked = !!cfg.dryRun;
+  $('setShipCutoff').value = cfg.shipCutoff || '16:00';
   const sr = cfg.stockRouting || {};
   $('setRouting').checked = !!sr.enabled;
   const fsel = $('setFallbackLoc');
@@ -734,6 +860,7 @@ $('settingsSave').addEventListener('click', async () => {
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
     },
     dryRun: $('setDryRun').checked,
+    shipCutoff: /^\d{1,2}:\d{2}$/.test($('setShipCutoff').value.trim()) ? $('setShipCutoff').value.trim() : '16:00',
     stockRouting: {
       enabled: $('setRouting').checked,
       fallbackLocationId: $('setFallbackLoc').value,
@@ -820,6 +947,7 @@ function showPage(page) {
     focusScan();
   }
   if (state) render(); // footer buttons depend on the active page
+  if (bReady) applyBrowserPane(); // the pane only exists on the Capture page
 }
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
@@ -827,11 +955,373 @@ $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabReturns').addEventListener('click', () => showPage('returns'));
 
 // receiving lives on the Stock page now, as a dialog
+/* ---------- "shipped different item" substitution dialog ---------- */
+
+let subRowId = null;
+let subNoteDirty = false; // stop regenerating once the user edits the note
+
+// the auto note the pill/CSV carry: pure, e2e-testable
+function subDefaultNote(listedSku, shippedSku) {
+  return `ordered ${listedSku || 'listed item'}, shipped ${shippedSku}`;
+}
+
+function subListedSku(row) {
+  const meta = (state && state.orderMeta || {})[row.order_number];
+  const first = meta && meta.items && meta.items[0];
+  return first ? (first.sku || first.channelSku || '') : '';
+}
+
+function openSubDialog(row) {
+  subRowId = row.id;
+  subNoteDirty = !!row.sub_note;
+  const meta = (state.orderMeta || {})[row.order_number];
+  const first = meta && meta.items && meta.items[0];
+  $('subOrderLine').textContent = `${row.order_number} · listed: ${subListedSku(row) || 'unknown'}`;
+  $('subSku').value = row.sub_sku || '';
+  $('subQty').value = String(row.sub_qty || (first && first.qty) || 1);
+  $('subNote').value = row.sub_note || '';
+  $('subClear').hidden = !row.sub_sku;
+  $('subResult').hidden = true;
+  ensureInventory();
+  $('subDialog').showModal();
+  $('subSku').focus();
+}
+
+function subFeedback(msg) {
+  const el = $('subResult');
+  el.textContent = msg;
+  el.hidden = !msg;
+  el.className = 'dlg-note test-result is-fail';
+}
+
+function subRegenNote() {
+  if (subNoteDirty || subRowId == null) return;
+  const row = (state.rows || []).find(r => r.id === subRowId);
+  const shipped = $('subSku').value.trim();
+  $('subNote').value = shipped ? subDefaultNote(subListedSku(row || {}), shipped) : '';
+}
+
+makeCombo($('subSku'), $('subComboList'), (item) => {
+  $('subSku').value = item.sku;
+  subRegenNote();
+  $('subQty').focus();
+  $('subQty').select();
+});
+$('subSku').addEventListener('input', subRegenNote);
+$('subNote').addEventListener('input', () => { subNoteDirty = true; });
+
+$('subSave').addEventListener('click', async () => {
+  const sku = $('subSku').value.trim();
+  const qty = Number($('subQty').value);
+  if (!sku) { subFeedback('Pick the SKU that actually shipped.'); return; }
+  if (recvLookup === 'ready' && !recvLookupExact(sku)) { subFeedback(`Unknown SKU: ${sku}. Pick one from the inventory.`); return; }
+  if (!Number.isInteger(qty) || qty < 1) { subFeedback('Quantity must be a whole number of 1 or more.'); return; }
+  const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false);
+  if (!res.ok) { subFeedback(res.error || 'Could not save.'); return; }
+  $('subDialog').close();
+  toast(`Substitution saved: ${res.row.sub_sku} ×${res.row.sub_qty}`);
+  await refresh();
+});
+
+$('subClear').addEventListener('click', async () => {
+  const res = await api.substituteRow(subRowId, '', 0, '', true);
+  if (!res.ok) { subFeedback(res.error || 'Could not remove.'); return; }
+  $('subDialog').close();
+  toast('Substitution removed');
+  await refresh();
+});
+
+$('subCancel').addEventListener('click', () => $('subDialog').close());
+$('subDialog').addEventListener('close', () => { subRowId = null; focusScan(); });
+
+/* ---------- New SKU dialog ---------- */
+
+let skuDialogCb = null; // onCreated(sku) - the returns mapping flows use this
+
+// Pure and offline-testable: everything the dialog can catch before Linnworks.
+function validateNewSku(f, items) {
+  const sku = String(f.sku || '').trim().toUpperCase();
+  if (!sku) return 'SKU is required.';
+  if (!/^[A-Z0-9][A-Z0-9\-_./]*$/.test(sku)) return 'SKU can only use letters, numbers and - _ . /';
+  if (!String(f.title || '').trim()) return 'Title is required.';
+  const qty = f.qty === '' || f.qty == null ? 0 : Number(f.qty);
+  if (!Number.isInteger(qty) || qty < 0) return 'Starting quantity must be a whole number of 0 or more.';
+  if ((items || []).some(i => String(i.sku || '').toUpperCase() === sku)) return `${sku} already exists in the inventory.`;
+  return '';
+}
+
+function skuFeedback(msg, ok = true) {
+  const el = $('skuResult');
+  el.textContent = msg;
+  el.hidden = !msg;
+  el.className = `dlg-note test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
+}
+
+function skuBusy(busy) {
+  for (const id of ['skuSku', 'skuTitle', 'skuBarcode', 'skuQty', 'skuRetail', 'skuPurchase', 'skuCancel']) {
+    $(id).disabled = busy;
+  }
+  $('skuCreate').disabled = busy;
+  $('skuCreate').textContent = busy ? 'Creating…' : 'Create SKU';
+}
+
+function openNewSkuDialog(prefill = {}, onCreated = null) {
+  skuDialogCb = onCreated;
+  $('skuSku').value = String(prefill.sku || '').toUpperCase();
+  $('skuTitle').value = prefill.title || '';
+  $('skuBarcode').value = '';
+  $('skuQty').value = '0';
+  $('skuRetail').value = prefill.retailPrice ? String(prefill.retailPrice) : '';
+  $('skuPurchase').value = '';
+  $('skuLoc').textContent = (stockCache && stockCache.locationName) || 'the warehouse';
+  ensureInventory(); // duplicate check wants the live list
+  skuFeedback('');
+  skuBusy(false);
+  $('skuDialog').showModal();
+  $('skuSku').focus();
+}
+
+// SKUs live uppercase in Linnworks: normalize as the user types
+$('skuSku').addEventListener('input', () => {
+  const el = $('skuSku');
+  const pos = el.selectionStart;
+  el.value = el.value.toUpperCase();
+  el.setSelectionRange(pos, pos);
+});
+
+$('skuCreate').addEventListener('click', async () => {
+  const fields = {
+    sku: $('skuSku').value.trim().toUpperCase(),
+    title: $('skuTitle').value.trim(),
+    barcode: $('skuBarcode').value.trim(),
+    retailPrice: Number($('skuRetail').value) || 0,
+    purchasePrice: Number($('skuPurchase').value) || 0,
+    qty: $('skuQty').value.trim() === '' ? 0 : Number($('skuQty').value),
+  };
+  const err = validateNewSku(fields, recvItems || (stockCache && stockCache.items) || []);
+  if (err) { skuFeedback(err, false); return; }
+  skuBusy(true);
+  const res = await api.createSku(fields);
+  skuBusy(false);
+  if (!res.ok) { skuFeedback(res.error || 'Could not create the SKU.', false); return; }
+  toast(`Created ${res.sku}`);
+  // the shared inventory caches see the new item straight away
+  const item = {
+    sku: res.sku, title: fields.title, barcode: fields.barcode,
+    stockItemId: res.stockItemId, retailPrice: fields.retailPrice,
+    purchasePrice: fields.purchasePrice, image: '', category: '', levels: [],
+  };
+  if (recvItems) {
+    recvItems.push(item);
+    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
+    if (recvByBarcode && fields.barcode) recvByBarcode.set(fields.barcode.toLowerCase(), item);
+  }
+  const cb = skuDialogCb; // grab before close() clears it
+  skuDialogCb = null;
+  $('skuDialog').close();
+  if (activePage === 'stock') loadStock(); // fresh grid shows the new item
+  if (cb) cb(res.sku);
+});
+
+$('skuCancel').addEventListener('click', () => $('skuDialog').close());
+$('skuDialog').addEventListener('close', () => { skuDialogCb = null; focusScan(); });
+$('newSkuBtn').addEventListener('click', () => openNewSkuDialog());
+
 $('recvBtn').addEventListener('click', () => {
   $('recvDialog').showModal();
   enterReceiving();
 });
 $('recvClose').addEventListener('click', () => $('recvDialog').close());
+
+/* ---------- embedded marketplace browser pane ---------- */
+
+// The pane is a native WebContentsView the main process docks over #bView's
+// rectangle. The renderer reserves the space, reports the bounds, and hides
+// the pane while any dialog is open (a native view draws above the DOM).
+let bPane = { visible: false, width: 480 };
+let bReady = false; // config loaded
+
+async function initBrowserPane() {
+  const cfg = await api.getConfig();
+  const bp = cfg.browserPane || {};
+  bPane.width = Math.max(280, Number(bp.width) || 480);
+  bPane.visible = !!bp.visible;
+  bReady = true;
+  applyBrowserPane();
+}
+
+function browserAllowed() {
+  return !!state && !state.captureOnly; // sync-mode Capture tool
+}
+
+function applyBrowserPane() {
+  const show = bReady && browserAllowed() && bPane.visible && activePage === 'capture';
+  $('bDock').hidden = !show;
+  $('bDivider').hidden = !show;
+  $('rowsRow').classList.toggle('has-browser', show);
+  $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
+  if (show) {
+    $('bDock').style.width = `${bPane.width}px`;
+    $('rowsMain').style.width = ''; // the sheet takes whatever remains
+  } else {
+    const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
+    $('rowsMain').style.width = savedW ? `${savedW}px` : '';
+    if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
+  }
+  syncBrowserBounds();
+}
+
+// coalesce bounds updates (resize, divider drag, dialogs) into one per frame
+let bSyncQueued = false;
+
+function syncBrowserBounds() {
+  if (bSyncQueued) return;
+  bSyncQueued = true;
+  requestAnimationFrame(() => {
+    bSyncQueued = false;
+    alignCaptureToolbar(); // the find bar tracks the sheet column's edges
+    // the native view yields to dialogs AND to the DOM loading panel
+    if ($('bDock').hidden || anyDialogOpen() || bLoad.active) {
+      api.browserLayout({ visible: false });
+      return;
+    }
+    const r = $('bView').getBoundingClientRect();
+    api.browserLayout({ visible: true, x: r.left, y: r.top, width: r.width, height: r.height });
+  });
+}
+
+// dialogs float above the DOM but under a native view: hide the pane while
+// any <dialog> is open, restore it on close
+const _showModal = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.showModal = function (...args) {
+  const out = _showModal.apply(this, args);
+  syncBrowserBounds();
+  return out;
+};
+document.querySelectorAll('dialog').forEach(d => d.addEventListener('close', () => syncBrowserBounds()));
+
+new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
+window.addEventListener('resize', () => syncBrowserBounds());
+
+$('bExpand').addEventListener('click', () => {
+  bPane.visible = true;
+  api.setConfig({ browserPane: { visible: true } });
+  applyBrowserPane();
+});
+
+$('bCollapse').addEventListener('click', () => {
+  bPane.visible = false;
+  api.setConfig({ browserPane: { visible: false } });
+  applyBrowserPane();
+});
+
+// divider drag, persisted to config like the sheet widths
+let bDrag = null;
+
+$('bDivider').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  bDrag = { startX: e.clientX, startW: $('bDock').offsetWidth };
+  $('bDivider').classList.add('is-active');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!bDrag) return;
+  const max = Math.max(320, window.innerWidth - 380); // the sheet keeps room
+  bPane.width = Math.min(max, Math.max(280, bDrag.startW + (e.clientX - bDrag.startX)));
+  $('bDock').style.width = `${bPane.width}px`;
+  syncBrowserBounds();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!bDrag) return;
+  bDrag = null;
+  $('bDivider').classList.remove('is-active');
+  api.setConfig({ browserPane: { width: bPane.width } });
+});
+
+// manual navs get the generic loading treatment
+const bManualNav = (action) => {
+  bShowLoading('Loading…');
+  api.browserNav(action);
+};
+$('bBack').addEventListener('click', () => bManualNav('back'));
+$('bFwd').addEventListener('click', () => bManualNav('forward'));
+$('bReload').addEventListener('click', () => bManualNav('reload'));
+$('bPrint').addEventListener('click', () => api.browserPrint());
+
+api.on('browser:state', (s) => {
+  $('bDomain').textContent = s.domain || '—'; // domain only, never the raw URL
+  $('bDomain').classList.toggle('is-loading', !!s.loading);
+  $('bBack').disabled = !s.canGoBack;
+  $('bFwd').disabled = !s.canGoForward;
+  if (bLoad.active && !bLoad.failed && s.domain) $('bLoadDomain').textContent = s.domain;
+});
+
+/* pane loading screen: while a page loads, the native view hides and this
+   DOM panel fills the reserved space (canvas bg, accent spinner, no URLs) */
+
+const bLoad = { active: false, failed: false, timer: null };
+
+function bShowLoading(label) {
+  bLoad.active = true;
+  bLoad.failed = false;
+  clearTimeout(bLoad.timer);
+  // guard: a page that never fires loadend must not leave the pane stuck
+  bLoad.timer = setTimeout(() => { if (bLoad.active && !bLoad.failed) bHideLoading(); }, 20000);
+  $('bLoadLabel').textContent = label;
+  $('bLoadLabel').hidden = false;
+  $('bLoadSpin').hidden = false;
+  const dom = $('bDomain').textContent;
+  $('bLoadDomain').textContent = dom === '—' ? '' : dom;
+  $('bLoadErr').hidden = true;
+  $('bLoadPanel').hidden = false;
+  syncBrowserBounds();
+}
+
+function bHideLoading() {
+  clearTimeout(bLoad.timer);
+  bLoad.active = false;
+  bLoad.failed = false;
+  $('bLoadPanel').hidden = true;
+  syncBrowserBounds();
+}
+
+function bShowLoadError(message) {
+  if (!bLoad.active) return;
+  bLoad.failed = true;
+  clearTimeout(bLoad.timer);
+  $('bLoadSpin').hidden = true;
+  $('bLoadLabel').hidden = true;
+  $('bLoadErrText').textContent = message || 'The page failed to load.';
+  $('bLoadErr').hidden = false;
+  syncBrowserBounds(); // the view stays hidden behind the error panel
+}
+
+api.on('browser:loadstart', ({ domain }) => {
+  if ($('bDock').hidden) return;
+  if (!bLoad.active) bShowLoading('Loading…'); // page-initiated / manual navs
+  if (!bLoad.failed && domain) $('bLoadDomain').textContent = domain;
+});
+
+api.on('browser:loadend', () => {
+  if (bLoad.active && !bLoad.failed) bHideLoading();
+});
+
+api.on('browser:loadfail', ({ desc, domain }) => {
+  if ($('bDock').hidden) return;
+  if (!bLoad.active) bShowLoading('Loading…');
+  if (domain) $('bLoadDomain').textContent = domain;
+  bShowLoadError(desc ? `Could not load the page (${desc}).` : 'Could not load the page.');
+});
+
+$('bLoadRetry').addEventListener('click', () => {
+  bShowLoading('Loading…');
+  api.browserNav('reload');
+});
+
+api.on('browser:download', ({ file, state: dlState }) => {
+  toast(dlState === 'completed' ? `Downloaded ${file}` : `Download ${dlState}: ${file}`, 3500);
+});
 
 /* ---------- stock page ---------- */
 
@@ -867,7 +1357,7 @@ function renderStockChips() {
   box.innerHTML = [
     `<button class="view-chip ${stockActiveView ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
-      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
   ].join('');
 }
 
@@ -1104,7 +1594,17 @@ initCaptureCols();
 // the search/chips toolbar tracks the sheet's width so they stay aligned
 function alignCaptureToolbar() {
   const w = $('rowsMain').offsetWidth;
-  if (w) $('findBar').style.width = `${w}px`;
+  if (!w) return;
+  $('findBar').style.width = `${w}px`;
+  if (!$('bDock').hidden) {
+    // browser pane open: the bar hugs the order-sheet column (same left
+    // edge as the sheet, past the divider), tracking pane resizes
+    $('findBar').style.marginLeft = `${Math.round($('rowsMain').getBoundingClientRect().left)}px`;
+    $('findBar').style.marginRight = '0';
+  } else {
+    $('findBar').style.marginLeft = ''; // collapsed: centered as before
+    $('findBar').style.marginRight = '';
+  }
 }
 
 let rowsDrag = null;
@@ -1254,7 +1754,7 @@ function ioRender(sku, orders, primaryLocationId) {
               ? `<span class="copyable" data-copy="${esc(o.channelSku)}" title="Click to copy ${esc(o.channelSku)}">${esc(o.channelSku)}</span>`
               : '<span class="cell-missing">—</span>'}${o.via
               ? `<span class="io-via" title="This SKU is inside the bundle ${esc(o.via)} on this order">via ${esc(o.via)}</span>` : ''}</td>
-            <td class="num-cell">${o.quantity || 0}</td>
+            <td class="num-cell">${o.quantity > 1 ? `<span class="qty-chip" title="${o.quantity} units on this order">×${o.quantity}</span>` : (o.quantity || 0)}</td>
             <td class="mono io-date">${esc(ioDate(o.date))}</td>
           </tr>`).join('')}</tbody>
       </table>
@@ -1282,7 +1782,7 @@ $('ioBody').addEventListener('click', (e) => {
 $('ioClose').addEventListener('click', () => $('ioDialog').close());
 $('ioDialog').addEventListener('close', () => focusScan());
 
-/* ---------- Returns page: look up order, grade units, stock redirects ---------- */
+/* ---------- Returns page: spreadsheet worksheet ---------- */
 
 const RET_CONDS = [
   { key: 'new', label: 'New' },
@@ -1290,141 +1790,270 @@ const RET_CONDS = [
   { key: 'used', label: 'Used' },
   { key: 'scrap', label: 'Scrap' },
 ];
-let retOrder = null; // lookup result: { order, skus }
+
+let retDrafts = []; // one sheet row per returned unit, awaiting "Receive returns"
+let retReceivedBy = ''; // last-used initials, config-backed default
+let retBusy = false;
 
 function enterReturns() {
-  $('retRef').value = '';
+  $('retPo').value = '';
   $('retHint').textContent = '';
-  $('retCard').hidden = true;
-  retOrder = null;
+  renderRetSheet();
   loadRetPast();
-  $('retRef').focus();
+  ensureInventory(); // fallback SKU picker + one-time pickers need it
+  api.getConfig().then(cfg => {
+    if (!retReceivedBy && cfg.returnsReceivedBy) {
+      retReceivedBy = cfg.returnsReceivedBy;
+      renderRetSheet();
+    }
+  });
+  $('retPo').focus();
 }
 
-async function retLookup() {
-  const ref = $('retRef').value.trim();
-  if (!ref) return;
-  $('retHint').textContent = 'Searching…';
-  const res = await api.returnsLookup(ref);
-  if (!res.ok) {
-    $('retHint').textContent = res.error || 'Not found.';
-    $('retCard').hidden = true;
-    retOrder = null;
-    return;
-  }
-  $('retHint').textContent = '';
-  retOrder = res;
-  renderRetCard();
+function retFootNote(msg, ok = true) {
+  const el = $('retFootNote');
+  el.textContent = msg;
+  el.className = `test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-function retCondOptions(it, selected) {
+function retCondOptions(selected) {
   return RET_CONDS.map(c =>
     `<option value="${c.key}" ${c.key === selected ? 'selected' : ''}>${c.label}</option>`).join('');
 }
 
-function renderRetCard() {
-  const o = retOrder.order;
-  const when = o.processedOn ? `${String(o.processedOn).slice(0, 10)}` : '';
-  $('retCard').hidden = false;
-  $('retCard').innerHTML = `
-    <div class="ret-card-head">
-      <span>${esc(o.reference)} · ${esc(channelLabel((o.source || '').toLowerCase()))}${when ? ` · shipped ${esc(when)}` : ''}</span>
-      <span class="ret-stamp">RETURN</span>
-    </div>
-    <div class="ret-card-meta">${esc([o.customer, o.tracking ? `trk ${o.tracking}` : ''].filter(Boolean).join(' · '))}</div>
-    <div class="ret-lines">
-      ${o.items.length === 0 ? '<p class="dlg-note">Could not read the order\'s items - type the SKU below.</p>' : ''}
-      ${o.items.map((it, idx) => `
-      <div class="ret-line" data-idx="${idx}">
-        <span class="mono ret-line-sku" title="${esc(it.title)}">${esc(it.sku)}</span>
-        <input type="number" class="input ret-qty" min="0" max="${it.quantity}" step="1" value="${it.quantity}" title="Units returned" />
-        <select class="input ret-cond">${retCondOptions(it, 'new')}</select>
-        <span class="ret-target mono"></span>
-      </div>`).join('')}
-    </div>
-    <div class="ret-actions">
-      <input id="retNote" class="input" type="text" placeholder="Note (reason, damage, serial…)" autocomplete="off" />
-      <button id="retReceive" class="btn btn-primary">Receive return</button>
-    </div>
-    <p class="dlg-note" id="retResult" hidden></p>`;
-  $('retCard').querySelectorAll('.ret-line').forEach(line => retUpdateTarget(line));
+function retDraftBlank(po) {
+  return {
+    po, orderId: null, source: '', customer: '', tracking: '',
+    sku: '', title: '', price: 0, condition: 'new', targets: null,
+    note: '', pick: '', receivedBy: retReceivedBy, unmatched: true,
+    at: new Date().toISOString(),
+  };
 }
 
-// show where the unit will land; missing mapping -> one-time picker
-function retUpdateTarget(line) {
-  const idx = Number(line.dataset.idx);
-  const it = retOrder.order.items[idx];
-  const cond = line.querySelector('.ret-cond').value;
-  const targetEl = line.querySelector('.ret-target');
-  const known = (it.targets || {})[cond] || (cond === 'new' ? it.sku : '');
-  if (known) {
-    line.dataset.target = known;
-    targetEl.innerHTML = `→ +1 ${esc(known)}`;
-    targetEl.classList.remove('is-missing');
-  } else {
-    line.dataset.target = '';
-    targetEl.innerHTML = `<input type="text" class="input mono ret-pick" list="retSkuOptions"
-      placeholder="Pick the ${esc(cond)} listing…" autocomplete="off" spellcheck="false" />`;
-    targetEl.classList.add('is-missing');
-    $('retSkuOptions').innerHTML = (retOrder.skus || []).map(s => `<option value="${esc(s)}"></option>`).join('');
+// Enter on the PO# cell: processed-order lookup fills the sheet, one row per
+// unit; no match falls back to a blank "no order" row with an inline SKU pick.
+async function retEntrySubmit() {
+  const po = $('retPo').value.trim();
+  if (!po || retBusy) return;
+  retBusy = true;
+  $('retEntryHint').textContent = 'Looking the order up…';
+  const res = await api.returnsLookup(po);
+  retBusy = false;
+  $('retEntryHint').textContent = 'Enter looks the order up and fills the row — one row per unit; no match falls back to a SKU pick';
+  if (!res.ok) {
+    $('retHint').textContent = `${res.error || 'Not found.'} — added as “no order”, pick the SKU on the row.`;
+    retDrafts.push(retDraftBlank(po));
+    $('retPo').value = '';
+    renderRetSheet();
+    return;
   }
+  $('retHint').textContent = '';
+  const o = res.order;
+  if (!o.items.length) {
+    // order found but items unreadable: keep the match, pick the SKU by hand
+    retDrafts.push({
+      ...retDraftBlank(o.reference), unmatched: false,
+      orderId: o.orderId, source: o.source, customer: o.customer, tracking: o.tracking,
+    });
+  }
+  for (const it of o.items) {
+    for (let u = 0; u < (it.quantity || 1); u++) { // one sheet row per unit
+      retDrafts.push({
+        po: o.reference, orderId: o.orderId, source: o.source,
+        customer: o.customer, tracking: o.tracking,
+        sku: it.sku, title: it.title || '', price: it.price || 0,
+        condition: 'new', targets: it.targets || null,
+        note: '', pick: '', receivedBy: retReceivedBy, unmatched: false,
+        at: new Date().toISOString(),
+      });
+    }
+  }
+  $('retPo').value = '';
+  renderRetSheet();
 }
 
-$('retFind').addEventListener('click', retLookup);
-$('retRef').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); retLookup(); } });
-
-$('retCard').addEventListener('change', (e) => {
-  const line = e.target.closest('.ret-line');
-  if (line && e.target.classList.contains('ret-cond')) retUpdateTarget(line);
+$('retPo').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  retEntrySubmit();
 });
 
-$('retCard').addEventListener('click', async (e) => {
-  if (e.target.id !== 'retReceive') return;
-  const out = $('retResult');
-  out.hidden = true;
-  const items = [];
-  let bad = '';
-  $('retCard').querySelectorAll('.ret-line').forEach(line => {
-    const idx = Number(line.dataset.idx);
-    const it = retOrder.order.items[idx];
-    const qty = Number(line.querySelector('.ret-qty').value);
-    if (!Number.isInteger(qty) || qty <= 0) return; // 0 = not returned, skip
-    const cond = line.querySelector('.ret-cond').value;
-    const pick = line.querySelector('.ret-pick');
-    const target = pick ? pick.value.trim() : line.dataset.target;
-    if (!target) { bad = `Pick the ${cond} listing for ${it.sku}.`; return; }
-    if (pick && !(retOrder.skus || []).includes(target)) { bad = `Unknown SKU: ${target}`; return; }
-    items.push({ sku: it.sku, condition: cond, targetSku: target, qty });
+// the Condition cell carries the live "→ TARGET" preview; a missing mapping
+// shows the one-time picker inline (persisted on commit, as before)
+// suffix + label per condition, for prefiling the New SKU dialog
+const RET_SUFFIX = {
+  openbox: { suf: '-OPENBOX', label: 'Open Box' },
+  used: { suf: '-USED', label: 'Used' },
+  scrap: { suf: '-SCRAP', label: 'Scrap' },
+};
+
+function retTargetCell(d, idx) {
+  if (!d.sku) return '';
+  const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
+  if (known) return `<div class="ret-cell-target" title="Stock lands on ${esc(known)}">→ ${esc(known)}</div>`;
+  return `<div class="ret-cell-target is-missing">
+    <input type="text" class="input mono ret-pick" data-idx="${idx}" list="retSkuOptions"
+      value="${esc(d.pick || '')}" placeholder="Pick the ${esc(d.condition)} listing…" autocomplete="off" spellcheck="false" />
+    <button class="newsku-link ret-new-sku" data-idx="${idx}" title="No suitable listing yet? Create it">+ new</button>
+  </div>`;
+}
+
+function renderRetSheet() {
+  const units = retDrafts.length;
+  $('retSummary').innerHTML = `<strong>${units}</strong> unit${units === 1 ? '' : 's'} to receive`;
+  $('retReceiveAll').disabled = units === 0 || retBusy;
+  $('retEntryNum').textContent = units + 1;
+  $('retSkuOptions').innerHTML = (recvItems || []).map(i => `<option value="${esc(i.sku)}"></option>`).join('');
+  $('retBody').innerHTML = retDrafts.map((d, idx) => `
+    <tr data-idx="${idx}">
+      <td class="cell-gutter ${d.unmatched ? 'st-failed' : 'st-captured'}" title="${d.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${idx + 1}</td>
+      <td class="mono ret-cell-po" title="${esc(d.po)}">${d.po ? esc(d.po) : '<span class="cell-missing">—</span>'}${d.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
+      <td class="ret-cell-cust" title="${esc(d.customer)}">${d.customer ? esc(d.customer) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
+      <td class="ret-cell-sku">${d.sku
+        ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span>`
+        : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
+             placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
+      <td class="ret-cell-price"><input type="number" class="recv-cell-input ret-price-in" data-idx="${idx}"
+        min="0" step="0.01" value="${d.price || ''}" placeholder="0.00" aria-label="Price" /></td>
+      <td class="ret-cell-cond">
+        <select class="input ret-cond ret-cond-in" data-idx="${idx}" aria-label="Condition">${retCondOptions(d.condition)}</select>
+        ${retTargetCell(d, idx)}
+      </td>
+      <td class="ret-cell-by"><input type="text" class="recv-cell-input ret-by-in" data-idx="${idx}"
+        value="${esc(d.receivedBy)}" placeholder="IM" maxlength="12" aria-label="Received by" /></td>
+      <td class="ret-cell-note"><input type="text" class="recv-cell-input ret-note-in" data-idx="${idx}"
+        value="${esc(d.note)}" placeholder="—" aria-label="Notes or dispute" /></td>
+      <td class="cell-actions"><span class="row-actions">
+        <button class="btn-icon is-danger" data-act="del" data-idx="${idx}" title="Remove row">${ICONS.trash}</button>
+      </span></td>
+    </tr>`).join('');
+  // inline SKU pickers on "no order" rows reuse the shared combobox
+  $('retBody').querySelectorAll('.ret-sheet-combo').forEach(box => {
+    const input = box.querySelector('input');
+    const list = box.querySelector('.combo-list');
+    makeCombo(input, list, async (item) => {
+      const d = retDrafts[Number(input.dataset.idx)];
+      if (!d) return;
+      d.sku = item.sku;
+      d.title = item.title || '';
+      if (!d.price) d.price = Number(item.retailPrice) || 0;
+      const tr = await api.returnsTargets(item.sku);
+      if (tr.ok) d.targets = tr.targets;
+      renderRetSheet();
+    });
   });
-  if (bad) { out.textContent = bad; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
-  if (!items.length) { out.textContent = 'Set a returned quantity on at least one line.'; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
-  const btn = $('retReceive');
-  btn.disabled = true;
-  btn.textContent = 'Receiving…';
-  const res = await api.returnsCreate({
-    orderId: retOrder.order.orderId,
-    orderNumber: retOrder.order.reference,
-    source: retOrder.order.source,
-    customer: retOrder.order.customer,
-    note: ($('retNote').value || '').trim(),
-    items,
-  });
-  btn.disabled = false;
-  btn.textContent = 'Receive return';
-  if (!res.ok) { out.textContent = res.error || 'Failed.'; out.hidden = false; out.style.color = 'var(--neg-text)'; return; }
-  toast(`Return received: ${items.map(i => `${i.targetSku} +${i.qty}`).join(', ')}`);
-  $('retCard').hidden = true;
-  $('retRef').value = '';
-  retOrder = null;
+}
+
+// cell edits land straight on the draft (no re-render, focus stays put)
+$('retBody').addEventListener('input', (e) => {
+  const d = retDrafts[Number(e.target.dataset.idx)];
+  if (!d) return;
+  if (e.target.classList.contains('ret-price-in')) d.price = Number(e.target.value) || 0;
+  else if (e.target.classList.contains('ret-by-in')) {
+    d.receivedBy = e.target.value.trim();
+    if (d.receivedBy) retReceivedBy = d.receivedBy; // next rows inherit it
+  } else if (e.target.classList.contains('ret-note-in')) d.note = e.target.value;
+  else if (e.target.classList.contains('ret-pick')) d.pick = e.target.value.trim();
+});
+
+$('retBody').addEventListener('change', (e) => {
+  if (!e.target.classList.contains('ret-cond-in')) return;
+  const d = retDrafts[Number(e.target.dataset.idx)];
+  if (!d) return;
+  d.condition = e.target.value;
+  renderRetSheet(); // the target preview follows the condition
+});
+
+$('retBody').addEventListener('click', (e) => {
+  const mk = e.target.closest('.ret-new-sku');
+  if (mk) {
+    // create the missing condition listing, prefilled from the sold SKU,
+    // and use it as this row's target once it exists
+    const d = retDrafts[Number(mk.dataset.idx)];
+    if (!d || !d.sku) return;
+    const meta = RET_SUFFIX[d.condition] || { suf: '', label: d.condition };
+    openNewSkuDialog({
+      sku: `${d.sku}${meta.suf}`,
+      title: `${d.title || d.sku} (${meta.label})`,
+      retailPrice: d.price || 0,
+    }, (newSku) => {
+      d.targets = { ...(d.targets || {}), [d.condition]: newSku };
+      d.pick = '';
+      renderRetSheet();
+    });
+    return;
+  }
+  const del = e.target.closest('[data-act="del"]');
+  if (!del) return;
+  retDrafts.splice(Number(del.dataset.idx), 1);
+  renderRetSheet();
+});
+
+// commit: group rows per order, one ledger record each; stock bumps + mapping
+// persistence run through the unchanged returns:create engine
+$('retReceiveAll').addEventListener('click', async () => {
+  if (!retDrafts.length || retBusy) return;
+  retFootNote('');
+  for (const [i, d] of retDrafts.entries()) {
+    if (!d.sku) { retFootNote(`Row ${i + 1}: pick the returned SKU.`, false); return; }
+    const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
+    const target = known || String(d.pick || '').trim();
+    if (!target) { retFootNote(`Row ${i + 1}: pick the ${d.condition} listing for ${d.sku}.`, false); return; }
+    if (!known && recvLookup === 'ready' && !recvLookupExact(target)) {
+      retFootNote(`Row ${i + 1}: unknown SKU ${target}.`, false);
+      return;
+    }
+    d.resolvedTarget = target;
+  }
+  const groups = new Map();
+  for (const d of retDrafts) {
+    const key = `${d.po}|${d.orderId || ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+  retBusy = true;
+  renderRetSheet();
+  retFootNote('Receiving…');
+  let received = 0;
+  let failed = '';
+  for (const rows of groups.values()) {
+    const head = rows[0];
+    const res = await api.returnsCreate({
+      orderId: head.orderId || undefined,
+      orderNumber: head.po,
+      source: head.source,
+      customer: head.customer,
+      tracking: head.tracking,
+      receivedBy: rows.map(r => r.receivedBy).filter(Boolean).pop() || '',
+      unmatched: !!head.unmatched,
+      note: '',
+      items: rows.map(r => ({ sku: r.sku, condition: r.condition, targetSku: r.resolvedTarget, qty: 1, price: r.price, note: r.note })),
+    });
+    if (res.ok) {
+      received += rows.length;
+      retDrafts = retDrafts.filter(d => !rows.includes(d));
+    } else {
+      failed = res.error || 'Failed.';
+    }
+  }
+  retBusy = false;
+  renderRetSheet();
+  if (received) toast(`Received ${received} return unit${received === 1 ? '' : 's'}`);
+  retFootNote(failed || (received ? `Received ${received} unit${received === 1 ? '' : 's'} — stock updated.` : ''), !failed);
   loadRetPast();
-  $('retRef').focus();
+  $('retPo').focus();
 });
 
+
+
+// day-grouped history, rendered as sheet rows (newest first)
 async function loadRetPast() {
   const returns = await api.returnsList();
   const box = $('retPastBox');
   if (!returns.length) {
-    box.innerHTML = '<div class="recv-past-empty">No returns yet. Look up an order above to receive one.</div>';
+    box.innerHTML = '<div class="recv-past-empty">No returns yet. Type a PO# in the worksheet above to receive one.</div>';
     return;
   }
   const days = new Map();
@@ -1445,22 +2074,21 @@ async function loadRetPast() {
       <span class="recv-day-preview"></span>
       <span class="recv-day-units">${units} unit${units === 1 ? '' : 's'}</span>
     </div>
-    ${open ? `<div class="recv-cards">${list.map(r => `
-      <div class="recv-card">
-        <div class="recv-card-head">
-          <span>${fmtTime(r.created_at)} · ${esc(r.order_number)}</span>
-          <span class="ret-stamp">RETURN</span>
-        </div>
-        ${r.customer || r.source ? `<div class="recv-card-meta">${esc([channelLabel((r.source || '').toLowerCase()), r.customer].filter(Boolean).join(' · '))}</div>` : ''}
-        <div class="recv-card-lines">
-          ${r.items.map(i => `
-          <div class="recv-card-line">
-            <span class="recv-card-sku">${esc(i.sku)} → ${esc(i.targetSku)} ×${i.qty}</span>
-            <span class="ret-cond-tag ${i.condition === 'scrap' ? 'is-scrap' : ''}">${esc(i.condition)}</span>
-          </div>`).join('')}
-        </div>
-        ${r.note ? `<div class="recv-card-note">${esc(r.note)}</div>` : ''}
-      </div>`).join('')}</div>` : ''}`;
+    ${open ? `
+    <div class="ret-hist-wrap"><table class="ret-hist-table"><tbody>
+      ${list.map(r => r.items.map(i => `
+      <tr>
+        <td class="mono ret-h-time">${fmtTime(r.created_at)}</td>
+        <td class="mono ret-h-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
+        <td class="ret-h-cust" title="${esc(r.customer || '')}">${esc(r.customer || '')}</td>
+        <td class="mono ret-h-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 14)) : ''}</td>
+        <td class="mono ret-h-sku" title="Stock landed on ${esc(i.targetSku)}">${esc(i.sku)}${i.qty > 1 ? ` ×${i.qty}` : ''}</td>
+        <td class="mono ret-h-price">${i.price ? Number(i.price).toFixed(2) : ''}</td>
+        <td class="ret-h-cond"><span class="ret-cond-tag ${i.condition === 'scrap' ? 'is-scrap' : ''}">${esc(i.condition)}</span></td>
+        <td class="mono ret-h-by" title="Received by">${esc(r.received_by || '')}</td>
+        <td class="ret-h-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      </tr>`).join('')).join('')}
+    </tbody></table></div>` : ''}`;
   }).join('');
 }
 
@@ -1472,6 +2100,144 @@ $('retPastBox').addEventListener('click', (e) => {
   if (retOpenDays.has(key)) retOpenDays.delete(key); else retOpenDays.add(key);
   loadRetPast();
 });
+
+/* ---------- condition-mapping editor ---------- */
+
+let mapRows = null; // [{ baseSku, conds: { openbox|used|scrap: { sku, source } } }]
+const MAP_CONDS = [['openbox', 'Open box'], ['used', 'Used'], ['scrap', 'Scrap']];
+
+async function openMappings() {
+  $('mapSearch').value = '';
+  $('mapCount').textContent = '';
+  $('mapList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('mapDialog').showModal();
+  ensureInventory(); // the cell editors need the picker data
+  const res = await api.returnsMappings();
+  if (!$('mapDialog').open) return;
+  if (!res.ok) {
+    $('mapList').innerHTML = `<p class="dlg-note test-result is-fail">${esc(res.error || 'Could not load mappings.')}</p>`;
+    return;
+  }
+  mapRows = res.mappings || [];
+  renderMapList();
+}
+
+function mapCellHtml(row, cond) {
+  const c = row.conds[cond];
+  if (!c) {
+    return `<button class="map-set" data-base="${esc(row.baseSku)}" data-cond="${cond}"
+      title="Pick the ${cond} listing for ${esc(row.baseSku)}">set…</button>`;
+  }
+  return `
+    <button class="map-val" data-base="${esc(row.baseSku)}" data-cond="${cond}" title="Click to change">
+      <span class="mono">${esc(c.sku)}</span><span class="map-tag is-${c.source}">${c.source}</span>
+    </button>
+    ${c.source === 'manual' ? `<button class="map-del btn-icon is-danger" data-base="${esc(row.baseSku)}" data-cond="${cond}"
+      title="Remove the manual pick (falls back to auto)">✕</button>` : ''}`;
+}
+
+function renderMapList() {
+  if (!mapRows) return;
+  const q = $('mapSearch').value.trim().toLowerCase();
+  const rows = mapRows.filter(r => !q
+    || r.baseSku.toLowerCase().includes(q)
+    || Object.values(r.conds).some(c => c && c.sku.toLowerCase().includes(q)));
+  const shown = rows.slice(0, 200);
+  $('mapCount').textContent = `${rows.length} SKU${rows.length === 1 ? '' : 's'} mapped${rows.length > shown.length ? ` · showing ${shown.length}` : ''}`;
+  $('mapList').innerHTML = rows.length === 0
+    ? `<p class="dlg-note">${q ? 'No mapping matches that filter.' : 'No mappings yet. They appear here from the -OPENBOX / -USED / -SCRAP listing names, or the first time a return needs a pick.'}</p>`
+    : `<table class="map-table">
+        <thead><tr>
+          <th class="th-gutter">#</th>
+          <th>Sold SKU</th>
+          ${MAP_CONDS.map(([, label]) => `<th>${label}</th>`).join('')}
+        </tr></thead>
+        <tbody>${shown.map((r, idx) => `
+          <tr>
+            <td class="cell-gutter">${idx + 1}</td>
+            <td class="mono map-base" title="${esc(r.baseSku)}">${esc(r.baseSku)}</td>
+            ${MAP_CONDS.map(([cond]) => `<td class="map-cell" data-cellbase="${esc(r.baseSku)}" data-cellcond="${cond}">${mapCellHtml(r, cond)}</td>`).join('')}
+          </tr>`).join('')}</tbody>
+      </table>`;
+}
+
+// click a cell -> inline combobox editor; pick persists a manual override.
+// "+ new" creates the missing listing and maps it in one move.
+function beginMapEdit(td, base, cond) {
+  td.innerHTML = `
+    <div class="combo map-combo">
+      <input class="input mono map-edit-input" type="text" placeholder="SKU, title or barcode…"
+             autocomplete="off" spellcheck="false" />
+      <div class="combo-list map-edit-list" hidden></div>
+    </div>
+    <button class="newsku-link map-new-sku" title="No suitable listing yet? Create it">+ new</button>`;
+  const input = td.querySelector('.map-edit-input');
+  const list = td.querySelector('.map-edit-list');
+  let done = false;
+  const saveMapping = async (targetSku) => {
+    const res = await api.returnsMapSet(base, cond, targetSku);
+    if (!res.ok) {
+      toast(res.error || 'Could not save the mapping.');
+      renderMapList();
+      return;
+    }
+    const row = mapRows.find(r => r.baseSku === base) || (mapRows.push({ baseSku: base, conds: {} }), mapRows[mapRows.length - 1]);
+    row.conds[cond] = { sku: res.targetSku, source: 'manual' };
+    renderMapList();
+    toast(`${base} ${cond} → ${res.targetSku}`);
+  };
+  makeCombo(input, list, (item) => {
+    if (done) return;
+    done = true;
+    saveMapping(item.sku);
+  });
+  // mousedown beats the input's blur-cancel timer
+  td.querySelector('.map-new-sku').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (done) return;
+    done = true;
+    const meta = RET_SUFFIX[cond] || { suf: '', label: cond };
+    const baseItem = recvLookup === 'ready' ? recvLookupExact(base) : null;
+    renderMapList(); // restore the cell; the dialog takes over
+    openNewSkuDialog({
+      sku: `${base}${meta.suf}`,
+      title: `${(baseItem && baseItem.title) || base} (${meta.label})`,
+      retailPrice: baseItem ? baseItem.retailPrice : 0,
+    }, (newSku) => saveMapping(newSku));
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { done = true; renderMapList(); }
+  });
+  input.addEventListener('blur', () => setTimeout(() => { if (!done) { done = true; renderMapList(); } }, 200));
+  input.focus();
+}
+
+$('mapList').addEventListener('click', async (e) => {
+  const del = e.target.closest('.map-del');
+  if (del) {
+    const res = await api.returnsMapDelete(del.dataset.base, del.dataset.cond);
+    if (!res.ok) { toast(res.error || 'Could not remove the mapping.'); return; }
+    const row = mapRows.find(r => r.baseSku === del.dataset.base);
+    if (row) {
+      if (res.fallback) row.conds[del.dataset.cond] = { sku: res.fallback, source: 'auto' };
+      else delete row.conds[del.dataset.cond];
+      if (!Object.keys(row.conds).length) mapRows = mapRows.filter(r => r !== row);
+    }
+    renderMapList();
+    toast(res.fallback ? `Back to auto: ${res.fallback}` : 'Manual pick removed');
+    return;
+  }
+  const cellBtn = e.target.closest('.map-val, .map-set');
+  if (cellBtn) {
+    const td = cellBtn.closest('td.map-cell');
+    if (td) beginMapEdit(td, cellBtn.dataset.base, cellBtn.dataset.cond);
+  }
+});
+
+$('mapSearch').addEventListener('input', renderMapList);
+$('mapClose').addEventListener('click', () => $('mapDialog').close());
+$('mapDialog').addEventListener('close', () => focusScan());
+$('retMapBtn').addEventListener('click', openMappings);
 
 /* ---------- linked channel SKUs per stock item ---------- */
 
@@ -1850,21 +2616,97 @@ async function enterReceiving() {
       try { recvTrackingRes.push({ carrier: p.carrier, re: new RegExp(p.pattern, 'i') }); } catch { /* bad user regex */ }
     }
   }
-  if (recvLookup === 'idle') {
-    recvLookup = 'loading';
+  if (recvLookup !== 'ready') {
     recvNote('Loading Linnworks SKUs…');
+    const ok = await ensureInventory();
+    recvNote(ok ? '' : `SKU lookup unavailable: ${invError}`, ok);
+  }
+}
+
+// One shared inventory load for every SKU picker (receiving worksheet,
+// unmatched-return path, mapping editor). Retries after a failure.
+let invLoadPromise = null;
+let invError = '';
+
+function ensureInventory() {
+  if (recvLookup === 'ready') return Promise.resolve(true);
+  if (invLoadPromise) return invLoadPromise;
+  recvLookup = 'loading';
+  invLoadPromise = (async () => {
     const res = await api.getStock();
     if (res.ok) {
       recvItems = res.items;
       recvBySku = new Map(res.items.map(i => [i.sku.toLowerCase(), i]));
       recvByBarcode = new Map(res.items.filter(i => i.barcode).map(i => [i.barcode.toLowerCase(), i]));
       recvLookup = 'ready';
-      recvNote('');
-    } else {
-      recvLookup = 'unavailable';
-      recvNote(`SKU lookup unavailable: ${res.error || 'could not load inventory'}`, false);
+      invError = '';
+      return true;
     }
-  }
+    recvLookup = 'unavailable';
+    invError = res.error || 'could not load inventory';
+    invLoadPromise = null; // a later open retries
+    return false;
+  })();
+  return invLoadPromise;
+}
+
+// Reusable searchable-SKU combobox (same look/behavior as the receiving
+// worksheet's): filters the shared inventory by SKU, title or barcode.
+// The worksheet's own instance stays as-is; new pickers attach this.
+function makeCombo(input, listEl, onPick) {
+  let matches = [];
+  let hl = -1;
+  const close = () => { listEl.hidden = true; matches = []; hl = -1; };
+  const render = () => {
+    if (recvLookup === 'loading') {
+      listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
+    } else if (!matches.length) {
+      listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
+    } else {
+      listEl.innerHTML = matches.map((it, i) => `
+        <button class="combo-opt ${i === hl ? 'is-hl' : ''}" data-i="${i}" title="${esc(it.sku)} — ${esc(it.title)}">
+          <span class="mono">${esc(it.sku)}</span>
+          <span class="combo-opt-title">${esc(it.title || '')}</span>
+        </button>`).join('');
+    }
+    listEl.hidden = false;
+    const hlEl = listEl.querySelector('.combo-opt.is-hl');
+    if (hlEl) hlEl.scrollIntoView({ block: 'nearest' });
+  };
+  const open = () => {
+    matches = comboFilter(input.value);
+    hl = matches.length ? 0 : -1;
+    render();
+  };
+  input.addEventListener('input', open);
+  input.addEventListener('focus', () => { if (input.value.trim()) open(); });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+  input.addEventListener('keydown', (e) => {
+    const isOpen = !listEl.hidden;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isOpen) { open(); return; }
+      if (!matches.length) return;
+      hl = (hl + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+      render();
+      return;
+    }
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const exact = recvLookupExact(input.value.trim());
+    if (exact) { close(); onPick(exact); return; }
+    if (isOpen && hl >= 0 && matches[hl]) { close(); onPick(matches[hl]); }
+  });
+  listEl.addEventListener('mousedown', (e) => {
+    const opt = e.target.closest('.combo-opt');
+    if (!opt) return;
+    e.preventDefault();
+    const item = matches[Number(opt.dataset.i)];
+    close();
+    if (item) onPick(item);
+  });
+  return { close };
 }
 
 function recvNote(msg, ok = true) {
@@ -2335,6 +3177,7 @@ function renderHistory() {
               ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
               : '<span class="mono history-tracking">—</span>'}
             <span class="history-status st-${esc(r.status)}" title="${esc(r.fail_reason || '')}">${esc(historyStatusLabel(r))}</span>
+            ${r.sub_sku ? `<span class="sub-pill" title="${esc(r.sub_note || `Shipped ${r.sub_sku} instead of the listed item`)}">SUB → ${esc(r.sub_sku)}${r.sub_qty > 1 ? ` ×${r.sub_qty}` : ''}</span>` : ''}
             ${r.notes ? `<span class="history-notes" title="${esc(r.notes)}">${esc(r.notes)}</span>` : ''}
           </div>`).join('')}
       </div>`).join('');
@@ -2369,7 +3212,7 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog', 'mapDialog', 'skuDialog', 'subDialog'].some(id => $(id).open);
 }
 
 function focusScan() {
@@ -2422,7 +3265,7 @@ document.addEventListener('mouseleave', () => { floatTip.hidden = true; });
 
 /* ---------- main-process events ---------- */
 
-api.on('state:changed', (s) => { state = s; render(); });
+api.on('state:changed', (s) => { state = s; render(); if (bReady) applyBrowserPane(); });
 
 api.on('order:detected', ({ row }) => {
   clearWarn();
@@ -2491,3 +3334,4 @@ api.on('ui:open-history', openHistory);
 /* ---------- boot ---------- */
 
 refresh().then(() => focusScan());
+initBrowserPane();

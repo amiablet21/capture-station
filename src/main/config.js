@@ -58,8 +58,13 @@ const DEFAULTS = {
   // (dropship) location; move them back when the primary is replenished.
   stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },
   // Condition views on the Stock page: filter chips matching SKU or title
-  // against a regex. Extend here (or later in Settings) e.g. with Used.
-  stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX' }],
+  // against a regex. Word-boundary guards keep USED from matching UNUSED.
+  // tint = muted badge palette for the active chip (blue/yellow/red).
+  stockViews: [
+    { label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' },
+    { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' },
+    { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' },
+  ],
   // SHA-256 hex of the Settings PIN; empty = no PIN required.
   settingsPinHash: '',
   // Capture-only: hide all Linnworks sync UI; the station just records and
@@ -73,6 +78,8 @@ const DEFAULTS = {
   // folder = Documents\Capture Station\receiving.
   // webhookUrl: optional Make.com webhook POSTed on "Finish receiving".
   receiving: { folder: '', webhookUrl: '' },
+  // Daily carrier cutoff (24h HH:MM): "Due today" chips turn red as it nears.
+  shipCutoff: '16:00',
   // Auto-drop Linnworks open orders onto the Capture page as pending rows.
   // excludeLocationNames: orders at these stock locations never enter the
   // queue (WFS = fulfilled by Walmart, no label to make here).
@@ -84,6 +91,12 @@ const DEFAULTS = {
     ebay: 'https://www.ebay.com/sh/ord/details?orderid={po}',
     temu: '',
   },
+  // "Received by" initials on the Returns worksheet: last-used value becomes
+  // the default for the next return.
+  returnsReceivedBy: '',
+  // Embedded marketplace browser pane on the Capture page (sync mode only):
+  // width and open/collapsed state survive restarts.
+  browserPane: { visible: false, width: 480 },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
   lastSync: null, // { at, synced, failed, dryRun }
@@ -111,6 +124,15 @@ function load() {
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
     stored.pages.returns = !!stored.pages.receiving;
+  }
+  // migration: stock condition views gained Used and Scrap - add any default
+  // view a saved config is missing (dedupe by label), and backfill tints
+  if (Array.isArray(stored.stockViews)) {
+    for (const def of DEFAULTS.stockViews) {
+      const mine = stored.stockViews.find(v => v && String(v.label || '').toLowerCase() === def.label.toLowerCase());
+      if (!mine) stored.stockViews.push(structuredClone(def));
+      else if (!mine.tint) mine.tint = def.tint;
+    }
   }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
   return cached;

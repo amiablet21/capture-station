@@ -210,10 +210,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.getStockOpenOrders('S25-128GB-NAVY')`);
     check('stock:openOrders refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
-    // 21. stock condition views: config default + pure filter logic
+    // 21. stock condition views: config defaults + pure filter logic
     res = await exec('api.getConfig()');
-    check('stockViews default has Open Box',
-      Array.isArray(res.stockViews) && res.stockViews.length === 1 && res.stockViews[0].label === 'Open Box',
+    check('stockViews default: Open Box + Used + Scrap',
+      Array.isArray(res.stockViews) && res.stockViews.length === 3
+        && res.stockViews.map(v => v.label).join(',') === 'Open Box,Used,Scrap'
+        && res.stockViews.every(v => v.tint),
       res.stockViews);
     const obPat = JSON.stringify('OPEN[\\s-]?BOX');
     const svm = await exec(`[
@@ -227,6 +229,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
       svm[0] === true && svm[1] === true && svm[2] === true && svm[3] === false,
       svm);
     check('invalid view regex filters nothing', svm[4] === true, svm[4]);
+    const usedPat = JSON.stringify('(^|[^A-Za-z])USED($|[^A-Za-z])');
+    const svu = await exec(`[
+      stockViewMatch({ sku: 'S25-128GB-NAVY-USED', title: '' }, ${usedPat}),
+      stockViewMatch({ sku: 'X1', title: 'Galaxy S25 (Used)' }, ${usedPat}),
+      stockViewMatch({ sku: 'S25-UNUSED', title: '' }, ${usedPat}),
+      stockViewMatch({ sku: 'X2', title: 'Unused sealed unit' }, ${usedPat}),
+    ]`);
+    check('Used view matches -USED but never UNUSED',
+      svu[0] === true && svu[1] === true && svu[2] === false && svu[3] === false,
+      svu);
 
     // 22. product image handlers: capture-only refusal + cancel safe when idle
     res = await exec(`api.addStockImageUrl('S25-128GB-NAVY', 'sid', 'https://example.com/x.jpg')`);
@@ -234,14 +246,277 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec('api.cancelStockImage()');
     check('stock:cancelImage safe with nothing in flight', res && res.ok === true, res);
 
+    // 23. condition-mapping engine: manual overrides beat auto, delete falls back
+    const inv = ['S25-128GB-NAVY', 'S25-128GB-NAVY-OPENBOX', 'S25-128GB-NAVY-SCRAP'];
+    let targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
+    check('auto-derivation from suffix listings',
+      targets.new === 'S25-128GB-NAVY' && targets.openbox === 'S25-128GB-NAVY-OPENBOX'
+        && targets.scrap === 'S25-128GB-NAVY-SCRAP' && targets.used === '',
+      targets);
+    db.saveConditionMapping('S25-128GB-NAVY', 'openbox', 'ALT-OPENBOX-BIN');
+    targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
+    check('manual mapping beats auto-derivation', targets.openbox === 'ALT-OPENBOX-BIN', targets);
+    db.deleteConditionMapping('S25-128GB-NAVY', 'openbox');
+    targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
+    check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
+
+    // 24. returns worksheet: failed lookup falls back to a "no order" sheet
+    // row with an inline SKU picker; the log carries the new sheet columns
+    await exec(`retDrafts = []; $('retPo').value = 'WMR-REMOVAL-7788'; retEntrySubmit()`);
+    await sleep(300); // lookup refuses offline -> unmatched draft row
+    const draft = await exec('JSON.parse(JSON.stringify(retDrafts))');
+    check('failed lookup adds an unmatched draft row',
+      draft.length === 1 && draft[0].unmatched === true && draft[0].po === 'WMR-REMOVAL-7788' && draft[0].sku === '',
+      draft);
+    const sheetBits = await exec(`[
+      !!document.querySelector('#retBody .ret-noorder'),
+      !!document.querySelector('#retBody .ret-sheet-combo'),
+      $('retEntryNum').textContent,
+    ]`);
+    check('sheet row shows the no-order pill + inline SKU picker',
+      sheetBits[0] === true && sheetBits[1] === true && sheetBits[2] === '2',
+      sheetBits);
+    await exec('retDrafts = []; renderRetSheet();');
+    db.createReturn({
+      orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
+      tracking: '1ZRETURN000111', receivedBy: 'IM',
+      items: [{ sku: 'S25-128GB-NAVY', condition: 'openbox', targetSku: 'S25-128GB-NAVY-OPENBOX', qty: 2, price: 189.99, note: 'box dented' }],
+    });
+    res = await exec('api.returnsList()');
+    check('returns:list carries the worksheet fields',
+      Array.isArray(res) && res.length === 1 && res[0].unmatched === true
+        && res[0].tracking === '1ZRETURN000111' && res[0].received_by === 'IM'
+        && res[0].items[0].price === 189.99 && res[0].items[0].note === 'box dented',
+      res);
+    await exec(`retOpenDays.add('${db.localDay()}'); loadRetPast()`);
+    await sleep(250);
+    const ledgerBits = await exec(`[
+      !!document.querySelector('#retPastBox .ret-hist-table'),
+      !!document.querySelector('#retPastBox .ret-noorder'),
+    ]`);
+    check('history renders sheet rows and flags the unmatched return',
+      ledgerBits[0] === true && ledgerBits[1] === true, ledgerBits);
+
+    // 25. new returns handlers refuse in capture-only mode
+    res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);
+    check('returns:targets refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec('api.returnsMappings()');
+    check('returns:mappings refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.returnsMapSet('A', 'openbox', 'B')`);
+    check('returns:mapSet refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.returnsMapDelete('A', 'openbox')`);
+    check('returns:mapDelete refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+
+    // 26. marketplace browser pane: refusals + safe no-ops in capture-only
+    res = await exec(`api.browserOpen('119121297240391', 'walmart')`);
+    check('browser:open refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.browserLayout({ visible: true, x: 0, y: 0, width: 300, height: 300 })`);
+    check('browser:layout stays hidden in capture-only mode', res && res.ok === true && res.visible === false, res);
+    res = await exec(`api.browserNav('back')`);
+    check('browser:nav safe with no pane', res && res.ok === false, res);
+
+    // 27. New SKU: capture-only refusal + offline dialog validation
+    res = await exec(`api.createSku({ sku: 'TEST-1', title: 'Test', qty: 0 })`);
+    check('stock:createSku refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const invList = JSON.stringify([{ sku: 'S25-128GB-NAVY' }]);
+    const v = await exec(`[
+      validateNewSku({ sku: '', title: 'T', qty: 0 }, ${invList}),
+      validateNewSku({ sku: 'A-1', title: '', qty: 0 }, ${invList}),
+      validateNewSku({ sku: 'bad sku!', title: 'T', qty: 0 }, ${invList}),
+      validateNewSku({ sku: 's25-128gb-navy', title: 'T', qty: 0 }, ${invList}),
+      validateNewSku({ sku: 'A-1', title: 'T', qty: -2 }, ${invList}),
+      validateNewSku({ sku: 'A-1', title: 'T', qty: 3 }, ${invList}),
+      validateNewSku({ sku: 'a-1', title: 'T', qty: '' }, ${invList}),
+    ]`);
+    check('new-SKU validation: required fields, charset, case-blind dupes, qty',
+      /required/i.test(v[0]) && /required/i.test(v[1]) && /letters/i.test(v[2])
+        && /already exists/i.test(v[3]) && /whole number/i.test(v[4])
+        && v[5] === '' && v[6] === '',
+      v);
+
+    // 28. ship-by due logic (pure, pinned clock) + cutoff formatting
+    const dueChecks = await exec(`(() => {
+      const now = new Date('2026-08-01T14:00:00');
+      return [
+        dueInfo('2026-07-30T00:00:00', '16:00', now),
+        dueInfo('2026-08-01T20:00:00', '16:00', now),
+        dueInfo('2026-08-01T20:00:00', '16:00', new Date('2026-08-01T15:10:00')),
+        dueInfo('2026-08-05T00:00:00', '16:00', now),
+        dueInfo('', '16:00', now),
+        dueInfo('1899-12-30T00:00:00', '16:00', now),
+        fmtCutoff('16:00'),
+        fmtCutoff('9:30'),
+      ];
+    })()`);
+    check('due chips: overdue / amber / red near cutoff / future+unset clean',
+      dueChecks[0] && dueChecks[0].label === 'Overdue' && dueChecks[0].overdue === true
+        && dueChecks[1] && dueChecks[1].label === 'Due today' && dueChecks[1].urgent === false
+        && dueChecks[2] && dueChecks[2].urgent === true
+        && dueChecks[3] === null && dueChecks[4] === null && dueChecks[5] === null,
+      dueChecks);
+    check('cutoff formats as a 12h clock', dueChecks[6] === '4:00 PM' && dueChecks[7] === '9:30 AM',
+      [dueChecks[6], dueChecks[7]]);
+
+    // 29. seeded queue: overdue row sorts to top, chips + filter + header show
+    await exec(`
+      state.orderMeta['02-12345-67890'] = { source: 'EBAY', despatchBy: '2020-01-02T00:00:00',
+        items: [{ sku: 'S25-128GB-NAVY', qty: 2, title: 'Galaxy S25', img: '' }] };
+      state.shipCutoff = '16:00';
+      render();
+    `);
+    const queueBits = await exec(`[
+      !!document.querySelector('#rowsBody .due-chip'),
+      !!document.querySelector('#rowsBody .qty-chip'),
+      !!document.querySelector('#channelChips .chip-due'),
+      document.querySelector('#rowsBody tr td.cell-order .order-num').dataset.po,
+      $('dueHeader').hidden,
+      document.querySelector('#rowsBody tr:first-child td.cell-gutter').textContent,
+      document.querySelector('#rowsBody tr:last-child td.cell-gutter').textContent,
+    ]`);
+    check('queue shows due + qty chips, Due-today filter, overdue row on top',
+      queueBits[0] === true && queueBits[1] === true && queueBits[2] === true
+        && queueBits[3] === '02-12345-67890' && queueBits[4] === false,
+      queueBits);
+    check('gutter numbers follow display order: top = count, bottom = 1',
+      queueBits[5] === '2' && queueBits[6] === '1',
+      [queueBits[5], queueBits[6]]);
+
+    // 30. browser pane loading screen: show -> fail -> retry-clear (DOM side)
+    await exec(`bShowLoading('Opening order 119121415476080'); $('bLoadDomain').textContent = 'seller.walmart.com';`);
+    let lp = await exec(`[!$('bLoadPanel').hidden, $('bLoadLabel').textContent, bLoad.active, !$('bLoadSpin').hidden]`);
+    check('loading panel shows with PO label + spinner',
+      lp[0] === true && /119121415476080/.test(lp[1]) && lp[2] === true && lp[3] === true, lp);
+    await exec(`bShowLoadError('ERR_NAME_NOT_RESOLVED')`);
+    lp = await exec(`[!$('bLoadErr').hidden, bLoad.failed, $('bLoadSpin').hidden]`);
+    check('failed load swaps to the red retry state', lp[0] === true && lp[1] === true && lp[2] === true, lp);
+    await exec('bHideLoading()');
+    lp = await exec(`[$('bLoadPanel').hidden, bLoad.active, bLoad.failed]`);
+    check('loading panel clears fully', lp[0] === true && lp[1] === false && lp[2] === false, lp);
+
+    // 31. per-order location move: refusal + both affordances render
+    res = await exec(`api.moveOrder('119121297240391', 'primary', false)`);
+    check('orders:move refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    await exec(`
+      state.captureOnly = false;
+      state.locations = { primaryName: 'Digital World Shop', fallbackName: 'DropShip', fallbackSet: true };
+      state.orderMeta['119121297240391'] = { source: 'WALMART', dropship: true, despatchBy: '', items: [] };
+      render();
+    `);
+    const moveBits = await exec(`[
+      !!document.querySelector('#rowsBody .badge-dropship[data-act="moveback"]'),
+      !!document.querySelector('#rowsBody [data-act="movedropship"]'),
+      (document.querySelector('#rowsBody .badge-dropship[data-act="moveback"]') || {}).title || '',
+    ]`);
+    check('DS chip is clickable and non-DS rows get the move action',
+      moveBits[0] === true && moveBits[1] === true && /Digital World Shop/.test(moveBits[2]),
+      moveBits);
+    // restore capture-only + drop only the DS seeding (the due/qty seeding
+    // from check 29 stays visible for the screenshot pass)
+    await exec(`state.captureOnly = true; delete state.orderMeta['119121297240391']; render();`);
+
+    // 32. "shipped different item" substitution: refusal + intent + pill + CSV + clear
+    res = await exec(`api.substituteRow(${ebayRow.id}, 'X230-128GB-GRAY', 1, '', false)`);
+    check('rows:substitute refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const noteText = await exec(`subDefaultNote('S25-128GB-NAVY', 'X230-128GB-GRAY')`);
+    check('substitution auto-note format', noteText === 'ordered S25-128GB-NAVY, shipped X230-128GB-GRAY', noteText);
+    db.setSubstitution(ebayRow.id, 'X230-128GB-GRAY', 2, noteText);
+    const subRow = db.getRow(ebayRow.id);
+    check('substitution intent saved on the row',
+      subRow.sub_sku === 'X230-128GB-GRAY' && subRow.sub_qty === 2 && /shipped X230/.test(subRow.sub_note), subRow);
+    await exec(`api.updateRow(${ebayRow.id}, {})`); // pushState -> fresh state + CSV
+    await sleep(200);
+    const pillBits = await exec(`[
+      !!document.querySelector('#rowsBody .sub-pill'),
+      (document.querySelector('#rowsBody .sub-pill') || {}).textContent || '',
+    ]`);
+    check('row shows the SUB pill with SKU and qty',
+      pillBits[0] === true && /SUB → X230-128GB-GRAY ×2/.test(pillBits[1]), pillBits);
+    state = await exec('api.getState()');
+    const csvSub = fs.readFileSync(state.csv.path, 'utf8');
+    check('CSV notes column carries the internal SUB marker',
+      csvSub.includes('SUB:') && csvSub.includes('shipped X230-128GB-GRAY'), csvSub.split('\r\n')[0]);
+    db.setSubstitution(ebayRow.id, '', 0, '');
+    await exec(`api.updateRow(${ebayRow.id}, {})`);
+    await sleep(200);
+    const cleared = await exec(`!!document.querySelector('#rowsBody .sub-pill')`);
+    check('clearing the substitution removes the pill', cleared === false, cleared);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);
       let img = await win.webContents.capturePage();
       fs.writeFileSync(process.env.CAPTURE_E2E_SHOT, img.toPNG());
       console.log(`SHOT ${process.env.CAPTURE_E2E_SHOT}`);
-      // second shot: the PO worksheet with lines, tracking, note + an expanded past day
       await exec(`api.setConfig(${JSON.stringify({ captureOnly: false, pages: { returns: true } })})`);
+      await sleep(400); // let state:changed land so the pane becomes allowed
+      // per-order location move: DS chip + row swap action
+      await exec(`
+        state.locations = { primaryName: 'Digital World Shop', fallbackName: 'DropShip', fallbackSet: true };
+        state.orderMeta['119121297240391'] = { source: 'WALMART', dropship: true, despatchBy: '', items: [{ sku: 'S25-128GB-NAVY', qty: 1, title: '', img: '' }] };
+        state.orderMeta['02-12345-67890'] = { source: 'EBAY', despatchBy: '', items: [{ sku: 'A16-64GB-BLK', qty: 2, title: '', img: '' }] };
+        render();
+        const tr = document.querySelector('#rowsBody tr:last-child');
+        if (tr) tr.querySelector('.row-actions').style.opacity = '1';
+      `);
+      await sleep(250);
+      img = await win.webContents.capturePage();
+      const moveShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-move.png');
+      fs.writeFileSync(moveShot, img.toPNG());
+      console.log(`SHOT ${moveShot}`);
+      // substitution: pill on the row + the dialog prefilled
+      db.setSubstitution(ebayRow.id, 'X230-128GB-GRAY', 2, 'ordered A16-64GB-BLK, shipped X230-128GB-GRAY');
+      await exec(`api.updateRow(${ebayRow.id}, {})`);
+      await sleep(250);
+      await exec(`
+        recvItems = recvItems || [];
+        openSubDialog(state.rows.find(r => r.id === ${ebayRow.id}));
+      `);
+      await sleep(250);
+      img = await win.webContents.capturePage();
+      const subShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-substitute.png');
+      fs.writeFileSync(subShot, img.toPNG());
+      console.log(`SHOT ${subShot}`);
+      await exec(`$('subDialog').close()`);
+      db.setSubstitution(ebayRow.id, '', 0, '');
+      await exec(`api.updateRow(${ebayRow.id}, {})`);
+      // marketplace browser pane docked beside the capture sheet
+      await exec(`bPane.visible = true; applyBrowserPane();`);
+      await sleep(200); // let the rAF layout pass run
+      const align = await exec(`[
+        Math.round($('findBar').getBoundingClientRect().left),
+        Math.round($('rowsMain').getBoundingClientRect().left),
+        Math.round($('findBar').getBoundingClientRect().width),
+        Math.round($('rowsMain').getBoundingClientRect().width),
+      ]`);
+      check('find bar aligns with the sheet column while the pane is open',
+        Math.abs(align[0] - align[1]) <= 1 && Math.abs(align[2] - align[3]) <= 1, align);
+      // the loading panel, exactly as a PO#-click shows it
+      await exec(`bShowLoading('Opening order 119121415476080'); $('bLoadDomain').textContent = 'seller.walmart.com';`);
+      await sleep(250);
+      img = await win.webContents.capturePage();
+      const loadShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-browser-loadingpane.png');
+      fs.writeFileSync(loadShot, img.toPNG());
+      console.log(`SHOT ${loadShot}`);
+      await exec('bHideLoading()');
+      await exec(`api.browserOpenUrl('https://example.com')`);
+      await sleep(3000); // page load
+      img = await win.capturePage(); // window layout (native view compositing may be blank here)
+      const paneShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-browser.png');
+      fs.writeFileSync(paneShot, img.toPNG());
+      console.log(`SHOT ${paneShot}`);
+      try {
+        // the pane's own contents, as proof the page really loaded in it
+        const kid = win.contentView.children.find(v => v.webContents);
+        if (kid) {
+          const pimg = await kid.webContents.capturePage();
+          const pageShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-browser-page.png');
+          fs.writeFileSync(pageShot, pimg.toPNG());
+          console.log(`SHOT ${pageShot}`);
+        }
+      } catch { /* capture is best effort */ }
+      await exec(`bPane.visible = false; applyBrowserPane();`);
+      await sleep(200);
+      // the receiving worksheet with lines, tracking, note + an expanded past day
       await exec(`$('recvDialog').showModal(); enterReceiving();`);
       await sleep(500); // let the past-receipts list load
       await exec(`recvSeed(${JSON.stringify([
@@ -262,6 +537,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const recvShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-receiving.png');
       fs.writeFileSync(recvShot, img.toPNG());
       console.log(`SHOT ${recvShot}`);
+      await exec(`$('recvDialog').close()`);
       // third shot: the open-orders-per-SKU dialog, seeded with demo rows
       await exec(`ioRender('S25-128GB-NAVY', ${JSON.stringify([
         { source: 'WALMART', reference: '119121297240391', channelSku: 'WM-S25-NVY-128', quantity: 1, date: '2026-07-31T14:12:00Z' },
@@ -310,6 +586,57 @@ module.exports = async function run({ app, win, db, clipboard }) {
       fs.writeFileSync(imgLoadShot, img.toPNG());
       console.log(`SHOT ${imgLoadShot}`);
       await exec(`imgState = 'idle'; $('imgDialog').close();`);
+      // New SKU dialog, prefilled the way the returns mapping flow opens it
+      await exec(`openNewSkuDialog({ sku: 's25-128gb-navy-openbox', title: 'Samsung Galaxy S25 128GB Navy (Open Box)', retailPrice: 449.99 })`);
+      await exec(`$('skuQty').value = '2'; $('skuPurchase').value = '310';`);
+      await sleep(300);
+      img = await win.webContents.capturePage();
+      const skuShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-new-sku.png');
+      fs.writeFileSync(skuShot, img.toPNG());
+      console.log(`SHOT ${skuShot}`);
+      await exec(`$('skuDialog').close()`);
+      // returns worksheet: matched rows (one per unit) + an unmatched row + history
+      // (shot at a desktop-ish width: the sheet fills the page, no inner scroll)
+      win.setContentSize(1360, 1000);
+      db.saveConditionMapping('S25-128GB-NAVY', 'openbox', 'S25-128GB-NAVY-OPENBOX');
+      await exec(`showPage('returns')`);
+      await sleep(300);
+      await exec(`
+        recvItems = ${JSON.stringify([
+          { sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', barcode: '' },
+          { sku: 'S25-128GB-NAVY-OPENBOX', title: 'Samsung Galaxy S25 128GB Navy (Open Box)', barcode: '' },
+          { sku: 'A16-64GB-BLK', title: 'Samsung Galaxy A16 64GB Black', barcode: '' },
+          { sku: 'A16-64GB-BLK-USED', title: 'Samsung Galaxy A16 64GB Black (Used)', barcode: '' },
+        ])};
+        recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+        recvByBarcode = new Map();
+        recvLookup = 'ready';
+      `);
+      const retAt = new Date().toISOString();
+      const s25Targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
+      await exec(`retReceivedBy = 'IM'; retDrafts = ${JSON.stringify([
+        { po: '119121310078834', orderId: 'oid-1', source: 'WALMART', customer: 'J. Alvarez', tracking: '1ZF98W401234567890', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, condition: 'openbox', targets: s25Targets, note: 'box opened once, resealed', pick: '', receivedBy: 'IM', unmatched: false, at: retAt },
+        { po: '119121310078834', orderId: 'oid-1', source: 'WALMART', customer: 'J. Alvarez', tracking: '1ZF98W401234567890', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, condition: 'new', targets: s25Targets, note: '', pick: '', receivedBy: 'IM', unmatched: false, at: retAt },
+        { po: 'WMR-4479', orderId: null, source: '', customer: '', tracking: '', sku: 'A16-64GB-BLK', title: 'Samsung Galaxy A16 64GB Black', price: 139.99, condition: 'used', targets: { new: 'A16-64GB-BLK', openbox: '', used: 'A16-64GB-BLK-USED', scrap: '' }, note: 'WFS removal - dispute open', pick: '', receivedBy: 'IM', unmatched: true, at: retAt },
+      ])}; renderRetSheet();`);
+      await sleep(400);
+      img = await win.webContents.capturePage();
+      const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-sheet.png');
+      fs.writeFileSync(retShot, img.toPNG());
+      console.log(`SHOT ${retShot}`);
+      // condition-mapping editor, seeded with mixed auto/manual rows
+      await exec(`$('mapDialog').showModal(); $('mapSearch').value = ''; mapRows = ${JSON.stringify([
+        { baseSku: 'A16-64GB-BLK', conds: { used: { sku: 'A16-64GB-BLK-USED', source: 'manual' } } },
+        { baseSku: 'S25-128GB-NAVY', conds: { openbox: { sku: 'S25-128GB-NAVY-OPENBOX', source: 'auto' }, used: { sku: 'S25-128GB-NAVY-USED', source: 'auto' }, scrap: { sku: 'SCRAP-PARTS-BIN', source: 'manual' } } },
+        { baseSku: 'S25-256GB-ICYBLUE', conds: { openbox: { sku: 'S25-256GB-ICYBLUE-OPENBOX', source: 'auto' } } },
+      ])}; renderMapList();`);
+      await sleep(300);
+      img = await win.webContents.capturePage();
+      const mapShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-mappings.png');
+      fs.writeFileSync(mapShot, img.toPNG());
+      console.log(`SHOT ${mapShot}`);
+      await exec(`$('mapDialog').close()`);
+      win.setContentSize(860, 1000);
     }
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);

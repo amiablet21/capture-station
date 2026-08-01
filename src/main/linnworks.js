@@ -114,6 +114,9 @@ class LinnworksClient {
         sku: it.SKU || it.ItemNumber || '',
         title: it.Title || '',
         quantity: it.Quantity || 1,
+        // substitution reversal must skip lines that never deducted stock
+        isService: !!it.IsService,
+        unlinked: !!it.IsUnlinked,
       })),
       shippingInfo: order.ShippingInfo || {},
     };
@@ -204,6 +207,7 @@ class LinnworksClient {
           reference: o.GeneralInfo ? o.GeneralInfo.ReferenceNum : '',
           source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
+          despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
           // ALL lines are returned, flagged: unlinked lines still reserve stock
           // (they carry a SKU and count in InOrders), so the Stock page's
           // per-SKU order list must see them. Consumers that need a live stock
@@ -363,6 +367,11 @@ class LinnworksClient {
         sku: it.SKU || it.ItemNumber || '',
         title: it.Title || '',
         quantity: it.Quantity || 1,
+        // sold price per unit for the returns sheet: PricePerUnit when the
+        // channel provides it, otherwise the line total divided down
+        price: Math.round(((Number(it.PricePerUnit) > 0
+          ? Number(it.PricePerUnit)
+          : (Number(it.CostIncTax) || 0) / (it.Quantity || 1))) * 100) / 100,
       }));
     } catch { /* items stay empty; the UI lets the user pick the SKU */ }
     return out;
@@ -395,6 +404,27 @@ class LinnworksClient {
 
   async moveOrdersToLocation(orderIds, locationId) {
     return this.call('Orders/MoveToLocation', { orderIds, pkStockLocationId: locationId });
+  }
+
+  // Create a bare stock item. Verified: POST Inventory/AddInventoryItem with
+  // { inventoryItem: StockItem } returns 204 No Content, so the StockItemId
+  // GUID is generated client-side and returned for follow-up calls.
+  // MinimumLevel null = the account's default; TaxRate -1 = country rate.
+  async createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice }) {
+    const stockItemId = globalThis.crypto.randomUUID();
+    await this.call('Inventory/AddInventoryItem', {
+      inventoryItem: {
+        StockItemId: stockItemId,
+        ItemNumber: sku,
+        ItemTitle: title,
+        BarcodeNumber: barcode || '',
+        RetailPrice: Number(retailPrice) || 0,
+        PurchasePrice: Number(purchasePrice) || 0,
+        MinimumLevel: null,
+        TaxRate: -1,
+      },
+    });
+    return { stockItemId };
   }
 
   async getLocations() {
