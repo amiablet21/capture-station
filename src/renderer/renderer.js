@@ -22,12 +22,16 @@ if (!window.api) {
     captureOnly: true,
     pages: { stock: true, history: true, receiving: false },
     csv: { path: 'C:\\Users\\packer\\Documents\\Capture Station\\capture-2026-07-30.csv', at: at(0), error: null },
+    orderMeta: {},
+    orderUrlTemplates: {},
   };
   window.api = {
     getState: async () => demo,
     submitScan: async () => ({ ok: false, error: 'Preview mode, scanning is inert.' }),
     nextOrder: async () => ({ ok: true }),
     addOrderAnyway: async () => ({ ok: true }),
+    openOrderPage: async () => ({ ok: false }),
+    refreshOrders: async () => ({ ok: true }),
     reopenRow: async () => ({ ok: true }),
     undo: async () => ({ ok: true, message: 'Preview mode' }),
     updateRow: async () => ({ ok: true }),
@@ -59,6 +63,7 @@ if (!window.api) {
 }
 
 let state = null;
+let channelFilter = 'all'; // marketplace chip on the capture list
 let pendingConfirm = null; // { value, reason, duplicate }
 let editingRowId = null;
 let toastTimer = null;
@@ -214,6 +219,26 @@ function render() {
   // numbers are kept so a filtered row matches its unfiltered position)
   const total = state.rows.length;
   let visible = state.rows.map((row, idx) => ({ row, num: total - idx }));
+
+  // marketplace filter chips (shown once there is more than one channel)
+  const channels = [...new Set(state.rows.map(r => r.channel))];
+  const chipBar = $('channelChips');
+  if (activePage === 'capture' && state.rows.length && channels.length > 1) {
+    if (channelFilter !== 'all' && !channels.includes(channelFilter)) channelFilter = 'all';
+    const counts = {};
+    for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
+    chipBar.hidden = false;
+    chipBar.innerHTML = [
+      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${state.rows.length}</button>`,
+      ...channels.map(c =>
+        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+    ].join('');
+  } else {
+    chipBar.hidden = true;
+    channelFilter = 'all';
+  }
+  if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
+
   if (findQuery) {
     const q = findQuery.toLowerCase();
     visible = visible.filter(({ row }) =>
@@ -227,13 +252,21 @@ function render() {
   const empty = visible.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty || !!findQuery; // finder shows "no matches" itself
-  $('rowsBody').innerHTML = visible.map(({ row, num }) => `
+  $('rowsBody').innerHTML = visible.map(({ row, num }) => {
+    const meta = (state.orderMeta || {})[row.order_number];
+    const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
+    const itemsTxt = meta && meta.items && meta.items.length
+      ? meta.items.map(i => `${i.sku}${i.qty > 1 ? ` ×${i.qty}` : ''}`).join(', ')
+      : '';
+    return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
         <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
-        <span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span>${
+        ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
+        <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
+      <td class="cell-items" title="${esc(itemsTxt)}">${esc(itemsTxt)}</td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${notesCell(row)}</td>
       <td class="cell-actions">
@@ -243,7 +276,8 @@ function render() {
           <button class="btn-icon is-danger" data-act="del" title="Delete">${ICONS.trash}</button>
         </span>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   knownRowIds.clear();
   state.rows.forEach(r => knownRowIds.add(r.id));
   firstRender = false;
@@ -371,7 +405,28 @@ async function copyFromApp(text) {
   toast(`Copied ${text}`);
 }
 
+$('channelChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip-filter');
+  if (!chip) return;
+  channelFilter = chip.dataset.ch;
+  render();
+  focusScan();
+});
+
 $('rowsBody').addEventListener('click', async (e) => {
+  // PO# with a marketplace link: select the row (so the tracking you copy
+  // next lands here) and open the order page in the browser
+  const link = e.target.closest('.order-link');
+  if (link) {
+    const tr = link.closest('tr');
+    const row = state.rows.find(r => r.id === Number(tr.dataset.id));
+    if (row && !row.tracking && row.id !== state.currentRowId) {
+      await api.reopenRow(row.id);
+      await refresh();
+    }
+    api.openOrderPage(link.dataset.po, link.dataset.ch);
+    return;
+  }
   const btn = e.target.closest('[data-act]');
   const copyEl = e.target.closest('[data-copy]');
   if (!btn && copyEl) { copyFromApp(copyEl.dataset.copy); return; }
@@ -400,6 +455,14 @@ $('rowsBody').addEventListener('click', async (e) => {
     }
     focusScan();
   }
+});
+
+// right-click a linked PO# to copy it (left-click opens the marketplace)
+$('rowsBody').addEventListener('contextmenu', (e) => {
+  const link = e.target.closest('.order-link');
+  if (!link) return;
+  e.preventDefault();
+  copyFromApp(link.dataset.po);
 });
 
 /* ---------- edit dialog ---------- */
@@ -2006,6 +2069,13 @@ api.on('sync:progress', (p) => {
 api.on('sync:done', (summary) => {
   showSyncResults(summary);
   refresh();
+});
+
+api.on('orders:imported', ({ added, removed }) => {
+  const parts = [];
+  if (added) parts.push(`${added} new order${added === 1 ? '' : 's'} from Linnworks`);
+  if (removed) parts.push(`${removed} no longer open (removed)`);
+  if (parts.length) toast(parts.join(' · '), 3500);
 });
 
 api.on('routing:done', (res) => {

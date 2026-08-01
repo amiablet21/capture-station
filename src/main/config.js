@@ -72,6 +72,15 @@ const DEFAULTS = {
   // folder = Documents\Capture Station\receiving.
   // webhookUrl: optional Make.com webhook POSTed on "Finish receiving".
   receiving: { folder: '', webhookUrl: '' },
+  // Auto-drop Linnworks open orders onto the Capture page as pending rows.
+  orderImport: { enabled: true },
+  // Click a PO# -> open the order on its marketplace. {po} is replaced with
+  // the order number. Empty template = clicking just selects the row.
+  orderUrlTemplates: {
+    walmart: 'https://seller.walmart.com/orders/manage-orders?orderGroups=All&poNumber={po}',
+    ebay: 'https://www.ebay.com/sh/ord/details?orderid={po}',
+    temu: '',
+  },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
   lastSync: null, // { at, synced, failed, dryRun }

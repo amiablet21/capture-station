@@ -847,6 +847,52 @@ body {
   margin: 0;
 }
 
+/* marketplace filter chips above the capture list */
+
+.channel-chips {
+  display: flex;
+  gap: 6px;
+  margin: 8px 24px -6px;
+}
+
+.chip-filter {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  cursor: pointer;
+  transition: background 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.chip-filter:hover { color: var(--text); border-color: var(--border-soft); background: var(--surface-2); }
+
+.chip-filter.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* items column + dropship badge + PO click-through */
+
+.th-items { min-width: 140px; }
+.cell-items {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge-dropship { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+
+.order-link { cursor: pointer; }
+.order-link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
 /* Ctrl+F row finder: a slim bar that slides in above the list */
 
 .find-bar {

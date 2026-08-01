@@ -59,6 +59,11 @@ function open() {
   if (!cols.includes('notes')) {
     db.exec(`ALTER TABLE rows ADD COLUMN notes TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: where the row came from ('' = captured by hand,
+  // 'linnworks' = auto-imported from open orders)
+  if (!cols.includes('origin')) {
+    db.exec(`ALTER TABLE rows ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
+  }
   return db;
 }
 
@@ -66,12 +71,20 @@ function parseRow(r) {
   return r ? { ...r, serials: JSON.parse(r.serials) } : null;
 }
 
-function createRow({ channel, orderNumber }) {
+function createRow({ channel, orderNumber, origin }) {
   const now = new Date();
   const res = open().prepare(
-    'INSERT INTO rows (created_at, day, channel, order_number) VALUES (?, ?, ?, ?)'
-  ).run(now.toISOString(), localDay(now), channel, orderNumber);
+    'INSERT INTO rows (created_at, day, channel, order_number, origin) VALUES (?, ?, ?, ?, ?)'
+  ).run(now.toISOString(), localDay(now), channel, orderNumber, origin || '');
   return getRow(Number(res.lastInsertRowid));
+}
+
+// Auto-imported rows the user never touched: safe to remove when their order
+// leaves Linnworks' open orders (cancelled, or processed elsewhere).
+function untouchedImportedRows() {
+  return open().prepare(
+    "SELECT * FROM rows WHERE origin = 'linnworks' AND status = 'pending' AND tracking = '' AND notes = ''"
+  ).all().map(parseRow);
 }
 
 function getRow(id) {
@@ -214,5 +227,5 @@ module.exports = {
   open, close, backup, dbPath, localDay,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed,
-  rowsToSync, createWfsShipment, listWfsShipments,
+  rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
 };

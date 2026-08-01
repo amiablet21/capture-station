@@ -58,6 +58,8 @@ function buildState() {
     captureOnly: !!cfg.captureOnly,
     pages: cfg.pages,
     csv: lastCsv,
+    orderMeta,
+    orderUrlTemplates: cfg.orderUrlTemplates || {},
   };
 }
 
@@ -548,6 +550,72 @@ async function triggerSync(trigger, ids) {
   return summary;
 }
 
+/* ---------- open-order auto-import (Capture work queue) ---------- */
+
+// Linnworks open orders drop onto the Capture page as pending rows, so the
+// packer's list IS the to-do list: click the PO#, make the label, copy the
+// tracking. Rows the user never touched disappear again if their order
+// leaves open orders (cancelled / processed elsewhere).
+let orderMeta = {}; // reference -> { source, locationId, locationName, items: [{sku, qty}] }
+
+function sourceToChannel(source) {
+  const s = String(source || '').toLowerCase();
+  if (s.includes('walmart')) return 'walmart';
+  if (s.includes('ebay')) return 'ebay';
+  if (s.includes('temu')) return 'temu';
+  return s || 'other';
+}
+
+async function runOrderImport() {
+  const cfg = config.load();
+  if (cfg.captureOnly || !(cfg.orderImport && cfg.orderImport.enabled)) return;
+  if (!cfg.linnworks.applicationId) return;
+  try {
+    const orders = await getOpenOrdersCached(cfg);
+    const fallbackId = (cfg.stockRouting || {}).fallbackLocationId || '';
+    const openRefs = new Set();
+    let added = 0;
+    const meta = {};
+    for (const o of orders) {
+      const ref = String(o.reference || '').trim();
+      if (!ref) continue;
+      openRefs.add(ref);
+      meta[ref] = {
+        source: o.source || '',
+        locationId: o.locationId || '',
+        locationName: o.locationName || '',
+        dropship: !!fallbackId && o.locationId === fallbackId,
+        items: (o.items || []).slice(0, 4).map(it => ({ sku: it.sku || it.channelSku || '', qty: it.quantity || 1 })),
+      };
+      if (!db.findByOrderNumber(ref)) {
+        db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks' });
+        added++;
+      }
+    }
+    // untouched imported rows whose order left open orders: cancelled or
+    // handled elsewhere - remove them so the queue stays truthful
+    let removed = 0;
+    for (const row of db.untouchedImportedRows()) {
+      if (!openRefs.has(row.order_number)) {
+        if (currentRowId === row.id) currentRowId = null;
+        db.deleteRow(row.id);
+        removed++;
+      }
+    }
+    orderMeta = meta;
+    if (added || removed) {
+      if (win && !win.isDestroyed()) win.webContents.send('orders:imported', { added, removed });
+    }
+    pushState();
+  } catch { /* offline or auth hiccup: next pass retries */ }
+}
+
+function startOrderImporter() {
+  const tick = () => { runOrderImport(); };
+  setTimeout(tick, 5000);
+  setInterval(tick, 5 * 60 * 1000);
+}
+
 /* ---------- stock routing scheduler ---------- */
 
 // Periodically move out-of-stock orders to the fallback location and pull
@@ -578,6 +646,19 @@ function registerIpc() {
   });
   ipcMain.handle('order:forceAdd', (_e, { channel, orderNumber }) => {
     ingestOrder(channel, orderNumber, { force: true });
+    return { ok: true };
+  });
+  ipcMain.handle('order:openExternal', (_e, { orderNumber, channel }) => {
+    const cfg = config.load();
+    const tpl = (cfg.orderUrlTemplates || {})[channel] || '';
+    if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No marketplace link set for this channel.' };
+    const url = tpl.replace('{po}', encodeURIComponent(String(orderNumber)));
+    shell.openExternal(url);
+    return { ok: true };
+  });
+  ipcMain.handle('orders:refresh', async () => {
+    openOrdersCache = { at: 0, data: null, promise: null }; // force a fresh fetch
+    await runOrderImport();
     return { ok: true };
   });
   ipcMain.handle('order:open', (_e, id) => {
@@ -906,6 +987,7 @@ app.whenReady().then(() => {
   createWindow();
   startClipboardWatcher();
   startStockRouter();
+  startOrderImporter();
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {
