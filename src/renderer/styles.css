@@ -59,6 +59,9 @@
 /* the hidden attribute always wins, even over display:flex rules */
 [hidden] { display: none !important; }
 
+/* invisible but still occupying layout space (no shifting on page switches) */
+.invisible { visibility: hidden !important; pointer-events: none; }
+
 html, body { height: 100%; }
 
 body {
@@ -1201,96 +1204,113 @@ body {
   overflow: hidden;
 }
 
-.recv-past-table { width: 100%; border-collapse: collapse; }
+/* past receipts: collapsible day rows -> mono ledger receipt cards */
 
-.recv-past-table td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border-soft);
-  border-right: 1px solid var(--border-soft);
-  height: 32px;
-  font-size: 12.5px;
-  color: var(--muted);
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.recv-past-table tr:last-child td { border-bottom: none; }
-.recv-past-table td:last-child { border-right: none; }
-.recv-past-table td .mono { font-weight: 600; color: var(--text); }
-
-.recv-past-table td.cell-gutter { width: 34px; }
-.recv-past-table td.recv-units-cell {
-  width: 64px;
-  text-align: right;
+.recv-day-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-size: 12.5px;
   color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+  cursor: pointer;
 }
 
-.recv-day-preview { max-width: 340px; }
-
-tr.recv-day { cursor: pointer; }
-tr.recv-day:hover td:not(.cell-gutter) { background: var(--surface-2); }
-
-/* individual receipts inside an expanded day */
-tr.recv-sess { cursor: pointer; }
-tr.recv-sess td { background: var(--surface-2); }
-tr.recv-sess td.cell-gutter { background: var(--surface-2); }
-tr.recv-sess td:nth-child(2) { padding-left: 18px; }
-tr.recv-sess:hover td { background: var(--accent-soft); }
-
-.recv-sess-meta { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-
-.recv-past-meta {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--muted);
-  padding: 2px 0 6px;
-}
-
-.recv-past-meta .mono { font-weight: 600; color: var(--text); font-size: 12px; }
-.recv-past-meta-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--faint);
-  margin-right: 4px;
-}
+.recv-day-row:hover { background: var(--surface-2); }
+.recv-day-row:last-child { border-bottom: none; }
+.recv-day-label { font-weight: 600; white-space: nowrap; }
+.recv-day-preview { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recv-day-units { font-weight: 600; white-space: nowrap; }
 
 .recv-caret {
   display: inline-flex;
   width: 12px;
   height: 12px;
-  margin-right: 6px;
-  vertical-align: -1px;
   color: var(--faint);
   transition: transform 150ms var(--ease);
 }
 
 .recv-caret svg { width: 12px; height: 12px; }
-tr.recv-day.is-open .recv-caret, tr.recv-sess.is-open .recv-caret { transform: rotate(90deg); color: var(--accent); }
+.recv-day-row.is-open .recv-caret { transform: rotate(90deg); color: var(--accent); }
 
-td.recv-lines-cell { padding: 0 !important; background: var(--surface-2); }
-
-.recv-past-lines { padding: 6px 12px 8px 46px; }
-
-.recv-past-line {
+.recv-cards {
   display: flex;
-  gap: 12px;
-  align-items: baseline;
-  font-size: 12px;
-  padding: 2px 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-soft);
 }
 
-.recv-past-line .mono { font-weight: 600; font-size: 12px; }
-.recv-past-line-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recv-past-line-qty { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.recv-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  max-width: 560px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.recv-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.recv-stamp {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 8px;
+}
+
+.recv-stamp.is-fail { color: var(--neg-text); border-color: var(--neg-text); }
+
+.recv-card-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+.recv-card-lines { border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 5px; }
+
+.recv-card-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.recv-card-sku { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recv-card-qty { color: var(--muted); flex: 0 0 auto; }
+
+.recv-card-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding-top: 5px;
+}
+
+.recv-card-total span:first-child { color: var(--muted); }
+.recv-card-total span:last-child { font-weight: 600; }
+
+.recv-card-note {
+  font-family: var(--font);
+  font-size: 11.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border-soft);
+  margin-top: 6px;
+  padding-top: 6px;
+}
 
 .recv-past-empty {
   padding: 32px 24px;

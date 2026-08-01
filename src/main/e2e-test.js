@@ -256,9 +256,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
         $('recvTracking').dispatchEvent(new Event('input'));
         $('recvNotes').value = 'Left at dock door 2 - one box dented, contents fine.';
       `);
-      await exec(`{ const d = document.querySelector('tr.recv-day'); if (d) d.click(); }`);
-      await sleep(150);
-      await exec(`{ const r = document.querySelector('tr.recv-sess'); if (r) r.click(); }`);
+      await exec(`{ const d = document.querySelector('.recv-day-row'); if (d) d.click(); }`);
       await sleep(400);
       img = await win.webContents.capturePage();
       const recvShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-receiving.png');

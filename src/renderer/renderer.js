@@ -154,7 +154,9 @@ function render() {
   $('historyBtn').hidden = !pages.history;
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
-  $('dayCountBox').hidden = activePage !== 'capture'; // capture stat, not a stock stat
+  // capture stat, not a stock stat — but keep its SPACE so the header never
+  // changes height/width when switching pages
+  $('dayCountBox').classList.toggle('invisible', activePage !== 'capture');
   $('nextOrderBtn').disabled = !state.currentRowId;
   $('undoBtn').disabled = !state.canUndo;
   $('dryRunChip').hidden = !state.dryRun;
@@ -170,7 +172,9 @@ function render() {
 
   // footer: capture-only shows the CSV mirror, otherwise the sync controls
   const syncEl = $('syncStatus');
-  $('syncBtn').hidden = state.captureOnly || activePage !== 'capture';
+  $('syncBtn').hidden = state.captureOnly;
+  // off-page: invisible but still occupying space, so the footer never jumps
+  $('syncBtn').classList.toggle('invisible', activePage !== 'capture');
   $('openCsvBtn').hidden = !state.captureOnly;
   if (activePage !== 'capture') $('dryRunChip').hidden = true;
   if (state.captureOnly) {
@@ -1319,7 +1323,6 @@ let recvLookup = 'idle'; // idle | loading | ready | unavailable
 let recvPending = null; // { sku, qty } unknown SKU awaiting Add anyway / Discard
 let recvPast = []; // past sessions from receiving:list
 const recvOpenDays = new Set(); // expanded day groups in Past receipts
-const recvOpenSessions = new Set(); // expanded individual receipts
 let recvTrackingRes = null; // compiled tracking patterns for the loose hint
 
 // SKU lookup reuses the same Linnworks inventory fetch as the Stock page.
@@ -1684,23 +1687,38 @@ function recvDayLabel(key) {
   return Number.isNaN(d.getTime()) ? key : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// one receipt's expanded block: shipment meta (when present) + its lines
-function recvSessLinesHtml(s) {
+// one receipt as a mono ledger card: head line + stamp, meta, ruled lines,
+// units total, notes footer ("Design B")
+function recvReceiptCardHtml(s) {
+  const st = recvSessStatus(s);
+  const stamp = st.cls === 'st-failed'
+    ? { txt: 'WEBHOOK FAILED', cls: 'is-fail' }
+    : { txt: 'RECEIVED', cls: '' };
+  const head = [s.finishedAt ? fmtTime(s.finishedAt) : '—', s.station || ''].filter(Boolean).join(' · ');
   const meta = [
-    s.reference ? `<span><span class="recv-past-meta-label">Ref</span><span class="mono">${esc(s.reference)}</span></span>` : '',
-    s.trackingNumber ? `<span><span class="recv-past-meta-label">Tracking</span><span class="mono">${esc(s.trackingNumber)}</span></span>` : '',
-    s.notes ? `<span><span class="recv-past-meta-label">Notes</span>${esc(s.notes)}</span>` : '',
-  ].filter(Boolean).join('');
+    s.reference ? `ref ${s.reference}` : '',
+    s.trackingNumber ? `trk ${s.trackingNumber}` : '',
+  ].filter(Boolean).join(' · ');
   return `
-    <tr><td class="recv-lines-cell" colspan="4"><div class="recv-past-lines">
-      ${meta ? `<div class="recv-past-meta">${meta}</div>` : ''}
+  <div class="recv-card" title="${esc(st.title)}">
+    <div class="recv-card-head">
+      <span>${esc(head)}</span>
+      <span class="recv-stamp ${stamp.cls}">${stamp.txt}</span>
+    </div>
+    ${meta ? `<div class="recv-card-meta">${esc(meta)}</div>` : ''}
+    <div class="recv-card-lines">
       ${s.lines.map(l => `
-      <div class="recv-past-line">
-        <span class="mono">${esc(l.sku)}</span>
-        <span class="recv-past-line-title">${esc(l.title)}</span>
-        <span class="recv-past-line-qty">×${l.qty}</span>
+      <div class="recv-card-line">
+        <span class="recv-card-sku" title="${esc(l.title || l.sku)}">${esc(l.sku)}</span>
+        <span class="recv-card-qty">×&nbsp;&nbsp;${l.qty}</span>
       </div>`).join('')}
-    </div></td></tr>`;
+      <div class="recv-card-total">
+        <span>${s.lines.length} line${s.lines.length === 1 ? '' : 's'}</span>
+        <span>${recvSessUnits(s)} unit${recvSessUnits(s) === 1 ? '' : 's'}</span>
+      </div>
+    </div>
+    ${s.notes ? `<div class="recv-card-note">${esc(s.notes)}</div>` : ''}
+  </div>`;
 }
 
 function renderRecvPast() {
@@ -1720,51 +1738,27 @@ function renderRecvPast() {
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(s);
   }
-  box.innerHTML = `
-    <table class="recv-past-table">
-      <tbody>${[...days.entries()].map(([day, list]) => {
-        const open = recvOpenDays.has(day);
-        const units = list.reduce((a, s) => a + recvSessUnits(s), 0);
-        // aggregated per-SKU preview across the day's receipts
-        const totals = new Map();
-        for (const s of list) for (const l of s.lines) totals.set(l.sku, (totals.get(l.sku) || 0) + l.qty);
-        const parts = [...totals.entries()].slice(0, 3).map(([sku, q]) => `${sku} ×${q}`);
-        const preview = parts.join(', ') + (totals.size > 3 ? ' …' : '');
-        return `
-        <tr class="recv-day ${open ? 'is-open' : ''}" data-day="${esc(day)}" title="Click to ${open ? 'collapse' : 'expand'} this day">
-          <td class="cell-gutter"><span class="recv-caret">${CARET_ICON}</span></td>
-          <td><span class="mono">${esc(recvDayLabel(day))}</span> · ${list.length} receipt${list.length === 1 ? '' : 's'}</td>
-          <td class="recv-day-preview" title="${esc(preview)}">${esc(preview)}</td>
-          <td class="recv-units-cell">${units}</td>
-        </tr>
-        ${open ? list.map(s => {
-          const st = recvSessStatus(s);
-          const sOpen = recvOpenSessions.has(s.file);
-          const detail = [s.reference, s.trackingNumber].filter(Boolean).join(' · ');
-          return `
-          <tr class="recv-sess ${sOpen ? 'is-open' : ''}" data-file="${esc(s.file)}" title="Click to ${sOpen ? 'hide' : 'show'} the lines">
-            <td class="cell-gutter"><span class="recv-caret">${CARET_ICON}</span></td>
-            <td><span class="mono">${s.finishedAt ? fmtTime(s.finishedAt) : '—'}</span> · ${esc(s.station || '—')}
-              <span class="history-status ${st.cls}" title="${esc(st.title)}">${esc(st.label)}</span></td>
-            <td class="recv-sess-meta" title="${esc(detail)}">${detail ? esc(detail) : `${s.lines.length} SKU${s.lines.length === 1 ? '' : 's'}`}</td>
-            <td class="recv-units-cell">${recvSessUnits(s)}</td>
-          </tr>
-          ${sOpen ? recvSessLinesHtml(s) : ''}`;
-        }).join('') : ''}`;
-      }).join('')}</tbody>
-    </table>`;
+  box.innerHTML = [...days.entries()].map(([day, list]) => {
+    const open = recvOpenDays.has(day);
+    const units = list.reduce((a, s) => a + recvSessUnits(s), 0);
+    // aggregated per-SKU preview across the day's receipts
+    const totals = new Map();
+    for (const s of list) for (const l of s.lines) totals.set(l.sku, (totals.get(l.sku) || 0) + l.qty);
+    const parts = [...totals.entries()].slice(0, 3).map(([sku, q]) => `${sku} ×${q}`);
+    const preview = parts.join(', ') + (totals.size > 3 ? ' …' : '');
+    return `
+    <div class="recv-day-row ${open ? 'is-open' : ''}" data-day="${esc(day)}" title="Click to ${open ? 'collapse' : 'expand'} this day">
+      <span class="recv-caret">${CARET_ICON}</span>
+      <span class="recv-day-label">${esc(recvDayLabel(day))} · ${list.length} receipt${list.length === 1 ? '' : 's'}</span>
+      <span class="recv-day-preview" title="${esc(preview)}">${esc(preview)}</span>
+      <span class="recv-day-units">${units} units</span>
+    </div>
+    ${open ? `<div class="recv-cards">${list.map(recvReceiptCardHtml).join('')}</div>` : ''}`;
+  }).join('');
 }
 
 $('recvPastBox').addEventListener('click', (e) => {
-  const sess = e.target.closest('tr.recv-sess');
-  if (sess) {
-    const file = sess.dataset.file;
-    if (recvOpenSessions.has(file)) recvOpenSessions.delete(file);
-    else recvOpenSessions.add(file);
-    renderRecvPast();
-    return;
-  }
-  const day = e.target.closest('tr.recv-day');
+  const day = e.target.closest('.recv-day-row');
   if (day) {
     const key = day.dataset.day;
     if (recvOpenDays.has(key)) recvOpenDays.delete(key);
