@@ -277,7 +277,14 @@ function render() {
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = (state.orderMeta || {})[row.order_number];
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
-    const metaItems = (meta && meta.items) || [];
+    const allItems = (meta && meta.items) || [];
+    // first three entries render fully; the rest collapse into "+N more"
+    // with the full list on hover, so big orders never silently truncate
+    const metaItems = allItems.slice(0, 3);
+    const moreItems = allItems.slice(3);
+    const moreHtml = moreItems.length
+      ? `<span class="item-more" data-tip="${esc(moreItems.map(i => `${i.sku || i.channelSku || i.title || '?'} ×${i.qty}`).join(', '))}">+${moreItems.length} more</span>`
+      : '';
     const itemsHtml = metaItems.map(i => {
       const linked = !i.unmapped && i.sku;
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
@@ -288,7 +295,7 @@ function render() {
       return linked
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
-    }).join(' ');
+    }).join(' ') + moreHtml;
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>

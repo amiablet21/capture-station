@@ -620,7 +620,7 @@ async function runOrderImport() {
         locationId: o.locationId || '',
         locationName: o.locationName || '',
         dropship: !!fallbackId && o.locationId === fallbackId,
-        items: (o.items || []).filter(it => !it.isService).slice(0, 4).map(it => {
+        items: (o.items || []).filter(it => !it.isService).map(it => {
           const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
           return {
             sku: it.sku || '',
