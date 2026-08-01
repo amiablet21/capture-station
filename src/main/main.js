@@ -48,6 +48,7 @@ function buildState() {
     // Capture-only mode: plain view of today's captures, as before.
     rows: cfg.captureOnly ? db.todayRows() : db.activeRows(),
     todayCount: db.todayRows().length,
+    todayProcessed: db.todayRows().filter(r => r.status === 'synced').length,
     currentRowId,
     expecting: current && !current.tracking ? 'tracking' : null,
     canUndo: undoStack.length > 0,

@@ -154,6 +154,8 @@ function render() {
   $('historyBtn').hidden = !pages.history;
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
+  const openToday = (state.todayCount || 0) - (state.todayProcessed || 0);
+  $('dayCountBox').title = `${state.todayProcessed || 0} processed · ${openToday} still open`;
   // capture stat, not a stock stat — but keep its SPACE so the header never
   // changes height/width when switching pages
   $('dayCountBox').classList.toggle('invisible', activePage !== 'capture');
@@ -208,14 +210,26 @@ function render() {
   }
   $('syncBtn').disabled = !!state.syncRunning;
 
-  // rows table
-  const empty = state.rows.length === 0;
-  $('rowsTable').hidden = empty;
-  $('rowsEmpty').hidden = !empty;
+  // rows table, optionally narrowed by the Ctrl+F finder (original row
+  // numbers are kept so a filtered row matches its unfiltered position)
   const total = state.rows.length;
-  $('rowsBody').innerHTML = state.rows.map((row, idx) => `
+  let visible = state.rows.map((row, idx) => ({ row, num: total - idx }));
+  if (findQuery) {
+    const q = findQuery.toLowerCase();
+    visible = visible.filter(({ row }) =>
+      row.order_number.toLowerCase().includes(q)
+      || (row.tracking || '').toLowerCase().includes(q)
+      || (row.notes || '').toLowerCase().includes(q));
+    $('findCount').textContent = visible.length === 0 ? 'no matches' : `${visible.length} of ${total}`;
+  } else {
+    $('findCount').textContent = '';
+  }
+  const empty = visible.length === 0;
+  $('rowsTable').hidden = empty;
+  $('rowsEmpty').hidden = !empty || !!findQuery; // finder shows "no matches" itself
+  $('rowsBody').innerHTML = visible.map(({ row, num }) => `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
-      <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${total - idx}</td>
+      <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
         <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
         <span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span>${
@@ -315,7 +329,40 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     $('undoBtn').click();
   }
+  if (e.ctrlKey && (e.key === 'f' || e.key === 'F') && activePage === 'capture') {
+    e.preventDefault();
+    openFind();
+  }
 });
+
+/* ---------- Ctrl+F row finder ---------- */
+
+let findQuery = '';
+
+function openFind() {
+  $('findBar').hidden = false;
+  $('findInput').focus();
+  $('findInput').select();
+}
+
+function closeFind() {
+  findQuery = '';
+  $('findInput').value = '';
+  $('findBar').hidden = true;
+  render();
+  focusScan();
+}
+
+$('findInput').addEventListener('input', () => {
+  findQuery = $('findInput').value.trim();
+  render();
+});
+
+$('findInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+});
+
+$('findClose').addEventListener('click', closeFind);
 
 /* ---------- rows list actions ---------- */
 
@@ -601,6 +648,11 @@ let activePage = 'capture';
 
 function showPage(page) {
   activePage = page;
+  if (page !== 'capture' && !$('findBar').hidden) {
+    findQuery = '';
+    $('findInput').value = '';
+    $('findBar').hidden = true;
+  }
   $('scanPanel').hidden = page !== 'capture';
   document.querySelector('main.rows').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
@@ -1731,10 +1783,14 @@ function renderRecvPast() {
       </div>`;
     return;
   }
-  // group by local day (sessions arrive newest first, so day order holds)
+  // group by LOCAL day (slicing the ISO string would use UTC and file
+  // late-evening receipts under the next day)
   const days = new Map();
   for (const s of recvPast) {
-    const key = String(s.finishedAt).slice(0, 10) || 'unknown';
+    const d = new Date(s.finishedAt);
+    const key = Number.isNaN(d.getTime())
+      ? 'unknown'
+      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(s);
   }

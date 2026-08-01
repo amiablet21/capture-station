@@ -17,7 +17,7 @@
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
-        <span class="daycount-label">Orders today</span>
+        <span class="daycount-label" id="dayCountLabel">Captured today</span>
       </div>
     </div>
   </header>
@@ -41,6 +41,12 @@
       <button id="undoBtn" class="btn btn-ghost" disabled>Undo last</button>
     </div>
   </section>
+
+  <div id="findBar" class="find-bar" hidden>
+    <input id="findInput" class="input mono" type="text" placeholder="Find order #, tracking or note…" autocomplete="off" spellcheck="false" />
+    <span id="findCount" class="find-count"></span>
+    <button id="findClose" class="btn-icon" title="Close (Esc)" aria-label="Close search">✕</button>
+  </div>
 
   <main class="rows" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
