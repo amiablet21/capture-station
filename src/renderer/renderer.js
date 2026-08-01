@@ -71,7 +71,10 @@ const knownRowIds = new Set();
 let firstRender = true;
 
 const $ = (id) => document.getElementById(id);
-const scanInput = $('scanInput');
+// tracking is scanned/typed straight into the active row's inline input
+function activeScanInput() {
+  return document.getElementById('rowScanInput');
+}
 
 /* ---------- helpers ---------- */
 
@@ -129,10 +132,10 @@ function statusTitle(row) {
 function trackingCell(row) {
   if (!row.tracking) {
     if (state && row.id === state.currentRowId) {
-      return '<span class="tracking-now">Scan tracking now&hellip;</span>'
-        + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking">✕</button>';
+      return '<input id="rowScanInput" class="row-scan-input mono" type="text" placeholder="Scan tracking…" autocomplete="off" spellcheck="false" />'
+        + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking (Esc)">✕</button>';
     }
-    return '<button class="tracking-add" data-act="open" title="Click, then scan or type this order\'s tracking">+ Add tracking</button>';
+    return '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
   return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>`;
@@ -265,6 +268,9 @@ function render() {
   const empty = visible.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty || !!findQuery; // finder shows "no matches" itself
+  // a half-typed scan must survive re-renders (state pushes rebuild the tbody)
+  const prevInp = activeScanInput();
+  const prevScan = prevInp ? { value: prevInp.value, focused: document.activeElement === prevInp } : null;
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = (state.orderMeta || {})[row.order_number];
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
@@ -278,10 +284,12 @@ function render() {
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
       const qty = i.qty > 1 ? ` ×${i.qty}` : '';
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
+      const sub = i.channelSku && i.channelSku !== label
+        ? `<span class="item-sub" title="Channel SKU">${esc(i.channelSku)}</span>` : '';
       return linked
-        ? `<span class="item-entry">${thumb}${esc(label)}${qty}</span>`
-        : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}</span>`;
-    }).join(', ');
+        ? `<span class="item-entry">${thumb}<span class="item-txt"><span>${esc(label)}${qty}</span>${sub}</span></span>`
+        : `<span class="item-entry item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">${thumb}<span class="item-txt"><span>⚠ ${esc(label)}${qty}</span>${sub}</span></span>`;
+    }).join(' ');
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
@@ -305,6 +313,13 @@ function render() {
   knownRowIds.clear();
   state.rows.forEach(r => knownRowIds.add(r.id));
   firstRender = false;
+  const inp = activeScanInput();
+  if (inp && prevScan) {
+    inp.value = prevScan.value;
+    if (prevScan.focused) inp.focus();
+  } else if (inp && !anyDialogOpen() && activePage === 'capture') {
+    inp.focus(); // a row just became active: ready for the scanner immediately
+  }
 }
 
 async function refresh() {
@@ -343,11 +358,14 @@ async function submitScan(value, force) {
   showWarn({ reason: res.error || 'Scan rejected.', danger: !!res.clipped, confirmable: false });
 }
 
-scanInput.addEventListener('keydown', (e) => {
+$('rowsBody').addEventListener('keydown', (e) => {
+  const inp = e.target.closest('.row-scan-input');
+  if (!inp) return;
+  if (e.key === 'Escape') { e.preventDefault(); $('nextOrderBtn').click(); return; }
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const value = scanInput.value.trim();
-  scanInput.value = '';
+  const value = inp.value.trim();
+  inp.value = '';
   if (!value) return;
   clearWarn();
   submitScan(value, false);
@@ -2007,15 +2025,9 @@ function anyDialogOpen() {
 }
 
 function focusScan() {
-  if (!anyDialogOpen() && activePage === 'capture') scanInput.focus();
-}
-
-function updateFocusPill() {
-  const pill = $('focusPill');
-  const ready = document.hasFocus() && document.activeElement === scanInput;
-  pill.classList.toggle('is-ready', ready);
-  pill.classList.toggle('is-away', !ready);
-  pill.textContent = ready ? 'Ready to scan' : 'Click app to focus';
+  if (anyDialogOpen() || activePage !== 'capture') return;
+  const inp = activeScanInput();
+  if (inp && document.activeElement !== inp) inp.focus();
 }
 
 window.addEventListener('click', (e) => {
@@ -2025,20 +2037,19 @@ window.addEventListener('click', (e) => {
   focusScan();
 });
 
+// keep the active row's inline input ready for the barcode scanner
 setInterval(() => {
-  if (!anyDialogOpen() && activePage === 'capture' && document.hasFocus() && document.activeElement !== scanInput) {
+  if (!anyDialogOpen() && activePage === 'capture' && document.hasFocus()) {
+    const inp = activeScanInput();
     const a = document.activeElement;
-    if (!a || (a.tagName !== 'INPUT' && a.tagName !== 'TEXTAREA' && a.tagName !== 'SELECT' && a.tagName !== 'BUTTON')) {
-      scanInput.focus();
+    if (inp && a !== inp
+      && (!a || (a.tagName !== 'INPUT' && a.tagName !== 'TEXTAREA' && a.tagName !== 'SELECT' && a.tagName !== 'BUTTON'))) {
+      inp.focus();
     }
   }
-  updateFocusPill();
 }, 1500);
 
-window.addEventListener('focus', () => { focusScan(); updateFocusPill(); });
-window.addEventListener('blur', updateFocusPill);
-scanInput.addEventListener('focus', updateFocusPill);
-scanInput.addEventListener('blur', updateFocusPill);
+window.addEventListener('focus', focusScan);
 
 /* ---------- main-process events ---------- */
 
