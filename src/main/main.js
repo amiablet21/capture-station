@@ -446,6 +446,23 @@ function handleScan({ text, force }) {
   const value = String(text || '').trim();
   if (!value) return { ok: false, error: 'Empty scan.' };
   if (!currentRowId) {
+    // No row waiting for tracking: an order number typed/pasted into the scan
+    // box opens a new order, same as copying it from the marketplace page.
+    // (With a row open, tracking wins - a 15-digit PO and FedEx tracking are
+    // format-identical, and the open row means a label scan is expected.)
+    const channel = matchOrder(value);
+    if (channel) {
+      const existing = db.findByOrderNumber(value);
+      if (existing) {
+        return { ok: false, clipped: true, error: `DUPLICATE ORDER: ${value} was already captured (${existing.status}). Not added.` };
+      }
+      const similar = db.findSimilarOrder(value);
+      if (similar) {
+        return { ok: false, clipped: true, error: `POSSIBLE COPY MISTAKE: ${value} looks like a piece of ${similar.order_number}. Not added - check the number.` };
+      }
+      ingestOrder(channel, value, { force: true });
+      return { ok: true, kind: 'order' };
+    }
     return { ok: false, error: 'No open order. Copy the order number from the marketplace page first.' };
   }
   const row = db.getRow(currentRowId);
