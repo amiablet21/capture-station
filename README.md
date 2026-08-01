@@ -2,6 +2,14 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.3.0 highlights
+
+- **Capture is a work queue**: Linnworks open orders auto-drop as pending rows (every 5 min; WFS location excluded); untouched rows auto-remove when an order leaves open orders (cancellations). Marketplace filter chips, persistent search (PO#/SKU/channel SKU/title/tracking/notes), stacked item lines with thumbnails, ⚠ unmapped-listing flags, channel-SKU info dots, DS badges on dropship-routed rows.
+- **Click a PO#** to select the row and open the order on its marketplace (per-channel URL templates); tracking is scanned/typed into the row's inline box (global scan box and clipboard auto-capture removed in sync mode; capture-only stations unchanged).
+- **Returns page**: look up the processed order, grade each unit New/Open box/Used/Scrap, and stock auto-redirects to the mapped condition listing (suffix auto-derive + remembered one-time picks). Returns ledger + `returns.csv`, note on the original order.
+- **Receiving moved into the Stock page** (dialog beside WFS Shipments). Stock SKUs click through to their linked channel SKUs.
+- Resizable everything: sheet-width handles and per-column grips on Capture and Stock, all persisted.
+
 ## v1.1.0 highlights
 
 - **Process button**: manual push to Linnworks; parked orders are auto-unparked (tag 7 cleared) and stamped "was parked"; dropship orders process at the fallback location.
