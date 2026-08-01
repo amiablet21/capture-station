@@ -119,6 +119,9 @@ async function syncRow(client, row, locationId, dryRun) {
   const processLocationId = foundAtFallback ? fallbackId : locationId;
 
   const { assignments, notes } = distributeSerials(order.items, row.serials);
+  // serial tracking is retired: rows carry no serials, so serial-count
+  // mismatch notes are meaningless noise unless serials actually exist
+  const serialNotes = row.serials.length ? notes : [];
 
   if (dryRun) {
     const plan = [];
@@ -128,7 +131,7 @@ async function syncRow(client, row, locationId, dryRun) {
       plan.push(`attach ${row.serials.length} serial(s) to ${assignments.length} line(s)`);
     }
     plan.push(foundAtFallback ? 'process at DROPSHIP location, mark shipped' : 'process at warehouse, mark shipped');
-    const note = notes.length ? ` [${notes.join('; ')}]` : '';
+    const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
     return { ok: true, dryRun: true, message: `DRY RUN, would: ${plan.join(', then ')}${note}` };
   }
 
@@ -162,7 +165,7 @@ async function syncRow(client, row, locationId, dryRun) {
   switch (proc.processedState) {
     case 'PROCESSED': {
       db.markSynced(row.id);
-      const note = notes.length ? ` [${notes.join('; ')}]` : '';
+      const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
       return { ok: true, message: `Processed${foundAtFallback ? ' (dropship)' : ''}${note}` };
     }
     case 'NOT_FOUND':

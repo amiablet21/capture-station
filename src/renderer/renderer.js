@@ -625,17 +625,28 @@ $('openCsvBtn').addEventListener('click', async () => {
 function showSyncResults(summary) {
   const title = summary.error
     ? `Sync failed: ${summary.error}`
-    : `${summary.dryRun ? 'Dry run: ' : ''}${summary.synced} synced, ${summary.failed} failed of ${summary.total}`;
+    : `${summary.dryRun ? 'Dry run: ' : ''}${summary.synced} processed, ${summary.failed} failed of ${summary.total}`;
   $('syncDialogTitle').textContent = title;
   const list = $('syncDialogList');
-  const details = summary.details || [];
+  // failures first - they are what needs reading; clean rows are a glance
+  const details = (summary.details || []).slice().sort((a, b) => (a.ok === b.ok ? 0 : a.ok ? 1 : -1));
   list.innerHTML = details.length === 0
     ? '<p class="dlg-note">Nothing to send. Rows are sent to Linnworks once they have a tracking number.</p>'
-    : details.map(d => `
+    : details.map(d => {
+      const msg = d.message || '';
+      const dropship = d.ok && /dropship/i.test(msg);
+      const parked = d.ok && /parked/i.test(msg);
+      // processed rows speak through chips; only failures and dry runs need prose
+      const extra = (!d.ok || summary.dryRun) ? `<span class="sync-item-msg">${esc(msg)}</span>` : '';
+      return `
       <div class="sync-item ${d.ok ? '' : 'is-fail'}">
         <span class="mono">${esc(d.orderNumber)}</span>
-        <span class="sync-item-msg">${esc(d.message)}</span>
-      </div>`).join('');
+        <span class="history-status ${d.ok ? 'st-synced' : 'st-failed'}">${d.ok ? 'Processed' : 'Failed'}</span>
+        ${dropship ? '<span class="history-status st-captured">Dropship</span>' : ''}
+        ${parked ? '<span class="history-status st-pending">Was parked</span>' : ''}
+        ${extra}
+      </div>`;
+    }).join('');
   $('syncDialog').showModal();
 }
 
