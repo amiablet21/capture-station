@@ -257,9 +257,19 @@ function render() {
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = (state.orderMeta || {})[row.order_number];
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
-    const itemsTxt = meta && meta.items && meta.items.length
-      ? meta.items.map(i => `${i.sku}${i.qty > 1 ? ` ×${i.qty}` : ''}`).join(', ')
-      : '';
+    const metaItems = (meta && meta.items) || [];
+    const itemsTitle = metaItems.map(i => {
+      const label = (!i.unmapped && i.sku) ? i.sku : (i.channelSku || i.title || 'unknown item');
+      return `${label}${i.qty > 1 ? ` ×${i.qty}` : ''}${i.unmapped ? ' (NOT MAPPED in Linnworks)' : ''}`;
+    }).join(', ');
+    const itemsHtml = metaItems.map(i => {
+      const linked = !i.unmapped && i.sku;
+      const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
+      const qty = i.qty > 1 ? ` ×${i.qty}` : '';
+      return linked
+        ? `${esc(label)}${qty}`
+        : `<span class="item-unmapped" title="This listing is not mapped in Linnworks Channel Mapping - stock will NOT deduct when processed">⚠ ${esc(label)}${qty}</span>`;
+    }).join(', ');
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
@@ -268,7 +278,7 @@ function render() {
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
-      <td class="cell-items" title="${esc(itemsTxt)}">${esc(itemsTxt)}</td>
+      <td class="cell-items" title="${esc(itemsTitle)}">${itemsHtml}</td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${notesCell(row)}</td>
       <td class="cell-actions">

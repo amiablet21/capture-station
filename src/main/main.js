@@ -591,7 +591,16 @@ async function runOrderImport() {
         locationId: o.locationId || '',
         locationName: o.locationName || '',
         dropship: !!fallbackId && o.locationId === fallbackId,
-        items: (o.items || []).slice(0, 4).map(it => ({ sku: it.sku || it.channelSku || '', qty: it.quantity || 1 })),
+        items: (o.items || []).filter(it => !it.isService).slice(0, 4).map(it => {
+          const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
+          return {
+            sku: it.sku || '',
+            channelSku: it.channelSku || '',
+            title: it.title || '',
+            qty: it.quantity || 1,
+            unmapped: !linked,
+          };
+        }),
       };
       if (!db.findByOrderNumber(ref)) {
         db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks' });
