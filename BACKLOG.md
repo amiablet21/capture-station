@@ -27,6 +27,22 @@ Admin-side only (page toggles). Two moves:
    Mockup approved: order card with RETURN stamp (mono ledger style), live
    "-> +1 SKU-OPENBOX" preview beside the condition dropdown.
 
+   **Owner requirement added 2026-08-01 — the log is arrival-driven, not
+   order-driven.** The Returns log records whatever physically lands in the
+   warehouse; a Linnworks order match is a convenience, never a gate:
+   - Orders shipped before Linnworks adoption won't be in ProcessedOrders
+     (returns arrive 30-90 days after sale, so this is common for months).
+   - WFS returns DO come back eventually, as Walmart removal shipments —
+     often bulk boxes with a removal-order ID, no per-customer PO#, and no
+     processed order in Linnworks at all.
+   - Therefore: an **unmatched-return path is required**. Minimum record =
+     SKU (inventory picker) + condition; reference (PO# / WFS removal ID /
+     RMA) and notes optional. Same condition mapping, same stock bump, same
+     daily log + all-time history, flagged "not matched to an order".
+   - Optional layer: marketplace order-history CSV exports in a folder as a
+     fallback lookup, so pre-Linnworks returns can still auto-fill SKU and
+     sale date. Blind spot shrinks naturally as Linnworks history grows.
+
 Planned features, in the owner's words (2026-07-31). Not started yet.
 
 ## 1. Sales-velocity reorder alerts
