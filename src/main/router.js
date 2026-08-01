@@ -32,9 +32,13 @@ async function runRouting() {
       return avail.get(id);
     };
 
-    // Routing decisions only make sense for lines linked to a real stock item;
-    // service and unlinked lines have no usable stock item id.
-    const routable = (o) => o.items.filter(it => !it.isService && !it.unlinked);
+    // Routing decisions only make sense for lines linked to a real stock item.
+    // Judge by the live link (a real stock item id), NOT the IsUnlinked flag:
+    // that flag is a snapshot from download time and stays stale after a line
+    // is mapped (see docs/unlinked-orders-investigation.md).
+    const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+    const routable = (o) => o.items.filter(it =>
+      !it.isService && it.stockItemId && it.stockItemId !== ZERO_GUID);
 
     // 1) primary orders the stock cannot cover -> fallback. Newest first, so
     // the orders that pushed availability negative are the ones that leave.
