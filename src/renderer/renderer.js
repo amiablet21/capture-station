@@ -169,6 +169,9 @@ function render() {
   $('dayCountBox').classList.toggle('invisible', activePage !== 'capture');
   $('nextOrderBtn').disabled = !state.currentRowId;
   $('undoBtn').disabled = !state.canUndo;
+  $('undoFooterBtn').hidden = state.captureOnly || activePage !== 'capture';
+  $('undoFooterBtn').disabled = !state.canUndo;
+  updateScanPanel();
   $('dryRunChip').hidden = !state.dryRun;
 
   // expected-input line
@@ -325,17 +328,29 @@ async function refresh() {
 
 /* ---------- scan flow ---------- */
 
+// Sync mode: the top panel exists only to carry warnings, so it stays
+// collapsed until one appears. Capture-only keeps the full guidance panel.
+function updateScanPanel() {
+  const captureOnly = !!(state && state.captureOnly);
+  const warnOpen = !$('warnBanner').hidden;
+  $('expectLine').hidden = !captureOnly;
+  $('scanActions').hidden = !captureOnly;
+  $('scanPanel').hidden = activePage !== 'capture' || (!captureOnly && !warnOpen);
+}
+
 function showWarn({ reason, danger, confirmable = true }) {
   const b = $('warnBanner');
   $('warnText').textContent = reason;
   $('warnAccept').hidden = !confirmable;
   b.classList.toggle('is-danger', !!danger);
   b.hidden = false;
+  updateScanPanel();
 }
 
 function clearWarn() {
   $('warnBanner').hidden = true;
   pendingConfirm = null;
+  updateScanPanel();
 }
 
 async function submitScan(value, force) {
@@ -388,6 +403,8 @@ $('nextOrderBtn').addEventListener('click', async () => {
   await refresh();
   focusScan();
 });
+
+$('undoFooterBtn').addEventListener('click', () => $('undoBtn').click());
 
 $('undoBtn').addEventListener('click', async () => {
   const res = await api.undo();
@@ -771,7 +788,7 @@ let activePage = 'capture';
 function showPage(page) {
   activePage = page;
   if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
-  $('scanPanel').hidden = page !== 'capture';
+  updateScanPanel();
   document.querySelector('main.rows').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
   $('receivingPage').hidden = page !== 'receiving';

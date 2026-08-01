@@ -33,7 +33,7 @@
         <button id="warnDiscard" class="btn btn-ghost">Discard</button>
       </div>
     </div>
-    <div class="scan-actions">
+    <div class="scan-actions" id="scanActions">
       <button id="nextOrderBtn" class="btn btn-secondary" disabled>Next order</button>
       <button id="undoBtn" class="btn btn-ghost" disabled>Undo last</button>
     </div>
@@ -156,6 +156,7 @@
   <footer class="footbar">
     <div class="footbar-left">
       <button id="syncBtn" class="btn btn-primary" hidden>Process</button>
+      <button id="undoFooterBtn" class="btn btn-ghost" hidden>Undo</button>
       <span id="dryRunChip" class="chip chip-warn" hidden>Dry run</span>
       <button id="openCsvBtn" class="btn btn-secondary" hidden>Open CSV folder</button>
     </div>
