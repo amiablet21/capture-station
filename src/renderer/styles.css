@@ -919,7 +919,9 @@ body {
 
 .item-unmapped { color: var(--badge-yellow-text); font-weight: 600; }
 
-.item-entry { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; }
+/* one item per line: multi-SKU orders read as a stacked list */
+.items-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 4px 0; }
+.item-entry { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 .item-more {
   display: inline-flex;

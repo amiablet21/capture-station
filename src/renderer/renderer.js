@@ -279,10 +279,10 @@ function render() {
     const meta = (state.orderMeta || {})[row.order_number];
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
     const allItems = (meta && meta.items) || [];
-    // first three entries render fully; the rest collapse into "+N more"
-    // with the full list on hover, so big orders never silently truncate
-    const metaItems = allItems.slice(0, 3);
-    const moreItems = allItems.slice(3);
+    // items stack vertically, one per line; beyond four, "+N more" carries
+    // the full list on hover so big orders never silently truncate
+    const metaItems = allItems.slice(0, 4);
+    const moreItems = allItems.slice(4);
     const moreHtml = moreItems.length
       ? `<span class="item-more" data-tip="${esc(moreItems.map(i => `${i.sku || i.channelSku || i.title || '?'} ×${i.qty}`).join(', '))}">+${moreItems.length} more</span>`
       : '';
@@ -296,7 +296,7 @@ function render() {
       return linked
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
-    }).join(' ') + moreHtml;
+    }).join('') + moreHtml;
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
@@ -305,7 +305,7 @@ function render() {
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
-      <td class="cell-items">${itemsHtml}</td>
+      <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${notesCell(row)}</td>
       <td class="cell-actions">
