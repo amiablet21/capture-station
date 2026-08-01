@@ -73,7 +73,9 @@ const DEFAULTS = {
   // webhookUrl: optional Make.com webhook POSTed on "Finish receiving".
   receiving: { folder: '', webhookUrl: '' },
   // Auto-drop Linnworks open orders onto the Capture page as pending rows.
-  orderImport: { enabled: true },
+  // excludeLocationNames: orders at these stock locations never enter the
+  // queue (WFS = fulfilled by Walmart, no label to make here).
+  orderImport: { enabled: true, excludeLocationNames: ['WFS FULFILLED'] },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {

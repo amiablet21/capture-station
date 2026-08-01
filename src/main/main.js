@@ -573,12 +573,18 @@ async function runOrderImport() {
   try {
     const orders = await getOpenOrdersCached(cfg);
     const fallbackId = (cfg.stockRouting || {}).fallbackLocationId || '';
+    // orders at excluded locations (e.g. WFS FULFILLED, shipped by Walmart)
+    // never enter the queue; leaving them out of openRefs also cleans up any
+    // untouched rows previously imported from there
+    const excluded = new Set(((cfg.orderImport || {}).excludeLocationNames || [])
+      .map(n => String(n).trim().toLowerCase()).filter(Boolean));
     const openRefs = new Set();
     let added = 0;
     const meta = {};
     for (const o of orders) {
       const ref = String(o.reference || '').trim();
       if (!ref) continue;
+      if (excluded.has(String(o.locationName || '').trim().toLowerCase())) continue;
       openRefs.add(ref);
       meta[ref] = {
         source: o.source || '',
