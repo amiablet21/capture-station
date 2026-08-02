@@ -175,6 +175,19 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     await client.createSerials(assignments);
   }
 
+  // Substitution reversals must know each listed line's PHYSICAL level
+  // before despatch: Linnworks floors deductions at zero, so restoring the
+  // full quantity when stock was already 0 would mint phantom units.
+  let preLevels = null;
+  if (row.sub_sku && row.sub_qty > 0 && processLocationId === locationId) {
+    preLevels = {};
+    for (const it of order.items) {
+      if (it.isService || it.unlinked || !it.sku || !it.stockItemId) continue;
+      try { preLevels[it.sku] = await client.getLevelAt(it.stockItemId, locationId); }
+      catch { preLevels[it.sku] = null; /* unknown: reverse the full qty as before */ }
+    }
+  }
+
   let proc = await client.processOrder(row.order_number, processLocationId);
 
   // Parked orders refuse to process. Unpark, note it on the row so it can be
@@ -188,7 +201,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     proc = await client.processOrder(row.order_number, processLocationId);
     if (proc.processedState === 'PROCESSED') {
       db.markSynced(row.id);
-      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId);
+      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId, preLevels);
       return { ok: true, message: `Processed (was parked - unparked automatically)${subMsg}` };
     }
   }
@@ -196,7 +209,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   switch (proc.processedState) {
     case 'PROCESSED': {
       db.markSynced(row.id);
-      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId);
+      const subMsg = await applySubstitution(client, row, order, locationId, processLocationId, preLevels);
       const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
       return { ok: true, message: `Processed${foundAtFallback ? ' (dropship)' : (locLabel ? ` (at ${locLabel})` : '')}${subMsg}${note}` };
     }
@@ -217,13 +230,21 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
 // processing anywhere else (dropship etc.) deducted nothing at the primary.
 // Either way the substituted SKU is what left the shelf, so deduct it at the
 // primary warehouse via the same UpdateStockLevelsBySKU delta path as WFS.
-async function applySubstitution(client, row, order, primaryLocationId, processLocationId) {
+async function applySubstitution(client, row, order, primaryLocationId, processLocationId, preLevels) {
   if (!row.sub_sku || !(row.sub_qty > 0)) return '';
   try {
     if (processLocationId === primaryLocationId) {
+      // Restore only what despatch actually deducted. Deduction floors at
+      // zero, so a line whose pre-despatch level was L loses min(qty, L) -
+      // reversing the full qty when L was 0 would mint phantom units.
       const reversals = order.items
         .filter(it => !it.isService && !it.unlinked && it.sku)
-        .map(it => ({ sku: it.sku, delta: it.quantity }));
+        .map(it => {
+          const pre = preLevels ? preLevels[it.sku] : null;
+          const deducted = (pre === null || pre === undefined) ? it.quantity : Math.min(it.quantity, Math.max(0, pre));
+          return { sku: it.sku, delta: deducted };
+        })
+        .filter(r => r.delta > 0);
       if (reversals.length) {
         await client.changeStockLevels(reversals, primaryLocationId, 'Capture Station substitution (listed item not shipped)');
       }

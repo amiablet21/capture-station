@@ -111,6 +111,8 @@ class LinnworksClient {
       source: order.GeneralInfo ? order.GeneralInfo.Source : '',
       items: (order.Items || []).map(it => ({
         rowId: it.RowId,
+        // for open-order items the stock item GUID is ItemId (StockItemId is zeros)
+        stockItemId: it.ItemId,
         sku: it.SKU || it.ItemNumber || '',
         title: it.Title || '',
         quantity: it.Quantity || 1,
@@ -275,6 +277,14 @@ class LinnworksClient {
       }
       if (!items || items.length < 200) return out;
     }
+  }
+
+  // Physical StockLevel for one stock item at one location (what despatch
+  // deducts from - it floors at zero, so reversals must know the pre-level).
+  async getLevelAt(stockItemId, locationId) {
+    const levels = await this.call(`Stock/GetStockLevel?stockItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
+    const row = (levels || []).find(l => l.Location && l.Location.StockLocationId === locationId);
+    return row ? (row.StockLevel || 0) : 0;
   }
 
   // Available (StockLevel - InOrders) for one stock item at one location.
