@@ -1357,6 +1357,14 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // a corrected count can change routing decisions (e.g. "actually we DO
+      // have some"): re-route and re-import right away instead of waiting
+      // for the 5-minute passes
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
       return { ok: true, ...updated };
     } catch (e) {
       return { ok: false, error: e.message };
