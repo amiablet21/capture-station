@@ -383,21 +383,17 @@ function render() {
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
         <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
-        ${meta && meta.dropship ? `<button class="badge badge-dropship badge-btn" data-act="moveback" title="At the dropship location - click to move it back to ${esc((state.locations || {}).primaryName || 'the warehouse')}">DS</button>` : ''}
+        ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${row.sub_sku
-        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}&#10;Click to edit or remove">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
+        ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
-          ${!state.captureOnly && meta && !meta.dropship && (state.locations || {}).fallbackSet
-            ? `<button class="btn-icon" data-act="movedropship" title="Move to ${esc((state.locations || {}).fallbackName || 'the dropship location')} (dropship)">${ICONS.swap}</button>` : ''}
-          ${!state.captureOnly && row.status !== 'synced'
-            ? `<button class="btn-icon" data-act="substitute" title="Shipped a different item than listed">${ICONS.box}</button>` : ''}
           <button class="btn-icon" data-act="edit" title="Edit / add notes">${ICONS.pencil}</button>
           <button class="btn-icon is-danger" data-act="del" title="Delete">${ICONS.trash}</button>
         </span>
@@ -625,18 +621,10 @@ $('rowsBody').addEventListener('click', async (e) => {
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
-  if (btn.dataset.act === 'substitute') {
-    openSubDialog(row);
-    return;
-  }
-  if (btn.dataset.act === 'moveback') {
-    const name = (state.locations || {}).primaryName || 'the warehouse';
-    if (confirm(`Move ${row.order_number} to ${name}?`)) await doOrderMove(row.order_number, 'primary');
-    return;
-  }
-  if (btn.dataset.act === 'movedropship') {
-    const name = (state.locations || {}).fallbackName || 'the dropship location';
-    if (confirm(`Move ${row.order_number} to ${name} (dropship)?`)) await doOrderMove(row.order_number, 'fallback');
+  // Location-move and substitution actions are PARKED (owner is rethinking
+  // the workflow); the backend IPC (rows:substitute, order:move) stays
+  // dormant so re-enabling is just restoring these branches + buttons.
+  if (btn.dataset.act === 'substitute' || btn.dataset.act === 'moveback' || btn.dataset.act === 'movedropship') {
     return;
   }
   if (btn.dataset.act === 'open') {

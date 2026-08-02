@@ -402,13 +402,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
       state.orderMeta['119121297240391'] = { source: 'WALMART', dropship: true, despatchBy: '', items: [] };
       render();
     `);
+    // location-move UI is PARKED: the DS chip renders as a passive badge and
+    // no move affordances exist (the IPC surface stays, dormant)
     const moveBits = await exec(`[
-      !!document.querySelector('#rowsBody .badge-dropship[data-act="moveback"]'),
+      !!document.querySelector('#rowsBody .badge-dropship'),
+      !!document.querySelector('#rowsBody .badge-dropship[data-act]'),
       !!document.querySelector('#rowsBody [data-act="movedropship"]'),
-      (document.querySelector('#rowsBody .badge-dropship[data-act="moveback"]') || {}).title || '',
     ]`);
-    check('DS chip is clickable and non-DS rows get the move action',
-      moveBits[0] === true && moveBits[1] === true && /Digital World Shop/.test(moveBits[2]),
+    check('DS chip is a passive badge and move actions are parked',
+      moveBits[0] === true && moveBits[1] === false && moveBits[2] === false,
       moveBits);
     // restore capture-only + drop only the DS seeding (the due/qty seeding
     // from check 29 stays visible for the screenshot pass)

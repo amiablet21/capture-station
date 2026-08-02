@@ -158,9 +158,6 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
       plan.push(`attach ${row.serials.length} serial(s) to ${assignments.length} line(s)`);
     }
     plan.push(locLabel ? `process at ${locLabel} location, mark shipped` : 'process at warehouse, mark shipped');
-    if (row.sub_sku && row.sub_qty > 0) {
-      plan.push(`substitution: deduct ${row.sub_qty} × ${row.sub_sku} at the warehouse instead of the listed item`);
-    }
     const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
     return { ok: true, dryRun: true, message: `DRY RUN, would: ${plan.join(', then ')}${note}` };
   }
@@ -178,8 +175,9 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   // Substitution reversals must know each listed line's PHYSICAL level
   // before despatch: Linnworks floors deductions at zero, so restoring the
   // full quantity when stock was already 0 would mint phantom units.
+  // (Substitutions are PARKED, so this pre-read never triggers for now.)
   let preLevels = null;
-  if (row.sub_sku && row.sub_qty > 0 && processLocationId === locationId) {
+  if (false && row.sub_sku && row.sub_qty > 0 && processLocationId === locationId) {
     preLevels = {};
     for (const it of order.items) {
       if (it.isService || it.unlinked || !it.sku || !it.stockItemId) continue;
@@ -231,6 +229,10 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
 // Either way the substituted SKU is what left the shelf, so deduct it at the
 // primary warehouse via the same UpdateStockLevelsBySKU delta path as WFS.
 async function applySubstitution(client, row, order, primaryLocationId, processLocationId, preLevels) {
+  // PARKED 2026-08-02: the owner is rethinking the substitution workflow.
+  // No stock swaps are applied until the feature is re-enabled.
+  return '';
+  // eslint-disable-next-line no-unreachable
   if (!row.sub_sku || !(row.sub_qty > 0)) return '';
   try {
     if (processLocationId === primaryLocationId) {
