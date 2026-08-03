@@ -1009,7 +1009,7 @@ makeCombo($('subSku'), $('subComboList'), (item) => {
   subRegenNote();
   $('subQty').focus();
   $('subQty').select();
-});
+}, { claims: (sku) => subPendingClaims(sku, subRowId) });
 $('subSku').addEventListener('input', subRegenNote);
 $('subNote').addEventListener('input', () => { subNoteDirty = true; });
 
@@ -1019,6 +1019,18 @@ $('subSave').addEventListener('click', async () => {
   if (!sku) { subFeedback('Pick the SKU that actually shipped.'); return; }
   if (recvLookup === 'ready' && !recvLookupExact(sku)) { subFeedback(`Unknown SKU: ${sku}. Pick one from the inventory.`); return; }
   if (!Number.isInteger(qty) || qty < 1) { subFeedback('Quantity must be a whole number of 1 or more.'); return; }
+  // the app is the reservation system for substitutes: real stock that other
+  // pending substitutions already claim cannot be promised twice (typed-in
+  // SKUs would otherwise sneak past the greyed-out picker option)
+  const invItem = recvLookup === 'ready' ? recvLookupExact(sku) : null;
+  if (invItem) {
+    const availHere = invAvailAtPrimary(invItem);
+    const claimed = subPendingClaims(sku, subRowId);
+    if (availHere !== null && availHere > 0 && claimed + qty > availHere) {
+      subFeedback(`${claimed} of ${availHere} available ${invItem.sku} already promised to another order — only ${Math.max(0, availHere - claimed)} left to substitute.`);
+      return;
+    }
+  }
   const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false);
   if (!res.ok) { subFeedback(res.error || 'Could not save.'); return; }
   $('subDialog').close();
@@ -2662,17 +2674,39 @@ function ensureInventory() {
 // Reusable searchable-SKU combobox (same look/behavior as the receiving
 // worksheet's): filters the shared inventory by SKU, title or barcode.
 // The worksheet's own instance stays as-is; new pickers attach this.
-function makeCombo(input, listEl, onPick) {
+// Live warehouse availability for one inventory item (null = unknown).
+function invAvailAtPrimary(it) {
+  const lid = state && state.locations && state.locations.primaryId;
+  if (!lid || !Array.isArray(it.levels)) return null;
+  const lv = it.levels.find(l => l.locationId === lid);
+  return lv ? (lv.available || 0) : 0;
+}
+
+// Units of a SKU already promised as the substitute on OTHER unprocessed
+// rows. Linnworks cannot reserve a SKU that is not on an order line, so the
+// app is the reservation system for pending substitutes.
+function subPendingClaims(sku, excludeRowId) {
+  const k = String(sku || '').trim().toLowerCase();
+  if (!k) return 0;
+  let n = 0;
+  for (const r of (state && state.rows) || []) {
+    if (r.id === excludeRowId || r.status === 'synced') continue;
+    if ((r.sub_sku || '').toLowerCase() === k) n += r.sub_qty || 1;
+  }
+  return n;
+}
+
+function makeCombo(input, listEl, onPick, opts) {
   let matches = [];
   let hl = -1;
   const close = () => { listEl.hidden = true; matches = []; hl = -1; };
-  // live warehouse availability per option, so substitution picks (and every
-  // other SKU picker) show at a glance what can actually ship
-  const availOf = (it) => {
-    const lid = state && state.locations && state.locations.primaryId;
-    if (!lid || !Array.isArray(it.levels)) return null;
-    const lv = it.levels.find(l => l.locationId === lid);
-    return lv ? (lv.available || 0) : 0;
+  const claimsOf = (it) => (opts && opts.claims ? opts.claims(it.sku) : 0);
+  // blocked = real stock exists but every unit is already promised to another
+  // pending substitution. Genuine zero stock stays pickable (the order simply
+  // stays at dropship and the supplier ships the substitute).
+  const blockedOf = (it) => {
+    const a = invAvailAtPrimary(it);
+    return a !== null && a > 0 && claimsOf(it) >= a;
   };
   const render = () => {
     if (recvLookup === 'loading') {
@@ -2681,12 +2715,16 @@ function makeCombo(input, listEl, onPick) {
       listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
     } else {
       listEl.innerHTML = matches.map((it, i) => {
-        const a = availOf(it);
+        const a = invAvailAtPrimary(it);
+        const claimed = claimsOf(it);
+        const blocked = blockedOf(it);
+        const availTxt = a === null ? '' : `${a} avail${claimed ? ` · ${claimed} promised` : ''}`;
         return `
-        <button class="combo-opt ${i === hl ? 'is-hl' : ''}" data-i="${i}" title="${esc(it.sku)} — ${esc(it.title)}">
+        <button class="combo-opt ${i === hl ? 'is-hl' : ''} ${blocked ? 'is-blocked' : ''}" data-i="${i}"
+                title="${blocked ? 'Every unit is already promised as a substitute on another order — process that one first' : `${esc(it.sku)} — ${esc(it.title)}`}">
           <span class="mono">${esc(it.sku)}</span>
           <span class="combo-opt-title">${esc(it.title || '')}</span>
-          ${a === null ? '' : `<span class="combo-avail ${a > 0 ? '' : 'is-zero'}">${a} avail</span>`}
+          ${availTxt ? `<span class="combo-avail ${a > 0 && !blocked ? '' : 'is-zero'}">${availTxt}</span>` : ''}
         </button>`;
       }).join('');
     }
@@ -2716,14 +2754,16 @@ function makeCombo(input, listEl, onPick) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const exact = recvLookupExact(input.value.trim());
-    if (exact) { close(); onPick(exact); return; }
-    if (isOpen && hl >= 0 && matches[hl]) { close(); onPick(matches[hl]); }
+    if (exact && !blockedOf(exact)) { close(); onPick(exact); return; }
+    if (exact) return; // blocked: leave the list open, the tooltip says why
+    if (isOpen && hl >= 0 && matches[hl] && !blockedOf(matches[hl])) { close(); onPick(matches[hl]); }
   });
   listEl.addEventListener('mousedown', (e) => {
     const opt = e.target.closest('.combo-opt');
     if (!opt) return;
     e.preventDefault();
     const item = matches[Number(opt.dataset.i)];
+    if (item && blockedOf(item)) return; // unclickable by design
     close();
     if (item) onPick(item);
   });

@@ -449,6 +449,27 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(200);
     const cleared = await exec(`!!document.querySelector('#rowsBody .sub-pill')`);
     check('clearing the substitution removes the pill', cleared === false, cleared);
+    // pending-substitution claims: the app-side "reservation" for substitutes.
+    // Counts other unprocessed rows' sub intents per SKU, case-blind, and
+    // never counts the row being edited itself.
+    const claims = await exec(`(() => {
+      const saved = state.rows;
+      state.rows = [
+        { id: 1, status: 'pending', sub_sku: 'X236-128GB-BLACK', sub_qty: 2 },
+        { id: 2, status: 'pending', sub_sku: 'x236-128gb-black', sub_qty: 1 },
+        { id: 3, status: 'failed', sub_sku: '' },
+      ];
+      const n = [
+        subPendingClaims('X236-128GB-BLACK', 99), // both rows count
+        subPendingClaims('x236-128gb-BLACK', 1),  // own row (qty 2) excluded
+        subPendingClaims('X999-NOPE', 99),        // unclaimed SKU
+        subPendingClaims('', 99),                 // blank never matches blanks
+      ];
+      state.rows = saved;
+      return n;
+    })()`);
+    check('pending substitution claims counted per SKU, own row excluded',
+      claims[0] === 3 && claims[1] === 1 && claims[2] === 0 && claims[3] === 0, claims);
 
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
