@@ -483,20 +483,27 @@ module.exports = async function run({ app, win, db, clipboard }) {
       renderStockChips();
       const chip = document.querySelector('#stockChips [data-view="wfs"]');
       if (chip) chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const wfsCell = document.querySelector('#stockList .stock-num-ro');
+      const homeBtn = document.querySelector('#stockList .stock-num-btn');
+      const head = document.querySelector('#stockList thead');
       const out = {
         chip: !!chip,
         rows: document.querySelectorAll('#stockList tbody tr').length,
-        readOnly: !!document.querySelector('#stockList .stock-num-ro'),
-        editable: !!document.querySelector('#stockList .stock-num-btn'),
+        wfsCount: wfsCell ? wfsCell.textContent.trim() : '',
+        homeCount: homeBtn ? homeBtn.textContent.trim() : '',
+        homeEditable: !!(homeBtn && homeBtn.dataset.sku === 'S25-128GB-NAVY'),
+        headers: head ? head.textContent : '',
         summary: $('stockSummary').textContent,
         hiddenBtns: [$('newSkuBtn').hidden, $('recvBtn').hidden, $('wfsBtn').hidden],
       };
       stockWfsActive = false; stockCache = null; renderStockChips();
       return out;
     })()`);
-    check('WFS view: chip renders, filters to Walmart-held SKUs, read-only counts',
-      wfsView.chip === true && wfsView.rows === 1 && wfsView.readOnly === true
-      && wfsView.editable === false && /WFS FULFILLED/.test(wfsView.summary), wfsView);
+    check('WFS view: Walmart-held SKUs only, WFS count read-only, warehouse count editable',
+      wfsView.chip === true && wfsView.rows === 1
+      && wfsView.wfsCount === '9' && wfsView.homeCount === '4' && wfsView.homeEditable === true
+      && /At WFS/.test(wfsView.headers) && /At warehouse/.test(wfsView.headers)
+      && /WFS FULFILLED/.test(wfsView.summary), wfsView);
     check('stock toolbar buttons (New SKU / Receiving / WFS Shipments) hidden',
       wfsView.hiddenBtns.every(Boolean), wfsView);
 

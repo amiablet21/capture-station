@@ -1405,9 +1405,12 @@ $('stockChips').addEventListener('click', (e) => {
   if (chip.dataset.view === 'wfs') {
     stockWfsActive = true;
     stockActiveView = null;
+    // sorted column may not exist in this view - fall back to units
+    if (!['sku', 'stockLevel', 'home'].includes(stockSort.key)) stockSort = { key: 'stockLevel', dir: -1 };
   } else {
     stockWfsActive = false;
     stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
+    if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
   }
   renderStockChips();
   renderStock();
@@ -1426,6 +1429,8 @@ const STOCK_COLS = {
   inOrders: { label: 'In orders', get: r => r.l.inOrders },
   minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
   available: { label: 'Available', get: r => r.l.available },
+  // WFS view only: your own warehouse count beside Walmart's
+  home: { label: 'At warehouse', get: r => (r.home ? r.home.stockLevel : 0) },
 };
 let stockSort = { key: 'stockLevel', dir: -1 }; // default: highest stock first
 
@@ -1433,12 +1438,12 @@ let stockSort = { key: 'stockLevel', dir: -1 }; // default: highest stock first
 let stockColWidths = {};
 try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'); } catch { /* fresh start */ }
 
-function stockTh(key, extraClass = '') {
+function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
   const w = stockColWidths[key];
   const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
-  return `<th class="sortable ${extraClass}" data-sort="${key}"${style} title="Click to sort · drag edge to resize">${col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+  return `<th class="sortable ${extraClass}" data-sort="${key}"${style} title="Click to sort · drag edge to resize">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
 }
 
 async function loadStock() {
@@ -1461,9 +1466,15 @@ function renderStock() {
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
   const wfsLoc = stockWfsActive ? stockWfsLocation() : null;
   const locId = wfsLoc ? wfsLoc.id : stockCache.locationId;
+  const EMPTY_LVL = { stockLevel: 0, inOrders: 0, due: 0, minimumLevel: 0, available: 0 };
   const rows = stockCache.items
-    .map(it => ({ ...it, l: it.levels.find(x => x.locationId === locId) || { stockLevel: 0, inOrders: 0, due: 0, minimumLevel: 0, available: 0 } }))
-    .filter(it => !wfsLoc || it.l.stockLevel || it.l.inOrders || it.l.available || it.l.due)
+    .map(it => ({
+      ...it,
+      l: it.levels.find(x => x.locationId === locId) || EMPTY_LVL,
+      // WFS view shows your own warehouse count alongside Walmart's
+      home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
+    }))
+    .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
     .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
     .filter(it => !q
       || it.sku.toLowerCase().includes(q)
@@ -1478,14 +1489,36 @@ function renderStock() {
       return (cmp * stockSort.dir) || a.sku.localeCompare(b.sku);
     });
   const tip = document.querySelector('#stockHint .stock-tip');
-  if (tip) tip.hidden = !!wfsLoc; // WFS counts are not correctable here
+  if (tip) tip.hidden = !!wfsLoc; // the WFS column is Walmart's, not correctable
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
-    ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} (Walmart-managed, read-only)`
+    ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
     : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
+  const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span></td>`;
+  // WFS view: two columns that answer "do I need to send more?" - Walmart's
+  // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
     ? '<p class="dlg-note">No SKUs match.</p>'
-    : `<table class="stock-table">
+    : wfsLoc
+      ? `<table class="stock-table">
+        <thead><tr>
+          <th class="th-gutter">#</th>
+          <th class="th-img"></th>
+          ${stockTh('sku')}
+          ${stockTh('stockLevel', 'num th-level', 'At WFS')}
+          ${stockTh('home', 'num')}
+        </tr></thead>
+        <tbody>${rows.map((r, idx) => `
+          <tr>
+            <td class="cell-gutter">${idx + 1}</td>
+            ${imgCell(r)}
+            ${skuCell(r)}
+            <td class="num cell-level"><span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span></td>
+            <td class="num ${r.home.stockLevel <= 0 ? 'stock-home-zero' : ''}"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Your warehouse count — click to correct">${r.home.stockLevel}</button></td>
+          </tr>`).join('')}</tbody>
+      </table>`
+      : `<table class="stock-table">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
@@ -1498,14 +1531,10 @@ function renderStock() {
         <tbody>${rows.map((r, idx) => `
           <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
             <td class="cell-gutter">${idx + 1}</td>
-            <td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-            <td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span></td>
-            <td class="num cell-level">${wfsLoc
-              ? `<span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span>`
-              : `<button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button>`}</td>
-            <td class="num">${wfsLoc
-              ? `<span class="stock-num-ro">${r.l.inOrders}</span>`
-              : `<button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button>`}</td>
+            ${imgCell(r)}
+            ${skuCell(r)}
+            <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
+            <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
             <td class="num">${r.l.minimumLevel}</td>
             <td class="num stock-avail">${r.l.available}</td>
           </tr>`).join('')}</tbody>

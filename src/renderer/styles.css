@@ -1362,6 +1362,9 @@ body {
   border: 1px dashed transparent;
 }
 
+/* WFS view: warehouse column at zero - restock-to-WFS depends on your shelf */
+.stock-home-zero .stock-num-btn { color: var(--faint); }
+
 /* fixed-width level column: swapping the button for the input must not
    change the cell's size, so the table never shifts during an edit */
 .stock-table .th-level, .stock-table .cell-level { width: 96px; }
