@@ -403,15 +403,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
       render();
     `);
     // location-move UI is PARKED: the DS chip renders as a passive badge and
-    // no move affordances exist (the IPC surface stays, dormant)
+    // no move affordances exist (the IPC surface stays, dormant). The
+    // substitution swap on the item line is LIVE again in sync mode.
     const moveBits = await exec(`[
       !!document.querySelector('#rowsBody .badge-dropship'),
       !!document.querySelector('#rowsBody .badge-dropship[data-act]'),
       !!document.querySelector('#rowsBody [data-act="movedropship"]'),
+      !!document.querySelector('#rowsBody .item-sub-btn[data-act="substitute"]'),
     ]`);
     check('DS chip is a passive badge and move actions are parked',
       moveBits[0] === true && moveBits[1] === false && moveBits[2] === false,
       moveBits);
+    check('substitution swap button renders on the item line in sync mode',
+      moveBits[3] === true, moveBits);
     // restore capture-only + drop only the DS seeding (the due/qty seeding
     // from check 29 stays visible for the screenshot pass)
     await exec(`state.captureOnly = true; delete state.orderMeta['119121297240391']; render();`);
@@ -430,9 +434,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
     const pillBits = await exec(`[
       !!document.querySelector('#rowsBody .sub-pill'),
       (document.querySelector('#rowsBody .sub-pill') || {}).textContent || '',
+      !!document.querySelector('#rowsBody button.sub-pill[data-act="substitute"]'),
     ]`);
     check('row shows the SUB pill with SKU and qty',
       pillBits[0] === true && /SUB → X230-128GB-GRAY ×2/.test(pillBits[1]), pillBits);
+    check('SUB pill is clickable (opens the substitution dialog)',
+      pillBits[2] === true, pillBits);
     state = await exec('api.getState()');
     const csvSub = fs.readFileSync(state.csv.path, 'utf8');
     check('CSV notes column carries the internal SUB marker',

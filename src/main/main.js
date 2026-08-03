@@ -62,6 +62,7 @@ function buildState() {
     orderUrlTemplates: cfg.orderUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
     locations: {
+      primaryId: cfg.linnworks.locationId || '',
       primaryName: cfg.linnworks.locationName || '',
       fallbackName: (cfg.stockRouting || {}).fallbackLocationName || '',
       fallbackSet: !!(cfg.stockRouting || {}).fallbackLocationId
@@ -819,6 +820,54 @@ async function runOrderImport() {
   } catch { /* offline or auth hiccup: next pass retries */ }
 }
 
+// Saving or clearing a substitution changes where the order belongs, so the
+// badge should flip immediately (same instant feel as stock corrections).
+// Judged by the substitute's availability when one is set; by the listed
+// lines when cleared. Best-effort: a routing hiccup never fails the save.
+async function reRouteAfterSubstitution(orderNumber) {
+  const cfg = config.load();
+  const sr = cfg.stockRouting || {};
+  const primary = cfg.linnworks.locationId;
+  if (cfg.captureOnly || !sr.enabled || !sr.fallbackLocationId || !primary) return { moved: null };
+  const ref = String(orderNumber || '').trim();
+  try {
+    const orders = await getOpenOrdersCached(cfg);
+    const order = orders.find(o => String(o.reference).trim() === ref);
+    if (!order) return { moved: null };
+    const client = new LinnworksClient(cfg.linnworks);
+    const row = db.findByOrderNumber(ref);
+    let desired;
+    if (row && row.sub_sku && row.sub_qty > 0) {
+      const subId = await client.findStockItemIdBySku(row.sub_sku);
+      if (!subId) return { moved: null }; // unresolvable SKU: leave it be
+      const a = await client.getAvailableAt(subId, primary);
+      desired = a >= row.sub_qty ? primary : sr.fallbackLocationId;
+    } else {
+      // cleared: judge the listed lines the same way the router does
+      const lines = (order.items || []).filter(it =>
+        !it.isService && it.stockItemId && it.stockItemId !== ZERO_GUID);
+      if (!lines.length) return { moved: null };
+      let ok = true;
+      for (const it of lines) {
+        const a = await client.getAvailableAt(it.stockItemId, primary);
+        // at the primary the order already reserves its lines (short = a < 0);
+        // at the fallback it does not, so coming home needs a >= quantity
+        if (order.locationId === primary ? a < 0 : a < it.quantity) { ok = false; break; }
+      }
+      desired = ok ? primary : sr.fallbackLocationId;
+    }
+    if (desired === order.locationId) return { moved: null };
+    const res = await client.moveOrdersToLocation([order.orderId], desired);
+    const moved = res && res.OrdersMoved ? res.OrdersMoved.length : 0;
+    if (!moved) return { moved: null };
+    openOrdersCache = { at: 0, data: null, promise: null };
+    await runOrderImport(); // refresh meta so the DS badge flips now
+    return { moved: desired === primary ? 'primary' : 'fallback' };
+  } catch {
+    return { moved: null };
+  }
+}
+
 function startOrderImporter() {
   const tick = () => { runOrderImport(); };
   setTimeout(tick, 5000);
@@ -944,8 +993,9 @@ function registerIpc() {
     return { ok: !!row, row };
   });
   // "Shipped different item": save the substitution intent on the row.
-  // Applied to stock at process time; internal only, never a Linnworks note.
-  ipcMain.handle('rows:substitute', (_e, { id, sku, qty, note, clear }) => {
+  // Stock is corrected at process time; a SUBSTITUTION note goes on the
+  // Linnworks order; routing follows the substitute's availability at once.
+  ipcMain.handle('rows:substitute', async (_e, { id, sku, qty, note, clear }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     const row = db.getRow(Number(id));
@@ -954,7 +1004,8 @@ function registerIpc() {
     if (clear) {
       const cleared = db.setSubstitution(row.id, '', 0, '');
       pushState();
-      return { ok: true, row: cleared };
+      const routed = await reRouteAfterSubstitution(row.order_number);
+      return { ok: true, row: cleared, moved: routed.moved };
     }
     const subSku = String(sku || '').trim();
     const subQty = Number(qty);
@@ -962,7 +1013,8 @@ function registerIpc() {
     if (!Number.isInteger(subQty) || subQty < 1) return { ok: false, error: 'Quantity must be a whole number of 1 or more.' };
     const updated = db.setSubstitution(row.id, subSku, subQty, String(note || '').trim().slice(0, 300));
     pushState();
-    return { ok: true, row: updated };
+    const routed = await reRouteAfterSubstitution(row.order_number);
+    return { ok: true, row: updated, moved: routed.moved };
   });
   ipcMain.handle('rows:delete', (_e, id) => {
     if (currentRowId === id) currentRowId = null;

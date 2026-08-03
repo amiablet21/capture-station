@@ -455,6 +455,11 @@ body {
 
 .sub-pill:hover { filter: brightness(0.95); }
 
+/* the swap affordance on the item line: quiet until the row is hovered */
+.item-line { display: flex; align-items: center; gap: 6px; }
+.item-sub-btn { opacity: 0; }
+#rowsBody tr:hover .item-sub-btn, .item-sub-btn:focus-visible { opacity: 1; }
+
 .sub-combo { position: relative; flex: 1 1 240px; min-width: 200px; }
 .sub-combo .input { width: 100%; }
 .sub-combo .combo-list { left: 0; width: min(440px, 80vw); }
@@ -1801,6 +1806,17 @@ body {
 
 .combo-opt:hover, .combo-opt.is-hl { background: var(--accent-soft); }
 .combo-opt:hover .combo-opt-title, .combo-opt.is-hl .combo-opt-title { color: var(--accent-soft-text); }
+
+/* live warehouse availability on picker options (substitutions care most) */
+.combo-avail {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.combo-avail.is-zero { color: var(--faint); }
 
 .combo-note { padding: 6px 8px; font-size: 12px; color: var(--faint); }
 

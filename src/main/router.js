@@ -5,6 +5,7 @@
 // unshipped fallback orders move back. Runs periodically from main.js.
 
 const config = require('./config');
+const db = require('./db');
 const { LinnworksClient } = require('./linnworks');
 
 let running = false;
@@ -40,6 +41,26 @@ async function runRouting() {
     const routable = (o) => o.items.filter(it =>
       !it.isService && it.stockItemId && it.stockItemId !== ZERO_GUID);
 
+    // Substitution intents on unprocessed rows: the order's lines still
+    // reserve the LISTED item in Linnworks, but routing must follow what will
+    // actually ship - a silver order substituted to in-stock black belongs at
+    // the warehouse even though silver reads short.
+    const subs = new Map();
+    for (const row of db.activeRows()) {
+      if (row.sub_sku && row.sub_qty > 0) {
+        subs.set(String(row.order_number).trim(), { sku: row.sub_sku, qty: row.sub_qty });
+      }
+    }
+    const subIdCache = new Map(); // sku (lower) -> stockItemId | null
+    const subItemId = async (sku) => {
+      const k = String(sku).toLowerCase();
+      if (!subIdCache.has(k)) {
+        try { subIdCache.set(k, await client.findStockItemIdBySku(sku)); }
+        catch { subIdCache.set(k, null); } // unresolvable: fall back to listed lines
+      }
+      return subIdCache.get(k);
+    };
+
     // 1) primary orders the stock cannot cover -> fallback. Newest first, so
     // the orders that pushed availability negative are the ones that leave.
     const toFallback = [];
@@ -47,6 +68,19 @@ async function runRouting() {
     primaryOrders.sort((a, b) => b.numOrderId - a.numOrderId);
     for (const o of primaryOrders) {
       const items = routable(o);
+      const sub = subs.get(String(o.reference || '').trim());
+      const subId = sub ? await subItemId(sub.sku) : null;
+      if (subId) {
+        // judged by the substitute alone: if it covers the order, the order
+        // stays home and claims that stock so competing substitutions see it
+        const a = await availAt(subId);
+        if (a >= sub.qty) { avail.set(subId, a - sub.qty); continue; }
+        toFallback.push(o);
+        for (const it of items) {
+          avail.set(it.stockItemId, (await availAt(it.stockItemId)) + it.quantity);
+        }
+        continue;
+      }
       if (!items.length) continue;
       let short = false;
       for (const it of items) {
@@ -67,6 +101,18 @@ async function runRouting() {
     fallbackOrders.sort((a, b) => a.numOrderId - b.numOrderId);
     for (const o of fallbackOrders) {
       const items = routable(o);
+      const sub = subs.get(String(o.reference || '').trim());
+      const subId = sub ? await subItemId(sub.sku) : null;
+      if (subId) {
+        if ((await availAt(subId)) < sub.qty) continue;
+        toPrimary.push(o);
+        avail.set(subId, avail.get(subId) - sub.qty);
+        // moving home re-reserves the LISTED lines at the warehouse too
+        for (const it of items) {
+          avail.set(it.stockItemId, (await availAt(it.stockItemId)) - it.quantity);
+        }
+        continue;
+      }
       if (!items.length) continue;
       let fits = true;
       for (const it of items) {

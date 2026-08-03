@@ -279,6 +279,33 @@ class LinnworksClient {
     }
   }
 
+  // Resolve a SKU to its stock item GUID (exact ItemNumber match, case-blind).
+  // Substitution routing needs this: rows store the substitute as a SKU string
+  // but availability reads (Stock/GetStockLevel) are keyed by stock item id.
+  async findStockItemIdBySku(sku) {
+    const wanted = String(sku || '').trim().toLowerCase();
+    if (!wanted) return null;
+    let items;
+    try {
+      items = await this.call('Stock/GetStockItemsFull', {
+        keyword: String(sku).trim(),
+        loadCompositeParents: false,
+        loadVariationParents: false,
+        entriesPerPage: 50,
+        pageNumber: 1,
+        dataRequirements: ['StockLevels'],
+        searchTypes: ['SKU'],
+      });
+    } catch (e) {
+      // an unknown keyword is a 400 ("No items found with given filter"),
+      // not an empty list - that is a miss, not an error
+      if (/no items found/i.test(e.message || '')) return null;
+      throw e;
+    }
+    const hit = (items || []).find(it => String(it.ItemNumber || '').trim().toLowerCase() === wanted);
+    return hit ? hit.StockItemId : null;
+  }
+
   // Physical StockLevel for one stock item at one location (what despatch
   // deducts from - it floors at zero, so reversals must know the pre-level).
   async getLevelAt(stockItemId, locationId) {

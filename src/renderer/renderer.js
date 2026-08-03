@@ -378,6 +378,17 @@ function render() {
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
     }).join('') + moreHtml;
+    // "shipped a different item" swap, on the item line itself. Single-line
+    // orders only: the process-time stock correction treats the WHOLE order
+    // as substituted, which has no honest meaning for a multi-line order.
+    const canSub = !state.captureOnly && row.status !== 'synced' && allItems.length <= 1;
+    const subBtn = canSub
+      ? `<button class="btn-icon item-sub-btn" data-act="substitute" title="Shipped a different item — pick the substitute">${ICONS.swap}</button>`
+      : '';
+    // the swap affordance rides ON the item line (stacked cells are a column)
+    const itemsCellHtml = subBtn && itemsHtml
+      ? `<span class="item-line">${itemsHtml}${subBtn}</span>`
+      : itemsHtml + subBtn;
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
@@ -387,10 +398,10 @@ function render() {
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
-      <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
+      <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${row.sub_sku
-        ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
+        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}&#10;Click to edit or remove">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
@@ -621,10 +632,14 @@ $('rowsBody').addEventListener('click', async (e) => {
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
-  // Location-move and substitution actions are PARKED (owner is rethinking
-  // the workflow); the backend IPC (rows:substitute, order:move) stays
-  // dormant so re-enabling is just restoring these branches + buttons.
-  if (btn.dataset.act === 'substitute' || btn.dataset.act === 'moveback' || btn.dataset.act === 'movedropship') {
+  if (btn.dataset.act === 'substitute') {
+    openSubDialog(row);
+    return;
+  }
+  // Location-move actions stay PARKED (owner is rethinking the workflow);
+  // the backend IPC (order:move) stays dormant so re-enabling is just
+  // restoring these branches + buttons.
+  if (btn.dataset.act === 'moveback' || btn.dataset.act === 'movedropship') {
     return;
   }
   if (btn.dataset.act === 'open') {
@@ -1007,7 +1022,10 @@ $('subSave').addEventListener('click', async () => {
   const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false);
   if (!res.ok) { subFeedback(res.error || 'Could not save.'); return; }
   $('subDialog').close();
-  toast(`Substitution saved: ${res.row.sub_sku} ×${res.row.sub_qty}`);
+  const movedMsg = res.moved === 'primary'
+    ? ' — order moved back to the warehouse'
+    : res.moved === 'fallback' ? ' — order routed to dropship (substitute not in stock)' : '';
+  toast(`Substitution saved: ${res.row.sub_sku} ×${res.row.sub_qty}${movedMsg}`);
   await refresh();
 });
 
@@ -1015,7 +1033,10 @@ $('subClear').addEventListener('click', async () => {
   const res = await api.substituteRow(subRowId, '', 0, '', true);
   if (!res.ok) { subFeedback(res.error || 'Could not remove.'); return; }
   $('subDialog').close();
-  toast('Substitution removed');
+  const clearedMsg = res.moved === 'primary'
+    ? ' — order moved back to the warehouse'
+    : res.moved === 'fallback' ? ' — order routed to dropship (listed item not in stock)' : '';
+  toast(`Substitution removed${clearedMsg}`);
   await refresh();
 });
 
@@ -2645,17 +2666,29 @@ function makeCombo(input, listEl, onPick) {
   let matches = [];
   let hl = -1;
   const close = () => { listEl.hidden = true; matches = []; hl = -1; };
+  // live warehouse availability per option, so substitution picks (and every
+  // other SKU picker) show at a glance what can actually ship
+  const availOf = (it) => {
+    const lid = state && state.locations && state.locations.primaryId;
+    if (!lid || !Array.isArray(it.levels)) return null;
+    const lv = it.levels.find(l => l.locationId === lid);
+    return lv ? (lv.available || 0) : 0;
+  };
   const render = () => {
     if (recvLookup === 'loading') {
       listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
     } else if (!matches.length) {
       listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
     } else {
-      listEl.innerHTML = matches.map((it, i) => `
+      listEl.innerHTML = matches.map((it, i) => {
+        const a = availOf(it);
+        return `
         <button class="combo-opt ${i === hl ? 'is-hl' : ''}" data-i="${i}" title="${esc(it.sku)} — ${esc(it.title)}">
           <span class="mono">${esc(it.sku)}</span>
           <span class="combo-opt-title">${esc(it.title || '')}</span>
-        </button>`).join('');
+          ${a === null ? '' : `<span class="combo-avail ${a > 0 ? '' : 'is-zero'}">${a} avail</span>`}
+        </button>`;
+      }).join('');
     }
     listEl.hidden = false;
     const hlEl = listEl.querySelector('.combo-opt.is-hl');
