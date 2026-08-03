@@ -1352,6 +1352,19 @@ let stockCache = null;
 
 let stockViews = null; // loaded once from config.stockViews
 let stockActiveView = null; // null = All
+let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed location
+
+// The WFS FULFILLED location, discovered from the loaded inventory's level
+// rows by name (no hardcoded GUID - survives a re-created location).
+function stockWfsLocation() {
+  if (!stockCache) return null;
+  for (const it of stockCache.items || []) {
+    for (const l of it.levels || []) {
+      if (/wfs/i.test(l.locationName || '')) return { id: l.locationId, name: l.locationName };
+    }
+  }
+  return null;
+}
 
 function stockViewMatch(it, pattern) {
   try {
@@ -1374,18 +1387,28 @@ async function loadStockViews() {
 function renderStockChips() {
   const box = $('stockChips');
   const views = stockViews || [];
-  box.hidden = views.length === 0;
+  const wfsLoc = stockWfsLocation();
+  box.hidden = views.length === 0 && !wfsLoc;
   box.innerHTML = [
-    `<button class="view-chip ${stockActiveView ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+    ...(wfsLoc
+      ? [`<button class="view-chip ${stockWfsActive ? 'is-active' : ''}" data-view="wfs" title="Stock at ${esc(wfsLoc.name)} — Walmart-managed, read-only (fed by Walmart's own connection)">WFS</button>`]
+      : []),
   ].join('');
 }
 
 $('stockChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.view-chip');
   if (!chip) return;
-  stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
+  if (chip.dataset.view === 'wfs') {
+    stockWfsActive = true;
+    stockActiveView = null;
+  } else {
+    stockWfsActive = false;
+    stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
+  }
   renderStockChips();
   renderStock();
 });
@@ -1427,15 +1450,20 @@ async function loadStock() {
     return;
   }
   stockCache = res;
+  renderStockChips(); // the WFS chip appears once the location is discoverable
   renderStock();
 }
 
 function renderStock() {
   if (!stockCache) return;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const locId = stockCache.locationId;
+  // WFS view reads the Walmart-managed location; everything else reads the
+  // primary warehouse. WFS numbers are Walmart's own (read-only here).
+  const wfsLoc = stockWfsActive ? stockWfsLocation() : null;
+  const locId = wfsLoc ? wfsLoc.id : stockCache.locationId;
   const rows = stockCache.items
     .map(it => ({ ...it, l: it.levels.find(x => x.locationId === locId) || { stockLevel: 0, inOrders: 0, due: 0, minimumLevel: 0, available: 0 } }))
+    .filter(it => !wfsLoc || it.l.stockLevel || it.l.inOrders || it.l.available || it.l.due)
     .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
     .filter(it => !q
       || it.sku.toLowerCase().includes(q)
@@ -1449,9 +1477,12 @@ function renderStock() {
       const cmp = col.text ? String(av).localeCompare(String(bv)) : (av - bv);
       return (cmp * stockSort.dir) || a.sku.localeCompare(b.sku);
     });
+  const tip = document.querySelector('#stockHint .stock-tip');
+  if (tip) tip.hidden = !!wfsLoc; // WFS counts are not correctable here
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
-  $('stockSummary').textContent =
-    `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
+  $('stockSummary').textContent = wfsLoc
+    ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} (Walmart-managed, read-only)`
+    : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   $('stockList').innerHTML = rows.length === 0
     ? '<p class="dlg-note">No SKUs match.</p>'
     : `<table class="stock-table">
@@ -1469,8 +1500,12 @@ function renderStock() {
             <td class="cell-gutter">${idx + 1}</td>
             <td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
             <td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span></td>
-            <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
-            <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
+            <td class="num cell-level">${wfsLoc
+              ? `<span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span>`
+              : `<button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button>`}</td>
+            <td class="num">${wfsLoc
+              ? `<span class="stock-num-ro">${r.l.inOrders}</span>`
+              : `<button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button>`}</td>
             <td class="num">${r.l.minimumLevel}</td>
             <td class="num stock-avail">${r.l.available}</td>
           </tr>`).join('')}</tbody>

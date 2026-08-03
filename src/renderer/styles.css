@@ -1352,6 +1352,16 @@ body {
 
 .stock-num-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+/* WFS view: same metrics as the button so columns don't shift, no affordance */
+.stock-num-ro {
+  display: inline-block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  padding: 1px 8px;
+  border: 1px dashed transparent;
+}
+
 /* fixed-width level column: swapping the button for the input must not
    change the cell's size, so the table never shifts during an edit */
 .stock-table .th-level, .stock-table .cell-level { width: 96px; }

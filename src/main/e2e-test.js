@@ -471,6 +471,35 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('pending substitution claims counted per SKU, own row excluded',
       claims[0] === 3 && claims[1] === 1 && claims[2] === 0 && claims[3] === 0, claims);
 
+    // 33. WFS stock view: the chip appears when a WFS location exists in the
+    // inventory data, shows only SKUs Walmart holds, and is read-only. The
+    // New SKU / Receiving / WFS Shipments buttons are temporarily hidden.
+    const wfsView = await exec(`(() => {
+      const lvl = (loc, name, n, o) => ({ locationId: loc, locationName: name, stockLevel: n, inOrders: o, due: 0, minimumLevel: 0, available: n - o });
+      stockSeed({ ok: true, locationId: 'L1', locationName: 'Digital World Shop', items: [
+        { stockItemId: '1', sku: 'S25-128GB-NAVY', title: 'navy', barcode: '', category: '', image: '', levels: [lvl('L1', 'Digital World Shop', 4, 1), lvl('LW', 'WFS FULFILLED', 9, 0)] },
+        { stockItemId: '2', sku: 'A16-64GB-BLK', title: 'black', barcode: '', category: '', image: '', levels: [lvl('L1', 'Digital World Shop', 2, 0)] },
+      ] });
+      renderStockChips();
+      const chip = document.querySelector('#stockChips [data-view="wfs"]');
+      if (chip) chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const out = {
+        chip: !!chip,
+        rows: document.querySelectorAll('#stockList tbody tr').length,
+        readOnly: !!document.querySelector('#stockList .stock-num-ro'),
+        editable: !!document.querySelector('#stockList .stock-num-btn'),
+        summary: $('stockSummary').textContent,
+        hiddenBtns: [$('newSkuBtn').hidden, $('recvBtn').hidden, $('wfsBtn').hidden],
+      };
+      stockWfsActive = false; stockCache = null; renderStockChips();
+      return out;
+    })()`);
+    check('WFS view: chip renders, filters to Walmart-held SKUs, read-only counts',
+      wfsView.chip === true && wfsView.rows === 1 && wfsView.readOnly === true
+      && wfsView.editable === false && /WFS FULFILLED/.test(wfsView.summary), wfsView);
+    check('stock toolbar buttons (New SKU / Receiving / WFS Shipments) hidden',
+      wfsView.hiddenBtns.every(Boolean), wfsView);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);

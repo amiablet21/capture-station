@@ -107,9 +107,11 @@
       <div id="stockChips" class="stock-chips" hidden></div>
       <div class="stock-actions">
         <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
-        <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks">New SKU</button>
-        <button id="recvBtn" class="btn btn-secondary">Receiving</button>
-        <button id="wfsBtn" class="btn btn-secondary">WFS Shipments</button>
+        <!-- temporarily hidden pending a toolbar redesign (owner request
+             2026-08-02); the dialogs and logic behind them are untouched -->
+        <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
+        <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
+        <button id="wfsBtn" class="btn btn-secondary" hidden>WFS Shipments</button>
       </div>
     </div>
     <p class="stock-hint" id="stockHint"><span id="stockSummary"></span><span class="stock-tip"> — click a count to correct it</span></p>
