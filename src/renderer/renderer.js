@@ -2000,8 +2000,6 @@ function renderRetSheet() {
         ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span>`
         : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
              placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
-      <td class="ret-cell-price"><input type="number" class="recv-cell-input ret-price-in" data-idx="${idx}"
-        min="0" step="0.01" value="${d.price || ''}" placeholder="0.00" aria-label="Price" /></td>
       <td class="ret-cell-cond">
         <select class="input ret-cond ret-cond-in" data-idx="${idx}" aria-label="Condition">${retCondOptions(d.condition)}</select>
         ${retTargetCell(d, idx)}
@@ -2035,8 +2033,9 @@ function renderRetSheet() {
 $('retBody').addEventListener('input', (e) => {
   const d = retDrafts[Number(e.target.dataset.idx)];
   if (!d) return;
-  if (e.target.classList.contains('ret-price-in')) d.price = Number(e.target.value) || 0;
-  else if (e.target.classList.contains('ret-by-in')) {
+  // (price column removed from the sheet; d.price still auto-fills from the
+  // order lookup and flows to the CSV / new-SKU prefill untouched)
+  if (e.target.classList.contains('ret-by-in')) {
     d.receivedBy = e.target.value.trim();
     if (d.receivedBy) retReceivedBy = d.receivedBy; // next rows inherit it
   } else if (e.target.classList.contains('ret-note-in')) d.note = e.target.value;
@@ -2168,7 +2167,6 @@ async function loadRetPast() {
         <td class="ret-h-cust" title="${esc(r.customer || '')}">${esc(r.customer || '')}</td>
         <td class="mono ret-h-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 14)) : ''}</td>
         <td class="mono ret-h-sku" title="Stock landed on ${esc(i.targetSku)}">${esc(i.sku)}${i.qty > 1 ? ` ×${i.qty}` : ''}</td>
-        <td class="mono ret-h-price">${i.price ? Number(i.price).toFixed(2) : ''}</td>
         <td class="ret-h-cond"><span class="ret-cond-tag ${i.condition === 'scrap' ? 'is-scrap' : ''}">${esc(i.condition)}</span></td>
         <td class="mono ret-h-by" title="Received by">${esc(r.received_by || '')}</td>
         <td class="ret-h-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>

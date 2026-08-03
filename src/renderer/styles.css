@@ -885,7 +885,6 @@ body {
 .ret-sheet th.th-trk { width: 130px; }
 .ret-sheet th.th-date { width: 74px; }
 .ret-sheet th.th-rsku { width: 175px; }
-.ret-sheet th.th-price { width: 86px; text-align: right; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-by { width: 60px; }
 
@@ -893,7 +892,6 @@ body {
 .ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
 .ret-cell-cust, .ret-cell-note { color: var(--muted); }
 .ret-cell-date { color: var(--muted); font-size: 12px; }
-.ret-cell-price .recv-cell-input { text-align: right; color: var(--text); font-weight: 500; }
 .ret-cell-by .recv-cell-input { color: var(--text); font-weight: 600; text-transform: uppercase; }
 .ret-cell-note .recv-cell-input { font-family: var(--font); color: var(--text); font-weight: 400; }
 
@@ -976,7 +974,6 @@ body {
 .ret-h-cust { max-width: 140px; }
 .ret-h-trk { max-width: 130px; }
 .ret-h-sku { color: var(--text); max-width: 200px; }
-.ret-h-price { text-align: right; width: 70px; font-variant-numeric: tabular-nums; }
 .ret-h-by { width: 46px; text-transform: uppercase; font-weight: 600; }
 .ret-h-note { max-width: 200px; }
 
