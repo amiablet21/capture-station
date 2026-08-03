@@ -56,6 +56,8 @@ if (!window.api) {
     getStock: async () => ({ ok: false, error: 'Preview mode' }),
     getStockOpenOrders: async () => ({ ok: false, error: 'Preview mode' }),
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
+    setStockMin: async () => ({ ok: false, error: 'Preview mode' }),
+    salesQuery: async () => ({ ok: false, error: 'Preview mode' }),
     getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     createSku: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
@@ -286,13 +288,13 @@ function render() {
   const total = state.rows.length;
   let visible = state.rows.map((row) => ({ row }));
 
-  // overdue first, then due-today, then the rest (stable, so the newest-first
-  // order inside each band survives): what must ship next is always on top
+  // the queue keeps pure capture order (newest first) — due-date urgency
+  // shows through the chips, the Due-today filter and the header counter,
+  // never by re-sorting the rows
   const dueRank = ({ row }) => {
     const due = rowDue(row);
     return due ? (due.overdue ? 0 : 1) : 2;
   };
-  visible.sort((a, b) => dueRank(a) - dueRank(b));
   const dueRows = visible.filter(v => dueRank(v) < 2);
 
   // header: how many must go out before today's carrier cutoff
@@ -779,6 +781,7 @@ async function openSettings() {
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
+  $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
@@ -855,6 +858,7 @@ $('settingsSave').addEventListener('click', async () => {
       returns: $('setPageReturns').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
+    lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
       applicationSecret: $('setAppSecret').value.trim(),
@@ -945,6 +949,8 @@ function showPage(page) {
     loadStockViews();
     loadStock().then(() => $('stockSearch').focus());
   } else if (page === 'returns') {
+    const savedW = Number(localStorage.getItem('retSheetWidth')) || 0;
+    $('retMain').style.width = savedW ? `${savedW}px` : '';
     enterReturns();
   } else {
     focusScan();
@@ -1353,6 +1359,19 @@ let stockCache = null;
 let stockViews = null; // loaded once from config.stockViews
 let stockActiveView = null; // null = All
 let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed location
+let stockLowActive = false; // Low stock view: Available below the minimum level
+
+// Available < Min (and a minimum is actually set) at the primary warehouse
+function stockIsLow(it) {
+  if (!stockCache) return false;
+  const l = (it.levels || []).find(x => x.locationId === stockCache.locationId);
+  return !!(l && l.minimumLevel > 0 && l.available < l.minimumLevel);
+}
+
+function stockLowCount() {
+  if (!stockCache) return 0;
+  return (stockCache.items || []).filter(stockIsLow).length;
+}
 
 // The WFS FULFILLED location, discovered from the loaded inventory's level
 // rows by name (no hardcoded GUID - survives a re-created location).
@@ -1388,11 +1407,16 @@ function renderStockChips() {
   const box = $('stockChips');
   const views = stockViews || [];
   const wfsLoc = stockWfsLocation();
-  box.hidden = views.length === 0 && !wfsLoc;
+  const lowCount = stockLowCount();
+  box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive;
   box.innerHTML = [
-    `<button class="view-chip ${stockActiveView || stockWfsActive ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+    // the Low stock chip appears once anything sits below its minimum
+    ...(lowCount || stockLowActive
+      ? [`<button class="view-chip tint-red ${stockLowActive ? 'is-active' : ''}" data-view="low" title="SKUs whose Available count is below their minimum level">Low stock · ${lowCount}</button>`]
+      : []),
     ...(wfsLoc
       ? [`<button class="view-chip ${stockWfsActive ? 'is-active' : ''}" data-view="wfs" title="Stock at ${esc(wfsLoc.name)} — Walmart-managed, read-only (fed by Walmart's own connection)">WFS</button>`]
       : []),
@@ -1404,11 +1428,18 @@ $('stockChips').addEventListener('click', (e) => {
   if (!chip) return;
   if (chip.dataset.view === 'wfs') {
     stockWfsActive = true;
+    stockLowActive = false;
     stockActiveView = null;
     // sorted column may not exist in this view - fall back to units
     if (!['sku', 'stockLevel', 'home'].includes(stockSort.key)) stockSort = { key: 'stockLevel', dir: -1 };
+  } else if (chip.dataset.view === 'low') {
+    stockLowActive = true;
+    stockWfsActive = false;
+    stockActiveView = null;
+    if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
   } else {
     stockWfsActive = false;
+    stockLowActive = false;
     stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
     if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
   }
@@ -1449,14 +1480,64 @@ function stockTh(key, extraClass = '', labelOverride = '') {
 async function loadStock() {
   $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('stockSummary').textContent = '';
+  loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
   const res = await api.getStock();
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
     return;
   }
   stockCache = res;
-  renderStockChips(); // the WFS chip appears once the location is discoverable
+  renderStockChips(); // the WFS + Low stock chips appear once data allows
   renderStock();
+}
+
+/* day-over-day sales delta beside each SKU: units sold today vs yesterday,
+   from the Sales tab's processed-orders cache (a 2-day query is a subrange
+   of any loaded Sales period, so it is usually served from memory) */
+
+let stockDeltas = null; // { sku: { today, yesterday } } | null = not loaded
+
+// local yyyy-mm-dd of a processed-order timestamp
+function salesDayKey(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// pure, e2e-testable: what the tiny delta renders as. null = render nothing.
+function salesDeltaText(today, yesterday) {
+  const t = Number(today) || 0;
+  const y = Number(yesterday) || 0;
+  if (!t && !y) return null;
+  if (!y) return { text: 'new', cls: 'is-pos' }; // sold today, none yesterday
+  const pct = Math.round(((t - y) / y) * 100);
+  if (pct === 0) return { text: '0%', cls: 'is-flat' };
+  return { text: `${pct > 0 ? '+' : ''}${pct}%`, cls: pct > 0 ? 'is-pos' : 'is-neg' };
+}
+
+let stockDeltasBusy = false;
+
+async function loadStockDeltas() {
+  if (stockDeltasBusy) return;
+  stockDeltasBusy = true;
+  try {
+    const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = day(new Date());
+    const yesterday = day(new Date(Date.now() - 86400000));
+    const res = await api.salesQuery(yesterday, today);
+    if (!res.ok) return; // capture-only / offline: the grid simply shows no deltas
+    const map = {};
+    for (const l of res.lines || []) {
+      const d = salesDayKey(l.processedOn);
+      if (d !== today && d !== yesterday) continue;
+      const m = map[l.sku] || (map[l.sku] = { today: 0, yesterday: 0 });
+      m[d === today ? 'today' : 'yesterday'] += Number(l.qty) || 0;
+    }
+    stockDeltas = map;
+    if (activePage === 'stock' && stockCache) renderStock(); // fill in lazily
+  } finally {
+    stockDeltasBusy = false;
+  }
 }
 
 function renderStock() {
@@ -1475,6 +1556,7 @@ function renderStock() {
       home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
     }))
     .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
+    .filter(it => !stockLowActive || stockIsLow(it))
     .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
     .filter(it => !q
       || it.sku.toLowerCase().includes(q)
@@ -1493,9 +1575,20 @@ function renderStock() {
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
     ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
-    : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
+    : stockLowActive
+      ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
+      : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span></td>`;
+  // tiny day-over-day sales delta beside the SKU, filled in once the sales
+  // cache answers; nothing renders when there were no sales either day
+  const deltaHtml = (r) => {
+    const d = stockDeltas && stockDeltas[r.sku];
+    const dt = d ? salesDeltaText(d.today, d.yesterday) : null;
+    return dt
+      ? `<span class="stock-delta mono ${dt.cls}" title="sold ${d.today} today vs ${d.yesterday} yesterday">${dt.text}</span>`
+      : '';
+  };
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
@@ -1535,8 +1628,8 @@ function renderStock() {
             ${skuCell(r)}
             <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
             <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
-            <td class="num">${r.l.minimumLevel}</td>
-            <td class="num stock-avail">${r.l.available}</td>
+            <td class="num"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button></td>
+            <td class="num stock-avail ${stockIsLow(r) ? 'is-low' : ''}" ${stockIsLow(r) ? `title="Below the minimum of ${r.l.minimumLevel}"` : ''}>${r.l.available}</td>
           </tr>`).join('')}</tbody>
       </table>`;
 }
@@ -1575,6 +1668,52 @@ function beginStockEdit(btn) {
     }
     renderStock();
     toast(`${sku}: stock set to ${res.stockLevel}`);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+// Inline edit of the Min number: same interaction as the stock-level edit,
+// writing through Stock/UpdateStockMinimumLevel.
+function beginStockMinEdit(btn) {
+  const sku = btn.dataset.minsku;
+  const sid = btn.dataset.minsid;
+  const current = btn.textContent.trim();
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  input.value = current;
+  input.className = 'input stock-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (val === '' || Number(val) === Number(current)) { restore(); return; }
+    input.disabled = true;
+    const res = await api.setStockMin(sid, Number(val));
+    if (!res.ok) {
+      toast(res.error || 'Minimum update failed');
+      restore();
+      return;
+    }
+    const item = stockCache && stockCache.items.find(i => i.sku === sku);
+    if (item) {
+      let l = item.levels.find(x => x.locationId === stockCache.locationId);
+      if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
+      l.minimumLevel = res.minimumLevel;
+    }
+    renderStockChips(); // the Low stock count follows the new minimum
+    renderStock();
+    toast(`${sku}: minimum set to ${res.minimumLevel}`);
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -1643,6 +1782,10 @@ window.addEventListener('mouseup', () => {
     if (gripDrag.storeName === 'capture') {
       captureColWidths[gripDrag.key] = gripDrag.w;
       localStorage.setItem('captureColWidths', JSON.stringify(captureColWidths));
+    } else if (gripDrag.storeName === 'ret') {
+      retColWidths[gripDrag.key] = gripDrag.w;
+      localStorage.setItem('retColWidths', JSON.stringify(retColWidths));
+      applyRetColsAll(); // the other returns sheet mirrors the same column
     } else {
       stockColWidths[gripDrag.key] = gripDrag.w;
       localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
@@ -1768,6 +1911,8 @@ $('stockList').addEventListener('click', (e) => {
   }
   const ioBtn = e.target.closest('button.stock-io-btn');
   if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
+  const minBtn = e.target.closest('button.stock-min-btn');
+  if (minBtn) { beginStockMinEdit(minBtn); return; }
   const skuLink = e.target.closest('.sku-link');
   if (skuLink) { openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid); return; }
   const numBtn = e.target.closest('button.stock-num-btn');
@@ -1901,9 +2046,19 @@ function retFootNote(msg, ok = true) {
   el.className = `test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-function retCondOptions(selected) {
-  return RET_CONDS.map(c =>
-    `<option value="${c.key}" ${c.key === selected ? 'selected' : ''}>${c.label}</option>`).join('');
+function retCondLabel(key) {
+  const c = RET_CONDS.find(x => x.key === key);
+  return c ? c.label : key;
+}
+
+// the Condition cell's trigger, styled like the other cell controls; the open
+// menu is the shared fixed-position card (#retDdMenu) so the sheet's scroll
+// container never clips it
+function retCondTrigger(d, idx) {
+  return `<button type="button" class="ret-cond ret-cond-btn" data-idx="${idx}"
+    aria-haspopup="listbox" aria-expanded="false" aria-label="Condition">
+    <span class="ret-dd-dot is-${esc(d.condition)}"></span>${esc(retCondLabel(d.condition))}
+    <span class="ret-dd-caret">${CARET_ICON}</span></button>`;
 }
 
 function retDraftBlank(po) {
@@ -1965,21 +2120,14 @@ $('retPo').addEventListener('keydown', (e) => {
 
 // the Condition cell carries the live "→ TARGET" preview; a missing mapping
 // shows the one-time picker inline (persisted on commit, as before)
-// suffix + label per condition, for prefiling the New SKU dialog
-const RET_SUFFIX = {
-  openbox: { suf: '-OPENBOX', label: 'Open Box' },
-  used: { suf: '-USED', label: 'Used' },
-  scrap: { suf: '-SCRAP', label: 'Scrap' },
-};
-
 function retTargetCell(d, idx) {
   if (!d.sku) return '';
   const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
   if (known) return `<div class="ret-cell-target" title="Stock lands on ${esc(known)}">→ ${esc(known)}</div>`;
+  // returns only ever map to EXISTING inventory SKUs: no create shortcut here
   return `<div class="ret-cell-target is-missing">
     <input type="text" class="input mono ret-pick" data-idx="${idx}" list="retSkuOptions"
       value="${esc(d.pick || '')}" placeholder="Pick the ${esc(d.condition)} listing…" autocomplete="off" spellcheck="false" />
-    <button class="newsku-link ret-new-sku" data-idx="${idx}" title="No suitable listing yet? Create it">+ new</button>
   </div>`;
 }
 
@@ -2001,7 +2149,7 @@ function renderRetSheet() {
         : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
              placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
       <td class="ret-cell-cond">
-        <select class="input ret-cond ret-cond-in" data-idx="${idx}" aria-label="Condition">${retCondOptions(d.condition)}</select>
+        ${retCondTrigger(d, idx)}
         ${retTargetCell(d, idx)}
       </td>
       <td class="ret-cell-by"><input type="text" class="recv-cell-input ret-by-in" data-idx="${idx}"
@@ -2042,35 +2190,198 @@ $('retBody').addEventListener('input', (e) => {
   else if (e.target.classList.contains('ret-pick')) d.pick = e.target.value.trim();
 });
 
-$('retBody').addEventListener('change', (e) => {
-  if (!e.target.classList.contains('ret-cond-in')) return;
-  const d = retDrafts[Number(e.target.dataset.idx)];
+/* ---------- condition dropdown (tinted menu with dots + target preview) ---------- */
+
+let retDd = null; // { idx, hl, edit } — open menu state; null = closed
+
+// right-aligned mono preview per option: New restocks the sold listing, the
+// rest show where stock lands via the mapping engine ("not mapped" = no
+// target yet, picking it falls into the one-time picker on the row)
+function retDdTargetHtml(d, cond) {
+  if (cond === 'new') return '<span class="ret-dd-tgt">→ same SKU</span>';
+  const t = d.sku ? ((d.targets || {})[cond] || '') : '';
+  return t
+    ? `<span class="ret-dd-tgt" title="Stock lands on ${esc(t)}">→ ${esc(t)}</span>`
+    : '<span class="ret-dd-tgt is-unmapped">not mapped</span>';
+}
+
+function retDdRender() {
+  if (!retDd) return;
+  const d = retDrafts[retDd.idx];
+  if (!d) { retDdClose(); return; }
+  const menu = $('retDdMenu');
+  if (retDd.edit) { retDdRenderEdit(d, menu); return; }
+  menu.innerHTML = RET_CONDS.map((c, i) => `
+    <div class="ret-dd-mi ${c.key === d.condition ? 'sel' : ''} ${i === retDd.hl ? 'is-hl' : ''}"
+         role="option" aria-selected="${c.key === d.condition}" data-cond="${c.key}">
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}
+      ${retDdTargetHtml(d, c.key)}
+      ${c.key !== 'new' && d.sku ? `<button type="button" class="btn-icon ret-dd-fix" data-cond="${c.key}"
+        title="Set the ${c.label.toLowerCase()} listing for ${esc(d.sku)}">${ICONS.pencil}</button>` : ''}
+    </div>`).join('');
+}
+
+// pencil: fix the mapping right here — the shared inventory combobox opens
+// inside the menu card, the pick persists through returns:mapSet (manual
+// overrides beat auto-derivation). Existing inventory SKUs only, no create.
+function retDdRenderEdit(d, menu) {
+  const cond = retDd.edit;
+  menu.innerHTML = `
+    <div class="ret-dd-edit">
+      <div class="ret-dd-edit-head"><span class="ret-dd-dot is-${cond}"></span>
+        ${retCondLabel(cond)} listing for <span class="mono">${esc(d.sku)}</span></div>
+      <div class="combo ret-dd-combo">
+        <input type="text" class="input mono ret-dd-edit-input" placeholder="SKU, title or barcode…"
+               autocomplete="off" spellcheck="false" />
+        <div class="combo-list" hidden></div>
+      </div>
+    </div>`;
+  const input = menu.querySelector('.ret-dd-edit-input');
+  const list = menu.querySelector('.combo-list');
+  // registered before makeCombo's own keydown: Escape with the match list
+  // already closed backs out to the condition menu instead of doing nothing
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && list.hidden && retDd) {
+      retDd.edit = '';
+      retDdRender();
+      retDdPosition();
+    }
+  });
+  makeCombo(input, list, (item) => retDdSaveMapping(d, cond, item.sku));
+  ensureInventory();
+  input.focus();
+}
+
+async function retDdSaveMapping(d, cond, targetSku) {
+  const res = await api.returnsMapSet(d.sku, cond, targetSku);
+  if (!res.ok) {
+    toast(res.error || 'Could not save the mapping.');
+    return;
+  }
+  // every draft row of this base SKU sees the new target immediately
+  for (const r of retDrafts) {
+    if (r.sku === d.sku) r.targets = { ...(r.targets || {}), [cond]: res.targetSku };
+  }
+  toast(`${d.sku} ${cond} → ${res.targetSku}`);
+  renderRetSheet();
+  if (retDd) {
+    retDd.edit = '';
+    retDdRender();
+    retDdPosition();
+  }
+}
+
+// fixed-position under the row's trigger, flipped above when the viewport
+// runs out; re-run after any render while open (the trigger is rebuilt)
+function retDdPosition() {
+  if (!retDd) return;
+  const menu = $('retDdMenu');
+  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${retDd.idx}"]`);
+  if (!btn) { retDdClose(); return; }
+  btn.setAttribute('aria-expanded', 'true');
+  const r = btn.getBoundingClientRect();
+  menu.style.minWidth = `${Math.max(280, Math.round(r.width))}px`;
+  const left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
+  let top = r.bottom + 4;
+  if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+  menu.style.left = `${Math.max(8, Math.round(left))}px`;
+  menu.style.top = `${Math.round(top)}px`;
+}
+
+function retDdOpen(idx) {
+  const d = retDrafts[idx];
   if (!d) return;
-  d.condition = e.target.value;
-  renderRetSheet(); // the target preview follows the condition
+  retDd = { idx, hl: RET_CONDS.findIndex(c => c.key === d.condition), edit: '' };
+  $('retDdMenu').hidden = false;
+  retDdRender();
+  retDdPosition();
+}
+
+function retDdClose(refocus) {
+  if (!retDd) return;
+  const idx = retDd.idx;
+  retDd = null;
+  $('retDdMenu').hidden = true;
+  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${idx}"]`);
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    if (refocus) btn.focus();
+  }
+}
+
+function retDdPick(cond) {
+  const d = retDd && retDrafts[retDd.idx];
+  if (!d) return;
+  const idx = retDd.idx;
+  d.condition = cond;
+  retDdClose();
+  renderRetSheet(); // the target preview / one-time picker follow the condition
+  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${idx}"]`);
+  if (btn) btn.focus();
+}
+
+$('retDdMenu').addEventListener('click', (e) => {
+  if (!retDd) return;
+  const fix = e.target.closest('.ret-dd-fix');
+  if (fix) {
+    retDd.edit = fix.dataset.cond;
+    retDdRender();
+    retDdPosition();
+    return;
+  }
+  const mi = e.target.closest('.ret-dd-mi');
+  if (mi) retDdPick(mi.dataset.cond);
+});
+
+// keyboard while the menu is open (edit mode: the combobox input handles keys)
+document.addEventListener('keydown', (e) => {
+  if (!retDd || retDd.edit) return;
+  if (e.key === 'Escape') { e.preventDefault(); retDdClose(true); return; }
+  if (e.key === 'Tab') { retDdClose(); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const n = RET_CONDS.length;
+    retDd.hl = ((retDd.hl < 0 ? 0 : retDd.hl) + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+    retDdRender();
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (retDd.hl >= 0) retDdPick(RET_CONDS[retDd.hl].key);
+  }
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (!retDd) return;
+  if (e.target.closest('#retDdMenu') || e.target.closest('.ret-cond-btn')) return;
+  retDdClose();
+});
+
+// any outside scroll or resize de-anchors the fixed menu: just close it
+document.addEventListener('scroll', (e) => {
+  if (retDd && !(e.target instanceof Node && $('retDdMenu').contains(e.target))) retDdClose();
+}, true);
+window.addEventListener('resize', () => retDdClose());
+
+$('retBody').addEventListener('keydown', (e) => {
+  const btn = e.target.closest('.ret-cond-btn');
+  if (!btn || retDd) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    retDdOpen(Number(btn.dataset.idx));
+  }
 });
 
 $('retBody').addEventListener('click', (e) => {
-  const mk = e.target.closest('.ret-new-sku');
-  if (mk) {
-    // create the missing condition listing, prefilled from the sold SKU,
-    // and use it as this row's target once it exists
-    const d = retDrafts[Number(mk.dataset.idx)];
-    if (!d || !d.sku) return;
-    const meta = RET_SUFFIX[d.condition] || { suf: '', label: d.condition };
-    openNewSkuDialog({
-      sku: `${d.sku}${meta.suf}`,
-      title: `${d.title || d.sku} (${meta.label})`,
-      retailPrice: d.price || 0,
-    }, (newSku) => {
-      d.targets = { ...(d.targets || {}), [d.condition]: newSku };
-      d.pick = '';
-      renderRetSheet();
-    });
+  const cond = e.target.closest('.ret-cond-btn');
+  if (cond) {
+    const idx = Number(cond.dataset.idx);
+    if (retDd && retDd.idx === idx) retDdClose(); else retDdOpen(idx);
     return;
   }
   const del = e.target.closest('[data-act="del"]');
   if (!del) return;
+  retDdClose();
   retDrafts.splice(Number(del.dataset.idx), 1);
   renderRetSheet();
 });
@@ -2132,7 +2443,29 @@ $('retReceiveAll').addEventListener('click', async () => {
 
 
 
-// day-grouped history, rendered as sheet rows (newest first)
+// Past returns: the SAME sheet as the worksheet above, read-only — identical
+// columns, widths, gridlines and cell rendering, one row per returned unit.
+// Day groups survive as slim header rows spanning the sheet (click toggles),
+// newest first.
+function retPastRowHtml(r, i, n) {
+  return `
+    <tr class="ret-past-tr">
+      <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${n}</td>
+      <td class="mono ret-cell-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
+      <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-date" title="Received ${esc(String(r.created_at).slice(0, 10))}">${fmtTime(r.created_at)}</td>
+      <td class="ret-cell-sku"><span class="mono">${esc(i.sku)}</span></td>
+      <td class="ret-cell-cond">
+        <span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>
+        ${i.targetSku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}</div>` : ''}
+      </td>
+      <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
+      <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      <td class="cell-actions"></td>
+    </tr>`;
+}
+
 async function loadRetPast() {
   const returns = await api.returnsList();
   const box = $('retPastBox');
@@ -2148,31 +2481,47 @@ async function loadRetPast() {
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(r);
   }
-  box.innerHTML = [...days.entries()].map(([day, list]) => {
-    const open = retOpenDays.has(day);
-    const units = list.reduce((a, r) => a + r.items.reduce((x, i) => x + i.qty, 0), 0);
-    return `
-    <div class="recv-day-row ${open ? 'is-open' : ''}" data-retday="${esc(day)}">
-      <span class="recv-caret">${CARET_ICON}</span>
-      <span class="recv-day-label">${esc(recvDayLabel(day))} · ${list.length} return${list.length === 1 ? '' : 's'}</span>
-      <span class="recv-day-preview"></span>
-      <span class="recv-day-units">${units} unit${units === 1 ? '' : 's'}</span>
-    </div>
-    ${open ? `
-    <div class="ret-hist-wrap"><table class="ret-hist-table"><tbody>
-      ${list.map(r => r.items.map(i => `
-      <tr>
-        <td class="mono ret-h-time">${fmtTime(r.created_at)}</td>
-        <td class="mono ret-h-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
-        <td class="ret-h-cust" title="${esc(r.customer || '')}">${esc(r.customer || '')}</td>
-        <td class="mono ret-h-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 14)) : ''}</td>
-        <td class="mono ret-h-sku" title="Stock landed on ${esc(i.targetSku)}">${esc(i.sku)}${i.qty > 1 ? ` ×${i.qty}` : ''}</td>
-        <td class="ret-h-cond"><span class="ret-cond-tag ${i.condition === 'scrap' ? 'is-scrap' : ''}">${esc(i.condition)}</span></td>
-        <td class="mono ret-h-by" title="Received by">${esc(r.received_by || '')}</td>
-        <td class="ret-h-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
-      </tr>`).join('')).join('')}
-    </tbody></table></div>` : ''}`;
-  }).join('');
+  box.innerHTML = `
+    <div class="ret-sheet-scroll">
+    <table class="recv-sheet-table ret-sheet ret-past-sheet">
+      <thead>
+        <tr>
+          <th class="th-gutter">#</th>
+          <th class="th-po">PO#</th>
+          <th class="th-cust">Customer</th>
+          <th class="th-trk">Tracking #</th>
+          <th class="th-date">Received</th>
+          <th class="th-rsku">Returned SKU</th>
+          <th class="th-cond">Condition</th>
+          <th class="th-by">By</th>
+          <th class="th-note">Notes / dispute</th>
+          <th class="th-actions"></th>
+        </tr>
+      </thead>
+      ${[...days.entries()].map(([day, list]) => {
+        const open = retOpenDays.has(day);
+        const units = list.reduce((a, r) => a + r.items.reduce((x, i) => x + i.qty, 0), 0);
+        const rows = [];
+        if (open) {
+          let n = 0;
+          for (const r of list) for (const i of r.items) for (let u = 0; u < (i.qty || 1); u++) rows.push(retPastRowHtml(r, i, ++n));
+        }
+        return `
+        <tbody>
+          <tr class="ret-day-tr ${open ? 'is-open' : ''}" data-retday="${esc(day)}" title="Click to ${open ? 'collapse' : 'expand'} this day">
+            <td class="ret-day-cell" colspan="10"><div class="ret-day-line">
+              <span class="recv-caret">${CARET_ICON}</span>
+              <span class="recv-day-label">${esc(recvDayLabel(day))} · ${list.length} return${list.length === 1 ? '' : 's'}</span>
+              <span class="recv-day-preview"></span>
+              <span class="recv-day-units">${units} unit${units === 1 ? '' : 's'}</span>
+            </div></td>
+          </tr>
+          ${rows.join('')}
+        </tbody>`;
+      }).join('')}
+    </table>
+    </div>`;
+  applyRetCols(box.querySelector('table')); // user column widths follow the worksheet
 }
 
 const retOpenDays = new Set();
@@ -2245,15 +2594,14 @@ function renderMapList() {
 }
 
 // click a cell -> inline combobox editor; pick persists a manual override.
-// "+ new" creates the missing listing and maps it in one move.
+// Mappings only ever point at EXISTING inventory SKUs.
 function beginMapEdit(td, base, cond) {
   td.innerHTML = `
     <div class="combo map-combo">
       <input class="input mono map-edit-input" type="text" placeholder="SKU, title or barcode…"
              autocomplete="off" spellcheck="false" />
       <div class="combo-list map-edit-list" hidden></div>
-    </div>
-    <button class="newsku-link map-new-sku" title="No suitable listing yet? Create it">+ new</button>`;
+    </div>`;
   const input = td.querySelector('.map-edit-input');
   const list = td.querySelector('.map-edit-list');
   let done = false;
@@ -2273,20 +2621,6 @@ function beginMapEdit(td, base, cond) {
     if (done) return;
     done = true;
     saveMapping(item.sku);
-  });
-  // mousedown beats the input's blur-cancel timer
-  td.querySelector('.map-new-sku').addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    if (done) return;
-    done = true;
-    const meta = RET_SUFFIX[cond] || { suf: '', label: cond };
-    const baseItem = recvLookup === 'ready' ? recvLookupExact(base) : null;
-    renderMapList(); // restore the cell; the dialog takes over
-    openNewSkuDialog({
-      sku: `${base}${meta.suf}`,
-      title: `${(baseItem && baseItem.title) || base} (${meta.label})`,
-      retailPrice: baseItem ? baseItem.retailPrice : 0,
-    }, (newSku) => saveMapping(newSku));
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { done = true; renderMapList(); }
@@ -2321,6 +2655,82 @@ $('mapSearch').addEventListener('input', renderMapList);
 $('mapClose').addEventListener('click', () => $('mapDialog').close());
 $('mapDialog').addEventListener('close', () => focusScan());
 $('retMapBtn').addEventListener('click', openMappings);
+
+/* ---------- Returns sheets resize (mirrors the Stock page grips) ---------- */
+
+// whole-page width: ONE handle drives the worksheet AND the past-returns
+// sheet (they share #retMain), persisted like the Stock sheet's width
+let retSheetDrag = null;
+
+$('retGrip').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  retSheetDrag = { startX: e.clientX, startW: $('retMain').offsetWidth, w: 0 };
+  $('retGrip').classList.add('is-active');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!retSheetDrag) return;
+  const w = Math.max(560, retSheetDrag.startW + (e.clientX - retSheetDrag.startX));
+  retSheetDrag.w = w;
+  $('retMain').style.width = `${w}px`;
+});
+
+window.addEventListener('mouseup', () => {
+  if (!retSheetDrag) return;
+  if (retSheetDrag.w) localStorage.setItem('retSheetWidth', String(retSheetDrag.w));
+  retSheetDrag = null;
+  $('retGrip').classList.remove('is-active');
+});
+
+$('retGrip').addEventListener('dblclick', () => {
+  localStorage.removeItem('retSheetWidth');
+  $('retMain').style.width = '';
+});
+
+// per-column grips, shared by BOTH returns sheets: one stored width per
+// column key keeps the worksheet and the past sheet pixel-identical
+let retColWidths = {};
+try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
+
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'by', 8: 'note' };
+
+function applyRetCols(table) {
+  if (!table) return;
+  table.querySelectorAll('thead th').forEach((th, i) => {
+    const key = RET_COL_KEYS[i];
+    if (!key) return;
+    if (!th.querySelector('.col-grip')) {
+      th.insertAdjacentHTML('beforeend', `<span class="col-grip" data-grip="${key}"></span>`);
+      th.title = 'Drag the edge to resize · double-click the edge to reset';
+    }
+    const w = retColWidths[key];
+    th.style.width = w ? `${w}px` : '';
+    th.style.minWidth = w ? `${w}px` : '';
+    th.style.maxWidth = w ? `${w}px` : '';
+  });
+}
+
+function applyRetColsAll() {
+  applyRetCols($('retTable'));
+  applyRetCols($('retPastBox').querySelector('table'));
+}
+applyRetCols($('retTable'));
+
+$('returnsPage').addEventListener('mousedown', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  e.preventDefault();
+  const th = grip.closest('th');
+  gripDrag = { key: grip.dataset.grip, startX: e.clientX, startW: th.offsetWidth, th, w: 0, storeName: 'ret' };
+});
+
+$('returnsPage').addEventListener('dblclick', (e) => {
+  const grip = e.target.closest('.col-grip');
+  if (!grip) return;
+  delete retColWidths[grip.dataset.grip];
+  localStorage.setItem('retColWidths', JSON.stringify(retColWidths));
+  applyRetColsAll();
+});
 
 /* ---------- linked channel SKUs per stock item ---------- */
 

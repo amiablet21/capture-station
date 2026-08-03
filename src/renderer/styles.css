@@ -785,6 +785,18 @@ body {
   gap: 14px;
 }
 
+/* one shared width for both returns sheets, resizable like the Stock sheet */
+.ret-sheet-row { display: flex; align-items: stretch; min-height: 0; }
+
+.ret-main {
+  width: 100%;
+  min-width: 0;
+  max-width: calc(100% - 14px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .ret-bar { display: flex; align-items: center; gap: 10px; }
 .ret-ref { width: 300px; }
 .ret-hint { font-size: 12px; color: var(--muted); }
@@ -842,18 +854,6 @@ body {
 .ret-actions { display: flex; gap: 10px; margin-top: 12px; font-family: var(--font); }
 .ret-actions .input { flex: 1; }
 
-.ret-cond-tag {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent-soft-text);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 1px 9px;
-  font-family: var(--font);
-}
-
-.ret-cond-tag.is-scrap { color: var(--neg-text); background: var(--neg-bg); }
-
 /* unmatched-return path */
 
 .ret-map-btn { margin-left: auto; }
@@ -897,6 +897,113 @@ body {
 
 .ret-cell-cond .ret-cond { width: 100%; padding: 2px 6px; font-size: 12px; }
 
+/* condition dropdown: trigger styled like the cell input, menu = bordered
+   card with color dots + right-aligned mono target previews (variant A) */
+
+.ret-cond-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+
+.ret-cond-btn:hover { border-color: var(--faint); }
+.ret-cond-btn:focus-visible,
+.ret-cond-btn[aria-expanded="true"] { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.ret-dd-caret { margin-left: auto; display: inline-flex; color: var(--faint); }
+.ret-dd-caret svg { width: 10px; height: 10px; transform: rotate(90deg); }
+
+.ret-dd-dot { width: 9px; height: 9px; border-radius: 999px; flex: 0 0 auto; }
+.ret-cond-btn .ret-dd-dot { width: 8px; height: 8px; }
+.ret-dd-dot.is-new { background: var(--badge-green-text); }
+.ret-dd-dot.is-openbox { background: var(--badge-blue-text); }
+.ret-dd-dot.is-used { background: var(--badge-yellow-text); }
+.ret-dd-dot.is-scrap { background: var(--badge-red-text); }
+
+.ret-dd-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 280px;
+  max-width: min(460px, 90vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(47, 52, 55, 0.08);
+}
+
+.ret-dd-mi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.ret-dd-mi:last-child { border-bottom: none; }
+.ret-dd-mi:hover, .ret-dd-mi.is-hl { background: var(--surface-2); }
+.ret-dd-mi.sel { background: var(--accent-soft); font-weight: 600; }
+
+.ret-dd-tgt {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.ret-dd-tgt.is-unmapped { color: var(--faint); font-style: italic; }
+
+/* the per-row mapping fix: pencil shows on hover / on the selected row */
+.ret-dd-fix { width: 22px; height: 22px; flex: 0 0 auto; margin: -3px -4px -3px 0; opacity: 0; }
+.ret-dd-fix svg { width: 13px; height: 13px; }
+.ret-dd-mi:hover .ret-dd-fix, .ret-dd-mi.sel .ret-dd-fix,
+.ret-dd-mi.is-hl .ret-dd-fix, .ret-dd-fix:focus-visible { opacity: 1; }
+
+/* inline mapping editor inside the menu card (combobox list flows in place,
+   the card grows instead of clipping under overflow: hidden) */
+.ret-dd-edit { padding: 10px 12px; }
+
+.ret-dd-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ret-dd-edit-head .mono { color: var(--text); font-weight: 600; }
+
+.ret-dd-combo .ret-dd-edit-input { width: 100%; padding: 5px 8px; font-size: 12px; }
+
+.ret-dd-combo .combo-list {
+  position: static;
+  width: auto;
+  margin-top: 8px;
+  border: 1px solid var(--border-soft);
+  box-shadow: none;
+  max-height: 220px;
+}
+
 .ret-cell-target {
   margin-top: 2px;
   font-family: var(--mono);
@@ -911,29 +1018,14 @@ body {
 .ret-cell-target.is-missing { display: flex; align-items: center; gap: 6px; }
 .ret-cell-target.is-missing .ret-pick { flex: 1; min-width: 0; padding: 2px 6px; font-size: 11px; }
 
-/* "+ new" affordance: create the missing condition listing on the spot */
-.newsku-link {
-  flex: 0 0 auto;
-  font-family: var(--font);
-  font-size: 11px;
-  color: var(--faint);
-  background: none;
-  border: 1px dashed var(--border);
-  border-radius: var(--r-ctl);
-  padding: 1px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 120ms var(--ease), border-color 120ms var(--ease);
-}
-
-.newsku-link:hover { color: var(--accent); border-color: var(--accent); }
-
-.map-new-sku { margin-left: 6px; vertical-align: middle; }
 
 .ret-sheet-combo { position: relative; min-width: 150px; }
 .ret-sheet-combo .combo-list { left: -11px; width: min(440px, 65vw); }
 
 .ret-entry-po { overflow: visible !important; }
+
+/* per-column resize grips (shared with the past sheet, like Stock's) */
+.ret-sheet th { position: relative; }
 
 /* the hint must not drive the table's max-content width (it spans 9 columns) */
 .ret-entry-hint {
@@ -945,37 +1037,37 @@ body {
   min-width: 300px;
 }
 
-.ret-cell-po .ret-noorder, .ret-h-po .ret-noorder { margin-left: 6px; }
+.ret-cell-po .ret-noorder { margin-left: 6px; }
 
-/* history sheet rows inside a day group */
+/* Past returns: the SAME sheet as the worksheet, read-only; day groups are
+   slim header rows spanning all columns (click to expand/collapse) */
 
-.ret-hist-wrap { overflow-x: auto; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
-
-.ret-hist-table { width: 100%; min-width: max-content; border-collapse: collapse; }
-
-.ret-hist-table td {
-  padding: 5px 10px;
-  height: 30px;
-  font-size: 12px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border-soft);
-  border-right: 1px solid var(--border-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
+.ret-past-sheet .ret-day-cell {
+  padding: 0;
+  height: auto;
+  background: var(--surface-2);
+  border-right: none;
+  overflow: visible;
 }
 
-.ret-hist-table tr:last-child td { border-bottom: none; }
-.ret-hist-table td:last-child { border-right: none; }
+.ret-day-tr { cursor: pointer; }
+.ret-day-tr:hover .ret-day-cell { background: var(--border); }
+.ret-day-tr.is-open .recv-caret { transform: rotate(90deg); color: var(--accent); }
 
-.ret-h-time { color: var(--faint); width: 58px; }
-.ret-h-po { color: var(--text); font-weight: 600; max-width: 170px; }
-.ret-h-cust { max-width: 140px; }
-.ret-h-trk { max-width: 130px; }
-.ret-h-sku { color: var(--text); max-width: 200px; }
-.ret-h-by { width: 46px; text-transform: uppercase; font-weight: 600; }
-.ret-h-note { max-width: 200px; }
+.ret-day-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
+/* read-only condition: the trigger's dot + label, minus the control chrome */
+.ret-cond-ro { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
+.ret-cond-ro .ret-dd-dot { width: 8px; height: 8px; }
+
+.ret-ro-by { font-weight: 600; text-transform: uppercase; font-size: 12px; }
+.ret-ro-note { font-family: var(--font); }
 
 /* condition-mapping editor */
 
@@ -1722,6 +1814,18 @@ body {
 .stock-table .stock-avail { font-weight: 600; }
 .stock-table tr.is-out .stock-avail { color: var(--neg-text); }
 .stock-table tr.is-out td.cell-gutter { background: var(--neg-bg); color: var(--neg-text); font-weight: 600; }
+
+/* below the minimum level: the Available number turns red */
+.stock-table .stock-avail.is-low { color: var(--neg-text); }
+
+/* tiny day-over-day sales delta beside the SKU (units today vs yesterday) */
+.stock-delta { margin-left: 8px; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stock-delta.is-pos { color: var(--pos-text); }
+.stock-delta.is-neg { color: var(--neg-text); }
+.stock-delta.is-flat { color: var(--faint); }
+
+/* (the Sales tab was removed 2026-08-03; its backend — sales:query and the
+   range cache — stays and feeds the day-over-day deltas above) */
 .stock-title {
   max-width: 300px;
   overflow: hidden;

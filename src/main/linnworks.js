@@ -414,6 +414,74 @@ class LinnworksClient {
     return out;
   }
 
+  // Sales page: every processed-order item line in a date window.
+  // Verified against apidocs.linnworks.net: SearchProcessedOrders takes a
+  // `request` wrapper (SearchTerm, DateField 'processed', FromDate/ToDate,
+  // PageNumber, ResultsPerPage) and returns paged HEADERS only (pkOrderID,
+  // Source, dProcessedOn, TotalPages, no item lines) — the per-item SKU /
+  // Quantity / CostIncTax come from Orders/GetOrdersById, batched.
+  // Both endpoints are heavy (150/min); the shared throttle spaces the calls.
+  async listProcessedLines(fromIso, toIso) {
+    const headers = [];
+    for (let page = 1; ; page++) {
+      const data = await this.call('ProcessedOrders/SearchProcessedOrders', {
+        request: {
+          SearchTerm: '',
+          DateField: 'processed',
+          FromDate: fromIso,
+          ToDate: toIso,
+          PageNumber: page,
+          ResultsPerPage: 200,
+        },
+      });
+      const po = (data && data.ProcessedOrders) || {};
+      const hits = po.Data || [];
+      for (const o of hits) {
+        headers.push({
+          orderId: o.pkOrderID,
+          source: o.Source || '',
+          processedOn: o.dProcessedOn || '',
+        });
+      }
+      if (!hits.length || page >= (po.TotalPages || 1)) break;
+    }
+    const headById = new Map(headers.map(h => [h.orderId, h]));
+    const lines = [];
+    for (let i = 0; i < headers.length; i += 50) {
+      const ids = headers.slice(i, i + 50).map(h => h.orderId);
+      const full = await this.call('Orders/GetOrdersById', { pkOrderIds: ids });
+      for (const order of full || []) {
+        const head = headById.get(order.OrderId) || {};
+        const source = head.source || (order.GeneralInfo ? order.GeneralInfo.Source : '') || '';
+        for (const it of order.Items || []) {
+          if (it.IsService) continue;
+          const qty = it.Quantity || 1;
+          lines.push({
+            orderId: order.OrderId,
+            source,
+            processedOn: head.processedOn || '',
+            sku: it.SKU || it.ItemNumber || '',
+            title: it.Title || '',
+            qty,
+            // line revenue: the channel's line total (inc tax) when present,
+            // otherwise the unit price times quantity
+            revenue: Math.round((Number(it.CostIncTax) > 0
+              ? Number(it.CostIncTax)
+              : (Number(it.PricePerUnit) || 0) * qty) * 100) / 100,
+          });
+        }
+      }
+    }
+    return lines;
+  }
+
+  // Set the minimum (reorder alert) level for one stock item at one location.
+  // Verified: POST Stock/UpdateStockMinimumLevel { stockItemId, locationId,
+  // minimumLevel } returns 204 No Content.
+  async setStockMinimumLevel(stockItemId, locationId, minimumLevel) {
+    return this.call('Stock/UpdateStockMinimumLevel', { stockItemId, locationId, minimumLevel });
+  }
+
   // Channel SKUs linked to a stock item (what Channel Mapping points here).
   async getChannelSkus(stockItemId) {
     const data = await this.call(`Inventory/GetInventoryItemChannelSKUs?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });

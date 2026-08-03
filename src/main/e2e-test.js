@@ -276,7 +276,55 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('sheet row shows the no-order pill + inline SKU picker',
       sheetBits[0] === true && sheetBits[1] === true && sheetBits[2] === '2',
       sheetBits);
-    await exec('retDrafts = []; renderRetSheet();');
+
+    // 24b. custom condition dropdown (replaces the native select): four option
+    // rows with dots + target previews, pencil fix on non-New rows only,
+    // arrows/Enter keyboard pick, unmapped conditions read "not mapped"
+    const ddTargets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
+    await exec(`retDrafts = [{ po: 'WMR-REMOVAL-7788', orderId: null, source: '', customer: '', tracking: '',
+      sku: 'S25-128GB-NAVY', title: '', price: 0, condition: 'openbox', targets: ${JSON.stringify(ddTargets)},
+      note: '', pick: '', receivedBy: '', unmatched: true, at: new Date().toISOString() }]; renderRetSheet();`);
+    await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
+    const dd = await exec(`[
+      !$('retDdMenu').hidden,
+      document.querySelectorAll('#retDdMenu .ret-dd-mi').length,
+      (document.querySelector('#retDdMenu .ret-dd-mi.sel') || { dataset: {} }).dataset.cond || '',
+      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="new"] .ret-dd-tgt') || {}).textContent || '',
+      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="openbox"] .ret-dd-tgt') || {}).textContent || '',
+      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="used"] .ret-dd-tgt') || {}).textContent || '',
+      document.querySelectorAll('#retDdMenu .ret-dd-fix').length,
+      !!document.querySelector('#retDdMenu .ret-dd-mi[data-cond="new"] .ret-dd-fix'),
+      (document.querySelector('#retBody .ret-cond-btn') || {}).getAttribute('aria-expanded'),
+    ]`);
+    check('condition menu: 4 rows, selection, target previews, unmapped state',
+      dd[0] === true && dd[1] === 4 && dd[2] === 'openbox'
+        && /same SKU/.test(dd[3]) && /S25-128GB-NAVY-OPENBOX/.test(dd[4]) && /not mapped/.test(dd[5])
+        && dd[8] === 'true',
+      dd);
+    check('pencil fix on non-New rows only', dd[6] === 3 && dd[7] === false, dd);
+    // keyboard: ArrowDown from Open box lands on Used, Enter picks it
+    await exec(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))`);
+    await exec(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+    const ddPick = await exec(`[
+      retDrafts[0].condition,
+      $('retDdMenu').hidden,
+      (document.querySelector('#retBody .ret-cond-btn') || {}).textContent || '',
+      !!document.querySelector('#retBody .ret-pick'),
+    ]`);
+    check('arrow + Enter picks Used, closes the menu, shows the one-time picker',
+      ddPick[0] === 'used' && ddPick[1] === true && /Used/.test(ddPick[2]) && ddPick[3] === true,
+      ddPick);
+    // pencil swaps the menu to the inline mapping editor (shared combobox)
+    await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
+    await exec(`document.querySelector('#retDdMenu .ret-dd-fix[data-cond="used"]').click()`);
+    const ddEdit = await exec(`[
+      !!document.querySelector('#retDdMenu .ret-dd-edit'),
+      !!document.querySelector('#retDdMenu .ret-dd-combo .combo-list'),
+      document.activeElement === document.querySelector('#retDdMenu .ret-dd-edit-input'),
+    ]`);
+    check('pencil opens the inline mapping editor anchored in the menu',
+      ddEdit[0] === true && ddEdit[1] === true && ddEdit[2] === true, ddEdit);
+    await exec('retDdClose(); retDrafts = []; renderRetSheet();');
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
@@ -290,12 +338,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec(`retOpenDays.add('${db.localDay()}'); loadRetPast()`);
     await sleep(250);
+    // history = the SAME sheet layout as the worksheet, read-only: identical
+    // 10-column header, one row per unit (the qty-2 return = 2 rows), the
+    // no-order pill, the condition dot, and no inputs/actions anywhere
     const ledgerBits = await exec(`[
-      !!document.querySelector('#retPastBox .ret-hist-table'),
+      !!document.querySelector('#retPastBox table.ret-sheet.ret-past-sheet'),
+      document.querySelectorAll('#retPastBox thead th').length,
+      !!document.querySelector('#retPastBox .ret-day-tr.is-open'),
+      document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
       !!document.querySelector('#retPastBox .ret-noorder'),
+      !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
+      document.querySelectorAll('#retPastBox input, #retPastBox select, #retPastBox .btn-icon').length,
     ]`);
-    check('history renders sheet rows and flags the unmatched return',
-      ledgerBits[0] === true && ledgerBits[1] === true, ledgerBits);
+    check('history renders the worksheet sheet layout, one row per unit',
+      ledgerBits[0] === true && ledgerBits[1] === 10 && ledgerBits[2] === true
+        && ledgerBits[3] === 2 && ledgerBits[4] === true && ledgerBits[5] === true,
+      ledgerBits);
+    check('history rows are read-only (no inputs or row actions)',
+      ledgerBits[6] === 0, ledgerBits);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);
@@ -357,7 +417,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('cutoff formats as a 12h clock', dueChecks[6] === '4:00 PM' && dueChecks[7] === '9:30 AM',
       [dueChecks[6], dueChecks[7]]);
 
-    // 29. seeded queue: overdue row sorts to top, chips + filter + header show
+    // 29. seeded queue: chips + filter + header show; ordering stays pure
+    // newest-first (due urgency never re-sorts the rows)
     await exec(`
       state.orderMeta['02-12345-67890'] = { source: 'EBAY', despatchBy: '2020-01-02T00:00:00',
         items: [{ sku: 'S25-128GB-NAVY', qty: 2, title: 'Galaxy S25', img: '' }] };
@@ -373,7 +434,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelector('#rowsBody tr:first-child td.cell-gutter').textContent,
       document.querySelector('#rowsBody tr:last-child td.cell-gutter').textContent,
     ]`);
-    check('queue shows due + qty chips, Due-today filter, overdue row on top',
+    // the ebay row is both the newest capture AND the overdue one, so the top
+    // slot proves newest-first (the due seed must not have re-sorted anything)
+    check('queue shows due + qty chips, Due-today filter, newest row on top',
       queueBits[0] === true && queueBits[1] === true && queueBits[2] === true
         && queueBits[3] === '02-12345-67890' && queueBits[4] === false,
       queueBits);
@@ -507,6 +570,71 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('stock toolbar buttons (New SKU / Receiving / WFS Shipments) hidden',
       wfsView.hiddenBtns.every(Boolean), wfsView);
 
+    // 34. stock minimums: pure crossing engine, capture-only refusal, Low view
+    const lows = db.lowStockCrossings([
+      { sku: 'A', title: 'a', available: 1, min: 3 },  // below, new -> alerts
+      { sku: 'B', title: 'b', available: 5, min: 3 },  // healthy
+      { sku: 'C', title: 'c', available: 0, min: 2 },  // below, already latched
+      { sku: 'D', title: 'd', available: 0, min: 0 },  // no minimum set: never alerts
+    ], { C: true, E: true }); // E recovered since the last pass
+    check('lowStockCrossings: one alert per crossing, latch holds, recovery re-arms',
+      lows.crossed.length === 1 && lows.crossed[0].sku === 'A'
+        && lows.below.A === true && lows.below.C === true
+        && lows.below.B === undefined && lows.below.E === undefined,
+      lows);
+    res = await exec(`api.setStockMin('sid-1', 5)`);
+    check('stock:setMin refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const lowView = await exec(`(() => {
+      const lvl = (n, o, m) => [{ locationId: 'L1', locationName: 'Digital World Shop', stockLevel: n, inOrders: o, due: 0, minimumLevel: m, available: n - o }];
+      stockSeed({ ok: true, locationId: 'L1', locationName: 'Digital World Shop', items: [
+        { stockItemId: '1', sku: 'S25-128GB-NAVY', title: 'navy', barcode: '', category: '', image: '', levels: lvl(2, 1, 5) },
+        { stockItemId: '2', sku: 'A16-64GB-BLK', title: 'black', barcode: '', category: '', image: '', levels: lvl(9, 0, 2) },
+      ] });
+      renderStockChips();
+      const chip = document.querySelector('#stockChips [data-view="low"]');
+      const chipText = chip ? chip.textContent : '';
+      if (chip) chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const out = {
+        chipText,
+        rows: document.querySelectorAll('#stockList tbody tr').length,
+        lowRed: !!document.querySelector('#stockList .stock-avail.is-low'),
+        minBtn: !!document.querySelector('#stockList .stock-min-btn'),
+        summary: $('stockSummary').textContent,
+      };
+      stockLowActive = false; stockCache = null; renderStockChips();
+      return out;
+    })()`);
+    check('Low stock view: live-count chip, filtered rows, red Available, Min editable',
+      /Low stock · 1/.test(lowView.chipText) && lowView.rows === 1 && lowView.lowRed === true
+        && lowView.minBtn === true && /below minimum/.test(lowView.summary),
+      lowView);
+
+    // 35. day-over-day sales deltas (the Sales tab itself was removed; its
+    // backend stays and feeds the Stock page badges)
+    const deltas = await exec(`[
+      salesDeltaText(11, 10), salesDeltaText(9, 10), salesDeltaText(5, 5),
+      salesDeltaText(3, 0), salesDeltaText(0, 4), salesDeltaText(0, 0),
+    ]`);
+    check('salesDeltaText: +10% / -10% / flat / new / -100% / nothing',
+      deltas[0].text === '+10%' && deltas[0].cls === 'is-pos'
+        && deltas[1].text === '-10%' && deltas[1].cls === 'is-neg'
+        && deltas[2].text === '0%' && deltas[2].cls === 'is-flat'
+        && deltas[3].text === 'new' && deltas[3].cls === 'is-pos'
+        && deltas[4].text === '-100%' && deltas[4].cls === 'is-neg'
+        && deltas[5] === null,
+      deltas);
+    res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
+    check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+
+    // 36. returns sheets resize: whole-width grip + per-column grips on BOTH
+    const retGrips = await exec(`[
+      !!$('retGrip'),
+      document.querySelectorAll('#retTable thead .col-grip').length,
+      document.querySelectorAll('#retPastBox thead .col-grip').length,
+    ]`);
+    check('returns sheets: shared width grip + column grips on worksheet and past sheet',
+      retGrips[0] === true && retGrips[1] === 8 && retGrips[2] === 8, retGrips);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);
@@ -621,17 +749,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
       // fourth shot: the Stock page with condition chips, Open Box view active
       await exec(`showPage('stock')`);
       await sleep(500); // loadStock fails fast without creds; chips load from config
-      const lvl = (n, o) => [{ locationId: 'L1', stockLevel: n, inOrders: o, due: 0, minimumLevel: 0, available: n - o }];
+      const lvl = (n, o, m = 0) => [{ locationId: 'L1', stockLevel: n, inOrders: o, due: 0, minimumLevel: m, available: n - o }];
       await exec(`stockSeed(${JSON.stringify({
         ok: true, locationId: 'L1', locationName: 'Warehouse',
         items: [
-          { stockItemId: '1', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', barcode: '', category: '', image: '', levels: lvl(42, 3) },
+          { stockItemId: '1', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', barcode: '', category: '', image: '', levels: lvl(42, 3, 10) },
           { stockItemId: '2', sku: 'S25-128GB-NAVY-OPENBOX', title: 'Samsung Galaxy S25 128GB Navy (Open Box)', barcode: '', category: '', image: '', levels: lvl(5, 1) },
           { stockItemId: '3', sku: 'A16-64GB-BLK-OPENBOX', title: 'Samsung Galaxy A16 64GB Black (Open Box)', barcode: '', category: '', image: '', levels: lvl(3, 0) },
-          { stockItemId: '4', sku: 'IP15-128GB-BLUE', title: 'iPhone 15 128GB Blue', barcode: '', category: '', image: '', levels: lvl(18, 2) },
+          { stockItemId: '4', sku: 'IP15-128GB-BLUE', title: 'iPhone 15 128GB Blue', barcode: '', category: '', image: '', levels: lvl(2, 1, 5) },
         ],
       })})`);
-      await exec(`stockActiveView = (stockViews || [])[0] || null; renderStockChips(); renderStock();`);
+      // day-over-day deltas beside the SKUs + the all-inventory view so the
+      // low-stock row (IP15, red Available) and the Low chip both show
+      await exec(`stockDeltas = ${JSON.stringify({
+        'S25-128GB-NAVY': { today: 11, yesterday: 10 },
+        'S25-128GB-NAVY-OPENBOX': { today: 1, yesterday: 0 },
+        'IP15-128GB-BLUE': { today: 2, yesterday: 4 },
+      })};`);
+      await exec(`stockActiveView = null; renderStockChips(); renderStock();`);
       await sleep(300);
       img = await win.webContents.capturePage();
       const stockShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-stock.png');
@@ -690,6 +825,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-sheet.png');
       fs.writeFileSync(retShot, img.toPNG());
       console.log(`SHOT ${retShot}`);
+      // the condition dropdown open on the first row: dots + target previews,
+      // pencil fix visible on the selected (Open box) row
+      await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
+      await sleep(250);
+      img = await win.webContents.capturePage();
+      const retDdShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-dropdown.png');
+      fs.writeFileSync(retDdShot, img.toPNG());
+      console.log(`SHOT ${retDdShot}`);
+      await exec('retDdClose()');
       // condition-mapping editor, seeded with mixed auto/manual rows
       await exec(`$('mapDialog').showModal(); $('mapSearch').value = ''; mapRows = ${JSON.stringify([
         { baseSku: 'A16-64GB-BLK', conds: { used: { sku: 'A16-64GB-BLK-USED', source: 'manual' } } },

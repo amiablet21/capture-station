@@ -299,6 +299,24 @@ function resolveConditionTargets(baseSku, inventorySkus) {
   return targets;
 }
 
+// Low-stock alerting: which SKUs CROSSED below their minimum since the last
+// check. Pure, so it is testable offline: items = [{ sku, title, available,
+// min }], prevBelow = { sku: true } (the persisted latch). A SKU alerts once
+// per crossing; recovering to >= min drops it from `below`, re-arming it.
+// min <= 0 means "no minimum set" and never alerts.
+function lowStockCrossings(items, prevBelow) {
+  const below = {};
+  const crossed = [];
+  for (const it of items || []) {
+    const min = Number(it.min) || 0;
+    if (min <= 0) continue;
+    if ((Number(it.available) || 0) >= min) continue;
+    below[it.sku] = true;
+    if (!prevBelow || !prevBelow[it.sku]) crossed.push(it);
+  }
+  return { below, crossed };
+}
+
 function close() {
   if (db) { try { db.close(); } catch { /* already closed */ } db = null; }
 }
@@ -324,4 +342,5 @@ module.exports = {
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
+  lowStockCrossings,
 };

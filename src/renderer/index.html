@@ -125,6 +125,10 @@
        expands to one row per unit, grades redirect stock via the mapping engine -->
   <section id="returnsPage" class="ret-page" hidden>
     <div class="ret-scroll">
+      <div class="ret-sheet-row">
+      <!-- one shared width drives BOTH sheets (worksheet + past returns),
+           since they must stay pixel-identical; the grip mirrors Stock's -->
+      <div id="retMain" class="ret-main">
       <div class="ret-bar">
         <span class="recv-past-head">Returns worksheet</span>
         <span id="retHint" class="ret-hint"></span>
@@ -169,6 +173,9 @@
       <div class="recv-past">
         <div class="recv-past-head">Past returns · grouped by day</div>
         <div id="retPastBox" class="recv-past-box"></div>
+      </div>
+      </div>
+      <div id="retGrip" class="sheet-grip" title="Drag to widen or narrow the sheets · double-click to reset"></div>
       </div>
     </div>
   </section>
@@ -342,6 +349,10 @@
         <span class="field-label">Make.com webhook URL (optional, receives each finished session)</span>
         <input id="setRecvWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
+      <label class="field">
+        <span class="field-label">Low-stock webhook URL (optional, one alert per SKU crossing below its minimum)</span>
+        <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">
@@ -446,6 +457,9 @@
   </dialog>
   <datalist id="skuOptions"></datalist>
   <datalist id="retSkuOptions"></datalist>
+  <!-- shared condition-dropdown menu for the Returns worksheet (fixed-position,
+       anchored under the row's trigger so the sheet's scroll never clips it) -->
+  <div id="retDdMenu" class="ret-dd-menu" role="listbox" aria-label="Condition" hidden></div>
 
   <!-- Shipped different item: substitution intent, applied at process time -->
   <dialog id="subDialog" class="dlg">

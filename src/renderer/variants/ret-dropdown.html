@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Condition dropdown options</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 20px; overflow: auto; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+  .opt-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px; }
+  .opt-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 10px; }
+
+  /* A: tinted menu with dots + target preview */
+  .menu { border: 1px solid var(--border); border-radius: var(--r-ctl); overflow: hidden; box-shadow: 0 8px 24px rgba(47,52,55,0.08); }
+  .mi { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13px; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
+  .mi:last-child { border-bottom: none; }
+  .dot { width: 9px; height: 9px; border-radius: 999px; flex: 0 0 auto; }
+  .mi .tgt { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .mi.sel { background: var(--accent-soft); font-weight: 600; }
+
+  /* B: segmented pills, no dropdown at all */
+  .segs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+  .seg.sel-ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
+  .seg-preview { margin-top: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+  /* C: big descriptive menu */
+  .bigmenu { border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; box-shadow: 0 8px 24px rgba(47,52,55,0.08); }
+  .bmi { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
+  .bmi:last-child { border-bottom: none; }
+  .bmi b { font-size: 13px; display: block; }
+  .bmi span { font-size: 11.5px; color: var(--muted); }
+  .bmi.sel { background: var(--accent-soft); }
+</style></head>
+<body>
+  <div class="row3">
+    <div class="opt-card">
+      <div class="opt-title">A — Tinted menu with target preview</div>
+      <div class="menu">
+        <div class="mi"><span class="dot" style="background:#346538"></span>New<span class="tgt">→ same SKU</span></div>
+        <div class="mi sel"><span class="dot" style="background:#1F6C9F"></span>Open box<span class="tgt">→ …-OPENBOX</span></div>
+        <div class="mi"><span class="dot" style="background:#956400"></span>Used<span class="tgt">→ …-USED</span></div>
+        <div class="mi"><span class="dot" style="background:#9F2F2D"></span>Scrap<span class="tgt">→ …-SCRAP</span></div>
+      </div>
+    </div>
+    <div class="opt-card">
+      <div class="opt-title">B — Pills, one click, no dropdown</div>
+      <div class="segs">
+        <span class="seg">New</span>
+        <span class="seg sel-ob">Open box</span>
+        <span class="seg">Used</span>
+        <span class="seg">Scrap</span>
+      </div>
+      <div class="seg-preview">→ +1 X230-128GB-GRAY-OPENBOX</div>
+    </div>
+    <div class="opt-card">
+      <div class="opt-title">C — Descriptive menu</div>
+      <div class="bigmenu">
+        <div class="bmi"><b>New</b><span>Unopened, restock the original listing</span></div>
+        <div class="bmi sel"><b>Open box</b><span>Opened, complete, resell as open box</span></div>
+        <div class="bmi"><b>Used</b><span>Visible wear, resell as used</span></div>
+        <div class="bmi"><b>Scrap</b><span>Not sellable, parts or write-off</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

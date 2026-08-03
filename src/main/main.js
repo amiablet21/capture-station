@@ -376,8 +376,9 @@ function receivingFolder() {
     || path.join(app.getPath('documents'), 'Capture Station', 'receiving');
 }
 
-// POST the finished session to the Make.com webhook: 10s timeout, one retry.
-async function postReceivingWebhook(url, session) {
+// POST a JSON body to a webhook: 10s timeout, one retry (receiving sessions
+// and low-stock alerts share this).
+async function postJsonWebhook(url, session) {
   let lastError = '';
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -429,7 +430,7 @@ async function finishReceiving(payload) {
   }
 
   const url = ((config.load().receiving || {}).webhookUrl || '').trim();
-  const webhook = url ? await postReceivingWebhook(url, session) : null; // null = not configured
+  const webhook = url ? await postJsonWebhook(url, session) : null; // null = not configured
   if (webhook) {
     // audit the webhook outcome into the session file for the history list
     try {
@@ -892,6 +893,136 @@ function startStockRouter() {
   setInterval(tick, 5 * 60 * 1000);
 }
 
+/* ---------- low-stock watcher ---------- */
+
+// Alerts once per SKU when Available crosses below the minimum level at the
+// primary warehouse (db.lowStockCrossings is the pure engine). The latch is
+// persisted to userData so restarts never respam; recovering above the
+// minimum re-arms the alert. Silent and visual-only in the app — the webhook
+// (Settings) is the notification channel, skipped when empty.
+let lowStockRunning = false;
+let lowStockLastAt = 0;
+
+function lowStockStatePath() {
+  return path.join(app.getPath('userData'), 'lowstock-state.json');
+}
+
+function loadLowStockState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(lowStockStatePath(), 'utf8'));
+    return { below: (s && typeof s.below === 'object' && s.below) || {} };
+  } catch {
+    return { below: {} };
+  }
+}
+
+function saveLowStockState(below) {
+  try {
+    fs.writeFileSync(lowStockStatePath(), JSON.stringify({ below, at: new Date().toISOString() }, null, 2), 'utf8');
+  } catch { /* best effort; the next pass rewrites it */ }
+}
+
+// items = pre-fetched inventory (stock:get piggybacks its own fetch);
+// omitted = fetch fresh. minIntervalMs guards the manual-refresh path.
+async function runLowStockCheck(itemsOpt, minIntervalMs = 0) {
+  const cfg = config.load();
+  if (cfg.captureOnly || !cfg.linnworks.applicationId || !cfg.linnworks.locationId) return;
+  if (lowStockRunning) return;
+  if (minIntervalMs && Date.now() - lowStockLastAt < minIntervalMs) return;
+  lowStockRunning = true;
+  try {
+    let inv = itemsOpt;
+    if (!inv) {
+      const client = new LinnworksClient(cfg.linnworks);
+      inv = await client.listInventory();
+    }
+    lowStockLastAt = Date.now();
+    const locId = cfg.linnworks.locationId;
+    const items = inv.map(it => {
+      const l = (it.levels || []).find(x => x.locationId === locId) || {};
+      return { sku: it.sku, title: it.title || '', available: l.available || 0, min: l.minimumLevel || 0 };
+    });
+    const prev = loadLowStockState();
+    const { below, crossed } = db.lowStockCrossings(items, prev.below);
+    saveLowStockState(below);
+    const url = ((cfg.lowStock || {}).webhookUrl || '').trim();
+    if (url) {
+      for (const it of crossed) {
+        await postJsonWebhook(url, {
+          sku: it.sku, title: it.title, available: it.available, min: it.min,
+          at: new Date().toISOString(),
+        });
+      }
+    }
+  } catch { /* silent: the next scheduled pass retries */ }
+  finally { lowStockRunning = false; }
+}
+
+function startLowStockWatcher() {
+  setTimeout(() => runLowStockCheck(), 15000);
+  setInterval(() => runLowStockCheck(), 15 * 60 * 1000);
+}
+
+/* ---------- Sales page: processed-order line cache ---------- */
+
+// SearchProcessedOrders + GetOrdersById are heavy (150/min): fetched item
+// lines are cached in memory per range and overlapping requests reuse or
+// extend the cache instead of re-paging the whole window.
+const SALES_CACHE_TTL_MS = 10 * 60 * 1000;
+let salesCache = { from: 0, to: 0, at: 0, lines: [] }; // epoch-ms range
+
+function salesSlice(f, t) {
+  return salesCache.lines.filter(l => {
+    const ts = Date.parse(l.processedOn);
+    return !Number.isNaN(ts) && ts >= f && ts <= t;
+  });
+}
+
+// merge a fetched segment, skipping orders the cache already holds
+// (boundary overlap between segments duplicates whole orders, never lines)
+function salesMerge(segment) {
+  const have = new Set(salesCache.lines.map(l => l.orderId));
+  for (const l of segment) {
+    if (!have.has(l.orderId)) salesCache.lines.push(l);
+  }
+}
+
+async function querySales(from, to, force) {
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+  const f = Date.parse(`${from}T00:00:00`);
+  const t = Date.parse(`${to}T23:59:59.999`);
+  if (Number.isNaN(f) || Number.isNaN(t) || f > t) return { ok: false, error: 'Pick a valid date range.' };
+  if (t - f > 366 * 24 * 3600 * 1000) return { ok: false, error: 'Range too long — one year at most.' };
+  try {
+    const client = new LinnworksClient(cfg.linnworks);
+    if (force || Date.now() - salesCache.at > SALES_CACHE_TTL_MS) {
+      salesCache = { from: 0, to: 0, at: 0, lines: [] };
+    }
+    if (salesCache.at && f >= salesCache.from && t <= salesCache.to) {
+      return { ok: true, lines: salesSlice(f, t), cached: true };
+    }
+    if (salesCache.at && t >= salesCache.from && f <= salesCache.to) {
+      // overlap: fetch only the missing head / tail segments
+      if (f < salesCache.from) {
+        salesMerge(await client.listProcessedLines(new Date(f).toISOString(), new Date(salesCache.from).toISOString()));
+      }
+      if (t > salesCache.to) {
+        salesMerge(await client.listProcessedLines(new Date(salesCache.to).toISOString(), new Date(t).toISOString()));
+      }
+      salesCache.from = Math.min(salesCache.from, f);
+      salesCache.to = Math.max(salesCache.to, t);
+      salesCache.at = Date.now();
+    } else {
+      const lines = await client.listProcessedLines(new Date(f).toISOString(), new Date(t).toISOString());
+      salesCache = { from: f, to: t, at: Date.now(), lines };
+    }
+    return { ok: true, lines: salesSlice(f, t) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 /* ---------- IPC ---------- */
 
 function registerIpc() {
@@ -917,6 +1048,9 @@ function registerIpc() {
   ipcMain.handle('orders:refresh', async () => {
     openOrdersCache = { at: 0, data: null, promise: null }; // force a fresh fetch
     await runOrderImport();
+    // manual refresh also sweeps for new low-stock crossings (own throttle:
+    // at most once per 5 minutes, so spamming Refresh stays cheap)
+    runLowStockCheck(null, 5 * 60 * 1000).catch(() => { /* silent */ });
     return { ok: true };
   });
   // Per-order location move (same Orders/MoveToLocation call the router uses):
@@ -1070,6 +1204,8 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
+      // fresh levels for free: run the low-stock crossing check on them
+      runLowStockCheck(items).catch(() => { /* silent */ });
       return {
         ok: true,
         locationId: cfg.linnworks.locationId,
@@ -1334,6 +1470,8 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // force = the page's Refresh button: bust the cache and re-page
+  ipcMain.handle('sales:query', (_e, { from, to, force }) => querySales(from, to, !!force));
   ipcMain.handle('wfs:list', () => db.listWfsShipments());
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();
@@ -1418,6 +1556,21 @@ function registerIpc() {
         await runOrderImport();
       })().catch(() => { /* the scheduled passes will catch up */ });
       return { ok: true, ...updated };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Minimum (reorder alert) level for one SKU at the primary warehouse.
+  ipcMain.handle('stock:setMin', async (_e, { stockItemId, level }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const n = Number(level);
+    if (!stockItemId) return { ok: false, error: 'Missing stock item.' };
+    if (!Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.setStockMinimumLevel(stockItemId, cfg.linnworks.locationId, n);
+      return { ok: true, minimumLevel: n };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1556,6 +1709,7 @@ app.whenReady().then(() => {
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();
+  startLowStockWatcher();
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {
