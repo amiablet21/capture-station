@@ -102,11 +102,28 @@ function open() {
   if (!cols.includes('sub_for')) {
     db.exec(`ALTER TABLE rows ADD COLUMN sub_for TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: item snapshot [{sku, qty}] taken while the order was open,
+  // so completed rows keep showing what was in them after the live order
+  // metadata disappears from the open-order book
+  if (!cols.includes('items')) {
+    db.exec(`ALTER TABLE rows ADD COLUMN items TEXT NOT NULL DEFAULT '[]'`);
+  }
   return db;
 }
 
 function parseRow(r) {
-  return r ? { ...r, serials: JSON.parse(r.serials) } : null;
+  if (!r) return null;
+  let items = [];
+  try { items = JSON.parse(r.items || '[]'); } catch { /* pre-migration row */ }
+  return { ...r, serials: JSON.parse(r.serials), items };
+}
+
+// snapshot of the order's item lines, kept forever on the row
+function setRowItems(id, items) {
+  const clean = (Array.isArray(items) ? items : [])
+    .map(i => ({ sku: String(i.sku || '').slice(0, 120), qty: Number(i.qty) || 1 }))
+    .filter(i => i.sku);
+  open().prepare('UPDATE rows SET items = ? WHERE id = ?').run(JSON.stringify(clean), id);
 }
 
 function createRow({ channel, orderNumber, origin }) {
@@ -393,7 +410,7 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,

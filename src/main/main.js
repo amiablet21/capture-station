@@ -85,9 +85,11 @@ function csvFolder() {
 }
 
 function buildCsvContent(rows) {
-  const header = 'time,channel,order_number,tracking,carrier,notes,status,fail_reason,synced_at';
+  const header = 'time,channel,order_number,items,tracking,carrier,notes,status,fail_reason,synced_at';
   const lines = rows.slice().reverse().map(r => [
-    r.created_at, r.channel, r.order_number, r.tracking, r.carrier,
+    r.created_at, r.channel, r.order_number,
+    (r.items || []).map(i => `${i.sku}${i.qty > 1 ? ` x${i.qty}` : ''}`).join('; '),
+    r.tracking, r.carrier,
     // the substitution marker rides in the notes column (internal audit trail)
     [r.notes || '', r.sub_sku ? `SUB: ${r.sub_note || `shipped ${r.sub_sku}${r.sub_for ? ` instead of ${r.sub_for}` : ''}`} (×${r.sub_qty || 1})` : '']
       .filter(Boolean).join(' | '),
@@ -828,6 +830,12 @@ async function runOrderImport() {
       if (!db.findByOrderNumber(ref)) {
         db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks' });
         added++;
+      }
+      // snapshot the item lines onto the row while the order is still open,
+      // so the Items column survives after the order leaves the open book
+      const row = db.findByOrderNumber(ref);
+      if (row && (!row.items || !row.items.length) && meta[ref] && meta[ref].items.length) {
+        db.setRowItems(row.id, meta[ref].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
       }
     }
     // untouched imported rows whose order left open orders: cancelled or

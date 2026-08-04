@@ -390,7 +390,12 @@ function render() {
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}${lineSub(i)}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}${lineSub(i)}</span>`;
     }).join('') + moreHtml;
-    const itemsCellHtml = itemsHtml;
+    // no live order metadata (processed / left the open book): fall back to
+    // the item snapshot taken while the order was open
+    const snapHtml = !allItems.length && Array.isArray(row.items) && row.items.length
+      ? row.items.map(s => `<span class="item-entry item-snap" title="From the order as captured">${esc(s.sku)}${s.qty > 1 ? `<span class="qty-chip">×${s.qty}</span>` : ''}</span>`).join('')
+      : '';
+    const itemsCellHtml = itemsHtml || snapHtml;
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
