@@ -358,8 +358,10 @@ function checkFile(file) {
 function restoreFrom(file) {
   close();
   const p = dbPath();
-  try { fs.renameSync(p, `${p}.corrupt-${Date.now()}`); } catch { /* nothing to quarantine */ }
+  // side files FIRST: if another process still holds them this throws while
+  // the live db is untouched — a half-done restore must never strand it
   for (const ext of ['-wal', '-shm']) fs.rmSync(p + ext, { force: true });
+  try { fs.renameSync(p, `${p}.corrupt-${Date.now()}`); } catch { /* nothing to quarantine */ }
   fs.copyFileSync(file, p);
   open();
 }

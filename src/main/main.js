@@ -1810,7 +1810,8 @@ function checkDbHealth() {
     try {
       db.restoreFrom(good);
     } catch (e) {
-      dialog.showErrorBox('Restore failed', e.message);
+      dialog.showErrorBox('Restore failed',
+        `${e.message}\n\nUsually this means another Capture Station window is open and holding the database. Close every Capture Station window, then reopen the app and try again. Nothing was changed.`);
     }
   }
 }
@@ -1832,6 +1833,27 @@ app.whenReady().then(() => {
   startStockRouter();
   startOrderImporter();
   startLowStockWatcher();
+
+  if (process.env.CAPTURE_DEBUG_LOC === '1') {
+    // temporary diagnostic: where do open orders actually sit?
+    (async () => {
+      try {
+        const cfg = config.load();
+        const client = new LinnworksClient(cfg.linnworks);
+        const locs = await client.getLocations();
+        console.log('LOCATIONS:', JSON.stringify(locs));
+        console.log('CFG fallbackLocationId:', (cfg.stockRouting || {}).fallbackLocationId);
+        console.log('CFG primary locationId:', cfg.linnworks.locationId);
+        for (const l of [...locs, { id: ZERO_GUID, name: 'Default' }]) {
+          const os = await client.listOpenOrders(l.id);
+          console.log(`LOC "${l.name}" ${l.id}: ${os.length} open orders${os.length ? ` (e.g. ${os.slice(0, 3).map(o => o.reference).join(', ')})` : ''}`);
+        }
+      } catch (e) {
+        console.log('DEBUG_LOC error:', e.message);
+      }
+      app.quit();
+    })();
+  }
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {
