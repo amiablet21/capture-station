@@ -786,7 +786,8 @@ body {
 }
 
 /* one shared width for both returns sheets, resizable like the Stock sheet */
-.ret-sheet-row { display: flex; align-items: stretch; min-height: 0; }
+/* the sheets stay centered when narrowed, instead of hugging the left edge */
+.ret-sheet-row { display: flex; align-items: stretch; justify-content: center; min-height: 0; }
 
 .ret-main {
   width: 100%;
@@ -1039,35 +1040,154 @@ body {
 
 .ret-cell-po .ret-noorder { margin-left: 6px; }
 
-/* Past returns: the SAME sheet as the worksheet, read-only; day groups are
-   slim header rows spanning all columns (click to expand/collapse) */
+/* open-on-marketplace button beside the PO#: sized down to the row height */
+.ret-cell-po .ret-po-open {
+  width: 20px;
+  height: 20px;
+  margin-left: 3px;
+  vertical-align: middle;
+  color: var(--muted);
+}
+.ret-cell-po .ret-po-open svg { width: 12px; height: 12px; }
 
-.ret-past-sheet .ret-day-cell {
-  padding: 0;
-  height: auto;
+/* Returns log: one flat stack, log style — roomier rows, condition as a
+   pastel badge, horizontal dividers only (no vertical gridlines) */
+
+.ret-log-bar { display: flex; align-items: center; gap: 12px; }
+.ret-log-count { color: var(--muted); font-weight: 400; }
+.ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
+
+.ret-log-table { table-layout: fixed; width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }
+.ret-log-table th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  text-align: left;
+  padding: 6px 10px;
   background: var(--surface-2);
-  border-right: none;
-  overflow: visible;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
-
-.ret-day-tr { cursor: pointer; }
-.ret-day-tr:hover .ret-day-cell { background: var(--border); }
-.ret-day-tr.is-open .recv-caret { transform: rotate(90deg); color: var(--accent); }
-
-.ret-day-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
-  font-size: 12.5px;
+.ret-log-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.ret-log-table tr:last-child td { border-bottom: none; }
+.ret-log-table tr:hover td { background: var(--surface-2); }
+.ret-log-table .mono { font-size: 12px; }
+.ret-log-dim { color: var(--muted); }
+.ret-log-none { color: var(--muted); text-align: center; padding: 18px 10px; }
 
-/* read-only condition: the trigger's dot + label, minus the control chrome */
-.ret-cond-ro { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
-.ret-cond-ro .ret-dd-dot { width: 8px; height: 8px; }
+.ret-log-table th.th-lpo { width: 175px; }
+.ret-log-table th.th-ldate { width: 108px; }
+.ret-log-table th.th-lcond { width: 160px; }
+.ret-log-table th.th-lsku { width: 190px; }
+.ret-log-table th.th-ltrk { width: 140px; }
 
-.ret-ro-by { font-weight: 600; text-transform: uppercase; font-size: 12px; }
-.ret-ro-note { font-family: var(--font); }
+/* condition badges: pastel pills, colors follow the grading semantics */
+.ret-cbadge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ret-cbadge.is-new { background: var(--pos-bg); color: var(--pos-text); }
+.ret-cbadge.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ret-cbadge.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.ret-cbadge.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
+
+/* 30-day sales dialog (Stock page): stat tiles + stacked daily bars */
+
+.stock-sales-btn {
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  vertical-align: middle;
+  color: var(--muted);
+  opacity: 0; /* row action: appears on row hover, like the branding says */
+}
+.stock-sales-btn svg { width: 13px; height: 13px; }
+.stock-table tr:hover .stock-sales-btn,
+.stock-sales-btn:focus-visible { opacity: 1; }
+
+.dlg-sales { width: 720px; max-width: 92vw; }
+.sales-head { display: flex; align-items: baseline; gap: 10px; }
+.sales-head .dlg-title { margin: 0; }
+.sales-sku { font-size: 12.5px; color: var(--muted); }
+.sales-sub { font-size: 11.5px; color: var(--faint); margin: 2px 0 14px; }
+
+/* one stat strip, hairline-divided — quieter than four separate cards */
+.sales-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  margin-bottom: 14px;
+}
+.sales-stat { padding: 10px 14px; min-width: 0; }
+.sales-stat + .sales-stat { border-left: 1px solid var(--border-soft); }
+.sales-stat .v { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+.sales-stat .l { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+.sales-stat .s { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sales-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.sales-ranges { display: flex; gap: 2px; margin-left: auto; border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 2px; }
+.sales-range {
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 9px;
+  cursor: pointer;
+  background: transparent;
+}
+.sales-range:hover { background: var(--surface-2); }
+.sales-range.is-active { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
+
+.sales-plot.is-dense { gap: 1px; }
+.sales-plot.is-dense .sales-col { border-radius: 2px 2px 0 0; }
+.sales-legend { display: flex; gap: 6px; }
+.sales-lg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer; user-select: none; background: var(--surface); }
+.sales-lg.is-off { opacity: 0.38; }
+.sales-sw { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.sales-tgl { font-family: var(--font); font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 10px; cursor: pointer; background: var(--surface); }
+.sales-tgl:hover { background: var(--surface-2); }
+
+.sales-plotwrap { position: relative; margin-left: 34px; }
+.sales-plot { display: flex; align-items: flex-end; gap: 3px; height: 190px; border-bottom: 1px solid var(--border); position: relative; }
+.sales-gridline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-soft); pointer-events: none; }
+.sales-gridline span { position: absolute; right: 100%; margin-right: 6px; top: -8px; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+.sales-col { flex: 1; display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; position: relative; border-radius: 4px 4px 0 0; }
+.sales-col:hover { background: rgba(0, 0, 0, 0.035); }
+.sales-seg { width: 100%; border-radius: 2px; }
+.sales-seg.is-top { border-radius: 4px 4px 2px 2px; }
+.sales-xaxis { display: flex; gap: 3px; margin-top: 4px; }
+.sales-xt { flex: 1; text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--faint); white-space: nowrap; }
+
+.sales-tip { position: absolute; z-index: 5; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 6px 18px rgba(47, 52, 55, 0.12); padding: 8px 10px; font-size: 11.5px; min-width: 132px; display: none; }
+.sales-tip b { display: block; font-size: 11px; margin-bottom: 4px; }
+.sales-tip .tr { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.sales-tip .n { margin-left: auto; color: var(--text); }
+.sales-tip .tot { border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 4px; display: flex; font-weight: 600; }
+
+.sales-tbl { max-height: 236px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-card); }
+.sales-tbl table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sales-tbl th { position: sticky; top: 0; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 5px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.sales-tbl td { padding: 4px 10px; border-bottom: 1px solid var(--border-soft); }
+.sales-tbl tr:last-child td { border-bottom: none; }
+.sales-tbl .num { text-align: right; }
 
 /* condition-mapping editor */
 

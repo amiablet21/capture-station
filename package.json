@@ -1,6 +1,6 @@
 {
   "name": "capture-station",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {
@@ -27,7 +27,8 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     }
   },
   "dependencies": {

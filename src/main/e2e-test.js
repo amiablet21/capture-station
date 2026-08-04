@@ -336,26 +336,26 @@ module.exports = async function run({ app, win, db, clipboard }) {
         && res[0].tracking === '1ZRETURN000111' && res[0].received_by === 'IM'
         && res[0].items[0].price === 189.99 && res[0].items[0].note === 'box dented',
       res);
-    await exec(`retOpenDays.add('${db.localDay()}'); loadRetPast()`);
+    await exec('loadRetPast()');
     await sleep(250);
-    // history = the SAME sheet layout as the worksheet, read-only: identical
-    // 10-column header, one row per unit (the qty-2 return = 2 rows), the
-    // no-order pill, the condition dot, and no inputs/actions anywhere
+    // history = flat log, newest first: 7-column header, one row per unit
+    // (the qty-2 return = 2 rows), the no-order pill, the condition badge,
+    // and no inputs/actions anywhere (the marketplace open button is the
+    // one allowed .btn-icon, and this unmatched return has none)
     const ledgerBits = await exec(`[
-      !!document.querySelector('#retPastBox table.ret-sheet.ret-past-sheet'),
+      !!document.querySelector('#retPastBox table.ret-log-table'),
       document.querySelectorAll('#retPastBox thead th').length,
-      !!document.querySelector('#retPastBox .ret-day-tr.is-open'),
       document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
       !!document.querySelector('#retPastBox .ret-noorder'),
-      !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
+      !!document.querySelector('#retPastBox .ret-cbadge.is-openbox'),
       document.querySelectorAll('#retPastBox input, #retPastBox select, #retPastBox .btn-icon').length,
     ]`);
-    check('history renders the worksheet sheet layout, one row per unit',
-      ledgerBits[0] === true && ledgerBits[1] === 10 && ledgerBits[2] === true
-        && ledgerBits[3] === 2 && ledgerBits[4] === true && ledgerBits[5] === true,
+    check('history renders the flat returns log, one row per unit',
+      ledgerBits[0] === true && ledgerBits[1] === 7
+        && ledgerBits[2] === 2 && ledgerBits[3] === true && ledgerBits[4] === true,
       ledgerBits);
     check('history rows are read-only (no inputs or row actions)',
-      ledgerBits[6] === 0, ledgerBits);
+      ledgerBits[5] === 0, ledgerBits);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);

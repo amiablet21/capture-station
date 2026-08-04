@@ -223,6 +223,21 @@ function ensurePane() {
     },
   });
   const wc = paneView.webContents;
+  // same copy/paste menu inside the marketplace pane — WITHOUT priming the
+  // clipboard watcher: tracking numbers copied here are meant to be captured
+  wc.on('context-menu', (_e, params) => {
+    const items = [];
+    if (params.isEditable) {
+      items.push(
+        { role: 'cut', enabled: params.editFlags.canCut },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+      );
+    } else if ((params.selectionText || '').trim()) {
+      items.push({ role: 'copy' });
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
   // marketplace login flows open popups; allow them, same isolated session
   wc.setWindowOpenHandler(() => ({
     action: 'allow',
@@ -487,7 +502,9 @@ function writeReturnsCsv() {
     fs.mkdirSync(folder, { recursive: true });
     const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched'];
     for (const r of db.listReturns(1000).slice().reverse()) {
-      for (const it of r.items) {
+      // a PO-only return has no item lines: one placeholder row keeps it in the CSV
+      const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
+      for (const it of its) {
         lines.push([
           r.created_at, r.order_number, r.source, r.customer, r.tracking || '',
           it.sku, it.condition, it.targetSku, it.qty,
@@ -1349,17 +1366,22 @@ function registerIpc() {
         price: Math.max(0, Math.round((Number(i.price) || 0) * 100) / 100),
         note: String(i.note || '').trim().slice(0, 300),
       }))
-      .filter(i => i.sku && i.targetSku && Number.isInteger(i.qty) && i.qty > 0);
-    if (!items.length) return { ok: false, error: 'Nothing to receive - every line needs a target SKU and quantity.' };
+      .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
+    // the PO# is the only mandatory field: a bare reference is a valid log
+    // entry; lines carry stock moves only when both SKU and target are known
+    if (!String(payload.orderNumber || '').trim()) return { ok: false, error: 'A PO# is required.' };
+    const stockItems = items.filter(i => i.targetSku);
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      await client.changeStockLevels(
-        items.map(i => ({ sku: i.targetSku, delta: i.qty })),
-        cfg.linnworks.locationId,
-        'Capture Station return'
-      );
+      if (stockItems.length) {
+        await client.changeStockLevels(
+          stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
+          cfg.linnworks.locationId,
+          'Capture Station return'
+        );
+      }
       // remember non-new mappings so the next return of this SKU is one click
-      for (const i of items) {
+      for (const i of stockItems) {
         if (i.condition !== 'new' && i.targetSku !== i.sku) {
           db.saveConditionMapping(i.sku, i.condition, i.targetSku);
         }
@@ -1382,7 +1404,7 @@ function registerIpc() {
       let noted = false;
       if (payload.orderId) {
         try {
-          const summary = items.map(i => `${i.sku} -> ${i.condition} (${i.targetSku}) x${i.qty}`).join('; ');
+          const summary = items.map(i => `${i.sku} -> ${i.condition}${i.targetSku ? ` (${i.targetSku})` : ''} x${i.qty}`).join('; ') || 'no items recorded';
           await client.addOrderNote(payload.orderId, `Return received: ${summary}${payload.note ? ` | ${payload.note}` : ''}`);
           noted = true;
         } catch { /* order note is a bonus, not a requirement */ }
@@ -1645,6 +1667,27 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // right-click copy/paste menu, standard across the whole app; in-app copies
+  // prime the clipboard watcher so they never re-ingest as order captures
+  win.webContents.on('context-menu', (_e, params) => {
+    const items = [];
+    if (params.isEditable) {
+      items.push(
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', enabled: params.editFlags.canCut,
+          click: () => { win.webContents.cut(); lastClipboardText = params.selectionText; } },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', enabled: params.editFlags.canCopy,
+          click: () => { win.webContents.copy(); lastClipboardText = params.selectionText; } },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', enabled: params.editFlags.canPaste,
+          click: () => win.webContents.paste() },
+        { type: 'separator' },
+        { label: 'Select all', accelerator: 'CmdOrCtrl+A', click: () => win.webContents.selectAll() },
+      );
+    } else if ((params.selectionText || '').trim()) {
+      items.push({ label: 'Copy', accelerator: 'CmdOrCtrl+C',
+        click: () => { win.webContents.copy(); lastClipboardText = params.selectionText; } });
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
   win.on('closed', () => { win = null; });
   if (process.env.CAPTURE_SMOKE === '1') {
     win.webContents.on('console-message', (_e, level, message) => {

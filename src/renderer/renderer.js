@@ -136,6 +136,8 @@ const ICONS = {
   trash: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></svg>',
   swap: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M217,163.51a12,12,0,0,1,0,17l-32,32a12,12,0,0,1-17-17L179.51,184H48a12,12,0,0,1,0-24H179.51L168,148.49a12,12,0,0,1,17-17ZM71,124.49a12,12,0,0,0,17-17L76.49,96H208a12,12,0,0,0,0-24H76.49L88,60.49a12,12,0,1,0-17-17l-32,32a12,12,0,0,0,0,17Z"/></svg>',
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
+  arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
+  chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
 };
 
 /* ---------- rendering ---------- */
@@ -1588,7 +1590,9 @@ function renderStock() {
       ? `<span class="stock-delta mono ${dt.cls}" title="sold ${d.today} today vs ${d.yesterday} yesterday">${dt.text}</span>`
       : '';
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}</td>`;
+  // chart button: 30-day sales dialog; days-of-cover uses the warehouse
+  // available (in WFS view r.home is the warehouse, elsewhere r.l is)
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button></td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
@@ -1909,6 +1913,8 @@ $('stockList').addEventListener('click', (e) => {
     renderStock();
     return;
   }
+  const salesBtn = e.target.closest('button.stock-sales-btn');
+  if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
   const ioBtn = e.target.closest('button.stock-io-btn');
   if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
   const minBtn = e.target.closest('button.stock-min-btn');
@@ -2118,6 +2124,21 @@ $('retPo').addEventListener('keydown', (e) => {
   retEntrySubmit();
 });
 
+// marketplace link for a returns row: the order's Source ("WALMART", "EBAY"…)
+// maps onto the same per-channel URL templates the Capture page's PO# links
+// use; no template (or an unmatched return) = no button
+function retChannel(source) {
+  const key = String(source || '').trim().toLowerCase();
+  return (((state || {}).orderUrlTemplates || {})[key] || '').trim() ? key : '';
+}
+
+function retPoOpenBtn(po, source) {
+  const ch = po ? retChannel(source) : '';
+  if (!ch) return '';
+  return `<button class="btn-icon ret-po-open" data-po="${esc(po)}" data-ch="${ch}"
+    title="Open ${esc(po)} on ${esc(channelLabel(ch))}">${ICONS.arrowOut}</button>`;
+}
+
 // the Condition cell carries the live "→ TARGET" preview; a missing mapping
 // shows the one-time picker inline (persisted on commit, as before)
 function retTargetCell(d, idx) {
@@ -2140,7 +2161,7 @@ function renderRetSheet() {
   $('retBody').innerHTML = retDrafts.map((d, idx) => `
     <tr data-idx="${idx}">
       <td class="cell-gutter ${d.unmatched ? 'st-failed' : 'st-captured'}" title="${d.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${idx + 1}</td>
-      <td class="mono ret-cell-po" title="${esc(d.po)}">${d.po ? esc(d.po) : '<span class="cell-missing">—</span>'}${d.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
+      <td class="mono ret-cell-po" title="${esc(d.po)}">${d.po ? esc(d.po) : '<span class="cell-missing">—</span>'}${d.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}${retPoOpenBtn(d.po, d.source)}</td>
       <td class="ret-cell-cust" title="${esc(d.customer)}">${d.customer ? esc(d.customer) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
@@ -2373,6 +2394,11 @@ $('retBody').addEventListener('keydown', (e) => {
 });
 
 $('retBody').addEventListener('click', (e) => {
+  const open = e.target.closest('.ret-po-open');
+  if (open) {
+    api.openOrderPage(open.dataset.po, open.dataset.ch);
+    return;
+  }
   const cond = e.target.closest('.ret-cond-btn');
   if (cond) {
     const idx = Number(cond.dataset.idx);
@@ -2392,11 +2418,13 @@ $('retReceiveAll').addEventListener('click', async () => {
   if (!retDrafts.length || retBusy) return;
   retFootNote('');
   for (const [i, d] of retDrafts.entries()) {
-    if (!d.sku) { retFootNote(`Row ${i + 1}: pick the returned SKU.`, false); return; }
+    // the PO# is the only mandatory field: SKU and target are optional, a
+    // row without them is logged as-is and just doesn't move any stock
+    if (!String(d.po || '').trim()) { retFootNote(`Row ${i + 1}: PO# is required.`, false); return; }
+    if (!d.sku) { d.resolvedTarget = ''; continue; }
     const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
     const target = known || String(d.pick || '').trim();
-    if (!target) { retFootNote(`Row ${i + 1}: pick the ${d.condition} listing for ${d.sku}.`, false); return; }
-    if (!known && recvLookup === 'ready' && !recvLookupExact(target)) {
+    if (!known && target && recvLookup === 'ready' && !recvLookupExact(target)) {
       retFootNote(`Row ${i + 1}: unknown SKU ${target}.`, false);
       return;
     }
@@ -2423,7 +2451,8 @@ $('retReceiveAll').addEventListener('click', async () => {
       tracking: head.tracking,
       receivedBy: rows.map(r => r.receivedBy).filter(Boolean).pop() || '',
       unmatched: !!head.unmatched,
-      note: '',
+      // rows without a SKU carry no item line, so their notes ride on the record
+      note: rows.filter(r => !r.sku).map(r => r.note).filter(Boolean).join('; '),
       items: rows.map(r => ({ sku: r.sku, condition: r.condition, targetSku: r.resolvedTarget, qty: 1, price: r.price, note: r.note })),
     });
     if (res.ok) {
@@ -2443,94 +2472,80 @@ $('retReceiveAll').addEventListener('click', async () => {
 
 
 
-// Past returns: the SAME sheet as the worksheet above, read-only — identical
-// columns, widths, gridlines and cell rendering, one row per returned unit.
-// Day groups survive as slim header rows spanning the sheet (click toggles),
-// newest first.
-function retPastRowHtml(r, i, n) {
+// Returns log: one flat stack, every unit a row, newest first — log style
+// (condition as a pastel badge, horizontal dividers only). Search filters
+// the whole history live.
+let retLogAll = null; // [{ r: return record, i: item line }] flattened per unit
+
+function retCondBadge(cond) {
+  if (!cond) return '<span class="cell-missing">—</span>';
+  return `<span class="ret-cbadge is-${esc(cond)}">${esc(retCondLabel(cond))}</span>`;
+}
+
+function retLogRowHtml(r, i) {
+  const day = String(r.created_at).slice(0, 10);
   return `
     <tr class="ret-past-tr">
-      <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${n}</td>
-      <td class="mono ret-cell-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}</td>
-      <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-date" title="Received ${esc(String(r.created_at).slice(0, 10))}">${fmtTime(r.created_at)}</td>
-      <td class="ret-cell-sku"><span class="mono">${esc(i.sku)}</span></td>
-      <td class="ret-cell-cond">
-        <span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>
-        ${i.targetSku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}</div>` : ''}
-      </td>
-      <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
-      <td class="cell-actions"></td>
+      <td class="mono ret-cell-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}${retPoOpenBtn(r.order_number, r.source)}</td>
+      <td class="mono ret-log-dim" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day)}</td>
+      <td>${retCondBadge(i.sku ? i.condition : '')}${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}</div>` : ''}</td>
+      <td class="mono">${i.sku ? esc(i.sku) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-log-dim" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-log-dim" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
     </tr>`;
+}
+
+function renderRetLog() {
+  if (!retLogAll) return;
+  const box = $('retPastBox');
+  if (!retLogAll.length) {
+    $('retLogCount').textContent = '';
+    box.innerHTML = '<div class="recv-past-empty">No returns yet. Type a PO# in the worksheet above to receive one.</div>';
+    return;
+  }
+  const q = $('retLogSearch').value.trim().toLowerCase();
+  const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
+    [r.order_number, r.customer, r.tracking, r.source, r.received_by, r.note,
+     i.sku, i.targetSku, i.note, retCondLabel(i.condition)]
+      .some(v => String(v || '').toLowerCase().includes(q)));
+  $('retLogCount').textContent = ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`;
+  box.innerHTML = `
+    <div class="ret-sheet-scroll">
+    <table class="ret-log-table">
+      <thead>
+        <tr>
+          <th class="th-lpo">PO#</th>
+          <th class="th-ldate">Date received</th>
+          <th class="th-lcond">Condition</th>
+          <th class="th-lsku">SKU</th>
+          <th class="th-lcust">Customer</th>
+          <th class="th-ltrk">Tracking #</th>
+          <th class="th-lnote">Notes</th>
+        </tr>
+      </thead>
+      <tbody>${rows.map(({ r, i }) => retLogRowHtml(r, i)).join('')
+        || `<tr><td colspan="7" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+    </table>
+    </div>`;
 }
 
 async function loadRetPast() {
   const returns = await api.returnsList();
-  const box = $('retPastBox');
-  if (!returns.length) {
-    box.innerHTML = '<div class="recv-past-empty">No returns yet. Type a PO# in the worksheet above to receive one.</div>';
-    return;
-  }
-  const days = new Map();
+  retLogAll = [];
   for (const r of returns) {
-    const d = new Date(r.created_at);
-    const key = Number.isNaN(d.getTime()) ? 'unknown'
-      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    if (!days.has(key)) days.set(key, []);
-    days.get(key).push(r);
+    // a PO-only return has no item lines but still shows as one row
+    const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: 1, note: '' }];
+    for (const i of its) for (let u = 0; u < (i.qty || 1); u++) retLogAll.push({ r, i });
   }
-  box.innerHTML = `
-    <div class="ret-sheet-scroll">
-    <table class="recv-sheet-table ret-sheet ret-past-sheet">
-      <thead>
-        <tr>
-          <th class="th-gutter">#</th>
-          <th class="th-po">PO#</th>
-          <th class="th-cust">Customer</th>
-          <th class="th-trk">Tracking #</th>
-          <th class="th-date">Received</th>
-          <th class="th-rsku">Returned SKU</th>
-          <th class="th-cond">Condition</th>
-          <th class="th-by">By</th>
-          <th class="th-note">Notes / dispute</th>
-          <th class="th-actions"></th>
-        </tr>
-      </thead>
-      ${[...days.entries()].map(([day, list]) => {
-        const open = retOpenDays.has(day);
-        const units = list.reduce((a, r) => a + r.items.reduce((x, i) => x + i.qty, 0), 0);
-        const rows = [];
-        if (open) {
-          let n = 0;
-          for (const r of list) for (const i of r.items) for (let u = 0; u < (i.qty || 1); u++) rows.push(retPastRowHtml(r, i, ++n));
-        }
-        return `
-        <tbody>
-          <tr class="ret-day-tr ${open ? 'is-open' : ''}" data-retday="${esc(day)}" title="Click to ${open ? 'collapse' : 'expand'} this day">
-            <td class="ret-day-cell" colspan="10"><div class="ret-day-line">
-              <span class="recv-caret">${CARET_ICON}</span>
-              <span class="recv-day-label">${esc(recvDayLabel(day))} · ${list.length} return${list.length === 1 ? '' : 's'}</span>
-              <span class="recv-day-preview"></span>
-              <span class="recv-day-units">${units} unit${units === 1 ? '' : 's'}</span>
-            </div></td>
-          </tr>
-          ${rows.join('')}
-        </tbody>`;
-      }).join('')}
-    </table>
-    </div>`;
-  applyRetCols(box.querySelector('table')); // user column widths follow the worksheet
+  renderRetLog();
 }
 
-const retOpenDays = new Set();
+$('retLogSearch').addEventListener('input', () => renderRetLog());
+
 $('retPastBox').addEventListener('click', (e) => {
-  const day = e.target.closest('[data-retday]');
-  if (!day) return;
-  const key = day.dataset.retday;
-  if (retOpenDays.has(key)) retOpenDays.delete(key); else retOpenDays.add(key);
-  loadRetPast();
+  const open = e.target.closest('.ret-po-open');
+  if (open) api.openOrderPage(open.dataset.po, open.dataset.ch);
 });
 
 /* ---------- condition-mapping editor ---------- */
@@ -2670,7 +2685,9 @@ $('retGrip').addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   if (!retSheetDrag) return;
-  const w = Math.max(560, retSheetDrag.startW + (e.clientX - retSheetDrag.startX));
+  // the sheet is centered, so its right edge moves half as fast as its width:
+  // double the mouse delta to keep the grip under the cursor
+  const w = Math.max(560, retSheetDrag.startW + 2 * (e.clientX - retSheetDrag.startX));
   retSheetDrag.w = w;
   $('retMain').style.width = `${w}px`;
 });
@@ -2711,8 +2728,8 @@ function applyRetCols(table) {
 }
 
 function applyRetColsAll() {
+  // the log table below has its own columns now; grips only drive the worksheet
   applyRetCols($('retTable'));
-  applyRetCols($('retPastBox').querySelector('table'));
 }
 applyRetCols($('retTable'));
 
@@ -2731,6 +2748,187 @@ $('returnsPage').addEventListener('dblclick', (e) => {
   localStorage.setItem('retColWidths', JSON.stringify(retColWidths));
   applyRetColsAll();
 });
+
+/* ---------- 30-day sales per stock item (Stock page chart dialog) ---------- */
+
+// fixed channel order, entity-locked colors (validated for CVD safety);
+// unknown sources fold into Other, never a new hue
+const SALES_CHANNELS = [
+  { key: 'walmart', label: 'Walmart', color: '#4A90D9' },
+  { key: 'ebay', label: 'eBay', color: '#059669' },
+  { key: 'temu', label: 'Temu', color: '#D97706' },
+  { key: 'other', label: 'Other', color: '#8A8782' },
+];
+
+const SALES_RANGES = [7, 14, 30, 60, 90];
+
+let salesDlg = null; // { sku, avail, range, seq, days, channels, on, table }
+
+async function openSalesDialog(sku, avail) {
+  salesDlg = { sku, avail, range: 30, seq: 0, days: null, channels: [], on: {}, table: false };
+  $('salesSku').textContent = sku;
+  $('salesDialog').showModal();
+  loadSalesRange();
+}
+
+async function loadSalesRange() {
+  const { sku, range } = salesDlg;
+  const seq = ++salesDlg.seq; // a range/SKU switched mid-flight discards this load
+  $('salesSub').textContent = '';
+  $('salesBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const res = await api.salesQuery(day(new Date(Date.now() - (range - 1) * 86400000)), day(new Date()));
+  if (!salesDlg || salesDlg.seq !== seq || !$('salesDialog').open) return;
+  if (!res.ok) {
+    $('salesBody').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load sales.')}</p>`;
+    return;
+  }
+  // one bucket per local day, oldest → newest, zero-filled
+  const days = [];
+  const byKey = new Map();
+  for (let i = range - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const bucket = {
+      key: day(d),
+      label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      walmart: 0, ebay: 0, temu: 0, other: 0,
+    };
+    days.push(bucket);
+    byKey.set(bucket.key, bucket);
+  }
+  for (const l of res.lines || []) {
+    if (l.sku !== sku) continue;
+    const bucket = byKey.get(salesDayKey(l.processedOn));
+    if (!bucket) continue;
+    const ch = String(l.source || '').trim().toLowerCase();
+    bucket[bucket[ch] !== undefined ? ch : 'other'] += Number(l.qty) || 0;
+  }
+  const channels = SALES_CHANNELS.filter(c => days.some(d => d[c.key] > 0));
+  $('salesSub').textContent =
+    `Linnworks processed orders · ${days[0].label} – ${days[days.length - 1].label}`;
+  salesDlg.days = days;
+  salesDlg.channels = channels;
+  salesDlg.on = Object.fromEntries(channels.map(c => [c.key, true]));
+  renderSalesDialog();
+}
+
+function salesTotals() {
+  const { days, channels, on } = salesDlg;
+  const dayTotal = (d) => channels.reduce((x, c) => x + (on[c.key] ? d[c.key] : 0), 0);
+  const total = days.reduce((a, d) => a + dayTotal(d), 0);
+  const last7 = days.slice(-7).reduce((a, d) => a + dayTotal(d), 0);
+  return { dayTotal, total, avgRange: total / days.length, avg7: last7 / Math.min(7, days.length) };
+}
+
+function renderSalesDialog() {
+  const { days, channels, on, avail, table, range } = salesDlg;
+  const { dayTotal, total, avgRange, avg7 } = salesTotals();
+  const rate = avg7 || avgRange;
+  const max = Math.max(1, ...days.map(dayTotal));
+  const step = max <= 6 ? 2 : max <= 12 ? 4 : Math.ceil(max / 4 / 5) * 5;
+  const labelEvery = Math.max(1, Math.ceil(days.length / 7));
+  // the CSP (style-src 'self') strips inline style attributes from innerHTML,
+  // so geometry and channel colors travel as data-* and land via the CSSOM
+  let grid = '';
+  for (let v = step; v <= max; v += step) {
+    grid += `<div class="sales-gridline" data-b="${(v / max) * 100}"><span>${v}</span></div>`;
+  }
+  const cols = days.map((d, i) => {
+    const segs = channels.filter(c => on[c.key] && d[c.key] > 0);
+    const topKey = segs.length ? segs[segs.length - 1].key : '';
+    return `<div class="sales-col" data-i="${i}">` + segs.map(c =>
+      `<div class="sales-seg ${c.key === topKey ? 'is-top' : ''}" data-h="${(d[c.key] / max) * 100}" data-gap="${segs.length > 1 ? 2 : 0}" data-c="${c.color}"></div>`).join('')
+      + '</div>';
+  }).join('');
+  const xaxis = days.map((d, i) => `<span class="sales-xt">${i % labelEvery === 0 || i === days.length - 1 ? esc(d.label) : ''}</span>`).join('');
+  const legend = channels.length ? channels.map(c =>
+    `<span class="sales-lg ${on[c.key] ? '' : 'is-off'}" data-ch="${c.key}"><span class="sales-sw" data-c="${c.color}"></span>${c.label}</span>`).join('') : '';
+  const ranges = SALES_RANGES.map(r =>
+    `<button class="sales-range ${r === range ? 'is-active' : ''}" data-range="${r}">${r}d</button>`).join('');
+  const tableHtml = `
+    <div class="sales-tbl">
+      <table>
+        <thead><tr><th>Date</th>${channels.map(c => `<th class="num">${c.label}</th>`).join('')}<th class="num">Total</th></tr></thead>
+        <tbody>${days.slice().reverse().map(d =>
+          `<tr><td>${esc(d.label)}</td>${channels.map(c => `<td class="num mono">${d[c.key]}</td>`).join('')}<td class="num mono"><strong>${channels.reduce((x, c) => x + d[c.key], 0)}</strong></td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  $('salesBody').innerHTML = `
+    ${channels.length === 0 ? `<p class="dlg-note">No sales for this SKU in the last ${range} days.</p>` : `
+    <div class="sales-strip">
+      <div class="sales-stat"><div class="v mono">${total}</div><div class="l">Units sold</div><div class="s">last ${range} days</div></div>
+      <div class="sales-stat"><div class="v mono">${avgRange.toFixed(1)}</div><div class="l">Per day</div><div class="s">${range}-day average</div></div>
+      <div class="sales-stat"><div class="v mono">${avg7.toFixed(1)}</div><div class="l">Per day</div><div class="s">last 7 days</div></div>
+      <div class="sales-stat"><div class="v mono">${rate > 0 ? Math.round(avail / rate) : '—'}</div><div class="l">Days of cover</div><div class="s">${avail} available now</div></div>
+    </div>`}
+    <div class="sales-bar">
+      <div class="sales-legend">${legend}</div>
+      <div class="sales-ranges">${ranges}</div>
+      ${channels.length ? `<button class="sales-tgl" id="salesTgl">${table ? 'Chart' : 'Table'}</button>` : ''}
+    </div>
+    ${channels.length === 0 ? '' : table ? tableHtml : `
+    <div class="sales-plotwrap" id="salesPlotWrap">
+      <div class="sales-plot ${days.length > 45 ? 'is-dense' : ''}" id="salesPlot">${grid}${cols}</div>
+      <div class="sales-xaxis">${xaxis}</div>
+      <div class="sales-tip" id="salesTip"></div>
+    </div>`}`;
+  applySalesStyles($('salesBody'));
+}
+
+// CSP-safe styling: inline style attributes are stripped by style-src 'self',
+// CSSOM assignments are not
+function applySalesStyles(root) {
+  root.querySelectorAll('[data-b]').forEach(el => { el.style.bottom = `${el.dataset.b}%`; });
+  root.querySelectorAll('[data-h]').forEach(el => { el.style.height = `calc(${el.dataset.h}% - ${el.dataset.gap || 0}px)`; });
+  root.querySelectorAll('[data-c]').forEach(el => { el.style.background = el.dataset.c; });
+}
+
+$('salesBody').addEventListener('click', (e) => {
+  if (!salesDlg) return;
+  const rangeBtn = e.target.closest('.sales-range');
+  if (rangeBtn) {
+    const r = Number(rangeBtn.dataset.range);
+    if (r && r !== salesDlg.range) { salesDlg.range = r; loadSalesRange(); }
+    return;
+  }
+  const lg = e.target.closest('.sales-lg');
+  if (lg) {
+    const k = lg.dataset.ch;
+    // never blank the whole chart: the last visible channel stays on
+    if (salesDlg.on[k] && Object.values(salesDlg.on).filter(Boolean).length === 1) return;
+    salesDlg.on[k] = !salesDlg.on[k];
+    renderSalesDialog();
+    return;
+  }
+  if (e.target.closest('#salesTgl')) {
+    salesDlg.table = !salesDlg.table;
+    renderSalesDialog();
+  }
+});
+
+$('salesBody').addEventListener('mousemove', (e) => {
+  if (!salesDlg || salesDlg.table) return;
+  const tip = $('salesTip');
+  if (!tip) return;
+  const col = e.target.closest('.sales-col');
+  if (!col) { tip.style.display = 'none'; return; }
+  const d = salesDlg.days[Number(col.dataset.i)];
+  const rows = salesDlg.channels.filter(c => salesDlg.on[c.key]).map(c =>
+    `<div class="tr"><span class="sales-sw" data-c="${c.color}"></span>${c.label}<span class="n mono">${d[c.key]}</span></div>`).join('');
+  const total = salesDlg.channels.reduce((x, c) => x + (salesDlg.on[c.key] ? d[c.key] : 0), 0);
+  tip.innerHTML = `<b>${esc(d.label)}</b>${rows}<div class="tot">Total<span class="n mono">${total}</span></div>`;
+  applySalesStyles(tip);
+  tip.style.display = 'block';
+  const wrap = $('salesPlotWrap').getBoundingClientRect();
+  const cr = col.getBoundingClientRect();
+  let x = cr.left - wrap.left + cr.width + 8;
+  if (x + 150 > wrap.width) x = cr.left - wrap.left - 150;
+  tip.style.left = `${x}px`;
+  tip.style.top = '14px';
+});
+
+$('salesClose').addEventListener('click', () => $('salesDialog').close());
 
 /* ---------- linked channel SKUs per stock item ---------- */
 

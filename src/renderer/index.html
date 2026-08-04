@@ -171,7 +171,11 @@
         </div>
       </div>
       <div class="recv-past">
-        <div class="recv-past-head">Past returns · grouped by day</div>
+        <div class="ret-log-bar">
+          <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
+          <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
+                 autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
+        </div>
         <div id="retPastBox" class="recv-past-box"></div>
       </div>
       </div>
@@ -572,6 +576,21 @@
       <div class="dlg-actions img-foot">
         <small id="imgFootHint">The image saves to this SKU when the download finishes.</small>
         <button id="imgClose" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 30-day sales for one stock item: stat tiles + stacked daily bars -->
+  <dialog id="salesDialog" class="dlg dlg-sales">
+    <div class="dlg-body">
+      <div class="sales-head">
+        <h2 class="dlg-title">Sales</h2>
+        <span id="salesSku" class="mono sales-sku"></span>
+      </div>
+      <div id="salesSub" class="sales-sub"></div>
+      <div id="salesBody"></div>
+      <div class="dlg-actions">
+        <button id="salesClose" class="btn btn-primary">Close</button>
       </div>
     </div>
   </dialog>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Stock item — 30-day sales</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; overflow: auto; align-items: center; }
+  .dlg-mock { width: 720px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px 16px; box-shadow: 0 12px 32px rgba(47,52,55,0.10); }
+  .dlg-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+  .dlg-head b { font-size: 13.5px; }
+  .dlg-head .sku { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .dlg-sub { font-size: 11.5px; color: var(--faint); margin-bottom: 14px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .tile { border: 1px solid var(--border); border-radius: var(--r-card); padding: 8px 12px; }
+  .tile .v { font-family: var(--mono); font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+  .tile .l { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .tile .s { font-size: 11px; color: var(--muted); }
+
+  .chart-bar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+  .legend { display: flex; gap: 6px; }
+  .lg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer; user-select: none; background: var(--surface); }
+  .lg .sw { width: 9px; height: 9px; border-radius: 3px; }
+  .lg.off { opacity: 0.38; }
+  .toggle-tbl { margin-left: auto; font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 3px 10px; cursor: pointer; background: var(--surface); }
+  .toggle-tbl:hover { background: var(--surface-2); }
+
+  .plot-wrap { position: relative; }
+  .plot { display: flex; align-items: flex-end; gap: 3px; height: 190px; border-bottom: 1px solid var(--border); position: relative; }
+  .gridline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-soft); pointer-events: none; }
+  .gridline .gl { position: absolute; right: 100%; margin-right: 6px; top: -8px; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .col { flex: 1; display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; justify-content: flex-start; cursor: default; position: relative; border-radius: 4px 4px 0 0; }
+  .col:hover { background: rgba(0,0,0,0.035); }
+  .seg { width: 100%; border-radius: 2px; }
+  .seg.top { border-radius: 4px 4px 2px 2px; }
+  .xaxis { display: flex; gap: 3px; margin-top: 4px; padding-left: 0; }
+  .xt { flex: 1; text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .plot-pad { margin-left: 34px; }
+
+  .tip { position: absolute; z-index: 5; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 6px 18px rgba(47,52,55,0.12); padding: 8px 10px; font-size: 11.5px; min-width: 132px; display: none; }
+  .tip b { display: block; font-size: 11px; margin-bottom: 4px; }
+  .tip .tr { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .tip .tr .sw { width: 8px; height: 8px; border-radius: 2px; }
+  .tip .tr .n { margin-left: auto; font-family: var(--mono); color: var(--text); }
+  .tip .tot { border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 4px; display: flex; }
+  .tip .tot .n { margin-left: auto; font-family: var(--mono); font-weight: 600; }
+
+  .tblview { display: none; max-height: 236px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-card); }
+  .tblview table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tblview th { position: sticky; top: 0; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: right; padding: 5px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .tblview th:first-child, .tblview td:first-child { text-align: left; }
+  .tblview td { padding: 4px 10px; text-align: right; font-family: var(--mono); border-bottom: 1px solid var(--border-soft); }
+  .tblview tr:last-child td { border-bottom: none; }
+</style></head>
+<body>
+  <div class="dlg-mock">
+    <div class="dlg-head"><b>Sales — last 30 days</b><span class="sku">S25-128GB-NAVY</span></div>
+    <div class="dlg-sub">Linnworks processed orders · Jul 5 – Aug 3 · opened from the Stock sheet</div>
+
+    <div class="tiles">
+      <div class="tile"><div class="v" id="tTotal"></div><div class="l">Units · 30 days</div></div>
+      <div class="tile"><div class="v" id="tAvg30"></div><div class="l">Per day · 30d avg</div></div>
+      <div class="tile"><div class="v" id="tAvg7"></div><div class="l">Per day · 7d avg</div></div>
+      <div class="tile"><div class="v" id="tCover"></div><div class="l">Days of cover</div><div class="s">142 available now</div></div>
+    </div>
+
+    <div class="chart-bar-row">
+      <div class="legend" id="legend"></div>
+      <button class="toggle-tbl" id="tglTbl">Table</button>
+    </div>
+
+    <div class="plot-wrap plot-pad" id="plotWrap">
+      <div class="plot" id="plot"></div>
+      <div class="xaxis" id="xaxis"></div>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="tblview" id="tblview"></div>
+  </div>
+
+<script>
+  // fixed channel order + entity-locked colors (never repainted on filter)
+  const CHANNELS = [
+    { key: 'walmart', label: 'Walmart', color: '#4A90D9' },
+    { key: 'ebay',    label: 'eBay',    color: '#059669' },
+    { key: 'temu',    label: 'Temu',    color: '#D97706' },
+  ];
+  // 30 days of sample sales, oldest → newest (Jul 5 … Aug 3)
+  const DAYS = [
+    { d: 'Jul 5',  walmart: 4, ebay: 1, temu: 0 }, { d: 'Jul 6',  walmart: 6, ebay: 0, temu: 1 },
+    { d: 'Jul 7',  walmart: 3, ebay: 2, temu: 0 }, { d: 'Jul 8',  walmart: 5, ebay: 1, temu: 0 },
+    { d: 'Jul 9',  walmart: 2, ebay: 0, temu: 0 }, { d: 'Jul 10', walmart: 7, ebay: 1, temu: 1 },
+    { d: 'Jul 11', walmart: 5, ebay: 2, temu: 0 }, { d: 'Jul 12', walmart: 8, ebay: 1, temu: 0 },
+    { d: 'Jul 13', walmart: 4, ebay: 0, temu: 0 }, { d: 'Jul 14', walmart: 3, ebay: 1, temu: 1 },
+    { d: 'Jul 15', walmart: 6, ebay: 2, temu: 0 }, { d: 'Jul 16', walmart: 9, ebay: 1, temu: 0 },
+    { d: 'Jul 17', walmart: 5, ebay: 0, temu: 0 }, { d: 'Jul 18', walmart: 4, ebay: 1, temu: 0 },
+    { d: 'Jul 19', walmart: 2, ebay: 0, temu: 1 }, { d: 'Jul 20', walmart: 6, ebay: 2, temu: 0 },
+    { d: 'Jul 21', walmart: 7, ebay: 1, temu: 0 }, { d: 'Jul 22', walmart: 10, ebay: 2, temu: 1 },
+    { d: 'Jul 23', walmart: 6, ebay: 1, temu: 0 }, { d: 'Jul 24', walmart: 4, ebay: 0, temu: 0 },
+    { d: 'Jul 25', walmart: 5, ebay: 1, temu: 0 }, { d: 'Jul 26', walmart: 8, ebay: 3, temu: 1 },
+    { d: 'Jul 27', walmart: 6, ebay: 1, temu: 0 }, { d: 'Jul 28', walmart: 3, ebay: 0, temu: 0 },
+    { d: 'Jul 29', walmart: 7, ebay: 2, temu: 0 }, { d: 'Jul 30', walmart: 9, ebay: 1, temu: 1 },
+    { d: 'Jul 31', walmart: 11, ebay: 2, temu: 0 }, { d: 'Aug 1', walmart: 8, ebay: 1, temu: 0 },
+    { d: 'Aug 2',  walmart: 6, ebay: 2, temu: 1 }, { d: 'Aug 3',  walmart: 7, ebay: 1, temu: 0 },
+  ];
+  const AVAILABLE = 142;
+  const on = { walmart: true, ebay: true, temu: true };
+
+  function totals() {
+    const t = DAYS.reduce((a, d) => a + CHANNELS.reduce((x, c) => x + (on[c.key] ? d[c.key] : 0), 0), 0);
+    const last7 = DAYS.slice(-7).reduce((a, d) => a + CHANNELS.reduce((x, c) => x + (on[c.key] ? d[c.key] : 0), 0), 0);
+    return { t, avg30: t / 30, avg7: last7 / 7 };
+  }
+
+  function renderStats() {
+    const { t, avg30, avg7 } = totals();
+    tTotal.textContent = t;
+    tAvg30.textContent = avg30.toFixed(1);
+    tAvg7.textContent = avg7.toFixed(1);
+    tCover.textContent = avg7 > 0 ? Math.round(AVAILABLE / avg7) : '—';
+  }
+
+  function renderLegend() {
+    legend.innerHTML = CHANNELS.map(c =>
+      `<span class="lg ${on[c.key] ? '' : 'off'}" data-k="${c.key}"><span class="sw" style="background:${c.color}"></span>${c.label}</span>`).join('');
+  }
+  legend.addEventListener('click', (e) => {
+    const el = e.target.closest('.lg'); if (!el) return;
+    const k = el.dataset.k;
+    if (on[k] && Object.values(on).filter(Boolean).length === 1) return; // keep one on
+    on[k] = !on[k];
+    renderAll();
+  });
+
+  function renderPlot() {
+    const max = Math.max(1, ...DAYS.map(d => CHANNELS.reduce((x, c) => x + (on[c.key] ? d[c.key] : 0), 0)));
+    const step = max <= 6 ? 2 : max <= 12 ? 4 : 5;
+    let html = '';
+    for (let v = step; v <= max; v += step) {
+      html += `<div class="gridline" style="bottom:${(v / max) * 100}%"><span class="gl">${v}</span></div>`;
+    }
+    html += DAYS.map((d, i) => {
+      const segs = CHANNELS.filter(c => on[c.key] && d[c.key] > 0);
+      const topKey = segs.length ? segs[segs.length - 1].key : '';
+      return `<div class="col" data-i="${i}">` + segs.map(c =>
+        `<div class="seg ${c.key === topKey ? 'top' : ''}" style="height:calc(${(d[c.key] / max) * 100}% - ${segs.length > 1 ? 2 : 0}px);background:${c.color}"></div>`
+      ).join('') + `</div>`;
+    }).join('');
+    plot.innerHTML = html;
+    xaxis.innerHTML = DAYS.map((d, i) => `<span class="xt">${i % 5 === 0 || i === 29 ? d.d.replace(' ', ' ') : ''}</span>`).join('');
+  }
+
+  plot.addEventListener('mousemove', (e) => {
+    const col = e.target.closest('.col');
+    if (!col) { tip.style.display = 'none'; return; }
+    const d = DAYS[Number(col.dataset.i)];
+    const rows = CHANNELS.filter(c => on[c.key]).map(c =>
+      `<div class="tr"><span class="sw" style="background:${c.color}"></span>${c.label}<span class="n">${d[c.key]}</span></div>`).join('');
+    const tot = CHANNELS.reduce((x, c) => x + (on[c.key] ? d[c.key] : 0), 0);
+    tip.innerHTML = `<b>${d.d}</b>${rows}<div class="tot">Total<span class="n">${tot}</span></div>`;
+    tip.style.display = 'block';
+    const wrap = plotWrap.getBoundingClientRect(), cr = col.getBoundingClientRect();
+    let x = cr.left - wrap.left + cr.width + 8;
+    if (x + 150 > wrap.width) x = cr.left - wrap.left - 150;
+    tip.style.left = `${x}px`;
+    tip.style.top = `14px`;
+  });
+  plot.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+
+  function renderTable() {
+    tblview.innerHTML = `<table><thead><tr><th>Date</th>${CHANNELS.map(c => `<th>${c.label}</th>`).join('')}<th>Total</th></tr></thead><tbody>` +
+      DAYS.slice().reverse().map(d =>
+        `<tr><td>${d.d}</td>${CHANNELS.map(c => `<td>${d[c.key]}</td>`).join('')}<td><b>${CHANNELS.reduce((x, c) => x + d[c.key], 0)}</b></td></tr>`).join('') +
+      `</tbody></table>`;
+  }
+  let tbl = false;
+  tglTbl.addEventListener('click', () => {
+    tbl = !tbl;
+    tglTbl.textContent = tbl ? 'Chart' : 'Table';
+    document.getElementById('plotWrap').style.display = tbl ? 'none' : '';
+    xaxis.style.display = tbl ? 'none' : '';
+    tblview.style.display = tbl ? 'block' : 'none';
+  });
+
+  function renderAll() { renderStats(); renderLegend(); renderPlot(); renderTable(); }
+  renderAll();
+</script>
+</body>
+</html>
