@@ -201,6 +201,16 @@ function sendPaneState() {
 function ensurePane() {
   if (paneView) return paneView;
   const ses = session.fromPartition(PANE_PARTITION);
+  // Marketplaces distrust the default Electron UA token and expire those
+  // logins aggressively: present as the Chrome build this actually is.
+  ses.setUserAgent(ses.getUserAgent()
+    .replace(/\sElectron\/\S+/i, '')
+    .replace(/\s(?:capture[- ]?station|Capture ?Station)\/\S+/i, ''));
+  // Login cookies are written lazily; a hard shutdown can lose a fresh
+  // sign-in. Flush every 5 minutes (and again at quit) so they stick.
+  if (!ensurePane.flushTimer) {
+    ensurePane.flushTimer = setInterval(() => ses.cookies.flushStore().catch(() => {}), 5 * 60 * 1000);
+  }
   // shipping labels: downloads land in Downloads, the renderer gets a toast
   ses.removeAllListeners('will-download');
   ses.on('will-download', (_e, item) => {
@@ -1770,5 +1780,7 @@ app.on('window-all-closed', () => app.quit());
 
 app.on('will-quit', () => {
   if (clipboardTimer) clearInterval(clipboardTimer);
+  // marketplace logins: force the cookie store to disk before exit
+  if (paneView) session.fromPartition(PANE_PARTITION).cookies.flushStore().catch(() => { /* best effort */ });
   try { db.backup(); } catch { /* best effort on exit */ }
 });
