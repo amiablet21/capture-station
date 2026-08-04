@@ -8,7 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const EMERALD = [0x04, 0x78, 0x57, 255];
+// darker emerald than the UI accent (#047857), per the owner's request
+const EMERALD = [0x06, 0x4E, 0x3B, 255];
 const WHITE = [255, 255, 255, 255];
 
 // ---- geometry (256-unit canvas) ----
