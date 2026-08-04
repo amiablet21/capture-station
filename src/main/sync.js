@@ -159,7 +159,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     }
     plan.push(locLabel ? `process at ${locLabel} location, mark shipped` : 'process at warehouse, mark shipped');
     if (row.sub_sku && row.sub_qty > 0) {
-      plan.push(`substitution: deduct ${row.sub_qty} × ${row.sub_sku} at the warehouse instead of the listed item, note it on the order`);
+      plan.push(`substitution: deduct ${row.sub_qty} × ${row.sub_sku} at the warehouse instead of ${row.sub_for || 'the listed item'}, note it on the order`);
     }
     const note = serialNotes.length ? ` [${serialNotes.join('; ')}]` : '';
     return { ok: true, dryRun: true, message: `DRY RUN, would: ${plan.join(', then ')}${note}` };
@@ -177,7 +177,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   if (row.sub_sku && row.sub_qty > 0) {
     await client.addOrderNote(
       order.orderId,
-      `SUBSTITUTION: ${row.sub_note || `shipped ${row.sub_sku} ×${row.sub_qty} instead of the listed item`}`
+      `SUBSTITUTION: ${row.sub_note || `shipped ${row.sub_sku} ×${row.sub_qty} instead of ${row.sub_for || 'the listed item'}`}`
     );
   }
   if (assignments.length > 0) {
@@ -192,6 +192,8 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     preLevels = {};
     for (const it of order.items) {
       if (it.isService || it.unlinked || !it.sku || !it.stockItemId) continue;
+      // per-line substitution: only the replaced line's deduction is reversed
+      if (row.sub_for && String(it.sku).trim() !== row.sub_for) continue;
       try { preLevels[it.sku] = await client.getLevelAt(it.stockItemId, locationId); }
       catch { preLevels[it.sku] = null; /* unknown: reverse the full qty as before */ }
     }
@@ -246,8 +248,11 @@ async function applySubstitution(client, row, order, primaryLocationId, processL
       // Restore only what despatch actually deducted. Deduction floors at
       // zero, so a line whose pre-despatch level was L loses min(qty, L) -
       // reversing the full qty when L was 0 would mint phantom units.
+      // With sub_for set only THAT line is reversed: the other lines really
+      // did ship as listed, their deduction stands.
       const reversals = order.items
         .filter(it => !it.isService && !it.unlinked && it.sku)
+        .filter(it => !row.sub_for || String(it.sku).trim() === row.sub_for)
         .map(it => {
           const pre = preLevels ? preLevels[it.sku] : null;
           const deducted = (pre === null || pre === undefined) ? it.quantity : Math.min(it.quantity, Math.max(0, pre));

@@ -97,6 +97,11 @@ function open() {
   if (!retCols.includes('received_by')) {
     db.exec(`ALTER TABLE returns ADD COLUMN received_by TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: which listed line a substitution replaces ('' = the whole
+  // order, the pre-multi-line behavior kept for old rows)
+  if (!cols.includes('sub_for')) {
+    db.exec(`ALTER TABLE rows ADD COLUMN sub_for TEXT NOT NULL DEFAULT ''`);
+  }
   return db;
 }
 
@@ -212,9 +217,9 @@ function deleteRow(id) {
 // Substitution intent: what actually shipped instead of the listed item.
 // Stored on the row, applied to stock at process time; internal only
 // (visible in Notes/CSV/history, never sent to Linnworks as an order note).
-function setSubstitution(id, sku, qty, note) {
-  open().prepare('UPDATE rows SET sub_sku = ?, sub_qty = ?, sub_note = ? WHERE id = ?')
-    .run(sku || '', Number(qty) || 0, note || '', id);
+function setSubstitution(id, sku, qty, note, subFor) {
+  open().prepare('UPDATE rows SET sub_sku = ?, sub_qty = ?, sub_note = ?, sub_for = ? WHERE id = ?')
+    .run(sku || '', Number(qty) || 0, note || '', subFor || '', id);
   return getRow(id);
 }
 

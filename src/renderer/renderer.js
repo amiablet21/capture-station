@@ -370,6 +370,14 @@ function render() {
     const moreHtml = moreItems.length
       ? `<span class="item-more" data-tip="${esc(moreItems.map(i => `${i.sku || i.channelSku || i.title || '?'} ×${i.qty}`).join(', '))}">+${moreItems.length} more</span>`
       : '';
+    // "shipped a different item" swap rides on EACH item line: the clicked
+    // line's SKU travels as sub_for, so the process-time stock correction
+    // reverses only that line on multi-line orders
+    const canSub = !state.captureOnly && row.status !== 'synced';
+    const lineSub = (i) => canSub
+      ? `<button class="btn-icon item-sub-btn" data-act="substitute" data-subfor="${esc(i.sku || i.channelSku || '')}"
+           title="Shipped a different item instead of ${esc(i.sku || i.channelSku || 'this line')} — pick the substitute">${ICONS.swap}</button>`
+      : '';
     const itemsHtml = metaItems.map(i => {
       const linked = !i.unmapped && i.sku;
       const label = linked ? i.sku : (i.channelSku || i.title || 'unknown item');
@@ -379,20 +387,10 @@ function render() {
       const info = i.channelSku && i.channelSku !== label
         ? `<span class="item-info" data-tip="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
       return linked
-        ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}</span>`
-        : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}</span>`;
+        ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}${lineSub(i)}</span>`
+        : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}${lineSub(i)}</span>`;
     }).join('') + moreHtml;
-    // "shipped a different item" swap, on the item line itself. Single-line
-    // orders only: the process-time stock correction treats the WHOLE order
-    // as substituted, which has no honest meaning for a multi-line order.
-    const canSub = !state.captureOnly && row.status !== 'synced' && allItems.length <= 1;
-    const subBtn = canSub
-      ? `<button class="btn-icon item-sub-btn" data-act="substitute" title="Shipped a different item — pick the substitute">${ICONS.swap}</button>`
-      : '';
-    // the swap affordance rides ON the item line (stacked cells are a column)
-    const itemsCellHtml = subBtn && itemsHtml
-      ? `<span class="item-line">${itemsHtml}${subBtn}</span>`
-      : itemsHtml + subBtn;
+    const itemsCellHtml = itemsHtml;
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
@@ -405,7 +403,7 @@ function render() {
       <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
       <td class="cell-notes">${row.sub_sku
-        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of the listed item`)}&#10;Click to edit or remove">SUB → ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
+        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}&#10;Click to edit or remove">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
@@ -637,7 +635,9 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!row) return;
 
   if (btn.dataset.act === 'substitute') {
-    openSubDialog(row);
+    // an item-line button names the line it replaces; the SUB pill edits the
+    // existing substitution and keeps its stored line
+    openSubDialog(row, btn.dataset.subfor || row.sub_for || '');
     return;
   }
   // Location-move actions stay PARKED (owner is rethinking the workflow);
@@ -970,6 +970,7 @@ $('tabReturns').addEventListener('click', () => showPage('returns'));
 
 let subRowId = null;
 let subNoteDirty = false; // stop regenerating once the user edits the note
+let subForSku = ''; // the listed line being replaced ('' = whole order, legacy)
 
 // the auto note the pill/CSV carry: pure, e2e-testable
 function subDefaultNote(listedSku, shippedSku) {
@@ -982,14 +983,18 @@ function subListedSku(row) {
   return first ? (first.sku || first.channelSku || '') : '';
 }
 
-function openSubDialog(row) {
+function openSubDialog(row, forSku) {
   subRowId = row.id;
   subNoteDirty = !!row.sub_note;
   const meta = (state.orderMeta || {})[row.order_number];
-  const first = meta && meta.items && meta.items[0];
-  $('subOrderLine').textContent = `${row.order_number} · listed: ${subListedSku(row) || 'unknown'}`;
+  const items = (meta && meta.items) || [];
+  // which listed line is being replaced: the clicked line, the stored one,
+  // or (single-line orders) the only line there is
+  subForSku = String(forSku || row.sub_for || subListedSku(row) || '').trim();
+  const forLine = items.find(i => (i.sku || i.channelSku) === subForSku) || items[0];
+  $('subOrderLine').textContent = `${row.order_number} · replacing: ${subForSku || 'listed item'}${items.length > 1 ? ` (1 of ${items.length} lines)` : ''}`;
   $('subSku').value = row.sub_sku || '';
-  $('subQty').value = String(row.sub_qty || (first && first.qty) || 1);
+  $('subQty').value = String(row.sub_qty || (forLine && forLine.qty) || 1);
   $('subNote').value = row.sub_note || '';
   $('subClear').hidden = !row.sub_sku;
   $('subResult').hidden = true;
@@ -1009,7 +1014,7 @@ function subRegenNote() {
   if (subNoteDirty || subRowId == null) return;
   const row = (state.rows || []).find(r => r.id === subRowId);
   const shipped = $('subSku').value.trim();
-  $('subNote').value = shipped ? subDefaultNote(subListedSku(row || {}), shipped) : '';
+  $('subNote').value = shipped ? subDefaultNote(subForSku || subListedSku(row || {}), shipped) : '';
 }
 
 makeCombo($('subSku'), $('subComboList'), (item) => {
@@ -1039,7 +1044,7 @@ $('subSave').addEventListener('click', async () => {
       return;
     }
   }
-  const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false);
+  const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false, subForSku);
   if (!res.ok) { subFeedback(res.error || 'Could not save.'); return; }
   $('subDialog').close();
   const movedMsg = res.moved === 'primary'

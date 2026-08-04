@@ -89,7 +89,7 @@ function buildCsvContent(rows) {
   const lines = rows.slice().reverse().map(r => [
     r.created_at, r.channel, r.order_number, r.tracking, r.carrier,
     // the substitution marker rides in the notes column (internal audit trail)
-    [r.notes || '', r.sub_sku ? `SUB: ${r.sub_note || `shipped ${r.sub_sku}`} (×${r.sub_qty || 1})` : '']
+    [r.notes || '', r.sub_sku ? `SUB: ${r.sub_note || `shipped ${r.sub_sku}${r.sub_for ? ` instead of ${r.sub_for}` : ''}`} (×${r.sub_qty || 1})` : '']
       .filter(Boolean).join(' | '),
     r.status, r.fail_reason, r.synced_at,
   ].map(csvEscape).join(','));
@@ -869,7 +869,18 @@ async function reRouteAfterSubstitution(orderNumber) {
       const subId = await client.findStockItemIdBySku(row.sub_sku);
       if (!subId) return { moved: null }; // unresolvable SKU: leave it be
       const a = await client.getAvailableAt(subId, primary);
-      desired = a >= row.sub_qty ? primary : sr.fallbackLocationId;
+      let ok = a >= row.sub_qty;
+      // a per-line substitution (sub_for) replaces ONE line; the order still
+      // needs the OTHER listed lines available at the primary to come home
+      if (ok && row.sub_for) {
+        for (const it of (order.items || [])) {
+          if (it.isService || !it.stockItemId || it.stockItemId === ZERO_GUID) continue;
+          if (String(it.sku || '').trim() === row.sub_for) continue; // replaced line
+          const la = await client.getAvailableAt(it.stockItemId, primary);
+          if (order.locationId === primary ? la < 0 : la < it.quantity) { ok = false; break; }
+        }
+      }
+      desired = ok ? primary : sr.fallbackLocationId;
     } else {
       // cleared: judge the listed lines the same way the router does
       const lines = (order.items || []).filter(it =>
@@ -1156,14 +1167,14 @@ function registerIpc() {
   // "Shipped different item": save the substitution intent on the row.
   // Stock is corrected at process time; a SUBSTITUTION note goes on the
   // Linnworks order; routing follows the substitute's availability at once.
-  ipcMain.handle('rows:substitute', async (_e, { id, sku, qty, note, clear }) => {
+  ipcMain.handle('rows:substitute', async (_e, { id, sku, qty, note, clear, subFor }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     const row = db.getRow(Number(id));
     if (!row) return { ok: false, error: 'Row not found.' };
     if (row.status === 'synced') return { ok: false, error: 'Already processed - the stock has moved.' };
     if (clear) {
-      const cleared = db.setSubstitution(row.id, '', 0, '');
+      const cleared = db.setSubstitution(row.id, '', 0, '', '');
       pushState();
       const routed = await reRouteAfterSubstitution(row.order_number);
       return { ok: true, row: cleared, moved: routed.moved };
@@ -1172,7 +1183,9 @@ function registerIpc() {
     const subQty = Number(qty);
     if (!subSku) return { ok: false, error: 'Pick the SKU that actually shipped.' };
     if (!Number.isInteger(subQty) || subQty < 1) return { ok: false, error: 'Quantity must be a whole number of 1 or more.' };
-    const updated = db.setSubstitution(row.id, subSku, subQty, String(note || '').trim().slice(0, 300));
+    // sub_for: which listed line the substitute replaces — required on
+    // multi-line orders (the renderer sends the clicked line's SKU)
+    const updated = db.setSubstitution(row.id, subSku, subQty, String(note || '').trim().slice(0, 300), String(subFor || '').trim());
     pushState();
     const routed = await reRouteAfterSubstitution(row.order_number);
     return { ok: true, row: updated, moved: routed.moved };

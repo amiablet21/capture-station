@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   moveOrder: (orderNumber, target, force) => ipcRenderer.invoke('orders:move', { orderNumber, target, force: !!force }),
   undo: () => ipcRenderer.invoke('undo'),
   updateRow: (id, fields) => ipcRenderer.invoke('rows:update', { id, fields }),
-  substituteRow: (id, sku, qty, note, clear) => ipcRenderer.invoke('rows:substitute', { id, sku, qty, note, clear: !!clear }),
+  substituteRow: (id, sku, qty, note, clear, subFor) => ipcRenderer.invoke('rows:substitute', { id, sku, qty, note, clear: !!clear, subFor: subFor || '' }),
   deleteRow: (id) => ipcRenderer.invoke('rows:delete', id),
   runSync: (ids) => ipcRenderer.invoke('sync:run', { ids }),
   getConfig: () => ipcRenderer.invoke('config:get'),
