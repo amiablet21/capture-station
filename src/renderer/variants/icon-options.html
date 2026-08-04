@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>App icon options</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; overflow: auto; }
+  .swatches { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .swatches .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-right: 4px; }
+  .sw { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px 4px 6px; cursor: pointer; background: var(--surface); user-select: none; }
+  .sw .chip { width: 18px; height: 18px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.12); }
+  .sw.is-active { border-color: #2F3437; color: var(--text); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; max-width: 1180px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 16px; }
+  .card h3 { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .card p { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
+  .big svg { width: 112px; height: 112px; }
+  .sizes { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .strip { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; }
+  .strip.dark { background: #1F2326; }
+  .strip.light { background: #EDECEA; }
+  .s48 svg { width: 48px; height: 48px; }
+  .s32 svg { width: 32px; height: 32px; }
+  .s16 svg { width: 16px; height: 16px; }
+</style></head>
+<body>
+  <div class="swatches" id="swatches"><span class="lbl">Background</span></div>
+  <div class="grid" id="grid"></div>
+
+<script>
+  // colorways: bg + glyph. Light backgrounds flip to a charcoal glyph and
+  // get a hairline so the tile doesn't vanish on white surfaces.
+  const COLORWAYS = [
+    { key: 'charcoal', label: 'Charcoal', bg: '#2F3437', fg: '#FFFFFF' },
+    { key: 'graphite', label: 'Near black', bg: '#1A1D1F', fg: '#FFFFFF' },
+    { key: 'navy', label: 'Slate blue', bg: '#1F6C9F', fg: '#FFFFFF' },
+    { key: 'indigo', label: 'Deep navy', bg: '#243B67', fg: '#FFFFFF' },
+    { key: 'bone', label: 'Bone (light)', bg: '#F7F6F3', fg: '#2F3437', edge: true },
+    { key: 'emerald', label: 'Emerald (old)', bg: '#047857', fg: '#FFFFFF' },
+  ];
+  let active = COLORWAYS[0];
+
+  const GLYPHS = {
+    A: { name: 'Barcode (current mark)', desc: 'The scanning read.', draw: (fg) => {
+      const w = [10, 18, 10, 26, 10, 18, 10], gap = 10;
+      const total = w.reduce((a, b) => a + b) + gap * 6;
+      let x = (256 - total) / 2, out = '';
+      for (const bw of w) { out += `<rect x="${x}" y="76" width="${bw}" height="104" rx="5" fill="${fg}"/>`; x += bw + gap; }
+      return out;
+    } },
+    B: { name: 'Inbound box', desc: 'Arrow dropping into an open box: receiving, returns, stock in.', draw: (fg) => `
+      <path d="M64 130 v54 a12 12 0 0 0 12 12 h104 a12 12 0 0 0 12-12 v-54" fill="none" stroke="${fg}" stroke-width="16" stroke-linecap="round"/>
+      <path d="M128 58 v76" stroke="${fg}" stroke-width="16" stroke-linecap="round"/>
+      <path d="M98 108 l30 32 30-32" fill="none" stroke="${fg}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>` },
+    C: { name: 'Stock grid', desc: 'Four inventory slots, one filled. Most legible tiny.', draw: (fg) => `
+      <rect x="62" y="62" width="60" height="60" rx="12" fill="${fg}"/>
+      <rect x="134" y="62" width="60" height="60" rx="12" fill="none" stroke="${fg}" stroke-width="12"/>
+      <rect x="62" y="134" width="60" height="60" rx="12" fill="none" stroke="${fg}" stroke-width="12"/>
+      <rect x="134" y="134" width="60" height="60" rx="12" fill="none" stroke="${fg}" stroke-width="12"/>` },
+    D: { name: 'Parcel', desc: 'A taped shipping box: what moves through the room.', draw: (fg) => `
+      <rect x="60" y="78" width="136" height="104" rx="14" fill="none" stroke="${fg}" stroke-width="16"/>
+      <path d="M60 112 h136" stroke="${fg}" stroke-width="14"/>
+      <path d="M128 112 v70" stroke="${fg}" stroke-width="14"/>` },
+    E: { name: 'Shelves', desc: 'Two stocked shelves: the warehouse itself.', draw: (fg) => `
+      <path d="M58 118 h140" stroke="${fg}" stroke-width="14" stroke-linecap="round"/>
+      <path d="M58 190 h140" stroke="${fg}" stroke-width="14" stroke-linecap="round"/>
+      <rect x="70" y="66" width="44" height="40" rx="8" fill="${fg}"/>
+      <rect x="126" y="66" width="44" height="40" rx="8" fill="${fg}"/>
+      <rect x="98" y="138" width="44" height="40" rx="8" fill="${fg}"/>` },
+    F: { name: 'Checked box', desc: 'Captured, counted, done.', draw: (fg) => `
+      <rect x="60" y="60" width="136" height="136" rx="20" fill="none" stroke="${fg}" stroke-width="16"/>
+      <path d="M96 130 l24 24 44-48" fill="none" stroke="${fg}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>` },
+  };
+
+  function tile(glyph, cw) {
+    const edge = cw.edge ? `<rect x="1.5" y="1.5" width="253" height="253" rx="55" fill="none" stroke="rgba(0,0,0,0.14)" stroke-width="3"/>` : '';
+    return `<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+      <rect width="256" height="256" rx="56" fill="${cw.bg}"/>${glyph.draw(cw.fg)}${edge}</svg>`;
+  }
+
+  function render() {
+    document.getElementById('swatches').innerHTML = '<span class="lbl">Background</span>' +
+      COLORWAYS.map(c => `<span class="sw ${c === active ? 'is-active' : ''}" data-k="${c.key}">
+        <span class="chip" style="background:${c.bg}"></span>${c.label}</span>`).join('');
+    document.getElementById('grid').innerHTML = Object.entries(GLYPHS).map(([id, g]) => {
+      const svg = tile(g, active);
+      return `<div class="card"><h3>${id} — ${g.name}</h3><p>${g.desc}</p>
+        <div class="big">${svg}</div>
+        <div class="sizes">
+          <div class="strip dark"><span class="s48">${svg}</span><span class="s32">${svg}</span><span class="s16">${svg}</span></div>
+          <div class="strip light"><span class="s48">${svg}</span><span class="s32">${svg}</span><span class="s16">${svg}</span></div>
+        </div></div>`;
+    }).join('');
+  }
+
+  document.getElementById('swatches').addEventListener('click', (e) => {
+    const sw = e.target.closest('.sw');
+    if (!sw) return;
+    active = COLORWAYS.find(c => c.key === sw.dataset.k) || active;
+    render();
+  });
+  render();
+</script>
+</body>
+</html>

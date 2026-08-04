@@ -13,23 +13,14 @@ const WHITE = [255, 255, 255, 255];
 
 // ---- geometry (256-unit canvas) ----
 const BG_RADIUS = 56;
-// barcode: 7 bars, varying widths, one narrow gap column each side
-const BAR_WIDTHS = [10, 18, 10, 26, 10, 18, 10];
-const BAR_GAP = 10;
-const BAR_TOP = 76;
-const BAR_BOTTOM = 180;
-const BAR_RADIUS = 5;
-
-function barRects() {
-  const total = BAR_WIDTHS.reduce((a, w) => a + w, 0) + BAR_GAP * (BAR_WIDTHS.length - 1);
-  let x = (256 - total) / 2;
-  const rects = [];
-  for (const w of BAR_WIDTHS) {
-    rects.push({ x, y: BAR_TOP, w, h: BAR_BOTTOM - BAR_TOP, r: BAR_RADIUS });
-    x += w + BAR_GAP;
-  }
-  return rects;
-}
+// parcel glyph (option D, approved 2026-08-04): an outlined taped shipping
+// box — a 16-unit ring (outer minus inner rounded rect) plus two tape bars
+const BOX_OUTER = { x: 52, y: 70, w: 152, h: 120, r: 22 };
+const BOX_INNER = { x: 68, y: 86, w: 120, h: 88, r: 6 };
+const TAPES = [
+  { x: 60, y: 105, w: 136, h: 14, r: 0 },  // horizontal fold line
+  { x: 121, y: 112, w: 14, h: 70, r: 0 },  // vertical tape, lower half
+];
 
 // signed containment test for a rounded rect, in 256-space
 function inRoundedRect(px, py, rect) {
@@ -41,9 +32,13 @@ function inRoundedRect(px, py, rect) {
   return (dx * dx + dy * dy) <= r * r || (px >= x + r && px <= x + w - r) || (py >= y + r && py <= y + h - r);
 }
 
+function inGlyph(px, py) {
+  if (inRoundedRect(px, py, BOX_OUTER) && !inRoundedRect(px, py, BOX_INNER)) return true;
+  return TAPES.some(t => inRoundedRect(px, py, t));
+}
+
 // render size×size RGBA with SS×SS supersampling
 function render(size, ss = 4) {
-  const bars = barRects();
   const bg = { x: 0, y: 0, w: 256, h: 256, r: BG_RADIUS };
   const px = Buffer.alloc(size * size * 4);
   const step = 256 / (size * ss);
@@ -56,10 +51,7 @@ function render(size, ss = 4) {
           const uy = (y * ss + sy + 0.5) * step;
           let c = null;
           if (inRoundedRect(ux, uy, bg)) {
-            c = EMERALD;
-            for (const b of bars) {
-              if (inRoundedRect(ux, uy, b)) { c = WHITE; break; }
-            }
+            c = inGlyph(ux, uy) ? WHITE : EMERALD;
           }
           if (c) { rs += c[0]; gs += c[1]; bs += c[2]; as += c[3]; }
         }
