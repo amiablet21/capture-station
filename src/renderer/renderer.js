@@ -2948,6 +2948,11 @@ async function openChannelSkus(sku, stockItemId) {
         <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
         <span class="chs-sub">${esc(c.subSource)}</span>
         <span class="mono chs-sku">${esc(c.sku)}</span>
+        ${c.price != null
+          ? `<span class="mono chs-price" title="${c.priceKind === 'default'
+              ? 'Channel default price stored in Linnworks (no listing-specific price)'
+              : 'Listing price stored in Linnworks'}">$${Number(c.price).toFixed(2)}${c.priceKind === 'default' ? '<span class="chs-price-def">def</span>' : ''}</span>`
+          : '<span class="chs-price chs-price-none" title="No price stored in Linnworks for this listing">—</span>'}
         ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
       </div>`).join('');
 }

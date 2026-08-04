@@ -1309,6 +1309,16 @@ body {
 .chs-row:last-child { border-bottom: none; }
 .chs-sub { color: var(--faint); font-size: 11.5px; }
 .chs-sku { font-weight: 600; margin-left: auto; }
+.chs-price { font-size: 12px; min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.chs-price-none { color: var(--faint); }
+.chs-price-def {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-left: 4px;
+}
 
 /* add-tracking affordance in the tracking column */
 

@@ -494,6 +494,19 @@ class LinnworksClient {
     }));
   }
 
+  // Channel prices stored in Linnworks for a stock item (Listing Descriptions:
+  // one row per Source/SubSource; a row with an empty SubSource is that
+  // channel's default price). These are what Linnworks pushes to channels —
+  // NOT read back from the marketplace.
+  async getChannelPrices(stockItemId) {
+    const data = await this.call(`Inventory/GetInventoryItemPrices?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
+    return (data || []).map(p => ({
+      source: p.Source || '',
+      subSource: p.SubSource || '',
+      price: Number(p.Price),
+    })).filter(p => Number.isFinite(p.price));
+  }
+
   // Adjust stock levels by a delta per SKU at one location (negative = deduct).
   async changeStockLevels(entries, locationId, changeSource) {
     return this.call('Stock/UpdateStockLevelsBySKU', {

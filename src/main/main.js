@@ -1566,7 +1566,20 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      return { ok: true, channels: await client.getChannelSkus(stockItemId) };
+      const channels = await client.getChannelSkus(stockItemId);
+      // best effort: stored channel prices ride along; a listing-specific
+      // (Source+SubSource) row wins over the channel's default row
+      let prices = [];
+      try { prices = await client.getChannelPrices(stockItemId); } catch { /* dialog still works without prices */ }
+      const norm = (s) => String(s || '').trim().toLowerCase();
+      for (const c of channels) {
+        const exact = prices.find(p => norm(p.source) === norm(c.source) && norm(p.subSource) === norm(c.subSource));
+        const def = prices.find(p => norm(p.source) === norm(c.source) && !norm(p.subSource));
+        const hit = exact || def;
+        c.price = hit ? hit.price : null;
+        c.priceKind = exact ? 'channel' : def ? 'default' : null;
+      }
+      return { ok: true, channels };
     } catch (e) {
       return { ok: false, error: e.message };
     }
