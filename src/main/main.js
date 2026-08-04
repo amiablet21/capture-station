@@ -1729,9 +1729,13 @@ function buildMenu() {
           label: 'Back Up Database Now',
           click: () => {
             try {
-              const dest = db.backup();
+              const res = db.backup();
               db.open();
-              dialog.showMessageBox(win, { message: `Backup saved:\n${dest}` });
+              dialog.showMessageBox(win, {
+                message: res.healthy
+                  ? `Backup saved:\n${res.dest}`
+                  : `The database failed its health check (${res.detail}) — the last good backup was kept untouched.\nA copy of the damaged file was saved for recovery:\n${res.dest}`,
+              });
             } catch (e) {
               dialog.showErrorBox('Backup failed', e.message);
             }
@@ -1760,6 +1764,44 @@ function buildMenu() {
 
 /* ---------- lifecycle ---------- */
 
+// Startup integrity gate: if the live db fails its health check, offer the
+// newest healthy backup instead of limping along corrupt. The damaged file
+// is quarantined beside the db either way; declining keeps the status quo.
+function checkDbHealth() {
+  const health = db.quickCheck();
+  if (health.ok) return;
+  const dir = path.join(app.getPath('userData'), 'backups');
+  let good = null;
+  try {
+    const candidates = fs.readdirSync(dir)
+      .filter(f => /^capture-station-\d{4}-\d{2}-\d{2}\.db$/.test(f))
+      .sort()
+      .reverse();
+    for (const f of candidates) {
+      if (db.checkFile(path.join(dir, f)).ok) { good = path.join(dir, f); break; }
+    }
+  } catch { /* no backups folder yet */ }
+  const detail = String(health.detail || '').slice(0, 300);
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'Capture Station',
+    message: 'The local database failed its health check.',
+    detail: good
+      ? `Problem found: ${detail}\n\nRestore the most recent healthy backup?\n${path.basename(good)}\n\nThe damaged file is kept next to the database either way.`
+      : `Problem found: ${detail}\n\nNo healthy backup was found. The app will continue, but some pages may fail until the database is repaired.`,
+    buttons: good ? ['Restore backup', 'Continue anyway'] : ['Continue anyway'],
+    defaultId: 0,
+    cancelId: good ? 1 : 0,
+  });
+  if (good && choice === 0) {
+    try {
+      db.restoreFrom(good);
+    } catch (e) {
+      dialog.showErrorBox('Restore failed', e.message);
+    }
+  }
+}
+
 app.whenReady().then(() => {
   if (IS_TEST_RUN) {
     // isolated throwaway data dir for automated tests
@@ -1767,6 +1809,7 @@ app.whenReady().then(() => {
     config.save({ csvFolder: path.join(app.getPath('userData'), 'csv') });
   }
   config.save({}); // re-persist so plaintext credentials migrate to encrypted storage
+  checkDbHealth(); // corrupt db -> offer the newest healthy backup BEFORE anything reads it
   db.open();
   writeDailyCsv();
   registerIpc();

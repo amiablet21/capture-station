@@ -321,22 +321,70 @@ function close() {
   if (db) { try { db.close(); } catch { /* already closed */ } db = null; }
 }
 
+// Health check of the LIVE db. quick_check's first row is 'ok' or the first
+// problem found; a throw (file unreadable) also counts as unhealthy.
+function quickCheck() {
+  try {
+    const r = open().prepare('PRAGMA quick_check').get();
+    const v = r ? String(Object.values(r)[0]) : 'no result';
+    return { ok: v === 'ok', detail: v };
+  } catch (e) {
+    return { ok: false, detail: e.message };
+  }
+}
+
+// Same check against an arbitrary file (used to pick a healthy backup),
+// read-only so it never creates -wal/-shm next to the backups.
+function checkFile(file) {
+  try {
+    const d = new DatabaseSync(file, { readOnly: true });
+    const r = d.prepare('PRAGMA quick_check').get();
+    d.close();
+    const v = r ? String(Object.values(r)[0]) : 'no result';
+    return { ok: v === 'ok', detail: v };
+  } catch (e) {
+    return { ok: false, detail: e.message };
+  }
+}
+
+// Replace the live db with a (healthy) backup. The damaged file is kept
+// beside it, and stale WAL/SHM side files are removed so the old state
+// cannot bleed back in on the next open.
+function restoreFrom(file) {
+  close();
+  const p = dbPath();
+  try { fs.renameSync(p, `${p}.corrupt-${Date.now()}`); } catch { /* nothing to quarantine */ }
+  for (const ext of ['-wal', '-shm']) fs.rmSync(p + ext, { force: true });
+  fs.copyFileSync(file, p);
+  open();
+}
+
 function backup() {
+  // never overwrite a good backup with a bad database: check health first,
+  // and fold the WAL in so the copy is one self-contained file
+  const health = quickCheck();
+  try { open().exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* copy still works */ }
   close();
   const dir = path.join(app.getPath('userData'), 'backups');
   fs.mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, `capture-station-${localDay()}.db`);
+  if (!health.ok) {
+    // keep the evidence under a name the restore scan and rotation ignore
+    const quarantine = path.join(dir, `capture-station-${localDay()}-corrupt-${Date.now()}.bad`);
+    fs.copyFileSync(dbPath(), quarantine);
+    return { dest: quarantine, healthy: false, detail: health.detail };
+  }
   fs.copyFileSync(dbPath(), dest);
   // keep the newest 14 backups
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.db')).sort();
   for (const f of files.slice(0, Math.max(0, files.length - 14))) {
     fs.rmSync(path.join(dir, f), { force: true });
   }
-  return dest;
+  return { dest, healthy: true, detail: 'ok' };
 }
 
 module.exports = {
-  open, close, backup, dbPath, localDay,
+  open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
