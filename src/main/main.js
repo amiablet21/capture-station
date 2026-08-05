@@ -297,6 +297,10 @@ function layoutPane(b) {
     if (paneView && paneAttached) {
       win.contentView.removeChildView(paneView);
       paneAttached = false;
+      // detaching a FOCUSED native view strands keyboard focus: nothing in
+      // the window receives keystrokes until the window refocuses. Hand
+      // focus back to the app so dialog inputs type immediately.
+      win.webContents.focus();
     }
     return { ok: true, visible: false };
   }
