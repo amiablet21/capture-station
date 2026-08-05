@@ -48,6 +48,7 @@
     </div>
     <span id="findCount" class="find-count"></span>
     <div id="channelChips" class="channel-chips" hidden></div>
+    <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
     <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
     <button id="bExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the list">Browser</button>
   </div>
@@ -132,7 +133,6 @@
       <div class="ret-bar">
         <span class="recv-past-head">Returns worksheet</span>
         <span id="retHint" class="ret-hint"></span>
-        <button id="retMapBtn" class="btn btn-ghost ret-map-btn" title="Inspect and adjust the condition listing mappings">Mappings</button>
       </div>
       <div class="recv-sheet-box">
         <div class="ret-sheet-scroll">
@@ -460,7 +460,22 @@
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>
-  <datalist id="retSkuOptions"></datalist>
+  <!-- Delete-return confirmation: the log's only popup -->
+  <dialog id="retDelDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Delete return</h2>
+      <p class="dlg-note mono" id="retDelLine"></p>
+      <p style="font-size:12.5px">Remove this entry from the returns log?</p>
+      <label class="check" id="retDelStockWrap"><input id="retDelStock" type="checkbox" checked />
+        <span>Also remove the received unit from stock (<span class="mono" id="retDelTarget"></span>)</span></label>
+      <p class="dlg-note">Checked: the return was logged by mistake, undo everything. Unchecked: the unit really is on the shelf — only the log entry goes away.</p>
+      <div class="dlg-actions">
+        <button id="retDelCancel" class="btn btn-ghost">Cancel</button>
+        <button id="retDelConfirm" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- shared condition-dropdown menu for the Returns worksheet (fixed-position,
        anchored under the row's trigger so the sheet's scroll never clips it) -->
   <div id="retDdMenu" class="ret-dd-menu" role="listbox" aria-label="Condition" hidden></div>

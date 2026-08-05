@@ -298,7 +298,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     ]`);
     check('condition menu: 4 rows, selection, target previews, unmapped state',
       dd[0] === true && dd[1] === 4 && dd[2] === 'openbox'
-        && /same SKU/.test(dd[3]) && /S25-128GB-NAVY-OPENBOX/.test(dd[4]) && /not mapped/.test(dd[5])
+        // targets show the FULL SKUs (no arrows / "same SKU"), owner request 2026-08-05
+        && dd[3] === 'S25-128GB-NAVY' && /S25-128GB-NAVY-OPENBOX/.test(dd[4]) && /no mapping yet/.test(dd[5])
         && dd[8] === 'true',
       dd);
     check('pencil fix on non-New rows only', dd[6] === 3 && dd[7] === false, dd);
@@ -338,24 +339,35 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec('loadRetPast()');
     await sleep(250);
-    // history = flat log, newest first: 7-column header, one row per unit
-    // (the qty-2 return = 2 rows), the no-order pill, the condition badge,
-    // and no inputs/actions anywhere (the marketplace open button is the
-    // one allowed .btn-icon, and this unmatched return has none)
+    // history = flat log, newest first: 8-column header (incl. actions), one
+    // row per unit (the qty-2 return = 2 rows), the condition badge, the
+    // per-row edit/delete buttons, and no inputs until an edit begins
     const ledgerBits = await exec(`[
       !!document.querySelector('#retPastBox table.ret-log-table'),
       document.querySelectorAll('#retPastBox thead th').length,
       document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
-      !!document.querySelector('#retPastBox .ret-noorder'),
       !!document.querySelector('#retPastBox .ret-cbadge.is-openbox'),
-      document.querySelectorAll('#retPastBox input, #retPastBox select, #retPastBox .btn-icon').length,
+      document.querySelectorAll('#retPastBox .ret-log-edit-btn').length,
+      document.querySelectorAll('#retPastBox .ret-log-del-btn').length,
+      document.querySelectorAll('#retPastBox input, #retPastBox select').length,
     ]`);
     check('history renders the flat returns log, one row per unit',
-      ledgerBits[0] === true && ledgerBits[1] === 7
-        && ledgerBits[2] === 2 && ledgerBits[3] === true && ledgerBits[4] === true,
+      ledgerBits[0] === true && ledgerBits[1] === 8
+        && ledgerBits[2] === 2 && ledgerBits[3] === true,
       ledgerBits);
-    check('history rows are read-only (no inputs or row actions)',
-      ledgerBits[5] === 0, ledgerBits);
+    check('history rows carry edit + delete, no inputs until editing',
+      ledgerBits[4] === 2 && ledgerBits[5] === 2 && ledgerBits[6] === 0, ledgerBits);
+    // inline edit: clicking the pencil turns the row into in-place inputs
+    await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
+    await sleep(150);
+    const editBits = await exec(`[
+      !!document.querySelector('#retPastBox tr.ret-log-editing'),
+      document.querySelectorAll('#retPastBox tr.ret-log-editing input, #retPastBox tr.ret-log-editing select').length,
+      !!document.querySelector('#retPastBox .ret-log-save'),
+    ]`);
+    check('pencil opens the inline edit row (inputs in place, save button)',
+      editBits[0] === true && editBits[1] >= 6 && editBits[2] === true, editBits);
+    await exec(`retLogEdit = null; renderRetLog()`);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);
@@ -626,14 +638,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
     check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
-    // 36. returns sheets resize: whole-width grip + per-column grips on BOTH
+    // 36. returns resize: whole-width grip + per-column grips on the
+    // WORKSHEET only (the log below is its own flat table since v1.7.0)
     const retGrips = await exec(`[
       !!$('retGrip'),
       document.querySelectorAll('#retTable thead .col-grip').length,
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
-    check('returns sheets: shared width grip + column grips on worksheet and past sheet',
-      retGrips[0] === true && retGrips[1] === 8 && retGrips[2] === 8, retGrips);
+    check('returns worksheet: shared width grip + column grips (log has none)',
+      retGrips[0] === true && retGrips[1] === 8 && retGrips[2] === 0, retGrips);
 
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {

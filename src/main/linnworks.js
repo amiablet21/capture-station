@@ -373,7 +373,9 @@ class LinnworksClient {
 
   // Find a PROCESSED order by its channel reference (for returns): search,
   // then pull the full order for its item lines.
-  async findProcessedOrder(reference) {
+  // opts.light: skip the per-order items fetch (the sync's already-processed
+  // reconfirmation only needs existence + the processed date)
+  async findProcessedOrder(reference, opts) {
     const search = await this.call('ProcessedOrders/SearchProcessedOrders', {
       request: {
         SearchTerm: String(reference),
@@ -397,6 +399,7 @@ class LinnworksClient {
       tracking: hit.PostalTrackingNumber || '',
       items: [],
     };
+    if (opts && opts.light) return out;
     try {
       const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [hit.pkOrderID] });
       const order = (full || [])[0];

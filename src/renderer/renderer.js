@@ -40,6 +40,9 @@ if (!window.api) {
     refreshOrders: async () => ({ ok: true }),
     moveOrder: async () => ({ ok: false, error: 'Preview mode' }),
     substituteRow: async () => ({ ok: false, error: 'Preview mode' }),
+    clearFailedRows: async () => ({ ok: false }),
+    returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     reopenRow: async () => ({ ok: true }),
     undo: async () => ({ ok: true, message: 'Preview mode' }),
     updateRow: async () => ({ ok: true }),
@@ -326,6 +329,11 @@ function render() {
     chipBar.hidden = true;
     channelFilter = 'all';
   }
+  // one-click cleanup for rows whose orders already left Linnworks' open book
+  const failedGone = state.rows.filter(r =>
+    r.status === 'failed' && String(r.fail_reason || '').startsWith('Not found in open orders')).length;
+  $('clearFailedBtn').hidden = activePage !== 'capture' || failedGone === 0;
+  if (failedGone) $('clearFailedBtn').textContent = `Clear failed · ${failedGone}`;
   if (channelFilter === 'due') visible = visible.filter(v => dueRank(v) < 2);
   else if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
@@ -603,6 +611,14 @@ $('channelChips').addEventListener('click', (e) => {
   if (!chip) return;
   channelFilter = chip.dataset.ch;
   render();
+  focusScan();
+});
+
+$('clearFailedBtn').addEventListener('click', async () => {
+  if (!confirm('Remove all rows whose orders already left Linnworks\' open orders?\nTheir capture history stays in the daily CSVs.')) { focusScan(); return; }
+  const res = await api.clearFailedRows();
+  if (res.ok) toast(`Removed ${res.removed} row${res.removed === 1 ? '' : 's'}`);
+  await refresh();
   focusScan();
 });
 
@@ -2157,8 +2173,9 @@ function retTargetCell(d, idx) {
   if (known) return `<div class="ret-cell-target" title="Stock lands on ${esc(known)}">→ ${esc(known)}</div>`;
   // returns only ever map to EXISTING inventory SKUs: no create shortcut here
   return `<div class="ret-cell-target is-missing">
-    <input type="text" class="input mono ret-pick" data-idx="${idx}" list="retSkuOptions"
+    <div class="combo ret-pick-combo"><input type="text" class="input mono ret-pick" data-idx="${idx}"
       value="${esc(d.pick || '')}" placeholder="Pick the ${esc(d.condition)} listing…" autocomplete="off" spellcheck="false" />
+    <div class="combo-list" hidden></div></div>
   </div>`;
 }
 
@@ -2167,7 +2184,6 @@ function renderRetSheet() {
   $('retSummary').innerHTML = `<strong>${units}</strong> unit${units === 1 ? '' : 's'} to receive`;
   $('retReceiveAll').disabled = units === 0 || retBusy;
   $('retEntryNum').textContent = units + 1;
-  $('retSkuOptions').innerHTML = (recvItems || []).map(i => `<option value="${esc(i.sku)}"></option>`).join('');
   $('retBody').innerHTML = retDrafts.map((d, idx) => `
     <tr data-idx="${idx}">
       <td class="cell-gutter ${d.unmatched ? 'st-failed' : 'st-captured'}" title="${d.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${idx + 1}</td>
@@ -2176,7 +2192,7 @@ function renderRetSheet() {
       <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
       <td class="ret-cell-sku">${d.sku
-        ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span>`
+        ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
         : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
              placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
       <td class="ret-cell-cond">
@@ -2206,6 +2222,18 @@ function renderRetSheet() {
       renderRetSheet();
     });
   });
+  // one-time listing pickers get the same live suggestions (was a bare
+  // datalist, which shows nothing while typing)
+  $('retBody').querySelectorAll('.ret-pick-combo').forEach(box => {
+    const input = box.querySelector('input');
+    const list = box.querySelector('.combo-list');
+    makeCombo(input, list, (item) => {
+      const d = retDrafts[Number(input.dataset.idx)];
+      if (!d) return;
+      d.pick = item.sku;
+      input.value = item.sku;
+    });
+  });
 }
 
 // cell edits land straight on the draft (no re-render, focus stays put)
@@ -2229,11 +2257,13 @@ let retDd = null; // { idx, hl, edit } — open menu state; null = closed
 // rest show where stock lands via the mapping engine ("not mapped" = no
 // target yet, picking it falls into the one-time picker on the row)
 function retDdTargetHtml(d, cond) {
-  if (cond === 'new') return '<span class="ret-dd-tgt">→ same SKU</span>';
+  if (cond === 'new') {
+    return d.sku ? `<span class="ret-dd-tgt" title="Restocks the sold listing">${esc(d.sku)}</span>` : '';
+  }
   const t = d.sku ? ((d.targets || {})[cond] || '') : '';
   return t
-    ? `<span class="ret-dd-tgt" title="Stock lands on ${esc(t)}">→ ${esc(t)}</span>`
-    : '<span class="ret-dd-tgt is-unmapped">not mapped</span>';
+    ? `<span class="ret-dd-tgt" title="Stock lands on ${esc(t)}">${esc(t)}</span>`
+    : '<span class="ret-dd-tgt is-unmapped">(no mapping yet)</span>';
 }
 
 function retDdRender() {
@@ -2257,6 +2287,12 @@ function retDdRender() {
 // overrides beat auto-derivation). Existing inventory SKUs only, no create.
 function retDdRenderEdit(d, menu) {
   const cond = retDd.edit;
+  // the conventional suffix listing for this SKU+condition; when it does not
+  // exist yet, offer to create it in Linnworks right here (owner request
+  // 2026-08-05, reversing the earlier no-create rule)
+  const suffix = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' }[cond] || '';
+  const suggested = `${d.sku}${suffix}`.toUpperCase();
+  const canCreate = suffix && recvLookup === 'ready' && !recvLookupExact(suggested);
   menu.innerHTML = `
     <div class="ret-dd-edit">
       <div class="ret-dd-edit-head"><span class="ret-dd-dot is-${cond}"></span>
@@ -2266,7 +2302,37 @@ function retDdRenderEdit(d, menu) {
                autocomplete="off" spellcheck="false" />
         <div class="combo-list" hidden></div>
       </div>
+      ${canCreate ? `<button type="button" class="btn btn-ghost ret-dd-create" data-sku="${esc(suggested)}"
+        title="Creates the Linnworks item with this exact name (title and price copied from ${esc(d.sku)}), maps it, and routes this return into it. Create the marketplace listings later with the same SKU and they link automatically.">
+        Create <span class="mono">${esc(suggested)}</span></button>` : ''}
     </div>`;
+  const createBtn = menu.querySelector('.ret-dd-create');
+  if (createBtn) {
+    createBtn.addEventListener('click', async () => {
+      createBtn.disabled = true;
+      createBtn.textContent = 'Creating…';
+      const parent = recvLookupExact(d.sku);
+      const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
+      const res = await api.createSku({
+        sku: suggested,
+        title: `${(parent && parent.title) || d.sku} - ${condLabel}`,
+        retailPrice: Number(parent && parent.retailPrice) || 0,
+        qty: 0,
+      });
+      if (!res.ok) {
+        toast(res.error || 'Could not create the SKU.');
+        if (retDd) retDdRender();
+        return;
+      }
+      // the fresh SKU joins the local inventory caches so every combo sees it
+      if (recvItems) {
+        const item = { sku: res.sku, title: `${(parent && parent.title) || d.sku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
+        recvItems.push(item);
+        if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
+      }
+      retDdSaveMapping(d, cond, res.sku); // persists + updates drafts + toast
+    });
+  }
   const input = menu.querySelector('.ret-dd-edit-input');
   const list = menu.querySelector('.combo-list');
   // registered before makeCombo's own keydown: Escape with the match list
@@ -2415,6 +2481,18 @@ $('retBody').addEventListener('click', (e) => {
     if (retDd && retDd.idx === idx) retDdClose(); else retDdOpen(idx);
     return;
   }
+  const skuEdit = e.target.closest('.ret-sku-edit');
+  if (skuEdit) {
+    // reopen the picked SKU as the typing state — nothing is locked in
+    const d = retDrafts[Number(skuEdit.dataset.idx)];
+    if (!d) return;
+    retDdClose();
+    d.sku = ''; d.title = ''; d.targets = null; d.pick = '';
+    renderRetSheet();
+    const inp = $('retBody').querySelector(`.ret-sku-in[data-idx="${skuEdit.dataset.idx}"]`);
+    if (inp) inp.focus();
+    return;
+  }
   const del = e.target.closest('[data-act="del"]');
   if (!del) return;
   retDdClose();
@@ -2485,24 +2563,48 @@ $('retReceiveAll').addEventListener('click', async () => {
 // Returns log: one flat stack, every unit a row, newest first — log style
 // (condition as a pastel badge, horizontal dividers only). Search filters
 // the whole history live.
-let retLogAll = null; // [{ r: return record, i: item line }] flattened per unit
+let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-only) }] per unit
+let retLogEdit = null; // { rid, ii, un } — the one row currently edited inline
 
 function retCondBadge(cond) {
   if (!cond) return '<span class="cell-missing">—</span>';
   return `<span class="ret-cbadge is-${esc(cond)}">${esc(retCondLabel(cond))}</span>`;
 }
 
-function retLogRowHtml(r, i) {
+function retLogRowHtml(r, i, ii, un) {
   const day = String(r.created_at).slice(0, 10);
+  if (retLogEdit && retLogEdit.rid === r.id && retLogEdit.ii === ii && retLogEdit.un === un) {
+    // inline edit: every field editable in place, ✓/✕ where the actions were
+    return `
+    <tr class="ret-past-tr ret-log-editing" data-rid="${r.id}" data-ii="${ii}">
+      <td><input class="ret-log-ein mono" data-f="po" value="${esc(r.order_number)}" /></td>
+      <td><input class="ret-log-ein mono" data-f="day" value="${esc(day)}" title="YYYY-MM-DD" /></td>
+      <td><select class="ret-log-ein ret-log-esel" data-f="condition">
+        ${RET_CONDS.map(c => `<option value="${c.key}" ${c.key === (i.condition || 'new') ? 'selected' : ''}>${c.label}</option>`).join('')}
+      </select></td>
+      <td><div class="combo ret-log-ecombo"><input class="ret-log-ein mono" data-f="sku" value="${esc(i.sku || '')}" placeholder="SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div></td>
+      <td><input class="ret-log-ein" data-f="customer" value="${esc(r.customer || '')}" placeholder="customer…" /></td>
+      <td><input class="ret-log-ein mono" data-f="tracking" value="${esc(r.tracking || '')}" placeholder="tracking…" /></td>
+      <td><input class="ret-log-ein" data-f="note" value="${esc(ii >= 0 ? (i.note || '') : (r.note || ''))}" placeholder="notes…" /></td>
+      <td class="ret-log-actcell"><span class="ret-log-act is-editing">
+        <button class="btn-icon ret-log-save" title="Save (Enter)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button>
+        <button class="btn-icon is-danger ret-log-cancel" title="Cancel (Esc)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></svg></button>
+      </span></td>
+    </tr>`;
+  }
   return `
-    <tr class="ret-past-tr">
-      <td class="mono ret-cell-po" title="${esc(r.order_number)}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${r.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}${retPoOpenBtn(r.order_number, r.source)}</td>
+    <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
+      <td class="mono ret-cell-po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="mono ret-log-dim" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day)}</td>
       <td>${retCondBadge(i.sku ? i.condition : '')}${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}</div>` : ''}</td>
       <td class="mono">${i.sku ? esc(i.sku) : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-log-dim" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-log-dim" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      <td class="ret-log-actcell"><span class="ret-log-act">
+        <button class="btn-icon ret-log-edit-btn" title="Edit this return">${ICONS.pencil}</button>
+        <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
+      </span></td>
     </tr>`;
 }
 
@@ -2532,30 +2634,112 @@ function renderRetLog() {
           <th class="th-lcust">Customer</th>
           <th class="th-ltrk">Tracking #</th>
           <th class="th-lnote">Notes</th>
+          <th class="th-lact"></th>
         </tr>
       </thead>
-      <tbody>${rows.map(({ r, i }) => retLogRowHtml(r, i)).join('')
-        || `<tr><td colspan="7" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+      <tbody>${rows.map(({ r, i, ii, un }) => retLogRowHtml(r, i, ii, un)).join('')
+        || `<tr><td colspan="8" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
     </table>
     </div>`;
+  // the edit row's SKU input gets the shared live suggestions
+  const ecombo = box.querySelector('.ret-log-ecombo');
+  if (ecombo) {
+    const input = ecombo.querySelector('input');
+    const list = ecombo.querySelector('.combo-list');
+    makeCombo(input, list, (item) => { input.value = item.sku; });
+    ensureInventory();
+    input.focus();
+    input.select();
+  }
 }
 
 async function loadRetPast() {
   const returns = await api.returnsList();
   retLogAll = [];
   for (const r of returns) {
-    // a PO-only return has no item lines but still shows as one row
-    const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: 1, note: '' }];
-    for (const i of its) for (let u = 0; u < (i.qty || 1); u++) retLogAll.push({ r, i });
+    // a PO-only return has no item lines but still shows as one row (ii -1)
+    if (!r.items.length) {
+      retLogAll.push({ r, i: { sku: '', condition: '', targetSku: '', qty: 1, note: '' }, ii: -1, un: 0 });
+      continue;
+    }
+    r.items.forEach((i, ii) => {
+      for (let u = 0; u < (i.qty || 1); u++) retLogAll.push({ r, i, ii, un: u });
+    });
   }
   renderRetLog();
 }
 
 $('retLogSearch').addEventListener('input', () => renderRetLog());
 
+let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
+
+async function retLogSave() {
+  if (!retLogEdit) return;
+  const tr = $('retPastBox').querySelector('.ret-log-editing');
+  if (!tr) { retLogEdit = null; return; }
+  const val = (f) => {
+    const el = tr.querySelector(`[data-f="${f}"]`);
+    return el ? el.value.trim() : '';
+  };
+  const res = await api.returnsEditUnit({
+    id: retLogEdit.rid, itemIndex: retLogEdit.ii,
+    po: val('po'), day: val('day'), customer: val('customer'),
+    tracking: val('tracking'), sku: val('sku'),
+    condition: val('condition'), note: val('note'),
+  });
+  if (!res.ok) { toast(res.error || 'Could not save.'); return; }
+  retLogEdit = null;
+  toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
+  loadRetPast();
+}
+
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
-  if (open) api.openOrderPage(open.dataset.po, open.dataset.ch);
+  if (open) { api.openOrderPage(open.dataset.po, open.dataset.ch); return; }
+  if (e.target.closest('.ret-log-save')) { retLogSave(); return; }
+  if (e.target.closest('.ret-log-cancel')) { retLogEdit = null; renderRetLog(); return; }
+  const tr = e.target.closest('tr[data-rid]');
+  if (!tr) return;
+  if (e.target.closest('.ret-log-edit-btn')) {
+    retLogEdit = { rid: Number(tr.dataset.rid), ii: Number(tr.dataset.ii), un: Number(tr.dataset.un) || 0 };
+    renderRetLog();
+    return;
+  }
+  if (e.target.closest('.ret-log-del-btn')) {
+    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    if (!entry) return;
+    retDelCtx = { rid: entry.r.id, ii: entry.ii, target: entry.i.targetSku || '' };
+    $('retDelLine').textContent = [entry.r.order_number, entry.i.sku, entry.i.sku ? retCondLabel(entry.i.condition) : '']
+      .filter(Boolean).join(' · ');
+    $('retDelStockWrap').hidden = !retDelCtx.target;
+    $('retDelStock').checked = !!retDelCtx.target;
+    $('retDelTarget').textContent = retDelCtx.target ? `−1 ${retDelCtx.target}` : '';
+    $('retDelDialog').showModal();
+  }
+});
+
+// Enter saves, Escape cancels — inside the inline edit row only
+$('retPastBox').addEventListener('keydown', (e) => {
+  if (!retLogEdit || !e.target.closest('.ret-log-editing')) return;
+  // the SKU combo's own Enter/Escape (open suggestion list) takes priority
+  const comboList = e.target.closest('.combo') && e.target.closest('.combo').querySelector('.combo-list');
+  if (comboList && !comboList.hidden) return;
+  if (e.key === 'Enter') { e.preventDefault(); retLogSave(); }
+  else if (e.key === 'Escape') { e.preventDefault(); retLogEdit = null; renderRetLog(); }
+});
+
+$('retDelCancel').addEventListener('click', () => $('retDelDialog').close());
+$('retDelConfirm').addEventListener('click', async () => {
+  if (!retDelCtx) return;
+  const res = await api.returnsDeleteUnit({
+    id: retDelCtx.rid, itemIndex: retDelCtx.ii,
+    removeStock: !!retDelCtx.target && $('retDelStock').checked,
+  });
+  $('retDelDialog').close();
+  if (!res.ok) { toast(res.error || 'Could not delete.'); return; }
+  toast(res.stockNote ? `Return deleted — ${res.stockNote}` : 'Return deleted');
+  retDelCtx = null;
+  loadRetPast();
 });
 
 /* ---------- condition-mapping editor ---------- */
@@ -2679,7 +2863,8 @@ $('mapList').addEventListener('click', async (e) => {
 $('mapSearch').addEventListener('input', renderMapList);
 $('mapClose').addEventListener('click', () => $('mapDialog').close());
 $('mapDialog').addEventListener('close', () => focusScan());
-$('retMapBtn').addEventListener('click', openMappings);
+// (the toolbar Mappings button is gone — mapping edits live in the
+// condition dropdown, per SKU; openMappings stays for potential reuse)
 
 /* ---------- Returns sheets resize (mirrors the Stock page grips) ---------- */
 
@@ -3958,7 +4143,7 @@ $('debugDialog').addEventListener('close', () => focusScan());
 /* ---------- focus guard ---------- */
 
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog', 'mapDialog', 'skuDialog', 'subDialog'].some(id => $(id).open);
+  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog', 'mapDialog', 'skuDialog', 'subDialog', 'salesDialog', 'retDelDialog'].some(id => $(id).open);
 }
 
 function focusScan() {

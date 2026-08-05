@@ -134,7 +134,24 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     }
   }
   if (!order) {
-    // Order may not have downloaded into Linnworks yet, or is already processed.
+    // Not open anymore. Usually Linnworks already processed it by itself:
+    // label bought on the channel -> Walmart marks it shipped -> channel
+    // sync despatches the order before our sync gets there. Reconfirm
+    // against processed orders and complete the row instead of failing it;
+    // orders missing from BOTH books (e.g. cancelled) still fail loudly.
+    let done = null;
+    try { done = await client.findProcessedOrder(row.order_number, { light: true }); }
+    catch { /* lookup hiccup: treat as unconfirmed, fall through to retry */ }
+    if (done) {
+      const when = done.processedOn ? ` ${String(done.processedOn).slice(0, 10)}` : '';
+      if (dryRun) return { ok: true, dryRun: true, message: `DRY RUN: already processed on Linnworks${when} - would complete the row` };
+      const marker = 'processed via channel sync';
+      if (!(row.notes || '').includes(marker)) {
+        db.updateRow(row.id, { notes: row.notes ? `${row.notes} | ${marker}` : marker });
+      }
+      db.markSynced(row.id);
+      return { ok: true, message: `Already processed on Linnworks${when} - row completed` };
+    }
     if (!dryRun) db.markFailed(row.id, 'Not found in open orders (retries next sync)');
     return { ok: false, message: 'Not found in open orders (retries next sync)' };
   }

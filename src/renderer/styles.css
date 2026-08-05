@@ -1050,6 +1050,27 @@ body {
 }
 .ret-cell-po .ret-po-open svg { width: 12px; height: 12px; }
 
+/* spacing: the actions column is a fixed sliver, so the header band ends
+   flush with the last column instead of leaving a dead zone */
+.ret-sheet th.th-actions { width: 56px; }
+
+/* re-editable picked SKU on the worksheet: pencil rides beside the SKU */
+.ret-cell-sku .ret-sku-edit {
+  width: 20px;
+  height: 20px;
+  margin-left: 3px;
+  vertical-align: middle;
+  color: var(--muted);
+  opacity: 0;
+}
+.ret-sheet tr:hover .ret-sku-edit,
+.ret-sku-edit:focus-visible { opacity: 1; }
+.ret-cell-sku .ret-sku-edit svg { width: 12px; height: 12px; }
+
+/* create-the-missing-listing shortcut inside the mapping editor */
+.ret-dd-create { width: 100%; margin-top: 8px; font-size: 12px; justify-content: center; }
+.ret-dd-create .mono { font-size: 11.5px; }
+
 /* Returns log: one flat stack, log style — roomier rows, condition as a
    pastel badge, horizontal dividers only (no vertical gridlines) */
 
@@ -1088,6 +1109,37 @@ body {
 .ret-log-table th.th-lcond { width: 160px; }
 .ret-log-table th.th-lsku { width: 190px; }
 .ret-log-table th.th-ltrk { width: 140px; }
+.ret-log-table th.th-lact { width: 64px; }
+
+/* row actions: faint until the row is hovered */
+.ret-log-actcell { overflow: visible; }
+.ret-log-act { display: inline-flex; gap: 2px; opacity: 0.25; }
+.ret-log-table tr:hover .ret-log-act,
+.ret-log-act.is-editing,
+.ret-log-act:focus-within { opacity: 1; }
+.ret-log-act .btn-icon { width: 24px; height: 24px; }
+.ret-log-act .btn-icon svg { width: 13px; height: 13px; }
+.ret-log-save { color: var(--accent); }
+
+/* inline edit row: every field becomes an input in place */
+.ret-log-editing { background: var(--surface-2); }
+.ret-log-editing td { overflow: visible; }
+.ret-log-ein {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+.ret-log-ein:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ret-log-ein[data-f="customer"], .ret-log-ein[data-f="note"] { font-family: var(--font); }
+.ret-log-esel { font-family: var(--font); appearance: auto; }
+.ret-log-ecombo { position: relative; }
 
 /* condition badges: pastel pills, colors follow the grading semantics */
 .ret-cbadge {

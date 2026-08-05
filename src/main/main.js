@@ -936,6 +936,10 @@ function startStockRouter() {
     if (cfg.captureOnly || !cfg.stockRouting || !cfg.stockRouting.enabled) return;
     const res = await runRouting();
     if (res && (res.movedOut || res.movedBack)) {
+      // badges (DS etc.) follow the order list: refresh it NOW instead of
+      // letting moved orders wear stale badges until the next import cycle
+      openOrdersCache = { at: 0, data: null, promise: null };
+      await runOrderImport();
       if (win && !win.isDestroyed()) win.webContents.send('routing:done', res);
     }
   };
@@ -1096,6 +1100,18 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('orders:refresh', async () => {
+    // Refresh = "make everything right, now": run a routing pass first so
+    // stock changes made OUTSIDE the app (Linnworks edits, marketplace
+    // sales) take effect immediately instead of waiting the 5-minute tick
+    const cfg = config.load();
+    if (!cfg.captureOnly && cfg.stockRouting && cfg.stockRouting.enabled) {
+      try {
+        const routed = await runRouting();
+        if (routed && (routed.movedOut || routed.movedBack)) {
+          if (win && !win.isDestroyed()) win.webContents.send('routing:done', routed);
+        }
+      } catch { /* routing hiccups never block the refresh itself */ }
+    }
     openOrdersCache = { at: 0, data: null, promise: null }; // force a fresh fetch
     await runOrderImport();
     // manual refresh also sweeps for new low-stock crossings (own throttle:
@@ -1201,6 +1217,12 @@ function registerIpc() {
     pushState();
     const routed = await reRouteAfterSubstitution(row.order_number);
     return { ok: true, row: updated, moved: routed.moved };
+  });
+  ipcMain.handle('rows:clearFailed', () => {
+    const removed = db.clearFailedNotFound();
+    if (removed && currentRowId && !db.getRow(currentRowId)) currentRowId = null;
+    pushState();
+    return { ok: true, removed };
   });
   ipcMain.handle('rows:delete', (_e, id) => {
     if (currentRowId === id) currentRowId = null;
@@ -1450,6 +1472,116 @@ function registerIpc() {
     }
   });
   ipcMain.handle('returns:list', () => db.listReturns());
+  // Inline log editing: one UNIT of one return record. Record-level fields
+  // (PO#, date, customer, tracking) apply to the whole record; SKU/condition
+  // apply to the unit, splitting a qty>1 line when needed. Stock is
+  // corrected only when the unit originally moved stock (targetSku set)
+  // and its landing spot changes: -1 old target, +1 new target.
+  ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const rec = db.getReturn(Number(id));
+    if (!rec) return { ok: false, error: 'Return not found.' };
+    const newPo = String(po || '').trim();
+    if (!newPo) return { ok: false, error: 'PO# is required.' };
+    const newDay = String(day || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDay)) return { ok: false, error: 'Date must look like 2026-08-05.' };
+    const createdAt = `${newDay}T${String(rec.created_at).split('T')[1] || '12:00:00.000Z'}`;
+    const items = rec.items.slice();
+    const ii = Number(itemIndex);
+    const newSku = String(sku || '').trim();
+    const newCond = String(condition || '').trim() || 'new';
+    const newNote = String(note || '').trim().slice(0, 300);
+    let recordNote = rec.note;
+    let stockNote = '';
+    try {
+      if (ii >= 0) {
+        const it = items[ii];
+        if (!it) return { ok: false, error: 'Return line not found.' };
+        if (!newSku) return { ok: false, error: 'Pick the returned SKU.' };
+        let newTarget = it.targetSku || '';
+        if (newSku !== it.sku || newCond !== it.condition) {
+          if (newCond === 'new') newTarget = newSku;
+          else {
+            const skus = await getInventorySkus(cfg).catch(() => []);
+            newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
+            if (!newTarget && it.targetSku) {
+              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — set it from the worksheet's condition menu first.` };
+            }
+          }
+        }
+        if (it.targetSku && newTarget && newTarget !== it.targetSku) {
+          const client = new LinnworksClient(cfg.linnworks);
+          await client.changeStockLevels(
+            [{ sku: it.targetSku, delta: -1 }, { sku: newTarget, delta: 1 }],
+            cfg.linnworks.locationId, 'Capture Station return edit'
+          );
+          stockNote = `stock corrected: -1 ${it.targetSku}, +1 ${newTarget}`;
+        }
+        const edited = { ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: 1 };
+        if ((it.qty || 1) > 1) {
+          items[ii] = { ...it, qty: it.qty - 1 };
+          items.push(edited);
+        } else {
+          items[ii] = edited;
+        }
+      } else {
+        // PO-only pseudo row: record fields, plus an item line if a SKU was
+        // typed (log-only, no stock move — the unit never bumped stock)
+        recordNote = newNote;
+        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: 1, price: 0, note: '' });
+      }
+      db.saveReturn(rec.id, {
+        orderNumber: newPo, createdAt,
+        customer: String(customer || '').trim().slice(0, 120),
+        tracking: String(tracking || '').trim().slice(0, 100),
+        note: recordNote, items, unmatched: rec.unmatched,
+      });
+      writeReturnsCsv();
+      return { ok: true, stockNote };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('returns:deleteUnit', async (_e, { id, itemIndex, removeStock }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const rec = db.getReturn(Number(id));
+    if (!rec) return { ok: false, error: 'Return not found.' };
+    const ii = Number(itemIndex);
+    let stockNote = '';
+    try {
+      if (ii < 0 || rec.items.length === 0) {
+        db.deleteReturn(rec.id); // PO-only record: nothing ever moved stock
+      } else {
+        const it = rec.items[ii];
+        if (!it) return { ok: false, error: 'Return line not found.' };
+        if (removeStock && it.targetSku) {
+          const client = new LinnworksClient(cfg.linnworks);
+          await client.changeStockLevels(
+            [{ sku: it.targetSku, delta: -1 }],
+            cfg.linnworks.locationId, 'Capture Station return delete'
+          );
+          stockNote = `stock corrected: -1 ${it.targetSku}`;
+        }
+        const items = rec.items.slice();
+        if ((it.qty || 1) > 1) items[ii] = { ...it, qty: it.qty - 1 };
+        else items.splice(ii, 1);
+        if (items.length === 0) db.deleteReturn(rec.id);
+        else {
+          db.saveReturn(rec.id, {
+            orderNumber: rec.order_number, createdAt: rec.created_at,
+            customer: rec.customer, tracking: rec.tracking,
+            note: rec.note, items, unmatched: rec.unmatched,
+          });
+        }
+      }
+      writeReturnsCsv();
+      return { ok: true, stockNote };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // Condition targets for one SKU (the unmatched-return path picks the SKU
   // first, so it needs the same engine the order lookup uses per item).
   ipcMain.handle('returns:targets', async (_e, { sku }) => {

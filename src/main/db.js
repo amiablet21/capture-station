@@ -118,6 +118,15 @@ function parseRow(r) {
   return { ...r, serials: JSON.parse(r.serials), items };
 }
 
+// one-click cleanup of rows whose orders left Linnworks' open book: only
+// the specific retriable failure is touched, other failures stay visible
+function clearFailedNotFound() {
+  const res = open().prepare(
+    "DELETE FROM rows WHERE status = 'failed' AND fail_reason LIKE 'Not found in open orders%'"
+  ).run();
+  return Number(res.changes) || 0;
+}
+
 // snapshot of the order's item lines, kept forever on the row
 function setRowItems(id, items) {
   const clean = (Array.isArray(items) ? items : [])
@@ -284,6 +293,25 @@ function listReturns(limit = 200) {
     .map(r => ({ ...r, items: JSON.parse(r.items), unmatched: !!r.unmatched }));
 }
 
+function getReturn(id) {
+  const r = open().prepare('SELECT * FROM returns WHERE id = ?').get(id);
+  return r ? { ...r, items: JSON.parse(r.items), unmatched: !!r.unmatched } : null;
+}
+
+// full-record update used by the log's inline edit; created_at accepts a
+// replacement ISO string so the received DATE is editable while the time
+// part of the original stamp is preserved by the caller
+function saveReturn(id, { orderNumber, createdAt, customer, tracking, note, items, unmatched }) {
+  open().prepare(
+    'UPDATE returns SET order_number = ?, created_at = ?, customer = ?, tracking = ?, note = ?, items = ?, unmatched = ? WHERE id = ?'
+  ).run(orderNumber, createdAt, customer || '', tracking || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, id);
+  return getReturn(id);
+}
+
+function deleteReturn(id) {
+  open().prepare('DELETE FROM returns WHERE id = ?').run(id);
+}
+
 // Remembered condition -> listing mappings (one-time picks in the Returns UI,
 // or edits made in the Mappings dialog).
 function getConditionMap() {
@@ -410,9 +438,9 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
-  createReturn, listReturns, getConditionMap, saveConditionMapping,
+  createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
   lowStockCrossings,
 };

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns — redesign, one idea per card</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 30px; overflow: auto; }
+  .sec { max-width: 1240px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; max-width: 900px; line-height: 1.5; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th:last-child { border-right: none; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  tr:last-child td { border-bottom: none; }
+  .mono2 { font-family: var(--mono); font-size: 12px; }
+  .mut { color: var(--muted); }
+  .gut { width: 30px; text-align: right; color: var(--faint); font-family: var(--mono); font-size: 11px; }
+  .cbadge { display: inline-block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 9px; border-radius: 999px; background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .noorder { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); margin-left: 5px; }
+
+  /* card row for the isolated demos */
+  .cards { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px; width: 360px; }
+  .card h4 { font-size: 12.5px; font-weight: 600; margin-bottom: 3px; }
+  .card .why { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
+  .demo-input { display: flex; align-items: center; font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--accent); border-radius: var(--r-ctl); outline: 3px solid var(--accent-soft); background: var(--surface); color: var(--text); }
+  .demo-input .caretline { display: inline-block; width: 1px; height: 14px; background: var(--text); margin-left: 1px; }
+
+  .menu { margin-top: 6px; border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 8px 22px rgba(47,52,55,0.10); overflow: hidden; background: var(--surface); }
+  .co { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+  .co:last-child { border-bottom: none; }
+  .co.hl { background: var(--accent-soft); }
+  .co .t { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .co .avail { font-family: var(--mono); font-size: 10.5px; color: var(--pos-text); background: var(--pos-bg); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+
+  .sku-picked { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border-soft); border-radius: var(--r-ctl); }
+  .mini-btn { width: 22px; height: 22px; border: none; background: transparent; border-radius: 5px; color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .mini-btn:hover { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .mini-btn svg { width: 12px; height: 12px; }
+
+  .ddi { display: flex; align-items: center; gap: 9px; padding: 9px 11px; font-size: 12.5px; border-bottom: 1px solid var(--border-soft); }
+  .ddi:last-child { border-bottom: none; }
+  .ddi.hl { background: var(--accent-soft); }
+  .dot { width: 9px; height: 9px; border-radius: 999px; flex: 0 0 auto; }
+  .ddi .tgt { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .dd-edit { padding: 10px 11px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .dd-edit .lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 6px; }
+  .dd-edit input { width: 100%; font-family: var(--mono); font-size: 12px; padding: 6px 9px; border: 1px solid var(--accent); border-radius: 5px; outline: 2px solid var(--accent-soft); background: var(--surface); color: var(--text); box-sizing: border-box; }
+  .dd-edit .hint { font-size: 10.5px; color: var(--muted); margin-top: 5px; }
+
+  .act { display: inline-flex; gap: 2px; }
+  .act button { width: 24px; height: 24px; border: none; background: transparent; border-radius: 6px; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .act button:hover { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .act button.del:hover { background: var(--neg-bg); color: var(--neg-text); }
+  .act svg { width: 13px; height: 13px; }
+
+  .dlg-mock { width: 430px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: 0 12px 32px rgba(47,52,55,0.12); }
+  .dlg-mock h3 { font-size: 13.5px; margin-bottom: 2px; }
+  .dlg-mock .sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .frow { margin-bottom: 10px; }
+  .frow .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 4px; }
+  .frow input, .frow .fake-dd { width: 100%; font-size: 12.5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); box-sizing: border-box; }
+  .fake-dd { display: flex; align-items: center; gap: 8px; }
+  .fake-dd .caret { margin-left: auto; color: var(--faint); }
+  .stock-note { font-size: 11.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: var(--r-ctl); padding: 8px 10px; margin: 10px 0; line-height: 1.5; }
+  .stock-note b { color: var(--text); }
+  .dlg-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .btn2 { font-size: 12.5px; font-weight: 500; padding: 6px 14px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .btn2.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn2.danger { background: var(--neg-bg); border-color: transparent; color: var(--neg-text); }
+  .checkline { display: block; font-size: 12px; color: var(--text); margin-top: 10px; line-height: 1.6; }
+  .checkline input { vertical-align: -2px; margin-right: 6px; }
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">1 — The worksheet itself: spacing fixed, Mappings button gone</div>
+    <div class="sec-sub">Just the table, nothing open. The header band now ends flush with the last column (the trailing dead zone is gone), and the top-right Mappings button is removed.</div>
+    <div class="box">
+      <table>
+        <thead><tr>
+          <th class="gut">#</th><th style="width:150px">PO#</th><th style="width:160px">Customer</th><th style="width:115px">Tracking #</th>
+          <th style="width:64px">Received</th><th style="width:200px">Returned SKU</th><th style="width:180px">Condition</th><th style="width:44px">By</th><th>Notes / dispute</th><th style="width:56px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="gut">1</td><td class="mono2">119121418478576</td><td class="mut">Marybeth Morris</td><td class="mono2">1ZF9814D03…</td><td class="mono2 mut">10:44</td>
+            <td class="mono2">X230-128GB-SILVER</td>
+            <td><span class="dot" style="background:#1F6C9F;display:inline-block;margin-right:6px"></span>Open box</td>
+            <td>IM</td><td class="mut">box dented</td><td></td>
+          </tr>
+          <tr><td class="gut">2</td><td class="mut mono2" colspan="9" style="color:var(--faint)">Type / paste PO#…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">2 — Picking a SKU, in three moments</div>
+    <div class="sec-sub">Each card is the same worksheet cell at a different moment.</div>
+    <div class="cards">
+      <div class="card">
+        <h4>While typing</h4>
+        <div class="why">Suggestions appear immediately: SKU, product name, and how many are available. Arrow keys + Enter or click to pick.</div>
+        <div class="demo-input">s25-ul<span class="caretline"></span></div>
+        <div class="menu">
+          <div class="co hl"><span class="mono2">S25-ULTRA-256GB-BLACK</span><span class="t">Galaxy S25 Ultra 256GB</span><span class="avail">41 avail</span></div>
+          <div class="co"><span class="mono2">S25-ULTRA-256GB-VIOLET</span><span class="t">Galaxy S25 Ultra</span><span class="avail">17 avail</span></div>
+          <div class="co"><span class="mono2">S25-ULTRA-512GB-BLACK</span><span class="t">Galaxy S25 Ultra</span><span class="avail">8 avail</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h4>After picking</h4>
+        <div class="why">The picked SKU keeps a pencil beside it. Click it and the cell reopens as the typing state on the left — nothing is ever locked in.</div>
+        <span class="sku-picked">S25-ULTRA-256GB-BLACK
+          <button class="mini-btn" title="Change the SKU"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg></button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">3 — The condition dropdown: mappings live here now, per SKU</div>
+    <div class="sec-sub">Opened on a return of S25-FE-128GB-JETBLACK. Every condition shows where THIS SKU's returns land. The pencil on a row opens the editor at the bottom of the menu — type the target with the same suggestions, and it's saved for every future return of this SKU. This replaces the global Mappings screen.</div>
+    <div class="card" style="width:400px">
+      <div class="menu" style="margin-top:0">
+        <div class="ddi"><span class="dot" style="background:#346538"></span>New<span class="tgt">S25-FE-128GB-JETBLACK</span></div>
+        <div class="ddi"><span class="dot" style="background:#1F6C9F"></span>Open box<span class="tgt">S25-FE-128GB-JETBLACK-OPENBOX</span>
+          <button class="mini-btn"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg></button></div>
+        <div class="ddi hl"><span class="dot" style="background:#956400"></span>Used<span class="tgt">(no mapping yet)</span>
+          <button class="mini-btn"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg></button></div>
+        <div class="ddi"><span class="dot" style="background:#9F2F2D"></span>Scrap<span class="tgt">S25-FE-128GB-JETBLACK-SCRAP</span>
+          <button class="mini-btn"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg></button></div>
+        <div class="dd-edit">
+          <div class="lbl">Used returns of S25-FE-128GB-JETBLACK land on</div>
+          <input class="mono2" value="S25-FE-128GB-JETBLACK-U" />
+          <div class="hint">Same suggestions as you type. Saved for every future return of this SKU.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">4 — The returns log: edit happens ON the row</div>
+    <div class="sec-sub">Top row: normal, with pencil + trash at the end (faint until hover). Bottom row: what the pencil turns the row into — EVERY field becomes editable in place (PO#, date received, condition, SKU, customer, tracking, notes), with save (✓) and cancel (✕) where the actions were. Enter saves, Esc cancels. No popup.</div>
+    <div class="box">
+      <table>
+        <thead><tr><th style="width:190px">PO#</th><th style="width:108px">Date received</th><th style="width:130px">Condition</th><th style="width:220px">SKU</th><th>Customer</th><th style="width:120px">Tracking #</th><th>Notes</th><th style="width:64px"></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono2">119120671019601<span class="noorder">no order</span></td><td class="mono2 mut">2026-08-05</td>
+            <td><span class="cbadge" style="background:var(--pos-bg);color:var(--pos-text)">New</span></td>
+            <td class="mono2">S25-ULTRA-256GB-BLACK</td><td class="mut">—</td><td class="mono2">—</td><td class="mut"></td>
+            <td><span class="act">
+              <button title="Edit"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg></button>
+              <button class="del" title="Delete"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></svg></button>
+            </span></td>
+          </tr>
+          <tr style="background:var(--surface-2)">
+            <td><input class="mono2" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;padding:4px 7px;background:var(--surface);color:var(--text)" value="119120671019601" /></td>
+            <td><input class="mono2" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;padding:4px 7px;background:var(--surface);color:var(--text)" value="2026-08-05" /></td>
+            <td><span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:12px;background:var(--surface)"><span class="dot" style="background:#346538"></span>New <span class="mut" style="margin-left:2px">▾</span></span></td>
+            <td><input class="mono2" style="width:100%;box-sizing:border-box;border:1px solid var(--accent);border-radius:5px;padding:4px 7px;outline:2px solid var(--accent-soft);background:var(--surface);color:var(--text)" value="S25-ULTRA-256GB-BLACK" /></td>
+            <td><input style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;padding:4px 7px;background:var(--surface);color:var(--text);font-size:12px" placeholder="customer…" /></td>
+            <td><input class="mono2" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;padding:4px 7px;background:var(--surface);color:var(--text)" placeholder="tracking…" /></td>
+            <td><input style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:5px;padding:4px 7px;background:var(--surface);color:var(--text);font-size:12px" placeholder="notes…" /></td>
+            <td><span class="act" style="opacity:1">
+              <button title="Save (Enter)" style="color:var(--accent)"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button>
+              <button class="del" title="Cancel (Esc)"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></svg></button>
+            </span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sec-sub" style="margin-top:8px">Changing SKU or condition still corrects Linnworks stock on save (−1 old landing spot, +1 new one) — shown as a toast after saving, not a dialog.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">5 — The only popup left: confirming a delete</div>
+    <div class="cards">
+      <div class="dlg-mock">
+        <h3>Delete return</h3>
+        <div class="sub">119120671019601 · S25-ULTRA-256GB-BLACK · New</div>
+        <div style="font-size:12.5px">Remove this entry from the returns log?</div>
+        <label class="checkline"><input type="checkbox" checked />Also remove the received unit from stock (<span class="mono2">−1 S25-ULTRA-256GB-BLACK</span>)</label>
+        <div class="stock-note">Checked: the return was logged by mistake, undo everything. Unchecked: the unit really is on the shelf — only the log entry goes away.</div>
+        <div class="dlg-acts"><button class="btn2">Cancel</button><button class="btn2 danger">Delete</button></div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
