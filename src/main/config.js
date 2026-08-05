@@ -97,6 +97,18 @@ const DEFAULTS = {
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
+  // DropShip program: SKUs the supplier can fulfil, each with a pad — the
+  // level the app keeps topped up at the DropShip location so the listing
+  // stays live with zero warehouse stock. Pad 0 = listing dark (supplier
+  // out). Router only sends orders to DropShip when every line is enrolled
+  // with a pad > 0.
+  dropshipPads: {}, // { SKU: qty }
+  // Reorder points from sales velocity: Min = perDay × leadTimeDays × 1.5,
+  // buy quantity ≈ perDay × (coverDays + leadTimeDays). suggest shows them
+  // in the Min column; auto applies them nightly (only when ±20% off).
+  reorder: { suggest: true, auto: false, leadTimeDays: 7, coverDays: 21 },
+  // one-per-crossing latch for dropship BUY alerts (like lowStockBelow)
+  dropshipAlerted: {},
   // Embedded marketplace browser pane on the Capture page (sync mode only):
   // width and open/collapsed state survive restarts.
   browserPane: { visible: false, width: 480 },

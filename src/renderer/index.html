@@ -107,6 +107,8 @@
       <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
       <div id="stockChips" class="stock-chips" hidden></div>
       <div class="stock-actions">
+        <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
+                title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
         <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
         <!-- temporarily hidden pending a toolbar redesign (owner request
              2026-08-02); the dialogs and logic behind them are untouched -->
@@ -159,7 +161,7 @@
                 <input id="retPo" class="recv-cell-input mono" type="text" placeholder="Type / paste PO#…"
                        autocomplete="off" spellcheck="false" aria-label="Original order number" />
               </td>
-              <td colspan="9" class="ret-entry-hint" id="retEntryHint">Enter looks the order up and fills the row — one row per unit; no match falls back to a SKU pick</td>
+              <td colspan="8" class="ret-entry-hint" id="retEntryHint">Enter looks the order up and fills the row — one row per unit; no match falls back to a SKU pick</td>
             </tr>
           </tbody>
         </table>
@@ -397,6 +399,22 @@
       <div class="settings-row">
         <span class="field-label">Carrier cutoff (24h) — "Due today" turns red as it nears</span>
         <input id="setShipCutoff" type="text" class="input input-time mono" placeholder="16:00" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <h3 class="dlg-section">Reorder points</h3>
+      <div class="settings-row">
+        <label class="check"><input id="setReorderSuggest" type="checkbox" /> Suggest minimum levels from sales velocity</label>
+      </div>
+      <p class="dlg-note">Recomputed from processed orders: velocity × lead time × 1.5. Suggestions appear beside the Min column on the Stock page.</p>
+      <div class="settings-row">
+        <label class="check"><input id="setReorderAuto" type="checkbox" /> Apply them automatically (nightly)</label>
+      </div>
+      <p class="dlg-note">Writes a new Min only when it differs by more than 20% from the current one, and posts a one-line summary. Turn on once the suggestions have earned your trust.</p>
+      <div class="settings-row">
+        <span class="field-label">Supplier lead time (days)</span>
+        <input id="setLeadDays" type="number" min="1" step="1" class="input input-time mono" />
+        <span class="field-label">Buy coverage (days)</span>
+        <input id="setCoverDays" type="number" min="1" step="1" class="input input-time mono" />
       </div>
       <div class="settings-row">
         <span class="field-label">Settings PIN (empty = no PIN)</span>

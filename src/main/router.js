@@ -41,6 +41,12 @@ async function runRouting() {
     const routable = (o) => o.items.filter(it =>
       !it.isService && it.stockItemId && it.stockItemId !== ZERO_GUID);
 
+    // DropShip program: only enrolled SKUs (pad > 0) may route to the
+    // fallback — the supplier does not carry everything. A short order with
+    // an unenrolled line stays home and screams via the low-stock alert.
+    const pads = cfg.dropshipPads || {};
+    const enrolled = (sku) => (Number(pads[String(sku || '').trim().toUpperCase()]) || 0) > 0;
+
     // Substitution intents on unprocessed rows: the order's lines still
     // reserve the LISTED item in Linnworks, but routing must follow what will
     // actually ship - a silver order substituted to in-stock black belongs at
@@ -75,6 +81,7 @@ async function runRouting() {
         // stays home and claims that stock so competing substitutions see it
         const a = await availAt(subId);
         if (a >= sub.qty) { avail.set(subId, a - sub.qty); continue; }
+        if (!enrolled(sub.sku)) continue; // supplier can't ship the substitute
         toFallback.push(o);
         for (const it of items) {
           avail.set(it.stockItemId, (await availAt(it.stockItemId)) + it.quantity);
@@ -86,7 +93,7 @@ async function runRouting() {
       for (const it of items) {
         if ((await availAt(it.stockItemId)) < 0) { short = true; break; }
       }
-      if (short) {
+      if (short && items.every(it => enrolled(it.sku))) {
         toFallback.push(o);
         for (const it of items) {
           avail.set(it.stockItemId, (await availAt(it.stockItemId)) + it.quantity);

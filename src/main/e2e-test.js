@@ -88,8 +88,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('duplicate order not re-added', walmartRows.length === 1, state.rows.length);
 
     // clipboard checks are done: restore the operator's clipboard right away so
-    // a concurrently running production instance stops seeing test order numbers
-    try { clipboard.writeText(savedClipboard); } catch { /* best effort */ }
+    // a concurrently running production instance stops seeing test order numbers.
+    // restoreText bypasses the watcher: the operator's clipboard may hold a
+    // real PO#, which must not become a phantom row in THIS suite's queue
+    try { (clipboard.restoreText || clipboard.writeText)(savedClipboard); } catch { /* best effort */ }
 
     // 10. Edit adds tracking and notes, requeues row
     await exec(`api.updateRow(${ebayRow.id}, { tracking: '9234567890123456789012', notes: 'IMEI 355123450987654, resold unit' })`);
@@ -867,7 +869,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     console.log(`E2E_CRASH ${e.stack}`);
     failures++;
   } finally {
-    try { clipboard.writeText(savedClipboard); } catch { /* best effort */ }
+    try { (clipboard.restoreText || clipboard.writeText)(savedClipboard); } catch { /* best effort */ }
     app.exit(failures === 0 ? 0 : 1);
   }
 };

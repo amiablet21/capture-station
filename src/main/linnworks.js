@@ -456,12 +456,17 @@ class LinnworksClient {
       for (const order of full || []) {
         const head = headById.get(order.OrderId) || {};
         const source = head.source || (order.GeneralInfo ? order.GeneralInfo.Source : '') || '';
+        // which location despatched it (drives dropship-velocity stats);
+        // field name read defensively across API shapes
+        const locationId = order.FulfilledLocationId || order.FulfilledLocation
+          || (order.GeneralInfo && order.GeneralInfo.Location) || '';
         for (const it of order.Items || []) {
           if (it.IsService) continue;
           const qty = it.Quantity || 1;
           lines.push({
             orderId: order.OrderId,
             source,
+            locationId,
             processedOn: head.processedOn || '',
             sku: it.SKU || it.ItemNumber || '',
             title: it.Title || '',

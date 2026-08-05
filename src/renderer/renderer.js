@@ -43,6 +43,10 @@ if (!window.api) {
     clearFailedRows: async () => ({ ok: false }),
     returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
+    dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
+    dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
+    dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
+    reorderApply: async () => ({ ok: false, error: 'Preview mode' }),
     reopenRow: async () => ({ ok: true }),
     undo: async () => ({ ok: true, message: 'Preview mode' }),
     updateRow: async () => ({ ok: true }),
@@ -118,6 +122,20 @@ function fmtTime(iso) {
 
 function channelLabel(c) {
   return { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' }[c] || c;
+}
+
+// Walmart spark: the owner wants the logo on order rows, not the word.
+// Blue disc + six yellow rounded rays (drawn inline, CSP-safe).
+const WALMART_SPARK = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#0071DC"/>'
+  + [0, 60, 120, 180, 240, 300].map(a =>
+    `<rect x="10.8" y="3.4" width="2.4" height="6" rx="1.2" fill="#FFC220" transform="rotate(${a} 12 12)"/>`).join('')
+  + '</svg>';
+
+// order-row channel marker: Walmart wears its spark, the rest keep text
+function channelBadge(c) {
+  return c === 'walmart'
+    ? `<span class="badge badge-logo" title="Walmart">${WALMART_SPARK}</span>`
+    : `<span class="badge badge-${esc(c)}">${esc(channelLabel(c))}</span>`;
 }
 
 function toast(msg, ms = 2200) {
@@ -408,8 +426,9 @@ function render() {
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
-        <span class="badge badge-${esc(row.channel)}">${esc(channelLabel(row.channel))}</span>
+        ${channelBadge(row.channel)}
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
+        ${meta && meta.parked ? '<span class="badge badge-parked" title="Parked or locked in Linnworks — the stock router cannot move it. Unpark it in Linnworks if that is unintended.">PARKED</span>' : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
@@ -814,6 +833,11 @@ async function openSettings() {
     : '<option value="">Not selected, test connection first</option>';
   $('setDryRun').checked = !!cfg.dryRun;
   $('setShipCutoff').value = cfg.shipCutoff || '16:00';
+  const rc = cfg.reorder || {};
+  $('setReorderSuggest').checked = rc.suggest !== false;
+  $('setReorderAuto').checked = !!rc.auto;
+  $('setLeadDays').value = String(rc.leadTimeDays || 7);
+  $('setCoverDays').value = String(rc.coverDays || 21);
   const sr = cfg.stockRouting || {};
   $('setRouting').checked = !!sr.enabled;
   const fsel = $('setFallbackLoc');
@@ -895,6 +919,12 @@ $('settingsSave').addEventListener('click', async () => {
       enabled: $('setRouting').checked,
       fallbackLocationId: $('setFallbackLoc').value,
       fallbackLocationName: $('setFallbackLoc').selectedOptions[0] ? $('setFallbackLoc').selectedOptions[0].textContent : '',
+    },
+    reorder: {
+      suggest: $('setReorderSuggest').checked,
+      auto: $('setReorderAuto').checked,
+      leadTimeDays: Math.max(1, parseInt($('setLeadDays').value, 10) || 7),
+      coverDays: Math.max(1, parseInt($('setCoverDays').value, 10) || 21),
     },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
@@ -1388,6 +1418,44 @@ let stockViews = null; // loaded once from config.stockViews
 let stockActiveView = null; // null = All
 let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed location
 let stockLowActive = false; // Low stock view: Available below the minimum level
+let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
+let dsPads = null; // { SKU: padQty } from config
+let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
+let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
+let reorderLoading = false;
+
+async function loadReorderStats() {
+  if (reorderLoading) return;
+  reorderLoading = true;
+  try {
+    const cfg = await api.getConfig();
+    dsPads = cfg.dropshipPads || {};
+    const res = await api.dropshipStats();
+    if (res.ok) {
+      reorderStats = res.stats;
+      reorderMeta = { leadTimeDays: res.leadTimeDays, coverDays: res.coverDays, suggest: (cfg.reorder || {}).suggest !== false };
+    }
+    if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
+  } finally {
+    reorderLoading = false;
+  }
+}
+
+// suggestion worth showing: exists, mature, and meaningfully different from
+// the current Min. Dropship SKUs with zero owned stock suggest nothing —
+// the DS BUY signal owns them, the low-stock alarm must stay silent.
+function minSuggestionFor(it, l) {
+  if (!reorderStats || !dsPads || reorderMeta.suggest === false) return null;
+  const s = reorderStats[String(it.sku).toUpperCase()];
+  if (!s || s.tooNew || s.suggestMin === null) return null;
+  const pad = Number(dsPads[String(it.sku).toUpperCase()]) || 0;
+  if (pad > 0 && (Number(l.stockLevel) || 0) === 0) return null;
+  const cur = Number(l.minimumLevel) || 0;
+  const diff = Math.abs(s.suggestMin - cur);
+  if (diff < 2) return null;
+  if (cur > 0 && diff / cur <= 0.2) return null;
+  return s.suggestMin;
+}
 
 // Available < Min (and a minimum is actually set) at the primary warehouse
 function stockIsLow(it) {
@@ -1436,7 +1504,8 @@ function renderStockChips() {
   const views = stockViews || [];
   const wfsLoc = stockWfsLocation();
   const lowCount = stockLowCount();
-  box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive;
+  box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive
+    && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   box.innerHTML = [
     `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
@@ -1448,12 +1517,16 @@ function renderStockChips() {
     ...(wfsLoc
       ? [`<button class="view-chip ${stockWfsActive ? 'is-active' : ''}" data-view="wfs" title="Stock at ${esc(wfsLoc.name)} — Walmart-managed, read-only (fed by Walmart's own connection)">WFS</button>`]
       : []),
+    ...(!state || state.captureOnly ? [] : [
+      `<button class="view-chip ${stockDsActive ? 'is-active' : ''}" data-view="ds" title="The dropship program: pads, sales pace, and BUY signals">DropShip${dsPads && Object.keys(dsPads).length ? ` · ${Object.keys(dsPads).length}` : ''}</button>`,
+    ]),
   ].join('');
 }
 
 $('stockChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.view-chip');
   if (!chip) return;
+  stockDsActive = false;
   if (chip.dataset.view === 'wfs') {
     stockWfsActive = true;
     stockLowActive = false;
@@ -1465,6 +1538,12 @@ $('stockChips').addEventListener('click', (e) => {
     stockWfsActive = false;
     stockActiveView = null;
     if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
+  } else if (chip.dataset.view === 'ds') {
+    stockDsActive = true;
+    stockWfsActive = false;
+    stockLowActive = false;
+    stockActiveView = null;
+    if (!reorderStats) loadReorderStats();
   } else {
     stockWfsActive = false;
     stockLowActive = false;
@@ -1474,6 +1553,40 @@ $('stockChips').addEventListener('click', (e) => {
   renderStockChips();
   renderStock();
 });
+
+// remove a SKU from the dropship program: right-click its row in the view
+$('stockList').addEventListener('contextmenu', (e) => {
+  const row = e.target.closest('tr[data-dsrow]');
+  if (!row) return;
+  e.preventDefault();
+  const sku = row.dataset.dsrow;
+  if (!confirm(`Remove ${sku} from the dropship program?\nIts DropShip level is zeroed first — the listing goes dark unless the warehouse has stock.`)) return;
+  (async () => {
+    const res = await api.dropshipRemove(sku);
+    if (!res.ok) { toast(res.error || 'Could not remove.'); return; }
+    delete dsPads[sku];
+    renderStockChips();
+    renderStock();
+    toast(`${sku} removed from the dropship program`);
+  })();
+});
+
+$('minApplyAll').addEventListener('click', async () => {
+  const btn = $('minApplyAll');
+  let pending = [];
+  try { pending = JSON.parse(btn.dataset.pending || '[]'); } catch { /* nothing queued */ }
+  if (!pending.length) return;
+  if (!confirm(`Write ${pending.length} suggested minimum${pending.length === 1 ? '' : 's'} to Linnworks?\nEach one becomes that SKU's low-stock alert threshold.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+  const res = await api.reorderApply(pending);
+  btn.disabled = false;
+  if (!res.ok) { toast(res.error || 'Apply failed'); renderStock(); return; }
+  toast(`Minimums applied to ${res.applied} SKU${res.applied === 1 ? '' : 's'}${res.errors.length ? ` — ${res.errors.length} failed` : ''}`);
+  loadStock(); // fresh levels reflect the new Mins everywhere
+});
+
+api.on('reorder:applied', ({ summary }) => toast(summary, 7000));
 
 // e2e/screenshot helper: seed the stock sheet without Linnworks
 function stockSeed(data) {
@@ -1509,6 +1622,7 @@ async function loadStock() {
   $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
+  loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
   const res = await api.getStock();
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
@@ -1570,6 +1684,7 @@ async function loadStockDeltas() {
 
 function renderStock() {
   if (!stockCache) return;
+  if (stockDsActive) { renderDropshipView(); return; }
   const q = $('stockSearch').value.trim().toLowerCase();
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
@@ -1618,7 +1733,11 @@ function renderStock() {
   };
   // chart button: 30-day sales dialog; days-of-cover uses the warehouse
   // available (in WFS view r.home is the warehouse, elsewhere r.l is)
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button></td>`;
+  // "+ DS" enrolls a SKU into the dropship program (pad 10) right from here
+  const dsAdd = (r) => (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
+    ? `<button class="stock-ds-add" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">+ DS</button>`
+    : '';
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
@@ -1658,10 +1777,127 @@ function renderStock() {
             ${skuCell(r)}
             <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
             <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
-            <td class="num"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button></td>
+            <td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
+              const sug = minSuggestionFor(r, r.l);
+              return sug === null ? '' : `<span class="min-sugg mono" title="Suggested reorder point: ${((reorderStats[String(r.sku).toUpperCase()] || {}).perDay || 0)}/day × ${reorderMeta.leadTimeDays}d lead × 1.5">→ ${sug}</span><button class="min-apply" data-applysid="${esc(r.stockItemId || '')}" data-applysku="${esc(r.sku)}" data-applymin="${sug}">apply</button>`;
+            })()}</td>
             <td class="num stock-avail ${stockIsLow(r) ? 'is-low' : ''}" ${stockIsLow(r) ? `title="Below the minimum of ${r.l.minimumLevel}"` : ''}>${r.l.available}</td>
           </tr>`).join('')}</tbody>
       </table>`;
+  // one-click bulk apply for every differing suggested minimum
+  const applyAll = $('minApplyAll');
+  if (applyAll) {
+    const pending = wfsLoc || !reorderStats ? [] : (stockCache.items || []).map(it => {
+      const l = (it.levels || []).find(x => x.locationId === stockCache.locationId);
+      if (!l || !it.stockItemId) return null;
+      const sug = minSuggestionFor(it, l);
+      return sug === null ? null : { stockItemId: it.stockItemId, sku: it.sku, min: sug };
+    }).filter(Boolean);
+    applyAll.hidden = pending.length === 0;
+    if (pending.length) {
+      applyAll.textContent = `Apply suggested minimums · ${pending.length}`;
+      applyAll.dataset.pending = JSON.stringify(pending);
+    }
+  }
+}
+
+/* ---------- DropShip program view (pads · pace · BUY signals) ---------- */
+
+function renderDropshipView() {
+  const aa = $('minApplyAll');
+  if (aa) aa.hidden = true; // suggestions belong to the warehouse view
+  const q = $('stockSearch').value.trim().toLowerCase();
+  const pads = dsPads || {};
+  const skus = Object.keys(pads).sort((a, b) => {
+    const sa = (reorderStats || {})[a] || {};
+    const sb = (reorderStats || {})[b] || {};
+    return (sb.ds30 || 0) - (sa.ds30 || 0) || a.localeCompare(b);
+  }).filter(sku => !q || sku.toLowerCase().includes(q));
+  $('stockSummary').textContent = `${Object.keys(pads).length} SKU${Object.keys(pads).length === 1 ? '' : 's'} in the dropship program — pad, sales pace, and when to buy instead`;
+  if (!Object.keys(pads).length) {
+    $('stockList').innerHTML = '<p class="dlg-note">Nothing enrolled yet. Hover a SKU in the stock list and click “+ DS” to add it to the dropship program.</p>';
+    return;
+  }
+  if (!reorderStats) {
+    $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+    return;
+  }
+  const rowsHtml = skus.map((sku, idx) => {
+    const it = (stockCache.items || []).find(i => String(i.sku).toUpperCase() === sku) || { sku, levels: [] };
+    const l = (it.levels || []).find(x => x.locationId === stockCache.locationId) || { available: 0 };
+    const s = reorderStats[sku] || { perDay: 0, trend: 'flat', ds1: 0, ds7: 0, ds30: 0, ds90: 0, buyQty: 0 };
+    const pad = Number(pads[sku]) || 0;
+    const buyNet = Math.max(0, (s.buyQty || 0) - Math.max(0, Number(l.available) || 0));
+    const hot = s.ds7 >= 25;
+    const warm = !hot && s.ds7 >= 10;
+    const trendArrow = s.trend === 'up' ? '<span class="ds-up">▲</span>' : s.trend === 'down' ? '<span class="ds-dim">▼</span>' : '<span class="ds-dim">→</span>';
+    const action = pad === 0
+      ? `<span class="ds-pill is-off" title="Pad is 0: nothing offered at DropShip — listing dark until the supplier restocks. Click the pad to set it back.">PAD 0</span>`
+      : (hot || warm) && buyNet > 0
+        ? `<span class="ds-pill ${hot ? 'is-hot' : 'is-warm'}" title="${s.ds30} units dropshipped in 30 days. ${buyNet} ≈ ${s.perDay}/day × (${reorderMeta.coverDays}d cover + ${reorderMeta.leadTimeDays}d lead) − on hand — covers ${reorderMeta.coverDays} days at this rate.">BUY ${buyNet}</span>`
+        : '<span class="ds-dim">—</span>';
+    return `
+      <tr class="${hot && pad > 0 ? 'ds-hot' : warm && pad > 0 ? 'ds-warm' : ''}" data-dsrow="${esc(sku)}" title="Right-click to remove from the program">
+        <td class="cell-gutter">${idx + 1}</td>
+        <td class="cell-img">${it.image ? `<img class="stock-img" src="${esc(it.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none"></span>'}</td>
+        <td class="mono"><span title="${esc(it.title || '')}">${esc(it.sku)}</span></td>
+        <td class="num mono ${Number(l.available) > 0 ? '' : 'ds-dim'}" title="Digital World Shop: ${Number(l.stockLevel) || 0} in stock · ${Number(l.inOrders) || 0} in orders · ${Number(l.available) || 0} available">${Number(l.available) || 0}</td>
+        <td class="num"><button class="stock-num-btn ds-pad-btn ${pad === 0 ? 'ds-pad-zero' : ''}" data-padsku="${esc(sku)}" title="Units the app keeps at DropShip — click to change; 0 = listing dark">${pad}</button></td>
+        <td class="num mono" title="${s.ds1} today · ${s.ds7} in 7d · ${s.ds30} in 30d · ${s.ds90} in 90d dropshipped">${(s.perDay || 0).toFixed(1)}/day ${trendArrow}</td>
+        <td class="num mono">${s.ds30 || 0}</td>
+        <td>${action}</td>
+      </tr>`;
+  }).join('');
+  $('stockList').innerHTML = `
+    <table class="stock-table ds-table">
+      <thead><tr>
+        <th class="th-gutter">#</th>
+        <th class="th-img"></th>
+        <th>SKU</th>
+        <th class="num" title="Available at Digital World Shop right now">Warehouse</th>
+        <th class="num">Pad</th>
+        <th class="num">Per day</th>
+        <th class="num">Past month</th>
+        <th>Action</th>
+      </tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="8" class="ret-log-none">No enrolled SKU matches.</td></tr>'}</tbody>
+    </table>`;
+}
+
+// pad edit: same inline number pattern as stock counts
+function beginPadEdit(btn) {
+  const sku = btn.dataset.padsku;
+  const current = btn.textContent.trim();
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  input.value = current;
+  input.className = 'input stock-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (val === '' || Number(val) === Number(current)) { restore(); return; }
+    input.disabled = true;
+    const res = await api.dropshipSetPad(sku, Number(val));
+    if (!res.ok) { toast(res.error || 'Pad update failed'); restore(); return; }
+    dsPads[sku] = Number(val);
+    renderStock();
+    toast(Number(val) === 0
+      ? `${sku}: pad 0 — DropShip zeroed, listing goes dark`
+      : `${sku}: pad set to ${val}`);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', () => commit());
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 // Inline edit of the In stock number: click -> type -> Enter saves to Linnworks.
@@ -1941,6 +2177,34 @@ $('stockList').addEventListener('click', (e) => {
   }
   const salesBtn = e.target.closest('button.stock-sales-btn');
   if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
+  const padBtn = e.target.closest('button.ds-pad-btn');
+  if (padBtn) { beginPadEdit(padBtn); return; }
+  const dsAddBtn = e.target.closest('button.stock-ds-add');
+  if (dsAddBtn) {
+    (async () => {
+      const sku = dsAddBtn.dataset.dssku;
+      const res = await api.dropshipSetPad(sku, 10);
+      if (!res.ok) { toast(res.error || 'Could not enroll.'); return; }
+      dsPads[String(sku).toUpperCase()] = 10;
+      renderStockChips();
+      renderStock();
+      toast(`${sku} added to the dropship program — pad 10 at DropShip`);
+    })();
+    return;
+  }
+  const minApply = e.target.closest('button.min-apply');
+  if (minApply) {
+    (async () => {
+      const res = await api.reorderApply([{ stockItemId: minApply.dataset.applysid, sku: minApply.dataset.applysku, min: Number(minApply.dataset.applymin) }]);
+      if (!res.ok || !res.applied) { toast((res.errors && res.errors[0]) || res.error || 'Could not apply.'); return; }
+      const item = stockCache && stockCache.items.find(i => i.sku === minApply.dataset.applysku);
+      const l = item && (item.levels || []).find(x => x.locationId === stockCache.locationId);
+      if (l) l.minimumLevel = Number(minApply.dataset.applymin);
+      renderStock();
+      toast(`${minApply.dataset.applysku}: Min set to ${minApply.dataset.applymin}`);
+    })();
+    return;
+  }
   const ioBtn = e.target.closest('button.stock-io-btn');
   if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
   const minBtn = e.target.closest('button.stock-min-btn');
@@ -4102,7 +4366,7 @@ function renderHistory() {
         ${list.map(r => `
           <div class="history-item">
             <span class="history-time mono">${fmtTime(r.created_at)}</span>
-            <span class="badge badge-${esc(r.channel)}">${esc(channelLabel(r.channel))}</span>
+            ${channelBadge(r.channel)}
             <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy">${esc(r.order_number)}</span>
             ${r.tracking
               ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
@@ -4255,7 +4519,10 @@ api.on('routing:done', (res) => {
   const parts = [];
   if (res.movedOut) parts.push(`${res.movedOut} order${res.movedOut === 1 ? '' : 's'} → dropship (no stock)`);
   if (res.movedBack) parts.push(`${res.movedBack} back (restocked)`);
-  if (parts.length) toast(`Stock routing: ${parts.join(', ')}`, 4000);
+  // refusals were previously swallowed: a locked/parked order silently
+  // stayed put every pass — say so, it needs a human in Linnworks
+  if (res.errors && res.errors.length) parts.push(`${res.errors.length} refused (locked or parked in Linnworks)`);
+  if (parts.length) toast(`Stock routing: ${parts.join(', ')}`, 5000);
 });
 
 api.on('ui:open-settings', openSettings);

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Stock toolbar — organization options</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 30px; overflow: auto; }
+  .sec { max-width: 1100px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; max-width: 860px; line-height: 1.5; }
+  .bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 12px; }
+  .search { width: 230px; font-family: var(--font); font-size: 12.5px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+  .chip { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); white-space: nowrap; }
+  .chip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .chip.alert { color: var(--badge-yellow-text); }
+
+  /* segmented view switcher: one bordered group, radio behavior */
+  .seg { display: flex; border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 2px; gap: 2px; }
+  .seg span { font-size: 11.5px; font-weight: 500; color: var(--muted); border-radius: 4px; padding: 3px 11px; white-space: nowrap; }
+  .seg span.on { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
+
+  .divider { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+  .dd { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 10px; background: var(--surface); white-space: nowrap; }
+  .dd .caret { color: var(--faint); }
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">Today — everything flat (the problem)</div>
+    <div class="bar">
+      <span class="search">Search SKU, title or barcode</span>
+      <span class="chip on">All</span><span class="chip">Open Box</span><span class="chip">Used</span><span class="chip">Scrap</span>
+      <span class="chip alert">Low stock · 22</span><span class="chip">WFS</span><span class="chip">DropShip · 4</span>
+      <span class="chip" style="margin-left:auto">Refresh</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">A — Views on the left, filters after the divider</div>
+    <div class="sec-sub">The segmented switcher answers "which table am I looking at" (Warehouse / WFS / DropShip — exactly one is ever active). Filters only appear when they apply: conditions and Low stock filter the Warehouse table, so in WFS or DropShip view that group disappears and the bar gets even shorter.</div>
+    <div class="bar">
+      <span class="seg"><span class="on">Warehouse</span><span>WFS</span><span>DropShip · 4</span></span>
+      <span class="divider"></span>
+      <span class="search">Search SKU, title or barcode</span>
+      <span class="chip on">All</span><span class="chip">Open Box</span><span class="chip">Used</span><span class="chip">Scrap</span>
+      <span class="chip alert">Low stock · 22</span>
+      <span class="chip" style="margin-left:auto">Refresh</span>
+    </div>
+    <div class="sec-sub" style="margin-top:10px">…and the same bar with DropShip active:</div>
+    <div class="bar">
+      <span class="seg"><span>Warehouse</span><span>WFS</span><span class="on">DropShip · 4</span></span>
+      <span class="divider"></span>
+      <span class="search">Search SKU, title or barcode</span>
+      <span class="chip" style="margin-left:auto">Refresh</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">B — Same split, plus conditions folded into one dropdown</div>
+    <div class="sec-sub">If four condition chips still feel like noise (you use them rarely), they collapse into a single "Condition" dropdown. The bar carries just five things: view, search, condition, low stock, refresh.</div>
+    <div class="bar">
+      <span class="seg"><span class="on">Warehouse</span><span>WFS</span><span>DropShip · 4</span></span>
+      <span class="divider"></span>
+      <span class="search">Search SKU, title or barcode</span>
+      <span class="dd">Condition: All <span class="caret">▾</span></span>
+      <span class="chip alert">Low stock · 22</span>
+      <span class="chip" style="margin-left:auto">Refresh</span>
+    </div>
+  </div>
+
+</body>
+</html>

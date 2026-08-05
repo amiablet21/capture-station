@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Suggested minimums — Stock page</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 26px; overflow: auto; }
+  .sec { max-width: 1180px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; max-width: 920px; line-height: 1.5; }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .chip { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); }
+  .chip.apply { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th:last-child { border-right: none; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  td:last-child { border-right: none; }
+  tr:last-child td { border-bottom: none; }
+  .gut { width: 30px; text-align: right; font-family: var(--mono); font-size: 11px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .mono2 { font-family: var(--mono); font-size: 12px; }
+  .mut { color: var(--muted); }
+  .imgcell { width: 34px; } .imgbox { width: 24px; height: 24px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-2); }
+
+  /* the Min cell: current value + faint suggestion + one-click apply */
+  .mincell { display: inline-flex; align-items: center; gap: 7px; justify-content: flex-end; width: 100%; }
+  .cur { font-family: var(--mono); font-size: 12.5px; }
+  .sugg { font-family: var(--mono); font-size: 11.5px; color: var(--accent-soft-text); }
+  .apply-pill { font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 2px 9px; cursor: pointer; }
+  .ok { color: var(--pos-text); font-size: 12px; }
+  .nodata { color: var(--faint); font-size: 11px; font-style: italic; }
+
+  .settings-mock { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px 16px; max-width: 640px; }
+  .settings-mock .head { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 10px; }
+  .checkline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-bottom: 8px; }
+  .subline { font-size: 11.5px; color: var(--muted); margin: 0 0 10px 24px; line-height: 1.5; }
+  .inline-inputs { display: flex; gap: 16px; margin-left: 24px; font-size: 12px; color: var(--muted); align-items: center; }
+  .numbox { font-family: var(--mono); font-size: 12px; border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; width: 34px; text-align: right; display: inline-block; }
+
+  .note { font-size: 11.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: var(--r-ctl); padding: 9px 12px; max-width: 920px; line-height: 1.55; margin-top: 10px; }
+  .note b { color: var(--text); }
+  .toastbox { font-family: var(--mono); font-size: 12px; background: #2F3437; color: #F7F6F3; border-radius: 8px; padding: 10px 14px; max-width: 560px; }
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">1 — Suggest mode: the Min column grows a faint suggestion</div>
+    <div class="sec-sub">Nightly, every SKU's reorder point is computed (velocity × lead × 1.5). Where it differs from the current Min, the suggestion sits beside it with a one-click apply — hover the row to see the pill. A toolbar button applies everything at once when you trust it.</div>
+
+    <div class="toolbar">
+      <span class="chip">All</span><span class="chip">Low stock · 22</span><span class="chip">WFS</span><span class="chip">DropShip · 4</span>
+      <span class="chip apply" style="margin-left:auto">Apply suggested minimums · 41</span>
+      <span class="chip">Refresh</span>
+    </div>
+
+    <div class="box">
+      <table>
+        <thead><tr>
+          <th class="gut" style="background:var(--surface-2);color:var(--faint)">#</th>
+          <th class="imgcell"></th>
+          <th style="width:220px">SKU</th>
+          <th class="num" style="width:90px">In stock</th>
+          <th class="num" style="width:90px">In orders</th>
+          <th class="num" style="width:170px">Min</th>
+          <th class="num" style="width:90px">Available</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="gut">1</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">SM-X133-64GB-GREY</td>
+            <td class="num mono2">1191</td><td class="num mono2">1</td>
+            <td class="num"><span class="mincell"><span class="cur">400</span><span class="sugg" title="8.3/day × 7d lead × 1.5">→ 87</span><button class="apply-pill">apply</button></span></td>
+            <td class="num mono2">1190</td>
+          </tr>
+          <tr>
+            <td class="gut">2</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">X210-64GB-GRAY</td>
+            <td class="num mono2">1004</td><td class="num mono2">68</td>
+            <td class="num"><span class="mincell"><span class="cur">0</span><span class="sugg" title="5.1/day × 7d lead × 1.5">→ 54</span><button class="apply-pill">apply</button></span></td>
+            <td class="num mono2">936</td>
+          </tr>
+          <tr>
+            <td class="gut">3</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">X930-256GB-GRAY</td>
+            <td class="num mono2">8</td><td class="num mono2">1</td>
+            <td class="num"><span class="mincell"><span class="cur">0</span><span class="sugg" title="3.2/day × 7d lead × 1.5">→ 34</span><button class="apply-pill">apply</button></span></td>
+            <td class="num mono2">7</td>
+          </tr>
+          <tr>
+            <td class="gut">4</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">S25-FE-128GB-JETBLACK</td>
+            <td class="num mono2">201</td><td class="num mono2">12</td>
+            <td class="num"><span class="mincell"><span class="cur">21</span><span class="ok" title="Current Min matches the suggestion (within 20%)">✓</span></span></td>
+            <td class="num mono2">189</td>
+          </tr>
+          <tr>
+            <td class="gut">5</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">Z-FLIP7-512GB-CORAL</td>
+            <td class="num mono2">12</td><td class="num mono2">0</td>
+            <td class="num"><span class="mincell"><span class="cur">0</span><span class="nodata" title="Listed 5 days ago — suggestions start after 14 days of sales history">too new</span></span></td>
+            <td class="num mono2">12</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><b>Reading the rows:</b> row 1 shows a hand-set Min the math disagrees with (400 vs 87 — the alert fires months too early); row 2–3 are unset Mins with computed suggestions; row 4 already matches (quiet ✓); row 5 is too new to judge — no suggestion until it has two weeks of history. Applying writes the value to Linnworks, same as editing the Min by hand today.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">2 — The Settings switch: graduate to automatic</div>
+    <div class="settings-mock">
+      <div class="head">Reorder points</div>
+      <label class="checkline"><input type="checkbox" checked /> Suggest minimum levels from sales velocity</label>
+      <div class="subline">Recomputed nightly for every SKU: velocity × lead time × 1.5. Suggestions appear in the Min column.</div>
+      <label class="checkline"><input type="checkbox" /> Apply them automatically (nightly)</label>
+      <div class="subline">Writes the new Min only when it differs by more than 20% from the current one, and posts a one-line summary of what changed. Turn this on once the suggestions have earned your trust.</div>
+      <div class="inline-inputs">
+        <span>Supplier lead time <span class="numbox">7</span> days</span>
+        <span>Buy coverage <span class="numbox">21</span> days</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">3 — The nightly summary (auto mode)</div>
+    <div class="sec-sub">One toast in the app (and the webhook, if set) — never a flood:</div>
+    <div class="toastbox">Minimums updated for 6 SKUs: X930-256GB-GRAY 0→34, X210-64GB-GRAY 0→54, SM-X133 400→87, +3 more. 2 skipped (too new).</div>
+  </div>
+
+</body>
+</html>

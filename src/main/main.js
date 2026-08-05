@@ -11,6 +11,7 @@ const { LinnworksClient } = require('./linnworks');
 
 let win = null;
 let clipboardTimer = null;
+let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -544,6 +545,13 @@ function matchOrder(text) {
 }
 
 function startClipboardWatcher() {
+  // test isolation: whatever is on the DESKTOP's clipboard when a test run
+  // launches is not test input — prime the watcher so it only reacts to
+  // changes made during the run (a real PO# on the clipboard once seeded a
+  // phantom row into an e2e queue check, 2026-08-05)
+  if (IS_TEST_RUN) {
+    try { lastClipboardText = clipboard.readText(); } catch { /* ignore */ }
+  }
   const poll = () => {
     // Clipboard auto-capture belongs to capture-only stations, where copying
     // IS the input method. In sync mode the queue is fed by the Linnworks
@@ -555,6 +563,9 @@ function startClipboardWatcher() {
     if (lastClipboardText === null) { lastClipboardText = text; return; } // ignore whatever was copied before launch
     if (text === lastClipboardText) return;
     lastClipboardText = text;
+    // test isolation: the desktop clipboard stays live during a suite run
+    // (the user keeps working) — only values the suite itself wrote count
+    if (IS_TEST_RUN && text !== testClipboardAllow) return;
     const trimmed = (text || '').trim();
     if (!trimmed || trimmed.length > 200) return;
     const channel = matchOrder(trimmed);
@@ -749,6 +760,23 @@ async function triggerSync(trigger, ids) {
 // leaves open orders (cancelled / processed elsewhere).
 let orderMeta = {}; // reference -> { source, locationId, locationName, items: [{sku, qty}] }
 
+// Orders the router WANTED to move but Linnworks refused (locked/parked):
+// refreshed after every routing pass from its error strings, surfaced as a
+// PARKED chip on the row. Self-clears once the order unparks or moves.
+let routerRefusedRefs = new Set();
+
+function updateRouterRefusals(res) {
+  const refused = new Set();
+  for (const err of (res && res.errors) || []) {
+    const m = /Order '(\d+)'/.exec(String(err));
+    if (!m) continue;
+    const numId = Number(m[1]);
+    const hit = (openOrdersCache.data || []).find(o => o.numOrderId === numId);
+    if (hit) refused.add(String(hit.reference).trim());
+  }
+  routerRefusedRefs = refused;
+}
+
 // sku -> main image URL, from the inventory list (cached 10 min): gives the
 // capture queue its item thumbnails without hammering the API
 let skuImageCache = { at: 0, map: null, skus: null, promise: null };
@@ -818,6 +846,7 @@ async function runOrderImport() {
         locationId: o.locationId || '',
         locationName: o.locationName || '',
         dropship: !!fallbackId && o.locationId === fallbackId,
+        parked: routerRefusedRefs.has(ref),
         despatchBy: o.despatchBy || '',
         items: (o.items || []).filter(it => !it.isService).map(it => {
           const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
@@ -935,13 +964,17 @@ function startStockRouter() {
     const cfg = config.load();
     if (cfg.captureOnly || !cfg.stockRouting || !cfg.stockRouting.enabled) return;
     const res = await runRouting();
-    if (res && (res.movedOut || res.movedBack)) {
-      // badges (DS etc.) follow the order list: refresh it NOW instead of
+    updateRouterRefusals(res);
+    if (res && (res.movedOut || res.movedBack || (res.errors && res.errors.length))) {
+      // badges (DS/PARKED) follow the order list: refresh it NOW instead of
       // letting moved orders wear stale badges until the next import cycle
       openOrdersCache = { at: 0, data: null, promise: null };
       await runOrderImport();
       if (win && !win.isDestroyed()) win.webContents.send('routing:done', res);
     }
+    // dropship pads ride the same cadence; nightly reorder pass piggybacks
+    runPadMaintenance().catch(() => { /* next tick retries */ });
+    runReorderAuto().catch(() => { /* next tick retries */ });
   };
   setTimeout(tick, 8000); // shortly after launch
   setInterval(tick, 5 * 60 * 1000);
@@ -1015,6 +1048,160 @@ async function runLowStockCheck(itemsOpt, minIntervalMs = 0) {
 function startLowStockWatcher() {
   setTimeout(() => runLowStockCheck(), 15000);
   setInterval(() => runLowStockCheck(), 15 * 60 * 1000);
+}
+
+/* ---------- DropShip program: pad engine ---------- */
+
+// Keeps every enrolled SKU's DropShip level at its pad. One inventory fetch
+// per pass; only mismatched levels get a delta. Pad 0 = hold the level at
+// zero (listing dark) until the SKU is removed from the program.
+let padRunning = false;
+
+async function runPadMaintenance() {
+  const cfg = config.load();
+  const pads = cfg.dropshipPads || {};
+  const dsLoc = (cfg.stockRouting || {}).fallbackLocationId;
+  if (cfg.captureOnly || !dsLoc || !Object.keys(pads).length || padRunning) return { skipped: true };
+  padRunning = true;
+  try {
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+    const deltas = [];
+    for (const [sku, qtyRaw] of Object.entries(pads)) {
+      const target = Math.max(0, Number(qtyRaw) || 0);
+      const it = bySku.get(String(sku).toUpperCase());
+      if (!it) continue; // SKU no longer in inventory
+      const lvl = (it.levels || []).find(l => l.locationId === dsLoc);
+      const cur = lvl ? Number(lvl.stockLevel) || 0 : 0;
+      if (cur !== target) deltas.push({ sku: it.sku, delta: target - cur });
+    }
+    if (deltas.length) {
+      await client.changeStockLevels(deltas, dsLoc, 'Capture Station dropship pad');
+    }
+    return { ok: true, adjusted: deltas.length };
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    padRunning = false;
+  }
+}
+
+/* ---------- reorder points from sales velocity ---------- */
+
+// Min = perDay × leadTimeDays × 1.5 (rounded up). Guards: no suggestion
+// before 14 days of sales history; dropship-enrolled SKUs with zero owned
+// stock suggest 0 (the DS BUY signal owns that case, not the low-stock
+// alarm). Pure math on the shared sales cache.
+async function computeReorderStats() {
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+  const rc = { leadTimeDays: 7, coverDays: 21, ...(cfg.reorder || {}) };
+  const dsLoc = (cfg.stockRouting || {}).fallbackLocationId || '';
+  const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const res = await querySales(day(new Date(Date.now() - 89 * 86400000)), day(new Date()));
+  if (!res.ok) return res;
+  const now = Date.now();
+  const per = {};
+  for (const l of res.lines) {
+    const sku = String(l.sku || '').trim().toUpperCase();
+    if (!sku) continue;
+    const t = Date.parse(l.processedOn);
+    if (Number.isNaN(t)) continue;
+    const age = (now - t) / 86400000;
+    const p = per[sku] || (per[sku] = { total7: 0, total30: 0, ds1: 0, ds7: 0, ds30: 0, ds90: 0, oldest: 0 });
+    p.oldest = Math.max(p.oldest, age);
+    if (age <= 7) p.total7 += l.qty;
+    if (age <= 30) p.total30 += l.qty;
+    if (l.locationId && l.locationId === dsLoc) {
+      if (age <= 1) p.ds1 += l.qty;
+      if (age <= 7) p.ds7 += l.qty;
+      if (age <= 30) p.ds30 += l.qty;
+      p.ds90 += l.qty;
+    }
+  }
+  const pads = cfg.dropshipPads || {};
+  const stats = {};
+  for (const [sku, p] of Object.entries(per)) {
+    const perDay = p.total30 / 30;
+    stats[sku] = {
+      ...p,
+      perDay: Math.round(perDay * 10) / 10,
+      trend: p.total7 / 7 > perDay * 1.15 ? 'up' : p.total7 / 7 < perDay * 0.85 ? 'down' : 'flat',
+      tooNew: p.oldest < 14,
+      suggestMin: p.oldest < 14 ? null : Math.ceil(perDay * rc.leadTimeDays * 1.5),
+      buyQty: Math.ceil(perDay * (rc.coverDays + rc.leadTimeDays)),
+      enrolled: sku in pads,
+      pad: Number(pads[sku]) || 0,
+    };
+  }
+  return { ok: true, stats, leadTimeDays: rc.leadTimeDays, coverDays: rc.coverDays, dsLocationId: dsLoc };
+}
+
+// nightly auto-apply + dropship BUY webhook crossings (once per day)
+let lastReorderAutoDay = '';
+
+async function runReorderAuto() {
+  const cfg = config.load();
+  const rc = cfg.reorder || {};
+  const today = db.localDay();
+  if (cfg.captureOnly || lastReorderAutoDay === today) return;
+  lastReorderAutoDay = today;
+  try {
+    const res = await computeReorderStats();
+    if (!res.ok) return;
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const changes = [];
+    if (rc.auto) {
+      for (const it of items) {
+        const s = res.stats[String(it.sku).toUpperCase()];
+        if (!s || s.tooNew || s.suggestMin === null) continue;
+        const lvl = (it.levels || []).find(l => l.locationId === cfg.linnworks.locationId);
+        if (!lvl) continue;
+        // dropship SKUs with zero owned stock keep Min 0 (BUY signal owns them)
+        const target = (s.pad > 0 && (Number(lvl.stockLevel) || 0) === 0) ? 0 : s.suggestMin;
+        const cur = Number(lvl.minimumLevel) || 0;
+        const diff = Math.abs(target - cur);
+        if (diff >= 2 && (cur === 0 ? target > 0 : diff / cur > 0.2)) {
+          try {
+            await client.setStockMinimumLevel(it.stockItemId, cfg.linnworks.locationId, target);
+            changes.push(`${it.sku} ${cur}→${target}`);
+          } catch { /* one bad SKU never stops the pass */ }
+        }
+      }
+    }
+    // dropship BUY crossings: once per crossing, latched like low stock
+    const alerted = { ...(cfg.dropshipAlerted || {}) };
+    const crossings = [];
+    for (const [sku, s] of Object.entries(res.stats)) {
+      if (!(sku in (cfg.dropshipPads || {}))) continue;
+      if (s.ds7 >= 25 && !alerted[sku]) {
+        alerted[sku] = true;
+        crossings.push(`${sku}: ${s.ds7}/week dropshipped — BUY ~${s.buyQty}`);
+      } else if (s.ds7 < 10 && alerted[sku]) {
+        delete alerted[sku]; // cooled off: re-arm
+      }
+    }
+    config.save({ dropshipAlerted: alerted });
+    if (changes.length || crossings.length) {
+      const summary = [
+        changes.length ? `Minimums updated for ${changes.length} SKUs: ${changes.slice(0, 4).join(', ')}${changes.length > 4 ? ` +${changes.length - 4} more` : ''}` : '',
+        ...crossings.map(c => `DropShip alert: ${c}`),
+      ].filter(Boolean).join('\n');
+      if (win && !win.isDestroyed()) win.webContents.send('reorder:applied', { summary });
+      const hook = ((cfg.lowStock || {}).webhookUrl || '').trim();
+      if (hook && /^https:\/\//i.test(hook)) {
+        try {
+          await fetch(hook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'reorder-summary', summary, at: new Date().toISOString() }),
+          });
+        } catch { /* webhook is best effort */ }
+      }
+    }
+  } catch { /* next day retries */ }
 }
 
 /* ---------- Sales page: processed-order line cache ---------- */
@@ -1107,7 +1294,8 @@ function registerIpc() {
     if (!cfg.captureOnly && cfg.stockRouting && cfg.stockRouting.enabled) {
       try {
         const routed = await runRouting();
-        if (routed && (routed.movedOut || routed.movedBack)) {
+        updateRouterRefusals(routed);
+        if (routed && (routed.movedOut || routed.movedBack || (routed.errors && routed.errors.length))) {
           if (win && !win.isDestroyed()) win.webContents.send('routing:done', routed);
         }
       } catch { /* routing hiccups never block the refresh itself */ }
@@ -1718,6 +1906,56 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // DropShip program + reorder points
+  ipcMain.handle('dropship:setPad', async (_e, { sku, qty }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const key = String(sku || '').trim().toUpperCase();
+    const n = Number(qty);
+    if (!key) return { ok: false, error: 'Missing SKU.' };
+    if (!Number.isInteger(n) || n < 0) return { ok: false, error: 'Pad must be a whole number of 0 or more.' };
+    config.save({ dropshipPads: { ...(cfg.dropshipPads || {}), [key]: n } });
+    runPadMaintenance().catch(() => { /* next pass retries */ });
+    return { ok: true };
+  });
+  ipcMain.handle('dropship:remove', async (_e, { sku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const key = String(sku || '').trim().toUpperCase();
+    const pads = { ...(cfg.dropshipPads || {}) };
+    if (!(key in pads)) return { ok: false, error: 'Not in the program.' };
+    // zero the DropShip level first so nothing keeps selling from a pad
+    pads[key] = 0;
+    config.save({ dropshipPads: pads });
+    await runPadMaintenance().catch(() => { /* best effort */ });
+    delete pads[key];
+    config.save({ dropshipPads: pads });
+    return { ok: true };
+  });
+  ipcMain.handle('dropship:stats', () => computeReorderStats());
+  ipcMain.handle('reorder:apply', async (_e, { entries }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = Array.isArray(entries) ? entries.slice(0, 500) : [];
+    let applied = 0;
+    const errors = [];
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      for (const e of list) {
+        const min = Number(e.min);
+        if (!e.stockItemId || !Number.isInteger(min) || min < 0) continue;
+        try {
+          await client.setStockMinimumLevel(e.stockItemId, cfg.linnworks.locationId, min);
+          applied++;
+        } catch (err) {
+          errors.push(`${e.sku || e.stockItemId}: ${err.message}`);
+        }
+      }
+      return { ok: true, applied, errors };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('stock:channelSkus', async (_e, { stockItemId }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -1978,27 +2216,6 @@ app.whenReady().then(() => {
   startOrderImporter();
   startLowStockWatcher();
 
-  if (process.env.CAPTURE_DEBUG_LOC === '1') {
-    // temporary diagnostic: where do open orders actually sit?
-    (async () => {
-      try {
-        const cfg = config.load();
-        const client = new LinnworksClient(cfg.linnworks);
-        const locs = await client.getLocations();
-        console.log('LOCATIONS:', JSON.stringify(locs));
-        console.log('CFG fallbackLocationId:', (cfg.stockRouting || {}).fallbackLocationId);
-        console.log('CFG primary locationId:', cfg.linnworks.locationId);
-        for (const l of [...locs, { id: ZERO_GUID, name: 'Default' }]) {
-          const os = await client.listOpenOrders(l.id);
-          console.log(`LOC "${l.name}" ${l.id}: ${os.length} open orders${os.length ? ` (e.g. ${os.slice(0, 3).map(o => o.reference).join(', ')})` : ''}`);
-        }
-      } catch (e) {
-        console.log('DEBUG_LOC error:', e.message);
-      }
-      app.quit();
-    })();
-  }
-
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {
       console.log('SMOKE_OK');
@@ -2007,7 +2224,16 @@ app.whenReady().then(() => {
   }
 
   if (process.env.CAPTURE_E2E === '1') {
-    require('./e2e-test')({ app, win, db, clipboard });
+    // the suite gets a wrapped clipboard: every write is allowlisted for the
+    // watcher, so the user's live copying during a run can't seed phantom rows
+    const testClipboard = {
+      writeText: (t) => { testClipboardAllow = String(t); clipboard.writeText(t); },
+      // restoring the user's own clipboard must NOT count as test input —
+      // their clipboard may hold a real PO# (it did, 2026-08-05)
+      restoreText: (t) => { clipboard.writeText(t); },
+      readText: () => clipboard.readText(),
+    };
+    require('./e2e-test')({ app, win, db, clipboard: testClipboard });
   }
 });
 

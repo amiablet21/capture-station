@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>DropShip program — Stock page view</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 26px; overflow: auto; }
+  .sec { max-width: 1280px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; max-width: 940px; line-height: 1.5; }
+
+  /* toolbar with the new chip */
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .search { width: 260px; font-family: var(--font); font-size: 12.5px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+  .chip { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); }
+  .chip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th:last-child { border-right: none; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  tr:last-child td { border-bottom: none; }
+  .gut { width: 30px; text-align: right; color: var(--faint); font-family: var(--mono); font-size: 11px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .mono2 { font-family: var(--mono); font-size: 12px; }
+  .mut { color: var(--muted); }
+  .imgcell { width: 34px; } .imgbox { width: 24px; height: 24px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-2); }
+
+  /* pad toggle + size */
+  .sw { display: inline-flex; align-items: center; gap: 7px; }
+  .track { width: 30px; height: 17px; border-radius: 999px; background: var(--accent); position: relative; flex: 0 0 auto; }
+  .track.off { background: var(--border); }
+  .knob { position: absolute; top: 2px; width: 13px; height: 13px; border-radius: 999px; background: #fff; right: 2px; }
+  .track.off .knob { right: auto; left: 2px; }
+  .padqty { font-family: var(--mono); font-size: 12px; border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; min-width: 26px; text-align: right; display: inline-block; }
+  .padqty.dim { color: var(--faint); border-style: dashed; }
+
+  /* velocity heat */
+  .v { font-family: var(--mono); font-size: 12px; }
+  tr.warm { background: #FBF3DB55; }
+  tr.hot { background: #FDEBEC66; }
+  .sig { font-size: 12px; }
+  .sig .pill { display: inline-block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 9px; border-radius: 999px; margin-right: 7px; }
+  .sig.hot .pill { background: var(--neg-bg); color: var(--neg-text); }
+  .sig.warm .pill { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .sig.calm { color: var(--faint); }
+  .sig.off .pill { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .addbtn { font-size: 11.5px; font-weight: 500; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 3px 11px; }
+
+  .note { font-size: 11.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: var(--r-ctl); padding: 9px 12px; max-width: 940px; line-height: 1.55; margin-top: 10px; }
+  .note b { color: var(--text); }
+
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">The DropShip view — a chip beside WFS on the Stock page</div>
+    <div class="sec-sub">Click the DropShip chip and the sheet becomes the program: which SKUs dropship, their pad, and — the point of the whole view — how many units you've been renting from the supplier lately. Rows heat up as the numbers say "stop dropshipping, buy it."</div>
+
+    <div class="toolbar">
+      <span class="search">Search SKU, title or barcode</span>
+      <span class="chip">All</span><span class="chip">Open Box</span><span class="chip">Used</span><span class="chip">Scrap</span><span class="chip">Low stock · 22</span><span class="chip">WFS</span><span class="chip on">DropShip · 4</span>
+      <span class="chip" style="margin-left:auto">Refresh</span>
+    </div>
+
+    <div class="box" style="max-width:860px">
+      <table>
+        <thead><tr>
+          <th class="gut" style="background:var(--surface-2);color:var(--faint)">#</th>
+          <th class="imgcell"></th>
+          <th style="width:230px">SKU</th>
+          <th style="width:120px">Pad</th>
+          <th class="num" style="width:110px">Per day</th>
+          <th class="num" style="width:100px">Past month</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody>
+          <tr class="hot">
+            <td class="gut">1</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">X930-256GB-GRAY</td>
+            <td><span class="padqty">10</span></td>
+            <td class="num v" title="4 today · 31 in 7d · 96 in 30d · 210 in 90d">3.2/day <span style="color:var(--neg-text)">▲</span></td>
+            <td class="num v"><b>96</b></td>
+            <td class="sig hot" title="96 units dropshipped in 30 days. 90 ≈ 3.2/day × (21d cover + 7d lead) — covers 21 days at this rate."><span class="pill">BUY 90</span></td>
+          </tr>
+          <tr class="warm">
+            <td class="gut">2</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">Z-FOLD-256GB-JBLK</td>
+            <td><span class="padqty">10</span></td>
+            <td class="num v" title="2 today · 12 in 7d · 38 in 30d · 85 in 90d">1.3/day <span style="color:var(--neg-text)">▲</span></td>
+            <td class="num v">38</td>
+            <td class="sig warm" title="38 units dropshipped in 30 days and climbing. 36 ≈ 1.3/day × (21d cover + 7d lead)."><span class="pill">BUY 36</span></td>
+          </tr>
+          <tr>
+            <td class="gut">3</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">S25-ULTRA-256GB-BLACK</td>
+            <td><span class="padqty">5</span></td>
+            <td class="num v" title="0 today · 2 in 7d · 5 in 30d · 9 in 90d">0.2/day <span style="color:var(--faint)">→</span></td>
+            <td class="num v">5</td>
+            <td class="sig calm" title="0.2/day — too slow to be worth owning; dropshipping is the right call">—</td>
+          </tr>
+          <tr>
+            <td class="gut">4</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">X135-64GB-SILVER</td>
+            <td><span class="padqty dim" title="Pad 0: nothing offered at DropShip — listing dark until the supplier restocks">0</span></td>
+            <td class="num v mut" title="0 today · 6 in 7d · 22 in 30d · 51 in 90d">0.7/day <span style="color:var(--faint)">▼</span></td>
+            <td class="num v mut">22</td>
+            <td class="sig off" title="Pad is 0: DropShip level zeroed, listing dark on Walmart. Set the pad back to 10 when the supplier restocks."><span class="pill">PAD 0</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><b>How it reads:</b> <b>Per day</b> = units/day over the trailing 30 days, arrow = last week vs the month (▲ speeding up, → steady, ▼ slowing down); hover for the raw Today/7/30/90 counts. <b>Past month</b> = units dropshipped in the last 30 days. <b>Action</b> does the math for you: <span class="mono2">Buy ≈ velocity × (cover + lead time) − on hand</span> and <span class="mono2">Min = velocity × lead time × 1.5</span>, with lead time and cover days as two small settings (defaults 7 and 21). The <b>Pad</b> is the one control: the number of units the app keeps at DropShip (click to edit). Set it to <b>0</b> when no supplier can source it — the listing goes dark instead of overselling. Removing a SKU from the program entirely is a right-click on the row.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Enrolling a SKU — from the normal stock view</div>
+    <div class="sec-sub">Any SKU's row in the regular Stock list gets a small "+ DropShip" affordance (row hover). One click enrolls it with a default pad of 10 — no separate screen.</div>
+    <div class="box">
+      <table>
+        <thead><tr>
+          <th class="gut" style="background:var(--surface-2);color:var(--faint)">#</th>
+          <th class="imgcell"></th>
+          <th style="width:230px">SKU</th>
+          <th class="num" style="width:90px">In stock</th>
+          <th class="num" style="width:90px">In orders</th>
+          <th class="num" style="width:70px">Min</th>
+          <th class="num" style="width:90px">Available</th>
+          <th style="width:120px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="gut" style="background:var(--neg-bg);color:var(--neg-text)">1</td><td class="imgcell"><div class="imgbox"></div></td>
+            <td class="mono2">Z-FOLD-256GB-JBLK</td>
+            <td class="num v">0</td><td class="num v">0</td><td class="num v">0</td><td class="num v" style="color:var(--neg-text)">0</td>
+            <td><button class="addbtn">+ DropShip</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">The nudge, outside the app (optional)</div>
+    <div class="sec-sub">Same webhook channel as the low-stock alerts — one message per SKU when it crosses into "Buy stock", so the signal reaches you even with the app closed:</div>
+    <div class="note" style="font-family:var(--mono);font-size:12px">
+      DropShip alert: X930-256GB-GRAY crossed 25 units/week.<br/>
+      Dropshipped 4 today · 31 this week · 96 in 30 days · 210 in 90 days.<br/>
+      Recommendation: buy stock for Digital World Shop.
+    </div>
+  </div>
+
+</body>
+</html>
