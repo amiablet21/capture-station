@@ -1205,24 +1205,21 @@ body {
 .ds-dim { color: var(--faint); font-size: 10px; }
 .ds-pad-zero { color: var(--faint); }
 
-/* suggested minimums beside the Min column */
+/* suggested minimums beside the Min column: the suggestion IS the button —
+   dashed pill reads as a proposal, hover fills it solid, click applies */
 .cell-min { white-space: nowrap; }
-.min-sugg { font-size: 11px; color: var(--accent-soft-text); margin-left: 6px; }
 .min-apply {
-  font-family: var(--font);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
   color: var(--accent-soft-text);
-  background: var(--accent-soft);
-  border: none;
+  background: transparent;
+  border: 1px dashed rgba(4, 120, 87, 0.35);
   border-radius: 999px;
-  padding: 1px 8px;
-  margin-left: 4px;
+  padding: 1px 9px;
+  margin-left: 6px;
   cursor: pointer;
-  opacity: 0;
 }
-.stock-table tr:hover .min-apply,
-.min-apply:focus-visible { opacity: 1; }
+.min-apply:hover,
+.min-apply:focus-visible { background: var(--accent-soft); border-style: solid; border-color: transparent; font-weight: 600; }
 .min-apply-all { color: var(--accent-soft-text); }
 
 /* 30-day sales dialog (Stock page): stat tiles + stacked daily bars */

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Min suggestion — apply affordance options</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 24px; overflow: auto; }
+  .sec { max-width: 980px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; max-width: 860px; line-height: 1.5; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; max-width: 560px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .mono2 { font-family: var(--mono); font-size: 12.5px; }
+  .mut { color: var(--muted); }
+
+  /* A — current: faint arrow + tiny pill */
+  .a-sugg { font-family: var(--mono); font-size: 11px; color: var(--accent-soft-text); margin-left: 6px; }
+  .a-apply { font-size: 10px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 1px 8px; margin-left: 4px; }
+
+  /* B — the suggestion IS the button */
+  .b-sugg {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--accent-soft-text);
+    border: 1px dashed rgba(4, 120, 87, 0.35);
+    border-radius: 999px;
+    padding: 2px 9px;
+    margin-left: 7px;
+    cursor: pointer;
+    background: transparent;
+  }
+  .b-sugg.hover { background: var(--accent-soft); border-style: solid; border-color: transparent; font-weight: 600; }
+
+  /* C — arrow value + circled check on hover */
+  .c-sugg { font-family: var(--mono); font-size: 11.5px; color: var(--accent-soft-text); margin-left: 7px; }
+  .c-check {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 999px;
+    border: none; background: var(--accent); color: #fff;
+    margin-left: 5px; cursor: pointer; vertical-align: -4px;
+  }
+  .c-check svg { width: 11px; height: 11px; }
+
+  /* D — ghost target with accept / dismiss */
+  .d-sugg { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 7px; }
+  .d-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; border: none; background: transparent; margin-left: 3px; cursor: pointer; vertical-align: -4px; }
+  .d-yes { color: var(--accent); } .d-yes.hover { background: var(--accent-soft); }
+  .d-no { color: var(--faint); }
+  .d-btn svg { width: 11px; height: 11px; }
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">A — Current (for reference)</div>
+    <div class="box"><table>
+      <thead><tr><th>SKU</th><th class="num" style="width:170px">Min</th><th class="num" style="width:90px">Available</th></tr></thead>
+      <tr><td class="mono2">X930-256GB-GRAY</td><td class="num"><span class="mono2">0</span><span class="a-sugg">→ 34</span><button class="a-apply">apply</button></td><td class="num mono2">297</td></tr>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">B — The suggestion is the button</div>
+    <div class="sec-sub">No separate "apply" word. The dashed pill reads as a proposal; hovering fills it solid (second row shows the hover state); clicking writes it. Tooltip carries the math.</div>
+    <div class="box"><table>
+      <thead><tr><th>SKU</th><th class="num" style="width:170px">Min</th><th class="num" style="width:90px">Available</th></tr></thead>
+      <tr><td class="mono2">X930-256GB-GRAY</td><td class="num"><span class="mono2">0</span><button class="b-sugg">→ 34</button></td><td class="num mono2">297</td></tr>
+      <tr><td class="mono2 mut">…same row, hovered</td><td class="num"><span class="mono2">0</span><button class="b-sugg hover">→ 34</button></td><td class="num mono2">297</td></tr>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">C — Value + check button</div>
+    <div class="sec-sub">The suggestion stays plain text; a small filled check appears on row hover to commit it. Very small footprint.</div>
+    <div class="box"><table>
+      <thead><tr><th>SKU</th><th class="num" style="width:170px">Min</th><th class="num" style="width:90px">Available</th></tr></thead>
+      <tr><td class="mono2">X930-256GB-GRAY</td><td class="num"><span class="mono2">0</span><span class="c-sugg">→ 34</span><button class="c-check" title="Set Min to 34"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button></td><td class="num mono2">297</td></tr>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">D — Accept or dismiss</div>
+    <div class="sec-sub">Ghost value with ✓ (apply) and ✕ (hide this suggestion until the number changes). For when you want a way to say "no, my hand-set Min is deliberate".</div>
+    <div class="box"><table>
+      <thead><tr><th>SKU</th><th class="num" style="width:170px">Min</th><th class="num" style="width:90px">Available</th></tr></thead>
+      <tr><td class="mono2">SM-X133-64GB-GREY</td><td class="num"><span class="mono2">400</span><span class="d-sugg">→ 87</span><button class="d-btn d-yes hover" title="Set Min to 87"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button><button class="d-btn d-no" title="Keep 400 — hide this suggestion"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></svg></button></td><td class="num mono2">297</td></tr>
+    </table></div>
+  </div>
+
+</body>
+</html>

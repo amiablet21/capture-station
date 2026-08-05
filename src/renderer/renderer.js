@@ -124,19 +124,8 @@ function channelLabel(c) {
   return { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' }[c] || c;
 }
 
-// Walmart spark: the owner wants the logo on order rows, not the word.
-// Blue disc + six yellow rounded rays (drawn inline, CSP-safe).
-const WALMART_SPARK = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#0071DC"/>'
-  + [0, 60, 120, 180, 240, 300].map(a =>
-    `<rect x="10.8" y="3.4" width="2.4" height="6" rx="1.2" fill="#FFC220" transform="rotate(${a} 12 12)"/>`).join('')
-  + '</svg>';
-
-// order-row channel marker: Walmart wears its spark, the rest keep text
-function channelBadge(c) {
-  return c === 'walmart'
-    ? `<span class="badge badge-logo" title="Walmart">${WALMART_SPARK}</span>`
-    : `<span class="badge badge-${esc(c)}">${esc(channelLabel(c))}</span>`;
-}
+// No channel badge on order rows: the PO# format already tells the channel
+// apart (owner request 2026-08-05). Filter chips keep the channel names.
 
 function toast(msg, ms = 2200) {
   const el = $('toast');
@@ -425,8 +414,7 @@ function render() {
     return `
     <tr class="${row.id === state.currentRowId ? 'is-current' : ''} ${!firstRender && !knownRowIds.has(row.id) ? 'is-new' : ''}" data-id="${row.id}">
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
-      <td class="cell-order" title="Captured ${fmtTime(row.created_at)}">
-        ${channelBadge(row.channel)}
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}">
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
         ${meta && meta.parked ? '<span class="badge badge-parked" title="Parked or locked in Linnworks — the stock router cannot move it. Unpark it in Linnworks if that is unintended.">PARKED</span>' : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
@@ -1779,7 +1767,8 @@ function renderStock() {
             <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
             <td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);
-              return sug === null ? '' : `<span class="min-sugg mono" title="Suggested reorder point: ${((reorderStats[String(r.sku).toUpperCase()] || {}).perDay || 0)}/day × ${reorderMeta.leadTimeDays}d lead × 1.5">→ ${sug}</span><button class="min-apply" data-applysid="${esc(r.stockItemId || '')}" data-applysku="${esc(r.sku)}" data-applymin="${sug}">apply</button>`;
+              // the suggestion IS the button: dashed = proposal, click = apply
+              return sug === null ? '' : `<button class="min-apply mono" title="Suggested reorder point: ${((reorderStats[String(r.sku).toUpperCase()] || {}).perDay || 0)}/day × ${reorderMeta.leadTimeDays}d lead × 1.5 — click to set Min to ${sug}" data-applysid="${esc(r.stockItemId || '')}" data-applysku="${esc(r.sku)}" data-applymin="${sug}">→ ${sug}</button>`;
             })()}</td>
             <td class="num stock-avail ${stockIsLow(r) ? 'is-low' : ''}" ${stockIsLow(r) ? `title="Below the minimum of ${r.l.minimumLevel}"` : ''}>${r.l.available}</td>
           </tr>`).join('')}</tbody>
@@ -4366,8 +4355,7 @@ function renderHistory() {
         ${list.map(r => `
           <div class="history-item">
             <span class="history-time mono">${fmtTime(r.created_at)}</span>
-            ${channelBadge(r.channel)}
-            <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy">${esc(r.order_number)}</span>
+            <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy · ${esc(channelLabel(r.channel))}">${esc(r.order_number)}</span>
             ${r.tracking
               ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
               : '<span class="mono history-tracking">—</span>'}
