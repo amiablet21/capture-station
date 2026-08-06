@@ -96,6 +96,15 @@ const DEFAULTS = {
     // referrer params in a copied URL are disposable
     temu: 'https://seller.temu.com/order-detail.html?parent_order_sn={po}',
   },
+  // Same idea for RETURNS: the Returns page's PO# buttons open the return,
+  // not the order. {from}/{to} are filled with a rolling 180-day window
+  // (Walmart's returns search is date-bounded). Empty = fall back to the
+  // order link above.
+  returnUrlTemplates: {
+    walmart: 'https://seller.walmart.com/orders/returns?appliedFilters=%257B%2522pageSize%2522%253A25%252C%2522pageNum%2522%253A0%252C%2522offset%2522%253A0%252C%2522returnGroup%2522%253A%2522ALL%2522%252C%2522filter%2522%253Atrue%252C%2522startDate%2522%253A%2522{from}%2522%252C%2522endDate%2522%253A%2522{to}%2522%252C%2522id%2522%253A%2522{po}%2522%252C%2522searchIdType%2522%253A%2522PO_NO%2522%252C%2522limit%2522%253A25%252C%2522resetFilter%2522%253Atrue%252C%2522tabIndex%2522%253A4%257D&returnGroup=ALL',
+    ebay: 'https://www.ebay.com/mesh/ord/details?orderid={po}',
+    temu: '', // no return seen yet — falls back to the order page
+  },
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',

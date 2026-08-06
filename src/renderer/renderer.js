@@ -2462,14 +2462,17 @@ $('retPo').addEventListener('keydown', (e) => {
 // use; no template (or an unmatched return) = no button
 function retChannel(source) {
   const key = String(source || '').trim().toLowerCase();
-  return (((state || {}).orderUrlTemplates || {})[key] || '').trim() ? key : '';
+  const s = state || {};
+  const hasLink = ((s.returnUrlTemplates || {})[key] || '').trim()
+    || ((s.orderUrlTemplates || {})[key] || '').trim();
+  return hasLink ? key : '';
 }
 
 function retPoOpenBtn(po, source) {
   const ch = po ? retChannel(source) : '';
   if (!ch) return '';
   return `<button class="btn-icon ret-po-open" data-po="${esc(po)}" data-ch="${ch}"
-    title="Open ${esc(po)} on ${esc(channelLabel(ch))}">${ICONS.arrowOut}</button>`;
+    title="Open the ${esc(channelLabel(ch))} return for ${esc(po)}">${ICONS.arrowOut}</button>`;
 }
 
 // the Condition cell carries the live "→ TARGET" preview; a missing mapping
@@ -2795,18 +2798,20 @@ $('retBody').addEventListener('keydown', (e) => {
   }
 });
 
-// pane open -> the order loads beside the sheets; collapsed -> external
+// pane open -> the RETURN loads beside the sheets; collapsed -> external.
+// kind 'return' picks the marketplace's returns page (Walmart's returns
+// search, eBay's return details), falling back to the order page.
 function retOpenPo(po, ch) {
   if (!$('bDock').hidden) {
-    bShowLoading(`Opening order ${po}`);
-    api.browserOpen(po, ch).then(opened => {
+    bShowLoading(`Opening return ${po}`);
+    api.browserOpen(po, ch, 'return').then(opened => {
       if (!opened.ok) {
         bHideLoading();
         if (opened.error) toast(opened.error);
       }
     });
   } else {
-    api.openOrderPage(po, ch);
+    api.openOrderPage(po, ch, 'return');
   }
 }
 

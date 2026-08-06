@@ -62,6 +62,7 @@ function buildState() {
     csv: lastCsv,
     orderMeta,
     orderUrlTemplates: cfg.orderUrlTemplates || {},
+    returnUrlTemplates: cfg.returnUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
     locations: {
       primaryId: cfg.linnworks.locationId || '',
@@ -766,6 +767,27 @@ let orderMeta = {}; // reference -> { source, locationId, locationName, items: [
 // PARKED chip on the row. Self-clears once the order unparks or moves.
 let routerRefusedRefs = new Set();
 
+// Marketplace deep links. kind 'return' uses the returns templates (falling
+// back to the order link when a channel has none). Walmart's returns search
+// is date-bounded, so {from}/{to} carry a rolling 180-day window — doubly
+// encoded, because the whole filter blob is an encoded JSON string.
+function buildMarketUrl(cfg, channel, po, kind) {
+  const ch = String(channel || '').toLowerCase();
+  const tpl = String(
+    (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+    || (cfg.orderUrlTemplates || {})[ch] || ''
+  ).trim();
+  if (!tpl || !/^https:\/\//i.test(tpl)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const enc2 = (s) => encodeURIComponent(encodeURIComponent(s));
+  const now = new Date();
+  return tpl
+    .replace('{po}', encodeURIComponent(String(po)))
+    .replace('{from}', enc2(`${day(new Date(now.getTime() - 180 * 86400000))}T00:00:00+00:00`))
+    .replace('{to}', enc2(`${day(now)}T23:59:59+00:00`));
+}
+
 function updateRouterRefusals(res) {
   const refused = new Set();
   for (const err of (res && res.errors) || []) {
@@ -1279,11 +1301,9 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
-  ipcMain.handle('order:openExternal', (_e, { orderNumber, channel }) => {
-    const cfg = config.load();
-    const tpl = (cfg.orderUrlTemplates || {})[channel] || '';
-    if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No marketplace link set for this channel.' };
-    const url = tpl.replace('{po}', encodeURIComponent(String(orderNumber)));
+  ipcMain.handle('order:openExternal', (_e, { orderNumber, channel, kind }) => {
+    const url = buildMarketUrl(config.load(), channel, orderNumber, kind);
+    if (!url) return { ok: false, error: 'No marketplace link set for this channel.' };
     shell.openExternal(url);
     return { ok: true };
   });
@@ -2081,14 +2101,13 @@ function registerIpc() {
   });
   // embedded marketplace browser pane
   ipcMain.handle('browser:layout', (_e, b) => layoutPane(b || {}));
-  ipcMain.handle('browser:open', (_e, { orderNumber, channel, url }) => {
+  ipcMain.handle('browser:open', (_e, { orderNumber, channel, url, kind }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     let target = String(url || '');
     if (!target) {
-      const tpl = (cfg.orderUrlTemplates || {})[channel] || '';
-      if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No marketplace link set for this channel.' };
-      target = tpl.replace('{po}', encodeURIComponent(String(orderNumber)));
+      target = buildMarketUrl(cfg, channel, orderNumber, kind);
+      if (!target) return { ok: false, error: 'No marketplace link set for this channel.' };
     }
     if (!/^https:\/\//i.test(target)) return { ok: false, error: 'Only https pages can load here.' };
     ensurePane().webContents.loadURL(target).catch(() => { /* nav errors show in-pane */ });
