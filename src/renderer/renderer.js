@@ -2374,10 +2374,10 @@ async function retEntrySubmit() {
   const po = $('retPo').value.trim();
   if (!po || retBusy) return;
   retBusy = true;
-  $('retEntryHint').textContent = 'Looking the order up…';
+  $('retHint').textContent = 'Looking the order up…';
   const res = await api.returnsLookup(po);
   retBusy = false;
-  $('retEntryHint').textContent = 'Enter looks the order up and fills the row — one row per unit; no match falls back to a SKU pick';
+  if ($('retHint').textContent === 'Looking the order up…') $('retHint').textContent = '';
   if (!res.ok) {
     $('retHint').textContent = `${res.error || 'Not found.'} — added as “no order”, pick the SKU on the row.`;
     retDrafts.push(retDraftBlank(po));
@@ -2459,7 +2459,7 @@ function renderRetSheet() {
       <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.unmatched
         ? `<input type="text" class="recv-cell-input mono ret-trk-in" data-idx="${idx}" value="${esc(d.tracking)}" placeholder="—" aria-label="Return tracking number" />`
         : (d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>')}</td>
-      <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
+      <td class="mono ret-cell-date" title="Recorded automatically · ${esc(String(d.at).slice(0, 10))}">${esc(String(d.at).slice(5, 10))} ${fmtTime(d.at)}</td>
       <td class="ret-cell-sku">${d.sku
         ? `${invImg(d.sku) ? `<img class="sku-thumb" src="${esc(invImg(d.sku))}" loading="lazy" alt="" />` : ''}<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
         : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
@@ -2929,7 +2929,7 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="mono ret-cell-po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))}</td>
+      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))} ${fmtTime(r.created_at)}</td>
       <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-cell-cond">
         ${i.sku ? `<span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}

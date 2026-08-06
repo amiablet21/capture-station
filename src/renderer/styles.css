@@ -892,7 +892,7 @@ body {
 .ret-sheet { table-layout: fixed; width: 100%; min-width: 1100px; }
 .ret-sheet th.th-po { width: 150px; }
 .ret-sheet th.th-trk { width: 130px; }
-.ret-sheet th.th-date { width: 74px; }
+.ret-sheet th.th-date { width: 104px; } /* MM-DD HH:MM */
 .ret-sheet th.th-rsku { width: 175px; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-by { width: 60px; }
