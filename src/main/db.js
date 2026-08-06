@@ -301,10 +301,10 @@ function getReturn(id) {
 // full-record update used by the log's inline edit; created_at accepts a
 // replacement ISO string so the received DATE is editable while the time
 // part of the original stamp is preserved by the caller
-function saveReturn(id, { orderNumber, createdAt, customer, tracking, note, items, unmatched }) {
+function saveReturn(id, { orderNumber, createdAt, customer, tracking, note, items, unmatched, receivedBy }) {
   open().prepare(
-    'UPDATE returns SET order_number = ?, created_at = ?, customer = ?, tracking = ?, note = ?, items = ?, unmatched = ? WHERE id = ?'
-  ).run(orderNumber, createdAt, customer || '', tracking || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, id);
+    'UPDATE returns SET order_number = ?, created_at = ?, customer = ?, tracking = ?, note = ?, items = ?, unmatched = ?, received_by = ? WHERE id = ?'
+  ).run(orderNumber, createdAt, customer || '', tracking || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, receivedBy || '', id);
   return getReturn(id);
 }
 
@@ -338,13 +338,19 @@ function deleteConditionMapping(baseSku, condition) {
 // auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention.
 // Pure given an inventory SKU list, so it is testable offline.
 const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
+// preferred naming since 2026-08-06: prefix listings (OPEN-BOX-<SKU> …);
+// suffix names keep auto-deriving so existing listings never unmap
+const CONDITION_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 
 function resolveConditionTargets(baseSku, inventorySkus) {
   const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
   const saved = getConditionMap()[baseSku] || {};
   const targets = { new: baseSku };
-  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
-    targets[cond] = saved[cond] || bySkuUpper.get(`${baseSku}${suf}`.toUpperCase()) || '';
+  for (const cond of Object.keys(CONDITION_SUFFIX)) {
+    targets[cond] = saved[cond]
+      || bySkuUpper.get(`${CONDITION_PREFIX[cond]}${baseSku}`.toUpperCase())
+      || bySkuUpper.get(`${baseSku}${CONDITION_SUFFIX[cond]}`.toUpperCase())
+      || '';
   }
   return targets;
 }

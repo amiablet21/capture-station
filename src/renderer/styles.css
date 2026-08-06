@@ -882,11 +882,10 @@ body {
 /* returns worksheet (spreadsheet, like the receiving sheet) */
 
 .ret-sheet-scroll { overflow-x: auto; } /* ten columns: the sheet scrolls sideways, the page never does */
-/* suggestion dropdowns must escape the cell AND the sideways-scroll container;
-   :has() lifts the clipping only while a list is actually open */
-.ret-sheet td:has(.combo-list:not([hidden])) { overflow: visible; }
-.ret-log-table td:has(.combo-list:not([hidden])) { overflow: visible; }
-.ret-sheet-scroll:has(.combo-list:not([hidden])) { overflow: visible; }
+/* suggestion lists inside the sheets go position:fixed (set by makeCombo),
+   escaping every clipping container without changing the sheet's overflow —
+   toggling overflow while typing made the whole page shift */
+.combo-list.is-fixed { position: fixed; }
 
 /* fixed layout: columns hold their widths, Customer + Notes flex with the
    window; below 1100px the sheet scrolls sideways instead of crushing */
@@ -904,6 +903,8 @@ body {
 .ret-cell-date { color: var(--muted); font-size: 12px; }
 .ret-cell-by .recv-cell-input { color: var(--text); font-weight: 600; text-transform: uppercase; }
 .ret-cell-note .recv-cell-input { font-family: var(--font); color: var(--text); font-weight: 400; }
+.ret-cell-cust .recv-cell-input { font-family: var(--font); color: var(--text); font-weight: 400; }
+.ret-cell-trk .recv-cell-input { color: var(--text); }
 
 .ret-cell-cond .ret-cond { width: 100%; padding: 2px 6px; font-size: 12px; }
 
@@ -1087,38 +1088,35 @@ body {
 .ret-log-count { color: var(--muted); font-weight: 400; }
 .ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
 
-.ret-log-table { table-layout: fixed; width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }
-.ret-log-table th {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--faint);
-  text-align: left;
-  padding: 6px 10px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-.ret-log-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ret-log-table tr:last-child td { border-bottom: none; }
-.ret-log-table tr:hover td { background: var(--surface-2); }
-.ret-log-table .mono { font-size: 12px; }
-.ret-log-dim { color: var(--muted); }
+/* the log table IS the worksheet sheet (recv-sheet-table ret-sheet classes
+   carry the gridlines, widths and density) — only log extras live here */
 .ret-log-none { color: var(--muted); text-align: center; padding: 18px 10px; }
 
-.ret-log-table th.th-lpo { width: 175px; }
-.ret-log-table th.th-ldate { width: 108px; }
-.ret-log-table th.th-lcond { width: 160px; }
-.ret-log-table th.th-lsku { width: 190px; }
-.ret-log-table th.th-ltrk { width: 140px; }
-.ret-log-table th.th-lact { width: 64px; }
+/* read-only condition + by/notes, same as the worksheet's cells */
+.ret-cond-ro { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
+.ret-cond-ro .ret-dd-dot { width: 8px; height: 8px; }
+.ret-ro-by { font-weight: 600; text-transform: uppercase; font-size: 12px; }
+.ret-ro-note { font-family: var(--font); }
+
+/* Units column: narrow, right-aligned, on both sheets */
+.ret-sheet th.th-units { width: 52px; }
+.ret-cell-units { text-align: right; }
+.ret-cell-units .recv-cell-input, .ret-cell-units .ret-log-ein { text-align: right; }
+
+/* condition SKUs holding returns with no marketplace listing linked yet */
+.badge-unlisted {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  margin-left: 6px;
+  vertical-align: middle;
+}
 
 /* row actions: faint until the row is hovered */
 .ret-log-actcell { overflow: visible; }
@@ -1204,6 +1202,10 @@ body {
 .ds-up { color: var(--neg-text); font-size: 10px; }
 .ds-dim { color: var(--faint); font-size: 10px; }
 .ds-pad-zero { color: var(--faint); }
+.ds-table th.th-dsact { width: 44px; }
+.ds-remove-btn { opacity: 0; }
+.ds-table tr:hover .ds-remove-btn,
+.ds-remove-btn:focus-visible { opacity: 1; }
 
 /* suggested minimums beside the Min column: the suggestion IS the button —
    dashed pill reads as a proposal, hover fills it solid, click applies */

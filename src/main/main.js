@@ -12,6 +12,7 @@ const { LinnworksClient } = require('./linnworks');
 let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
+let unlistedCache = { at: 0, skus: null }; // condition SKUs with no linked listing
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -1665,7 +1666,7 @@ function registerIpc() {
   // apply to the unit, splitting a qty>1 line when needed. Stock is
   // corrected only when the unit originally moved stock (targetSku set)
   // and its landing spot changes: -1 old target, +1 new target.
-  ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note }) => {
+  ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const rec = db.getReturn(Number(id));
@@ -1680,6 +1681,7 @@ function registerIpc() {
     const newSku = String(sku || '').trim();
     const newCond = String(condition || '').trim() || 'new';
     const newNote = String(note || '').trim().slice(0, 300);
+    const newQty = Math.max(1, parseInt(units, 10) || 1);
     let recordNote = rec.note;
     let stockNote = '';
     try {
@@ -1687,6 +1689,7 @@ function registerIpc() {
         const it = items[ii];
         if (!it) return { ok: false, error: 'Return line not found.' };
         if (!newSku) return { ok: false, error: 'Pick the returned SKU.' };
+        const oldQty = Number(it.qty) || 1;
         let newTarget = it.targetSku || '';
         if (newSku !== it.sku || newCond !== it.condition) {
           if (newCond === 'new') newTarget = newSku;
@@ -1698,32 +1701,35 @@ function registerIpc() {
             }
           }
         }
-        if (it.targetSku && newTarget && newTarget !== it.targetSku) {
-          const client = new LinnworksClient(cfg.linnworks);
-          await client.changeStockLevels(
-            [{ sku: it.targetSku, delta: -1 }, { sku: newTarget, delta: 1 }],
-            cfg.linnworks.locationId, 'Capture Station return edit'
-          );
-          stockNote = `stock corrected: -1 ${it.targetSku}, +1 ${newTarget}`;
+        // stock corrections: target moved (swap old qty out, new qty in) or
+        // quantity changed on the same target (delta the difference)
+        if (it.targetSku) {
+          const deltas = [];
+          if (newTarget && newTarget !== it.targetSku) {
+            deltas.push({ sku: it.targetSku, delta: -oldQty }, { sku: newTarget, delta: newQty });
+            stockNote = `stock corrected: -${oldQty} ${it.targetSku}, +${newQty} ${newTarget}`;
+          } else if (newQty !== oldQty) {
+            deltas.push({ sku: it.targetSku, delta: newQty - oldQty });
+            stockNote = `stock corrected: ${newQty > oldQty ? '+' : ''}${newQty - oldQty} ${it.targetSku}`;
+          }
+          if (deltas.length) {
+            const client = new LinnworksClient(cfg.linnworks);
+            await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
+          }
         }
-        const edited = { ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: 1 };
-        if ((it.qty || 1) > 1) {
-          items[ii] = { ...it, qty: it.qty - 1 };
-          items.push(edited);
-        } else {
-          items[ii] = edited;
-        }
+        items[ii] = { ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: newQty };
       } else {
         // PO-only pseudo row: record fields, plus an item line if a SKU was
         // typed (log-only, no stock move — the unit never bumped stock)
         recordNote = newNote;
-        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: 1, price: 0, note: '' });
+        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: 0, note: '' });
       }
       db.saveReturn(rec.id, {
         orderNumber: newPo, createdAt,
         customer: String(customer || '').trim().slice(0, 120),
         tracking: String(tracking || '').trim().slice(0, 100),
         note: recordNote, items, unmatched: rec.unmatched,
+        receivedBy: String(receivedBy || '').trim().slice(0, 60),
       });
       writeReturnsCsv();
       return { ok: true, stockNote };
@@ -1744,23 +1750,24 @@ function registerIpc() {
       } else {
         const it = rec.items[ii];
         if (!it) return { ok: false, error: 'Return line not found.' };
+        const qty = Number(it.qty) || 1;
         if (removeStock && it.targetSku) {
           const client = new LinnworksClient(cfg.linnworks);
           await client.changeStockLevels(
-            [{ sku: it.targetSku, delta: -1 }],
+            [{ sku: it.targetSku, delta: -qty }],
             cfg.linnworks.locationId, 'Capture Station return delete'
           );
-          stockNote = `stock corrected: -1 ${it.targetSku}`;
+          stockNote = `stock corrected: -${qty} ${it.targetSku}`;
         }
         const items = rec.items.slice();
-        if ((it.qty || 1) > 1) items[ii] = { ...it, qty: it.qty - 1 };
-        else items.splice(ii, 1);
+        items.splice(ii, 1); // the row IS the line now — remove it whole
         if (items.length === 0) db.deleteReturn(rec.id);
         else {
           db.saveReturn(rec.id, {
             orderNumber: rec.order_number, createdAt: rec.created_at,
             customer: rec.customer, tracking: rec.tracking,
             note: rec.note, items, unmatched: rec.unmatched,
+            receivedBy: rec.received_by,
           });
         }
       }
@@ -1902,6 +1909,44 @@ function registerIpc() {
       }
       skuImageCache = { at: 0, map: null, skus: null, promise: null }; // inventory changed
       return { ok: true, sku, stockItemId };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Condition SKUs holding returned stock with no marketplace listing linked
+  // yet: the employee's "go create the listing" list. Candidates = condition
+  // naming (prefix or suffix) or saved mapping targets, with stock on hand;
+  // each gets one GetInventoryItemChannelSKUs call, cached 10 minutes.
+  ipcMain.handle('stock:unlisted', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (unlistedCache.skus && Date.now() - unlistedCache.at < 10 * 60 * 1000) {
+      return { ok: true, skus: unlistedCache.skus };
+    }
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const mapTargets = new Set(
+        Object.values(db.getConditionMap()).flatMap(m => Object.values(m)).map(s => String(s).toUpperCase())
+      );
+      const isCondition = (sku) => {
+        const u = String(sku).toUpperCase();
+        return /^(OPEN-BOX-|USED-|SCRAP-)/.test(u) || /(-OPENBOX|-USED|-SCRAP)$/.test(u) || mapTargets.has(u);
+      };
+      const candidates = items.filter(it => {
+        if (!isCondition(it.sku) || !it.stockItemId) return false;
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+        return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
+      }).slice(0, 60);
+      const unlisted = [];
+      for (const it of candidates) {
+        try {
+          const channels = await client.getChannelSkus(it.stockItemId);
+          if (!channels.length) unlisted.push(String(it.sku).toUpperCase());
+        } catch { /* one bad lookup never hides the rest */ }
+      }
+      unlistedCache = { at: Date.now(), skus: unlisted };
+      return { ok: true, skus: unlisted };
     } catch (e) {
       return { ok: false, error: e.message };
     }

@@ -43,6 +43,7 @@ if (!window.api) {
     clearFailedRows: async () => ({ ok: false }),
     returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
+    stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1495,13 +1496,11 @@ function renderStockChips() {
   box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   box.innerHTML = [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
-    // the Low stock chip appears once anything sits below its minimum
-    ...(lowCount || stockLowActive
-      ? [`<button class="view-chip tint-red ${stockLowActive ? 'is-active' : ''}" data-view="low" title="SKUs whose Available count is below their minimum level">Low stock · ${lowCount}</button>`]
-      : []),
+    // (the Low stock chip was removed at the owner's request 2026-08-06 —
+    // the low-stock ALERTS and red Available tints stay)
     ...(wfsLoc
       ? [`<button class="view-chip ${stockWfsActive ? 'is-active' : ''}" data-view="wfs" title="Stock at ${esc(wfsLoc.name)} — Walmart-managed, read-only (fed by Walmart's own connection)">WFS</button>`]
       : []),
@@ -1547,16 +1546,7 @@ $('stockList').addEventListener('contextmenu', (e) => {
   const row = e.target.closest('tr[data-dsrow]');
   if (!row) return;
   e.preventDefault();
-  const sku = row.dataset.dsrow;
-  if (!confirm(`Remove ${sku} from the dropship program?\nIts DropShip level is zeroed first — the listing goes dark unless the warehouse has stock.`)) return;
-  (async () => {
-    const res = await api.dropshipRemove(sku);
-    if (!res.ok) { toast(res.error || 'Could not remove.'); return; }
-    delete dsPads[sku];
-    renderStockChips();
-    renderStock();
-    toast(`${sku} removed from the dropship program`);
-  })();
+  removeDsSku(row.dataset.dsrow);
 });
 
 $('minApplyAll').addEventListener('click', async () => {
@@ -1611,6 +1601,7 @@ async function loadStock() {
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
+  loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   const res = await api.getStock();
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
@@ -1725,7 +1716,7 @@ function renderStock() {
   const dsAdd = (r) => (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
     ? `<button class="stock-ds-add" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">+ DS</button>`
     : '';
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}</td>`;
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
@@ -1835,6 +1826,7 @@ function renderDropshipView() {
         <td class="num mono" title="${s.ds1} today · ${s.ds7} in 7d · ${s.ds30} in 30d · ${s.ds90} in 90d dropshipped">${(s.perDay || 0).toFixed(1)}/day ${trendArrow}</td>
         <td class="num mono">${s.ds30 || 0}</td>
         <td>${action}</td>
+        <td class="cell-actions"><button class="btn-icon is-danger ds-remove-btn" title="Remove ${esc(sku)} from the dropship program">${ICONS.trash}</button></td>
       </tr>`;
   }).join('');
   $('stockList').innerHTML = `
@@ -1848,9 +1840,23 @@ function renderDropshipView() {
         <th class="num">Per day</th>
         <th class="num">Past month</th>
         <th>Action</th>
+        <th class="th-dsact"></th>
       </tr></thead>
-      <tbody>${rowsHtml || '<tr><td colspan="8" class="ret-log-none">No enrolled SKU matches.</td></tr>'}</tbody>
+      <tbody>${rowsHtml || '<tr><td colspan="9" class="ret-log-none">No enrolled SKU matches.</td></tr>'}</tbody>
     </table>`;
+}
+
+// shared by the row's trash button and right-click
+function removeDsSku(sku) {
+  if (!confirm(`Remove ${sku} from the dropship program?\nIts DropShip level is zeroed first — the listing goes dark unless the warehouse has stock.`)) return;
+  (async () => {
+    const res = await api.dropshipRemove(sku);
+    if (!res.ok) { toast(res.error || 'Could not remove.'); return; }
+    delete dsPads[sku];
+    renderStockChips();
+    renderStock();
+    toast(`${sku} removed from the dropship program`);
+  })();
 }
 
 // pad edit: same inline number pattern as stock counts
@@ -2168,6 +2174,12 @@ $('stockList').addEventListener('click', (e) => {
   if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
   const padBtn = e.target.closest('button.ds-pad-btn');
   if (padBtn) { beginPadEdit(padBtn); return; }
+  const dsRemove = e.target.closest('button.ds-remove-btn');
+  if (dsRemove) {
+    const row = dsRemove.closest('tr[data-dsrow]');
+    if (row) removeDsSku(row.dataset.dsrow);
+    return;
+  }
   const dsAddBtn = e.target.closest('button.stock-ds-add');
   if (dsAddBtn) {
     (async () => {
@@ -2315,6 +2327,7 @@ function enterReturns() {
   $('retHint').textContent = '';
   renderRetSheet();
   loadRetPast();
+  loadUnlisted(); // "not listed" markers on condition targets
   ensureInventory(); // fallback SKU picker + one-time pickers need it
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) {
@@ -2349,7 +2362,7 @@ function retCondTrigger(d, idx) {
 function retDraftBlank(po) {
   return {
     po, orderId: null, source: '', customer: '', tracking: '',
-    sku: '', title: '', price: 0, condition: 'new', targets: null,
+    sku: '', title: '', price: 0, condition: 'new', targets: null, qty: 1,
     note: '', pick: '', receivedBy: retReceivedBy, unmatched: true,
     at: new Date().toISOString(),
   };
@@ -2382,16 +2395,15 @@ async function retEntrySubmit() {
     });
   }
   for (const it of o.items) {
-    for (let u = 0; u < (it.quantity || 1); u++) { // one sheet row per unit
-      retDrafts.push({
-        po: o.reference, orderId: o.orderId, source: o.source,
-        customer: o.customer, tracking: o.tracking,
-        sku: it.sku, title: it.title || '', price: it.price || 0,
-        condition: 'new', targets: it.targets || null,
-        note: '', pick: '', receivedBy: retReceivedBy, unmatched: false,
-        at: new Date().toISOString(),
-      });
-    }
+    // one sheet row per ITEM LINE; the Units column carries the quantity
+    retDrafts.push({
+      po: o.reference, orderId: o.orderId, source: o.source,
+      customer: o.customer, tracking: o.tracking,
+      sku: it.sku, title: it.title || '', price: it.price || 0,
+      condition: 'new', targets: it.targets || null, qty: it.quantity || 1,
+      note: '', pick: '', receivedBy: retReceivedBy, unmatched: false,
+      at: new Date().toISOString(),
+    });
   }
   $('retPo').value = '';
   renderRetSheet();
@@ -2433,16 +2445,20 @@ function retTargetCell(d, idx) {
 }
 
 function renderRetSheet() {
-  const units = retDrafts.length;
+  const units = retDrafts.reduce((a, d) => a + (Number(d.qty) || 1), 0);
   $('retSummary').innerHTML = `<strong>${units}</strong> unit${units === 1 ? '' : 's'} to receive`;
-  $('retReceiveAll').disabled = units === 0 || retBusy;
-  $('retEntryNum').textContent = units + 1;
+  $('retReceiveAll').disabled = retDrafts.length === 0 || retBusy;
+  $('retEntryNum').textContent = retDrafts.length + 1;
   $('retBody').innerHTML = retDrafts.map((d, idx) => `
     <tr data-idx="${idx}">
       <td class="cell-gutter ${d.unmatched ? 'st-failed' : 'st-captured'}" title="${d.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${idx + 1}</td>
       <td class="mono ret-cell-po" title="${esc(d.po)}">${d.po ? esc(d.po) : '<span class="cell-missing">—</span>'}${d.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}${retPoOpenBtn(d.po, d.source)}</td>
-      <td class="ret-cell-cust" title="${esc(d.customer)}">${d.customer ? esc(d.customer) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-cust" title="${esc(d.customer)}">${d.unmatched
+        ? `<input type="text" class="recv-cell-input ret-cust-in" data-idx="${idx}" value="${esc(d.customer)}" placeholder="—" aria-label="Customer name" />`
+        : (d.customer ? esc(d.customer) : '<span class="cell-missing">—</span>')}</td>
+      <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.unmatched
+        ? `<input type="text" class="recv-cell-input mono ret-trk-in" data-idx="${idx}" value="${esc(d.tracking)}" placeholder="—" aria-label="Return tracking number" />`
+        : (d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>')}</td>
       <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
       <td class="ret-cell-sku">${d.sku
         ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
@@ -2452,6 +2468,8 @@ function renderRetSheet() {
         ${retCondTrigger(d, idx)}
         ${retTargetCell(d, idx)}
       </td>
+      <td class="ret-cell-units"><input type="number" min="1" step="1" class="recv-cell-input mono ret-qty-in" data-idx="${idx}"
+        value="${Number(d.qty) || 1}" aria-label="Units received" title="How many units of this SKU came back" /></td>
       <td class="ret-cell-by"><input type="text" class="recv-cell-input ret-by-in" data-idx="${idx}"
         value="${esc(d.receivedBy)}" placeholder="IM" maxlength="12" aria-label="Received by" /></td>
       <td class="ret-cell-note"><input type="text" class="recv-cell-input ret-note-in" data-idx="${idx}"
@@ -2500,6 +2518,14 @@ $('retBody').addEventListener('input', (e) => {
     if (d.receivedBy) retReceivedBy = d.receivedBy; // next rows inherit it
   } else if (e.target.classList.contains('ret-note-in')) d.note = e.target.value;
   else if (e.target.classList.contains('ret-pick')) d.pick = e.target.value.trim();
+  // "no order" rows: customer + tracking are typed by hand
+  else if (e.target.classList.contains('ret-cust-in')) d.customer = e.target.value.trim();
+  else if (e.target.classList.contains('ret-trk-in')) d.tracking = e.target.value.trim();
+  else if (e.target.classList.contains('ret-qty-in')) {
+    d.qty = Math.max(1, parseInt(e.target.value, 10) || 1);
+    const total = retDrafts.reduce((a, x) => a + (Number(x.qty) || 1), 0);
+    $('retSummary').innerHTML = `<strong>${total}</strong> unit${total === 1 ? '' : 's'} to receive`;
+  }
 });
 
 /* ---------- condition dropdown (tinted menu with dots + target preview) ---------- */
@@ -2530,8 +2556,8 @@ function retDdRender() {
          role="option" aria-selected="${c.key === d.condition}" data-cond="${c.key}">
       <span class="ret-dd-dot is-${c.key}"></span>${c.label}
       ${retDdTargetHtml(d, c.key)}
-      ${c.key !== 'new' && d.sku ? `<button type="button" class="btn-icon ret-dd-fix" data-cond="${c.key}"
-        title="Set the ${c.label.toLowerCase()} listing for ${esc(d.sku)}">${ICONS.pencil}</button>` : ''}
+      ${c.key !== 'new' ? `<button type="button" class="btn-icon ret-dd-fix" data-cond="${c.key}"
+        title="${d.sku ? `Set the ${c.label.toLowerCase()} listing for ${esc(d.sku)}` : 'Pick the returned SKU first — mappings are per SKU'}">${ICONS.pencil}</button>` : ''}
     </div>`).join('');
 }
 
@@ -2540,12 +2566,12 @@ function retDdRender() {
 // overrides beat auto-derivation). Existing inventory SKUs only, no create.
 function retDdRenderEdit(d, menu) {
   const cond = retDd.edit;
-  // the conventional suffix listing for this SKU+condition; when it does not
-  // exist yet, offer to create it in Linnworks right here (owner request
-  // 2026-08-05, reversing the earlier no-create rule)
-  const suffix = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' }[cond] || '';
-  const suggested = `${d.sku}${suffix}`.toUpperCase();
-  const canCreate = suffix && recvLookup === 'ready' && !recvLookupExact(suggested);
+  // the conventional PREFIX listing for this SKU+condition (owner naming,
+  // 2026-08-06: OPEN-BOX-<SKU> / USED-<SKU> / SCRAP-<SKU>); when it does
+  // not exist yet, offer to create it in Linnworks right here
+  const prefix = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' }[cond] || '';
+  const suggested = `${prefix}${d.sku}`.toUpperCase();
+  const canCreate = prefix && recvLookup === 'ready' && !recvLookupExact(suggested);
   menu.innerHTML = `
     <div class="ret-dd-edit">
       <div class="ret-dd-edit-head"><span class="ret-dd-dot is-${cond}"></span>
@@ -2674,6 +2700,11 @@ $('retDdMenu').addEventListener('click', (e) => {
   if (!retDd) return;
   const fix = e.target.closest('.ret-dd-fix');
   if (fix) {
+    const d = retDrafts[retDd.idx];
+    if (!d || !d.sku) {
+      toast('Pick the returned SKU first — mappings are per SKU.');
+      return;
+    }
     retDd.edit = fix.dataset.cond;
     retDdRender();
     retDdPosition();
@@ -2794,7 +2825,7 @@ $('retReceiveAll').addEventListener('click', async () => {
       unmatched: !!head.unmatched,
       // rows without a SKU carry no item line, so their notes ride on the record
       note: rows.filter(r => !r.sku).map(r => r.note).filter(Boolean).join('; '),
-      items: rows.map(r => ({ sku: r.sku, condition: r.condition, targetSku: r.resolvedTarget, qty: 1, price: r.price, note: r.note })),
+      items: rows.map(r => ({ sku: r.sku, condition: r.condition, targetSku: r.resolvedTarget, qty: Number(r.qty) || 1, price: r.price, note: r.note })),
     });
     if (res.ok) {
       received += rows.length;
@@ -2819,27 +2850,47 @@ $('retReceiveAll').addEventListener('click', async () => {
 let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-only) }] per unit
 let retLogEdit = null; // { rid, ii, un } — the one row currently edited inline
 
-function retCondBadge(cond) {
-  if (!cond) return '<span class="cell-missing">—</span>';
-  return `<span class="ret-cbadge is-${esc(cond)}">${esc(retCondLabel(cond))}</span>`;
+// condition SKUs holding returned stock with NO marketplace listing linked
+// yet — surfaced as "not listed" markers so the employee knows what to make
+let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
+let unlistedLoading = false;
+
+async function loadUnlisted() {
+  if (unlistedLoading || (state && state.captureOnly)) return;
+  unlistedLoading = true;
+  try {
+    const res = await api.stockUnlisted();
+    if (res.ok) {
+      unlistedSkus = new Set(res.skus || []);
+      if (activePage === 'returns') renderRetLog();
+      if (activePage === 'stock' && stockCache) renderStock();
+    }
+  } finally {
+    unlistedLoading = false;
+  }
 }
 
-function retLogRowHtml(r, i, ii, un) {
+// the log wears the SAME sheet as the worksheet (same columns, same
+// gridlines, same order) — flat, searchable, and editable on the row
+function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
   if (retLogEdit && retLogEdit.rid === r.id && retLogEdit.ii === ii && retLogEdit.un === un) {
     // inline edit: every field editable in place, ✓/✕ where the actions were
     return `
     <tr class="ret-past-tr ret-log-editing" data-rid="${r.id}" data-ii="${ii}">
-      <td><input class="ret-log-ein mono" data-f="po" value="${esc(r.order_number)}" /></td>
-      <td><input class="ret-log-ein mono" data-f="day" value="${esc(day)}" title="YYYY-MM-DD" /></td>
-      <td><select class="ret-log-ein ret-log-esel" data-f="condition">
+      <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}">${num}</td>
+      <td class="ret-cell-po"><input class="ret-log-ein mono" data-f="po" value="${esc(r.order_number)}" /></td>
+      <td class="ret-cell-cust"><input class="ret-log-ein" data-f="customer" value="${esc(r.customer || '')}" placeholder="customer…" /></td>
+      <td class="ret-cell-trk"><input class="ret-log-ein mono" data-f="tracking" value="${esc(r.tracking || '')}" placeholder="tracking…" /></td>
+      <td class="ret-cell-date"><input class="ret-log-ein mono" data-f="day" value="${esc(day)}" title="YYYY-MM-DD" /></td>
+      <td class="ret-cell-sku"><div class="combo ret-log-ecombo"><input class="ret-log-ein mono" data-f="sku" value="${esc(i.sku || '')}" placeholder="SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div></td>
+      <td class="ret-cell-cond"><select class="ret-log-ein ret-log-esel" data-f="condition">
         ${RET_CONDS.map(c => `<option value="${c.key}" ${c.key === (i.condition || 'new') ? 'selected' : ''}>${c.label}</option>`).join('')}
       </select></td>
-      <td><div class="combo ret-log-ecombo"><input class="ret-log-ein mono" data-f="sku" value="${esc(i.sku || '')}" placeholder="SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div></td>
-      <td><input class="ret-log-ein" data-f="customer" value="${esc(r.customer || '')}" placeholder="customer…" /></td>
-      <td><input class="ret-log-ein mono" data-f="tracking" value="${esc(r.tracking || '')}" placeholder="tracking…" /></td>
-      <td><input class="ret-log-ein" data-f="note" value="${esc(ii >= 0 ? (i.note || '') : (r.note || ''))}" placeholder="notes…" /></td>
-      <td class="ret-log-actcell"><span class="ret-log-act is-editing">
+      <td class="ret-cell-units"><input class="ret-log-ein mono" data-f="units" type="number" min="1" step="1" value="${Number(i.qty) || 1}" /></td>
+      <td class="ret-cell-by"><input class="ret-log-ein mono" data-f="by" value="${esc(r.received_by || '')}" maxlength="12" placeholder="IM" /></td>
+      <td class="ret-cell-note"><input class="ret-log-ein" data-f="note" value="${esc(ii >= 0 ? (i.note || '') : (r.note || ''))}" placeholder="—" /></td>
+      <td class="cell-actions"><span class="ret-log-act is-editing">
         <button class="btn-icon ret-log-save" title="Save (Enter)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button>
         <button class="btn-icon is-danger ret-log-cancel" title="Cancel (Esc)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></svg></button>
       </span></td>
@@ -2847,18 +2898,32 @@ function retLogRowHtml(r, i, ii, un) {
   }
   return `
     <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
+      <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
       <td class="mono ret-cell-po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
-      <td class="mono ret-log-dim" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day)}</td>
-      <td>${retCondBadge(i.sku ? i.condition : '')}${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}</div>` : ''}</td>
-      <td class="mono">${i.sku ? esc(i.sku) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-log-dim" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-log-dim" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
-      <td class="ret-log-actcell"><span class="ret-log-act">
+      <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))}</td>
+      <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-cond">
+        ${i.sku ? `<span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+        ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
+      </td>
+      <td class="ret-cell-units mono">${Number(i.qty) || 1}</td>
+      <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
+      <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      <td class="cell-actions"><span class="ret-log-act">
         <button class="btn-icon ret-log-edit-btn" title="Edit this return">${ICONS.pencil}</button>
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
       </span></td>
     </tr>`;
+}
+
+// amber marker on condition targets that hold returned stock but have no
+// marketplace listing linked yet — the employee's "create the listing" cue
+function retUnlistedMark(sku) {
+  return unlistedSkus && unlistedSkus.has(String(sku || '').toUpperCase())
+    ? '<span class="badge-unlisted" title="No marketplace listing is linked to this SKU yet — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>'
+    : '';
 }
 
 function renderRetLog() {
@@ -2877,23 +2942,27 @@ function renderRetLog() {
   $('retLogCount').textContent = ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`;
   box.innerHTML = `
     <div class="ret-sheet-scroll">
-    <table class="ret-log-table">
+    <table class="recv-sheet-table ret-sheet ret-log-table">
       <thead>
         <tr>
-          <th class="th-lpo">PO#</th>
-          <th class="th-ldate">Date received</th>
-          <th class="th-lcond">Condition</th>
-          <th class="th-lsku">SKU</th>
-          <th class="th-lcust">Customer</th>
-          <th class="th-ltrk">Tracking #</th>
-          <th class="th-lnote">Notes</th>
-          <th class="th-lact"></th>
+          <th class="th-gutter">#</th>
+          <th class="th-po">PO#</th>
+          <th class="th-cust">Customer</th>
+          <th class="th-trk">Tracking #</th>
+          <th class="th-date">Received</th>
+          <th class="th-rsku">Returned SKU</th>
+          <th class="th-cond">Condition</th>
+          <th class="th-units">Units</th>
+          <th class="th-by">By</th>
+          <th class="th-note">Notes / dispute</th>
+          <th class="th-actions"></th>
         </tr>
       </thead>
-      <tbody>${rows.map(({ r, i, ii, un }) => retLogRowHtml(r, i, ii, un)).join('')
-        || `<tr><td colspan="8" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+      <tbody>${rows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, idx + 1)).join('')
+        || `<tr><td colspan="11" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
     </table>
     </div>`;
+  applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
   // the edit row's SKU input gets the shared live suggestions
   const ecombo = box.querySelector('.ret-log-ecombo');
   if (ecombo) {
@@ -2915,9 +2984,9 @@ async function loadRetPast() {
       retLogAll.push({ r, i: { sku: '', condition: '', targetSku: '', qty: 1, note: '' }, ii: -1, un: 0 });
       continue;
     }
-    r.items.forEach((i, ii) => {
-      for (let u = 0; u < (i.qty || 1); u++) retLogAll.push({ r, i, ii, un: u });
-    });
+    // one row per ITEM LINE — the Units column carries the quantity,
+    // mirroring the worksheet exactly
+    r.items.forEach((i, ii) => retLogAll.push({ r, i, ii, un: 0 }));
   }
   renderRetLog();
 }
@@ -2939,6 +3008,7 @@ async function retLogSave() {
     po: val('po'), day: val('day'), customer: val('customer'),
     tracking: val('tracking'), sku: val('sku'),
     condition: val('condition'), note: val('note'),
+    units: val('units'), receivedBy: val('by'),
   });
   if (!res.ok) { toast(res.error || 'Could not save.'); return; }
   retLogEdit = null;
@@ -2961,12 +3031,13 @@ $('retPastBox').addEventListener('click', (e) => {
   if (e.target.closest('.ret-log-del-btn')) {
     const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
     if (!entry) return;
+    const qty = Number(entry.i.qty) || 1;
     retDelCtx = { rid: entry.r.id, ii: entry.ii, target: entry.i.targetSku || '' };
-    $('retDelLine').textContent = [entry.r.order_number, entry.i.sku, entry.i.sku ? retCondLabel(entry.i.condition) : '']
+    $('retDelLine').textContent = [entry.r.order_number, entry.i.sku, entry.i.sku ? retCondLabel(entry.i.condition) : '', qty > 1 ? `×${qty}` : '']
       .filter(Boolean).join(' · ');
     $('retDelStockWrap').hidden = !retDelCtx.target;
     $('retDelStock').checked = !!retDelCtx.target;
-    $('retDelTarget').textContent = retDelCtx.target ? `−1 ${retDelCtx.target}` : '';
+    $('retDelTarget').textContent = retDelCtx.target ? `−${qty} ${retDelCtx.target}` : '';
     $('retDelDialog').showModal();
   }
 });
@@ -3157,7 +3228,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'by', 8: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'by', 9: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;
@@ -3176,8 +3247,9 @@ function applyRetCols(table) {
 }
 
 function applyRetColsAll() {
-  // the log table below has its own columns now; grips only drive the worksheet
+  // the log wears the SAME sheet as the worksheet again: widths sync to both
   applyRetCols($('retTable'));
+  applyRetCols($('retPastBox').querySelector('table.ret-log-table'));
 }
 applyRetCols($('retTable'));
 
@@ -3831,6 +3903,18 @@ function makeCombo(input, listEl, onPick, opts) {
     const a = invAvailAtPrimary(it);
     return a !== null && a > 0 && claimsOf(it) >= a;
   };
+  // combos inside the returns sheets anchor to the viewport: the sheet's
+  // scroll container clips absolute children, and toggling its overflow
+  // while a list is open made the whole page shift (owner report 2026-08-06)
+  const positionList = () => {
+    if (!input.closest('.ret-sheet-scroll')) return;
+    const r = input.getBoundingClientRect();
+    listEl.classList.add('is-fixed');
+    listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
+    listEl.style.minWidth = `${Math.max(260, Math.round(r.width))}px`;
+    const below = r.bottom + 4;
+    listEl.style.top = `${below + 260 > window.innerHeight ? Math.max(8, r.top - 264) : below}px`;
+  };
   const render = () => {
     if (recvLookup === 'loading') {
       listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
@@ -3852,6 +3936,7 @@ function makeCombo(input, listEl, onPick, opts) {
       }).join('');
     }
     listEl.hidden = false;
+    positionList();
     const hlEl = listEl.querySelector('.combo-opt.is-hl');
     if (hlEl) hlEl.scrollIntoView({ block: 'nearest' });
   };

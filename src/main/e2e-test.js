@@ -341,24 +341,26 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec('loadRetPast()');
     await sleep(250);
-    // history = flat log, newest first: 8-column header (incl. actions), one
-    // row per unit (the qty-2 return = 2 rows), the condition badge, the
-    // per-row edit/delete buttons, and no inputs until an edit begins
+    // history = the SAME sheet as the worksheet (11-column header incl.
+    // Units + actions), one row per ITEM LINE (the qty-2 return = 1 row,
+    // Units column carries the 2), condition dot, edit/delete per row,
+    // and no inputs until an edit begins
     const ledgerBits = await exec(`[
       !!document.querySelector('#retPastBox table.ret-log-table'),
       document.querySelectorAll('#retPastBox thead th').length,
       document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
-      !!document.querySelector('#retPastBox .ret-cbadge.is-openbox'),
+      !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
       document.querySelectorAll('#retPastBox .ret-log-edit-btn').length,
       document.querySelectorAll('#retPastBox .ret-log-del-btn').length,
       document.querySelectorAll('#retPastBox input, #retPastBox select').length,
+      (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
     ]`);
-    check('history renders the flat returns log, one row per unit',
-      ledgerBits[0] === true && ledgerBits[1] === 8
-        && ledgerBits[2] === 2 && ledgerBits[3] === true,
+    check('history renders the worksheet-identical sheet, one row per line',
+      ledgerBits[0] === true && ledgerBits[1] === 11
+        && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2',
       ledgerBits);
     check('history rows carry edit + delete, no inputs until editing',
-      ledgerBits[4] === 2 && ledgerBits[5] === 2 && ledgerBits[6] === 0, ledgerBits);
+      ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
     // inline edit: clicking the pencil turns the row into in-place inputs
     await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
     await sleep(150);
@@ -605,22 +607,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { stockItemId: '2', sku: 'A16-64GB-BLK', title: 'black', barcode: '', category: '', image: '', levels: lvl(9, 0, 2) },
       ] });
       renderStockChips();
-      const chip = document.querySelector('#stockChips [data-view="low"]');
-      const chipText = chip ? chip.textContent : '';
-      if (chip) chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      renderStock();
       const out = {
-        chipText,
-        rows: document.querySelectorAll('#stockList tbody tr').length,
+        // the Low stock CHIP was removed (owner request 2026-08-06); the red
+        // Available tint and Min editing stay
+        chipGone: !document.querySelector('#stockChips [data-view="low"]'),
         lowRed: !!document.querySelector('#stockList .stock-avail.is-low'),
         minBtn: !!document.querySelector('#stockList .stock-min-btn'),
-        summary: $('stockSummary').textContent,
       };
-      stockLowActive = false; stockCache = null; renderStockChips();
+      stockCache = null; renderStockChips();
       return out;
     })()`);
-    check('Low stock view: live-count chip, filtered rows, red Available, Min editable',
-      /Low stock · 1/.test(lowView.chipText) && lowView.rows === 1 && lowView.lowRed === true
-        && lowView.minBtn === true && /below minimum/.test(lowView.summary),
+    check('low stock: chip removed, red Available tint + Min editing stay',
+      lowView.chipGone === true && lowView.lowRed === true && lowView.minBtn === true,
       lowView);
 
     // 35. day-over-day sales deltas (the Sales tab itself was removed; its
@@ -640,15 +639,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
     check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
-    // 36. returns resize: whole-width grip + per-column grips on the
-    // WORKSHEET only (the log below is its own flat table since v1.7.0)
+    // 36. returns resize: whole-width grip + per-column grips on BOTH
+    // sheets again (the log mirrors the worksheet since v1.8.6)
     const retGrips = await exec(`[
       !!$('retGrip'),
       document.querySelectorAll('#retTable thead .col-grip').length,
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
-    check('returns worksheet: shared width grip + column grips (log has none)',
-      retGrips[0] === true && retGrips[1] === 8 && retGrips[2] === 0, retGrips);
+    check('returns sheets: shared width grip + column grips on both',
+      retGrips[0] === true && retGrips[1] === 9 && retGrips[2] === 9, retGrips);
 
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
