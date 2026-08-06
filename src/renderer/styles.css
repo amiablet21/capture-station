@@ -792,6 +792,9 @@ body {
 /* one shared width for both returns sheets, resizable like the Stock sheet */
 /* the sheets stay centered when narrowed, instead of hugging the left edge */
 .ret-sheet-row { display: flex; align-items: stretch; justify-content: center; min-height: 0; }
+/* with the marketplace pane docked, the sheet takes the remaining width */
+.ret-sheet-row.has-browser { justify-content: flex-start; }
+.ret-sheet-row.has-browser .ret-main { flex: 1 1 auto; max-width: none; min-width: 560px; }
 
 .ret-main {
   width: 100%;

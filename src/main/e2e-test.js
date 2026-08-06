@@ -444,7 +444,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     const queueBits = await exec(`[
       !!document.querySelector('#rowsBody .due-chip'),
       !!document.querySelector('#rowsBody .qty-chip'),
-      !!document.querySelector('#channelChips .chip-due'),
+      !document.querySelector('#channelChips .chip-due'), // filter chip removed 2026-08-06
       document.querySelector('#rowsBody tr td.cell-order .order-num').dataset.po,
       $('dueHeader').hidden,
       document.querySelector('#rowsBody tr:first-child td.cell-gutter').textContent,
@@ -452,7 +452,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     ]`);
     // the ebay row is both the newest capture AND the overdue one, so the top
     // slot proves newest-first (the due seed must not have re-sorted anything)
-    check('queue shows due + qty chips, Due-today filter, newest row on top',
+    check('queue shows due + qty chips (no Due-today filter), newest on top',
       queueBits[0] === true && queueBits[1] === true && queueBits[2] === true
         && queueBits[3] === '02-12345-67890' && queueBits[4] === false,
       queueBits);

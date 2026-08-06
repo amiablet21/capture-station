@@ -315,23 +315,20 @@ function render() {
   $('dueHeader').hidden = activePage !== 'capture' || dueOpen === 0;
   $('dueHeader').textContent = dueOpen ? `${dueOpen} due by ${fmtCutoff(state.shipCutoff)}` : '';
 
-  // marketplace filter chips (shown once there is more than one channel),
-  // plus a "Due today" chip whenever anything must ship today
+  // marketplace filter chips, shown once there is more than one channel
+  // (the "Due today" chip left at the owner's request 2026-08-06 — the
+  // header count and per-row due chips still carry the urgency)
   const channels = [...new Set(state.rows.map(r => r.channel))];
   const chipBar = $('channelChips');
-  if (activePage === 'capture' && state.rows.length && (channels.length > 1 || dueRows.length)) {
-    if (channelFilter !== 'all' && channelFilter !== 'due' && !channels.includes(channelFilter)) channelFilter = 'all';
-    if (channelFilter === 'due' && !dueRows.length) channelFilter = 'all';
+  if (activePage === 'capture' && state.rows.length && channels.length > 1) {
+    if (channelFilter !== 'all' && !channels.includes(channelFilter)) channelFilter = 'all';
     const counts = {};
     for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
       `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${state.rows.length}</button>`,
-      ...(dueRows.length
-        ? [`<button class="chip-filter chip-due ${channelFilter === 'due' ? 'is-active' : ''}" data-ch="due" title="Orders with a despatch-by date of today or earlier">Due today · ${dueRows.length}</button>`]
-        : []),
-      ...(channels.length > 1 ? channels.map(c =>
-        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`) : []),
+      ...channels.map(c =>
+        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -342,8 +339,7 @@ function render() {
     r.status === 'failed' && String(r.fail_reason || '').startsWith('Not found in open orders')).length;
   $('clearFailedBtn').hidden = activePage !== 'capture' || failedGone === 0;
   if (failedGone) $('clearFailedBtn').textContent = `Clear failed · ${failedGone}`;
-  if (channelFilter === 'due') visible = visible.filter(v => dueRank(v) < 2);
-  else if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
+  if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
   // search bar: always available on the capture list, matches PO#, tracking,
   // notes, and the order's item SKUs / channel SKUs / titles
@@ -1229,21 +1225,43 @@ function browserAllowed() {
 }
 
 function applyBrowserPane() {
-  const show = bReady && browserAllowed() && bPane.visible && activePage === 'capture';
-  $('bDock').hidden = !show;
-  $('bDivider').hidden = !show;
-  $('rowsRow').classList.toggle('has-browser', show);
+  // one native pane, two homes: the dock element relocates between the
+  // Capture list and the Returns sheets depending on the active page
+  const onPage = activePage === 'capture' || activePage === 'returns';
+  const show = bReady && browserAllowed() && bPane.visible && onPage;
+  const host = activePage === 'returns' ? document.querySelector('.ret-sheet-row') : $('rowsRow');
+  const dock = $('bDock');
+  const divider = $('bDivider');
+  if (host && dock.parentElement !== host) {
+    host.insertBefore(divider, host.firstChild);
+    host.insertBefore(dock, divider);
+  }
+  dock.hidden = !show;
+  divider.hidden = !show;
+  $('rowsRow').classList.toggle('has-browser', show && activePage === 'capture');
+  const retRow = document.querySelector('.ret-sheet-row');
+  if (retRow) retRow.classList.toggle('has-browser', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
+  $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
-    $('bDock').style.width = `${bPane.width}px`;
-    $('rowsMain').style.width = ''; // the sheet takes whatever remains
+    dock.style.width = `${bPane.width}px`;
+    if (activePage === 'capture') $('rowsMain').style.width = ''; // the sheet takes whatever remains
+    else $('retMain').style.width = '';
   } else {
     const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
     $('rowsMain').style.width = savedW ? `${savedW}px` : '';
+    const retW = Number(localStorage.getItem('retSheetWidth')) || 0;
+    $('retMain').style.width = retW ? `${retW}px` : '';
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
   }
   syncBrowserBounds();
 }
+
+$('retBExpand').addEventListener('click', () => {
+  bPane.visible = true;
+  api.setConfig({ browserPane: { visible: true } });
+  applyBrowserPane();
+});
 
 // coalesce bounds updates (resize, divider drag, dialogs) into one per frame
 let bSyncQueued = false;
@@ -2753,10 +2771,25 @@ $('retBody').addEventListener('keydown', (e) => {
   }
 });
 
+// pane open -> the order loads beside the sheets; collapsed -> external
+function retOpenPo(po, ch) {
+  if (!$('bDock').hidden) {
+    bShowLoading(`Opening order ${po}`);
+    api.browserOpen(po, ch).then(opened => {
+      if (!opened.ok) {
+        bHideLoading();
+        if (opened.error) toast(opened.error);
+      }
+    });
+  } else {
+    api.openOrderPage(po, ch);
+  }
+}
+
 $('retBody').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
   if (open) {
-    api.openOrderPage(open.dataset.po, open.dataset.ch);
+    retOpenPo(open.dataset.po, open.dataset.ch);
     return;
   }
   const cond = e.target.closest('.ret-cond-btn');
@@ -3044,7 +3077,7 @@ async function retLogSave() {
 
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
-  if (open) { api.openOrderPage(open.dataset.po, open.dataset.ch); return; }
+  if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
   if (e.target.closest('.ret-log-save')) { retLogSave(); return; }
   if (e.target.closest('.ret-log-cancel')) { retLogEdit = null; renderRetLog(); return; }
   const tr = e.target.closest('tr[data-rid]');
