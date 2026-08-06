@@ -1103,6 +1103,51 @@ body {
 .ret-cell-units { text-align: right; }
 .ret-cell-units .recv-cell-input, .ret-cell-units .ret-log-ein { text-align: right; }
 
+/* inline product thumbnails once a SKU is picked (returns + receiving) */
+.sku-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* the Returns page to-do card: created-but-unlisted condition SKUs */
+.ret-todo {
+  background: var(--surface);
+  border: 1px solid var(--badge-yellow-bg);
+  border-left: 3px solid var(--badge-yellow-text);
+  border-radius: var(--r-card);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.ret-todo h4 { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.ret-todo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.ret-todo-row:last-of-type { border-bottom: none; }
+.ret-todo-row .mono { font-size: 12px; }
+.ret-todo-units { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+.ret-todo-copy {
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.ret-todo-note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
 /* condition SKUs holding returns with no marketplace listing linked yet */
 .badge-unlisted {
   display: inline-block;

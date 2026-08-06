@@ -2461,7 +2461,7 @@ function renderRetSheet() {
         : (d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>')}</td>
       <td class="mono ret-cell-date" title="Recorded automatically">${fmtTime(d.at)}</td>
       <td class="ret-cell-sku">${d.sku
-        ? `<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
+        ? `${invImg(d.sku) ? `<img class="sku-thumb" src="${esc(invImg(d.sku))}" loading="lazy" alt="" />` : ''}<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
         : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
              placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
       <td class="ret-cell-cond">
@@ -2862,13 +2862,40 @@ async function loadUnlisted() {
     const res = await api.stockUnlisted();
     if (res.ok) {
       unlistedSkus = new Set(res.skus || []);
-      if (activePage === 'returns') renderRetLog();
+      if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) renderStock();
     }
   } finally {
     unlistedLoading = false;
   }
 }
+
+// the to-do card: every created-but-unlisted condition SKU with how many
+// units sit unsellable — copy grabs the exact string for Seller Center
+function renderRetTodo() {
+  const box = $('retTodo');
+  if (!box) return;
+  if (!unlistedSkus || unlistedSkus.size === 0) { box.hidden = true; return; }
+  const rows = [...unlistedSkus].map(sku => {
+    const it = recvBySku && recvBySku.get(sku.toLowerCase());
+    const lvl = it && (it.levels || []).find(l => l.locationId === recvLocationId);
+    return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
+  }).sort((a, b) => (b.units || 0) - (a.units || 0));
+  box.hidden = false;
+  box.innerHTML = `
+    <h4>${rows.length} returned listing${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
+    ${rows.map(r => `<div class="ret-todo-row">
+      <span class="mono">${esc(r.sku)}</span>
+      <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
+      <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
+    </div>`).join('')}
+    <div class="ret-todo-note">Create the listing on Walmart/eBay using exactly this SKU string — Linnworks links it automatically and the row leaves this list on the next refresh.</div>`;
+}
+
+$('retTodo').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-copy]');
+  if (c) copyFromApp(c.dataset.copy);
+});
 
 // the log wears the SAME sheet as the worksheet (same columns, same
 // gridlines, same order) — flat, searchable, and editable on the row
@@ -3810,6 +3837,7 @@ $('wfsSave').addEventListener('click', async () => {
 
 let recvLines = []; // { sku, title, qty, known }
 let recvItems = null; // full inventory list for the combobox
+let recvLocationId = ''; // primary location id, for unit counts on the to-do card
 let recvBySku = null; // lowercased SKU -> inventory item
 let recvByBarcode = null; // lowercased barcode -> inventory item
 let recvLookup = 'idle'; // idle | loading | ready | unavailable
@@ -3852,10 +3880,14 @@ function ensureInventory() {
     const res = await api.getStock();
     if (res.ok) {
       recvItems = res.items;
+      recvLocationId = res.locationId || '';
       recvBySku = new Map(res.items.map(i => [i.sku.toLowerCase(), i]));
       recvByBarcode = new Map(res.items.filter(i => i.barcode).map(i => [i.barcode.toLowerCase(), i]));
       recvLookup = 'ready';
       invError = '';
+      // sheets rendered before the inventory arrived now get their images
+      // and the to-do card gets its unit counts
+      if (activePage === 'returns') { renderRetSheet(); renderRetTodo(); }
       return true;
     }
     recvLookup = 'unavailable';
@@ -3992,6 +4024,12 @@ function clearRecvWarn() {
 function recvLookupExact(value) {
   const key = value.toLowerCase();
   return (recvBySku && recvBySku.get(key)) || (recvByBarcode && recvByBarcode.get(key)) || null;
+}
+
+// product image for a SKU from the shared inventory cache ('' = unknown)
+function invImg(sku) {
+  const it = recvBySku && recvBySku.get(String(sku || '').toLowerCase());
+  return it && it.image ? it.image : '';
 }
 
 function recvAdd(sku, title, known, qty = 1) {
@@ -4192,7 +4230,7 @@ function renderRecv() {
   $('recvBody').innerHTML = recvLines.map((l, idx) => `
     <tr data-idx="${idx}">
       <td class="cell-gutter ${l.known === false ? 'st-failed' : 'st-captured'}" title="${l.known === false ? 'Not in Linnworks inventory' : 'Matched in Linnworks'}">${idx + 1}</td>
-      <td class="mono cell-recv-sku">${esc(l.sku)}${l.known === false ? '<span class="unknown-note">not in Linnworks</span>' : ''}</td>
+      <td class="mono cell-recv-sku">${invImg(l.sku) ? `<img class="sku-thumb" src="${esc(invImg(l.sku))}" loading="lazy" alt="" />` : ''}${esc(l.sku)}${l.known === false ? '<span class="unknown-note">not in Linnworks</span>' : ''}</td>
       <td class="cell-recv-title" title="${esc(l.title)}">${l.title ? esc(l.title) : '<span class="cell-missing">—</span>'}</td>
       <td class="num cell-level"><button class="stock-num-btn recv-qty-btn" data-idx="${idx}" title="Click to edit the quantity">${l.qty}</button></td>
       <td class="cell-actions">

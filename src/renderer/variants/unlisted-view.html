@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returned SKUs awaiting marketplace listings</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 24px; gap: 26px; overflow: auto; }
+  .sec { max-width: 1180px; }
+  .sec-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 4px; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; max-width: 900px; line-height: 1.5; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th:last-child { border-right: none; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  tr:last-child td { border-bottom: none; }
+  .gut { width: 30px; text-align: right; font-family: var(--mono); font-size: 11px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .mono2 { font-family: var(--mono); font-size: 12px; }
+  .mut { color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 6px; }
+  .tgt { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .unlisted {
+    display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 1px 8px; border-radius: 999px;
+    background: var(--badge-yellow-bg); color: var(--badge-yellow-text); margin-left: 6px; vertical-align: middle;
+  }
+  .todo { background: var(--surface); border: 1px solid var(--badge-yellow-bg); border-left: 3px solid var(--badge-yellow-text); border-radius: var(--r-card); padding: 12px 14px; max-width: 640px; }
+  .todo h4 { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+  .todo-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid var(--border-soft); }
+  .todo-row:last-child { border-bottom: none; }
+  .todo-row .units { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+  .copybtn { font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 2px 9px; cursor: pointer; }
+  .todo-note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+</style></head>
+<body>
+
+  <div class="sec">
+    <div class="sec-title">1 — In the returns log (shipped in 1.8.6): the marker on the landing spot</div>
+    <div class="sec-sub">A graded return whose target SKU exists in Linnworks but has no Walmart/eBay listing linked yet wears the amber "not listed" tag right where the stock landed. Hover explains what to do.</div>
+    <div class="box"><table>
+      <thead><tr><th class="gut">#</th><th style="width:160px">PO#</th><th style="width:130px">Customer</th><th style="width:70px">Received</th><th style="width:210px">Returned SKU</th><th style="width:300px">Condition</th><th style="width:52px">Units</th><th>Notes</th></tr></thead>
+      <tr>
+        <td class="gut">1</td><td class="mono2">119120671019601</td><td class="mut">Marybeth Morris</td><td class="mono2 mut">08-06</td>
+        <td class="mono2">S26-ULTRA-512GB-BLACK</td>
+        <td><span class="dot" style="background:#1F6C9F"></span>Open box
+          <div class="tgt">→ OPEN-BOX-S26-ULTRA-512GB-BLACK<span class="unlisted" title="No marketplace listing is linked to this SKU yet — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span></div></td>
+        <td class="mono2" style="text-align:right">1</td><td class="mut"></td>
+      </tr>
+      <tr>
+        <td class="gut">2</td><td class="mono2">119121418478576</td><td class="mut">Tom Okafor</td><td class="mono2 mut">08-06</td>
+        <td class="mono2">X230-128GB-SILVER</td>
+        <td><span class="dot" style="background:#956400"></span>Used
+          <div class="tgt">→ X230-128GB-SILVER-USED</div></td>
+        <td class="mono2" style="text-align:right">1</td><td class="mut">already listed — no tag</td>
+      </tr>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">2 — On the Stock page (shipped in 1.8.6): the same tag beside the SKU</div>
+    <div class="sec-sub">The condition SKU holds real returned units, so it appears in the stock list — wearing the tag until a listing is linked. Searching "OPEN-BOX" or using the Open Box chip gathers them.</div>
+    <div class="box"><table>
+      <thead><tr><th class="gut">#</th><th></th><th style="width:360px">SKU</th><th style="width:90px; text-align:right">In stock</th><th style="width:90px; text-align:right">Available</th></tr></thead>
+      <tr>
+        <td class="gut">1</td><td style="width:34px"><div style="width:24px;height:24px;border:1px solid var(--border-soft);border-radius:5px;background:var(--surface-2)"></div></td>
+        <td class="mono2">OPEN-BOX-S26-ULTRA-512GB-BLACK<span class="unlisted">not listed</span></td>
+        <td class="mono2" style="text-align:right">2</td><td class="mono2" style="text-align:right">2</td>
+      </tr>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">3 — NEW (proposal): a to-do card on the Returns page</div>
+    <div class="sec-sub">Instead of hunting for tags, the employee gets the complete list in one card at the top of the Returns page — every created-but-unlisted SKU with how many units are waiting to be sellable. Copy grabs the exact SKU string for Seller Center / eBay; the card disappears when the list is empty.</div>
+    <div class="todo">
+      <h4>3 returned listings still need marketplace listings</h4>
+      <div class="todo-row"><span class="mono2">OPEN-BOX-S26-ULTRA-512GB-BLACK</span><button class="copybtn">copy</button><span class="units">2 units waiting</span></div>
+      <div class="todo-row"><span class="mono2">USED-X930-256GB-GRAY</span><button class="copybtn">copy</button><span class="units">1 unit waiting</span></div>
+      <div class="todo-row"><span class="mono2">SCRAP-A15-64GB-BLK</span><button class="copybtn">copy</button><span class="units">3 units waiting</span></div>
+      <div class="todo-note">Create the listing on Walmart/eBay using exactly this SKU string — Linnworks links it automatically, stock syncs, and the row leaves this list on the next refresh.</div>
+    </div>
+  </div>
+
+</body>
+</html>
