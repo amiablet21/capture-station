@@ -1063,6 +1063,8 @@ $('subSku').addEventListener('input', subRegenNote);
 $('subNote').addEventListener('input', () => { subNoteDirty = true; });
 
 $('subSave').addEventListener('click', async () => {
+  const btn = $('subSave');
+  if (btn.disabled) return;
   const sku = $('subSku').value.trim();
   const qty = Number($('subQty').value);
   if (!sku) { subFeedback('Pick the SKU that actually shipped.'); return; }
@@ -1080,19 +1082,31 @@ $('subSave').addEventListener('click', async () => {
       return;
     }
   }
-  const res = await api.substituteRow(subRowId, recvLookup === 'ready' ? recvLookupExact(sku).sku : sku, qty, $('subNote').value.trim(), false, subForSku);
-  if (!res.ok) { subFeedback(res.error || 'Could not save.'); return; }
-  $('subDialog').close();
-  const movedMsg = res.moved === 'primary'
-    ? ' — order moved back to the warehouse'
-    : res.moved === 'fallback' ? ' — order routed to dropship (substitute not in stock)' : '';
-  toast(`Substitution saved: ${res.row.sub_sku} ×${res.row.sub_qty}${movedMsg}`);
-  await refresh();
+  // a rejected IPC (or one returning nothing) used to kill this handler
+  // mid-flight: the dialog just sat there with no message. Never again.
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await api.substituteRow(subRowId, invItem ? invItem.sku : sku, qty, $('subNote').value.trim(), false, subForSku);
+    if (!res || !res.ok) { subFeedback((res && res.error) || 'Could not save the substitution.'); return; }
+    $('subDialog').close();
+    const movedMsg = res.moved === 'primary'
+      ? ' — order moved back to the warehouse'
+      : res.moved === 'fallback' ? ' — order routed to dropship (substitute not in stock)' : '';
+    const saved = res.row || {};
+    toast(`Substitution saved: ${saved.sub_sku || sku} ×${saved.sub_qty || qty}${movedMsg}`);
+    await refresh();
+  } catch (e) {
+    subFeedback(`Could not save: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
 });
 
 $('subClear').addEventListener('click', async () => {
-  const res = await api.substituteRow(subRowId, '', 0, '', true);
-  if (!res.ok) { subFeedback(res.error || 'Could not remove.'); return; }
+  const res = await api.substituteRow(subRowId, '', 0, '', true).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) { subFeedback((res && res.error) || 'Could not remove the substitution.'); return; }
   $('subDialog').close();
   const clearedMsg = res.moved === 'primary'
     ? ' — order moved back to the warehouse'

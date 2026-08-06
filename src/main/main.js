@@ -1393,8 +1393,11 @@ function registerIpc() {
     if (clear) {
       const cleared = db.setSubstitution(row.id, '', 0, '', '');
       pushState();
-      const routed = await reRouteAfterSubstitution(row.order_number);
-      return { ok: true, row: cleared, moved: routed.moved };
+      // routing runs in the BACKGROUND: it pages the whole open-order book,
+      // which took long enough to look like a frozen dialog. The row (and
+      // its DS badge) update themselves when the pass finishes.
+      reRouteAfterSubstitution(row.order_number).catch(() => { /* next tick retries */ });
+      return { ok: true, row: cleared, moved: null };
     }
     const subSku = String(sku || '').trim();
     const subQty = Number(qty);
@@ -1404,8 +1407,9 @@ function registerIpc() {
     // multi-line orders (the renderer sends the clicked line's SKU)
     const updated = db.setSubstitution(row.id, subSku, subQty, String(note || '').trim().slice(0, 300), String(subFor || '').trim());
     pushState();
-    const routed = await reRouteAfterSubstitution(row.order_number);
-    return { ok: true, row: updated, moved: routed.moved };
+    // background routing (see the clear branch): the dialog closes at once
+    reRouteAfterSubstitution(row.order_number).catch(() => { /* next tick retries */ });
+    return { ok: true, row: updated, moved: null };
   });
   ipcMain.handle('rows:clearFailed', () => {
     const removed = db.clearFailedNotFound();
