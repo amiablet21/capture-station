@@ -92,7 +92,9 @@ const DEFAULTS = {
   orderUrlTemplates: {
     walmart: 'https://seller.walmart.com/orders/manage-orders?orderGroups=All&poNumber={po}',
     ebay: 'https://www.ebay.com/sh/ord/details?orderid={po}',
-    temu: '',
+    // Temu's order page keys off the parent order number; the session and
+    // referrer params in a copied URL are disposable
+    temu: 'https://seller.temu.com/order-detail.html?parent_order_sn={po}',
   },
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
@@ -135,6 +137,12 @@ function load() {
     const secrets = decryptCreds(stored.linnworksEnc);
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
+  }
+  // migration: Temu shipped with no order URL; fill in the real one for
+  // configs saved before it was known (a blank means "never set", not
+  // "deliberately cleared" — clearing it just makes the PO# copy instead)
+  if (stored.orderUrlTemplates && !String(stored.orderUrlTemplates.temu || '').trim()) {
+    stored.orderUrlTemplates.temu = DEFAULTS.orderUrlTemplates.temu;
   }
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {

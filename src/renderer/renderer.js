@@ -1243,7 +1243,9 @@ function applyBrowserPane() {
   // Capture list and the Returns sheets depending on the active page
   const onPage = activePage === 'capture' || activePage === 'returns';
   const show = bReady && browserAllowed() && bPane.visible && onPage;
-  const host = activePage === 'returns' ? document.querySelector('.ret-sheet-row') : $('rowsRow');
+  // Returns docks the pane at PAGE level so it spans the full window height,
+  // not just the sheet row; Capture keeps it inside the list row.
+  const host = activePage === 'returns' ? $('returnsPage') : $('rowsRow');
   const dock = $('bDock');
   const divider = $('bDivider');
   if (host && dock.parentElement !== host) {
@@ -1253,8 +1255,9 @@ function applyBrowserPane() {
   dock.hidden = !show;
   divider.hidden = !show;
   $('rowsRow').classList.toggle('has-browser', show && activePage === 'capture');
-  const retRow = document.querySelector('.ret-sheet-row');
-  if (retRow) retRow.classList.toggle('has-browser', show && activePage === 'returns');
+  $('returnsPage').classList.toggle('has-browser', show && activePage === 'returns');
+  // compact columns while the sheets share the window with the pane
+  document.body.classList.toggle('ret-compact', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
   $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
@@ -1262,12 +1265,19 @@ function applyBrowserPane() {
     if (activePage === 'capture') $('rowsMain').style.width = ''; // the sheet takes whatever remains
     else $('retMain').style.width = '';
   } else {
-    const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
-    $('rowsMain').style.width = savedW ? `${savedW}px` : '';
-    const retW = Number(localStorage.getItem('retSheetWidth')) || 0;
-    $('retMain').style.width = retW ? `${retW}px` : '';
+    // a saved width wider than the window leaves the sheet overflowing with
+    // a stray horizontal scrollbar after the pane closes: clamp to the room
+    // actually available, and fall back to "fill" when it does not fit
+    const fit = (el, key) => {
+      const saved = Number(localStorage.getItem(key)) || 0;
+      const room = (el.parentElement ? el.parentElement.clientWidth : 0) - 20;
+      el.style.width = saved && room > 0 && saved <= room ? `${saved}px` : '';
+    };
+    fit($('rowsMain'), 'captureSheetWidth');
+    fit($('retMain'), 'retSheetWidth');
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
   }
+  if (activePage === 'returns') renderRetLog(); // colspan follows the column count
   syncBrowserBounds();
 }
 
@@ -3033,7 +3043,7 @@ function renderRetLog() {
         </tr>
       </thead>
       <tbody>${rows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, idx + 1)).join('')
-        || `<tr><td colspan="11" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+        || `<tr><td colspan="${document.body.classList.contains('ret-compact') ? 6 : 11}" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
     </table>
     </div>`;
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet

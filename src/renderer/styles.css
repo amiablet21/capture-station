@@ -792,9 +792,30 @@ body {
 /* one shared width for both returns sheets, resizable like the Stock sheet */
 /* the sheets stay centered when narrowed, instead of hugging the left edge */
 .ret-sheet-row { display: flex; align-items: stretch; justify-content: center; min-height: 0; }
-/* with the marketplace pane docked, the sheet takes the remaining width */
-.ret-sheet-row.has-browser { justify-content: flex-start; }
-.ret-sheet-row.has-browser .ret-main { flex: 1 1 auto; max-width: none; min-width: 560px; }
+
+/* marketplace pane on the Returns page: docked at PAGE level so it runs the
+   full window height, with the sheets taking whatever remains */
+.ret-page.has-browser { flex-direction: row; padding: 0; }
+.ret-page.has-browser > .ret-scroll { flex: 1 1 auto; min-width: 0; padding: 14px 24px 16px; }
+.ret-page.has-browser > .bdock { align-self: stretch; }
+.ret-page.has-browser .ret-sheet-row { justify-content: flex-start; }
+.ret-page.has-browser .ret-main { flex: 1 1 auto; max-width: none; min-width: 0; width: auto !important; }
+.ret-page.has-browser .sheet-grip { display: none; } /* the pane divider resizes instead */
+
+/* compact columns while the pane shares the window: Customer, Tracking,
+   Received, By and Notes step aside (their values stay in cell tooltips)
+   and return the moment the pane collapses */
+body.ret-compact .ret-sheet th:nth-child(3),
+body.ret-compact .ret-sheet td:nth-child(3),
+body.ret-compact .ret-sheet th:nth-child(4),
+body.ret-compact .ret-sheet td:nth-child(4),
+body.ret-compact .ret-sheet th:nth-child(5),
+body.ret-compact .ret-sheet td:nth-child(5),
+body.ret-compact .ret-sheet th:nth-child(9),
+body.ret-compact .ret-sheet td:nth-child(9),
+body.ret-compact .ret-sheet th:nth-child(10),
+body.ret-compact .ret-sheet td:nth-child(10) { display: none; }
+body.ret-compact .ret-sheet { min-width: 0; }
 
 .ret-main {
   width: 100%;

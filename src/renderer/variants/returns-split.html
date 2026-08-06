@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns + full-height browser — interactive</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 8px; flex: 0 0 auto; }
+  .tab { font-size: 12.5px; font-weight: 500; color: var(--muted); padding: 4px 14px; border-radius: var(--r-ctl); }
+  .tab.on { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+
+  /* the split fills everything under the tabs — the pane is full height */
+  .split { flex: 1; display: flex; min-height: 0; }
+  .pane { width: 420px; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); min-height: 0; }
+  .pane.hidden { display: none; }
+  .pane-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; border-radius: 5px; cursor: pointer; }
+  .ico:hover { background: var(--border); }
+  .pane-domain { font-size: 11.5px; color: var(--muted); margin: 0 auto; font-family: var(--mono); }
+  .pane-body { flex: 1; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  .wm { text-align: center; color: var(--muted); font-size: 12.5px; }
+  .wm-logo { width: 46px; height: 46px; border-radius: 999px; background: #0071DC; margin: 0 auto 10px; }
+  .wm b { display: block; font-family: var(--mono); font-size: 13px; color: var(--text); margin-bottom: 4px; }
+  .divider { width: 5px; flex: 0 0 auto; background: transparent; cursor: col-resize; }
+  .divider:hover { background: var(--accent-soft); }
+  .divider.hidden { display: none; }
+
+  .work { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px 14px 12px; gap: 8px; min-height: 0; }
+  .bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); cursor: pointer; }
+  .btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .bar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .search { width: 200px; font-size: 11.5px; padding: 4px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+
+  .sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; flex: 0 0 auto; }
+  .sheet.grow { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+  th:last-child { border-right: none; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .g { width: 28px; text-align: right; font-family: var(--mono); font-size: 10.5px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .g.bad { background: var(--neg-bg); color: var(--neg-text); }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .po { color: var(--accent); cursor: pointer; border-bottom: 1px dotted var(--accent); }
+  .po.active { background: var(--accent-soft); border-radius: 3px; padding: 0 3px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .num { text-align: right; }
+  .foot { display: flex; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--surface-2); font-size: 11.5px; }
+  .save { margin-left: auto; background: var(--accent); color: #fff; border-radius: var(--r-ctl); padding: 4px 12px; font-weight: 500; font-size: 11.5px; }
+  /* columns that only exist while the pane is collapsed */
+  .wide-only { display: none; }
+  body.wide .wide-only { display: table-cell; }
+</style></head>
+<body>
+  <div class="try">Interactive: <b>click a PO#</b> to load it in the pane · <b>Browser</b> toggles the pane (columns return when it collapses) · drag the divider to resize.</div>
+  <div class="tabs"><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab on">Returns</span></div>
+
+  <div class="split">
+    <div class="pane" id="pane">
+      <div class="pane-head">
+        <span class="ico">‹</span><span class="ico">›</span><span class="ico">⟳</span>
+        <span class="pane-domain" id="domain">seller.walmart.com</span>
+        <span class="ico" title="Print">⎙</span>
+        <span class="ico" id="collapse" title="Collapse">»</span>
+      </div>
+      <div class="pane-body">
+        <div class="wm"><div class="wm-logo"></div><b id="paneOrder">no order open</b>click a PO# on the right</div>
+      </div>
+    </div>
+    <div class="divider" id="divider"></div>
+
+    <div class="work">
+      <div class="bar">
+        <b>Returns worksheet</b>
+        <div class="right"><button class="btn on" id="browserBtn">Browser</button></div>
+      </div>
+      <div class="sheet">
+        <table>
+          <thead><tr>
+            <th class="g">#</th><th style="width:150px">PO#</th>
+            <th class="wide-only" style="width:130px">Customer</th>
+            <th class="wide-only" style="width:120px">Tracking #</th>
+            <th class="wide-only" style="width:100px">Received</th>
+            <th>Returned SKU</th><th style="width:118px">Condition</th><th style="width:48px">Units</th>
+            <th class="wide-only" style="width:40px">By</th>
+            <th class="wide-only">Notes</th>
+            <th style="width:34px"></th>
+          </tr></thead>
+          <tbody>
+            <tr title="Daniel Scarpati · 1Z4324190390115… · 08-06 11:24 · IM">
+              <td class="g">1</td><td class="m">119120771799124</td>
+              <td class="wide-only mut">Daniel Scarpati</td><td class="wide-only m">1Z4324190…</td><td class="wide-only m mut">08-06 11:24</td>
+              <td class="m">S25-256GB-SILVERSHADOW</td><td><span class="dot" style="background:#346538"></span>New</td><td class="m num">1</td>
+              <td class="wide-only">IM</td><td class="wide-only mut">brand new</td><td></td>
+            </tr>
+            <!-- real cells, never a colspan: hidden columns would make the
+                 row wider than the header and stretch the whole table -->
+            <tr>
+              <td class="g mut">2</td><td class="m mut">Type / paste PO#…</td>
+              <td class="wide-only"></td><td class="wide-only"></td><td class="wide-only"></td>
+              <td></td><td></td><td></td>
+              <td class="wide-only"></td><td class="wide-only"></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="foot"><span><b>1</b> unit to receive</span><span class="save">Receive returns</span></div>
+      </div>
+
+      <div class="bar"><b>Returns log — 3 entries</b><div class="right"><input class="search" placeholder="Search PO, SKU, customer…" /></div></div>
+      <div class="sheet grow">
+        <div class="scroll">
+          <table>
+            <thead><tr>
+              <th class="g">#</th><th style="width:150px">PO#</th>
+              <th class="wide-only" style="width:130px">Customer</th>
+              <th class="wide-only" style="width:120px">Tracking #</th>
+              <th class="wide-only" style="width:100px">Received</th>
+              <th>Returned SKU</th><th style="width:118px">Condition</th><th style="width:48px">Units</th>
+              <th class="wide-only" style="width:40px">By</th>
+              <th class="wide-only">Notes</th>
+              <th style="width:34px"></th>
+            </tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const LOG = [
+    { n: 1, po: '119120771799124', cust: 'Daniel Scarpati', trk: '1Z4324190…', at: '08-06 11:24', sku: 'S25-256GB-SILVERSHADOW', cond: 'New', c: '#346538', units: 1, by: 'IM', note: 'brand new', bad: false },
+    { n: 2, po: '119119354597966', cust: '—', trk: '—', at: '08-06 10:52', sku: 'S25-FE-128GB-JETBLACK', cond: 'Open box', c: '#1F6C9F', units: 1, by: 'IM', note: 'no issues', bad: true },
+    { n: 3, po: '119120671019601', cust: '—', trk: '—', at: '08-06 10:01', sku: 'S26-ULTRA-512GB-BLACK', cond: 'Used', c: '#956400', units: 2, by: 'IM', note: '', bad: true },
+  ];
+  document.getElementById('logBody').innerHTML = LOG.map(r => `
+    <tr title="${r.cust} · ${r.trk} · ${r.at} · ${r.by}">
+      <td class="g ${r.bad ? 'bad' : ''}">${r.n}</td>
+      <td class="m"><span class="po" data-po="${r.po}">${r.po}</span></td>
+      <td class="wide-only mut">${r.cust}</td><td class="wide-only m">${r.trk}</td><td class="wide-only m mut">${r.at}</td>
+      <td class="m">${r.sku}</td>
+      <td><span class="dot" style="background:${r.c}"></span>${r.cond}</td>
+      <td class="m num">${r.units}</td>
+      <td class="wide-only">${r.by}</td><td class="wide-only mut">${r.note}</td>
+      <td class="mut">✎</td>
+    </tr>`).join('');
+
+  const pane = document.getElementById('pane');
+  const divider = document.getElementById('divider');
+  const btn = document.getElementById('browserBtn');
+  const setOpen = (open) => {
+    pane.classList.toggle('hidden', !open);
+    divider.classList.toggle('hidden', !open);
+    btn.classList.toggle('on', open);
+    document.body.classList.toggle('wide', !open); // columns return when collapsed
+  };
+  btn.addEventListener('click', () => setOpen(pane.classList.contains('hidden')));
+  document.getElementById('collapse').addEventListener('click', () => setOpen(false));
+
+  document.body.addEventListener('click', (e) => {
+    const po = e.target.closest('.po');
+    if (!po) return;
+    document.querySelectorAll('.po').forEach(p => p.classList.remove('active'));
+    po.classList.add('active');
+    setOpen(true);
+    document.getElementById('paneOrder').textContent = 'PO# ' + po.dataset.po;
+    document.getElementById('domain').textContent = 'seller.walmart.com';
+  });
+
+  let drag = null;
+  divider.addEventListener('mousedown', (e) => { drag = { x: e.clientX, w: pane.offsetWidth }; e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => {
+    if (!drag) return;
+    pane.style.width = Math.max(300, Math.min(900, drag.w + (e.clientX - drag.x))) + 'px';
+  });
+  window.addEventListener('mouseup', () => { drag = null; });
+</script>
+</body>
+</html>
