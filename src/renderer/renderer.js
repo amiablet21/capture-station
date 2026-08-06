@@ -2990,15 +2990,14 @@ function renderRetLog() {
     </table>
     </div>`;
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
-  // the edit row's SKU input gets the shared live suggestions
+  // the edit row's SKU input gets the shared live suggestions — but no
+  // auto-focus: focusing popped the list and read as "change the SKU"
   const ecombo = box.querySelector('.ret-log-ecombo');
   if (ecombo) {
-    const input = ecombo.querySelector('input');
-    const list = ecombo.querySelector('.combo-list');
-    makeCombo(input, list, (item) => { input.value = item.sku; });
+    makeCombo(ecombo.querySelector('input'), ecombo.querySelector('.combo-list'), (item) => {
+      ecombo.querySelector('input').value = item.sku;
+    });
     ensureInventory();
-    input.focus();
-    input.select();
   }
 }
 

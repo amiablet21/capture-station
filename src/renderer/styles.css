@@ -1098,10 +1098,18 @@ body {
 .ret-ro-by { font-weight: 600; text-transform: uppercase; font-size: 12px; }
 .ret-ro-note { font-family: var(--font); }
 
-/* Units column: narrow, right-aligned, on both sheets */
+/* Units column: narrow, right-aligned, on both sheets. The number inputs
+   drop their spinners — they ate the whole 52px and hid the typed value */
 .ret-sheet th.th-units { width: 52px; }
 .ret-cell-units { text-align: right; }
-.ret-cell-units .recv-cell-input, .ret-cell-units .ret-log-ein { text-align: right; }
+.ret-cell-units .recv-cell-input, .ret-cell-units .ret-log-ein {
+  text-align: right;
+  appearance: textfield;
+  padding-left: 4px;
+  padding-right: 6px;
+}
+.ret-cell-units input::-webkit-inner-spin-button,
+.ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* inline product thumbnails once a SKU is picked (returns + receiving) */
 .sku-thumb {
