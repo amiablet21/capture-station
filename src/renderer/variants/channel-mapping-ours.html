@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Channel mapping — Linnworks structure, our design ×3</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .hide { display: none !important; }
+
+  .stage { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; justify-content: center; align-items: flex-start; background: rgba(47,52,55,0.12); }
+  .frame { width: 1140px; max-width: 96vw; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 40px rgba(47,52,55,0.16); overflow: hidden; }
+
+  /* shared bones */
+  .head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .head h3 { font-size: 13.5px; font-weight: 600; margin: 0; }
+  .chan { font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; color: var(--muted); background: var(--surface); cursor: pointer; }
+  .chan.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  /* custom channel dropdown: the native <select> popup cannot be styled
+     (sharp corners, OS highlight) — this one is ours entirely */
+  .chanwrap { position: relative; display: inline-block; }
+  .chansel {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-soft-text);
+    border: none;
+    border-radius: 999px;
+    padding: 6px 14px;
+    background: var(--accent-soft);
+    cursor: pointer;
+    transition: box-shadow .12s;
+  }
+  .chansel svg { width: 11px; height: 11px; }
+  .chansel:hover, .chansel:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .chanmenu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    min-width: 150px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(47,52,55,0.18);
+    overflow: hidden;
+    z-index: 60;
+    padding: 4px;
+  }
+  .chanmenu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    font-family: var(--font);
+    font-size: 12.5px;
+    color: var(--text);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 11px;
+    cursor: pointer;
+  }
+  .chanmenu button:hover { background: var(--surface-2); }
+  .chanmenu button.on { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
+  .chanmenu button.on::after { content: '✓'; margin-left: auto; font-size: 11px; }
+  .btn svg { width: 12px; height: 12px; vertical-align: -2px; margin-right: 4px; }
+  .scanline { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+  .scanline .mono { font-size: 10px; }
+  .x { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; flex: 0 0 auto; }
+  .x:hover { background: var(--border); }
+
+  .grids { display: flex; min-height: 0; }
+  .g { display: flex; flex-direction: column; min-width: 0; }
+  .g.l { flex: 1.35; border-right: 1px solid var(--border); }
+  .g.r { flex: 1; }
+  .gbar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .gbar .t { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); white-space: nowrap; }
+  /* search fields wear the capture page's pill: rounded, magnifier, glow */
+  .sfield { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; transition: border-color .12s, box-shadow .12s; }
+  .sfield:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .sfield svg { width: 13px; height: 13px; color: var(--faint); flex: 0 0 auto; }
+  .sfield:focus-within svg { color: var(--accent); }
+  .search { flex: 1; min-width: 0; font-size: 12.5px; border: none; background: none; outline: none; color: var(--text); }
+  .search::placeholder { color: var(--faint); }
+  /* toolbar pills: same build as the channel dropdown, neutral colors */
+  .pillbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    background: var(--surface);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: box-shadow .12s, color .12s;
+  }
+  .pillbtn:hover { color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pillbtn.on { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
+  .scroll { overflow-y: auto; min-height: 0; max-height: 56vh; }
+  /* the sheets wear the returns-worksheet look: gridlines BOTH ways and a
+     numbered green gutter, so mapping reads like the rest of the app */
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  thead th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+  thead th:last-child { border-right: none; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+  td:last-child { border-right: none; }
+  .gut { width: 34px; text-align: right; font-family: var(--mono); font-size: 10.5px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  th.gut { background: var(--surface-2); }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr:hover td.gut, tbody tr.sel td.gut { background: var(--accent-soft); }
+  tbody tr.sel td { background: var(--accent-soft); }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .grn { color: var(--badge-green-text); }
+  .sub2 { display: block; font-size: 10.5px; color: var(--muted); font-family: var(--font); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
+  /* action cells never ellipsize — a clipped button painted a phantom "…" */
+  td.cell-act { text-overflow: clip; text-align: center; }
+
+  tbody tr.fresh td { background: var(--badge-green-bg); }
+
+  /* the New SKU popup (a small dialog above the mapping screen) */
+  .nfscrim { position: fixed; inset: 0; background: rgba(47,52,55,0.30); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .nfscrim.on { display: flex; }
+  .nfmodal { width: 400px; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.24); padding: 18px 20px 16px; }
+  .nfmodal h4 { font-size: 13.5px; font-weight: 600; margin: 0 0 3px; }
+  .nfmodal .sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .nfmodal label { display: block; font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin: 11px 0 5px; }
+  .nfmodal input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12.5px;
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .nfmodal input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .nfacts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .nfacts .pillbtn.go { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .nfacts .pillbtn.go:hover { box-shadow: 0 0 0 3px var(--accent-soft); color: #fff; }
+  .btn { font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 4px 13px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .btn.link { color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; }
+  .btn.link:disabled { opacity: .35; cursor: default; }
+  .btn.unlink:hover { border-color: var(--neg-text); color: var(--neg-text); }
+  .newrow { border-top: 1px dashed var(--border); padding: 8px 11px; flex: 0 0 auto; }
+  .newrow button { width: 100%; font-size: 11px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: var(--r-ctl); padding: 6px; cursor: pointer; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -5px; margin-right: 6px; }
+
+  /* V1 tweaks: pill link-state column */
+  .lk { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; }
+  .lk.no { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .lk.yes { background: var(--badge-green-bg); color: var(--badge-green-text); }
+
+  /* V2: WFS chip + hover-only buttons */
+  .v2 tbody .btn { visibility: hidden; }
+  .v2 tbody tr:hover .btn, .v2 tbody tr.sel .btn { visibility: visible; }
+  .wfs { font-size: 9px; font-weight: 700; border-radius: 4px; padding: 1px 5px; background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+
+  /* V3: amber tint for unlinked rows, denser */
+  .v3 td { padding: 4px 9px; font-size: 11.5px; }
+  .v3 tbody tr.unl td { background: var(--badge-yellow-bg); }
+  .v3 tbody tr.unl:hover td, .v3 tbody tr.unl.sel td { background: var(--accent-soft); }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; background: var(--text); color: var(--surface); font-size: 12px; border-radius: 999px; padding: 8px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; }
+  .toast.on { opacity: 1; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Variation</span>
+    <span class="opt on" data-o="1">1 · Clean grids</span>
+    <span class="opt" data-o="2">2 · Hover actions</span>
+    <span class="opt" data-o="3">3 · Amber worklist</span>
+    <span class="note" id="note"></span>
+  </div>
+  <div class="stage"><div id="mount"></div></div>
+
+  <!-- New SKU: its own popup (no price — just make it on Linnworks) -->
+  <div class="nfscrim" id="nfScrim">
+    <div class="nfmodal">
+      <h4>New Linnworks SKU</h4>
+      <div class="sub">Created straight in Linnworks. It lands at the top of the list, ready to Link.</div>
+      <label>SKU</label>
+      <input class="m" id="nfSku" placeholder="Exact SKU string…" autocomplete="off" spellcheck="false" />
+      <label>Title</label>
+      <input id="nfTitle" placeholder="Title" autocomplete="off" />
+      <div class="nfacts">
+        <button class="pillbtn" id="nfCancel">Cancel</button>
+        <button class="pillbtn go" id="nfGo">Create</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  const WM = [
+    { sku: 'X230-128GB-GRAY-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" Tablet, 128GB + 6GB RAM, Wi-Fi, 90Hz', wfs: false, linked: 'X230-128GB-GRAY' },
+    { sku: 'X230-128GB-GRAY-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB + 6GB RAM Wi-Fi — twin', wfs: false, linked: 'X230-128GB-GRAY' },
+    { sku: 'X230-128GB-SILVER-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" Tablet, 128GB, Silver', wfs: false, linked: 'X230-128GB-SILVER' },
+    { sku: 'X230-128GB-SILVER-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB Silver — twin', wfs: false, linked: '' },
+    { sku: 'S26-PLUS-256GB-WHITE-US', title: 'Samsung Galaxy S26+ 256GB White', wfs: false, linked: '' },
+    { sku: '(2)PIXEL 9 PRO 128GB PORCELAIN', title: 'Google Pixel 9 Pro 128GB - Porcelain - Unlocked', wfs: false, linked: '' },
+    { sku: 'X110GRAY-WFS', title: 'Samsung Galaxy Tab A9 64GB Gray (WFS)', wfs: true, linked: 'X110-64GB-GRAY' },
+  ];
+  const LW = [
+    { sku: 'X230-128GB-GRAY', title: 'Galaxy Tab A11+ 128GB Gray' },
+    { sku: 'X230-128GB-SILVER', title: 'Galaxy Tab A11+ 128GB Silver' },
+    { sku: 'X230-256GB-GRAY', title: 'Galaxy Tab A11+ 256GB Gray' },
+    { sku: 'S26-PLUS-256GB-WHITE', title: 'Galaxy S26+ 256GB White' },
+    { sku: 'PIXEL9PRO-128GB-PORCELAIN', title: 'Pixel 9 Pro 128GB Porcelain' },
+    { sku: 'X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray' },
+  ];
+  let sel = null, onlyUn = false, view = '1', newOpen = false, freshSku = null, chanName = 'Walmart';
+  let wmQ = '', lwQ = '';
+  const toast = (m) => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2600); };
+
+  const NOTES = {
+    1: 'The straight translation: same grids and buttons, our surfaces, pill link-states.',
+    2: 'Quieter: buttons appear on hover / selection; WFS as a blue chip.',
+    3: 'Worklist energy: unlinked rows tinted amber so the to-do jumps out; denser rows.',
+  };
+
+  function frame(inner) {
+    return `<div class="frame ${view === '2' ? 'v2' : view === '3' ? 'v3' : ''}">
+      <div class="head">
+        <h3>Channel mapping</h3>
+        <span class="chanwrap">
+          <button class="chansel" id="chanBtn"><span>${chanName}</span><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></button>
+          <div class="chanmenu" id="chanMenu" hidden>
+            ${['Walmart', 'eBay', 'Temu'].map(c => `<button data-ch="${c}" class="${c === chanName ? 'on' : ''}">${c}</button>`).join('')}
+          </div>
+        </span>
+        <span class="scanline">Last full scan <span class="mono">07 Aug 2026 12:53</span> · SubSource <span class="mono">10001467995</span></span>
+        <span class="x">✕</span>
+      </div>
+      ${inner}
+    </div>`;
+  }
+
+  function render() {
+    const q1 = wmQ.trim().toLowerCase();
+    const wmRows = WM.filter(w => (!onlyUn || !w.linked)
+      && (!q1 || w.sku.toLowerCase().includes(q1) || w.title.toLowerCase().includes(q1)
+          || (w.linked || '').toLowerCase().includes(q1)));
+    const q2 = lwQ.trim().toLowerCase();
+    const lwRows = LW.filter(l => !q2 || l.sku.toLowerCase().includes(q2) || l.title.toLowerCase().includes(q2));
+    const left = `
+      <div class="g l">
+        <div class="gbar"><span class="sfield"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg><input class="search" id="wmQ" value="${wmQ}" placeholder="Search ${chanName} SKU or title…" autocomplete="off" spellcheck="false" /></span>
+          <button class="pillbtn ${onlyUn ? 'on' : ''}" id="onlyBtn">Unlinked only</button>
+          <span class="t" style="text-transform:none">${WM.filter(w => !w.linked).length} unlinked</span></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Listing SKU</th><th style="width:210px">Linnworks SKU</th><th style="width:104px"></th></tr></thead>
+            <tbody>
+              ${wmRows.map(w => `
+              <tr class="${sel === w.sku ? 'sel' : ''} ${w.linked ? '' : 'unl'}" data-wm="${w.sku}">
+                <td class="m" title="${w.title}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''}">${w.sku}</td>
+                <td>${view === '1'
+                  ? (w.linked ? `<span class="m grn">${w.linked}</span>` : '<span class="lk no">not linked</span>')
+                  : (w.linked ? `<span class="m grn">${w.linked}</span>` : '<span class="mut">—</span>')}</td>
+                <td class="cell-act">${w.linked ? '<button class="btn unlink">Unlink</button>' : ''}</td>
+              </tr>`).join('')
+              || `<tr><td colspan="3" class="mut" style="text-align:center;padding:16px">No ${chanName} listing matches “${wmQ.trim()}”.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    const right = `
+      <div class="g r">
+        <div class="gbar"><span class="sfield"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg><input class="search" id="lwQ" value="${lwQ}" placeholder="Search Linnworks SKU or title…" autocomplete="off" spellcheck="false" /></span>
+          <button class="pillbtn" id="newSkuBtn" title="Create a new Linnworks item without leaving this screen — it appears in the list below, ready to link">+ New SKU</button></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th style="width:88px"></th><th>SKU</th></tr></thead>
+            <tbody>
+              ${lwRows.map(l => `
+              <tr data-lw="${l.sku}" class="${l.sku === freshSku ? 'fresh' : ''}">
+                <td class="cell-act"><button class="btn link" ${sel ? '' : 'disabled'} title="${sel ? `Link ${sel} → ${l.sku}` : 'Select a listing on the left first'}"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48,128.05l24-24a56,56,0,0,1,76.81-2.28,8,8,0,1,1-10.64,11.95A40,40,0,0,0,83.35,115.4l-24,24a40,40,0,0,0,56.57,56.56l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.57,56.56l-24,24a40,40,0,0,1-54.85,1.6A8,8,0,1,0,106.8,153.8a56,56,0,0,0,76.81-2.26l24-24A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Link</button></td>
+                <td class="m" title="${l.title}">${l.sku}${l.sku === freshSku ? ' <span class="lk yes">new</span>' : ''}</td>
+              </tr>`).join('')
+              || `<tr><td colspan="2" class="mut" style="text-align:center;padding:16px">Nothing matches “${lwQ.trim()}” — press <b>+ New SKU</b> to create it.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    document.getElementById('mount').innerHTML = frame(`<div class="grids">${left}${right}</div>`);
+    document.getElementById('note').textContent = NOTES[view];
+  }
+
+  document.body.addEventListener('click', (e) => {
+    const menu = document.getElementById('chanMenu');
+    if (e.target.closest('#chanBtn')) { menu.hidden = !menu.hidden; return; }
+    const ch = e.target.closest('[data-ch]');
+    if (ch) {
+      chanName = ch.dataset.ch;
+      toast(`${chanName} listings load here (mock shows Walmart data)`);
+      render();
+      return;
+    }
+    if (menu && !menu.hidden) menu.hidden = true; // any other click closes it
+    if (e.target.closest('#newSkuBtn')) {
+      document.getElementById('nfSku').value = '';
+      document.getElementById('nfTitle').value = '';
+      document.getElementById('nfScrim').classList.add('on');
+      document.getElementById('nfSku').focus();
+      return;
+    }
+    if (e.target.closest('#nfCancel') || e.target === document.getElementById('nfScrim')) {
+      document.getElementById('nfScrim').classList.remove('on');
+      return;
+    }
+    if (e.target.closest('#nfGo')) {
+      const sku = (document.getElementById('nfSku').value || '').trim().toUpperCase();
+      if (!sku) return;
+      LW.unshift({ sku, title: (document.getElementById('nfTitle').value || '').trim() || sku });
+      freshSku = sku;
+      document.getElementById('nfScrim').classList.remove('on');
+      toast(`${sku} created in Linnworks — it is at the top of the list, press Link to attach it`);
+      render();
+      return;
+    }
+    if (e.target.closest('#onlyBtn')) { onlyUn = !onlyUn; render(); return; }
+    if (e.target.closest('.unlink')) {
+      const w = WM.find(x => x.sku === e.target.closest('[data-wm]').dataset.wm);
+      w.linked = '';
+      toast(`${w.sku} unlinked`);
+      render();
+      return;
+    }
+    const lw = e.target.closest('[data-lw]');
+    if (lw && e.target.closest('.btn.link') && sel) {
+      const w = WM.find(x => x.sku === sel);
+      w.linked = lw.dataset.lw;
+      toast(`${w.sku} → ${w.linked} linked — open orders relink on the next refresh`);
+      sel = null;
+      render();
+      return;
+    }
+    const wm = e.target.closest('[data-wm]');
+    if (wm) { sel = sel === wm.dataset.wm ? null : wm.dataset.wm; render(); return; }
+    const opt = e.target.closest('.opt');
+    if (opt) {
+      view = opt.dataset.o;
+      document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === opt));
+      sel = null;
+      render();
+    }
+  });
+
+  // live search: filter on every keystroke, keeping focus and caret across
+  // the re-render (the real app filters its cached lists the same way)
+  document.body.addEventListener('input', (e) => {
+    if (e.target.id !== 'wmQ' && e.target.id !== 'lwQ') return;
+    const id = e.target.id;
+    const pos = e.target.selectionStart;
+    if (id === 'wmQ') wmQ = e.target.value; else lwQ = e.target.value;
+    render();
+    const el = document.getElementById(id);
+    el.focus();
+    el.setSelectionRange(pos, pos);
+  });
+
+  render();
+</script>
+</body>
+</html>

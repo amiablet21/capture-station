@@ -1199,6 +1199,157 @@ body.ret-compact .ret-sheet { min-width: 0; }
 
 /* (platform chips replaced by the globe's native menu, 2026-08-07) */
 
+/* ---------- Channel mapping dialog (Linnworks mapping screen, ours) ---------- */
+
+.chmap-dlg { width: min(1140px, 96vw); max-width: 96vw; }
+.chmap-body { display: flex; flex-direction: column; min-height: 0; }
+.chmap-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.chmap-head .dlg-title { margin: 0; }
+.chmap-sub { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.chmap-x { margin-left: auto; }
+
+.chanwrap { position: relative; display: inline-block; }
+.chmap-chansel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-soft-text);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--accent-soft);
+  cursor: pointer;
+  transition: box-shadow 120ms var(--ease);
+}
+.chmap-chansel svg { width: 11px; height: 11px; }
+.chmap-chansel:hover, .chmap-chansel:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.chanmenu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(47, 52, 55, 0.18);
+  overflow: hidden;
+  z-index: 80;
+  padding: 4px;
+}
+.chanmenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 11px;
+  cursor: pointer;
+}
+.chanmenu button:hover { background: var(--surface-2); }
+.chanmenu button.on { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
+.chanmenu button.on::after { content: '✓'; margin-left: auto; font-size: 11px; }
+
+/* neutral toolbar pills (same build as the channel pill, no color) */
+.pillbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 120ms var(--ease), color 120ms var(--ease);
+}
+.pillbtn:hover { color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pillbtn.on { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
+.pillbtn:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
+.pillbtn svg { width: 12px; height: 12px; }
+
+.chmap-cols { display: flex; min-height: 0; border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+.chmap-col { display: flex; flex-direction: column; min-width: 0; }
+.chmap-left { flex: 1.3; border-right: 1px solid var(--border); }
+.chmap-right { flex: 1; }
+.chmap-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+.chmap-sf { flex: 1 1 auto; min-width: 0; height: 32px; }
+.chmap-n { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.chmap-scroll { overflow-y: auto; min-height: 200px; max-height: 56vh; }
+
+/* excel-sheet look: gridlines both ways, like the returns sheets */
+.chmap-table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+.chmap-table thead th {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  text-align: left;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-soft);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
+}
+.chmap-table thead th:last-child { border-right: none; }
+.chmap-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.chmap-table td:last-child { border-right: none; }
+.chmap-table tbody tr:hover td { background: var(--surface-2); }
+.chmap-table tbody tr.sel td { background: var(--accent-soft); }
+.chmap-table .th-lw { width: 210px; }
+.chmap-table .th-act { width: 104px; }
+.chmap-table .th-act2 { width: 96px; }
+td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
+.chmap-grn { color: var(--badge-green-text); }
+.chmap-lk {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+}
+.chmap-link { color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; padding: 3px 11px; }
+.chmap-unlink { padding: 3px 11px; }
+.chmap-unlink:hover { border-color: var(--neg-text); color: var(--neg-text); box-shadow: none; }
+.chmap-none { color: var(--muted); text-align: center; padding: 18px 10px; white-space: normal; }
+.chmap-table tbody tr.chmap-fresh td { background: var(--badge-green-bg); }
+.chmap-new {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+.chmap-nfin { border-radius: 999px; }
+
 .rv-fix { display: flex; align-items: center; gap: 8px; width: 100%; }
 .rv-fix .rv-pick-combo { max-width: 260px; }
 .rv-fix .rv-in { border-color: var(--border); background: var(--surface); }

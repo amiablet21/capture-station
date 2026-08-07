@@ -2975,6 +2975,228 @@ async function loadUnlisted() {
   }
 }
 
+/* ---------- Channel mapping (in-app Linnworks mapping screen) ---------- */
+// Approved design: variants/channel-mapping-ours.html variation 1 — two
+// excel-style sheets, select a listing on the left, Link on the right.
+// The catalog comes from ChannelMapping/GetChannelItems (cached in main);
+// filtering is local and instant.
+
+const chmap = {
+  channels: [], chan: null, items: [], sel: null,
+  onlyUn: false, busy: '', fresh: '', local: false, // local = demo seed
+};
+
+function chmapChanLabel(c) {
+  const s = String((c && c.source) || '').toLowerCase();
+  if (s.includes('walmart')) return 'Walmart';
+  if (s.includes('ebay')) return 'eBay';
+  if (s.includes('temu')) return 'Temu';
+  return (c && c.source) || '—';
+}
+
+async function chmapOpen() {
+  $('chmapDialog').showModal();
+  ensureInventory(); // the right sheet is the inventory cache
+  if (chmap.local) { renderChmap(); return; }
+  if (!chmap.channels.length) {
+    chmap.busy = 'Loading channels…';
+    renderChmap();
+    const res = await api.mappingChannels();
+    if (!res.ok) {
+      chmap.busy = '';
+      renderChmap();
+      toast(res.error || 'Could not load the channel list.');
+      return;
+    }
+    chmap.channels = res.channels;
+    chmap.chan = chmap.channels.find(c => /walmart/i.test(c.source)) || chmap.channels[0] || null;
+  }
+  if (chmap.chan && !chmap.items.length) await chmapLoadItems();
+  else renderChmap();
+}
+
+async function chmapLoadItems(force) {
+  if (!chmap.chan) return;
+  chmap.busy = `Loading the ${chmapChanLabel(chmap.chan)} catalog…`;
+  chmap.sel = null;
+  renderChmap();
+  const res = await api.mappingItems(chmap.chan.id, chmap.chan.source, chmap.chan.subSource, !!force);
+  chmap.busy = '';
+  if (!res.ok) {
+    chmap.items = [];
+    renderChmap();
+    toast(res.error || 'Could not load the listings.');
+    return;
+  }
+  chmap.items = res.items;
+  renderChmap();
+}
+
+function renderChmap() {
+  if (!$('chmapDialog').open) return;
+  $('chmapChanLbl').textContent = chmapChanLabel(chmap.chan);
+  $('chmapSub').textContent = chmap.chan ? chmap.chan.subSource : '';
+  $('chmapWmQ').placeholder = `Search ${chmapChanLabel(chmap.chan)} SKU or title…`;
+  $('chmapOnlyUn').classList.toggle('on', chmap.onlyUn);
+  $('chmapChanMenu').innerHTML = chmap.channels.map(c => `
+    <button type="button" data-chid="${c.id}" class="${chmap.chan && c.id === chmap.chan.id ? 'on' : ''}">${esc(chmapChanLabel(c))}</button>`).join('');
+
+  // linked GUID -> Linnworks SKU string, via the inventory cache
+  const byId = new Map();
+  if (recvItems) for (const it of recvItems) { if (it.stockItemId) byId.set(it.stockItemId, it.sku); }
+
+  const q1 = $('chmapWmQ').value.trim().toLowerCase();
+  const rows = chmap.items.filter(w => {
+    if (chmap.onlyUn && w.linked) return false;
+    if (!q1) return true;
+    const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || '';
+    return w.sku.toLowerCase().includes(q1) || w.title.toLowerCase().includes(q1)
+      || linkedSku.toLowerCase().includes(q1);
+  });
+  const unlinked = chmap.items.filter(w => !w.linked).length;
+  $('chmapWmCount').textContent = chmap.busy ? '' : `${unlinked} unlinked / ${chmap.items.length}`;
+  $('chmapWmBody').innerHTML = chmap.busy
+    ? `<tr><td colspan="3" class="chmap-none">${esc(chmap.busy)}</td></tr>`
+    : rows.slice(0, 400).map(w => {
+      const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || (w.linked ? '(linked)' : '');
+      return `
+      <tr class="${chmap.sel === w.sku ? 'sel' : ''}" data-wm="${esc(w.sku)}">
+        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''}">${esc(w.sku)}</td>
+        <td>${w.linked
+          ? `<span class="mono chmap-grn">${esc(linkedSku)}</span>`
+          : '<span class="chmap-lk">not linked</span>'}</td>
+        <td class="chmap-act">${w.linked && w.rowId ? '<button class="pillbtn chmap-unlink" type="button">Unlink</button>' : ''}</td>
+      </tr>`;
+    }).join('')
+      || `<tr><td colspan="3" class="chmap-none">No ${esc(chmapChanLabel(chmap.chan))} listing matches.</td></tr>`;
+
+  const q2 = $('chmapLwQ').value.trim().toLowerCase();
+  let inv = recvItems ? recvItems.filter(l => !q2
+    || String(l.sku || '').toLowerCase().includes(q2)
+    || String(l.title || '').toLowerCase().includes(q2)) : [];
+  if (chmap.fresh) {
+    const i = inv.findIndex(l => l.sku === chmap.fresh);
+    if (i > 0) inv.unshift(inv.splice(i, 1)[0]);
+  }
+  $('chmapLwBody').innerHTML = recvLookup !== 'ready'
+    ? '<tr><td colspan="2" class="chmap-none">Loading the inventory…</td></tr>'
+    : inv.slice(0, 250).map(l => `
+      <tr data-lw="${esc(l.sku)}" class="${l.sku === chmap.fresh ? 'chmap-fresh' : ''}">
+        <td class="chmap-act2"><button class="pillbtn chmap-link" type="button" ${chmap.sel ? '' : 'disabled'}
+          title="${chmap.sel ? `Link ${esc(chmap.sel)} → ${esc(l.sku)}` : 'Select a listing on the left first'}"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48,128.05l24-24a56,56,0,0,1,76.81-2.28,8,8,0,1,1-10.64,11.95A40,40,0,0,0,83.35,115.4l-24,24a40,40,0,0,0,56.57,56.56l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.57,56.56l-24,24a40,40,0,0,1-54.85,1.6A8,8,0,1,0,106.8,153.8a56,56,0,0,0,76.81-2.26l24-24A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Link</button></td>
+        <td class="mono" title="${esc(l.title || '')}">${esc(l.sku)}${l.sku === chmap.fresh ? ' <span class="chmap-new">new</span>' : ''}</td>
+      </tr>`).join('')
+      || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
+}
+
+$('chmapBtn').addEventListener('click', () => chmapOpen());
+$('chmapClose').addEventListener('click', () => $('chmapDialog').close());
+$('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
+$('chmapWmQ').addEventListener('input', () => renderChmap());
+$('chmapLwQ').addEventListener('input', () => renderChmap());
+
+$('chmapChanBtn').addEventListener('click', () => {
+  $('chmapChanMenu').hidden = !$('chmapChanMenu').hidden;
+});
+$('chmapChanMenu').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-chid]');
+  if (!b) return;
+  $('chmapChanMenu').hidden = true;
+  const next = chmap.channels.find(c => c.id === Number(b.dataset.chid));
+  if (!next || (chmap.chan && next.id === chmap.chan.id)) return;
+  chmap.chan = next;
+  chmap.items = [];
+  if (!chmap.local) await chmapLoadItems();
+  else renderChmap();
+});
+document.addEventListener('mousedown', (e) => {
+  if (!$('chmapChanMenu').hidden && !e.target.closest('.chanwrap')) $('chmapChanMenu').hidden = true;
+});
+
+$('chmapWmBody').addEventListener('click', async (e) => {
+  const tr = e.target.closest('tr[data-wm]');
+  if (!tr) return;
+  const item = chmap.items.find(x => x.sku === tr.dataset.wm);
+  if (!item) return;
+  if (e.target.closest('.chmap-unlink')) {
+    if (chmap.local) {
+      item.linked = false; item.linkedItemId = ''; item.linkedSkuOverride = '';
+      toast(`${item.sku} unlinked`);
+      renderChmap();
+      return;
+    }
+    const res = await api.mappingUnlink(item.rowId);
+    if (!res.ok) { toast(res.error || 'Could not unlink.'); return; }
+    item.linked = false;
+    item.linkedItemId = '';
+    item.linkedSkuOverride = '';
+    item.rowId = '';
+    toast(`${item.sku} unlinked`);
+    renderChmap();
+    loadUnlisted();
+    return;
+  }
+  chmap.sel = chmap.sel === item.sku ? null : item.sku;
+  renderChmap();
+});
+
+$('chmapLwBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.chmap-link');
+  if (!btn || btn.disabled || !chmap.sel) return;
+  const target = e.target.closest('tr[data-lw]').dataset.lw;
+  const item = chmap.items.find(x => x.sku === chmap.sel);
+  if (!item) return;
+  if (!chmap.local) {
+    btn.disabled = true;
+    const res = await api.mappingLink(item.sku, chmap.chan.source, chmap.chan.subSource, target);
+    if (!res.ok) { btn.disabled = false; toast(res.error || 'Could not link.'); return; }
+  }
+  item.linked = true;
+  item.linkedSkuOverride = target;
+  chmap.sel = null;
+  toast(`${item.sku} → ${target} linked — open orders relink on the next refresh`);
+  renderChmap();
+  if (!chmap.local) {
+    chmapLoadItems(true); // silent re-pull picks up the new rowId for Unlink
+    loadUnlisted();
+  }
+});
+
+// + New SKU: minimal popup (SKU + title only, owner request 2026-08-07)
+$('chmapNewSku').addEventListener('click', () => {
+  $('chmapNfSku').value = $('chmapLwQ').value.trim().toUpperCase();
+  $('chmapNfTitle').value = '';
+  $('chmapNfNote').hidden = true;
+  $('chmapNewDialog').showModal();
+  $('chmapNfSku').focus();
+});
+$('chmapNfCancel').addEventListener('click', () => $('chmapNewDialog').close());
+$('chmapNfGo').addEventListener('click', async () => {
+  const sku = $('chmapNfSku').value.trim().toUpperCase();
+  const title = $('chmapNfTitle').value.trim();
+  const bad = validateNewSku({ sku, title, qty: 0 }, recvItems || []);
+  const note = $('chmapNfNote');
+  if (bad) { note.textContent = bad; note.hidden = false; note.className = 'dlg-note test-result is-fail'; return; }
+  const btn = $('chmapNfGo');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  const res = chmap.local
+    ? { ok: true, sku, stockItemId: `demo-${sku}` }
+    : await api.createSku({ sku, title, qty: 0 });
+  btn.disabled = false;
+  btn.textContent = 'Create';
+  if (!res.ok) { note.textContent = res.error || 'Could not create the SKU.'; note.hidden = false; note.className = 'dlg-note test-result is-fail'; return; }
+  if (recvItems) {
+    const it = { sku: res.sku || sku, title, stockItemId: res.stockItemId, levels: [], retailPrice: 0 };
+    recvItems.unshift(it);
+    if (recvBySku) recvBySku.set((res.sku || sku).toLowerCase(), it);
+  }
+  chmap.fresh = res.sku || sku;
+  $('chmapNewDialog').close();
+  toast(`${chmap.fresh} created in Linnworks — press Link to attach it`);
+  renderChmap();
+});
+
 // jump from a to-do row straight to the Stock page's Unlisted view,
 // filtered to that SKU (the Reminder banner left at the owner's request
 // 2026-08-07 — the to-do card is the one surface on Returns)

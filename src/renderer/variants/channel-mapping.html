@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Channel mapping — three layouts</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .stage { flex: 1; min-height: 0; display: flex; align-items: flex-start; justify-content: center; padding: 18px 14px; background: rgba(47,52,55,0.16); overflow-y: auto; }
+  .modal { background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.22); overflow: hidden; display: flex; flex-direction: column; }
+  .m-head { padding: 11px 15px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .m-head h3 { font-size: 13.5px; font-weight: 600; margin: 0; }
+  .chan { font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; color: var(--muted); background: var(--surface); cursor: pointer; }
+  .chan.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .m-head .x { margin-left: auto; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; }
+
+  .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .search { flex: 1; min-width: 0; font-size: 12px; padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); }
+  .only { font-size: 10px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; color: var(--muted); background: var(--surface); cursor: pointer; white-space: nowrap; }
+  .only.on { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
+  .bar .n { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+  thead th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 9px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 6px 9px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr.sel td { background: var(--accent-soft); }
+  .m { font-family: var(--mono); font-size: 11px; }
+  .mut { color: var(--muted); }
+  .grn { color: var(--badge-green-text); }
+  .amb { color: var(--badge-yellow-text); font-weight: 600; }
+  .act-btn { font-size: 10px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; background: var(--surface); color: var(--muted); cursor: pointer; }
+  .act-btn.link { color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; }
+  .act-btn.link:disabled { opacity: .35; cursor: default; }
+  .act-btn.unlink:hover { border-color: var(--neg-text); color: var(--neg-text); }
+  .hide { display: none !important; }
+
+  /* A: side by side, fixed proportions */
+  #viewA .modal { width: 940px; }
+  .cols { display: flex; min-height: 0; }
+  .col { display: flex; flex-direction: column; min-width: 0; }
+  .col.left { flex: 1.3; border-right: 1px solid var(--border); }
+  .col.right { flex: 1; }
+  .col .scroll { max-height: 380px; overflow-y: auto; }
+  .newrow { border-top: 1px dashed var(--border); padding: 8px 11px; flex: 0 0 auto; }
+  .newrow button { width: 100%; font-size: 11px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: var(--r-ctl); padding: 6px; cursor: pointer; }
+
+  /* B: one sheet with in-row combo */
+  #viewB .modal { width: 860px; }
+  #viewB .scroll { max-height: 430px; overflow-y: auto; }
+  .cell-combo { position: relative; display: block; }
+  .cell-combo input { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 11px; padding: 4px 8px; border: 1px dashed var(--badge-yellow-text); border-radius: 6px; background: var(--surface); color: var(--text); }
+  .cell-combo input::placeholder { color: var(--badge-yellow-text); font-family: var(--font); }
+  .sugg { position: absolute; left: 0; right: 0; top: 100%; margin-top: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px rgba(47,52,55,0.16); z-index: 20; overflow: hidden; }
+  .sugg div { display: flex; align-items: baseline; gap: 8px; padding: 6px 9px; font-size: 11.5px; cursor: pointer; border-bottom: 1px solid var(--border-soft); }
+  .sugg div:last-child { border-bottom: none; }
+  .sugg div:hover { background: var(--surface-2); }
+  .sugg .t { color: var(--muted); font-size: 10.5px; margin-left: auto; }
+  .sugg .mk { color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; font-size: 10px; font-weight: 600; padding: 1px 8px; }
+  .linked-x { font-size: 10px; color: var(--muted); border: none; background: none; cursor: pointer; padding: 2px; }
+  .linked-x:hover { color: var(--neg-text); }
+
+  /* C: picker drawer under the selected row */
+  #viewC .modal { width: 860px; }
+  #viewC .scroll { max-height: 430px; overflow-y: auto; }
+  .drawer td { background: var(--surface-2); padding: 10px 12px; white-space: normal; }
+  .drawer .din { width: 320px; font-family: var(--mono); font-size: 11px; padding: 6px 9px; border: 1px solid var(--accent); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .picks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .pick { font-size: 11px; font-family: var(--mono); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; background: var(--surface); cursor: pointer; }
+  .pick:hover { border-color: var(--accent); }
+  .pick.mk { font-family: var(--font); font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; background: var(--text); color: var(--surface); font-size: 12px; border-radius: 999px; padding: 8px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; }
+  .toast.on { opacity: 1; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Layout</span>
+    <span class="opt on" data-o="a">A · Side by side</span>
+    <span class="opt" data-o="b">B · One sheet</span>
+    <span class="opt" data-o="c">C · Row drawer</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage">
+    <!-- ============ A ============ -->
+    <div id="viewA">
+      <div class="modal">
+        <div class="m-head"><h3>Channel mapping</h3><span class="chan on">Walmart</span><span class="chan">eBay</span><span class="chan">Temu</span><span class="x">✕</span></div>
+        <div class="cols">
+          <div class="col left">
+            <div class="bar"><input class="search" placeholder="Search listing SKU or title…" /><button class="only on">Unlinked only</button><span class="n">3 unlinked / 6</span></div>
+            <div class="scroll">
+              <table>
+                <thead><tr><th style="width:190px">Listing SKU</th><th>Channel title</th><th style="width:150px">Linnworks SKU</th><th style="width:60px"></th></tr></thead>
+                <tbody id="aWm"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col right">
+            <div class="bar"><input class="search" placeholder="Search Linnworks SKU…" /><span class="n">5</span></div>
+            <div class="scroll">
+              <table>
+                <thead><tr><th style="width:52px"></th><th style="width:190px">SKU</th><th>Title</th></tr></thead>
+                <tbody id="aLw"></tbody>
+              </table>
+            </div>
+            <div class="newrow"><button>+ Create a Linnworks SKU</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div id="viewB" class="hide">
+      <div class="modal">
+        <div class="m-head"><h3>Channel mapping</h3><span class="chan on">Walmart</span><span class="chan">eBay</span><span class="chan">Temu</span><span class="x">✕</span></div>
+        <div class="bar"><input class="search" id="bQ" placeholder="Search listing SKU or title…" /><button class="only on">Unlinked only</button><span class="n">3 unlinked / 6</span></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th style="width:210px">Listing SKU</th><th>Channel title</th><th style="width:245px">Linnworks SKU</th></tr></thead>
+            <tbody id="bBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ C ============ -->
+    <div id="viewC" class="hide">
+      <div class="modal">
+        <div class="m-head"><h3>Channel mapping</h3><span class="chan on">Walmart</span><span class="chan">eBay</span><span class="chan">Temu</span><span class="x">✕</span></div>
+        <div class="bar"><input class="search" placeholder="Search listing SKU or title…" /><button class="only on">Unlinked only</button><span class="n">3 unlinked / 6</span></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th style="width:210px">Listing SKU</th><th>Channel title</th><th style="width:190px">Linnworks SKU</th></tr></thead>
+            <tbody id="cBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  const WM = [
+    { sku: 'S26-PLUS-256GB-WHITE-US', title: 'Samsung Galaxy S26+ 256GB White', linked: '' },
+    { sku: 'S26PLUS-256-WHT-2', title: 'Samsung Galaxy S26+ 256GB White — twin listing', linked: '' },
+    { sku: 'OB-S25-FE-128', title: 'Galaxy S25 FE 128GB (Open Box)', linked: '' },
+    { sku: 'X230-128GB-GRAY-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" 128GB Wi-Fi', linked: 'X230-128GB-GRAY' },
+    { sku: 'X230-128GB-GRAY-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB — twin', linked: 'X230-128GB-GRAY' },
+  ];
+  const LW = [
+    { sku: 'S26-PLUS-256GB-WHITE', title: 'Galaxy S26+ 256GB White' },
+    { sku: 'OPEN-BOX-S25-FE-128GB', title: 'Galaxy S25 FE — Open Box' },
+    { sku: 'X230-128GB-GRAY', title: 'Galaxy Tab A11+ 128GB Gray' },
+    { sku: 'X230-128GB-SILVER', title: 'Galaxy Tab A11+ 128GB Silver' },
+    { sku: 'X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray' },
+  ];
+  const toast = (m) => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2600); };
+  let aSel = null, cSel = null;
+
+  /* ---- A ---- */
+  const renderA = () => {
+    document.getElementById('aWm').innerHTML = WM.map(w => `
+      <tr class="${aSel === w.sku ? 'sel' : ''}" data-a="${w.sku}">
+        <td class="m">${w.sku}</td><td class="mut" title="${w.title}">${w.title}</td>
+        <td class="m ${w.linked ? 'grn' : 'amb'}">${w.linked || 'not linked'}</td>
+        <td>${w.linked ? '<button class="act-btn unlink">Unlink</button>' : ''}</td>
+      </tr>`).join('');
+    document.getElementById('aLw').innerHTML = LW.map(l => `
+      <tr data-alw="${l.sku}">
+        <td><button class="act-btn link" ${aSel ? '' : 'disabled'}>Link</button></td>
+        <td class="m">${l.sku}</td><td class="mut">${l.title}</td>
+      </tr>`).join('');
+  };
+
+  /* ---- B ---- */
+  const renderB = () => {
+    document.getElementById('bBody').innerHTML = WM.map((w, i) => `
+      <tr data-b="${w.sku}">
+        <td class="m">${w.sku}</td><td class="mut" title="${w.title}">${w.title}</td>
+        <td>${w.linked
+          ? `<span class="m grn">${w.linked}</span> <button class="linked-x" title="Unlink">✕</button>`
+          : `<span class="cell-combo"><input placeholder="type to link…" /><span class="sugg" hidden></span></span>`}</td>
+      </tr>`).join('');
+  };
+
+  /* ---- C ---- */
+  const renderC = () => {
+    document.getElementById('cBody').innerHTML = WM.map(w => `
+      <tr class="${cSel === w.sku ? 'sel' : ''}" data-c="${w.sku}">
+        <td class="m">${w.sku}</td><td class="mut" title="${w.title}">${w.title}</td>
+        <td class="m ${w.linked ? 'grn' : 'amb'}">${w.linked || 'click to link…'}</td>
+      </tr>
+      ${cSel === w.sku ? `
+      <tr class="drawer"><td colspan="3">
+        <input class="din" placeholder="Search Linnworks SKU for ${w.sku}…" autofocus />
+        <div class="picks">
+          ${LW.slice(0, 4).map(l => `<span class="pick" data-cpick="${l.sku}">${l.sku}</span>`).join('')}
+          <span class="pick mk" data-cmk="1">+ create new SKU</span>
+        </div>
+      </td></tr>` : ''}`).join('');
+  };
+
+  document.body.addEventListener('click', (e) => {
+    /* A interactions */
+    const aRow = e.target.closest('[data-a]');
+    if (aRow && !e.target.closest('.unlink')) { aSel = aSel === aRow.dataset.a ? null : aRow.dataset.a; renderA(); return; }
+    if (e.target.closest('.unlink') && aRow) {
+      const w = WM.find(x => x.sku === aRow.dataset.a); w.linked = ''; toast(`${w.sku} unlinked`); renderA(); renderB(); renderC(); return;
+    }
+    const aLw = e.target.closest('[data-alw]');
+    if (aLw && e.target.closest('.act-btn.link') && aSel) {
+      const w = WM.find(x => x.sku === aSel); w.linked = aLw.dataset.alw; aSel = null;
+      toast(`${w.sku} → ${w.linked} linked`); renderA(); renderB(); renderC(); return;
+    }
+    /* B interactions */
+    const bPick = e.target.closest('[data-pick]');
+    if (bPick) {
+      const w = WM.find(x => x.sku === bPick.closest('[data-b]').dataset.b);
+      w.linked = bPick.dataset.pick; toast(`${w.sku} → ${w.linked} linked`); renderA(); renderB(); renderC(); return;
+    }
+    if (e.target.closest('.linked-x')) {
+      const w = WM.find(x => x.sku === e.target.closest('[data-b]').dataset.b);
+      w.linked = ''; toast(`${w.sku} unlinked`); renderA(); renderB(); renderC(); return;
+    }
+    /* C interactions */
+    const cPick = e.target.closest('[data-cpick]');
+    if (cPick) {
+      const w = WM.find(x => x.sku === cSel); w.linked = cPick.dataset.cpick; cSel = null;
+      toast(`${w.sku} → ${w.linked} linked`); renderA(); renderB(); renderC(); return;
+    }
+    if (e.target.closest('[data-cmk]')) { toast('create-SKU form would open here'); return; }
+    const cRow = e.target.closest('[data-c]');
+    if (cRow) { cSel = cSel === cRow.dataset.c ? null : cRow.dataset.c; renderC(); return; }
+  });
+  document.body.addEventListener('input', (e) => {
+    if (e.target.tagName !== 'INPUT' || !e.target.closest('.cell-combo')) return;
+    const box = e.target.closest('.cell-combo').querySelector('.sugg');
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) { box.hidden = true; return; }
+    box.innerHTML = LW.filter(l => l.sku.toLowerCase().includes(q) || l.title.toLowerCase().includes(q)).slice(0, 5)
+      .map(l => `<div data-pick="${l.sku}"><span class="m">${l.sku}</span><span class="t">${l.title}</span></div>`).join('')
+      + `<div><span class="mk">create</span><span class="m">${e.target.value.trim().toUpperCase()}</span></div>`;
+    box.hidden = false;
+  });
+
+  const NOTES = {
+    a: 'Two lists like Linnworks — sized to content now, no dead space.',
+    b: 'One sheet; the Linnworks column IS the tool (type-to-link combo).',
+    c: 'Full-width list; clicking a row opens the picker right under it.',
+  };
+  document.querySelector('.switcher').addEventListener('click', (e) => {
+    const o = e.target.closest('.opt');
+    if (!o) return;
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    for (const k of ['a', 'b', 'c']) document.getElementById('view' + k.toUpperCase()).classList.toggle('hide', k !== o.dataset.o);
+    document.getElementById('note').textContent = NOTES[o.dataset.o];
+  });
+  document.getElementById('note').textContent = NOTES.a;
+  renderA(); renderB(); renderC();
+</script>
+</body>
+</html>

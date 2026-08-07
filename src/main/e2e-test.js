@@ -728,6 +728,61 @@ module.exports = async function run({ app, win, db, clipboard }) {
     db.deleteRow(s2.id);
     db.deleteRow(s3.id);
 
+    // 38. channel mapping: capture-only refusals + seeded dialog + link flow
+    res = await exec(`api.mappingChannels()`);
+    check('mapping:channels refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.mappingItems(1, 'WALMART', 'SUB')`);
+    check('mapping:items refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.mappingLink('A', 'WALMART', 'SUB', 'B')`);
+    check('mapping:link refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.mappingUnlink('rid')`);
+    check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const prevLookup2 = await exec('recvLookup');
+    await exec(`
+      chmap.local = true;
+      chmap.channels = [{ id: 1, source: 'WALMART', subSource: 'SUB' }];
+      chmap.chan = chmap.channels[0];
+      chmap.items = [
+        { sku: 'TWIN-A', title: 'Twin A', wfs: false, linked: true, linkedItemId: 's1', rowId: 'r1' },
+        { sku: 'TWIN-B', title: 'Twin B', wfs: false, linked: false, linkedItemId: '', rowId: '' },
+      ];
+      recvItems = [
+        { sku: 'LW-1', title: 'Item one', stockItemId: 's1' },
+        { sku: 'LW-2', title: 'Item two', stockItemId: 's2' },
+      ];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      chmapOpen();
+    `);
+    await sleep(200);
+    const cm = await exec(`[
+      !!document.querySelector('#chmapDialog[open]'),
+      document.querySelectorAll('#chmapWmBody tr').length,
+      !!document.querySelector('#chmapWmBody .chmap-lk'),
+      !!document.querySelector('#chmapWmBody .chmap-unlink'),
+      [...document.querySelectorAll('#chmapLwBody .chmap-link')].every(b => b.disabled),
+      $('chmapChanLbl').textContent,
+      (document.querySelectorAll('#chmapWmBody tr')[0].cells[1].textContent || '').trim(),
+    ]`);
+    check('mapping dialog renders both sheets from seeded state',
+      cm[0] === true && cm[1] === 2 && cm[2] === true && cm[3] === true
+        && cm[4] === true && cm[5] === 'Walmart' && cm[6] === 'LW-1',
+      cm);
+    await exec(`document.querySelectorAll('#chmapWmBody tr')[1].cells[0].click()`);
+    const en = await exec(`[...document.querySelectorAll('#chmapLwBody .chmap-link')].some(b => !b.disabled)`);
+    check('selecting a listing enables the Link buttons', en === true, en);
+    await exec(`document.querySelectorAll('#chmapLwBody .chmap-link')[1].click()`);
+    await sleep(120);
+    const cmLinked = await exec(`[chmap.items[1].linked, chmap.items[1].linkedSkuOverride]`);
+    check('Link maps the listing to the chosen SKU', cmLinked[0] === true && cmLinked[1] === 'LW-2', cmLinked);
+    await exec(`$('chmapWmQ').value = 'twin-a'; renderChmap()`);
+    const cmFilt = await exec(`document.querySelectorAll('#chmapWmBody tr').length`);
+    check('left search filters the catalog locally', cmFilt === 1, cmFilt);
+    await exec(`$('chmapWmQ').value = ''; $('chmapDialog').close();
+      chmap.local = false; chmap.items = []; chmap.channels = []; chmap.chan = null; chmap.sel = null;
+      recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup2)};`);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);

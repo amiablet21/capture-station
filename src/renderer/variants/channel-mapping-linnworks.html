@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Channel mapping — Linnworks replica</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 13px; color: #444; background: #eef1f4; display: flex; flex-direction: column; overflow: hidden; }
+  .try { font-size: 11.5px; color: #666; padding: 6px 12px; background: #f7f8f9; border-bottom: 1px solid #d9dde2; }
+  .try b { color: #333; }
+
+  .wrap { flex: 1; min-height: 0; overflow: auto; padding: 14px; background: #fff; }
+
+  .topline { font-size: 13px; color: #2a9fd8; margin-bottom: 12px; }
+  .topline b { color: #2a9fd8; font-weight: 600; }
+  .topline span { margin-right: 26px; }
+
+  .grids { display: flex; gap: 26px; align-items: flex-start; }
+  .grid { flex: 1.35; min-width: 0; }
+  .grid.right { flex: 1; }
+
+  .toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .gear { width: 34px; height: 30px; border: 1px solid #c8cdd3; background: #f5f6f7; border-radius: 3px; display: flex; align-items: center; justify-content: center; color: #667; cursor: pointer; }
+  .sbox { display: flex; flex: 0 0 auto; }
+  .sbox input { width: 250px; height: 30px; border: 1px solid #c8cdd3; border-right: none; border-radius: 3px 0 0 3px; padding: 0 9px; font-size: 13px; color: #444; outline: none; }
+  .sbox input:focus { border-color: #66afe9; }
+  .sbox button { width: 38px; height: 30px; border: 1px solid #c8cdd3; background: #f5f6f7; border-radius: 0 3px 3px 0; color: #667; cursor: pointer; font-size: 14px; }
+
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; background: #fff; }
+  thead th { background: #f5f6f7; border: 1px solid #d9dde2; color: #555; font-weight: 600; text-align: left; padding: 7px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  thead th .fun { float: right; color: #98a0a8; font-size: 11px; cursor: pointer; }
+  td { border: 1px solid #e3e7ea; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #444; }
+  tbody tr:hover td { background: #f2f7fb; }
+  tbody tr.sel td { background: #dceefc; }
+
+  .btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; font-size: 12px; color: #555; background: linear-gradient(#fdfdfd, #f0f1f3); border: 1px solid #c8cdd3; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #eef4f9; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.unlink-hl { outline: 2px solid #7bbf44; outline-offset: 1px; }
+  .btn .ic { font-size: 12px; line-height: 1; }
+
+  .empty-note { border: 1px solid #e3e7ea; border-top: none; padding: 14px; text-align: center; color: #98a0a8; font-size: 12px; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; background: #333; color: #fff; font-size: 12px; border-radius: 3px; padding: 8px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.on { opacity: 1; }
+</style></head>
+<body>
+  <div class="try"><b>Linnworks replica:</b> click a row on the LEFT to select it, then press <b>⚲ Link</b> on the right-hand SKU · <b>Unlink</b> (green outline, like their screen) breaks a link · both search boxes filter their grid. This whole screen would open from a Mappings button on the Stock page.</div>
+
+  <div class="wrap">
+    <div class="topline">
+      <span><b>Source:</b> WALMART</span>
+      <span><b>SubSource:</b> 10001467995</span>
+      <span><b>Last Full Scan:</b> 07 Aug 2026 12:53:06</span>
+    </div>
+
+    <div class="grids">
+      <div class="grid">
+        <div class="toolbar">
+          <span class="gear" title="Grid settings">⚙</span>
+          <span class="sbox"><input id="lq" placeholder="" value="X230" /><button title="Search">🔍</button></span>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:215px">SKU <span class="fun">▼</span></th>
+            <th>Channel Title <span class="fun">▼</span></th>
+            <th style="width:44px">WFS</th>
+            <th style="width:150px">Linnworks SKU <span class="fun">▼</span></th>
+            <th style="width:86px"></th>
+          </tr></thead>
+          <tbody id="lBody"></tbody>
+        </table>
+      </div>
+
+      <div class="grid right">
+        <div class="toolbar">
+          <span class="sbox"><input id="rq" placeholder="" value="X230" /><button title="Search">🔍</button></span>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:72px"></th>
+            <th style="width:225px">SKU <span class="fun">▼</span></th>
+            <th>Title</th>
+          </tr></thead>
+          <tbody id="rBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  const WM = [
+    { sku: 'X230-128GB-GRAY-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" Tablet, 128GB + 6GB RAM, Wi-Fi, 90Hz Display, Quad S…', wfs: '', linked: 'X230-128GB-GRAY' },
+    { sku: 'X230-128GB-GRAY-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB + 6GB RAM Wi-Fi Tablet – Brand New | 11" in…', wfs: '', linked: 'X230-128GB-GRAY' },
+    { sku: 'X230-128GB-SILVER-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" Tablet, 128GB + 6GB RAM, Wi-Fi, 90Hz Display, Quad S…', wfs: '', linked: 'X230-128GB-SILVER' },
+    { sku: 'X230-128GB-SILVER-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB + 6GB RAM Wi-Fi Tablet – Brand New | 11" in…', wfs: '', linked: '' },
+    { sku: 'X230-256GB-GRAY-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" Tablet, 256GB + 8GB RAM, Wi-Fi, 90Hz Display, Quad S…', wfs: '', linked: 'X230-256GB-GRAY' },
+    { sku: 'X230-256GB-GRAY-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 256GB + 8GB RAM Wi-Fi Tablet – Brand New | 11" in…', wfs: '', linked: '' },
+  ];
+  const LW = [
+    { sku: 'OPEN-BOX-X230-128GB-GRAY', title: '' },
+    { sku: 'OPEN-BOX-X230-128GB-SILVER', title: '' },
+    { sku: 'OPEN-BOX-X230-256GB-GRAY', title: '' },
+    { sku: 'X230-128GB-GRAY', title: '' },
+    { sku: 'X230-128GB-SILVER', title: 'X230-128GB-SILVER' },
+    { sku: 'X230-256GB-GRAY', title: '' },
+    { sku: 'X230-256GB-SILVER', title: '' },
+  ];
+  let sel = null;
+  const toast = (m) => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2600); };
+
+  const render = () => {
+    const lq = document.getElementById('lq').value.trim().toLowerCase();
+    const rq = document.getElementById('rq').value.trim().toLowerCase();
+    const lRows = WM.filter(w => !lq || w.sku.toLowerCase().includes(lq) || w.title.toLowerCase().includes(lq));
+    document.getElementById('lBody').innerHTML = lRows.map(w => `
+      <tr class="${sel === w.sku ? 'sel' : ''}" data-l="${w.sku}">
+        <td title="${w.sku}">${w.sku}</td>
+        <td title="${w.title}">${w.title}</td>
+        <td></td>
+        <td>${w.linked}</td>
+        <td>${w.linked
+          ? '<button class="btn unlink-hl"><span class="ic">⛓</span>Unlink</button>'
+          : ''}</td>
+      </tr>`).join('')
+      || '<tr><td colspan="5" class="empty-note">no listings match</td></tr>';
+    const rRows = LW.filter(l => !rq || l.sku.toLowerCase().includes(rq));
+    document.getElementById('rBody').innerHTML = rRows.map(l => `
+      <tr data-r="${l.sku}">
+        <td><button class="btn" ${sel ? '' : 'disabled'} title="${sel ? `Link ${sel} to ${l.sku}` : 'Select a channel item on the left first'}"><span class="ic">⚲</span>Link</button></td>
+        <td title="${l.sku}">${l.sku}</td>
+        <td>${l.title}</td>
+      </tr>`).join('');
+  };
+  document.body.addEventListener('click', (e) => {
+    const unBtn = e.target.closest('.unlink-hl');
+    if (unBtn) {
+      const w = WM.find(x => x.sku === e.target.closest('[data-l]').dataset.l);
+      w.linked = '';
+      toast(`${w.sku} unlinked`);
+      render();
+      return;
+    }
+    const lRow = e.target.closest('[data-l]');
+    if (lRow) { sel = sel === lRow.dataset.l ? null : lRow.dataset.l; render(); return; }
+    const linkBtn = e.target.closest('[data-r] .btn');
+    if (linkBtn && sel) {
+      const w = WM.find(x => x.sku === sel);
+      w.linked = e.target.closest('[data-r]').dataset.r;
+      toast(`${w.sku} → ${w.linked} linked`);
+      sel = null;
+      render();
+    }
+  });
+  document.getElementById('lq').addEventListener('input', render);
+  document.getElementById('rq').addEventListener('input', render);
+  render();
+</script>
+</body>
+</html>

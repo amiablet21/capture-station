@@ -14,6 +14,7 @@ let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
+const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -1394,6 +1395,65 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
+  // Channel mapping (the in-app Linnworks mapping screen): catalog feed,
+  // link, unlink. The catalog is cached per channel — filtering is local.
+  ipcMain.handle('mapping:channels', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      return { ok: true, channels: await client.getMappingChannels() };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('mapping:items', async (_e, { channelId, source, subSource, force }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const key = `${channelId}|${source}|${subSource}`;
+    const hit = mappingCache.get(key);
+    if (!force && hit && Date.now() - hit.at < 10 * 60 * 1000) {
+      return { ok: true, items: hit.items, cached: true };
+    }
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.getChannelItems(channelId, source, subSource);
+      mappingCache.set(key, { at: Date.now(), items });
+      return { ok: true, items };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('mapping:link', async (_e, { channelSku, source, subSource, targetSku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const stockItemId = await client.findStockItemIdBySku(targetSku);
+      if (!stockItemId) return { ok: false, error: `${targetSku} not found in Linnworks.` };
+      await client.linkChannelSku(channelSku, source, subSource, stockItemId);
+      mappingCache.clear();
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('mapping:unlink', async (_e, { rowId }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!rowId) return { ok: false, error: 'This listing carries no link id — rescan the channel in Linnworks.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.unlinkChannelSku(rowId);
+      mappingCache.clear();
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // Walmart shipped-orders file: pick the Seller Center download, fill
   // tracking onto matching queue rows in bulk (see shipfile.js)
   ipcMain.handle('ship:importFile', async () => {

@@ -43,6 +43,33 @@ const DEMO_SEED = `(() => {
     { sku: 'OPEN-BOX-S25-FE-128GB', title: 'Galaxy S25 FE (Open Box)', image: '', avail: 1, retail: 449 },
   ];
   unlistedChannels = ['WALMART', 'EBAY'];
+  // inventory cache: the mapping screen's right sheet + combos everywhere
+  recvItems = [
+    { sku: 'X230-128GB-GRAY', title: 'Galaxy Tab A11+ 128GB Gray', stockItemId: 'd1', levels: [], retailPrice: 219 },
+    { sku: 'X230-128GB-SILVER', title: 'Galaxy Tab A11+ 128GB Silver', stockItemId: 'd2', levels: [], retailPrice: 219 },
+    { sku: 'S26-PLUS-256GB-WHITE', title: 'Galaxy S26+ 256GB White', stockItemId: 'd3', levels: [], retailPrice: 999 },
+    { sku: 'OPEN-BOX-S25-FE-128GB', title: 'Galaxy S25 FE 128GB — Open Box', stockItemId: 'd4', levels: [], retailPrice: 449 },
+    { sku: 'X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray', stockItemId: 'd5', levels: [], retailPrice: 149 },
+  ];
+  recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+  recvByBarcode = new Map();
+  recvLookup = 'ready';
+  // channel mapping: local demo catalog (twin listings included)
+  chmap.local = true;
+  chmap.channels = [
+    { id: 1, source: 'WALMART', subSource: '10001467995' },
+    { id: 2, source: 'EBAY', subSource: 'wirelesstechnostore' },
+    { id: 3, source: 'TEMU US', subSource: 'Digital World Shop' },
+  ];
+  chmap.chan = chmap.channels[0];
+  chmap.items = [
+    { sku: 'X230-128GB-GRAY-GLOBAL', title: 'Samsung Galaxy Tab A11+ 11" 128GB Wi-Fi', wfs: false, linked: true, linkedItemId: 'd1', rowId: 'r1' },
+    { sku: 'X230-128GB-GRAY-GLOBAL-1', title: 'Samsung Galaxy Tab A11+ (Plus) 128GB — twin', wfs: false, linked: true, linkedItemId: 'd1', rowId: 'r2' },
+    { sku: 'S26-PLUS-256GB-WHITE-US', title: 'Samsung Galaxy S26+ 256GB White', wfs: false, linked: false, linkedItemId: '', rowId: '' },
+    { sku: 'S26PLUS-256-WHT-2', title: 'Samsung Galaxy S26+ 256GB White — twin listing', wfs: false, linked: false, linkedItemId: '', rowId: '' },
+    { sku: 'OB-S25-FE-128', title: 'Galaxy S25 FE 128GB (Open Box)', wfs: false, linked: false, linkedItemId: '', rowId: '' },
+    { sku: 'X110GRAY-WFS', title: 'Samsung Galaxy Tab A9 64GB Gray (WFS)', wfs: true, linked: true, linkedItemId: 'd5', rowId: 'r5' },
+  ];
   render();
   renderRetTodo();
   return 'demo seeded';

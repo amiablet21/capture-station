@@ -113,6 +113,7 @@
       <div class="stock-actions">
         <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                 title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
+        <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
         <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
         <!-- temporarily hidden pending a toolbar redesign (owner request
              2026-08-02); the dialogs and logic behind them are untouched -->
@@ -461,6 +462,75 @@
       <div class="dlg-actions">
         <button id="retDelCancel" class="btn btn-ghost">Cancel</button>
         <button id="retDelConfirm" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Channel mapping: the in-app Linnworks mapping screen (approved mockup
+       variants/channel-mapping-ours.html, variation 1, 2026-08-07) -->
+  <dialog id="chmapDialog" class="dlg chmap-dlg">
+    <div class="dlg-body chmap-body">
+      <div class="chmap-head">
+        <h2 class="dlg-title">Channel mapping</h2>
+        <span class="chanwrap">
+          <button id="chmapChanBtn" class="chmap-chansel" type="button">
+            <span id="chmapChanLbl">—</span>
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+          </button>
+          <div id="chmapChanMenu" class="chanmenu" hidden></div>
+        </span>
+        <span id="chmapSub" class="chmap-sub"></span>
+        <button id="chmapClose" class="btn-icon chmap-x" type="button" title="Close"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg></button>
+      </div>
+      <div class="chmap-cols">
+        <div class="chmap-col chmap-left">
+          <div class="chmap-bar">
+            <span class="search-field chmap-sf">
+              <svg class="search-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+              <input id="chmapWmQ" class="search-input" type="text" placeholder="Search listing SKU or title…" autocomplete="off" spellcheck="false" />
+            </span>
+            <button id="chmapOnlyUn" class="pillbtn" type="button">Unlinked only</button>
+            <span id="chmapWmCount" class="chmap-n"></span>
+          </div>
+          <div class="chmap-scroll">
+            <table class="chmap-table">
+              <thead><tr><th>Listing SKU</th><th class="th-lw">Linnworks SKU</th><th class="th-act"></th></tr></thead>
+              <tbody id="chmapWmBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="chmap-col chmap-right">
+          <div class="chmap-bar">
+            <span class="search-field chmap-sf">
+              <svg class="search-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+              <input id="chmapLwQ" class="search-input" type="text" placeholder="Search Linnworks SKU or title…" autocomplete="off" spellcheck="false" />
+            </span>
+            <button id="chmapNewSku" class="pillbtn" type="button" title="Create a new Linnworks item without leaving this screen">+ New SKU</button>
+          </div>
+          <div class="chmap-scroll">
+            <table class="chmap-table">
+              <thead><tr><th class="th-act2"></th><th>SKU</th></tr></thead>
+              <tbody id="chmapLwBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- New Linnworks SKU from the mapping screen: SKU + title only -->
+  <dialog id="chmapNewDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">New Linnworks SKU</h2>
+      <p class="dlg-note">Created straight in Linnworks. It lands at the top of the list, ready to Link.</p>
+      <label class="field"><span class="field-label">SKU</span>
+        <input id="chmapNfSku" class="input mono chmap-nfin" type="text" placeholder="Exact SKU string…" autocomplete="off" spellcheck="false" /></label>
+      <label class="field"><span class="field-label">Title</span>
+        <input id="chmapNfTitle" class="input chmap-nfin" type="text" placeholder="Title" autocomplete="off" /></label>
+      <p id="chmapNfNote" class="dlg-note test-result" hidden></p>
+      <div class="dlg-actions">
+        <button id="chmapNfCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="chmapNfGo" class="btn btn-primary" type="button">Create</button>
       </div>
     </div>
   </dialog>

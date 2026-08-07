@@ -279,6 +279,62 @@ class LinnworksClient {
     }
   }
 
+  // Channel integrations (Walmart / eBay / Temu…): id + source + subsource.
+  // The objects are property bags; unwrap PropertyValue where present.
+  async getMappingChannels() {
+    const raw = await this.call('Inventory/GetChannels', undefined, { method: 'GET' });
+    const val = (v) => (v && typeof v === 'object' && 'PropertyValue' in v) ? v.PropertyValue : v;
+    return (raw || []).map(c => ({
+      id: Number(val(c.PkChannelId)) || 0,
+      source: String(val(c.Source) || ''),
+      subSource: String(val(c.SubSource) || ''),
+    })).filter(c => c.id && c.source);
+  }
+
+  // The channel's SCANNED listing catalog — the same feed Linnworks' own
+  // mapping screen uses, unlinked listings included. Paged until dry.
+  async getChannelItems(channelId, source, subSource) {
+    const out = [];
+    const PAGE = 200;
+    for (let page = 1; page <= 50; page++) {
+      const rows = await this.call('ChannelMapping/GetChannelItems', {
+        channelOptions: {
+          ChannelId: channelId,
+          Source: source,
+          SubSource: subSource,
+          PageNumber: page,
+          EntriesPerPage: PAGE,
+        },
+      });
+      for (const r of rows || []) {
+        out.push({
+          sku: r.SKU || '',
+          title: r.Title || '',
+          wfs: !!r.WFS,
+          linked: !!r.IsLinked,
+          linkedItemId: r.LinkedItemId && r.LinkedItemId !== '00000000-0000-0000-0000-000000000000' ? r.LinkedItemId : '',
+          rowId: r.ChannelSKURowId && r.ChannelSKURowId !== '00000000-0000-0000-0000-000000000000' ? r.ChannelSKURowId : '',
+          ignoreSync: !!r.IgnoreSync,
+        });
+      }
+      if (!rows || rows.length < PAGE) break;
+    }
+    return out;
+  }
+
+  // Create / remove a channel-SKU → stock-item link (the mapping itself)
+  async linkChannelSku(channelSku, source, subSource, stockItemId) {
+    await this.call('Inventory/CreateInventoryItemChannelSKUs', {
+      inventoryItemChannelSKUs: [{ SKU: channelSku, Source: source, SubSource: subSource, StockItemId: stockItemId }],
+    });
+  }
+
+  async unlinkChannelSku(channelSkuRowId) {
+    await this.call('Inventory/DeleteInventoryItemChannelSKUs', {
+      inventoryItemChannelSKUIds: [channelSkuRowId],
+    });
+  }
+
   // Resolve a SKU to its stock item GUID (exact ItemNumber match, case-blind).
   // Substitution routing needs this: rows store the substitute as a SKU string
   // but availability reads (Stock/GetStockLevel) are keyed by stock item id.
