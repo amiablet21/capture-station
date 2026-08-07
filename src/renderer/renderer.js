@@ -1389,7 +1389,11 @@ HTMLDialogElement.prototype.showModal = function (...args) {
   syncBrowserBounds();
   return out;
 };
-document.querySelectorAll('dialog').forEach(d => d.addEventListener('close', () => syncBrowserBounds()));
+// capture-phase so it covers every dialog, including ones created later
+// ('close' does not bubble; a startup querySelectorAll missed new dialogs)
+document.addEventListener('close', (e) => {
+  if (e.target instanceof HTMLDialogElement) syncBrowserBounds();
+}, true);
 
 new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
 window.addEventListener('resize', () => syncBrowserBounds());
@@ -1442,11 +1446,6 @@ api.on('browser:state', (s) => {
   $('bBack').disabled = !s.canGoBack;
   $('bFwd').disabled = !s.canGoForward;
   if (bLoad.active && !bLoad.failed && s.domain) $('bLoadDomain').textContent = s.domain;
-  // the platform chip whose site is showing stays lit
-  const dom = String(s.domain || '').toLowerCase();
-  $('bPlat').querySelectorAll('.bplat-btn').forEach(b => {
-    b.classList.toggle('on', !!dom && dom.includes(b.dataset.plat));
-  });
 });
 
 // one-click marketplace homes: the pane's persistent session means the
@@ -1457,16 +1456,10 @@ const MARKET_HOME = {
   temu: 'https://seller.temu.com/',
 };
 
-$('bPlat').addEventListener('click', async (e) => {
-  const b = e.target.closest('.bplat-btn');
-  if (!b) return;
-  bShowLoading(`Opening ${channelLabel(b.dataset.plat)}`);
-  const res = await api.browserOpenUrl(MARKET_HOME[b.dataset.plat]);
-  if (!res.ok) {
-    bHideLoading();
-    if (res.error) toast(res.error);
-  }
-});
+// the globe opens a NATIVE menu (chips replaced at the owner's request,
+// 2026-08-07) — native because the marketplace page draws above the DOM
+// and would cover an HTML dropdown
+$('bGlobe').addEventListener('click', () => api.browserPlatformMenu());
 
 /* pane loading screen: while a page loads, the native view hides and this
    DOM panel fills the reserved space (canvas bg, accent spinner, no URLs) */
@@ -4581,8 +4574,10 @@ $('debugDialog').addEventListener('close', () => focusScan());
 
 /* ---------- focus guard ---------- */
 
+// ANY open dialog counts — a hardcoded id list silently missed dialogs
+// added later (the receive popup sat UNDER the marketplace pane, 2026-08-07)
 function anyDialogOpen() {
-  return ['editDialog', 'notesDialog', 'settingsDialog', 'syncDialog', 'debugDialog', 'historyDialog', 'pinDialog', 'wfsDialog', 'imgDialog', 'ioDialog', 'chsDialog', 'recvDialog', 'mapDialog', 'skuDialog', 'subDialog', 'salesDialog', 'retDelDialog'].some(id => $(id).open);
+  return !!document.querySelector('dialog[open]');
 }
 
 function focusScan() {

@@ -2241,6 +2241,26 @@ function registerIpc() {
     ensurePane().webContents.loadURL(target).catch(() => { /* nav errors show in-pane */ });
     return { ok: true };
   });
+  // the pane header's globe: a native popup with the seller portals (native
+  // so the marketplace page below can never draw over it); the current
+  // site wears the checkmark
+  ipcMain.handle('browser:platformMenu', () => {
+    if (!paneView || !win || win.isDestroyed()) return { ok: false };
+    const HOMES = [
+      { label: 'Walmart Seller Center', key: 'walmart', url: 'https://seller.walmart.com/orders/manage-orders' },
+      { label: 'eBay Seller Hub', key: 'ebay', url: 'https://www.ebay.com/sh/ord' },
+      { label: 'Temu Seller Central', key: 'temu', url: 'https://seller.temu.com/' },
+    ];
+    let host = '';
+    try { host = new URL(paneView.webContents.getURL()).hostname.toLowerCase(); } catch { /* blank pane */ }
+    Menu.buildFromTemplate(HOMES.map(h => ({
+      label: h.label,
+      type: 'checkbox',
+      checked: host.includes(h.key),
+      click: () => { ensurePane().webContents.loadURL(h.url).catch(() => { /* nav errors show in-pane */ }); },
+    }))).popup({ window: win });
+    return { ok: true };
+  });
   ipcMain.handle('browser:nav', (_e, { action }) => {
     if (!paneView) return { ok: false };
     const wc = paneView.webContents;

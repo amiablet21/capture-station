@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Process preview — side-by-side with checkboxes</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .try b { color: var(--text); }
+
+  .stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; background: rgba(47,52,55,0.16); }
+  .modal { width: 700px; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.22); overflow: hidden; }
+  .m-head { padding: 15px 18px 4px; }
+  .m-head h3 { font-size: 14.5px; font-weight: 600; margin: 0 0 3px; }
+  .m-head .sub { font-size: 11.5px; color: var(--muted); }
+  .m-body { padding: 10px 18px 6px; }
+  .m-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 18px 15px; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 5px 12px; background: var(--surface); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 6px 16px; }
+  .btn.primary:disabled { opacity: .45; cursor: default; }
+  .m-acts .left { margin-right: auto; font-size: 11.5px; color: var(--muted); }
+
+  .warn { border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: var(--r-card); padding: 8px 11px; font-size: 11.5px; color: var(--badge-yellow-text); margin-bottom: 10px; }
+  .warn b { display: block; margin-bottom: 2px; }
+
+  .cols { display: flex; gap: 10px; align-items: flex-start; }
+  .grp { flex: 1; border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; min-width: 0; }
+  .grp-head { display: flex; align-items: center; gap: 7px; padding: 8px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .grp-head b { font-size: 12px; font-weight: 600; }
+  .grp-head .count { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .grp-sub { font-size: 10px; color: var(--muted); padding: 4px 10px 6px; border-bottom: 1px solid var(--border-soft); background: var(--surface-2); }
+  .tag { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 4px; padding: 2px 7px; }
+  .tag.dws { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .tag.ds { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .mini { font-size: 10px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 2px 8px; cursor: pointer; }
+
+  .line { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+  .line:last-child { border-bottom: none; }
+  .line:hover { background: var(--surface-2); }
+  .line input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); flex: 0 0 auto; cursor: pointer; }
+  .line .body { min-width: 0; flex: 1; }
+  .line .sku { font-family: var(--mono); font-size: 11.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .line .po { font-family: var(--mono); font-size: 10px; color: var(--muted); display: block; }
+  .line .qty { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: 0 0 auto; }
+  .line .trkdot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+  .line .trkdot.has { background: var(--badge-green-text); }
+  .line .trkdot.none { background: var(--border); }
+  .line .trkdot.warn-t { background: var(--badge-yellow-text); }
+  .line.off .body, .line.off .qty { opacity: .4; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); flex: 0 0 auto; }
+  .ghost-line { font-size: 10.5px; color: var(--faint); padding: 6px 10px; border-top: 1px dashed var(--border-soft); }
+</style></head>
+<body>
+  <div class="try"><b>Click a line to include / exclude it</b> · green dot = tracking scanned, grey = supplier will add it, amber = the flagged one (starts unchecked). Counts and the button follow your picks; hover a line for its tracking.</div>
+
+  <div class="stage">
+    <div class="modal">
+      <div class="m-head">
+        <h3 id="title">Ready to process</h3>
+        <div class="sub">Check what processes now — unchecked orders stay in the queue, nothing touches Linnworks until you confirm.</div>
+      </div>
+      <div class="m-body">
+        <div class="warn">
+          <b>⚠ 1 DropShip order has tracking you entered — left unchecked for you</b>
+          Processing it at DropShip deducts the supplier pad, not your shelf. If it really shipped from the shelf, fix the location first.
+        </div>
+        <div class="cols">
+          <div class="grp">
+            <div class="grp-head"><span class="tag dws">Digital World Shop</span><b>You ship</b><button class="mini" data-all="dws">all / none</button><span class="count" data-count="dws"></span></div>
+            <div class="grp-sub">deducts your warehouse stock</div>
+            <label class="line" data-g="dws" title="Tracking: 1ZF9814D0328003862"><input type="checkbox" checked /><span class="thumb"></span><span class="body"><span class="sku">X110-64GB-GRAY</span><span class="po">119122050615281</span></span><span class="qty">×1</span><span class="trkdot has" title="tracking scanned"></span></label>
+            <label class="line" data-g="dws" title="Tracking: 1ZF9814D0309830405"><input type="checkbox" checked /><span class="thumb"></span><span class="body"><span class="sku">S26-ULTRA-256GB-BLACK-US</span><span class="po">119122050526914</span></span><span class="qty">×1</span><span class="trkdot has"></span></label>
+            <label class="line" data-g="dws" title="Tracking: 1ZF9814D0331717059"><input type="checkbox" checked /><span class="thumb"></span><span class="body"><span class="sku">X520-256GB-BLUE-US</span><span class="po">119122050508076</span></span><span class="qty">×2</span><span class="trkdot has"></span></label>
+            <div class="ghost-line">Z-FOLD-256GB-JBLK · 02-14818-21581 — no tracking yet, stays in the queue</div>
+          </div>
+          <div class="grp">
+            <div class="grp-head"><span class="tag ds">DropShip</span><b>Supplier ships</b><button class="mini" data-all="ds">all / none</button><span class="count" data-count="ds"></span></div>
+            <div class="grp-sub">the pad deducts — your shelf is untouched</div>
+            <label class="line" data-g="ds" title="Supplier adds tracking after shipping"><input type="checkbox" checked /><span class="thumb"></span><span class="body"><span class="sku">X520-128GB-GRAY</span><span class="po">119121731359321</span></span><span class="qty">×1</span><span class="trkdot none"></span></label>
+            <label class="line" data-g="ds" title="⚠ You entered tracking 1ZF9814D0216394250 on a DropShip order"><input type="checkbox" /><span class="thumb"></span><span class="body"><span class="sku">S25-ULTRA-256GB-SILVER</span><span class="po">119121734127041</span></span><span class="qty">×1</span><span class="trkdot warn-t"></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="m-acts">
+        <span class="left" id="leftNote"></span>
+        <button class="btn">Cancel</button>
+        <button class="btn primary" id="goBtn"></button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const lines = () => [...document.querySelectorAll('.line')];
+  const refresh = () => {
+    let on = 0;
+    const per = { dws: [0, 0], ds: [0, 0] };
+    for (const l of lines()) {
+      const c = l.querySelector('input').checked;
+      l.classList.toggle('off', !c);
+      per[l.dataset.g][1]++;
+      if (c) { per[l.dataset.g][0]++; on++; }
+    }
+    document.querySelector('[data-count="dws"]').textContent = `${per.dws[0]}/${per.dws[1]}`;
+    document.querySelector('[data-count="ds"]').textContent = `${per.ds[0]}/${per.ds[1]}`;
+    const off = per.dws[1] + per.ds[1] - on;
+    document.getElementById('title').textContent = `Ready to process ${on} order${on === 1 ? '' : 's'}`;
+    document.getElementById('goBtn').textContent = on ? `Process ${on} order${on === 1 ? '' : 's'}` : 'Nothing picked';
+    document.getElementById('goBtn').disabled = !on;
+    document.getElementById('leftNote').textContent =
+      (off ? `${off} unchecked stay in the queue · ` : '') + '1 without tracking stays in the queue';
+  };
+  document.body.addEventListener('change', (e) => { if (e.target.type === 'checkbox') refresh(); });
+  document.body.addEventListener('click', (e) => {
+    const all = e.target.closest('[data-all]');
+    if (!all) return;
+    const boxes = lines().filter(l => l.dataset.g === all.dataset.all).map(l => l.querySelector('input'));
+    const target = !boxes.every(b => b.checked);
+    boxes.forEach(b => { b.checked = target; });
+    refresh();
+  });
+  refresh();
+</script>
+</body>
+</html>

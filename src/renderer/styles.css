@@ -1197,21 +1197,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 /* the reusable message dialog's body (CSP strips inline styles) */
 .dlg-pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; max-height: 40vh; overflow-y: auto; }
 
-/* platform chips in the pane header: one click to each seller portal */
-.bplat { display: flex; gap: 3px; flex: 0 0 auto; margin: 0 4px; }
-.bplat-btn {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 9px;
-  background: var(--surface);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.bplat-btn:hover { border-color: var(--accent); color: var(--text); }
-.bplat-btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+/* (platform chips replaced by the globe's native menu, 2026-08-07) */
 
 .rv-fix { display: flex; align-items: center; gap: 8px; width: 100%; }
 .rv-fix .rv-pick-combo { max-width: 260px; }
