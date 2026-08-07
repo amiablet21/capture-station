@@ -21,7 +21,8 @@ const ignoredLog = []; // debug ring buffer of non-matching clipboard text
 
 // E2E and smoke runs are throwaway test boots that may coexist with a
 // normal instance: isolated userData, no single-instance lock.
-const IS_TEST_RUN = process.env.CAPTURE_E2E === '1' || process.env.CAPTURE_SMOKE === '1';
+const IS_DEMO = process.env.CAPTURE_DEMO === '1'; // dummy-data review boot
+const IS_TEST_RUN = process.env.CAPTURE_E2E === '1' || process.env.CAPTURE_SMOKE === '1' || IS_DEMO;
 
 if (process.env.CAPTURE_E2E === '1') {
   // keep compositing while the window is occluded so capturePage works in tests
@@ -2280,6 +2281,7 @@ function createWindow() {
     win.webContents.send('app:notice', { message: pendingNotice });
     pendingNotice = '';
   });
+  if (IS_DEMO) require('./demo.js').seedDemo(win, db);
   win.on('closed', () => { win = null; });
   if (process.env.CAPTURE_SMOKE === '1') {
     win.webContents.on('console-message', (_e, level, message) => {
