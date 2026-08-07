@@ -177,6 +177,12 @@ function createRow({ channel, orderNumber, origin, lwOrderId }) {
   return getRow(Number(res.lastInsertRowid));
 }
 
+// every row for a PO#, oldest first (split parts share an order number)
+function rowsByOrderNumber(orderNumber) {
+  return open().prepare('SELECT * FROM rows WHERE order_number = ? ORDER BY id')
+    .all(orderNumber).map(parseRow);
+}
+
 // split-order support: one row per Linnworks order PART
 function findByOrderAndPart(orderNumber, lwOrderId) {
   return parseRow(open().prepare(
@@ -490,7 +496,7 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,

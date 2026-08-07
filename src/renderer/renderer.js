@@ -606,6 +606,47 @@ $('ordersRefreshBtn').addEventListener('click', async () => {
   toast('Orders refreshed from Linnworks');
 });
 
+// Walmart shipped-orders upload: tracking fills onto matching rows in bulk
+$('shipImportBtn').addEventListener('click', async () => {
+  const btn = $('shipImportBtn');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  const res = await api.shipImport().catch(e => ({ ok: false, error: e.message }));
+  btn.disabled = false;
+  btn.textContent = 'Import shipped';
+  if (!res || res.canceled) return;
+  if (!res.ok) { toast(res.error || 'Could not read that file.'); return; }
+  await refresh();
+  const bits = [`Tracking filled on ${res.filled} row${res.filled === 1 ? '' : 's'}`];
+  if (res.already) bits.push(`${res.already} already had it`);
+  if (res.notInQueue.length) bits.push(`${res.notInQueue.length} PO#${res.notInQueue.length === 1 ? '' : 's'} not in the queue`);
+  if (res.conflicts.length) bits.push(`${res.conflicts.length} conflict${res.conflicts.length === 1 ? '' : 's'}`);
+  toast(bits.join(' · '), 9000);
+  // conflicts deserve more than a toast: the details land in the day note
+  if (res.conflicts.length) {
+    console.warn('shipped-file conflicts:', res.conflicts);
+    alertDialog('Tracking conflicts', res.conflicts.join('\n'));
+  }
+});
+
+// tiny reusable message dialog (native alert() blocks the renderer loop)
+function alertDialog(title, body) {
+  let dlg = $('appAlertDialog');
+  if (!dlg) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <dialog id="appAlertDialog" class="dlg"><div class="dlg-body">
+        <h2 class="dlg-title" id="appAlertTitle"></h2>
+        <pre class="dlg-note dlg-pre" id="appAlertBody"></pre>
+        <div class="dlg-actions"><button id="appAlertClose" class="btn btn-primary">OK</button></div>
+      </div></dialog>`);
+    dlg = $('appAlertDialog');
+    $('appAlertClose').addEventListener('click', () => dlg.close());
+  }
+  $('appAlertTitle').textContent = title;
+  $('appAlertBody').textContent = body;
+  dlg.showModal();
+}
+
 /* ---------- rows list actions ---------- */
 
 // Per-order location move: warn-not-block when the warehouse shows no stock

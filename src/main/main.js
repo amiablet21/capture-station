@@ -1394,6 +1394,26 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
+  // Walmart shipped-orders file: pick the Seller Center download, fill
+  // tracking onto matching queue rows in bulk (see shipfile.js)
+  ipcMain.handle('ship:importFile', async () => {
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import shipped orders (Walmart download)',
+      filters: [{ name: 'Shipped orders', extensions: ['xlsx', 'csv'] }],
+      properties: ['openFile'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: true, canceled: true };
+    try {
+      const shipfile = require('./shipfile.js');
+      const records = shipfile.extractShipped(pick.filePaths[0]);
+      const summary = shipfile.applyShipped(db, records);
+      if (summary.filled) writeDailyCsv(); // the CSV mirror carries tracking
+      pushState();
+      return { ok: true, ...summary };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // focus rescue: a click on an app input while the native pane holds the
   // keyboard hands it back (the input then focuses normally)
   ipcMain.handle('app:focus', () => {

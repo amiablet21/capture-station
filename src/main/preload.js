@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('api', {
   browserOpen: (orderNumber, channel, kind) => ipcRenderer.invoke('browser:open', { orderNumber, channel, kind }),
   browserOpenUrl: (url) => ipcRenderer.invoke('browser:open', { url }),
   appFocus: () => ipcRenderer.invoke('app:focus'),
+  shipImport: () => ipcRenderer.invoke('ship:importFile'),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
   browserPrint: () => ipcRenderer.invoke('browser:print'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),

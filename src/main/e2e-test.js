@@ -694,6 +694,40 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('returns log: shared width grip + column grips',
       retGrips[0] === true && retGrips[1] === 9, retGrips);
 
+    // 37. shipped-orders file import: header detection ignores the "Update
+    // Tracking Number" column, per-PO dedupe, bulk fill + conflict report
+    const shipfile = require('./shipfile.js');
+    const shipCsv = require('path').join(app.getPath('userData'), 'ship-test.csv');
+    fs.writeFileSync(shipCsv, [
+      'PO#,Order#,Status,Carrier,Tracking Number,Update Tracking Number',
+      '119990000000001,2001,Shipped,UPS,1Z0000000000000001,',
+      '119990000000001,2001,Shipped,UPS,1Z0000000000000001,',
+      '119990000000002,2002,Shipped,FedEx,881122334455,',
+      '119990000000003,2003,Shipped,UPS,1Z0000000000000003,',
+      '119990000000009,2009,Shipped,UPS,1Z0000000000000009,',
+    ].join('\n'));
+    const shipRecs = shipfile.extractShipped(shipCsv);
+    check('shipped file parses with the right tracking column',
+      shipRecs.length === 5 && shipRecs[0].tracking === '1Z0000000000000001' && shipRecs[0].carrier === 'UPS',
+      shipRecs.slice(0, 2));
+    const s1 = db.createRow({ channel: 'walmart', orderNumber: '119990000000001', origin: 'linnworks' });
+    const s2 = db.createRow({ channel: 'walmart', orderNumber: '119990000000002', origin: 'linnworks' });
+    const s3 = db.createRow({ channel: 'walmart', orderNumber: '119990000000003', origin: 'linnworks' });
+    db.setTracking(s3.id, 'DIFFERENT-TRACKING', 'USPS');
+    const shipSum = shipfile.applyShipped(db, shipRecs);
+    check('shipped import fills empty rows, spares filled ones, reports the rest',
+      shipSum.filled === 2
+        && db.getRow(s1.id).tracking === '1Z0000000000000001'
+        && db.getRow(s2.id).tracking === '881122334455'
+        && db.getRow(s2.id).carrier === 'FedEx'
+        && db.getRow(s3.id).tracking === 'DIFFERENT-TRACKING'
+        && shipSum.conflicts.length === 1
+        && shipSum.notInQueue.length === 1 && shipSum.notInQueue[0] === '119990000000009',
+      shipSum);
+    db.deleteRow(s1.id);
+    db.deleteRow(s2.id);
+    db.deleteRow(s3.id);
+
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
       await sleep(400);
