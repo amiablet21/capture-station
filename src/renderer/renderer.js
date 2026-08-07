@@ -1300,11 +1300,26 @@ function applyBrowserPane() {
   syncBrowserBounds();
 }
 
-$('retBExpand').addEventListener('click', () => {
+// a freshly opened pane has NO page yet — a bare white rectangle that reads
+// as a broken screen. Expanding with nothing loaded starts on Walmart
+// Seller Center (the platform chips switch from there).
+function bExpandPane() {
   bPane.visible = true;
   api.setConfig({ browserPane: { visible: true } });
   applyBrowserPane();
-});
+  const dom = $('bDomain').textContent;
+  if (!dom || dom === '—') {
+    bShowLoading(`Opening ${channelLabel('walmart')}`);
+    api.browserOpenUrl(MARKET_HOME.walmart).then(res => {
+      if (!res.ok) {
+        bHideLoading();
+        if (res.error) toast(res.error);
+      }
+    });
+  }
+}
+
+$('retBExpand').addEventListener('click', bExpandPane);
 
 // coalesce bounds updates (resize, divider drag, dialogs) into one per frame
 let bSyncQueued = false;
@@ -1338,11 +1353,7 @@ document.querySelectorAll('dialog').forEach(d => d.addEventListener('close', () 
 new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
 window.addEventListener('resize', () => syncBrowserBounds());
 
-$('bExpand').addEventListener('click', () => {
-  bPane.visible = true;
-  api.setConfig({ browserPane: { visible: true } });
-  applyBrowserPane();
-});
+$('bExpand').addEventListener('click', bExpandPane);
 
 $('bCollapse').addEventListener('click', () => {
   bPane.visible = false;
