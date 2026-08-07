@@ -213,6 +213,18 @@ function dueInfo(despatchBy, cutoff, now = new Date()) {
   return { overdue: false, urgent: nowMin >= parseCutoffMin(cutoff) - 60, label: 'Due today' };
 }
 
+// Focus rescue for text inputs: with the native marketplace pane around,
+// the OS-level keyboard can strand on it — the window looks active, a click
+// lands on an input, but keystrokes vanish. Any pointerdown on an editable
+// field pulls the keyboard back to the app first; the click then focuses
+// the field normally.
+document.addEventListener('pointerdown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
+    api.appFocus();
+  }
+}, true);
+
 // meta lookup: split parts key as "ref#lwOrderId", whole orders as the ref
 function metaFor(row) {
   const m = (state && state.orderMeta) || {};

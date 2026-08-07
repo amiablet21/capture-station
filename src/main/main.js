@@ -1394,6 +1394,12 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
+  // focus rescue: a click on an app input while the native pane holds the
+  // keyboard hands it back (the input then focuses normally)
+  ipcMain.handle('app:focus', () => {
+    if (win && !win.isDestroyed()) win.webContents.focus();
+    return { ok: true };
+  });
   ipcMain.handle('order:openExternal', (_e, { orderNumber, channel, kind }) => {
     const url = buildMarketUrl(config.load(), channel, orderNumber, kind);
     if (!url) return { ok: false, error: 'No marketplace link set for this channel.' };
@@ -2282,6 +2288,13 @@ function createWindow() {
     pendingNotice = '';
   });
   if (IS_DEMO) require('./demo.js').seedDemo(win, db);
+  // Focus can strand on the native marketplace view (it is a separate
+  // surface): the window looks active but keystrokes go nowhere and inputs
+  // "stick". Whenever the WINDOW gains focus, hand the keyboard to the app's
+  // own web contents — unless the pane is attached and deliberately in use.
+  win.on('focus', () => {
+    if (!paneAttached) win.webContents.focus();
+  });
   win.on('closed', () => { win = null; });
   if (process.env.CAPTURE_SMOKE === '1') {
     win.webContents.on('console-message', (_e, level, message) => {
