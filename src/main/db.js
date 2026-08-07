@@ -118,6 +118,31 @@ function parseRow(r) {
   return { ...r, serials: JSON.parse(r.serials), items };
 }
 
+// One-time repair for the 2026-08-04 corruption: while the rows table's
+// B-tree was damaged ("rowid out of order"), the importer's duplicate check
+// could not see existing rows and created second copies of open orders.
+// Keeps the richest copy of each order number and drops the redundant ones —
+// but never a copy carrying tracking the kept row lacks (that would be a real
+// conflict, so both stay and get reported).
+function dedupeOrderRows() {
+  const d = open();
+  const groups = d.prepare('SELECT order_number FROM rows GROUP BY order_number HAVING COUNT(*) > 1').all();
+  let removed = 0;
+  let conflicts = 0;
+  const score = (r) => (r.tracking ? 8 : 0) + (r.status === 'synced' ? 4 : 0) + (r.notes ? 2 : 0);
+  for (const g of groups) {
+    const rows = d.prepare('SELECT * FROM rows WHERE order_number = ? ORDER BY id').all(g.order_number);
+    const keep = rows.slice().sort((a, b) => score(b) - score(a) || b.id - a.id)[0];
+    for (const r of rows) {
+      if (r.id === keep.id) continue;
+      if (r.tracking && r.tracking !== keep.tracking) { conflicts++; continue; }
+      d.prepare('DELETE FROM rows WHERE id = ?').run(r.id);
+      removed++;
+    }
+  }
+  return { removed, conflicts };
+}
+
 // one-click cleanup of rows whose orders left Linnworks' open book: only
 // the specific retriable failure is touched, other failures stay visible
 function clearFailedNotFound() {
@@ -444,7 +469,7 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,

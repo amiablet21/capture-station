@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns — design C with popup entry (final draft)</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .try b { color: var(--text); }
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 8px; flex: 0 0 auto; }
+  .tab { font-size: 12.5px; font-weight: 500; color: var(--muted); padding: 4px 14px; border-radius: var(--r-ctl); }
+  .tab.on { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+
+  .split { flex: 1; display: flex; min-height: 0; }
+  .pane { width: 410px; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); min-height: 0; }
+  .pane.hidden { display: none; }
+  .pane-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; border-radius: 5px; cursor: pointer; }
+  .pane-domain { font-size: 11.5px; color: var(--muted); margin: 0 auto; font-family: var(--mono); }
+  .pane-body { flex: 1; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 0; color: var(--faint); font-size: 12.5px; text-align: center; }
+  .pane-body b { display: block; font-family: var(--mono); font-size: 13px; color: var(--text); margin-bottom: 4px; }
+  .divider { width: 5px; flex: 0 0 auto; cursor: col-resize; }
+  .divider:hover { background: var(--accent-soft); }
+  .divider.hidden { display: none; }
+
+  .work { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px 14px 12px; gap: 9px; min-height: 0; }
+  .bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); cursor: pointer; }
+  .btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .search { width: 200px; font-size: 11.5px; padding: 4px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .g { width: 26px; text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .po { color: var(--accent); cursor: pointer; border-bottom: 1px dotted var(--accent); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -5px; margin-right: 7px; }
+  /* the pencil gets real room: 40px, centered, never clipped */
+  .th-act { width: 40px; }
+  td.act { text-align: center; overflow: visible; padding: 7px 4px; }
+  .pencil { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; }
+  .pencil:hover { background: var(--border); color: var(--text); }
+
+  /* popup */
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,0.28); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .scrim.on { display: flex; }
+  .modal { width: 470px; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.22); padding: 18px 20px 16px; }
+  .modal h3 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .modal .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 13px; }
+  .f { display: flex; flex-direction: column; gap: 4px; margin-bottom: 11px; }
+  .f .lbl { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .f input { font-size: 12.5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); }
+  .f input.mono { font-family: var(--mono); }
+  .f input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .row2 { display: flex; gap: 10px; }
+  .row2 .f { flex: 1; }
+  .fx { flex: 0 0 84px !important; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { font-size: 11.5px; font-weight: 500; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--muted); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; }
+  .pill.on { border-color: transparent; font-weight: 600; }
+  .pill.on.new { background: var(--pos-bg); color: var(--pos-text); }
+  .pill.on.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .pill.on.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .pill.on.scrap { background: var(--neg-bg); color: var(--neg-text); }
+  .target { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .target .sku { font-family: var(--mono); font-weight: 600; }
+  .lookup { font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; margin-left: 8px; }
+  .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; background: var(--text); color: var(--surface); font-size: 12px; border-radius: 999px; padding: 8px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+  .toast.on { opacity: 1; }
+</style></head>
+<body>
+  <div class="try"><b>+ Receive a return</b> opens the popup (Enter on the PO# fills the rest) · <b>Receive &amp; next</b> keeps it open for a multi-item box · a row's <b>✎</b> edits in the same popup · pencils now have room.</div>
+  <div class="tabs"><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab on">Returns</span></div>
+
+  <div class="split">
+    <div class="pane" id="pane">
+      <div class="pane-head"><span class="ico">‹</span><span class="ico">›</span><span class="ico">⟳</span><span class="pane-domain">seller.walmart.com</span><span class="ico">⎙</span><span class="ico" id="collapse">»</span></div>
+      <div class="pane-body"><div><b id="paneOrder">no order open</b>click a PO#</div></div>
+    </div>
+    <div class="divider" id="divider"></div>
+
+    <div class="work">
+      <div class="bar">
+        <b id="logCount">Returns log — 3 entries</b>
+        <div class="right">
+          <input class="search" placeholder="Search PO, SKU, customer…" />
+          <button class="btn primary" id="addBtn">+ Receive a return</button>
+          <button class="btn on" id="browserBtn">Browser</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="scroll">
+          <table>
+            <thead><tr>
+              <th class="g">#</th><th style="width:145px">PO#</th><th>Returned SKU</th>
+              <th style="width:112px">Condition</th><th style="width:46px" class="num">Units</th><th class="th-act"></th>
+            </tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim">
+    <div class="modal">
+      <h3 id="mTitle">Receive a return</h3>
+      <div class="sub" id="mSub">Type the PO# and press Enter — a matched order fills the rest.</div>
+      <div class="f"><span class="lbl">PO# / reference<span class="lookup" id="mFound" hidden>matched · Marybeth Morris</span></span><input class="mono" id="mPo" placeholder="Type / paste PO#…" /></div>
+      <div class="row2">
+        <div class="f"><span class="lbl">Customer</span><input id="mCust" /></div>
+        <div class="f"><span class="lbl">Tracking #</span><input class="mono" id="mTrk" /></div>
+      </div>
+      <div class="f"><span class="lbl">Returned SKU</span><input class="mono" id="mSku" placeholder="Start typing…" /></div>
+      <div class="f"><span class="lbl">Condition</span>
+        <div class="pills" id="mPills">
+          <span class="pill new on" data-c="New" data-col="#346538">New</span>
+          <span class="pill ob" data-c="Open box" data-col="#1F6C9F">Open box</span>
+          <span class="pill used" data-c="Used" data-col="#956400">Used</span>
+          <span class="pill scrap" data-c="Scrap" data-col="#9F2F2D">Scrap</span>
+        </div>
+        <div class="target" id="mTarget"></div>
+      </div>
+      <div class="row2">
+        <div class="f fx"><span class="lbl">Units</span><input class="mono" id="mUnits" value="1" /></div>
+        <div class="f fx"><span class="lbl">By</span><input class="mono" id="mBy" value="IM" /></div>
+        <div class="f"><span class="lbl">Notes</span><input id="mNote" placeholder="—" /></div>
+      </div>
+      <div class="acts">
+        <button class="btn" id="mCancel">Cancel</button>
+        <button class="btn" id="mNext">Receive &amp; next</button>
+        <button class="btn primary" id="mSave">Receive</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const LOG = [
+    { po: '119120771799124', sku: 'S25-256GB-SILVERSHADOW', cond: 'New', col: '#346538', units: 1 },
+    { po: '119119354597966', sku: 'S25-FE-128GB-JETBLACK', cond: 'New', col: '#346538', units: 1 },
+    { po: '119120671019601', sku: 'S26-ULTRA-512GB-BLACK', cond: 'Used', col: '#956400', units: 2 },
+  ];
+  const toastEl = document.getElementById('toast');
+  const toast = (m) => { toastEl.textContent = m; toastEl.classList.add('on'); setTimeout(() => toastEl.classList.remove('on'), 2400); };
+  const render = () => {
+    document.getElementById('logBody').innerHTML = LOG.map((r, i) => `<tr>
+      <td class="g">${i + 1}</td>
+      <td class="m"><span class="po" data-po="${r.po}">${r.po}</span></td>
+      <td class="m"><span class="thumb"></span>${r.sku}</td>
+      <td><span class="dot" style="background:${r.col}"></span>${r.cond}</td>
+      <td class="m num">${r.units}</td>
+      <td class="act"><span class="pencil" data-i="${i}" title="Edit this return">✎</span></td></tr>`).join('');
+    document.getElementById('logCount').textContent = `Returns log — ${LOG.length} entries`;
+  };
+
+  const scrim = document.getElementById('scrim');
+  let editIdx = null;
+  const PREFIX = { 'New': '', 'Open box': 'OPEN-BOX-', 'Used': 'USED-', 'Scrap': 'SCRAP-' };
+  const setTarget = () => {
+    const sku = document.getElementById('mSku').value.trim().toUpperCase();
+    const cond = document.querySelector('.pill.on').dataset.c;
+    document.getElementById('mTarget').innerHTML = sku
+      ? 'stock lands on <span class="sku">' + PREFIX[cond] + sku + '</span>' : '';
+  };
+  const openModal = (idx) => {
+    editIdx = idx;
+    const r = idx !== null ? LOG[idx] : null;
+    document.getElementById('mTitle').textContent = r ? 'Edit return' : 'Receive a return';
+    document.getElementById('mSub').textContent = r
+      ? 'Changing the SKU, condition or units corrects Linnworks stock automatically.'
+      : 'Type the PO# and press Enter — a matched order fills the rest.';
+    document.getElementById('mPo').value = r ? r.po : '';
+    document.getElementById('mCust').value = r ? 'Marybeth Morris' : '';
+    document.getElementById('mTrk').value = r ? '1Z43241903901156' : '';
+    document.getElementById('mSku').value = r ? r.sku : '';
+    document.getElementById('mUnits').value = r ? r.units : '1';
+    document.getElementById('mNote').value = '';
+    document.getElementById('mFound').hidden = !r;
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('on', p.dataset.c === (r ? r.cond : 'New')));
+    document.getElementById('mNext').hidden = !!r;
+    document.getElementById('mSave').textContent = r ? 'Save changes' : 'Receive';
+    setTarget();
+    scrim.classList.add('on');
+    document.getElementById(r ? 'mUnits' : 'mPo').focus();
+  };
+  const commit = () => {
+    const pill = document.querySelector('.pill.on');
+    const rec = {
+      po: document.getElementById('mPo').value.trim() || '—',
+      sku: (document.getElementById('mSku').value.trim() || 'SKU?').toUpperCase(),
+      cond: pill.dataset.c, col: pill.dataset.col,
+      units: Number(document.getElementById('mUnits').value) || 1,
+    };
+    if (editIdx !== null) { LOG[editIdx] = rec; toast('Saved — stock corrected'); }
+    else { LOG.unshift(rec); toast('Received onto ' + PREFIX[rec.cond] + rec.sku); }
+    render();
+  };
+
+  document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+  document.getElementById('mCancel').addEventListener('click', () => scrim.classList.remove('on'));
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) scrim.classList.remove('on'); });
+  document.getElementById('mSave').addEventListener('click', () => { commit(); scrim.classList.remove('on'); });
+  document.getElementById('mNext').addEventListener('click', () => {
+    commit();
+    // same box, next item: PO#, customer and tracking stay; SKU resets
+    document.getElementById('mSku').value = '';
+    document.getElementById('mUnits').value = '1';
+    document.getElementById('mNote').value = '';
+    setTarget();
+    document.getElementById('mSku').focus();
+  });
+  document.getElementById('mPo').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    document.getElementById('mFound').hidden = false;
+    document.getElementById('mCust').value = 'Marybeth Morris';
+    document.getElementById('mTrk').value = '1Z43241903901156';
+    document.getElementById('mSku').value = 'S25-256GB-SILVERSHADOW';
+    setTarget();
+    document.getElementById('mSku').focus();
+  });
+  document.getElementById('mPills').addEventListener('click', (e) => {
+    const p = e.target.closest('.pill');
+    if (!p) return;
+    document.querySelectorAll('.pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on');
+    setTarget();
+  });
+  document.getElementById('mSku').addEventListener('input', setTarget);
+
+  document.body.addEventListener('click', (e) => {
+    const pen = e.target.closest('.pencil');
+    if (pen) { openModal(Number(pen.dataset.i)); return; }
+    const po = e.target.closest('.po');
+    if (po) {
+      document.getElementById('pane').classList.remove('hidden');
+      document.getElementById('divider').classList.remove('hidden');
+      document.getElementById('browserBtn').classList.add('on');
+      document.getElementById('paneOrder').textContent = po.dataset.po;
+    }
+  });
+  const pane = document.getElementById('pane');
+  document.getElementById('browserBtn').addEventListener('click', function () {
+    const hide = !pane.classList.contains('hidden');
+    pane.classList.toggle('hidden', hide);
+    document.getElementById('divider').classList.toggle('hidden', hide);
+    this.classList.toggle('on', !hide);
+  });
+  document.getElementById('collapse').addEventListener('click', () => {
+    pane.classList.add('hidden');
+    document.getElementById('divider').classList.add('hidden');
+    document.getElementById('browserBtn').classList.remove('on');
+  });
+  let drag = null;
+  const divider = document.getElementById('divider');
+  divider.addEventListener('mousedown', (e) => { drag = { x: e.clientX, w: pane.offsetWidth }; e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => { if (drag) pane.style.width = Math.max(300, Math.min(900, drag.w + (e.clientX - drag.x))) + 'px'; });
+  window.addEventListener('mouseup', () => { drag = null; });
+  render();
+</script>
+</body>
+</html>

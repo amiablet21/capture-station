@@ -1450,6 +1450,7 @@ let stockActiveView = null; // null = All
 let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed location
 let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
+let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
 let dsPads = null; // { SKU: padQty } from config
 let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
 let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
@@ -1538,7 +1539,7 @@ function renderStockChips() {
   box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   box.innerHTML = [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
@@ -1549,6 +1550,11 @@ function renderStockChips() {
     ...(!state || state.captureOnly ? [] : [
       `<button class="view-chip ${stockDsActive ? 'is-active' : ''}" data-view="ds" title="The dropship program: pads, sales pace, and BUY signals">DropShip${dsPads && Object.keys(dsPads).length ? ` · ${Object.keys(dsPads).length}` : ''}</button>`,
     ]),
+    // only exists while there is something to fix — in-stock SKUs no
+    // marketplace can currently sell
+    ...(unlistedDetail && unlistedDetail.length ? [
+      `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`,
+    ] : []),
   ].join('');
 }
 
@@ -1556,7 +1562,13 @@ $('stockChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.view-chip');
   if (!chip) return;
   stockDsActive = false;
-  if (chip.dataset.view === 'wfs') {
+  stockUnlistedActive = false;
+  if (chip.dataset.view === 'unl') {
+    stockUnlistedActive = true;
+    stockWfsActive = false;
+    stockLowActive = false;
+    stockActiveView = null;
+  } else if (chip.dataset.view === 'wfs') {
     stockWfsActive = true;
     stockLowActive = false;
     stockActiveView = null;
@@ -1607,6 +1619,7 @@ $('minApplyAll').addEventListener('click', async () => {
 });
 
 api.on('reorder:applied', ({ summary }) => toast(summary, 7000));
+api.on('app:notice', ({ message }) => toast(message, 7000));
 
 // e2e/screenshot helper: seed the stock sheet without Linnworks
 function stockSeed(data) {
@@ -1706,6 +1719,7 @@ async function loadStockDeltas() {
 function renderStock() {
   if (!stockCache) return;
   if (stockDsActive) { renderDropshipView(); return; }
+  if (stockUnlistedActive) { renderUnlistedView(); return; }
   const q = $('stockSearch').value.trim().toLowerCase();
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
@@ -1821,6 +1835,51 @@ function renderStock() {
       applyAll.dataset.pending = JSON.stringify(pending);
     }
   }
+}
+
+/* ---------- Unlisted view (in-stock SKUs no marketplace can sell) ---------- */
+
+function renderUnlistedView() {
+  const aa = $('minApplyAll');
+  if (aa) aa.hidden = true;
+  const q = $('stockSearch').value.trim().toLowerCase();
+  const rows = (unlistedDetail || []).filter(d => !q
+    || d.sku.toLowerCase().includes(q)
+    || (d.title || '').toLowerCase().includes(q));
+  const idle = rows.reduce((s, d) => s + d.avail * d.retail, 0);
+  $('stockSummary').textContent =
+    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing · ${fmtMoney(idle)} sitting idle`;
+  const missChips = unlistedChannels.length
+    ? unlistedChannels.map(c => `<span class="unl-chn">${esc(channelLabel(String(c).toLowerCase()) || c)} ✗</span>`).join('')
+    : '<span class="unl-chn">no channels linked</span>';
+  $('stockList').innerHTML = rows.length === 0
+    ? '<p class="dlg-note">Nothing here — every in-stock SKU has a marketplace listing. 🎉</p>'
+    : `<table class="stock-table">
+      <thead><tr>
+        <th class="th-gutter">#</th>
+        <th class="th-img"></th>
+        <th>SKU</th>
+        <th class="num th-level">Avail</th>
+        <th>Missing on</th>
+        <th class="num">Value idle</th>
+        <th class="th-actions"></th>
+      </tr></thead>
+      <tbody>${rows.map((d, idx) => `
+        <tr>
+          <td class="cell-gutter">${idx + 1}</td>
+          <td class="cell-img">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none"></span>'}</td>
+          <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
+          <td class="num">${d.avail}</td>
+          <td>${missChips}</td>
+          <td class="num mono" title="available × retail price">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
+          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button></td>
+        </tr>`).join('')}</tbody>
+    </table>
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).</p>`;
+}
+
+function fmtMoney(n) {
+  return '$' + Math.round(Number(n) || 0).toLocaleString();
 }
 
 /* ---------- DropShip program view (pads · pace · BUY signals) ---------- */
@@ -2200,6 +2259,8 @@ $('stockList').addEventListener('dblclick', (e) => {
 });
 
 $('stockList').addEventListener('click', (e) => {
+  const cp = e.target.closest('[data-copy]');
+  if (cp) { copyFromApp(cp.dataset.copy); return; }
   const th = e.target.closest('th[data-sort]');
   if (th) {
     if (e.target.closest('.col-grip') || Date.now() < suppressSortUntil) return;
@@ -2351,7 +2412,7 @@ $('ioBody').addEventListener('click', (e) => {
 $('ioClose').addEventListener('click', () => $('ioDialog').close());
 $('ioDialog').addEventListener('close', () => focusScan());
 
-/* ---------- Returns page: spreadsheet worksheet ---------- */
+/* ---------- Returns page: log + receive popup (design C, 2026-08-07) ---------- */
 
 const RET_CONDS = [
   { key: 'new', label: 'New' },
@@ -2359,31 +2420,18 @@ const RET_CONDS = [
   { key: 'used', label: 'Used' },
   { key: 'scrap', label: 'Scrap' },
 ];
+const RET_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 
-let retDrafts = []; // one sheet row per returned unit, awaiting "Receive returns"
 let retReceivedBy = ''; // last-used initials, config-backed default
-let retBusy = false;
 
 function enterReturns() {
-  $('retPo').value = '';
   $('retHint').textContent = '';
-  renderRetSheet();
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
-  ensureInventory(); // fallback SKU picker + one-time pickers need it
+  ensureInventory(); // the popup's SKU combos need it
   api.getConfig().then(cfg => {
-    if (!retReceivedBy && cfg.returnsReceivedBy) {
-      retReceivedBy = cfg.returnsReceivedBy;
-      renderRetSheet();
-    }
+    if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
   });
-  $('retPo').focus();
-}
-
-function retFootNote(msg, ok = true) {
-  const el = $('retFootNote');
-  el.textContent = msg;
-  el.className = `test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
 function retCondLabel(key) {
@@ -2391,70 +2439,322 @@ function retCondLabel(key) {
   return c ? c.label : key;
 }
 
-// the Condition cell's trigger, styled like the other cell controls; the open
-// menu is the shared fixed-position card (#retDdMenu) so the sheet's scroll
-// container never clips it
-function retCondTrigger(d, idx) {
-  return `<button type="button" class="ret-cond ret-cond-btn" data-idx="${idx}"
-    aria-haspopup="listbox" aria-expanded="false" aria-label="Condition">
-    <span class="ret-dd-dot is-${esc(d.condition)}"></span>${esc(retCondLabel(d.condition))}
-    <span class="ret-dd-caret">${CARET_ICON}</span></button>`;
-}
+/* ---------- Receive-a-return popup (design-A sheet) ---------- */
+// Replaces the staged worksheet: every Receive commits ONE item line through
+// the unchanged returns:create engine (a PO-only line logs without stock).
 
-function retDraftBlank(po) {
+let rv = null; // open popup state; null = closed
+
+function rvBlank() {
   return {
-    po, orderId: null, source: '', customer: '', tracking: '',
-    sku: '', title: '', price: 0, condition: 'new', targets: null, qty: 1,
-    note: '', pick: '', receivedBy: retReceivedBy, unmatched: true,
-    at: new Date().toISOString(),
+    orderId: null, source: '', unmatched: true,
+    sku: '', title: '', price: 0, targets: null, condition: 'new',
+    pick: '', items: [], received: [], itemIdx: -1, busy: false,
   };
 }
 
-// Enter on the PO# cell: processed-order lookup fills the sheet, one row per
-// unit; no match falls back to a blank "no order" row with an inline SKU pick.
-async function retEntrySubmit() {
-  const po = $('retPo').value.trim();
-  if (!po || retBusy) return;
-  retBusy = true;
-  $('retHint').textContent = 'Looking the order up…';
-  const res = await api.returnsLookup(po);
-  retBusy = false;
-  if ($('retHint').textContent === 'Looking the order up…') $('retHint').textContent = '';
-  if (!res.ok) {
-    $('retHint').textContent = `${res.error || 'Not found.'} — added as “no order”, pick the SKU on the row.`;
-    retDrafts.push(retDraftBlank(po));
-    $('retPo').value = '';
-    renderRetSheet();
-    return;
-  }
-  $('retHint').textContent = '';
-  const o = res.order;
-  if (!o.items.length) {
-    // order found but items unreadable: keep the match, pick the SKU by hand
-    retDrafts.push({
-      ...retDraftBlank(o.reference), unmatched: false,
-      orderId: o.orderId, source: o.source, customer: o.customer, tracking: o.tracking,
-    });
-  }
-  for (const it of o.items) {
-    // one sheet row per ITEM LINE; the Units column carries the quantity
-    retDrafts.push({
-      po: o.reference, orderId: o.orderId, source: o.source,
-      customer: o.customer, tracking: o.tracking,
-      sku: it.sku, title: it.title || '', price: it.price || 0,
-      condition: 'new', targets: it.targets || null, qty: it.quantity || 1,
-      note: '', pick: '', receivedBy: retReceivedBy, unmatched: false,
-      at: new Date().toISOString(),
-    });
-  }
-  $('retPo').value = '';
-  renderRetSheet();
+function rvFeedback(msg, ok = false) {
+  const el = $('rvFeedback');
+  el.textContent = msg;
+  el.hidden = !msg;
+  el.className = `dlg-note test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-$('retPo').addEventListener('keydown', (e) => {
+function retOpenRecv() {
+  rv = rvBlank();
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick']) $(id).value = '';
+  $('rvQty').value = '1';
+  $('rvBy').value = retReceivedBy;
+  $('rvThumb').hidden = true;
+  $('rvMatched').hidden = true;
+  rvFeedback('');
+  rvRenderCond();
+  rvRenderOrder();
+  ensureInventory();
+  $('retRecvDialog').showModal();
+  $('rvPo').focus();
+}
+
+function rvThumbUpdate() {
+  const src = rv.sku ? invImg(rv.sku) : '';
+  $('rvThumb').hidden = !src;
+  if (src) $('rvThumb').src = src;
+}
+
+// Enter on the PO#: processed-order lookup fills the sheet; a multi-item
+// order queues its remaining lines for "Receive & next"
+async function rvLookup() {
+  const po = $('rvPo').value.trim();
+  if (!po || !rv || rv.busy) return;
+  rv.busy = true;
+  rvFeedback('Looking the order up…', true);
+  const res = await api.returnsLookup(po);
+  rv.busy = false;
+  if (!res.ok) {
+    rvFeedback(`${res.error || 'Not found.'} — enter the details by hand.`);
+    rv.unmatched = true;
+    rv.orderId = null;
+    rv.source = '';
+    $('rvMatched').hidden = true;
+    $('rvCust').focus();
+    return;
+  }
+  rvFeedback('');
+  const o = res.order;
+  rv.unmatched = false;
+  rv.orderId = o.orderId;
+  rv.source = o.source;
+  $('rvPo').value = o.reference || po;
+  $('rvCust').value = o.customer || '';
+  $('rvTrk').value = o.tracking || '';
+  rv.items = o.items || [];
+  rv.received = rv.items.map(() => false);
+  if (rv.items.length) rvLoadItemAt(0); else rvLoadItem(null);
+  $('rvSku').focus();
+}
+
+// the Ordered row: every line the order contained, as clickable chips —
+// the receiver picks what ACTUALLY came back; ✓ = already received.
+// Nothing forces receiving every line, and Units can be fewer than ordered.
+function rvRenderOrder() {
+  const row = $('rvOrderRow');
+  if (!rv || rv.unmatched || !rv.items.length) { row.hidden = true; return; }
+  row.hidden = false;
+  $('rvOrder').innerHTML = rv.items.map((it, i) => `
+    <button type="button" class="rv-item ${i === rv.itemIdx ? 'on' : ''} ${rv.received[i] ? 'done' : ''}" data-i="${i}"
+      title="${rv.received[i] ? 'Already received — click to receive more of it' : 'Click to receive this line'}">
+      <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}${rv.received[i] ? ' ✓' : ''}
+    </button>`).join('');
+}
+
+$('rvOrder').addEventListener('click', (e) => {
+  const b = e.target.closest('.rv-item');
+  if (!b || !rv) return;
+  rvLoadItemAt(Number(b.dataset.i));
+  $('rvQty').focus();
+});
+
+function rvLoadItemAt(i) {
+  rv.itemIdx = i;
+  rvLoadItem(rv.items[i] || null);
+}
+
+function rvLoadItem(it) {
+  if (it) {
+    rv.sku = it.sku;
+    rv.title = it.title || '';
+    rv.price = it.price || 0;
+    rv.targets = it.targets || null;
+    $('rvSku').value = it.sku;
+    $('rvQty').value = String(it.quantity || 1);
+  } else {
+    rv.itemIdx = -1;
+    rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
+    $('rvSku').value = '';
+    $('rvQty').value = '1';
+  }
+  rv.condition = 'new';
+  rv.pick = '';
+  $('rvPick').value = '';
+  const cust = $('rvCust').value.trim();
+  $('rvMatched').textContent = `matched${cust ? ` · ${cust}` : ''}`;
+  $('rvMatched').hidden = rv.unmatched;
+  rvThumbUpdate();
+  rvRenderCond();
+  rvRenderOrder();
+}
+
+// pills + the live "stock lands on …" line; a missing target opens the
+// inline fix: pick an existing listing, or create the prefix-named SKU
+function rvRenderCond() {
+  if (!rv) return;
+  $('rvPills').innerHTML = RET_CONDS.map(c => `
+    <button type="button" class="rv-pill is-${c.key} ${rv.condition === c.key ? 'on' : ''}" data-cond="${c.key}"
+      role="radio" aria-checked="${rv.condition === c.key}">
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
+  const t = $('rvTarget');
+  const fix = $('rvFix');
+  if (!rv.sku) { t.textContent = ''; t.className = 'rv-target'; fix.hidden = true; return; }
+  const known = rv.condition === 'new' ? rv.sku : ((rv.targets || {})[rv.condition] || '');
+  const resolved = known || rv.pick;
+  if (resolved) {
+    t.className = 'rv-target';
+    t.innerHTML = `stock lands on <span class="mono">${esc(resolved)}</span>${known ? '' : ' <span class="rv-onetime">(picked for this return)</span>'}${retUnlistedMark(resolved)}`;
+    fix.hidden = true;
+    return;
+  }
+  t.className = 'rv-target is-missing';
+  t.innerHTML = `⚠ no ${esc(retCondLabel(rv.condition).toLowerCase())} listing for <span class="mono">${esc(rv.sku)}</span> yet — pick one or create it:`;
+  fix.hidden = false;
+  const suggested = `${RET_PREFIX[rv.condition] || ''}${rv.sku}`.toUpperCase();
+  const btn = $('rvCreate');
+  const canCreate = RET_PREFIX[rv.condition] && recvLookup === 'ready' && !recvLookupExact(suggested);
+  btn.hidden = !canCreate;
+  btn.disabled = false;
+  btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
+  btn.dataset.sku = suggested;
+  btn.title = `Creates the Linnworks item with this exact name (title and price copied from ${rv.sku}), maps it, and routes this return into it. Create the marketplace listings later with the same SKU and they link automatically.`;
+}
+
+$('rvPills').addEventListener('click', (e) => {
+  const p = e.target.closest('.rv-pill');
+  if (!p || !rv) return;
+  rv.condition = p.dataset.cond;
+  rv.pick = '';
+  $('rvPick').value = '';
+  rvRenderCond();
+});
+
+$('rvCreate').addEventListener('click', async () => {
+  if (!rv || !rv.sku) return;
+  const btn = $('rvCreate');
+  const suggested = btn.dataset.sku;
+  const cond = rv.condition;
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  const parent = recvLookupExact(rv.sku);
+  const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
+  const res = await api.createSku({
+    sku: suggested,
+    title: `${(parent && parent.title) || rv.sku} - ${condLabel}`,
+    retailPrice: Number(parent && parent.retailPrice) || 0,
+    qty: 0,
+  });
+  if (!res.ok) {
+    toast(res.error || 'Could not create the SKU.');
+    rvRenderCond();
+    return;
+  }
+  // the fresh SKU joins the local inventory caches so every combo sees it
+  if (recvItems) {
+    const item = { sku: res.sku, title: `${(parent && parent.title) || rv.sku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
+    recvItems.push(item);
+    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
+  }
+  const map = await api.returnsMapSet(rv.sku, cond, res.sku);
+  if (map.ok && rv) {
+    rv.targets = { ...(rv.targets || {}), [cond]: map.targetSku };
+    toast(`${rv.sku} ${cond} → ${map.targetSku}`);
+  }
+  rvRenderCond();
+});
+
+$('rvPo').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  retEntrySubmit();
+  rvLookup();
+});
+
+// editing the PO after a match voids the match — a stale orderId must never
+// ride along with a hand-changed number
+$('rvPo').addEventListener('input', () => {
+  if (!rv) return;
+  rv.orderId = null;
+  rv.source = '';
+  rv.unmatched = true;
+  rv.items = [];
+  rv.received = [];
+  rv.itemIdx = -1;
+  $('rvMatched').hidden = true;
+  rvRenderOrder();
+});
+
+$('rvSku').addEventListener('input', () => {
+  if (!rv) return;
+  rv.sku = $('rvSku').value.trim().toUpperCase();
+  rv.targets = null; // typed text is not a picked item; targets re-resolve on pick
+  rv.pick = '';
+  $('rvPick').value = '';
+  // a hand-typed SKU is no longer "that order line": receiving it must not
+  // tick an ordered chip, and the ordered-qty hint no longer applies
+  rv.itemIdx = -1;
+  rvRenderOrder();
+  rvThumbUpdate();
+  rvRenderCond();
+});
+
+async function rvCommit() {
+  if (!rv || rv.busy) return false;
+  const po = $('rvPo').value.trim();
+  if (!po) { rvFeedback('PO# is required.'); $('rvPo').focus(); return false; }
+  const sku = $('rvSku').value.trim().toUpperCase();
+  let target = '';
+  let qty = 1;
+  if (sku) {
+    const known = rv.condition === 'new' ? sku : ((rv.targets || {})[rv.condition] || '');
+    target = known || String(rv.pick || '').trim();
+    if (!target) {
+      rvFeedback(`No ${retCondLabel(rv.condition).toLowerCase()} listing for ${sku} — pick or create it first.`);
+      return false;
+    }
+    if (recvLookup === 'ready' && !recvLookupExact(target)) {
+      rvFeedback(`Unknown SKU: ${target}. Pick one from the inventory.`);
+      return false;
+    }
+    qty = Number($('rvQty').value);
+    if (!Number.isInteger(qty) || qty < 1) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
+  }
+  const by = $('rvBy').value.trim();
+  if (by) retReceivedBy = by;
+  rv.busy = true;
+  $('rvSave').disabled = true;
+  rvFeedback('Receiving…', true);
+  const res = await api.returnsCreate({
+    orderId: rv.orderId || undefined,
+    orderNumber: po,
+    source: rv.source,
+    customer: $('rvCust').value.trim(),
+    tracking: $('rvTrk').value.trim(),
+    receivedBy: by,
+    unmatched: !!rv.unmatched,
+    note: sku ? '' : $('rvNote').value.trim(),
+    items: sku ? [{ sku, condition: rv.condition, targetSku: target, qty, price: rv.price, note: $('rvNote').value.trim() }] : [],
+  }).catch(e => ({ ok: false, error: e.message }));
+  rv.busy = false;
+  $('rvSave').disabled = false;
+  if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not receive.'); return false; }
+  rvFeedback('');
+  toast(sku ? `Received ${qty} × ${target}` : `Logged return ${po}`);
+  loadRetPast();
+  return true;
+}
+
+// Receive commits the line. With other order lines still unreceived the
+// popup STAYS OPEN on the next one ("Receive & next" retired 2026-08-07,
+// owner request — one button does the sensible thing); otherwise it closes.
+$('rvSave').addEventListener('click', async () => {
+  if (!(await rvCommit())) return;
+  if (rv.itemIdx >= 0) rv.received[rv.itemIdx] = true;
+  const next = rv.items.findIndex((_, i) => !rv.received[i]);
+  if (next < 0) { $('retRecvDialog').close(); return; }
+  $('rvNote').value = '';
+  rvLoadItemAt(next);
+  $('rvQty').focus();
+});
+
+$('rvCancel').addEventListener('click', () => $('retRecvDialog').close());
+$('retRecvDialog').addEventListener('close', () => { rv = null; });
+$('retAddBtn').addEventListener('click', () => retOpenRecv());
+
+// live inventory suggestions in the popup's two SKU fields
+makeCombo($('rvSku'), document.querySelector('.rv-combo .combo-list'), async (item) => {
+  if (!rv) return;
+  rv.sku = item.sku;
+  rv.title = item.title || '';
+  if (!rv.price) rv.price = Number(item.retailPrice) || 0;
+  rv.pick = '';
+  $('rvPick').value = '';
+  $('rvSku').value = item.sku;
+  rvThumbUpdate();
+  const tr = await api.returnsTargets(item.sku);
+  if (tr.ok && rv) rv.targets = tr.targets;
+  rvRenderCond();
+});
+makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (item) => {
+  if (!rv) return;
+  rv.pick = item.sku;
+  $('rvPick').value = item.sku;
+  rvRenderCond();
 });
 
 // marketplace link for a returns row: the order's Source ("WALMART", "EBAY"…)
@@ -2475,328 +2775,6 @@ function retPoOpenBtn(po, source) {
     title="Open the ${esc(channelLabel(ch))} return for ${esc(po)}">${ICONS.arrowOut}</button>`;
 }
 
-// the Condition cell carries the live "→ TARGET" preview; a missing mapping
-// shows the one-time picker inline (persisted on commit, as before)
-function retTargetCell(d, idx) {
-  if (!d.sku) return '';
-  const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
-  if (known) return `<div class="ret-cell-target" title="Stock lands on ${esc(known)}">→ ${esc(known)}</div>`;
-  // returns only ever map to EXISTING inventory SKUs: no create shortcut here
-  return `<div class="ret-cell-target is-missing">
-    <div class="combo ret-pick-combo"><input type="text" class="input mono ret-pick" data-idx="${idx}"
-      value="${esc(d.pick || '')}" placeholder="Pick the ${esc(d.condition)} listing…" autocomplete="off" spellcheck="false" />
-    <div class="combo-list" hidden></div></div>
-  </div>`;
-}
-
-function renderRetSheet() {
-  const units = retDrafts.reduce((a, d) => a + (Number(d.qty) || 1), 0);
-  $('retSummary').innerHTML = `<strong>${units}</strong> unit${units === 1 ? '' : 's'} to receive`;
-  $('retReceiveAll').disabled = retDrafts.length === 0 || retBusy;
-  $('retEntryNum').textContent = retDrafts.length + 1;
-  $('retBody').innerHTML = retDrafts.map((d, idx) => `
-    <tr data-idx="${idx}">
-      <td class="cell-gutter ${d.unmatched ? 'st-failed' : 'st-captured'}" title="${d.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${idx + 1}</td>
-      <td class="mono ret-cell-po" title="${esc(d.po)}">${d.po ? esc(d.po) : '<span class="cell-missing">—</span>'}${d.unmatched ? '<span class="ret-noorder" title="Not matched to a Linnworks order">no order</span>' : ''}${retPoOpenBtn(d.po, d.source)}</td>
-      <td class="ret-cell-cust" title="${esc(d.customer)}">${d.unmatched
-        ? `<input type="text" class="recv-cell-input ret-cust-in" data-idx="${idx}" value="${esc(d.customer)}" placeholder="—" aria-label="Customer name" />`
-        : (d.customer ? esc(d.customer) : '<span class="cell-missing">—</span>')}</td>
-      <td class="mono ret-cell-trk" title="${esc(d.tracking)}">${d.unmatched
-        ? `<input type="text" class="recv-cell-input mono ret-trk-in" data-idx="${idx}" value="${esc(d.tracking)}" placeholder="—" aria-label="Return tracking number" />`
-        : (d.tracking ? esc(shorten(d.tracking, 16)) : '<span class="cell-missing">—</span>')}</td>
-      <td class="mono ret-cell-date" title="Recorded automatically · ${esc(String(d.at).slice(0, 10))}">${esc(String(d.at).slice(5, 10))} ${fmtTime(d.at)}</td>
-      <td class="ret-cell-sku">${d.sku
-        ? `${invImg(d.sku) ? `<img class="sku-thumb" src="${esc(invImg(d.sku))}" loading="lazy" alt="" />` : ''}<span class="mono" title="${esc(d.title)}">${esc(d.sku)}</span><button class="btn-icon ret-sku-edit" data-idx="${idx}" title="Change the SKU">${ICONS.pencil}</button>`
-        : `<div class="combo ret-sheet-combo"><input type="text" class="recv-cell-input mono ret-sku-in" data-idx="${idx}"
-             placeholder="Type a SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div>`}</td>
-      <td class="ret-cell-cond">
-        ${retCondTrigger(d, idx)}
-        ${retTargetCell(d, idx)}
-      </td>
-      <td class="ret-cell-units"><input type="number" min="1" step="1" class="recv-cell-input mono ret-qty-in" data-idx="${idx}"
-        value="${Number(d.qty) || 1}" aria-label="Units received" title="How many units of this SKU came back" /></td>
-      <td class="ret-cell-by"><input type="text" class="recv-cell-input ret-by-in" data-idx="${idx}"
-        value="${esc(d.receivedBy)}" placeholder="IM" maxlength="12" aria-label="Received by" /></td>
-      <td class="ret-cell-note"><input type="text" class="recv-cell-input ret-note-in" data-idx="${idx}"
-        value="${esc(d.note)}" placeholder="—" aria-label="Notes or dispute" /></td>
-      <td class="cell-actions"><span class="row-actions">
-        <button class="btn-icon is-danger" data-act="del" data-idx="${idx}" title="Remove row">${ICONS.trash}</button>
-      </span></td>
-    </tr>`).join('');
-  // inline SKU pickers on "no order" rows reuse the shared combobox
-  $('retBody').querySelectorAll('.ret-sheet-combo').forEach(box => {
-    const input = box.querySelector('input');
-    const list = box.querySelector('.combo-list');
-    makeCombo(input, list, async (item) => {
-      const d = retDrafts[Number(input.dataset.idx)];
-      if (!d) return;
-      d.sku = item.sku;
-      d.title = item.title || '';
-      if (!d.price) d.price = Number(item.retailPrice) || 0;
-      const tr = await api.returnsTargets(item.sku);
-      if (tr.ok) d.targets = tr.targets;
-      renderRetSheet();
-    });
-  });
-  // one-time listing pickers get the same live suggestions (was a bare
-  // datalist, which shows nothing while typing)
-  $('retBody').querySelectorAll('.ret-pick-combo').forEach(box => {
-    const input = box.querySelector('input');
-    const list = box.querySelector('.combo-list');
-    makeCombo(input, list, (item) => {
-      const d = retDrafts[Number(input.dataset.idx)];
-      if (!d) return;
-      d.pick = item.sku;
-      input.value = item.sku;
-    });
-  });
-}
-
-// cell edits land straight on the draft (no re-render, focus stays put)
-$('retBody').addEventListener('input', (e) => {
-  const d = retDrafts[Number(e.target.dataset.idx)];
-  if (!d) return;
-  // (price column removed from the sheet; d.price still auto-fills from the
-  // order lookup and flows to the CSV / new-SKU prefill untouched)
-  if (e.target.classList.contains('ret-by-in')) {
-    d.receivedBy = e.target.value.trim();
-    if (d.receivedBy) retReceivedBy = d.receivedBy; // next rows inherit it
-  } else if (e.target.classList.contains('ret-note-in')) d.note = e.target.value;
-  else if (e.target.classList.contains('ret-pick')) d.pick = e.target.value.trim();
-  // "no order" rows: customer + tracking are typed by hand
-  else if (e.target.classList.contains('ret-cust-in')) d.customer = e.target.value.trim();
-  else if (e.target.classList.contains('ret-trk-in')) d.tracking = e.target.value.trim();
-  else if (e.target.classList.contains('ret-qty-in')) {
-    d.qty = Math.max(1, parseInt(e.target.value, 10) || 1);
-    const total = retDrafts.reduce((a, x) => a + (Number(x.qty) || 1), 0);
-    $('retSummary').innerHTML = `<strong>${total}</strong> unit${total === 1 ? '' : 's'} to receive`;
-  }
-});
-
-/* ---------- condition dropdown (tinted menu with dots + target preview) ---------- */
-
-let retDd = null; // { idx, hl, edit } — open menu state; null = closed
-
-// right-aligned mono preview per option: New restocks the sold listing, the
-// rest show where stock lands via the mapping engine ("not mapped" = no
-// target yet, picking it falls into the one-time picker on the row)
-function retDdTargetHtml(d, cond) {
-  if (cond === 'new') {
-    return d.sku ? `<span class="ret-dd-tgt" title="Restocks the sold listing">${esc(d.sku)}</span>` : '';
-  }
-  const t = d.sku ? ((d.targets || {})[cond] || '') : '';
-  return t
-    ? `<span class="ret-dd-tgt" title="Stock lands on ${esc(t)}">${esc(t)}</span>`
-    : '<span class="ret-dd-tgt is-unmapped">(no mapping yet)</span>';
-}
-
-function retDdRender() {
-  if (!retDd) return;
-  const d = retDrafts[retDd.idx];
-  if (!d) { retDdClose(); return; }
-  const menu = $('retDdMenu');
-  if (retDd.edit) { retDdRenderEdit(d, menu); return; }
-  menu.innerHTML = RET_CONDS.map((c, i) => `
-    <div class="ret-dd-mi ${c.key === d.condition ? 'sel' : ''} ${i === retDd.hl ? 'is-hl' : ''}"
-         role="option" aria-selected="${c.key === d.condition}" data-cond="${c.key}">
-      <span class="ret-dd-dot is-${c.key}"></span>${c.label}
-      ${retDdTargetHtml(d, c.key)}
-      ${c.key !== 'new' ? `<button type="button" class="btn-icon ret-dd-fix" data-cond="${c.key}"
-        title="${d.sku ? `Set the ${c.label.toLowerCase()} listing for ${esc(d.sku)}` : 'Pick the returned SKU first — mappings are per SKU'}">${ICONS.pencil}</button>` : ''}
-    </div>`).join('');
-}
-
-// pencil: fix the mapping right here — the shared inventory combobox opens
-// inside the menu card, the pick persists through returns:mapSet (manual
-// overrides beat auto-derivation). Existing inventory SKUs only, no create.
-function retDdRenderEdit(d, menu) {
-  const cond = retDd.edit;
-  // the conventional PREFIX listing for this SKU+condition (owner naming,
-  // 2026-08-06: OPEN-BOX-<SKU> / USED-<SKU> / SCRAP-<SKU>); when it does
-  // not exist yet, offer to create it in Linnworks right here
-  const prefix = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' }[cond] || '';
-  const suggested = `${prefix}${d.sku}`.toUpperCase();
-  const canCreate = prefix && recvLookup === 'ready' && !recvLookupExact(suggested);
-  menu.innerHTML = `
-    <div class="ret-dd-edit">
-      <div class="ret-dd-edit-head"><span class="ret-dd-dot is-${cond}"></span>
-        ${retCondLabel(cond)} listing for <span class="mono">${esc(d.sku)}</span></div>
-      <div class="combo ret-dd-combo">
-        <input type="text" class="input mono ret-dd-edit-input" placeholder="SKU, title or barcode…"
-               autocomplete="off" spellcheck="false" />
-        <div class="combo-list" hidden></div>
-      </div>
-      ${canCreate ? `<button type="button" class="btn btn-ghost ret-dd-create" data-sku="${esc(suggested)}"
-        title="Creates the Linnworks item with this exact name (title and price copied from ${esc(d.sku)}), maps it, and routes this return into it. Create the marketplace listings later with the same SKU and they link automatically.">
-        Create <span class="mono">${esc(suggested)}</span></button>` : ''}
-    </div>`;
-  const createBtn = menu.querySelector('.ret-dd-create');
-  if (createBtn) {
-    createBtn.addEventListener('click', async () => {
-      createBtn.disabled = true;
-      createBtn.textContent = 'Creating…';
-      const parent = recvLookupExact(d.sku);
-      const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
-      const res = await api.createSku({
-        sku: suggested,
-        title: `${(parent && parent.title) || d.sku} - ${condLabel}`,
-        retailPrice: Number(parent && parent.retailPrice) || 0,
-        qty: 0,
-      });
-      if (!res.ok) {
-        toast(res.error || 'Could not create the SKU.');
-        if (retDd) retDdRender();
-        return;
-      }
-      // the fresh SKU joins the local inventory caches so every combo sees it
-      if (recvItems) {
-        const item = { sku: res.sku, title: `${(parent && parent.title) || d.sku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
-        recvItems.push(item);
-        if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
-      }
-      retDdSaveMapping(d, cond, res.sku); // persists + updates drafts + toast
-    });
-  }
-  const input = menu.querySelector('.ret-dd-edit-input');
-  const list = menu.querySelector('.combo-list');
-  // registered before makeCombo's own keydown: Escape with the match list
-  // already closed backs out to the condition menu instead of doing nothing
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && list.hidden && retDd) {
-      retDd.edit = '';
-      retDdRender();
-      retDdPosition();
-    }
-  });
-  makeCombo(input, list, (item) => retDdSaveMapping(d, cond, item.sku));
-  ensureInventory();
-  input.focus();
-}
-
-async function retDdSaveMapping(d, cond, targetSku) {
-  const res = await api.returnsMapSet(d.sku, cond, targetSku);
-  if (!res.ok) {
-    toast(res.error || 'Could not save the mapping.');
-    return;
-  }
-  // every draft row of this base SKU sees the new target immediately
-  for (const r of retDrafts) {
-    if (r.sku === d.sku) r.targets = { ...(r.targets || {}), [cond]: res.targetSku };
-  }
-  toast(`${d.sku} ${cond} → ${res.targetSku}`);
-  renderRetSheet();
-  if (retDd) {
-    retDd.edit = '';
-    retDdRender();
-    retDdPosition();
-  }
-}
-
-// fixed-position under the row's trigger, flipped above when the viewport
-// runs out; re-run after any render while open (the trigger is rebuilt)
-function retDdPosition() {
-  if (!retDd) return;
-  const menu = $('retDdMenu');
-  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${retDd.idx}"]`);
-  if (!btn) { retDdClose(); return; }
-  btn.setAttribute('aria-expanded', 'true');
-  const r = btn.getBoundingClientRect();
-  menu.style.minWidth = `${Math.max(280, Math.round(r.width))}px`;
-  const left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
-  let top = r.bottom + 4;
-  if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
-  menu.style.left = `${Math.max(8, Math.round(left))}px`;
-  menu.style.top = `${Math.round(top)}px`;
-}
-
-function retDdOpen(idx) {
-  const d = retDrafts[idx];
-  if (!d) return;
-  retDd = { idx, hl: RET_CONDS.findIndex(c => c.key === d.condition), edit: '' };
-  $('retDdMenu').hidden = false;
-  retDdRender();
-  retDdPosition();
-}
-
-function retDdClose(refocus) {
-  if (!retDd) return;
-  const idx = retDd.idx;
-  retDd = null;
-  $('retDdMenu').hidden = true;
-  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${idx}"]`);
-  if (btn) {
-    btn.setAttribute('aria-expanded', 'false');
-    if (refocus) btn.focus();
-  }
-}
-
-function retDdPick(cond) {
-  const d = retDd && retDrafts[retDd.idx];
-  if (!d) return;
-  const idx = retDd.idx;
-  d.condition = cond;
-  retDdClose();
-  renderRetSheet(); // the target preview / one-time picker follow the condition
-  const btn = document.querySelector(`#retBody .ret-cond-btn[data-idx="${idx}"]`);
-  if (btn) btn.focus();
-}
-
-$('retDdMenu').addEventListener('click', (e) => {
-  if (!retDd) return;
-  const fix = e.target.closest('.ret-dd-fix');
-  if (fix) {
-    const d = retDrafts[retDd.idx];
-    if (!d || !d.sku) {
-      toast('Pick the returned SKU first — mappings are per SKU.');
-      return;
-    }
-    retDd.edit = fix.dataset.cond;
-    retDdRender();
-    retDdPosition();
-    return;
-  }
-  const mi = e.target.closest('.ret-dd-mi');
-  if (mi) retDdPick(mi.dataset.cond);
-});
-
-// keyboard while the menu is open (edit mode: the combobox input handles keys)
-document.addEventListener('keydown', (e) => {
-  if (!retDd || retDd.edit) return;
-  if (e.key === 'Escape') { e.preventDefault(); retDdClose(true); return; }
-  if (e.key === 'Tab') { retDdClose(); return; }
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    const n = RET_CONDS.length;
-    retDd.hl = ((retDd.hl < 0 ? 0 : retDd.hl) + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
-    retDdRender();
-    return;
-  }
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    if (retDd.hl >= 0) retDdPick(RET_CONDS[retDd.hl].key);
-  }
-});
-
-document.addEventListener('mousedown', (e) => {
-  if (!retDd) return;
-  if (e.target.closest('#retDdMenu') || e.target.closest('.ret-cond-btn')) return;
-  retDdClose();
-});
-
-// any outside scroll or resize de-anchors the fixed menu: just close it
-document.addEventListener('scroll', (e) => {
-  if (retDd && !(e.target instanceof Node && $('retDdMenu').contains(e.target))) retDdClose();
-}, true);
-window.addEventListener('resize', () => retDdClose());
-
-$('retBody').addEventListener('keydown', (e) => {
-  const btn = e.target.closest('.ret-cond-btn');
-  if (!btn || retDd) return;
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    retDdOpen(Number(btn.dataset.idx));
-  }
-});
 
 // pane open -> the RETURN loads beside the sheets; collapsed -> external.
 // kind 'return' picks the marketplace's returns page (Walmart's returns
@@ -2815,94 +2793,6 @@ function retOpenPo(po, ch) {
   }
 }
 
-$('retBody').addEventListener('click', (e) => {
-  const open = e.target.closest('.ret-po-open');
-  if (open) {
-    retOpenPo(open.dataset.po, open.dataset.ch);
-    return;
-  }
-  const cond = e.target.closest('.ret-cond-btn');
-  if (cond) {
-    const idx = Number(cond.dataset.idx);
-    if (retDd && retDd.idx === idx) retDdClose(); else retDdOpen(idx);
-    return;
-  }
-  const skuEdit = e.target.closest('.ret-sku-edit');
-  if (skuEdit) {
-    // reopen the picked SKU as the typing state — nothing is locked in
-    const d = retDrafts[Number(skuEdit.dataset.idx)];
-    if (!d) return;
-    retDdClose();
-    d.sku = ''; d.title = ''; d.targets = null; d.pick = '';
-    renderRetSheet();
-    const inp = $('retBody').querySelector(`.ret-sku-in[data-idx="${skuEdit.dataset.idx}"]`);
-    if (inp) inp.focus();
-    return;
-  }
-  const del = e.target.closest('[data-act="del"]');
-  if (!del) return;
-  retDdClose();
-  retDrafts.splice(Number(del.dataset.idx), 1);
-  renderRetSheet();
-});
-
-// commit: group rows per order, one ledger record each; stock bumps + mapping
-// persistence run through the unchanged returns:create engine
-$('retReceiveAll').addEventListener('click', async () => {
-  if (!retDrafts.length || retBusy) return;
-  retFootNote('');
-  for (const [i, d] of retDrafts.entries()) {
-    // the PO# is the only mandatory field: SKU and target are optional, a
-    // row without them is logged as-is and just doesn't move any stock
-    if (!String(d.po || '').trim()) { retFootNote(`Row ${i + 1}: PO# is required.`, false); return; }
-    if (!d.sku) { d.resolvedTarget = ''; continue; }
-    const known = d.condition === 'new' ? d.sku : ((d.targets || {})[d.condition] || '');
-    const target = known || String(d.pick || '').trim();
-    if (!known && target && recvLookup === 'ready' && !recvLookupExact(target)) {
-      retFootNote(`Row ${i + 1}: unknown SKU ${target}.`, false);
-      return;
-    }
-    d.resolvedTarget = target;
-  }
-  const groups = new Map();
-  for (const d of retDrafts) {
-    const key = `${d.po}|${d.orderId || ''}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(d);
-  }
-  retBusy = true;
-  renderRetSheet();
-  retFootNote('Receiving…');
-  let received = 0;
-  let failed = '';
-  for (const rows of groups.values()) {
-    const head = rows[0];
-    const res = await api.returnsCreate({
-      orderId: head.orderId || undefined,
-      orderNumber: head.po,
-      source: head.source,
-      customer: head.customer,
-      tracking: head.tracking,
-      receivedBy: rows.map(r => r.receivedBy).filter(Boolean).pop() || '',
-      unmatched: !!head.unmatched,
-      // rows without a SKU carry no item line, so their notes ride on the record
-      note: rows.filter(r => !r.sku).map(r => r.note).filter(Boolean).join('; '),
-      items: rows.map(r => ({ sku: r.sku, condition: r.condition, targetSku: r.resolvedTarget, qty: Number(r.qty) || 1, price: r.price, note: r.note })),
-    });
-    if (res.ok) {
-      received += rows.length;
-      retDrafts = retDrafts.filter(d => !rows.includes(d));
-    } else {
-      failed = res.error || 'Failed.';
-    }
-  }
-  retBusy = false;
-  renderRetSheet();
-  if (received) toast(`Received ${received} return unit${received === 1 ? '' : 's'}`);
-  retFootNote(failed || (received ? `Received ${received} unit${received === 1 ? '' : 's'} — stock updated.` : ''), !failed);
-  loadRetPast();
-  $('retPo').focus();
-});
 
 
 
@@ -2915,6 +2805,8 @@ let retLogEdit = null; // { rid, ii, un } — the one row currently edited inlin
 // condition SKUs holding returned stock with NO marketplace listing linked
 // yet — surfaced as "not listed" markers so the employee knows what to make
 let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
+let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle value
+let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedLoading = false;
 
 async function loadUnlisted() {
@@ -2924,12 +2816,29 @@ async function loadUnlisted() {
     const res = await api.stockUnlisted();
     if (res.ok) {
       unlistedSkus = new Set(res.skus || []);
+      unlistedDetail = res.detail || [];
+      unlistedChannels = res.channels || [];
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
-      if (activePage === 'stock' && stockCache) renderStock();
+      if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
     }
   } finally {
     unlistedLoading = false;
   }
+}
+
+// jump from a to-do row straight to the Stock page's Unlisted view,
+// filtered to that SKU (the Reminder banner left at the owner's request
+// 2026-08-07 — the to-do card is the one surface on Returns)
+function showUnlistedFor(sku) {
+  stockUnlistedActive = true;
+  stockWfsActive = false;
+  stockLowActive = false;
+  stockDsActive = false;
+  stockActiveView = null;
+  $('stockSearch').value = sku || '';
+  showPage('stock');
+  renderStockChips();
+  renderStock();
 }
 
 // the to-do card: every created-but-unlisted condition SKU with how many
@@ -2945,9 +2854,9 @@ function renderRetTodo() {
   }).sort((a, b) => (b.units || 0) - (a.units || 0));
   box.hidden = false;
   box.innerHTML = `
-    <h4>${rows.length} returned listing${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
+    <h4>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
     ${rows.map(r => `<div class="ret-todo-row">
-      <span class="mono">${esc(r.sku)}</span>
+      <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Open the Stock page's Unlisted view filtered to this SKU">${esc(r.sku)}</button>
       <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
       <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
     </div>`).join('')}
@@ -2956,7 +2865,9 @@ function renderRetTodo() {
 
 $('retTodo').addEventListener('click', (e) => {
   const c = e.target.closest('[data-copy]');
-  if (c) copyFromApp(c.dataset.copy);
+  if (c) { copyFromApp(c.dataset.copy); return; }
+  const g = e.target.closest('[data-goto]');
+  if (g) showUnlistedFor(g.dataset.goto);
 });
 
 // the log wears the SAME sheet as the worksheet (same columns, same
@@ -3335,11 +3246,9 @@ function applyRetCols(table) {
 }
 
 function applyRetColsAll() {
-  // the log wears the SAME sheet as the worksheet again: widths sync to both
-  applyRetCols($('retTable'));
+  // one sheet left (the log) — widths land on it after every render
   applyRetCols($('retPastBox').querySelector('table.ret-log-table'));
 }
-applyRetCols($('retTable'));
 
 $('returnsPage').addEventListener('mousedown', (e) => {
   const grip = e.target.closest('.col-grip');
@@ -3948,7 +3857,7 @@ function ensureInventory() {
       invError = '';
       // sheets rendered before the inventory arrived now get their images
       // and the to-do card gets its unit counts
-      if (activePage === 'returns') { renderRetSheet(); renderRetTodo(); }
+      if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       return true;
     }
     recvLookup = 'unavailable';

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns — create-SKU + unlisted flows (interactive)</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .try b { color: var(--text); }
+  .wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; max-width: 980px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+
+  .bar { display: flex; align-items: center; gap: 10px; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.ghost-accent { color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; font-weight: 600; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:last-child td { border-bottom: none; }
+  .g { width: 26px; text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -5px; margin-right: 7px; }
+
+  /* entry form (design-B style) */
+  .form { padding: 12px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .f { display: flex; flex-direction: column; gap: 4px; }
+  .f.full { grid-column: 1 / -1; }
+  .f .lbl { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .f input { font-size: 12.5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); }
+  .f input.mono { font-family: var(--mono); }
+  .f input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { font-size: 11.5px; font-weight: 500; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--muted); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; }
+  .pill.on { border-color: transparent; font-weight: 600; }
+  .pill.on.new { background: var(--pos-bg); color: var(--pos-text); }
+  .pill.on.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .pill.on.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .pill.on.scrap { background: var(--neg-bg); color: var(--neg-text); }
+
+  /* the target line: ok vs missing */
+  .target { font-size: 11.5px; margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .target .sku { font-family: var(--mono); font-weight: 600; }
+  .target.ok { color: var(--muted); }
+  .target.missing { color: var(--badge-yellow-text); }
+  .target .mini { font-size: 11px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+
+  .foot { display: flex; align-items: center; padding: 7px 10px; border-top: 1px solid var(--border); background: var(--surface-2); font-size: 11.5px; }
+  .foot .r { margin-left: auto; display: flex; gap: 8px; }
+
+  /* to-do card */
+  .todo { border: 1px solid var(--badge-yellow-text); border-radius: var(--r-card); background: var(--badge-yellow-bg); padding: 10px 12px; }
+  .todo h5 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--badge-yellow-text); margin: 0 0 6px; }
+  .todo-row { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 4px 0; }
+  .todo-row .m { color: var(--text); }
+  .chn { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+  .chn.no { background: var(--surface); color: var(--badge-yellow-text); border: 1px dashed var(--badge-yellow-text); }
+  .chn.yes { background: var(--pos-bg); color: var(--pos-text); }
+  .todo-row .when { margin-left: auto; font-size: 10.5px; color: var(--badge-yellow-text); }
+  .badge-unlisted { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-radius: 4px; padding: 1px 6px; margin-left: 7px; vertical-align: 1px; }
+
+  /* dialogs */
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,0.28); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .scrim.on { display: flex; }
+  .modal { width: 430px; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.22); padding: 18px 20px 16px; }
+  .modal h3 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .modal .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 13px; }
+  .modal .f { margin-bottom: 10px; }
+  .row2 { display: flex; gap: 10px; }
+  .row2 .f { flex: 1; }
+  .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+  .okline { font-size: 11.5px; color: var(--pos-text); background: var(--pos-bg); border-radius: var(--r-ctl); padding: 6px 10px; margin-bottom: 10px; display: none; }
+  .okline.on { display: block; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; background: var(--text); color: var(--surface); font-size: 12px; border-radius: 999px; padding: 8px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+  .toast.on { opacity: 1; }
+  .step { font-size: 11px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 2px 10px; font-weight: 600; }
+</style></head>
+<body>
+  <div class="try"><b>Scenario:</b> a Z-FOLD came back opened — but <b>OPEN-BOX-Z-FOLD-256GB-JBLK doesn't exist in Linnworks yet</b>. Pick the <b>Open box</b> pill below and follow the buttons. Then watch the yellow "needs listings" card at the bottom.</div>
+
+  <div class="wrap">
+    <div class="bar"><b>New return</b><span class="step" id="stepLbl">step 1 — pick Open box</span></div>
+    <div class="card">
+      <div class="form">
+        <div class="f full"><span class="lbl">PO# / reference</span><input class="mono" value="119121520317929" readonly /></div>
+        <div class="f"><span class="lbl">Customer</span><input value="Terrence Howell" readonly /></div>
+        <div class="f"><span class="lbl">Tracking #</span><input class="mono" value="1ZF9814D0216394250" readonly /></div>
+        <div class="f full"><span class="lbl">Returned SKU</span><input class="mono" id="skuIn" value="Z-FOLD-256GB-JBLK" readonly /></div>
+        <div class="f full"><span class="lbl">Condition</span>
+          <div class="pills" id="pills">
+            <span class="pill new on" data-c="new"><span class="dot" style="background:#346538"></span>New</span>
+            <span class="pill ob" data-c="ob"><span class="dot" style="background:#1F6C9F"></span>Open box</span>
+            <span class="pill used" data-c="used"><span class="dot" style="background:#956400"></span>Used</span>
+            <span class="pill scrap" data-c="scrap"><span class="dot" style="background:#9F2F2D"></span>Scrap</span>
+          </div>
+          <div class="target ok" id="target">stock lands on <span class="sku">Z-FOLD-256GB-JBLK</span></div>
+        </div>
+        <div class="row2 f full" style="flex-direction:row">
+          <div class="f" style="width:80px"><span class="lbl">Units</span><input class="mono" value="1" /></div>
+          <div class="f" style="width:80px"><span class="lbl">By</span><input class="mono" value="IM" /></div>
+          <div class="f" style="flex:1"><span class="lbl">Notes</span><input placeholder="—" /></div>
+        </div>
+      </div>
+      <div class="foot"><span id="stageMsg">ready to stage</span><span class="r"><button class="btn">Cancel</button><button class="btn primary" id="stageBtn">Add to worksheet</button></span></div>
+    </div>
+
+    <div class="bar" style="margin-top:6px"><b>Returns log</b></div>
+    <div class="card">
+      <table>
+        <thead><tr><th class="g">#</th><th style="width:140px">PO#</th><th>Returned SKU</th><th style="width:105px">Condition</th><th style="width:42px" class="num">Units</th></tr></thead>
+        <tbody id="logBody">
+          <tr><td class="g">1</td><td class="m">119120771799124</td><td class="m"><span class="thumb"></span>S25-256GB-SILVERSHADOW</td><td><span class="dot" style="background:#346538"></span>New</td><td class="m num">1</td></tr>
+          <tr><td class="g">2</td><td class="m">119119354597966</td><td class="m"><span class="thumb"></span>OPEN-BOX-S25-FE-128GB<span class="badge-unlisted">not listed</span></td><td><span class="dot" style="background:#1F6C9F"></span>Open box</td><td class="m num">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="todo" id="todo">
+      <h5>⚠ Returned stock with no marketplace listing — nobody can buy these</h5>
+      <div id="todoRows">
+        <div class="todo-row"><span class="thumb"></span><span class="m">OPEN-BOX-S25-FE-128GB</span><span class="chn no">Walmart ✗</span><span class="chn no">eBay ✗</span><span class="when">1 unit · since 08-05</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New SKU dialog (prefilled) -->
+  <div class="scrim" id="skuScrim">
+    <div class="modal">
+      <h3>Create the condition SKU</h3>
+      <div class="sub">Created directly in Linnworks — prefilled from the original item.</div>
+      <div class="okline" id="okline">✓ OPEN-BOX-Z-FOLD-256GB-JBLK created in Linnworks</div>
+      <div class="f"><span class="lbl">SKU</span><input class="mono" id="newSku" value="OPEN-BOX-Z-FOLD-256GB-JBLK" /></div>
+      <div class="f"><span class="lbl">Title</span><input value="Galaxy Z Fold 256GB Jet Black — Open Box" /></div>
+      <div class="row2">
+        <div class="f"><span class="lbl">Retail price</span><input class="mono" value="1099.00" /></div>
+        <div class="f"><span class="lbl">Purchase price</span><input class="mono" value="0.00" /></div>
+      </div>
+      <div class="acts"><button class="btn" id="skuCancel">Cancel</button><button class="btn primary" id="skuCreate">Create SKU</button></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // OPEN-BOX-Z-FOLD… deliberately does NOT exist; USED- does.
+  const EXISTS = new Set(['Z-FOLD-256GB-JBLK', 'USED-Z-FOLD-256GB-JBLK', 'SCRAP-Z-FOLD-256GB-JBLK']);
+  const PREFIX = { new: '', ob: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
+  let cond = 'new';
+  let created = false;
+
+  const target = document.getElementById('target');
+  const stepLbl = document.getElementById('stepLbl');
+  const toast = (m) => {
+    const t = document.getElementById('toast');
+    t.textContent = m; t.classList.add('on');
+    setTimeout(() => t.classList.remove('on'), 2600);
+  };
+
+  function renderTarget() {
+    const sku = PREFIX[cond] + 'Z-FOLD-256GB-JBLK';
+    if (EXISTS.has(sku)) {
+      target.className = 'target ok';
+      target.innerHTML = 'stock lands on <span class="sku">' + sku + '</span>';
+      stepLbl.textContent = created && cond === 'ob' ? 'step 3 — stage it' : 'ready';
+    } else {
+      target.className = 'target missing';
+      target.innerHTML = '⚠ <span class="sku">' + sku + '</span> doesn’t exist in Linnworks yet '
+        + '<button class="mini" id="mkBtn">+ Create it</button>';
+      stepLbl.textContent = 'step 2 — create the SKU';
+    }
+  }
+
+  document.getElementById('pills').addEventListener('click', (e) => {
+    const p = e.target.closest('.pill');
+    if (!p) return;
+    document.querySelectorAll('.pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on');
+    cond = p.dataset.c;
+    renderTarget();
+  });
+
+  document.body.addEventListener('click', (e) => {
+    if (e.target.id !== 'mkBtn') return;
+    document.getElementById('skuScrim').classList.add('on');
+  });
+  document.getElementById('skuCancel').addEventListener('click', () => document.getElementById('skuScrim').classList.remove('on'));
+  document.getElementById('skuCreate').addEventListener('click', () => {
+    const btn = document.getElementById('skuCreate');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    setTimeout(() => {
+      document.getElementById('okline').classList.add('on');
+      btn.textContent = 'Created ✓';
+      created = true;
+      EXISTS.add('OPEN-BOX-Z-FOLD-256GB-JBLK');
+      setTimeout(() => {
+        document.getElementById('skuScrim').classList.remove('on');
+        renderTarget();
+        toast('OPEN-BOX-Z-FOLD-256GB-JBLK created — stock from this return will land on it');
+      }, 700);
+    }, 800);
+  });
+
+  document.getElementById('stageBtn').addEventListener('click', () => {
+    const sku = PREFIX[cond] + 'Z-FOLD-256GB-JBLK';
+    if (!EXISTS.has(sku)) { toast('Create ' + sku + ' first'); return; }
+    const colors = { new: '#346538', ob: '#1F6C9F', used: '#956400', scrap: '#9F2F2D' };
+    const names = { new: 'New', ob: 'Open box', used: 'Used', scrap: 'Scrap' };
+    const unlisted = cond !== 'new'; // a just-created condition SKU has no listings yet
+    document.getElementById('logBody').insertAdjacentHTML('afterbegin',
+      '<tr><td class="g">•</td><td class="m">119121520317929</td><td class="m"><span class="thumb"></span>' + sku
+      + (unlisted && created ? '<span class="badge-unlisted">not listed</span>' : '')
+      + '</td><td><span class="dot" style="background:' + colors[cond] + '"></span>' + names[cond]
+      + '</td><td class="m num">1</td></tr>');
+    if (unlisted && created) {
+      document.getElementById('todoRows').insertAdjacentHTML('afterbegin',
+        '<div class="todo-row"><span class="thumb"></span><span class="m">' + sku + '</span>'
+        + '<span class="chn no">Walmart ✗</span><span class="chn no">eBay ✗</span>'
+        + '<span class="when">1 unit · just now</span></div>');
+      toast('Received — and flagged: no Walmart or eBay listing exists for ' + sku + ' yet');
+    } else {
+      toast('Received onto ' + sku);
+    }
+    document.getElementById('stageMsg').innerHTML = '<b>received ✓</b>';
+    stepLbl.textContent = 'done — see the yellow card below';
+  });
+
+  renderTarget();
+</script>
+</body>
+</html>

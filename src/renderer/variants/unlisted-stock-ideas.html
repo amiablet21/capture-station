@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Unlisted stock — three ideas</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; max-width: 900px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+  .hide { display: none !important; }
+
+  .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; margin-bottom: 14px; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:last-child td { border-bottom: none; }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -5px; margin-right: 7px; }
+  .chn { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-right: 3px; }
+  .chn.no { background: var(--surface); color: var(--badge-yellow-text); border: 1px dashed var(--badge-yellow-text); }
+  .chn.yes { background: var(--pos-bg); color: var(--pos-text); }
+  .chip-filter { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; background: var(--surface); }
+  .chip-filter.warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; font-weight: 600; }
+  .chip-filter.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .copybtn { font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+  .val { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .desc { font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; max-width: 760px; }
+  .desc b { color: var(--text); }
+
+  /* A: banner strip */
+  .strip { border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: var(--r-card); padding: 9px 12px; display: flex; align-items: center; gap: 10px; margin-bottom: 14px; cursor: pointer; }
+  .strip .t { font-size: 12px; font-weight: 600; color: var(--badge-yellow-text); }
+  .strip .skus { font-family: var(--mono); font-size: 11px; color: var(--badge-yellow-text); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .strip .arrow { color: var(--badge-yellow-text); font-size: 13px; }
+  .drop { border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); margin: -8px 0 14px; overflow: hidden; }
+
+  /* C: digest */
+  .digest { border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); padding: 13px 15px; margin-bottom: 14px; }
+  .digest h4 { font-size: 12.5px; font-weight: 600; margin: 0 0 3px; }
+  .digest .sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .digest-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 12px; }
+  .digest-row .why { font-size: 10.5px; color: var(--faint); margin-left: auto; text-align: right; }
+  .done { text-decoration: line-through; opacity: .45; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Idea</span>
+    <span class="opt on" data-o="a">A · Yellow strip on Returns</span>
+    <span class="opt" data-o="b">B · Stock chip "Unlisted"</span>
+    <span class="opt" data-o="c">C · Make-listings checklist</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="wrap">
+    <!-- ============ A ============ -->
+    <div id="viewA">
+      <div class="desc"><b>A collapsed one-line strip at the top of the Returns page.</b> Shows the count and the first few SKUs; click to expand the full table with channel gaps and per-SKU copy buttons. Zero unlisted SKUs = the strip simply isn't there. Lives where your employee already works, costs 34 pixels when collapsed.</div>
+      <div class="strip" id="stripA">
+        <span class="t">⚠ 3 SKUs in stock, no listing</span>
+        <span class="skus">X133-64GB-BLACK · OPEN-BOX-S25-FE-128GB · USED-T220-64GB-GRAY</span>
+        <span class="arrow" id="arrowA">▾</span>
+      </div>
+      <div class="drop hide" id="dropA">
+        <table>
+          <thead><tr><th style="width:34px"></th><th>SKU</th><th style="width:64px" class="num">In stock</th><th style="width:150px">Missing on</th><th style="width:84px"></th></tr></thead>
+          <tbody>
+            <tr><td><span class="thumb"></span></td><td class="m">X133-64GB-BLACK</td><td class="m num">4</td><td><span class="chn no">Walmart</span><span class="chn no">eBay</span></td><td><button class="copybtn">Copy SKU</button></td></tr>
+            <tr><td><span class="thumb"></span></td><td class="m">OPEN-BOX-S25-FE-128GB</td><td class="m num">1</td><td><span class="chn yes">Walmart</span><span class="chn no">eBay</span></td><td><button class="copybtn">Copy SKU</button></td></tr>
+            <tr><td><span class="thumb"></span></td><td class="m">USED-T220-64GB-GRAY</td><td class="m num">2</td><td><span class="chn no">Walmart</span><span class="chn no">eBay</span></td><td><button class="copybtn">Copy SKU</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="bar"><b>Returns worksheet</b></div>
+      <div class="card"><table><thead><tr><th style="width:26px">#</th><th style="width:140px">PO#</th><th>Returned SKU</th><th style="width:100px">Condition</th></tr></thead>
+        <tbody><tr><td class="mut">1</td><td class="m mut">Type / paste PO#…</td><td></td><td></td></tr></tbody></table></div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div id="viewB" class="hide">
+      <div class="desc"><b>A filter chip on the Stock page, next to the condition views.</b> "Unlisted · 3" in warning yellow; click it and the stock sheet shows only in-stock SKUs missing a listing, with a "Missing on" column replacing Velocity. It reuses everything the Stock page already has — search, thumbnails, editing — and covers ALL stock, not just returns. The chip only appears when the count is non-zero.</div>
+      <div class="bar">
+        <span class="chip-filter">All · 214</span>
+        <span class="chip-filter">Open box · 12</span>
+        <span class="chip-filter">Used · 7</span>
+        <span class="chip-filter">DropShip · 9</span>
+        <span class="chip-filter warn">Unlisted · 3</span>
+        <div class="right"><input style="font-size:11.5px;padding:4px 9px;border:1px solid var(--border);border-radius:var(--r-ctl);background:var(--surface);color:var(--faint)" placeholder="Search SKU or title…" /></div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th style="width:34px"></th><th>SKU</th><th style="width:60px" class="num">Avail</th><th style="width:160px">Missing on</th><th style="width:120px" class="num">Value sitting idle</th></tr></thead>
+          <tbody>
+            <tr><td><span class="thumb"></span></td><td class="m">X133-64GB-BLACK</td><td class="m num">4</td><td><span class="chn no">Walmart</span><span class="chn no">eBay</span></td><td class="val num">$556</td></tr>
+            <tr><td><span class="thumb"></span></td><td class="m">OPEN-BOX-S25-FE-128GB</td><td class="m num">1</td><td><span class="chn yes">Walmart</span><span class="chn no">eBay</span></td><td class="val num">$449</td></tr>
+            <tr><td><span class="thumb"></span></td><td class="m">USED-T220-64GB-GRAY</td><td class="m num">2</td><td><span class="chn no">Walmart</span><span class="chn no">eBay</span></td><td class="val num">$278</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ C ============ -->
+    <div id="viewC" class="hide">
+      <div class="desc"><b>A "Make listings" checklist card on the Returns page.</b> Reads like a work order for your employee: each line says what to do and why the SKU exists ("returned 08-05", "restocked"). Ticking a line marks it done for today (it comes back if the SKU is still unlisted tomorrow). The most explicit "do this next" framing of the three.</div>
+      <div class="digest">
+        <h4>Make listings for…</h4>
+        <div class="sub">In-stock SKUs no marketplace can currently sell · refreshed hourly</div>
+        <div class="digest-row" data-i="0"><input type="checkbox" /><span class="thumb"></span><span class="m">X133-64GB-BLACK</span><span class="chn no">Walmart</span><span class="chn no">eBay</span><span class="why">4 in stock · restocked 08-06</span></div>
+        <div class="digest-row" data-i="1"><input type="checkbox" /><span class="thumb"></span><span class="m">OPEN-BOX-S25-FE-128GB</span><span class="chn no">eBay</span><span class="why">1 unit · returned 08-05</span></div>
+        <div class="digest-row" data-i="2"><input type="checkbox" /><span class="thumb"></span><span class="m">USED-T220-64GB-GRAY</span><span class="chn no">Walmart</span><span class="chn no">eBay</span><span class="why">2 units · returned 08-04</span></div>
+      </div>
+      <div class="bar"><b>Returns worksheet</b></div>
+      <div class="card"><table><thead><tr><th style="width:26px">#</th><th style="width:140px">PO#</th><th>Returned SKU</th><th style="width:100px">Condition</th></tr></thead>
+        <tbody><tr><td class="mut">1</td><td class="m mut">Type / paste PO#…</td><td></td><td></td></tr></tbody></table></div>
+    </div>
+  </div>
+
+<script>
+  const NOTES = {
+    a: 'One line when collapsed — click the strip.',
+    b: 'Reuses the Stock page: chips, search, thumbnails.',
+    c: 'A work order: tick a line when the listing is made.',
+  };
+  const setNote = (o) => document.getElementById('note').textContent = NOTES[o];
+  document.querySelector('.switcher').addEventListener('click', (e) => {
+    const o = e.target.closest('.opt');
+    if (!o) return;
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    for (const k of ['a', 'b', 'c']) document.getElementById('view' + k.toUpperCase()).classList.toggle('hide', k !== o.dataset.o);
+    setNote(o.dataset.o);
+  });
+  setNote('a');
+  document.getElementById('stripA').addEventListener('click', () => {
+    const d = document.getElementById('dropA');
+    d.classList.toggle('hide');
+    document.getElementById('arrowA').textContent = d.classList.contains('hide') ? '▾' : '▴';
+  });
+  document.body.addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    e.target.closest('.digest-row').classList.toggle('done', e.target.checked);
+  });
+  document.body.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('copybtn')) return;
+    e.target.textContent = 'Copied ✓';
+    setTimeout(() => { e.target.textContent = 'Copy SKU'; }, 1400);
+  });
+</script>
+</body>
+</html>

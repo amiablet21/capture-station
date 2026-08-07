@@ -12,7 +12,8 @@ const { LinnworksClient } = require('./linnworks');
 let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
-let unlistedCache = { at: 0, skus: null }; // condition SKUs with no linked listing
+let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
+let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -1941,36 +1942,45 @@ function registerIpc() {
   // yet: the employee's "go create the listing" list. Candidates = condition
   // naming (prefix or suffix) or saved mapping targets, with stock on hand;
   // each gets one GetInventoryItemChannelSKUs call, cached 10 minutes.
+  // Every in-stock SKU with NO channel listing linked (not just returns
+  // condition SKUs). One GetInventoryItemChannelSKUs call per in-stock item,
+  // so the result is cached for an hour; `channels` is the set of sources
+  // seen across the whole inventory (what "missing on" means here).
   ipcMain.handle('stock:unlisted', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (unlistedCache.skus && Date.now() - unlistedCache.at < 10 * 60 * 1000) {
-      return { ok: true, skus: unlistedCache.skus };
+    if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
+      return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels };
     }
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
-      const mapTargets = new Set(
-        Object.values(db.getConditionMap()).flatMap(m => Object.values(m)).map(s => String(s).toUpperCase())
-      );
-      const isCondition = (sku) => {
-        const u = String(sku).toUpperCase();
-        return /^(OPEN-BOX-|USED-|SCRAP-)/.test(u) || /(-OPENBOX|-USED|-SCRAP)$/.test(u) || mapTargets.has(u);
-      };
-      const candidates = items.filter(it => {
-        if (!isCondition(it.sku) || !it.stockItemId) return false;
+      const inStock = items.filter(it => {
+        if (!it.stockItemId) return false;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
         return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
-      }).slice(0, 60);
-      const unlisted = [];
-      for (const it of candidates) {
+      }).slice(0, 300);
+      const universe = new Set();
+      const detail = [];
+      for (const it of inStock) {
         try {
           const channels = await client.getChannelSkus(it.stockItemId);
-          if (!channels.length) unlisted.push(String(it.sku).toUpperCase());
+          for (const c of channels) if (c.source) universe.add(String(c.source).toUpperCase());
+          if (channels.length) continue;
+          const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
+          detail.push({
+            sku: String(it.sku).toUpperCase(),
+            title: it.title || '',
+            image: it.image || '',
+            avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
+            retail: Number(it.retailPrice) || 0,
+          });
         } catch { /* one bad lookup never hides the rest */ }
       }
-      unlistedCache = { at: Date.now(), skus: unlisted };
-      return { ok: true, skus: unlisted };
+      detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+      const skus = detail.map(d => d.sku);
+      unlistedCache = { at: Date.now(), skus, detail, channels: [...universe].sort() };
+      return { ok: true, skus, detail, channels: unlistedCache.channels };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -2174,6 +2184,11 @@ function createWindow() {
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
+  win.webContents.on('did-finish-load', () => {
+    if (!pendingNotice) return;
+    win.webContents.send('app:notice', { message: pendingNotice });
+    pendingNotice = '';
+  });
   win.on('closed', () => { win = null; });
   if (process.env.CAPTURE_SMOKE === '1') {
     win.webContents.on('console-message', (_e, level, message) => {
@@ -2275,6 +2290,14 @@ app.whenReady().then(() => {
   config.save({}); // re-persist so plaintext credentials migrate to encrypted storage
   checkDbHealth(); // corrupt db -> offer the newest healthy backup BEFORE anything reads it
   db.open();
+  // one-time sweep: duplicate order rows minted while the db was damaged
+  try {
+    const dd = db.dedupeOrderRows();
+    if (dd.removed || dd.conflicts) {
+      pendingNotice = `Removed ${dd.removed} duplicate order row${dd.removed === 1 ? '' : 's'} left over from the database repair`
+        + (dd.conflicts ? ` · ${dd.conflicts} kept for review (different tracking)` : '');
+    }
+  } catch { /* never block startup on housekeeping */ }
   writeDailyCsv();
   registerIpc();
   buildMenu();

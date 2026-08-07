@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns split view — three designs</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+
+  /* option switcher */
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 8px; flex: 0 0 auto; }
+  .tab { font-size: 12.5px; font-weight: 500; color: var(--muted); padding: 4px 14px; border-radius: var(--r-ctl); }
+  .tab.on { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+
+  .split { flex: 1; display: flex; min-height: 0; }
+  .pane { width: 400px; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); min-height: 0; }
+  .pane-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; border-radius: 5px; }
+  .pane-domain { font-size: 11.5px; color: var(--muted); margin: 0 auto; font-family: var(--mono); }
+  .pane-body { flex: 1; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 0; color: var(--faint); font-size: 12.5px; text-align: center; }
+  .pane-body b { display: block; font-family: var(--mono); font-size: 13px; color: var(--text); margin-bottom: 4px; }
+
+  .work { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px 14px 12px; gap: 9px; min-height: 0; }
+  .bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); cursor: pointer; }
+  .btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .search { width: 180px; font-size: 11.5px; padding: 4px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; flex: 0 0 auto; }
+  .card.grow { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .g { width: 26px; text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .po { color: var(--accent); cursor: pointer; border-bottom: 1px dotted var(--accent); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .thumb { width: 20px; height: 20px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -5px; margin-right: 7px; }
+  .foot { display: flex; align-items: center; padding: 7px 10px; border-top: 1px solid var(--border); background: var(--surface-2); font-size: 11.5px; }
+  .foot .r { margin-left: auto; }
+
+  /* A: stacked entry cards */
+  .qcard { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-bottom: 1px solid var(--border-soft); }
+  .qcard:last-child { border-bottom: none; }
+  .qcard .sku { font-family: var(--mono); font-size: 12px; }
+  .qcard .po2 { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .chip { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; }
+  .chip.new { background: var(--pos-bg); color: var(--pos-text); }
+  .chip.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .chip.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .qcard .units { font-family: var(--mono); font-size: 12px; margin-left: auto; }
+  .qcard .x { color: var(--faint); cursor: pointer; }
+  .addrow { display: flex; align-items: center; gap: 8px; padding: 10px 11px; }
+  .addrow input { flex: 1; font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border: 1px dashed var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); }
+
+  /* B: docked form */
+  .form { padding: 11px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px 10px; }
+  .f { display: flex; flex-direction: column; gap: 4px; }
+  .f.full { grid-column: 1 / -1; }
+  .f .lbl { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .f input { font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); }
+  .f input.mono { font-family: var(--mono); }
+  .pills { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pill { font-size: 11px; font-weight: 500; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer; color: var(--muted); background: var(--surface); }
+  .pill.on { border-color: transparent; font-weight: 600; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .target { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .staged { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 11px; }
+  .sc { font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; font-family: var(--mono); }
+
+  /* C: focus mode */
+  .fab { position: absolute; right: 26px; bottom: 22px; background: var(--accent); color: #fff; border-radius: 999px; padding: 10px 18px; font-size: 12.5px; font-weight: 600; box-shadow: 0 8px 22px rgba(4,120,87,0.32); cursor: pointer; }
+  .drawer { position: absolute; right: 0; top: 0; bottom: 0; width: 330px; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -12px 0 30px rgba(47,52,55,0.10); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+  .drawer h4 { font-size: 13px; font-weight: 600; }
+  .workwrap { position: relative; flex: 1; min-width: 0; display: flex; }
+  .hide { display: none !important; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Design</span>
+    <span class="opt on" data-o="a">A · Stacked cards</span>
+    <span class="opt" data-o="b">B · Docked form</span>
+    <span class="opt" data-o="c">C · Focus + drawer</span>
+    <span class="note" id="note">Staged returns as cards, entry inline at the bottom of the card stack.</span>
+  </div>
+  <div class="tabs"><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab on">Returns</span></div>
+
+  <div class="split">
+    <div class="pane">
+      <div class="pane-head"><span class="ico">‹</span><span class="ico">›</span><span class="ico">⟳</span><span class="pane-domain">ebay.com</span><span class="ico">⎙</span><span class="ico">»</span></div>
+      <div class="pane-body"><div><b id="paneOrder">21-14818-21581</b>return details</div></div>
+    </div>
+
+    <div class="workwrap">
+      <!-- ============ A: stacked cards ============ -->
+      <div class="work" id="viewA">
+        <div class="bar"><b>Receiving now</b><div class="right"><button class="btn on">Browser</button></div></div>
+        <div class="card">
+          <div class="qcard">
+            <span class="thumb"></span>
+            <span><span class="sku">S25-256GB-SILVERSHADOW</span><br/><span class="po2">119120771799124 · Marybeth Morris</span></span>
+            <span class="chip new">New</span><span class="units">×1</span><span class="x">✕</span>
+          </div>
+          <div class="qcard">
+            <span class="thumb"></span>
+            <span><span class="sku">S26-ULTRA-512GB-BLACK</span><br/><span class="po2">119120671019601 · no order</span></span>
+            <span class="chip used">Used</span><span class="units">×2</span><span class="x">✕</span>
+          </div>
+          <div class="addrow"><input placeholder="Scan / paste PO# to add…" /><button class="btn">Manual</button></div>
+          <div class="foot"><span><b>3</b> units to receive</span><span class="r"><button class="btn primary">Receive returns</button></span></div>
+        </div>
+        <div class="bar"><b>Returns log</b><div class="right"><input class="search" placeholder="Search…" /></div></div>
+        <div class="card grow"><div class="scroll"><table>
+          <thead><tr><th class="g">#</th><th style="width:135px">PO#</th><th>SKU</th><th style="width:96px">Condition</th><th style="width:40px" class="num">Qty</th></tr></thead>
+          <tbody id="logA"></tbody>
+        </table></div></div>
+      </div>
+
+      <!-- ============ B: docked form ============ -->
+      <div class="work hide" id="viewB">
+        <div class="bar"><b>New return</b><div class="right"><button class="btn on">Browser</button></div></div>
+        <div class="card">
+          <div class="form">
+            <div class="f full"><span class="lbl">PO# / reference</span><input class="mono" value="119120771799124" /></div>
+            <div class="f"><span class="lbl">Customer</span><input value="Marybeth Morris" /></div>
+            <div class="f"><span class="lbl">Tracking #</span><input class="mono" value="1Z43241903901156" /></div>
+            <div class="f full"><span class="lbl">Returned SKU</span><input class="mono" value="S25-256GB-SILVERSHADOW" /></div>
+            <div class="f full"><span class="lbl">Condition</span>
+              <div class="pills"><span class="pill on">New</span><span class="pill">Open box</span><span class="pill">Used</span><span class="pill">Scrap</span></div>
+              <span class="target">→ S25-256GB-SILVERSHADOW</span>
+            </div>
+            <div class="f"><span class="lbl">Units</span><input class="mono" value="1" /></div>
+            <div class="f"><span class="lbl">By</span><input class="mono" value="IM" /></div>
+            <div class="f full"><span class="lbl">Notes</span><input placeholder="—" /></div>
+          </div>
+          <div class="staged"><span class="sc">S25-256GB-SILVERSHADOW ×1</span><span class="sc">S26-ULTRA-512GB-BLACK ×2</span></div>
+          <div class="foot"><span><b>3</b> staged</span><span class="r"><button class="btn">Add another</button> <button class="btn primary">Receive returns</button></span></div>
+        </div>
+        <div class="bar"><b>Returns log</b><div class="right"><input class="search" placeholder="Search…" /></div></div>
+        <div class="card grow"><div class="scroll"><table>
+          <thead><tr><th class="g">#</th><th style="width:135px">PO#</th><th>SKU</th><th style="width:96px">Condition</th><th style="width:40px" class="num">Qty</th></tr></thead>
+          <tbody id="logB"></tbody>
+        </table></div></div>
+      </div>
+
+      <!-- ============ C: focus + drawer ============ -->
+      <div class="work hide" id="viewC">
+        <div class="bar"><b>Returns log — 3 entries</b><div class="right"><input class="search" placeholder="Search PO, SKU, customer…" /><button class="btn on">Browser</button></div></div>
+        <div class="card grow"><div class="scroll"><table>
+          <thead><tr><th class="g">#</th><th style="width:145px">PO#</th><th>Returned SKU</th><th style="width:110px">Condition</th><th style="width:44px" class="num">Units</th><th style="width:28px"></th></tr></thead>
+          <tbody id="logC"></tbody>
+        </table></div></div>
+        <div class="fab" id="fab">+ Receive a return</div>
+        <div class="drawer hide" id="drawer">
+          <h4>Receive a return</h4>
+          <div class="f"><span class="lbl">PO# / reference</span><input class="mono" value="119120771799124" /></div>
+          <div class="f"><span class="lbl">Returned SKU</span><input class="mono" value="S25-256GB-SILVERSHADOW" /></div>
+          <div class="f"><span class="lbl">Condition</span><div class="pills"><span class="pill on">New</span><span class="pill">Open box</span><span class="pill">Used</span><span class="pill">Scrap</span></div></div>
+          <div style="display:flex;gap:9px">
+            <div class="f" style="width:80px"><span class="lbl">Units</span><input class="mono" value="1" /></div>
+            <div class="f" style="width:80px"><span class="lbl">By</span><input class="mono" value="IM" /></div>
+          </div>
+          <div class="f"><span class="lbl">Notes</span><input placeholder="—" /></div>
+          <div style="margin-top:auto;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" id="drawerClose">Cancel</button><button class="btn primary">Receive</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const LOG = [
+    { po: '119120771799124', sku: 'S25-256GB-SILVERSHADOW', cond: 'New', c: '#346538', units: 1 },
+    { po: '119119354597966', sku: 'S25-FE-128GB-JETBLACK', cond: 'New', c: '#346538', units: 1 },
+    { po: '119120671019601', sku: 'S26-ULTRA-512GB-BLACK', cond: 'Used', c: '#956400', units: 2 },
+  ];
+  const rows = (withEdit) => LOG.map((r, i) => `<tr>
+    <td class="g">${i + 1}</td>
+    <td class="m"><span class="po" data-po="${r.po}">${r.po}</span></td>
+    <td class="m"><span class="thumb"></span>${r.sku}</td>
+    <td><span class="dot" style="background:${r.c}"></span>${r.cond}</td>
+    <td class="m num">${r.units}</td>${withEdit ? '<td class="mut">✎</td>' : ''}</tr>`).join('');
+  document.getElementById('logA').innerHTML = rows(false);
+  document.getElementById('logB').innerHTML = rows(false);
+  document.getElementById('logC').innerHTML = rows(true);
+
+  const NOTES = {
+    a: 'Staged returns as cards, entry inline at the bottom of the card stack.',
+    b: 'A permanent form panel — no popup at all; staged items shown as chips.',
+    c: 'The log owns the space; entry slides in as a drawer from the button.',
+  };
+  document.querySelector('.switcher').addEventListener('click', (e) => {
+    const o = e.target.closest('.opt');
+    if (!o) return;
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    for (const k of ['a', 'b', 'c']) {
+      document.getElementById('view' + k.toUpperCase()).classList.toggle('hide', k !== o.dataset.o);
+    }
+    document.getElementById('note').textContent = NOTES[o.dataset.o];
+  });
+  document.getElementById('fab').addEventListener('click', () => document.getElementById('drawer').classList.remove('hide'));
+  document.getElementById('drawerClose').addEventListener('click', () => document.getElementById('drawer').classList.add('hide'));
+  document.body.addEventListener('click', (e) => {
+    const po = e.target.closest('.po');
+    if (po) document.getElementById('paneOrder').textContent = po.dataset.po;
+    const pill = e.target.closest('.pill');
+    if (pill) { pill.parentElement.querySelectorAll('.pill').forEach(p => p.classList.remove('on')); pill.classList.add('on'); }
+  });
+</script>
+</body>
+</html>

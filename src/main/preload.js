@@ -20,6 +20,7 @@ const EVENTS = [
   'sync:done',
   'routing:done',
   'reorder:applied',
+  'app:notice',
   'ui:open-settings',
   'ui:open-debug',
   'ui:open-history',

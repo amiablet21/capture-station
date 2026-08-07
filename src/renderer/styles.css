@@ -1112,6 +1112,111 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-log-count { color: var(--muted); font-weight: 400; }
 .ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
 
+/* design C (2026-08-07): the log owns the page height; the sheet scrolls
+   inside its card instead of the page ending where the rows do */
+.ret-log-page { flex: 1 1 auto; min-height: 0; }
+.ret-log-page .recv-past-box { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* ---------- Receive-a-return popup: the design-A "excel sheet" ---------- */
+.ret-recv-dlg { width: min(500px, 92vw); }
+.rv-sheet {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  margin: 10px 0 4px;
+}
+.rv-row { display: grid; grid-template-columns: 118px 1fr; border-bottom: 1px solid var(--border-soft); }
+.rv-row:last-child { border-bottom: none; }
+.rv-k {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 9px 10px 9px 14px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+}
+.rv-v { padding: 3px 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rv-row.rv-tall .rv-v { padding: 9px 12px; }
+.rv-in {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  min-width: 0;
+}
+.rv-in:hover { background: var(--surface-2); }
+.rv-in:focus { outline: none; background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rv-in-sm { width: 84px; flex: 0 0 auto; }
+.rv-in[type='number'] { appearance: textfield; }
+.rv-in::-webkit-outer-spin-button, .rv-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.rv-combo, .rv-pick-combo { position: relative; flex: 1 1 auto; min-width: 0; }
+.rv-matched {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.rv-cond-v { flex-direction: column; align-items: flex-start; gap: 6px; }
+.rv-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.rv-pill {
+  font-size: 11.5px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rv-pill.on { border-color: transparent; font-weight: 600; }
+.rv-pill.on.is-new { background: var(--badge-green-bg); color: var(--badge-green-text); }
+.rv-pill.on.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.rv-pill.on.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.rv-pill.on.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.rv-target { font-size: 11.5px; color: var(--muted); }
+.rv-target.is-missing { color: var(--badge-yellow-text); }
+.rv-onetime { font-size: 10.5px; color: var(--faint); }
+.rv-fix { display: flex; align-items: center; gap: 8px; width: 100%; }
+.rv-fix .rv-pick-combo { max-width: 260px; }
+.rv-fix .rv-in { border-color: var(--border); background: var(--surface); }
+
+/* the Ordered row: what the order contained, chip per line, ✓ = received */
+.rv-order-v { padding: 8px 12px; }
+.rv-order { display: flex; gap: 6px; flex-wrap: wrap; }
+.rv-item {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--surface);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rv-item .mono { font-size: 10.5px; }
+.rv-item:hover { border-color: var(--accent); }
+.rv-item.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+.rv-item.done { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; }
+
 /* the log table IS the worksheet sheet (recv-sheet-table ret-sheet classes
    carry the gridlines, widths and density) — only log extras live here */
 .ret-log-none { color: var(--muted); text-align: center; padding: 18px 10px; }
@@ -1146,6 +1251,28 @@ body.ret-compact .ret-sheet { min-width: 0; }
   margin-right: 6px;
 }
 
+/* Stock page: the Unlisted chip + "missing on" chips in its view */
+.view-chip.chip-unlisted {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  border-color: transparent;
+  font-weight: 600;
+}
+.view-chip.chip-unlisted.is-active {
+  background: var(--badge-yellow-text);
+  color: var(--surface);
+}
+.unl-chn {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--badge-yellow-text);
+  border: 1px dashed var(--badge-yellow-text);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
   background: var(--surface);
@@ -1166,6 +1293,16 @@ body.ret-compact .ret-sheet { min-width: 0; }
 }
 .ret-todo-row:last-of-type { border-bottom: none; }
 .ret-todo-row .mono { font-size: 12px; }
+/* the SKU is a link into the Stock page's Unlisted view */
+.ret-todo-sku {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px dotted var(--muted);
+}
+.ret-todo-sku:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .ret-todo-units { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
 .ret-todo-copy {
   font-family: var(--font);

@@ -134,54 +134,16 @@
       <div id="retMain" class="ret-main">
       <!-- created-but-unlisted condition SKUs: the employee's work queue -->
       <div id="retTodo" class="ret-todo" hidden></div>
-      <div class="ret-bar">
-        <span class="recv-past-head">Returns worksheet</span>
-        <span id="retHint" class="ret-hint"></span>
-        <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheets">Browser</button>
-      </div>
-      <div class="recv-sheet-box">
-        <div class="ret-sheet-scroll">
-        <table class="recv-sheet-table ret-sheet" id="retTable">
-          <thead>
-            <tr>
-              <th class="th-gutter">#</th>
-              <th class="th-po">PO#</th>
-              <th class="th-cust">Customer</th>
-              <th class="th-trk">Tracking #</th>
-              <th class="th-date">Received</th>
-              <th class="th-rsku">Returned SKU</th>
-              <th class="th-cond">Condition</th>
-              <th class="th-units">Units</th>
-              <th class="th-by">By</th>
-              <th class="th-note">Notes / dispute</th>
-              <th class="th-actions"></th>
-            </tr>
-          </thead>
-          <tbody id="retBody"></tbody>
-          <tbody>
-            <tr class="ret-entry">
-              <td class="cell-gutter" id="retEntryNum">1</td>
-              <td class="ret-entry-po">
-                <input id="retPo" class="recv-cell-input mono" type="text" placeholder="Type / paste PO#…"
-                       autocomplete="off" spellcheck="false" aria-label="Original order number" />
-              </td>
-              <!-- empty gridded cells: the entry row looks like any other sheet row -->
-              <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="cell-actions"></td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-        <div class="recv-sheet-foot">
-          <span class="recv-total" id="retSummary">0 units</span>
-          <span id="retFootNote" class="test-result"></span>
-          <button id="retReceiveAll" class="btn btn-primary" disabled>Receive returns</button>
-        </div>
-      </div>
-      <div class="recv-past">
+      <!-- design C (2026-08-07): the log owns the page; receiving happens in
+           the popup opened from the bar button -->
+      <div class="recv-past ret-log-page">
         <div class="ret-log-bar">
           <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
+          <span id="retHint" class="ret-hint"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
+          <button id="retAddBtn" class="btn btn-primary">+ Receive a return</button>
+          <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
         <div id="retPastBox" class="recv-past-box"></div>
       </div>
@@ -499,9 +461,82 @@
     </div>
   </dialog>
 
-  <!-- shared condition-dropdown menu for the Returns worksheet (fixed-position,
-       anchored under the row's trigger so the sheet's scroll never clips it) -->
-  <div id="retDdMenu" class="ret-dd-menu" role="listbox" aria-label="Condition" hidden></div>
+  <!-- Receive a return: the design-A "excel sheet" popup (2026-08-07) — a
+       label column and a value column with gridlines, one field per row -->
+  <dialog id="retRecvDialog" class="dlg ret-recv-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="rvTitle">Receive a return</h2>
+      <p class="dlg-note">Type the PO# and press Enter — a matched order fills the rest.</p>
+      <div class="rv-sheet">
+        <div class="rv-row">
+          <div class="rv-k">PO#</div>
+          <div class="rv-v">
+            <input id="rvPo" class="rv-in mono" type="text" placeholder="Type / paste PO#…"
+                   autocomplete="off" spellcheck="false" aria-label="Original order number" />
+            <span id="rvMatched" class="rv-matched" hidden></span>
+          </div>
+        </div>
+        <!-- everything the order contained: click a line to receive it; a ✓
+             marks lines already received — nothing forces receiving them all -->
+        <div class="rv-row" id="rvOrderRow" hidden>
+          <div class="rv-k">Ordered</div>
+          <div class="rv-v rv-order-v"><div id="rvOrder" class="rv-order"></div></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Customer</div>
+          <div class="rv-v"><input id="rvCust" class="rv-in" type="text" placeholder="—" aria-label="Customer name" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Tracking #</div>
+          <div class="rv-v"><input id="rvTrk" class="rv-in mono" type="text" placeholder="—" aria-label="Return tracking number" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Returned SKU</div>
+          <div class="rv-v">
+            <img id="rvThumb" class="sku-thumb" hidden alt="" />
+            <div class="combo rv-combo">
+              <input id="rvSku" class="rv-in mono" type="text" placeholder="Type a SKU…"
+                     autocomplete="off" spellcheck="false" aria-label="Returned SKU" />
+              <div class="combo-list" hidden></div>
+            </div>
+          </div>
+        </div>
+        <div class="rv-row rv-tall">
+          <div class="rv-k">Condition</div>
+          <div class="rv-v rv-cond-v">
+            <div class="rv-pills" id="rvPills" role="radiogroup" aria-label="Condition"></div>
+            <div id="rvTarget" class="rv-target"></div>
+            <div id="rvFix" class="rv-fix" hidden>
+              <div class="combo rv-pick-combo">
+                <input id="rvPick" class="rv-in mono" type="text" placeholder="Pick the listing…"
+                       autocomplete="off" spellcheck="false" aria-label="Target listing" />
+                <div class="combo-list" hidden></div>
+              </div>
+              <button id="rvCreate" class="btn btn-ghost" type="button" hidden></button>
+            </div>
+          </div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Units</div>
+          <div class="rv-v"><input id="rvQty" class="rv-in rv-in-sm mono" type="number" min="1" step="1" value="1"
+            aria-label="Units received" title="How many units actually came back — fewer than ordered is fine" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">By</div>
+          <div class="rv-v"><input id="rvBy" class="rv-in rv-in-sm mono" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Notes</div>
+          <div class="rv-v"><input id="rvNote" class="rv-in" type="text" placeholder="—" aria-label="Notes or dispute" /></div>
+        </div>
+      </div>
+      <p id="rvFeedback" class="dlg-note test-result" hidden></p>
+      <div class="dlg-actions">
+        <button id="rvCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="rvSave" class="btn btn-primary" type="button">Receive</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Shipped different item: substitution intent, applied at process time -->
   <dialog id="subDialog" class="dlg">

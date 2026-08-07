@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Receive-a-return popup — three styles</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: 26px 16px; background: rgba(47,52,55,0.16); }
+  .hide { display: none !important; }
+
+  .modal { width: 460px; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.22); overflow: hidden; }
+  .m-head { padding: 15px 18px 11px; }
+  .m-head h3 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  .m-head .sub { font-size: 11.5px; color: var(--muted); }
+  .m-acts { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 15px; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 5px 12px; background: var(--surface); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .lookup { font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { font-size: 11.5px; font-weight: 500; border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; cursor: pointer; color: var(--muted); background: var(--surface); display: inline-flex; align-items: center; }
+  .pill.on { border-color: transparent; font-weight: 600; background: var(--pos-bg); color: var(--pos-text); }
+  .target { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  /* ===== A: the excel sheet — label column + value column, gridlines ===== */
+  .sheet { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .srow { display: grid; grid-template-columns: 118px 1fr; border-bottom: 1px solid var(--border-soft); }
+  .srow:last-child { border-bottom: none; }
+  .srow > .k { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 9px 10px 9px 18px; background: var(--surface-2); border-right: 1px solid var(--border-soft); display: flex; align-items: center; }
+  .srow > .v { padding: 3px 6px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .srow input { width: 100%; box-sizing: border-box; font-size: 12.5px; padding: 6px 9px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); min-width: 0; }
+  .srow input.mono { font-family: var(--mono); }
+  .srow input:hover { background: var(--surface-2); }
+  .srow input:focus { outline: none; background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .srow .v .lookup { flex: 0 0 auto; margin-right: 6px; }
+  .srow.tall .v { padding: 8px 12px; }
+
+  /* ===== B: numbered entry rows, like the worksheet gutter ===== */
+  .brow { display: grid; grid-template-columns: 30px 108px 1fr; border-bottom: 1px solid var(--border-soft); }
+  .brow:last-child { border-bottom: none; }
+  .brow > .n { font-family: var(--mono); font-size: 10px; color: var(--accent-soft-text); background: var(--accent-soft); display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--border-soft); }
+  .brow > .k { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 9px 10px; display: flex; align-items: center; border-right: 1px solid var(--border-soft); }
+  .brow > .v { padding: 3px 6px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .brow input { width: 100%; box-sizing: border-box; font-size: 12.5px; padding: 6px 9px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); min-width: 0; }
+  .brow input.mono { font-family: var(--mono); }
+  .brow input:focus { outline: none; background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .brow.tall .v { padding: 8px 12px; }
+
+  /* ===== C: one column stacked, underline fields ===== */
+  .cbody { padding: 2px 18px 8px; }
+  .crow { padding: 7px 0 9px; border-bottom: 1px solid var(--border-soft); }
+  .crow:last-child { border-bottom: none; }
+  .crow .k { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+  .crow input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 4px 0; border: none; background: transparent; color: var(--text); }
+  .crow input.mono { font-family: var(--mono); }
+  .crow input:focus { outline: none; }
+  .crow:focus-within { border-bottom-color: var(--accent); }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Popup style</span>
+    <span class="opt on" data-o="a">A · Excel sheet</span>
+    <span class="opt" data-o="b">B · Numbered rows</span>
+    <span class="opt" data-o="c">C · Stacked lines</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage">
+    <!-- ============ A ============ -->
+    <div class="modal" id="viewA">
+      <div class="m-head"><h3>Receive a return</h3><div class="sub">Type the PO# and press Enter — a matched order fills the rest.</div></div>
+      <div class="sheet">
+        <div class="srow"><div class="k">PO#</div><div class="v"><input class="mono" value="119120771799124" /><span class="lookup">matched · Marybeth Morris</span></div></div>
+        <div class="srow"><div class="k">Customer</div><div class="v"><input value="Marybeth Morris" /></div></div>
+        <div class="srow"><div class="k">Tracking #</div><div class="v"><input class="mono" value="1Z43241903901156" /></div></div>
+        <div class="srow"><div class="k">Returned SKU</div><div class="v"><input class="mono" value="S25-256GB-SILVERSHADOW" /></div></div>
+        <div class="srow tall"><div class="k">Condition</div><div class="v" style="flex-direction:column;align-items:flex-start;gap:5px">
+          <div class="pills"><span class="pill on">New</span><span class="pill">Open box</span><span class="pill">Used</span><span class="pill">Scrap</span></div>
+          <span class="target">stock lands on S25-256GB-SILVERSHADOW</span>
+        </div></div>
+        <div class="srow"><div class="k">Units</div><div class="v"><input class="mono" value="1" style="width:74px" /></div></div>
+        <div class="srow"><div class="k">By</div><div class="v"><input class="mono" value="IM" style="width:74px" /></div></div>
+        <div class="srow"><div class="k">Notes</div><div class="v"><input placeholder="—" /></div></div>
+      </div>
+      <div class="m-acts"><button class="btn">Cancel</button><button class="btn">Receive &amp; next</button><button class="btn primary">Receive</button></div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div class="modal hide" id="viewB">
+      <div class="m-head"><h3>Receive a return</h3><div class="sub">Type the PO# and press Enter — a matched order fills the rest.</div></div>
+      <div class="sheet">
+        <div class="brow"><div class="n">1</div><div class="k">PO#</div><div class="v"><input class="mono" value="119120771799124" /><span class="lookup">matched</span></div></div>
+        <div class="brow"><div class="n">2</div><div class="k">Customer</div><div class="v"><input value="Marybeth Morris" /></div></div>
+        <div class="brow"><div class="n">3</div><div class="k">Tracking #</div><div class="v"><input class="mono" value="1Z43241903901156" /></div></div>
+        <div class="brow"><div class="n">4</div><div class="k">SKU</div><div class="v"><input class="mono" value="S25-256GB-SILVERSHADOW" /></div></div>
+        <div class="brow tall"><div class="n">5</div><div class="k">Condition</div><div class="v" style="flex-direction:column;align-items:flex-start;gap:5px">
+          <div class="pills"><span class="pill on">New</span><span class="pill">Open box</span><span class="pill">Used</span><span class="pill">Scrap</span></div>
+          <span class="target">stock lands on S25-256GB-SILVERSHADOW</span>
+        </div></div>
+        <div class="brow"><div class="n">6</div><div class="k">Units</div><div class="v"><input class="mono" value="1" style="width:74px" /></div></div>
+        <div class="brow"><div class="n">7</div><div class="k">By</div><div class="v"><input class="mono" value="IM" style="width:74px" /></div></div>
+        <div class="brow"><div class="n">8</div><div class="k">Notes</div><div class="v"><input placeholder="—" /></div></div>
+      </div>
+      <div class="m-acts"><button class="btn">Cancel</button><button class="btn">Receive &amp; next</button><button class="btn primary">Receive</button></div>
+    </div>
+
+    <!-- ============ C ============ -->
+    <div class="modal hide" id="viewC">
+      <div class="m-head"><h3>Receive a return</h3><div class="sub">Type the PO# and press Enter — a matched order fills the rest.</div></div>
+      <div class="cbody">
+        <div class="crow"><div class="k">PO# <span class="lookup">matched · Marybeth Morris</span></div><input class="mono" value="119120771799124" /></div>
+        <div class="crow"><div class="k">Customer</div><input value="Marybeth Morris" /></div>
+        <div class="crow"><div class="k">Tracking #</div><input class="mono" value="1Z43241903901156" /></div>
+        <div class="crow"><div class="k">Returned SKU</div><input class="mono" value="S25-256GB-SILVERSHADOW" /></div>
+        <div class="crow"><div class="k">Condition</div>
+          <div class="pills" style="margin:4px 0 2px"><span class="pill on">New</span><span class="pill">Open box</span><span class="pill">Used</span><span class="pill">Scrap</span></div>
+          <div class="target">stock lands on S25-256GB-SILVERSHADOW</div>
+        </div>
+        <div class="crow"><div class="k">Units</div><input class="mono" value="1" /></div>
+        <div class="crow"><div class="k">By</div><input class="mono" value="IM" /></div>
+        <div class="crow"><div class="k">Notes</div><input placeholder="—" /></div>
+      </div>
+      <div class="m-acts"><button class="btn">Cancel</button><button class="btn">Receive &amp; next</button><button class="btn primary">Receive</button></div>
+    </div>
+  </div>
+
+<script>
+  const NOTES = {
+    a: 'Label column + value column with gridlines — reads like the worksheet.',
+    b: 'Same sheet plus the numbered green gutter, like the returns rows.',
+    c: 'One clean stack, underline fields — the lightest look.',
+  };
+  const setNote = (o) => document.getElementById('note').textContent = NOTES[o];
+  document.querySelector('.switcher').addEventListener('click', (e) => {
+    const o = e.target.closest('.opt');
+    if (!o) return;
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    for (const k of ['a', 'b', 'c']) document.getElementById('view' + k.toUpperCase()).classList.toggle('hide', k !== o.dataset.o);
+    setNote(o.dataset.o);
+  });
+  setNote('a');
+  document.body.addEventListener('click', (e) => {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    pill.parentElement.querySelectorAll('.pill').forEach(p => p.classList.remove('on'));
+    pill.classList.add('on');
+  });
+</script>
+</body>
+</html>

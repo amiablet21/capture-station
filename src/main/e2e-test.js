@@ -262,72 +262,69 @@ module.exports = async function run({ app, win, db, clipboard }) {
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
 
-    // 24. returns worksheet: failed lookup falls back to a "no order" sheet
-    // row with an inline SKU picker; the log carries the new sheet columns
-    await exec(`retDrafts = []; $('retPo').value = 'WMR-REMOVAL-7788'; retEntrySubmit()`);
-    await sleep(300); // lookup refuses offline -> unmatched draft row
-    const draft = await exec('JSON.parse(JSON.stringify(retDrafts))');
-    check('failed lookup adds an unmatched draft row',
-      draft.length === 1 && draft[0].unmatched === true && draft[0].po === 'WMR-REMOVAL-7788' && draft[0].sku === '',
-      draft);
-    const sheetBits = await exec(`[
-      !!document.querySelector('#retBody .ret-noorder'),
-      !!document.querySelector('#retBody .ret-sheet-combo'),
-      $('retEntryNum').textContent,
+    // 24. receive popup (design C, 2026-08-07): a failed PO lookup falls
+    // into the hand-entry path instead of staging a worksheet row
+    await exec(`retOpenRecv(); $('rvPo').value = 'WMR-REMOVAL-7788'; rvLookup()`);
+    await sleep(300); // lookup refuses offline -> unmatched hand-entry state
+    const rvBits = await exec(`[
+      !!document.querySelector('#retRecvDialog[open]'),
+      $('rvFeedback').hidden,
+      $('rvFeedback').textContent,
+      rv.unmatched,
+      $('rvMatched').hidden,
     ]`);
-    check('sheet row shows the no-order pill + inline SKU picker',
-      sheetBits[0] === true && sheetBits[1] === true && sheetBits[2] === '2',
-      sheetBits);
+    check('popup lookup failure falls into the hand-entry path',
+      rvBits[0] === true && rvBits[1] === false && /by hand/i.test(rvBits[2])
+        && rvBits[3] === true && rvBits[4] === true,
+      rvBits);
 
-    // 24b. custom condition dropdown (replaces the native select): four option
-    // rows with dots + target previews, pencil fix on non-New rows only,
-    // arrows/Enter keyboard pick, unmapped conditions read "not mapped"
-    const ddTargets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-    await exec(`retDrafts = [{ po: 'WMR-REMOVAL-7788', orderId: null, source: '', customer: '', tracking: '',
-      sku: 'S25-128GB-NAVY', title: '', price: 0, condition: 'openbox', targets: ${JSON.stringify(ddTargets)},
-      note: '', pick: '', receivedBy: '', unmatched: true, at: new Date().toISOString() }]; renderRetSheet();`);
-    await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
-    const dd = await exec(`[
-      !$('retDdMenu').hidden,
-      document.querySelectorAll('#retDdMenu .ret-dd-mi').length,
-      (document.querySelector('#retDdMenu .ret-dd-mi.sel') || { dataset: {} }).dataset.cond || '',
-      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="new"] .ret-dd-tgt') || {}).textContent || '',
-      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="openbox"] .ret-dd-tgt') || {}).textContent || '',
-      (document.querySelector('#retDdMenu .ret-dd-mi[data-cond="used"] .ret-dd-tgt') || {}).textContent || '',
-      document.querySelectorAll('#retDdMenu .ret-dd-fix').length,
-      !!document.querySelector('#retDdMenu .ret-dd-mi[data-cond="new"] .ret-dd-fix'),
-      (document.querySelector('#retBody .ret-cond-btn') || {}).getAttribute('aria-expanded'),
+    // 24b. condition pills + the live target line: New restocks the SKU
+    // itself, a mapped condition shows its listing, an unmapped one opens
+    // the fix row (pick combo + prefix-named create button)
+    const prevLookup = await exec(`(() => {
+      const prev = recvLookup;
+      recvItems = [{ sku: 'S25-128GB-NAVY', title: 'Galaxy S25', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      return prev;
+    })()`);
+    await exec(`rv.sku = 'S25-128GB-NAVY'; $('rvSku').value = 'S25-128GB-NAVY';
+      rv.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
+      rvRenderCond();`);
+    const pills = await exec(`[
+      document.querySelectorAll('#rvPills .rv-pill').length,
+      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
+      $('rvTarget').textContent,
+      $('rvFix').hidden,
     ]`);
-    check('condition menu: 4 rows, selection, target previews, unmapped state',
-      dd[0] === true && dd[1] === 4 && dd[2] === 'openbox'
-        // targets show the FULL SKUs (no arrows / "same SKU"), owner request 2026-08-05
-        && dd[3] === 'S25-128GB-NAVY' && /S25-128GB-NAVY-OPENBOX/.test(dd[4]) && /no mapping yet/.test(dd[5])
-        && dd[8] === 'true',
-      dd);
-    check('pencil fix on non-New rows only', dd[6] === 3 && dd[7] === false, dd);
-    // keyboard: ArrowDown from Open box lands on Used, Enter picks it
-    await exec(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))`);
-    await exec(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
-    const ddPick = await exec(`[
-      retDrafts[0].condition,
-      $('retDdMenu').hidden,
-      (document.querySelector('#retBody .ret-cond-btn') || {}).textContent || '',
-      !!document.querySelector('#retBody .ret-pick'),
+    check('popup: 4 condition pills, New selected, target = the SKU itself',
+      pills[0] === 4 && pills[1] === 'new' && /S25-128GB-NAVY/.test(pills[2]) && pills[3] === true,
+      pills);
+    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="openbox"]').click()`);
+    let tgt = await exec(`[$('rvTarget').textContent, $('rvFix').hidden]`);
+    check('a mapped condition resolves to its listing, no fix row',
+      /S25-128GB-NAVY-OPENBOX/.test(tgt[0]) && tgt[1] === true, tgt);
+    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
+    tgt = await exec(`[
+      $('rvTarget').className,
+      $('rvFix').hidden,
+      $('rvCreate').hidden,
+      $('rvCreate').textContent,
+      !!document.querySelector('.rv-pick-combo .combo-list'),
     ]`);
-    check('arrow + Enter picks Used, closes the menu, shows the one-time picker',
-      ddPick[0] === 'used' && ddPick[1] === true && /Used/.test(ddPick[2]) && ddPick[3] === true,
-      ddPick);
-    // pencil swaps the menu to the inline mapping editor (shared combobox)
-    await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
-    await exec(`document.querySelector('#retDdMenu .ret-dd-fix[data-cond="used"]').click()`);
-    const ddEdit = await exec(`[
-      !!document.querySelector('#retDdMenu .ret-dd-edit'),
-      !!document.querySelector('#retDdMenu .ret-dd-combo .combo-list'),
-      document.activeElement === document.querySelector('#retDdMenu .ret-dd-edit-input'),
-    ]`);
-    check('pencil opens the inline mapping editor anchored in the menu',
-      ddEdit[0] === true && ddEdit[1] === true && ddEdit[2] === true, ddEdit);
-    await exec('retDdClose(); retDrafts = []; renderRetSheet();');
+    check('an unmapped condition opens the fix row with the prefix create button',
+      /is-missing/.test(tgt[0]) && tgt[1] === false && tgt[2] === false
+        && /USED-S25-128GB-NAVY/.test(tgt[3]) && tgt[4] === true,
+      tgt);
+    // receive is blocked while the target is unresolved
+    await exec(`$('rvPo').value = 'WMR-REMOVAL-7788'; rvCommit()`);
+    await sleep(120);
+    const blocked = await exec(`$('rvFeedback').textContent`);
+    check('receive blocked until the missing listing is picked or created',
+      /pick or create/i.test(blocked), blocked);
+    await exec(`$('retRecvDialog').close()`);
+    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}`);
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
@@ -639,15 +636,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
     check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
-    // 36. returns resize: whole-width grip + per-column grips on BOTH
-    // sheets again (the log mirrors the worksheet since v1.8.6)
+    // 36. returns resize: whole-width grip + per-column grips on the log
+    // (the worksheet left with design C, 2026-08-07 — the log is the sheet)
     const retGrips = await exec(`[
       !!$('retGrip'),
-      document.querySelectorAll('#retTable thead .col-grip').length,
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
-    check('returns sheets: shared width grip + column grips on both',
-      retGrips[0] === true && retGrips[1] === 9 && retGrips[2] === 9, retGrips);
+    check('returns log: shared width grip + column grips',
+      retGrips[0] === true && retGrips[1] === 9, retGrips);
 
     // screenshot of the live window for visual review
     if (process.env.CAPTURE_E2E_SHOT) {
@@ -827,27 +823,35 @@ module.exports = async function run({ app, win, db, clipboard }) {
         recvByBarcode = new Map();
         recvLookup = 'ready';
       `);
-      const retAt = new Date().toISOString();
       const s25Targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      await exec(`retReceivedBy = 'IM'; retDrafts = ${JSON.stringify([
-        { po: '119121310078834', orderId: 'oid-1', source: 'WALMART', customer: 'J. Alvarez', tracking: '1ZF98W401234567890', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, condition: 'openbox', targets: s25Targets, note: 'box opened once, resealed', pick: '', receivedBy: 'IM', unmatched: false, at: retAt },
-        { po: '119121310078834', orderId: 'oid-1', source: 'WALMART', customer: 'J. Alvarez', tracking: '1ZF98W401234567890', sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, condition: 'new', targets: s25Targets, note: '', pick: '', receivedBy: 'IM', unmatched: false, at: retAt },
-        { po: 'WMR-4479', orderId: null, source: '', customer: '', tracking: '', sku: 'A16-64GB-BLK', title: 'Samsung Galaxy A16 64GB Black', price: 139.99, condition: 'used', targets: { new: 'A16-64GB-BLK', openbox: '', used: 'A16-64GB-BLK-USED', scrap: '' }, note: 'WFS removal - dispute open', pick: '', receivedBy: 'IM', unmatched: true, at: retAt },
-      ])}; renderRetSheet();`);
+      await exec(`retReceivedBy = 'IM'; retOpenRecv();
+        rv.unmatched = false; rv.orderId = 'oid-1'; rv.source = 'WALMART';
+        $('rvPo').value = '119121310078834';
+        $('rvCust').value = 'J. Alvarez';
+        $('rvTrk').value = '1ZF98W401234567890';
+        rv.items = [
+          { sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, quantity: 2, targets: ${JSON.stringify(s25Targets)} },
+          { sku: 'A16-64GB-BLK', title: 'Samsung Galaxy A16 64GB Black', price: 139.99, quantity: 1, targets: null },
+        ];
+        rv.received = [false, false];
+        rvLoadItemAt(0);
+        rv.condition = 'openbox';
+        $('rvMatched').hidden = false; $('rvMatched').textContent = 'matched · J. Alvarez';
+        $('rvBy').value = 'IM'; $('rvNote').value = 'box opened once, resealed';
+        rvRenderCond();`);
       await sleep(400);
       img = await win.webContents.capturePage();
-      const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-sheet.png');
+      const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-popup.png');
       fs.writeFileSync(retShot, img.toPNG());
       console.log(`SHOT ${retShot}`);
-      // the condition dropdown open on the first row: dots + target previews,
-      // pencil fix visible on the selected (Open box) row
-      await exec(`document.querySelector('#retBody .ret-cond-btn').click()`);
+      // the unmapped state: Used has no listing -> fix row with create button
+      await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
       await sleep(250);
       img = await win.webContents.capturePage();
-      const retDdShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-dropdown.png');
-      fs.writeFileSync(retDdShot, img.toPNG());
-      console.log(`SHOT ${retDdShot}`);
-      await exec('retDdClose()');
+      const retFixShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-popup-fix.png');
+      fs.writeFileSync(retFixShot, img.toPNG());
+      console.log(`SHOT ${retFixShot}`);
+      await exec(`$('retRecvDialog').close()`);
       // condition-mapping editor, seeded with mixed auto/manual rows
       await exec(`$('mapDialog').showModal(); $('mapSearch').value = ''; mapRows = ${JSON.stringify([
         { baseSku: 'A16-64GB-BLK', conds: { used: { sku: 'A16-64GB-BLK-USED', source: 'manual' } } },
