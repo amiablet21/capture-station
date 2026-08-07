@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('api', {
   browserLayout: (bounds) => ipcRenderer.invoke('browser:layout', bounds),
   browserOpen: (orderNumber, channel, kind) => ipcRenderer.invoke('browser:open', { orderNumber, channel, kind }),
   browserOpenUrl: (url) => ipcRenderer.invoke('browser:open', { url }),
+  browserOpenUrl: (url) => ipcRenderer.invoke('browser:open', { url }),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
   browserPrint: () => ipcRenderer.invoke('browser:print'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),

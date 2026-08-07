@@ -254,14 +254,59 @@ function ensurePane() {
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
-  // marketplace login flows open popups; allow them, same isolated session
-  wc.setWindowOpenHandler(() => ({
-    action: 'allow',
-    overrideBrowserWindowOptions: {
-      autoHideMenuBar: true,
-      webPreferences: { partition: PANE_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
-    },
-  }));
+  // Owner privacy filter (2026-08-07): Seller Center's money/performance
+  // pages stay hidden from whoever works the pane. The menu links vanish via
+  // injected CSS, and any navigation that still reaches them (typed URL, SPA
+  // route, popup) bounces back to the order list with a notice. This guards
+  // the PANE only — a real browser outside the app is not covered.
+  const HIDDEN_PANE_PATHS = [
+    '/payments/statements',
+    '/payments/capital',
+    '/analytics/overview/executive-dashboard',
+    '/analytics/sales-insights',
+  ];
+  const paneHiddenUrl = (u) => {
+    try {
+      const url = new URL(u);
+      return url.hostname.replace(/^www\./, '') === 'seller.walmart.com'
+        && HIDDEN_PANE_PATHS.some(p => url.pathname.startsWith(p));
+    } catch { return false; }
+  };
+  const PANE_SAFE_URL = 'https://seller.walmart.com/orders/manage-orders';
+  const paneBlockNote = () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('app:notice', { message: 'That Seller Center page is hidden in Capture Station' });
+    }
+  };
+  wc.on('will-navigate', (e, u) => {
+    if (paneHiddenUrl(u)) { e.preventDefault(); paneBlockNote(); }
+  });
+  wc.on('did-navigate', (_e, u) => {
+    if (paneHiddenUrl(u)) { paneBlockNote(); wc.loadURL(PANE_SAFE_URL).catch(() => {}); }
+  });
+  wc.on('did-navigate-in-page', (_e, u, isMainFrame) => {
+    if (isMainFrame && paneHiddenUrl(u)) { paneBlockNote(); wc.loadURL(PANE_SAFE_URL).catch(() => {}); }
+  });
+  wc.on('did-finish-load', () => {
+    let host = '';
+    try { host = new URL(wc.getURL()).hostname.replace(/^www\./, ''); } catch { /* not a page */ }
+    if (host !== 'seller.walmart.com') return;
+    wc.insertCSS(
+      HIDDEN_PANE_PATHS.map(p => `a[href*="${p}"]`).join(', ') + ' { display: none !important; }'
+    ).catch(() => { /* purely cosmetic — the nav block is the real gate */ });
+  });
+  // marketplace login flows open popups; allow them, same isolated session —
+  // except popups aimed at hidden pages, which are refused outright
+  wc.setWindowOpenHandler(({ url }) => {
+    if (paneHiddenUrl(url)) { paneBlockNote(); return { action: 'deny' }; }
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        autoHideMenuBar: true,
+        webPreferences: { partition: PANE_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
+      },
+    };
+  });
   for (const ev of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) {
     wc.on(ev, sendPaneState);
   }

@@ -358,17 +358,26 @@ module.exports = async function run({ app, win, db, clipboard }) {
       ledgerBits);
     check('history rows carry edit + delete, no inputs until editing',
       ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
-    // inline edit: clicking the pencil turns the row into in-place inputs
+    // popup edit (owner request 2026-08-07): the pencil opens the receive
+    // popup prefilled from the row, with the Received-date row visible
     await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
-    await sleep(150);
+    await sleep(200);
     const editBits = await exec(`[
-      !!document.querySelector('#retPastBox tr.ret-log-editing'),
-      document.querySelectorAll('#retPastBox tr.ret-log-editing input, #retPastBox tr.ret-log-editing select').length,
-      !!document.querySelector('#retPastBox .ret-log-save'),
+      !!document.querySelector('#retRecvDialog[open]'),
+      $('rvTitle').textContent,
+      $('rvPo').value,
+      $('rvSku').value,
+      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
+      $('rvQty').value,
+      $('rvSave').textContent,
+      $('rvDayRow').hidden,
     ]`);
-    check('pencil opens the inline edit row (inputs in place, save button)',
-      editBits[0] === true && editBits[1] >= 6 && editBits[2] === true, editBits);
-    await exec(`retLogEdit = null; renderRetLog()`);
+    check('pencil opens the edit popup prefilled from the row',
+      editBits[0] === true && /Edit return/.test(editBits[1]) && editBits[2] === 'WMR-REMOVAL-7788'
+        && editBits[3] === 'S25-128GB-NAVY' && editBits[4] === 'openbox' && editBits[5] === '2'
+        && /Save changes/.test(editBits[6]) && editBits[7] === false,
+      editBits);
+    await exec(`$('retRecvDialog').close()`);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);

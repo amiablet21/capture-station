@@ -1371,6 +1371,30 @@ api.on('browser:state', (s) => {
   $('bBack').disabled = !s.canGoBack;
   $('bFwd').disabled = !s.canGoForward;
   if (bLoad.active && !bLoad.failed && s.domain) $('bLoadDomain').textContent = s.domain;
+  // the platform chip whose site is showing stays lit
+  const dom = String(s.domain || '').toLowerCase();
+  $('bPlat').querySelectorAll('.bplat-btn').forEach(b => {
+    b.classList.toggle('on', !!dom && dom.includes(b.dataset.plat));
+  });
+});
+
+// one-click marketplace homes: the pane's persistent session means the
+// saved seller logins are already active
+const MARKET_HOME = {
+  walmart: 'https://seller.walmart.com/orders/manage-orders',
+  ebay: 'https://www.ebay.com/sh/ord',
+  temu: 'https://seller.temu.com/',
+};
+
+$('bPlat').addEventListener('click', async (e) => {
+  const b = e.target.closest('.bplat-btn');
+  if (!b) return;
+  bShowLoading(`Opening ${channelLabel(b.dataset.plat)}`);
+  const res = await api.browserOpenUrl(MARKET_HOME[b.dataset.plat]);
+  if (!res.ok) {
+    bHideLoading();
+    if (res.error) toast(res.error);
+  }
 });
 
 /* pane loading screen: while a page loads, the native view hides and this
@@ -2450,6 +2474,7 @@ function rvBlank() {
     orderId: null, source: '', unmatched: true,
     sku: '', title: '', price: 0, targets: null, condition: 'new',
     pick: '', items: [], received: [], itemIdx: -1, busy: false,
+    edit: null, // { rid, ii } = editing a log line instead of receiving
   };
 }
 
@@ -2467,6 +2492,9 @@ function retOpenRecv() {
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
   $('rvMatched').hidden = true;
+  $('rvDayRow').hidden = true;
+  $('rvTitle').textContent = 'Receive a return';
+  $('rvSave').textContent = 'Receive';
   rvFeedback('');
   rvRenderCond();
   rvRenderOrder();
@@ -2481,11 +2509,47 @@ function rvThumbUpdate() {
   if (src) $('rvThumb').src = src;
 }
 
+// the SAME popup edits a log line ("more coherent that way" — owner,
+// 2026-08-07, reversing the earlier edit-on-the-line preference): fields
+// prefill from the row, Save runs the qty-aware stock corrections
+function retOpenEdit({ r, i, ii }) {
+  rv = rvBlank();
+  rv.edit = { rid: r.id, ii };
+  rv.unmatched = !!r.unmatched;
+  rv.sku = String(i.sku || '').toUpperCase();
+  rv.condition = i.condition || 'new';
+  $('rvPo').value = r.order_number || '';
+  $('rvCust').value = r.customer || '';
+  $('rvTrk').value = r.tracking || '';
+  $('rvSku').value = i.sku || '';
+  $('rvQty').value = String(Number(i.qty) || 1);
+  $('rvBy').value = r.received_by || '';
+  $('rvNote').value = ii >= 0 ? (i.note || '') : (r.note || '');
+  $('rvPick').value = '';
+  $('rvDay').value = String(r.created_at).slice(0, 10);
+  $('rvDayRow').hidden = false;
+  $('rvMatched').hidden = true;
+  $('rvTitle').textContent = 'Edit return';
+  $('rvSave').textContent = 'Save changes';
+  rvFeedback('');
+  rvRenderOrder();
+  rvThumbUpdate();
+  rvRenderCond();
+  // target previews for the pills; the save path re-resolves server-side
+  if (rv.sku) {
+    api.returnsTargets(rv.sku).then(tr => {
+      if (tr.ok && rv && rv.edit) { rv.targets = tr.targets; rvRenderCond(); }
+    });
+  }
+  ensureInventory();
+  $('retRecvDialog').showModal();
+}
+
 // Enter on the PO#: processed-order lookup fills the sheet; a multi-item
 // order queues its remaining lines for "Receive & next"
 async function rvLookup() {
   const po = $('rvPo').value.trim();
-  if (!po || !rv || rv.busy) return;
+  if (!po || !rv || rv.busy || rv.edit) return; // edit mode: the PO is just text
   rv.busy = true;
   rvFeedback('Looking the order up…', true);
   const res = await api.returnsLookup(po);
@@ -2648,7 +2712,7 @@ $('rvPo').addEventListener('keydown', (e) => {
 // editing the PO after a match voids the match — a stale orderId must never
 // ride along with a hand-changed number
 $('rvPo').addEventListener('input', () => {
-  if (!rv) return;
+  if (!rv || rv.edit) return;
   rv.orderId = null;
   rv.source = '';
   rv.unmatched = true;
@@ -2678,6 +2742,28 @@ async function rvCommit() {
   const po = $('rvPo').value.trim();
   if (!po) { rvFeedback('PO# is required.'); $('rvPo').focus(); return false; }
   const sku = $('rvSku').value.trim().toUpperCase();
+  if (rv.edit) {
+    // edit mode: the qty-aware corrections engine re-resolves the target
+    const eqty = Number($('rvQty').value);
+    if (sku && (!Number.isInteger(eqty) || eqty < 1)) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
+    rv.busy = true;
+    $('rvSave').disabled = true;
+    rvFeedback('Saving…', true);
+    const res = await api.returnsEditUnit({
+      id: rv.edit.rid, itemIndex: rv.edit.ii,
+      po, day: $('rvDay').value.trim(), customer: $('rvCust').value.trim(),
+      tracking: $('rvTrk').value.trim(), sku,
+      condition: rv.condition, note: $('rvNote').value.trim(),
+      units: $('rvQty').value.trim(), receivedBy: $('rvBy').value.trim(),
+    }).catch(e => ({ ok: false, error: e.message }));
+    rv.busy = false;
+    $('rvSave').disabled = false;
+    if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not save.'); return false; }
+    rvFeedback('');
+    toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
+    loadRetPast();
+    return true;
+  }
   let target = '';
   let qty = 1;
   if (sku) {
@@ -2800,7 +2886,6 @@ function retOpenPo(po, ch) {
 // (condition as a pastel badge, horizontal dividers only). Search filters
 // the whole history live.
 let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-only) }] per unit
-let retLogEdit = null; // { rid, ii, un } — the one row currently edited inline
 
 // condition SKUs holding returned stock with NO marketplace listing linked
 // yet — surfaced as "not listed" markers so the employee knows what to make
@@ -2871,31 +2956,11 @@ $('retTodo').addEventListener('click', (e) => {
 });
 
 // the log wears the SAME sheet as the worksheet (same columns, same
-// gridlines, same order) — flat, searchable, and editable on the row
+// gridlines, same order) — flat and searchable; the pencil opens the
+// receive popup in edit mode (popup editing at the owner's request
+// 2026-08-07, replacing the earlier inline row)
 function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
-  if (retLogEdit && retLogEdit.rid === r.id && retLogEdit.ii === ii && retLogEdit.un === un) {
-    // inline edit: every field editable in place, ✓/✕ where the actions were
-    return `
-    <tr class="ret-past-tr ret-log-editing" data-rid="${r.id}" data-ii="${ii}">
-      <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}">${num}</td>
-      <td class="ret-cell-po"><input class="ret-log-ein mono" data-f="po" value="${esc(r.order_number)}" /></td>
-      <td class="ret-cell-cust"><input class="ret-log-ein" data-f="customer" value="${esc(r.customer || '')}" placeholder="customer…" /></td>
-      <td class="ret-cell-trk"><input class="ret-log-ein mono" data-f="tracking" value="${esc(r.tracking || '')}" placeholder="tracking…" /></td>
-      <td class="ret-cell-date"><input class="ret-log-ein mono" data-f="day" value="${esc(day)}" title="YYYY-MM-DD" /></td>
-      <td class="ret-cell-sku"><div class="combo ret-log-ecombo"><input class="ret-log-ein mono" data-f="sku" value="${esc(i.sku || '')}" placeholder="SKU…" autocomplete="off" spellcheck="false" /><div class="combo-list" hidden></div></div></td>
-      <td class="ret-cell-cond"><select class="ret-log-ein ret-log-esel" data-f="condition">
-        ${RET_CONDS.map(c => `<option value="${c.key}" ${c.key === (i.condition || 'new') ? 'selected' : ''}>${c.label}</option>`).join('')}
-      </select></td>
-      <td class="ret-cell-units"><input class="ret-log-ein mono" data-f="units" type="number" min="1" step="1" value="${Number(i.qty) || 1}" /></td>
-      <td class="ret-cell-by"><input class="ret-log-ein mono" data-f="by" value="${esc(r.received_by || '')}" maxlength="12" placeholder="IM" /></td>
-      <td class="ret-cell-note"><input class="ret-log-ein" data-f="note" value="${esc(ii >= 0 ? (i.note || '') : (r.note || ''))}" placeholder="—" /></td>
-      <td class="cell-actions"><span class="ret-log-act is-editing">
-        <button class="btn-icon ret-log-save" title="Save (Enter)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></button>
-        <button class="btn-icon is-danger ret-log-cancel" title="Cancel (Esc)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></svg></button>
-      </span></td>
-    </tr>`;
-  }
   return `
     <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
@@ -2963,15 +3028,6 @@ function renderRetLog() {
     </table>
     </div>`;
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
-  // the edit row's SKU input gets the shared live suggestions — but no
-  // auto-focus: focusing popped the list and read as "change the SKU"
-  const ecombo = box.querySelector('.ret-log-ecombo');
-  if (ecombo) {
-    makeCombo(ecombo.querySelector('input'), ecombo.querySelector('.combo-list'), (item) => {
-      ecombo.querySelector('input').value = item.sku;
-    });
-    ensureInventory();
-  }
 }
 
 async function loadRetPast() {
@@ -2994,37 +3050,14 @@ $('retLogSearch').addEventListener('input', () => renderRetLog());
 
 let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
 
-async function retLogSave() {
-  if (!retLogEdit) return;
-  const tr = $('retPastBox').querySelector('.ret-log-editing');
-  if (!tr) { retLogEdit = null; return; }
-  const val = (f) => {
-    const el = tr.querySelector(`[data-f="${f}"]`);
-    return el ? el.value.trim() : '';
-  };
-  const res = await api.returnsEditUnit({
-    id: retLogEdit.rid, itemIndex: retLogEdit.ii,
-    po: val('po'), day: val('day'), customer: val('customer'),
-    tracking: val('tracking'), sku: val('sku'),
-    condition: val('condition'), note: val('note'),
-    units: val('units'), receivedBy: val('by'),
-  });
-  if (!res.ok) { toast(res.error || 'Could not save.'); return; }
-  retLogEdit = null;
-  toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
-  loadRetPast();
-}
-
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
-  if (e.target.closest('.ret-log-save')) { retLogSave(); return; }
-  if (e.target.closest('.ret-log-cancel')) { retLogEdit = null; renderRetLog(); return; }
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
   if (e.target.closest('.ret-log-edit-btn')) {
-    retLogEdit = { rid: Number(tr.dataset.rid), ii: Number(tr.dataset.ii), un: Number(tr.dataset.un) || 0 };
-    renderRetLog();
+    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    if (entry) retOpenEdit(entry);
     return;
   }
   if (e.target.closest('.ret-log-del-btn')) {
@@ -3039,16 +3072,6 @@ $('retPastBox').addEventListener('click', (e) => {
     $('retDelTarget').textContent = retDelCtx.target ? `−${qty} ${retDelCtx.target}` : '';
     $('retDelDialog').showModal();
   }
-});
-
-// Enter saves, Escape cancels — inside the inline edit row only
-$('retPastBox').addEventListener('keydown', (e) => {
-  if (!retLogEdit || !e.target.closest('.ret-log-editing')) return;
-  // the SKU combo's own Enter/Escape (open suggestion list) takes priority
-  const comboList = e.target.closest('.combo') && e.target.closest('.combo').querySelector('.combo-list');
-  if (comboList && !comboList.hidden) return;
-  if (e.key === 'Enter') { e.preventDefault(); retLogSave(); }
-  else if (e.key === 'Escape') { e.preventDefault(); retLogEdit = null; renderRetLog(); }
 });
 
 $('retDelCancel').addEventListener('click', () => $('retDelDialog').close());

@@ -60,6 +60,12 @@
       <button id="bBack" class="btn-icon" title="Back" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M168.49,199.51a12,12,0,0,1-17,17l-80-80a12,12,0,0,1,0-17l80-80a12,12,0,0,1,17,17L97,128Z"/></svg></button>
       <button id="bFwd" class="btn-icon" title="Forward" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg></button>
       <button id="bReload" class="btn-icon" title="Reload"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></button>
+      <!-- one-click jumps to the seller portals (saved logins already live in this pane) -->
+      <span class="bplat" id="bPlat">
+        <button class="bplat-btn" data-plat="walmart" title="Walmart Seller Center">Walmart</button>
+        <button class="bplat-btn" data-plat="ebay" title="eBay Seller Hub">eBay</button>
+        <button class="bplat-btn" data-plat="temu" title="Temu Seller Central">Temu</button>
+      </span>
       <span id="bDomain" class="bdock-domain" title="Only the site name shows here, never the full link">—</span>
       <button id="bPrint" class="btn-icon" title="Print this page (shipping label)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M214,80H196V40a12,12,0,0,0-12-12H72A12,12,0,0,0,60,40V80H42A26,26,0,0,0,16,106v66a26,26,0,0,0,26,26H60v18a12,12,0,0,0,12,12H184a12,12,0,0,0,12-12V198h18a26,26,0,0,0,26-26V106A26,26,0,0,0,214,80ZM84,52h88V80H84ZM172,204H84V164h88Zm44-32a2,2,0,0,1-2,2H196V152a12,12,0,0,0-12-12H72a12,12,0,0,0-12,12v22H42a2,2,0,0,1-2-2V106a2,2,0,0,1,2-2H214a2,2,0,0,1,2,2Z"/></svg></button>
       <button id="bCollapse" class="btn-icon" title="Collapse the browser pane"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M107.51,136.49a12,12,0,0,1,0-17l72-72a12,12,0,0,1,17,17L133,128l63.51,63.51a12,12,0,0,1-17,17Zm-64,0a12,12,0,0,1,0-17l72-72a12,12,0,0,1,17,17L69,128l63.51,63.51a12,12,0,0,1-17,17Z"/></svg></button>
@@ -489,6 +495,11 @@
         <div class="rv-row">
           <div class="rv-k">Tracking #</div>
           <div class="rv-v"><input id="rvTrk" class="rv-in mono" type="text" placeholder="—" aria-label="Return tracking number" /></div>
+        </div>
+        <!-- edit mode only: the received date is correctable, like the old inline edit -->
+        <div class="rv-row" id="rvDayRow" hidden>
+          <div class="rv-k">Received</div>
+          <div class="rv-v"><input id="rvDay" class="rv-in rv-in-sm mono" type="text" placeholder="YYYY-MM-DD" aria-label="Received date" /></div>
         </div>
         <div class="rv-row">
           <div class="rv-k">Returned SKU</div>

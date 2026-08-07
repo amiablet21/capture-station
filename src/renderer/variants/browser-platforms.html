@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Browser pane — platform picker</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .split { flex: 1; display: flex; min-height: 0; }
+  .pane { width: 470px; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); min-height: 0; }
+  .pane-head { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex: 0 0 auto; }
+  .ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; border-radius: 5px; cursor: pointer; flex: 0 0 auto; }
+  .ico:hover { background: var(--border); }
+  .pane-domain { font-size: 11px; color: var(--muted); margin: 0 auto; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pane-body { flex: 1; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 0; text-align: center; }
+  .site { color: var(--muted); font-size: 12.5px; }
+  .site .logo { width: 52px; height: 52px; border-radius: 12px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 20px; }
+  .site b { display: block; font-size: 13.5px; color: var(--text); margin-bottom: 3px; }
+
+  /* A: platform chips in the pane header */
+  .plat { display: flex; gap: 3px; flex: 0 0 auto; margin: 0 4px; }
+  .plat-btn { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: var(--surface); cursor: pointer; }
+  .plat-btn:hover { border-color: var(--accent); color: var(--text); }
+  .plat-btn.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+
+  /* B: one globe button + dropdown menu */
+  .menu { position: absolute; z-index: 30; margin-top: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 28px rgba(47,52,55,0.16); overflow: hidden; min-width: 170px; }
+  .menu button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font-size: 12.5px; padding: 8px 12px; background: none; border: none; cursor: pointer; color: var(--text); }
+  .menu button:hover { background: var(--surface-2); }
+  .menu .dot2 { width: 8px; height: 8px; border-radius: 999px; }
+
+  .work { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px 14px; }
+  .bar { display: flex; align-items: center; gap: 10px; }
+  .bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); flex: 1; margin-top: 8px; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12px; }
+  .hide { display: none !important; }
+</style></head>
+<body>
+  <div class="try"><b>Click Walmart / eBay / Temu</b> in the pane header — the pane jumps to that seller portal (your saved logins already live there). PO# clicks still work exactly as before.</div>
+  <div class="switcher">
+    <span class="lbl">Placement</span>
+    <span class="opt on" data-o="a">A · Chips in the header</span>
+    <span class="opt" data-o="b">B · Globe menu</span>
+    <span class="note" id="note">Always visible — one click to any marketplace.</span>
+  </div>
+
+  <div class="split">
+    <div class="pane">
+      <div class="pane-head">
+        <span class="ico">‹</span><span class="ico">›</span><span class="ico">⟳</span>
+        <span class="plat" id="platA">
+          <button class="plat-btn on" data-p="walmart">Walmart</button>
+          <button class="plat-btn" data-p="ebay">eBay</button>
+          <button class="plat-btn" data-p="temu">Temu</button>
+        </span>
+        <span class="ico hide" id="globeBtn" title="Open a marketplace">🌐</span>
+        <span class="pane-domain" id="domain">seller.walmart.com</span>
+        <span class="ico">⎙</span><span class="ico">»</span>
+        <div class="menu hide" id="menu" style="left:104px">
+          <button data-p="walmart"><span class="dot2" style="background:#0071DC"></span>Walmart Seller Center</button>
+          <button data-p="ebay"><span class="dot2" style="background:#346538"></span>eBay Seller Hub</button>
+          <button data-p="temu"><span class="dot2" style="background:#FB7701"></span>Temu Seller Central</button>
+        </div>
+      </div>
+      <div class="pane-body">
+        <div class="site" id="site">
+          <div class="logo" style="background:#0071DC">W</div>
+          <b>Walmart Seller Center</b>orders · returns · listings
+        </div>
+      </div>
+    </div>
+
+    <div class="work">
+      <div class="bar"><b>Returns log — 3 entries</b></div>
+      <div class="card">the returns sheet stays here, unchanged</div>
+    </div>
+  </div>
+
+<script>
+  const SITES = {
+    walmart: { name: 'Walmart Seller Center', color: '#0071DC', letter: 'W', domain: 'seller.walmart.com', sub: 'orders · returns · listings' },
+    ebay: { name: 'eBay Seller Hub', color: '#346538', letter: 'e', domain: 'www.ebay.com', sub: 'sh/ord — awaiting shipment' },
+    temu: { name: 'Temu Seller Central', color: '#FB7701', letter: 'T', domain: 'seller.temu.com', sub: 'order list · after-sales' },
+  };
+  const go = (p) => {
+    const s = SITES[p];
+    document.getElementById('site').innerHTML =
+      `<div class="logo" style="background:${s.color}">${s.letter}</div><b>${s.name}</b>${s.sub}`;
+    document.getElementById('domain').textContent = s.domain;
+    document.querySelectorAll('.plat-btn').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  };
+  document.getElementById('platA').addEventListener('click', (e) => {
+    const b = e.target.closest('.plat-btn');
+    if (b) go(b.dataset.p);
+  });
+  const menu = document.getElementById('menu');
+  document.getElementById('globeBtn').addEventListener('click', () => menu.classList.toggle('hide'));
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    go(b.dataset.p);
+    menu.classList.add('hide');
+  });
+  document.querySelector('.switcher').addEventListener('click', (e) => {
+    const o = e.target.closest('.opt');
+    if (!o) return;
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    const b = o.dataset.o === 'b';
+    document.getElementById('platA').classList.toggle('hide', b);
+    document.getElementById('globeBtn').classList.toggle('hide', !b);
+    if (!b) menu.classList.add('hide');
+    document.getElementById('note').textContent = b
+      ? 'One 🌐 button, a small menu — saves header space.'
+      : 'Always visible — one click to any marketplace.';
+  });
+</script>
+</body>
+</html>
