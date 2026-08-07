@@ -505,6 +505,46 @@ module.exports = async function run({ app, win, db, clipboard }) {
     // from check 29 stays visible for the screenshot pass)
     await exec(`state.captureOnly = true; delete state.orderMeta['119121297240391']; render();`);
 
+    // 31b. SPLIT orders (2026-08-07): one marketplace order split across
+    // locations by Linnworks' fulfillment network = one row per part, meta
+    // keyed ref#lwOrderId, part badges, and the dedupe sweep spares them
+    const sp1 = db.createRow({ channel: 'walmart', orderNumber: '119121888000111', origin: 'linnworks', lwOrderId: 'LW-A' });
+    const sp2 = db.createRow({ channel: 'walmart', orderNumber: '119121888000111', origin: 'linnworks', lwOrderId: 'LW-B' });
+    check('split parts store their Linnworks order ids',
+      sp1.lw_order_id === 'LW-A' && sp2.lw_order_id === 'LW-B'
+        && !!db.findByOrderAndPart('119121888000111', 'LW-B'), [sp1.lw_order_id, sp2.lw_order_id]);
+    const dd2 = db.dedupeOrderRows();
+    check('dedupe sweep never eats split parts',
+      !!db.findByOrderAndPart('119121888000111', 'LW-A') && !!db.findByOrderAndPart('119121888000111', 'LW-B'),
+      dd2);
+    await exec(`
+      state.rows.unshift(
+        { id: 99101, order_number: '119121888000111', lw_order_id: 'LW-A', channel: 'walmart', status: 'pending', created_at: new Date().toISOString(), serials: [], items: [], tracking: '', notes: '' },
+        { id: 99102, order_number: '119121888000111', lw_order_id: 'LW-B', channel: 'walmart', status: 'pending', created_at: new Date().toISOString(), serials: [], items: [], tracking: '', notes: '' });
+      state.orderMeta['119121888000111#LW-A'] = { source: 'WALMART', despatchBy: '', split: { part: 1, of: 2 }, items: [{ sku: 'S25-128GB-NAVY', qty: 1, title: '', img: '' }] };
+      state.orderMeta['119121888000111#LW-B'] = { source: 'WALMART', despatchBy: '', dropship: true, split: { part: 2, of: 2 }, items: [{ sku: 'X400-64GB-BLACK', qty: 1, title: '', img: '' }] };
+      render();
+    `);
+    const splitBits = await exec(`[
+      document.querySelectorAll('#rowsBody .badge-split').length,
+      [...document.querySelectorAll('#rowsBody .badge-split')].map(b => b.textContent).join(','),
+      [...document.querySelectorAll('#rowsBody tr')].filter(tr => tr.textContent.includes('119121888000111')).length,
+      [...document.querySelectorAll('#rowsBody tr')].some(tr => tr.textContent.includes('S25-128GB-NAVY') && tr.textContent.includes('119121888000111')),
+      [...document.querySelectorAll('#rowsBody tr')].some(tr => tr.textContent.includes('X400-64GB-BLACK') && tr.textContent.includes('119121888000111')),
+    ]`);
+    check('split parts render as separate rows with part badges + own items',
+      splitBits[0] === 2 && /1\/2/.test(splitBits[1]) && /2\/2/.test(splitBits[1])
+        && splitBits[2] === 2 && splitBits[3] === true && splitBits[4] === true,
+      splitBits);
+    db.deleteRow(sp1.id);
+    db.deleteRow(sp2.id);
+    await exec(`
+      state.rows = state.rows.filter(r => r.order_number !== '119121888000111');
+      delete state.orderMeta['119121888000111#LW-A'];
+      delete state.orderMeta['119121888000111#LW-B'];
+      render();
+    `);
+
     // 32. "shipped different item" substitution: refusal + intent + pill + CSV + clear
     res = await exec(`api.substituteRow(${ebayRow.id}, 'X230-128GB-GRAY', 1, '', false)`);
     check('rows:substitute refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);

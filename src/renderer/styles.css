@@ -516,6 +516,8 @@ body {
 
 .badge-walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .badge-parked { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+/* split-order part marker: "1/2" — same order number, ships separately */
+.badge-split { background: var(--badge-blue-bg); color: var(--badge-blue-text); font-family: var(--mono); }
 /* logo badge (Walmart spark on order rows): the mark itself, no pill chrome */
 .badge-logo { padding: 0; background: transparent; display: inline-flex; align-items: center; vertical-align: middle; }
 .badge-logo svg { width: 16px; height: 16px; display: block; }

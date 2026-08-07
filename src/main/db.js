@@ -108,6 +108,12 @@ function open() {
   if (!cols.includes('items')) {
     db.exec(`ALTER TABLE rows ADD COLUMN items TEXT NOT NULL DEFAULT '[]'`);
   }
+  // migration: Linnworks order id, so SPLIT orders (the fulfillment network
+  // splits one marketplace order across locations, 2026-08-07) get one row
+  // per part — same order_number, different lw_order_id
+  if (!cols.includes('lw_order_id')) {
+    db.exec(`ALTER TABLE rows ADD COLUMN lw_order_id TEXT NOT NULL DEFAULT ''`);
+  }
   return db;
 }
 
@@ -135,6 +141,9 @@ function dedupeOrderRows() {
     const keep = rows.slice().sort((a, b) => score(b) - score(a) || b.id - a.id)[0];
     for (const r of rows) {
       if (r.id === keep.id) continue;
+      // SPLIT parts legitimately share an order number: different Linnworks
+      // order ids are different orders, never duplicates
+      if (r.lw_order_id && keep.lw_order_id && r.lw_order_id !== keep.lw_order_id) continue;
       if (r.tracking && r.tracking !== keep.tracking) { conflicts++; continue; }
       d.prepare('DELETE FROM rows WHERE id = ?').run(r.id);
       removed++;
@@ -160,12 +169,24 @@ function setRowItems(id, items) {
   open().prepare('UPDATE rows SET items = ? WHERE id = ?').run(JSON.stringify(clean), id);
 }
 
-function createRow({ channel, orderNumber, origin }) {
+function createRow({ channel, orderNumber, origin, lwOrderId }) {
   const now = new Date();
   const res = open().prepare(
-    'INSERT INTO rows (created_at, day, channel, order_number, origin) VALUES (?, ?, ?, ?, ?)'
-  ).run(now.toISOString(), localDay(now), channel, orderNumber, origin || '');
+    'INSERT INTO rows (created_at, day, channel, order_number, origin, lw_order_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(now.toISOString(), localDay(now), channel, orderNumber, origin || '', lwOrderId || '');
   return getRow(Number(res.lastInsertRowid));
+}
+
+// split-order support: one row per Linnworks order PART
+function findByOrderAndPart(orderNumber, lwOrderId) {
+  return parseRow(open().prepare(
+    'SELECT * FROM rows WHERE order_number = ? AND lw_order_id = ? ORDER BY id DESC'
+  ).get(orderNumber, String(lwOrderId || '')));
+}
+
+function setRowPart(id, lwOrderId) {
+  open().prepare('UPDATE rows SET lw_order_id = ? WHERE id = ?').run(String(lwOrderId || ''), id);
+  return getRow(id);
 }
 
 // Auto-imported rows the user never touched: safe to remove when their order
@@ -469,7 +490,7 @@ function backup() {
 module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
-  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows,
+  setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart,
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,

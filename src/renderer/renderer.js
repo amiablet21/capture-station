@@ -213,8 +213,14 @@ function dueInfo(despatchBy, cutoff, now = new Date()) {
   return { overdue: false, urgent: nowMin >= parseCutoffMin(cutoff) - 60, label: 'Due today' };
 }
 
+// meta lookup: split parts key as "ref#lwOrderId", whole orders as the ref
+function metaFor(row) {
+  const m = (state && state.orderMeta) || {};
+  return (row.lw_order_id && m[`${row.order_number}#${row.lw_order_id}`]) || m[row.order_number];
+}
+
 function rowDue(row) {
-  const meta = (state.orderMeta || {})[row.order_number];
+  const meta = metaFor(row);
   return meta ? dueInfo(meta.despatchBy, state.shipCutoff) : null;
 }
 
@@ -347,7 +353,7 @@ function render() {
   if (findQuery) {
     const q = findQuery.toLowerCase();
     const itemMatch = (row) => {
-      const m = (state.orderMeta || {})[row.order_number];
+      const m = metaFor(row);
       return !!(m && m.items && m.items.some(i =>
         (i.sku || '').toLowerCase().includes(q)
         || (i.channelSku || '').toLowerCase().includes(q)
@@ -372,7 +378,7 @@ function render() {
   // number (newest-first aesthetic), regardless of due sorting or filters
   visible = visible.map((v, i) => ({ ...v, num: visible.length - i }));
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
-    const meta = (state.orderMeta || {})[row.order_number];
+    const meta = metaFor(row);
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
     const allItems = (meta && meta.items) || [];
     // items stack vertically, one per line; beyond four, "+N more" carries
@@ -414,6 +420,7 @@ function render() {
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}">
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
         ${meta && meta.parked ? '<span class="badge badge-parked" title="Parked or locked in Linnworks — the stock router cannot move it. Unpark it in Linnworks if that is unintended.">PARKED</span>' : ''}
+        ${meta && meta.split ? `<span class="badge badge-split" title="Linnworks split this order across locations — this row is part ${meta.split.part} of ${meta.split.of} and ships separately (its own tracking, its own process)">${meta.split.part}/${meta.split.of}</span>` : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
@@ -1014,7 +1021,7 @@ function subDefaultNote(listedSku, shippedSku) {
 }
 
 function subListedSku(row) {
-  const meta = (state && state.orderMeta || {})[row.order_number];
+  const meta = state ? metaFor(row) : null;
   const first = meta && meta.items && meta.items[0];
   return first ? (first.sku || first.channelSku || '') : '';
 }
@@ -1022,7 +1029,7 @@ function subListedSku(row) {
 function openSubDialog(row, forSku) {
   subRowId = row.id;
   subNoteDirty = !!row.sub_note;
-  const meta = (state.orderMeta || {})[row.order_number];
+  const meta = metaFor(row);
   const items = (meta && meta.items) || [];
   // which listed line is being replaced: the clicked line, the stored one,
   // or (single-line orders) the only line there is

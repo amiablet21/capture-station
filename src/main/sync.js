@@ -113,7 +113,12 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   // dropship labeling), then every remaining location.
   const sr = config.load().stockRouting || {};
   const fallbackId = sr.fallbackLocationId;
+  // split orders share a reference across locations: a row carrying a part
+  // id must process ITS part, never a sibling that happened to match first
+  const wantPart = String(row.lw_order_id || '');
+  const isMine = (o) => !!o && (!wantPart || String(o.orderId) === wantPart);
   let order = await client.findOpenOrder(row.order_number, locationId);
+  if (!isMine(order)) order = null;
   let foundAt = { id: locationId, name: '' }; // '' = the primary warehouse
   if (!order) {
     const seen = new Set([locationId]);
@@ -130,6 +135,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     }
     for (const t of targets) {
       order = await client.findOpenOrder(row.order_number, t.id);
+      if (!isMine(order)) order = null;
       if (order) { foundAt = t; break; }
     }
   }

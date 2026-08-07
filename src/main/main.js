@@ -903,48 +903,94 @@ async function runOrderImport() {
     const excluded = new Set(((cfg.orderImport || {}).excludeLocationNames || [])
       .map(n => String(n).trim().toLowerCase()).filter(Boolean));
     const openRefs = new Set();
+    const openParts = new Set(); // "ref#lwOrderId" for every live split part
     let added = 0;
     const meta = {};
+    // SPLIT support (2026-08-07): Linnworks' fulfillment network may split
+    // one marketplace order across locations — several open orders sharing
+    // one reference. Group first; each part gets its own row and meta entry
+    // (keyed ref#orderId), so parts ship and process independently.
+    const byRef = new Map();
     for (const o of orders) {
       const ref = String(o.reference || '').trim();
       if (!ref) continue;
       if (excluded.has(String(o.locationName || '').trim().toLowerCase())) continue;
+      if (!byRef.has(ref)) byRef.set(ref, []);
+      byRef.get(ref).push(o);
+    }
+    for (const [ref, parts] of byRef) {
       openRefs.add(ref);
-      meta[ref] = {
-        source: o.source || '',
-        locationId: o.locationId || '',
-        locationName: o.locationName || '',
-        dropship: !!fallbackId && o.locationId === fallbackId,
-        parked: routerRefusedRefs.has(ref),
-        despatchBy: o.despatchBy || '',
-        items: (o.items || []).filter(it => !it.isService).map(it => {
-          const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
-          return {
-            sku: it.sku || '',
-            channelSku: it.channelSku || '',
-            title: it.title || '',
-            qty: it.quantity || 1,
-            unmapped: !linked,
-            img: (it.sku && skuImages[it.sku]) || '',
-          };
-        }),
-      };
-      if (!db.findByOrderNumber(ref)) {
-        db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks' });
-        added++;
-      }
-      // snapshot the item lines onto the row while the order is still open,
-      // so the Items column survives after the order leaves the open book
-      const row = db.findByOrderNumber(ref);
-      if (row && (!row.items || !row.items.length) && meta[ref] && meta[ref].items.length) {
-        db.setRowItems(row.id, meta[ref].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
-      }
+      const isSplit = parts.length > 1;
+      parts.forEach((o, pi) => {
+        const key = isSplit ? `${ref}#${o.orderId}` : ref;
+        if (isSplit) openParts.add(key);
+        meta[key] = {
+          source: o.source || '',
+          locationId: o.locationId || '',
+          locationName: o.locationName || '',
+          dropship: !!fallbackId && o.locationId === fallbackId,
+          parked: routerRefusedRefs.has(ref),
+          despatchBy: o.despatchBy || '',
+          split: isSplit ? { part: pi + 1, of: parts.length } : null,
+          items: (o.items || []).filter(it => !it.isService).map(it => {
+            const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
+            return {
+              sku: it.sku || '',
+              channelSku: it.channelSku || '',
+              title: it.title || '',
+              qty: it.quantity || 1,
+              unmapped: !linked,
+              img: (it.sku && skuImages[it.sku]) || '',
+            };
+          }),
+        };
+        let row;
+        if (isSplit) {
+          row = db.findByOrderAndPart(ref, o.orderId);
+          if (!row) {
+            // the order split AFTER an earlier import: the legacy row (no
+            // part id yet) becomes the first part instead of a new one
+            const legacy = db.findByOrderNumber(ref);
+            if (legacy && !legacy.lw_order_id) {
+              row = db.setRowPart(legacy.id, o.orderId);
+              db.setRowItems(row.id, meta[key].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
+            } else {
+              row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
+              added++;
+            }
+          }
+        } else {
+          row = db.findByOrderNumber(ref);
+          if (!row) {
+            row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
+            added++;
+          } else if (!row.lw_order_id) {
+            row = db.setRowPart(row.id, o.orderId); // backfill for older rows
+          }
+        }
+        // snapshot the item lines onto the row while the order is still open,
+        // so the Items column survives after the order leaves the open book
+        if (row && (!row.items || !row.items.length) && meta[key].items.length) {
+          db.setRowItems(row.id, meta[key].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
+        }
+      });
     }
     // untouched imported rows whose order left open orders: cancelled or
-    // handled elsewhere - remove them so the queue stays truthful
+    // handled elsewhere - remove them so the queue stays truthful. A split
+    // part vanishes when ITS part id is gone AND it isn't the surviving
+    // unsplit order (parts can merge back on the Linnworks side).
     let removed = 0;
     for (const row of db.untouchedImportedRows()) {
-      if (!openRefs.has(row.order_number)) {
+      const partGone = row.lw_order_id
+        && openParts.size > 0
+        && (byRef.get(row.order_number) || []).length > 1
+        && !openParts.has(`${row.order_number}#${row.lw_order_id}`);
+      const refGone = !openRefs.has(row.order_number);
+      const mergedBack = row.lw_order_id
+        && (byRef.get(row.order_number) || []).length === 1
+        && (byRef.get(row.order_number) || [])[0].orderId !== row.lw_order_id
+        && !!db.findByOrderAndPart(row.order_number, (byRef.get(row.order_number) || [])[0].orderId);
+      if (refGone || partGone || mergedBack) {
         if (currentRowId === row.id) currentRowId = null;
         db.deleteRow(row.id);
         removed++;
