@@ -1442,6 +1442,46 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
+  // A listing search page for a channel SKU, in the pane or externally
+  ipcMain.handle('listing:open', (_e, { sku, channel, external }) => {
+    const cfg = config.load();
+    const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
+    if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
+    const url = tpl.replace('{sku}', encodeURIComponent(String(sku)));
+    if (external || cfg.captureOnly) {
+      shell.openExternal(url);
+      return { ok: true, external: true };
+    }
+    ensurePane().webContents.loadURL(url).catch(() => { /* nav errors show in-pane */ });
+    return { ok: true };
+  });
+  // Which stock items carry a link on each channel — for the per-channel
+  // "No eBay / No Walmart" stock filters. Derived from the mapping catalogs
+  // (same 10-min cache as the Mappings screen).
+  ipcMain.handle('mapping:linkedSets', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const channels = await client.getMappingChannels();
+      const sets = {};
+      for (const ch of channels) {
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        let hit = mappingCache.get(key);
+        if (!hit || Date.now() - hit.at > 10 * 60 * 1000) {
+          hit = { at: Date.now(), items: await client.getChannelItems(ch.id, ch.source, ch.subSource) };
+          mappingCache.set(key, hit);
+        }
+        const label = /walmart/i.test(ch.source) ? 'walmart' : /ebay/i.test(ch.source) ? 'ebay' : /temu/i.test(ch.source) ? 'temu' : ch.source.toLowerCase();
+        if (!sets[label]) sets[label] = [];
+        for (const it of hit.items) if (it.linked && it.linkedItemId) sets[label].push(it.linkedItemId);
+      }
+      return { ok: true, sets };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // Channel mapping (the in-app Linnworks mapping screen): catalog feed,
   // link, unlink. The catalog is cached per channel — filtering is local.
   ipcMain.handle('mapping:channels', async () => {

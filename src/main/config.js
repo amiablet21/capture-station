@@ -105,6 +105,13 @@ const DEFAULTS = {
     ebay: 'https://www.ebay.com/mesh/ord/details?orderid={po}',
     temu: '', // no return seen yet — falls back to the order page
   },
+  // Click a channel SKU in the Stock popup -> open that listing on the
+  // marketplace, searched by the channel SKU. {sku} is replaced.
+  listingUrlTemplates: {
+    walmart: 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}',
+    ebay: 'https://www.ebay.com/sh/lst/active?q={sku}',
+    temu: '', // Temu seller search URL unknown yet — clicking copies the SKU
+  },
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',

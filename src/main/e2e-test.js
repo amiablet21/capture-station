@@ -743,8 +743,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       chmap.channels = [{ id: 1, source: 'WALMART', subSource: 'SUB' }];
       chmap.chan = chmap.channels[0];
       chmap.items = [
-        { sku: 'TWIN-A', title: 'Twin A', wfs: false, linked: true, linkedItemId: 's1', rowId: 'r1' },
-        { sku: 'TWIN-B', title: 'Twin B', wfs: false, linked: false, linkedItemId: '', rowId: '' },
+        { sku: 'TWIN-A', title: 'Twin A', wfs: false, linked: true, linkedItemId: 's1', rowId: 'r1', qty: 2 },
+        { sku: 'TWIN-B', title: 'Twin B', wfs: false, linked: false, linkedItemId: '', rowId: '', qty: 3 },
       ];
       recvItems = [
         { sku: 'LW-1', title: 'Item one', stockItemId: 's1' },

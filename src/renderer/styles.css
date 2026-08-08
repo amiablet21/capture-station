@@ -1211,6 +1211,18 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .rv-target { font-size: 11.5px; color: var(--muted); }
 .rv-target.is-missing { color: var(--badge-yellow-text); }
 .rv-onetime { font-size: 10.5px; color: var(--faint); }
+/* the receive popup docked beside the marketplace pane: right side of the
+   window, so the native pane on the left keeps showing the marketplace */
+.ret-recv-dlg.beside-pane {
+  position: fixed;
+  left: auto;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+}
+.ret-recv-dlg.beside-pane::backdrop { background: transparent; }
+
 /* the reusable message dialog's body (CSP strips inline styles) */
 .dlg-pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; max-height: 40vh; overflow-y: auto; }
 
@@ -1367,6 +1379,18 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   color: var(--badge-green-text);
 }
 .chmap-nfin { border-radius: 999px; }
+
+/* channel SKUs in the stock popup are links to their listings */
+.chs-sku-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px dotted var(--muted);
+  text-align: left;
+}
+.chs-sku-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
 .rv-fix { display: flex; align-items: center; gap: 8px; width: 100%; }
 .rv-fix .rv-pick-combo { max-width: 260px; }

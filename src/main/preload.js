@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld('api', {
   mappingItems: (channelId, source, subSource, force) => ipcRenderer.invoke('mapping:items', { channelId, source, subSource, force }),
   mappingLink: (channelSku, source, subSource, targetSku) => ipcRenderer.invoke('mapping:link', { channelSku, source, subSource, targetSku }),
   mappingUnlink: (rowId) => ipcRenderer.invoke('mapping:unlink', { rowId }),
+  listingOpen: (sku, channel, external) => ipcRenderer.invoke('listing:open', { sku, channel, external }),
+  mappingLinkedSets: () => ipcRenderer.invoke('mapping:linkedSets'),
   browserPlatformMenu: () => ipcRenderer.invoke('browser:platformMenu'),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
   browserZoom: (dir) => ipcRenderer.invoke('browser:zoom', { dir }),

@@ -1406,8 +1406,12 @@ function syncBrowserBounds() {
     bSyncQueued = false;
     alignCaptureToolbar(); // the find bar tracks the sheet column's edges
     // the native view yields to dialogs, the DOM loading panel, AND divider
-    // drags - while it is frontmost it swallows mousemove, killing the drag
-    if ($('bDock').hidden || anyDialogOpen() || bLoad.active || bDrag) {
+    // drags - while it is frontmost it swallows mousemove, killing the drag.
+    // EXCEPTION: the receive popup docked beside the pane — the owner wants
+    // the marketplace visible while receiving (2026-08-08)
+    const blockingDialog = [...document.querySelectorAll('dialog[open]')]
+      .some(d => !(d.id === 'retRecvDialog' && d.classList.contains('beside-pane')));
+    if ($('bDock').hidden || blockingDialog || bLoad.active || bDrag) {
       api.browserLayout({ visible: false });
       return;
     }
@@ -1587,6 +1591,36 @@ let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed
 let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
 let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
+let stockMissingCh = ''; // 'walmart'|'ebay'|'temu' = in-stock items with no link on that channel
+let chLinked = null; // { walmart: Set(stockItemId), ebay: Set, temu: Set } | null
+let chLinkedLoading = false;
+
+async function loadChLinked() {
+  if (chLinkedLoading || chLinked || (state && state.captureOnly)) return;
+  chLinkedLoading = true;
+  try {
+    const res = await api.mappingLinkedSets();
+    if (res.ok) {
+      chLinked = {};
+      for (const [k, ids] of Object.entries(res.sets || {})) chLinked[k] = new Set(ids);
+      if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
+    }
+  } finally {
+    chLinkedLoading = false;
+  }
+}
+
+// in-stock items (primary) missing a link on the given channel
+function stockMissingList(label) {
+  if (!chLinked || !chLinked[label] || !stockCache) return [];
+  const set = chLinked[label];
+  return stockCache.items.filter(it => {
+    if (!it.stockItemId) return false;
+    const l = it.levels.find(x => x.locationId === stockCache.locationId);
+    if (!l || (Number(l.stockLevel) <= 0 && Number(l.available) <= 0)) return false;
+    return !set.has(it.stockItemId);
+  });
+}
 let dsPads = null; // { SKU: padQty } from config
 let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
 let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
@@ -1675,7 +1709,7 @@ function renderStockChips() {
   box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   box.innerHTML = [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
@@ -1691,6 +1725,14 @@ function renderStockChips() {
     ...(unlistedDetail && unlistedDetail.length ? [
       `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`,
     ] : []),
+    // per-channel gaps: in-stock items with no link on that marketplace
+    ...(chLinked ? ['walmart', 'ebay', 'temu'].flatMap(label => {
+      if (!chLinked[label]) return [];
+      const n = stockMissingList(label).length;
+      return n ? [
+        `<button class="view-chip chip-unlisted ${stockMissingCh === label ? 'is-active' : ''}" data-view="miss:${label}" title="In-stock items with no ${esc(channelLabel(label))} listing linked">No ${esc(channelLabel(label))} · ${n}</button>`,
+      ] : [];
+    }) : []),
   ].join('');
 }
 
@@ -1699,7 +1741,13 @@ $('stockChips').addEventListener('click', (e) => {
   if (!chip) return;
   stockDsActive = false;
   stockUnlistedActive = false;
-  if (chip.dataset.view === 'unl') {
+  stockMissingCh = '';
+  if (chip.dataset.view.startsWith('miss:')) {
+    stockMissingCh = chip.dataset.view.slice(5);
+    stockWfsActive = false;
+    stockLowActive = false;
+    stockActiveView = null;
+  } else if (chip.dataset.view === 'unl') {
     stockUnlistedActive = true;
     stockWfsActive = false;
     stockLowActive = false;
@@ -1793,6 +1841,7 @@ async function loadStock() {
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
+  loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
   const res = await api.getStock();
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
@@ -1870,6 +1919,8 @@ function renderStock() {
       home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
     }))
     .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
+    .filter(it => !stockMissingCh || (it.stockItemId && chLinked && chLinked[stockMissingCh]
+      && !chLinked[stockMissingCh].has(it.stockItemId) && (it.l.stockLevel > 0 || it.l.available > 0)))
     .filter(it => !stockLowActive || stockIsLow(it))
     .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
     .filter(it => !q
@@ -1889,9 +1940,11 @@ function renderStock() {
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
     ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
-    : stockLowActive
-      ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
-      : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
+    : stockMissingCh
+      ? `${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} with no ${channelLabel(stockMissingCh)} listing linked — map them in Mappings`
+      : stockLowActive
+        ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
+        : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
   // tiny day-over-day sales delta beside the SKU, filled in once the sales
   // cache answers; nothing renders when there were no sales either day
@@ -2611,8 +2664,17 @@ function retOpenRecv() {
   rvRenderCond();
   rvRenderOrder();
   ensureInventory();
+  rvBesidePane();
   $('retRecvDialog').showModal();
   $('rvPo').focus();
+}
+
+// with the marketplace pane open (and room for both), the popup docks to
+// the right so the pane STAYS VISIBLE while receiving
+function rvBesidePane() {
+  const paneOpen = !$('bDock').hidden;
+  const room = window.innerWidth - (paneOpen ? $('bDock').offsetWidth : 0);
+  $('retRecvDialog').classList.toggle('beside-pane', paneOpen && room >= 560);
 }
 
 function rvThumbUpdate() {
@@ -2654,6 +2716,7 @@ function retOpenEdit({ r, i, ii }) {
     });
   }
   ensureInventory();
+  rvBesidePane();
   $('retRecvDialog').showModal();
 }
 
@@ -3839,7 +3902,8 @@ async function openChannelSkus(sku, stockItemId) {
       <div class="chs-row">
         <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
         <span class="chs-sub">${esc(c.subSource)}</span>
-        <span class="mono chs-sku">${esc(c.sku)}</span>
+        <button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
+          title="Open this listing on ${esc(channelLabel((c.source || '').toLowerCase()))} (right-click: copy the SKU)">${esc(c.sku)}</button>
         ${c.price != null
           ? `<span class="mono chs-price" title="${c.priceKind === 'default'
               ? 'Channel default price stored in Linnworks (no listing-specific price)'
@@ -3848,6 +3912,31 @@ async function openChannelSkus(sku, stockItemId) {
         ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
       </div>`).join('');
 }
+
+// click a channel SKU -> that listing opens on its marketplace (pane if
+// open, external browser otherwise); no template = copy the SKU instead
+$('chsList').addEventListener('click', async (e) => {
+  const b = e.target.closest('.chs-sku-link');
+  if (!b) return;
+  const external = $('bDock').hidden;
+  const res = await api.listingOpen(b.dataset.lsku, b.dataset.lch, external);
+  if (!res.ok) {
+    copyFromApp(b.dataset.lsku);
+    toast(`${res.error || 'No listing link for this channel.'} SKU copied instead.`);
+    return;
+  }
+  if (!res.external) {
+    $('chsDialog').close(); // the pane is behind the dialog — reveal it
+    bShowLoading(`Opening ${b.dataset.lsku}`);
+  }
+});
+$('chsList').addEventListener('contextmenu', (e) => {
+  const b = e.target.closest('.chs-sku-link');
+  if (!b) return;
+  e.preventDefault();
+  copyFromApp(b.dataset.lsku);
+  toast(`${b.dataset.lsku} copied`);
+});
 
 $('chsClose').addEventListener('click', () => $('chsDialog').close());
 
