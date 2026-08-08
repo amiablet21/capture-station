@@ -1176,13 +1176,34 @@ let padRunning = false;
 
 async function runPadMaintenance() {
   const cfg = config.load();
-  const pads = cfg.dropshipPads || {};
   const dsLoc = (cfg.stockRouting || {}).fallbackLocationId;
-  if (cfg.captureOnly || !dsLoc || !Object.keys(pads).length || padRunning) return { skipped: true };
+  if (cfg.captureOnly || !dsLoc || padRunning) return { skipped: true };
   padRunning = true;
   try {
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
+    // the program lives in Linnworks (DropshipPad extended property), so
+    // every install sees the same enrollment; local config just mirrors it
+    // for the UI. Pads set before the property existed migrate up once.
+    const pads = {};
+    for (const it of items) {
+      if (it.dsPad) pads[String(it.sku).toUpperCase()] = Math.max(0, Number(it.dsPad.value) || 0);
+    }
+    if (!cfg.dropshipPadsMigrated) {
+      for (const [sku, qtyRaw] of Object.entries(cfg.dropshipPads || {})) {
+        const key = String(sku).toUpperCase();
+        if (key in pads) continue;
+        const qty = Math.max(0, Number(qtyRaw) || 0);
+        try {
+          await client.setDropshipPad(key, qty);
+          pads[key] = qty;
+        } catch { /* SKU no longer in inventory - drop it */ }
+      }
+      config.save({ dropshipPadsMigrated: true, dropshipPads: pads });
+    } else {
+      config.save({ dropshipPads: pads });
+    }
+    if (!Object.keys(pads).length) return { ok: true, adjusted: 0 };
     const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
     const deltas = [];
     for (const [sku, qtyRaw] of Object.entries(pads)) {
@@ -2171,6 +2192,12 @@ function registerIpc() {
     const n = Number(qty);
     if (!key) return { ok: false, error: 'Missing SKU.' };
     if (!Number.isInteger(n) || n < 0) return { ok: false, error: 'Pad must be a whole number of 0 or more.' };
+    // Linnworks first (the program's source of truth), then the local mirror
+    try {
+      await new LinnworksClient(cfg.linnworks).setDropshipPad(key, n);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
     config.save({ dropshipPads: { ...(cfg.dropshipPads || {}), [key]: n } });
     runPadMaintenance().catch(() => { /* next pass retries */ });
     return { ok: true };
@@ -2181,10 +2208,20 @@ function registerIpc() {
     const key = String(sku || '').trim().toUpperCase();
     const pads = { ...(cfg.dropshipPads || {}) };
     if (!(key in pads)) return { ok: false, error: 'Not in the program.' };
+    const client = new LinnworksClient(cfg.linnworks);
     // zero the DropShip level first so nothing keeps selling from a pad
+    try {
+      await client.setDropshipPad(key, 0);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
     pads[key] = 0;
     config.save({ dropshipPads: pads });
     await runPadMaintenance().catch(() => { /* best effort */ });
+    // now leave the program: the property goes, every machine follows
+    try {
+      await client.setDropshipPad(key, null);
+    } catch { /* property lingers at pad 0 - removing again retries */ }
     delete pads[key];
     config.save({ dropshipPads: pads });
     return { ok: true };

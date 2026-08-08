@@ -113,7 +113,12 @@ const DEFAULTS = {
   // stays live with zero warehouse stock. Pad 0 = listing dark (supplier
   // out). Router only sends orders to DropShip when every line is enrolled
   // with a pad > 0.
+  // The program itself lives in Linnworks (DropshipPad extended property on
+  // each enrolled item) so every install sees it; this map is the local
+  // mirror the UI reads, refreshed on every pad pass.
   dropshipPads: {}, // { SKU: qty }
+  // one-time: pads set before the extended property existed migrate up
+  dropshipPadsMigrated: false,
   // Reorder points from sales velocity: Min = perDay × leadTimeDays × 1.5,
   // buy quantity ≈ perDay × (coverDays + leadTimeDays). suggest shows them
   // in the Min column; auto applies them nightly (only when ±20% off).

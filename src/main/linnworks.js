@@ -2,9 +2,16 @@
 // Linnworks API client. Endpoints verified against apidocs.linnworks.net OpenAPI.
 // Auth returns a regional Server URL; all subsequent calls go to that server.
 
+const crypto = require('crypto');
+
 const AUTH_URL = 'https://api.linnworks.net/api/Auth/AuthorizeByApplication';
 // Heaviest endpoints allow 150/min; 450ms spacing keeps us safely under.
 const MIN_CALL_SPACING_MS = 450;
+
+// The DropShip program's source of truth: an extended property with this
+// name on each enrolled stock item, value = pad qty. Living in Linnworks
+// means every Capture Station install sees the same program.
+const DS_PAD_PROP = 'DropshipPad';
 
 class LinnworksError extends Error {
   constructor(message, { status, endpoint } = {}) {
@@ -250,12 +257,16 @@ class LinnworksClient {
         loadVariationParents: false,
         entriesPerPage: 200,
         pageNumber: page,
-        dataRequirements: ['StockLevels', 'Images'],
+        dataRequirements: ['StockLevels', 'Images', 'ExtendedProperties'],
         searchTypes: ['SKU', 'Title', 'Barcode'],
       });
       for (const it of items || []) {
         const img = (it.Images || []).find(i => i.IsMain) || (it.Images || [])[0] || null;
+        // NB the API's property-name field really is spelt "ProperyName"
+        const pad = (it.ItemExtendedProperties || [])
+          .find(p => (p.ProperyName || p.PropertyName) === DS_PAD_PROP);
         out.push({
+          dsPad: pad ? { rowId: pad.pkRowId, value: pad.PropertyValue || '' } : null,
           stockItemId: it.StockItemId,
           sku: it.ItemNumber || '',
           title: it.ItemTitle || '',
@@ -276,6 +287,47 @@ class LinnworksClient {
         });
       }
       if (!items || items.length < 200) return out;
+    }
+  }
+
+  // Write one SKU's dropship pad to the program's source of truth (the
+  // DropshipPad extended property). qty null = remove the SKU from the
+  // program. Field spelling "ProperyName" is the API's own.
+  async setDropshipPad(sku, qty) {
+    const found = await this.call('Inventory/GetStockItemIdsBySKU', { request: { SKUS: [sku] } });
+    const hit = ((found && found.Items) || [])[0];
+    if (!hit || !hit.StockItemId) throw new LinnworksError(`${sku} is not in Linnworks inventory.`);
+    const id = hit.StockItemId;
+    const rows = await this.call(
+      `Inventory/GetInventoryItemExtendedProperties?inventoryItemId=${encodeURIComponent(id)}`,
+      undefined, { method: 'GET' }
+    );
+    const row = (rows || []).find(r => (r.ProperyName || r.PropertyName) === DS_PAD_PROP);
+    if (qty === null) {
+      if (row) {
+        await this.call('Inventory/DeleteInventoryItemExtendedProperties', {
+          inventoryItemId: id,
+          inventoryItemExtendedPropertyIds: [row.pkRowId],
+        });
+      }
+      return;
+    }
+    const prop = {
+      pkRowId: row ? row.pkRowId : crypto.randomUUID(),
+      fkStockItemId: id,
+      ProperyName: DS_PAD_PROP,
+      PropertyValue: String(qty),
+      PropertyType: 'Attribute',
+    };
+    if (row) {
+      if (row.PropertyValue === String(qty)) return; // already right
+      await this.call('Inventory/UpdateInventoryItemExtendedProperties', {
+        inventoryItemExtendedProperties: [prop],
+      });
+    } else {
+      await this.call('Inventory/CreateInventoryItemExtendedProperties', {
+        inventoryItemExtendedProperties: [prop],
+      });
     }
   }
 
