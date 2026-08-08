@@ -2288,12 +2288,19 @@ function registerIpc() {
           for (const c of channels) if (c.source) universe.add(String(c.source).toUpperCase());
           if (channels.length) continue;
           const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
+          // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
+          // — Linnworks item retail prices are deliberately left empty here)
+          let price = 0;
+          try {
+            const prices = await client.getChannelPrices(it.stockItemId);
+            price = prices.reduce((m, p) => Math.max(m, p.price), 0);
+          } catch { /* no stored channel price: the column shows an em-dash */ }
           detail.push({
             sku: String(it.sku).toUpperCase(),
             title: it.title || '',
             image: it.image || '',
             avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-            retail: Number(it.retailPrice) || 0,
+            retail: price,
           });
         } catch { /* one bad lookup never hides the rest */ }
       }

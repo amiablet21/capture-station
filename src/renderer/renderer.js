@@ -2063,7 +2063,7 @@ function renderUnlistedView() {
           <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
           <td class="num">${d.avail}</td>
           <td>${missChips}</td>
-          <td class="num mono" title="available × retail price">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
+          <td class="num mono" title="available × channel listing price (highest stored)">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
           <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button></td>
         </tr>`).join('')}</tbody>
     </table>
