@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Listing gaps — one calm control</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow-y: auto; padding: 30px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; flex-wrap: wrap; max-width: 1100px; }
+  .search { width: 190px; font-size: 12px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--faint); }
+  .chip { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); cursor: pointer; white-space: nowrap; }
+  .chip.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 5px 12px; background: var(--surface); cursor: pointer; }
+  .sumline { font-size: 11.5px; color: var(--muted); }
+  .sumline b { color: var(--text); }
+
+  /* the control: flat and square-cornered — no pill (owner: "too bubble
+     like"), just a quiet bordered box that expands in place */
+  .gap { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+  .gap:hover { border-color: var(--accent); }
+  .gap-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; color: var(--muted); background: none; border: none; padding: 5px 11px; cursor: pointer; font-family: var(--font); }
+  .gap-dot { width: 6px; height: 6px; border-radius: 1px; background: var(--badge-yellow-text); }
+  .gap-n { font-family: var(--mono); font-size: 10.5px; color: var(--badge-yellow-text); font-weight: 700; }
+  .gap-seg { display: none; }
+  .gap.open .gap-seg { display: inline-flex; }
+  .gap.open .gap-toggle .car { transform: rotate(180deg); }
+  .car { font-size: 8.5px; transition: transform 120ms var(--ease); display: inline-block; color: var(--faint); }
+  .gap-seg button { font-size: 11px; font-weight: 500; color: var(--muted); background: var(--surface); border: none; border-left: 1px solid var(--border-soft); padding: 5px 12px; cursor: pointer; font-family: var(--font); display: inline-flex; gap: 6px; align-items: center; }
+  .gap-seg button .n { font-family: var(--mono); font-size: 10px; color: var(--badge-yellow-text); font-weight: 700; }
+  .gap-seg button:hover { background: var(--surface-2); color: var(--text); }
+  /* active-filter state: flat amber underline, not a filled bubble */
+  .gap.filtering { border-color: var(--badge-yellow-text); box-shadow: inset 0 -2px 0 var(--badge-yellow-text); }
+  .gap.filtering .gap-toggle { color: var(--badge-yellow-text); font-weight: 600; }
+  .gap-x { border: none; border-left: 1px solid var(--border-soft); background: none; color: var(--muted); font-size: 11px; padding: 0 9px; cursor: pointer; }
+  .gap-x:hover { color: var(--neg-text); }
+</style></head>
+<body>
+  <div class="try"><b>The one-control version:</b> calm grey pill with an amber dot when gaps exist · click it → expands in place into the three channels · pick one → the pill collapses and wears the filter (✕ clears). Nothing shouts until you ask.</div>
+
+  <div class="stage">
+    <div class="bar" id="bar"></div>
+    <div class="sumline" id="sum"></div>
+  </div>
+
+<script>
+  const GAPS = { Walmart: 2, eBay: 46, Temu: 54 };
+  const total = Object.values(GAPS).reduce((a, b) => a + b, 0);
+  let open = false, active = '';
+
+  function render() {
+    const gapCtl = active
+      ? `<span class="gap filtering">
+          <button class="gap-toggle" id="gapT">No ${active} listing <span class="gap-n">${GAPS[active]}</span></button>
+          <button class="gap-x" id="gapX" title="Clear the filter">✕</button>
+        </span>`
+      : `<span class="gap ${open ? 'open' : ''}">
+          <button class="gap-toggle" id="gapT"><span class="gap-dot"></span>Listing gaps <span class="gap-n">${total}</span> <span class="car">▾</span></button>
+          <span class="gap-seg">${Object.entries(GAPS).map(([c, n]) =>
+            `<button data-ch="${c}">${c}<span class="n">${n}</span></button>`).join('')}</span>
+        </span>`;
+    document.getElementById('bar').innerHTML = `
+      <input class="search" placeholder="Search SKU, title or barcode" disabled />
+      <span class="chip is-active">All</span><span class="chip">Open Box</span><span class="chip">Used</span>
+      <span class="chip">Scrap</span><span class="chip">WFS</span><span class="chip">DropShip · 38</span>
+      ${gapCtl}
+      <span style="flex:1"></span><button class="btn">Mappings</button><button class="btn">Refresh</button>`;
+    document.getElementById('sum').innerHTML = active
+      ? `<b>${GAPS[active]}</b> in-stock SKUs with no ${active} listing linked — map them in Mappings`
+      : `155 SKUs · 8,718 units`;
+  }
+  document.body.addEventListener('click', (e) => {
+    if (e.target.closest('#gapX')) { active = ''; open = false; render(); return; }
+    if (e.target.closest('#gapT')) { if (!active) { open = !open; render(); } return; }
+    const ch = e.target.closest('[data-ch]');
+    if (ch) { active = ch.dataset.ch; open = false; render(); return; }
+    if (open) { open = false; render(); }
+  });
+  render();
+</script>
+</body>
+</html>

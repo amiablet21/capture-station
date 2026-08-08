@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Channel-gap filters — five ideas</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+
+  .stage { flex: 1; overflow-y: auto; padding: 26px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; flex-wrap: wrap; max-width: 1100px; }
+  .search { width: 190px; font-size: 12px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--faint); }
+  .chip { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); cursor: pointer; white-space: nowrap; }
+  .chip.is-active { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .btn { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 5px 12px; background: var(--surface); cursor: pointer; }
+  .sumline { font-size: 11.5px; color: var(--muted); }
+  .sumline b { color: var(--text); }
+
+  /* 1: one Gaps chip + menu */
+  .gwrap { position: relative; }
+  .gaps-chip { display: inline-flex; align-items: center; gap: 6px; }
+  .gaps-chip .n { font-family: var(--mono); font-size: 10.5px; }
+  .gaps-chip .car { font-size: 9px; }
+  .gmenu { position: absolute; left: 0; top: calc(100% + 6px); min-width: 190px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47,52,55,0.18); z-index: 40; padding: 4px; }
+  .gmenu button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-size: 12.5px; color: var(--text); background: none; border: none; border-radius: 8px; padding: 8px 11px; cursor: pointer; font-family: var(--font); }
+  .gmenu button:hover { background: var(--surface-2); }
+  .gmenu .n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--badge-yellow-text); font-weight: 700; }
+
+  /* 2: tiny initial chips */
+  .mini { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; cursor: pointer; background: var(--surface); }
+  .mini .ini { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+  .mini .n { font-family: var(--mono); font-size: 10px; color: var(--badge-yellow-text); font-weight: 700; }
+  .mini.on { background: var(--badge-yellow-bg); border-color: transparent; }
+  .mini.on .ini { color: var(--badge-yellow-text); }
+
+  /* 3: segmented bar */
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+  .seg button { font-size: 11px; font-weight: 500; color: var(--muted); background: var(--surface); border: none; border-right: 1px solid var(--border-soft); padding: 5px 12px; cursor: pointer; font-family: var(--font); display: inline-flex; gap: 5px; align-items: center; }
+  .seg button:last-child { border-right: none; }
+  .seg button .n { font-family: var(--mono); font-size: 10px; color: var(--badge-yellow-text); font-weight: 700; }
+  .seg button.on { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-weight: 600; }
+  .seg .seg-lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); background: var(--surface-2); padding: 5px 10px; border-right: 1px solid var(--border-soft); display: inline-flex; align-items: center; }
+
+  /* 4: quiet text line under the chips */
+  .subline { font-size: 11px; color: var(--muted); display: flex; gap: 14px; align-items: center; padding: 2px 4px 0; }
+  .subline .lbl2 { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .subline a { color: var(--badge-yellow-text); font-weight: 600; cursor: pointer; border-bottom: 1px dotted var(--badge-yellow-text); }
+  .subline a.on { background: var(--badge-yellow-bg); border-radius: 4px; padding: 1px 6px; border-bottom: none; }
+
+  /* 5: badge on Mappings + menu */
+  .mapbtn { position: relative; display: inline-flex; align-items: center; gap: 7px; }
+  .mapbtn .dot { min-width: 17px; height: 17px; border-radius: 999px; background: var(--badge-yellow-text); color: var(--surface); font-family: var(--mono); font-size: 9.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Idea</span>
+    <span class="opt on" data-o="1">1 · One "Gaps" chip</span>
+    <span class="opt" data-o="2">2 · Tiny initials</span>
+    <span class="opt" data-o="3">3 · Segmented bar</span>
+    <span class="opt" data-o="4">4 · Quiet subline</span>
+    <span class="opt" data-o="5">5 · Badge on Mappings</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage">
+    <div id="mount"></div>
+    <div class="sumline" id="sum"></div>
+  </div>
+
+<script>
+  const GAPS = { Walmart: 2, eBay: 46, Temu: 54 };
+  let view = '1', active = '', menuOpen = false;
+  const NOTES = {
+    1: 'One chip carries the total; the dropdown picks the channel. Least crowding.',
+    2: 'Three tiny chips — initial + amber count. Compact but still per-channel at a glance.',
+    3: 'One segmented control: label + three cells. Reads as a single unit.',
+    4: 'The toolbar stays clean; gaps live on a quiet line beneath it.',
+    5: 'A count badge rides the Mappings button; its menu filters or opens Mappings.',
+  };
+  const total = Object.values(GAPS).reduce((a, b) => a + b, 0);
+  const chips = `<input class="search" placeholder="Search SKU, title or barcode" disabled />
+    <span class="chip is-active">All</span><span class="chip">Open Box</span><span class="chip">Used</span>
+    <span class="chip">Scrap</span><span class="chip">WFS</span><span class="chip">DropShip · 38</span>`;
+  const tail = (mapExtra) => `<span style="flex:1"></span>${mapExtra || '<button class="btn">Mappings</button>'}<button class="btn">Refresh</button>`;
+
+  function render() {
+    let mid = '', below = '', mapExtra = '';
+    if (view === '1') {
+      mid = `<span class="gwrap">
+        <span class="chip gaps-chip ${active ? 'is-active' : ''}" id="gapsChip">Listing gaps <span class="n">${total}</span> <span class="car">▾</span></span>
+        ${menuOpen ? `<span class="gmenu">${Object.entries(GAPS).map(([c, n]) =>
+          `<button data-ch="${c}">No ${c} listing<span class="n">${n}</span></button>`).join('')}
+          <button data-ch="">Show all SKUs</button></span>` : ''}
+      </span>`;
+    } else if (view === '2') {
+      mid = Object.entries(GAPS).map(([c, n]) =>
+        `<span class="mini ${active === c ? 'on' : ''}" data-ch="${c}" title="In-stock items with no ${c} listing"><span class="ini">${c === 'Walmart' ? 'W' : c === 'eBay' ? 'e' : 'T'}</span><span class="n">${n}</span></span>`).join('');
+    } else if (view === '3') {
+      mid = `<span class="seg"><span class="seg-lbl">No listing</span>${Object.entries(GAPS).map(([c, n]) =>
+        `<button data-ch="${c}" class="${active === c ? 'on' : ''}">${c}<span class="n">${n}</span></button>`).join('')}</span>`;
+    } else if (view === '4') {
+      below = `<div class="subline"><span class="lbl2">Missing listings</span>${Object.entries(GAPS).map(([c, n]) =>
+        `<a data-ch="${c}" class="${active === c ? 'on' : ''}">${c} ${n}</a>`).join('')}</div>`;
+    } else {
+      mapExtra = `<span class="gwrap"><button class="btn mapbtn" id="gapsChip">Mappings <span class="dot">${total}</span></button>
+        ${menuOpen ? `<span class="gmenu" style="right:0;left:auto">${Object.entries(GAPS).map(([c, n]) =>
+          `<button data-ch="${c}">Show no-${c} items<span class="n">${n}</span></button>`).join('')}
+          <button>Open channel mapping…</button></span>` : ''}</span>`;
+    }
+    document.getElementById('mount').innerHTML = `<div><div class="bar">${chips}${mid}${tail(mapExtra)}</div>${below}</div>`;
+    document.getElementById('sum').innerHTML = active
+      ? `<b>${GAPS[active]}</b> in-stock SKUs with no ${active} listing linked — map them in Mappings`
+      : `155 SKUs · 8,718 units`;
+    document.getElementById('note').textContent = NOTES[view];
+  }
+  document.body.addEventListener('click', (e) => {
+    if (e.target.closest('#gapsChip')) { menuOpen = !menuOpen; render(); return; }
+    const ch = e.target.closest('[data-ch]');
+    if (ch) { active = ch.dataset.ch === active ? '' : ch.dataset.ch; menuOpen = false; render(); return; }
+    if (menuOpen) { menuOpen = false; render(); }
+    const o = e.target.closest('.opt');
+    if (o) {
+      view = o.dataset.o;
+      active = '';
+      menuOpen = false;
+      document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+      render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>

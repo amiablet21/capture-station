@@ -1610,6 +1610,37 @@ async function loadChLinked() {
   }
 }
 
+// the quiet subline under the toolbar: "MISSING LISTINGS  Walmart 2 · …"
+// (owner picked this over chips, 2026-08-08); a link toggles the filter
+function renderStockGaps() {
+  const line = $('stockGapsLine');
+  if (!line) return;
+  if (!chLinked || activePage !== 'stock') { line.hidden = true; return; }
+  const parts = ['walmart', 'ebay', 'temu'].flatMap(label => {
+    if (!chLinked[label]) return [];
+    const n = stockMissingList(label).length;
+    return n ? [
+      `<a data-gap="${label}" class="${stockMissingCh === label ? 'on' : ''}" title="Show in-stock items with no ${esc(channelLabel(label))} listing linked">${esc(channelLabel(label))} ${n}</a>`,
+    ] : [];
+  });
+  line.hidden = parts.length === 0;
+  line.innerHTML = `<span class="stock-gaps-lbl">Missing listings</span>${parts.join('')}`;
+}
+
+$('stockGapsLine').addEventListener('click', (e) => {
+  const a = e.target.closest('[data-gap]');
+  if (!a) return;
+  const label = a.dataset.gap;
+  stockMissingCh = stockMissingCh === label ? '' : label;
+  stockWfsActive = false;
+  stockLowActive = false;
+  stockDsActive = false;
+  stockUnlistedActive = false;
+  stockActiveView = null;
+  renderStockChips();
+  renderStock();
+});
+
 // in-stock items (primary) missing a link on the given channel
 function stockMissingList(label) {
   if (!chLinked || !chLinked[label] || !stockCache) return [];
@@ -1725,15 +1756,8 @@ function renderStockChips() {
     ...(unlistedDetail && unlistedDetail.length ? [
       `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`,
     ] : []),
-    // per-channel gaps: in-stock items with no link on that marketplace
-    ...(chLinked ? ['walmart', 'ebay', 'temu'].flatMap(label => {
-      if (!chLinked[label]) return [];
-      const n = stockMissingList(label).length;
-      return n ? [
-        `<button class="view-chip chip-unlisted ${stockMissingCh === label ? 'is-active' : ''}" data-view="miss:${label}" title="In-stock items with no ${esc(channelLabel(label))} listing linked">No ${esc(channelLabel(label))} · ${n}</button>`,
-      ] : [];
-    }) : []),
   ].join('');
+  renderStockGaps();
 }
 
 $('stockChips').addEventListener('click', (e) => {
