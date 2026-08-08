@@ -295,8 +295,11 @@ class LinnworksClient {
   // mapping screen uses, unlinked listings included. Paged until dry.
   async getChannelItems(channelId, source, subSource) {
     const out = [];
+    const seen = new Set(); // the server caps pages at its own size (50 seen
+    // live, whatever EntriesPerPage asks for) - so a short page is NOT the
+    // last page. Page until empty, dedupe in case the cursor is ignored.
     const PAGE = 200;
-    for (let page = 1; page <= 50; page++) {
+    for (let page = 1; page <= 200; page++) {
       const rows = await this.call('ChannelMapping/GetChannelItems', {
         channelOptions: {
           ChannelId: channelId,
@@ -306,7 +309,13 @@ class LinnworksClient {
           EntriesPerPage: PAGE,
         },
       });
-      for (const r of rows || []) {
+      if (!rows || !rows.length) break;
+      let fresh = 0;
+      for (const r of rows) {
+        const key = `${r.ChannelSKURowId || ''}|${r.SKU || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        fresh += 1;
         out.push({
           sku: r.SKU || '',
           title: r.Title || '',
@@ -317,7 +326,7 @@ class LinnworksClient {
           ignoreSync: !!r.IgnoreSync,
         });
       }
-      if (!rows || rows.length < PAGE) break;
+      if (!fresh) break; // page cursor ignored - nothing new, stop
     }
     return out;
   }
