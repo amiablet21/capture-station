@@ -3032,6 +3032,7 @@ async function loadUnlisted() {
 const chmap = {
   channels: [], chan: null, items: [], sel: null,
   onlyUn: false, busy: '', fresh: '', local: false, // local = demo seed
+  hasQty: true, // hide unlinked listings with 0 qty (dead listings) by default
 };
 
 function chmapChanLabel(c) {
@@ -3093,9 +3094,13 @@ function renderChmap() {
   const byId = new Map();
   if (recvItems) for (const it of recvItems) { if (it.stockItemId) byId.set(it.stockItemId, it.sku); }
 
+  $('chmapHasQty').classList.toggle('on', chmap.hasQty);
   const q1 = $('chmapWmQ').value.trim().toLowerCase();
   const rows = chmap.items.filter(w => {
     if (chmap.onlyUn && w.linked) return false;
+    // dead listings (0 qty on the channel) hide from the unlinked worklist;
+    // linked rows stay visible either way
+    if (chmap.hasQty && !w.linked && !(w.qty > 0)) return false;
     if (!q1) return true;
     const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || '';
     return w.sku.toLowerCase().includes(q1) || w.title.toLowerCase().includes(q1)
@@ -3109,7 +3114,7 @@ function renderChmap() {
       const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || (w.linked ? '(linked)' : '');
       return `
       <tr class="${chmap.sel === w.sku ? 'sel' : ''}" data-wm="${esc(w.sku)}">
-        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''}">${esc(w.sku)}</td>
+        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''} · listed qty ${w.qty || 0}">${esc(w.sku)}${w.qty > 0 ? ` <span class="chmap-qty">×${w.qty}</span>` : ''}</td>
         <td>${w.linked
           ? `<span class="mono chmap-grn">${esc(linkedSku)}</span>`
           : '<span class="chmap-lk">not linked</span>'}</td>
@@ -3140,6 +3145,7 @@ function renderChmap() {
 $('chmapBtn').addEventListener('click', () => chmapOpen());
 $('chmapClose').addEventListener('click', () => $('chmapDialog').close());
 $('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
+$('chmapHasQty').addEventListener('click', () => { chmap.hasQty = !chmap.hasQty; renderChmap(); });
 $('chmapWmQ').addEventListener('input', () => renderChmap());
 $('chmapLwQ').addEventListener('input', () => renderChmap());
 

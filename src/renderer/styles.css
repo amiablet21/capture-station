@@ -1342,6 +1342,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .chmap-table .th-act2 { width: 96px; }
 td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
+.chmap-qty { font-size: 10.5px; color: var(--faint); }
 .chmap-lk {
   font-size: 9px;
   font-weight: 700;

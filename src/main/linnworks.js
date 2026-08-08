@@ -371,6 +371,7 @@ class LinnworksClient {
         out.push({
           sku: r.SKU || '',
           title: r.Title || '',
+          qty: Number(r.Quantity) || 0, // listed qty on the channel
           wfs: !!r.WFS,
           linked: !!r.IsLinked,
           linkedItemId: r.LinkedItemId && r.LinkedItemId !== '00000000-0000-0000-0000-000000000000' ? r.LinkedItemId : '',
