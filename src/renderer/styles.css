@@ -97,7 +97,7 @@ body {
 
 .topbar-right { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 24px; }
 
-.daycount, .ordercount { display: flex; flex-direction: column; align-items: flex-end; gap: 0; }
+.daycount, .ordercount { display: flex; flex-direction: column; align-items: flex-end; gap: 0; position: relative; }
 
 .daycount-num {
   font-family: var(--mono);
@@ -518,6 +518,11 @@ body {
 .chip-filter.chip-due.is-active { background: var(--badge-yellow-bg); border-color: transparent; color: var(--badge-yellow-text); }
 
 .due-header {
+  /* floats below the day count instead of stacking inside it - a third
+     line grew the topbar and nudged the page tabs down on Capture */
+  position: absolute;
+  top: 100%;
+  right: 0;
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
