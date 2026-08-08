@@ -574,9 +574,12 @@ class LinnworksClient {
       for (const order of full || []) {
         const head = headById.get(order.OrderId) || {};
         const source = head.source || (order.GeneralInfo ? order.GeneralInfo.Source : '') || '';
-        // which location despatched it (drives dropship-velocity stats);
-        // field name read defensively across API shapes
-        const locationId = order.FulfilledLocationId || order.FulfilledLocation
+        // which location despatched it (drives dropship-velocity stats).
+        // Verified live 2026-08-08: the REAL field is FulfilmentLocationId —
+        // the old FulfilledLocationId guesses never existed, so every order
+        // read as zero-GUID and dropship velocity counted nothing.
+        const locationId = order.FulfilmentLocationId
+          || order.FulfilledLocationId || order.FulfilledLocation
           || (order.GeneralInfo && order.GeneralInfo.Location) || '';
         for (const it of order.Items || []) {
           if (it.IsService) continue;
