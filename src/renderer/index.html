@@ -469,6 +469,23 @@
     </div>
   </dialog>
 
+  <!-- Delete a Linnworks SKU: irreversible, so the dialog spells out the
+       blast radius and demands explicit consent -->
+  <dialog id="stockDelDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Delete Linnworks SKU</h2>
+      <p class="dlg-note mono" id="sdelSku"></p>
+      <div id="sdelFacts" class="dlg-note"></div>
+      <p class="dlg-note">This permanently deletes the item from Linnworks — its stock count, history and channel links go with it. Marketplace listings are <b>not</b> ended: they keep selling with no stock sync, so end or relink them on the marketplace too.</p>
+      <label class="check"><input id="sdelAck" type="checkbox" />
+        <span>I understand this cannot be undone</span></label>
+      <div class="dlg-actions">
+        <button id="sdelCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="sdelGo" class="btn btn-danger" type="button" disabled>Delete SKU</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Channel mapping: the in-app Linnworks mapping screen (approved mockup
        variants/channel-mapping-ours.html, variation 1, 2026-08-07) -->
   <dialog id="chmapDialog" class="dlg chmap-dlg">

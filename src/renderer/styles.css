@@ -1380,6 +1380,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chmap-nfin { border-radius: 999px; }
 
+/* the delete-SKU trash hides until the row is hovered (rarely needed) */
+.stock-table .stock-del-btn { visibility: hidden; }
+.stock-table tr:hover .stock-del-btn { visibility: visible; }
+
 /* channel SKUs in the stock popup are links to their listings */
 .chs-sku-link {
   background: none;

@@ -1442,6 +1442,29 @@ function registerIpc() {
     ingestOrder(channel, orderNumber, { force: true });
     return { ok: true };
   });
+  // Permanently delete a stock item from Linnworks (guarded by a consent
+  // dialog in the UI — this is irreversible)
+  ipcMain.handle('stock:deleteSku', async (_e, { stockItemId, sku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.call('Inventory/DeleteInventoryItems', { inventoryItemIds: [stockItemId] });
+      mappingCache.clear();
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      // a deleted SKU leaves the dropship program implicitly
+      const pads = { ...(cfg.dropshipPads || {}) };
+      if (sku && String(sku).toUpperCase() in pads) {
+        delete pads[String(sku).toUpperCase()];
+        config.save({ dropshipPads: pads });
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // A listing search page for a channel SKU, in the pane or externally
   ipcMain.handle('listing:open', (_e, { sku, channel, external }) => {
     const cfg = config.load();

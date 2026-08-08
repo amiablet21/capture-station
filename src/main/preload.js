@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   mappingUnlink: (rowId) => ipcRenderer.invoke('mapping:unlink', { rowId }),
   listingOpen: (sku, channel, external) => ipcRenderer.invoke('listing:open', { sku, channel, external }),
   mappingLinkedSets: () => ipcRenderer.invoke('mapping:linkedSets'),
+  stockDeleteSku: (stockItemId, sku) => ipcRenderer.invoke('stock:deleteSku', { stockItemId, sku }),
   browserPlatformMenu: () => ipcRenderer.invoke('browser:platformMenu'),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
   browserZoom: (dir) => ipcRenderer.invoke('browser:zoom', { dir }),

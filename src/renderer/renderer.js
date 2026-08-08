@@ -1961,7 +1961,10 @@ function renderStock() {
   const dsAdd = (r) => (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
     ? `<button class="stock-ds-add" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">+ DS</button>`
     : '';
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}</td>`;
+  const delBtn = (r) => (state && !state.captureOnly && r.stockItemId)
+    ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
+    : '';
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}${delBtn(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
@@ -2450,6 +2453,8 @@ $('stockList').addEventListener('dblclick', (e) => {
 $('stockList').addEventListener('click', (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
+  const del = e.target.closest('.stock-del-btn');
+  if (del) { openStockDelete(del.dataset.delsku, del.dataset.delsid); return; }
   const th = e.target.closest('th[data-sort]');
   if (th) {
     if (e.target.closest('.col-grip') || Date.now() < suppressSortUntil) return;
@@ -3884,6 +3889,65 @@ $('salesBody').addEventListener('mousemove', (e) => {
 });
 
 $('salesClose').addEventListener('click', () => $('salesDialog').close());
+
+/* ---------- delete a Linnworks SKU (irreversible, consent-gated) ---------- */
+
+let sdelCtx = null; // { sku, sid }
+
+async function openStockDelete(sku, sid) {
+  sdelCtx = { sku, sid };
+  $('sdelSku').textContent = sku;
+  $('sdelAck').checked = false;
+  $('sdelGo').disabled = true;
+  $('sdelGo').textContent = 'Delete SKU';
+  // the blast radius: units on hand, dropship pad, linked listings
+  const it = stockCache && stockCache.items.find(x => x.stockItemId === sid);
+  const lvl = it && it.levels.find(l => l.locationId === stockCache.locationId);
+  const units = lvl ? Number(lvl.stockLevel) || 0 : 0;
+  const pad = dsPads && dsPads[String(sku).toUpperCase()];
+  const facts = [
+    `${units} unit${units === 1 ? '' : 's'} in stock at the warehouse${units > 0 ? ' — these counts are lost' : ''}`,
+    pad ? `enrolled in the DropShip program (pad ${pad}) — enrollment is removed` : '',
+    'checking linked listings…',
+  ].filter(Boolean);
+  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+  $('stockDelDialog').showModal();
+  const res = await api.getChannelSkus(sid);
+  if (!sdelCtx || sdelCtx.sid !== sid) return; // dialog moved on
+  facts.pop();
+  const n = res.ok ? res.channels.length : -1;
+  facts.push(n === -1 ? 'could not check linked listings'
+    : n === 0 ? 'no marketplace listings linked'
+      : `${n} marketplace listing${n === 1 ? '' : 's'} linked (${res.channels.map(c => channelLabel((c.source || '').toLowerCase())).join(', ')}) — they keep selling WITHOUT stock sync until ended or relinked`);
+  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+}
+
+$('sdelAck').addEventListener('change', () => { $('sdelGo').disabled = !$('sdelAck').checked; });
+$('sdelCancel').addEventListener('click', () => $('stockDelDialog').close());
+$('stockDelDialog').addEventListener('close', () => { sdelCtx = null; });
+$('sdelGo').addEventListener('click', async () => {
+  if (!sdelCtx || !$('sdelAck').checked) return;
+  const { sku, sid } = sdelCtx;
+  $('sdelGo').disabled = true;
+  $('sdelGo').textContent = 'Deleting…';
+  const res = await api.stockDeleteSku(sid, sku).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) {
+    $('sdelGo').textContent = 'Delete SKU';
+    $('sdelGo').disabled = false;
+    toast((res && res.error) || 'Could not delete the SKU.');
+    return;
+  }
+  $('stockDelDialog').close();
+  // every local cache forgets it immediately
+  if (recvItems) {
+    const i = recvItems.findIndex(x => x.stockItemId === sid);
+    if (i >= 0) recvItems.splice(i, 1);
+    if (recvBySku) recvBySku.delete(String(sku).toLowerCase());
+  }
+  if (dsPads) delete dsPads[String(sku).toUpperCase()];
+  toast(`${sku} deleted from Linnworks`);
+  loadStock();
+});
 
 /* ---------- linked channel SKUs per stock item ---------- */
 
