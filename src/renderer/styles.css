@@ -2044,6 +2044,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .stock-table th.sortable { cursor: pointer; user-select: none; }
 .stock-table th.sortable:hover { color: var(--text); }
 
+.rows-table th.th-sort { cursor: pointer; user-select: none; }
+.rows-table th.th-sort:hover { color: var(--text); }
+
 .stock-table .th-img, .stock-table .cell-img { width: 44px; padding: 3px 6px 3px 10px; }
 
 .stock-img {

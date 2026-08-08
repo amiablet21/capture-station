@@ -91,6 +91,8 @@ if (!window.api) {
 
 let state = null;
 let channelFilter = 'all'; // marketplace chip on the capture list
+let orderSort = 'new'; // capture list Order # header: 'new' | 'old' first
+let trackSort = 'none'; // Tracking header: 'none' | 'untracked' | 'tracked'
 let pendingConfirm = null; // { value, reason, duplicate }
 let editingRowId = null;
 let toastTimer = null;
@@ -386,6 +388,14 @@ function render() {
   } else {
     $('findCount').textContent = '';
   }
+  // header sorts: Order # flips age, Tracking groups by has/hasn't (stable,
+  // so the age order holds inside each group)
+  if (orderSort === 'old') visible = visible.slice().reverse();
+  if (trackSort !== 'none') {
+    const has = ({ row }) => (String(row.tracking || '').trim() ? 1 : 0);
+    visible = visible.slice().sort((a, b) =>
+      trackSort === 'tracked' ? has(b) - has(a) : has(a) - has(b));
+  }
   const empty = visible.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty || !!findQuery; // finder shows "no matches" itself
@@ -515,6 +525,24 @@ async function submitScan(value, force) {
   }
   showWarn({ reason: res.error || 'Scan rejected.', danger: !!res.clipped, confirmable: false });
 }
+
+// header sort toggles (owner request 2026-08-07): Order # flips the age
+// order; Tracking cycles missing-first -> added-first -> off
+function syncSortHeads() {
+  $('thOrder').textContent = orderSort === 'old' ? 'Order # · oldest first' : 'Order #';
+  $('thTracking').textContent = trackSort === 'none' ? 'Tracking'
+    : trackSort === 'untracked' ? 'Tracking · missing first' : 'Tracking · added first';
+}
+$('thOrder').addEventListener('click', () => {
+  orderSort = orderSort === 'new' ? 'old' : 'new';
+  syncSortHeads();
+  render();
+});
+$('thTracking').addEventListener('click', () => {
+  trackSort = trackSort === 'none' ? 'untracked' : trackSort === 'untracked' ? 'tracked' : 'none';
+  syncSortHeads();
+  render();
+});
 
 $('rowsBody').addEventListener('keydown', (e) => {
   const inp = e.target.closest('.row-scan-input');
