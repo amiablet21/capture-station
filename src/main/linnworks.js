@@ -357,7 +357,7 @@ class LinnworksClient {
           ChannelId: channelId,
           Source: source,
           SubSource: subSource,
-          PageNumber: page,
+          Page: page, // NOT PageNumber - that spelling is silently ignored
           EntriesPerPage: PAGE,
         },
       });
