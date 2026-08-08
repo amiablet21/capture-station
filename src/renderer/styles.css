@@ -1380,9 +1380,34 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chmap-nfin { border-radius: 999px; }
 
-/* the delete-SKU trash hides until the row is hovered (rarely needed) */
-.stock-table .stock-del-btn { visibility: hidden; }
-.stock-table tr:hover .stock-del-btn { visibility: visible; }
+/* stock row actions: a floating tray on the right of the SKU cell, shown
+   on hover (design B, 2026-08-08) — chart · DS enroll · delete */
+.stock-tray {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 4px;
+  visibility: hidden;
+  box-shadow: 0 2px 8px rgba(47, 52, 55, 0.08);
+}
+.stock-table tr:hover .stock-tray { visibility: visible; }
+.stock-tray .btn-icon { width: 24px; height: 24px; }
+.tray-ds {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.tray-ds:hover { background: var(--accent-soft); color: var(--accent-soft-text); }
 
 /* channel SKUs in the stock popup are links to their listings */
 .chs-sku-link {

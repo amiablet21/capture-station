@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Stock SKU cell — three action designs</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .hide { display: none !important; }
+
+  .stage { flex: 1; overflow-y: auto; padding: 22px; display: flex; justify-content: center; align-items: flex-start; }
+  .card { width: 860px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: visible; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  th.num, td.num { text-align: right; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .m { font-family: var(--mono); font-size: 11.5px; }
+  .thumb { width: 22px; height: 22px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-soft); display: inline-block; vertical-align: -6px; margin-right: 8px; }
+  .delta { font-family: var(--mono); font-size: 10px; margin-left: 7px; }
+  .delta.up { color: var(--badge-green-text); }
+  .delta.down { color: var(--neg-text); }
+  .nl { font-size: 9px; font-weight: 700; text-transform: uppercase; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
+  .numv { font-family: var(--mono); font-size: 12px; }
+
+  /* shared icon button */
+  .ib { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; border-radius: 6px; color: var(--muted); cursor: pointer; }
+  .ib:hover { background: var(--border); color: var(--text); }
+  .ib.danger:hover { background: var(--neg-bg); color: var(--neg-text); }
+  .ib svg { width: 14px; height: 14px; }
+
+  /* A: one kebab menu */
+  .kebab-wrap { position: relative; display: inline-block; float: right; }
+  .kebab { visibility: hidden; }
+  tr:hover .kebab { visibility: visible; }
+  .kmenu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 190px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 30px rgba(47,52,55,0.16); z-index: 30; overflow: hidden; padding: 4px; }
+  .kmenu button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font-size: 12px; color: var(--text); background: none; border: none; border-radius: 7px; padding: 7px 10px; cursor: pointer; font-family: var(--font); }
+  .kmenu button:hover { background: var(--surface-2); }
+  .kmenu button.danger { color: var(--neg-text); }
+  .kmenu button.danger:hover { background: var(--neg-bg); }
+  .kmenu svg { width: 13px; height: 13px; flex: 0 0 auto; }
+  .kmenu .sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
+
+  /* B: hover tray in the cell */
+  .tray { float: right; display: inline-flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 4px; visibility: hidden; box-shadow: 0 2px 8px rgba(47,52,55,0.08); }
+  tr:hover .tray { visibility: visible; }
+
+  /* C: dedicated actions column */
+  .acts-col { visibility: hidden; }
+  tr:hover .acts-col { visibility: visible; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Design</span>
+    <span class="opt on" data-o="a">A · One ⋯ menu</span>
+    <span class="opt" data-o="b">B · Hover tray</span>
+    <span class="opt" data-o="c">C · Actions column</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage"><div id="mount"></div></div>
+
+<script>
+  const ICO = {
+    chart: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>',
+    ds: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M247.42,117l-14-35A15.93,15.93,0,0,0,218.58,72H184V64a8,8,0,0,0-8-8H24A16,16,0,0,0,8,72V184a16,16,0,0,0,16,16H41a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,247.42,117ZM184,88h34.58l9.6,24H184ZM24,72H168v64H24ZM72,208a16,16,0,1,1,16-16A16,16,0,0,1,72,208Zm81-24H103a32,32,0,0,0-62,0H24V152H168v12.31A32.11,32.11,0,0,0,153,184Zm31,24a16,16,0,1,1,16-16A16,16,0,0,1,184,208Zm48-24H215a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>',
+    trash: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"/></svg>',
+    copy: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>',
+    kebab: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128ZM128,72a12,12,0,1,0-12-12A12,12,0,0,0,128,72Zm0,112a12,12,0,1,0,12,12A12,12,0,0,0,128,184Z"/></svg>',
+  };
+  const ROWS = [
+    { sku: 'S25-ULTRA-512GB-SILVERBLUE', delta: '+3', up: true, nl: false, stock: 41, min: 12, avail: 38 },
+    { sku: 'OPEN-BOX-S25-FE-128GB', delta: '', up: false, nl: true, stock: 1, min: 0, avail: 1 },
+    { sku: 'X230-128GB-GRAY', delta: '-25%', up: false, nl: false, stock: 12, min: 4, avail: 11 },
+  ];
+  const NOTES = {
+    a: 'One ⋯ on hover; everything lives in a tidy menu (chart, DropShip, copy, delete).',
+    b: 'A floating icon tray appears on hover — one click each, no menu.',
+    c: 'The SKU cell is pure; icons live in their own slim column on the right.',
+  };
+  let view = 'a', openMenu = null;
+
+  const skuHtml = (r) => `<span class="thumb"></span><span class="m">${r.sku}</span>${r.nl ? '<span class="nl">not listed</span>' : ''}${r.delta ? `<span class="delta ${r.up ? 'up' : 'down'}">${r.delta}${r.up ? '▲' : '▼'}</span>` : ''}`;
+
+  function render() {
+    const acts = `
+      <button class="ib" title="Sales history">${ICO.chart}</button>
+      <button class="ib" title="Add to the DropShip program">${ICO.ds}</button>
+      <button class="ib danger" title="Delete this SKU from Linnworks…">${ICO.trash}</button>`;
+    let rows;
+    if (view === 'a') {
+      rows = ROWS.map((r, i) => `
+        <tr>
+          <td>${skuHtml(r)}
+            <span class="kebab-wrap">
+              <button class="ib kebab" data-k="${i}" title="Actions">${ICO.kebab}</button>
+              ${openMenu === i ? `<span class="kmenu">
+                <button>${ICO.chart}Sales history</button>
+                <button>${ICO.ds}Add to DropShip</button>
+                <button>${ICO.copy}Copy SKU</button>
+                <span class="sep"></span>
+                <button class="danger">${ICO.trash}Delete from Linnworks…</button>
+              </span>` : ''}
+            </span>
+          </td>
+          <td class="num numv">${r.stock}</td><td class="num numv">${r.min}</td><td class="num numv">${r.avail}</td>
+        </tr>`).join('');
+    } else if (view === 'b') {
+      rows = ROWS.map(r => `
+        <tr>
+          <td>${skuHtml(r)}<span class="tray">${acts}</span></td>
+          <td class="num numv">${r.stock}</td><td class="num numv">${r.min}</td><td class="num numv">${r.avail}</td>
+        </tr>`).join('');
+    } else {
+      rows = ROWS.map(r => `
+        <tr>
+          <td>${skuHtml(r)}</td>
+          <td class="num numv">${r.stock}</td><td class="num numv">${r.min}</td><td class="num numv">${r.avail}</td>
+          <td class="acts-col" style="overflow:visible">${acts}</td>
+        </tr>`).join('');
+    }
+    document.getElementById('mount').innerHTML = `
+      <div class="card">
+        <table>
+          <thead><tr>
+            <th>SKU</th><th class="num" style="width:80px">In stock</th><th class="num" style="width:70px">Min</th><th class="num" style="width:90px">Available</th>
+            ${view === 'c' ? '<th style="width:92px"></th>' : ''}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    document.getElementById('note').textContent = NOTES[view];
+  }
+  document.body.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-k]');
+    if (k) { openMenu = openMenu === Number(k.dataset.k) ? null : Number(k.dataset.k); render(); return; }
+    if (!e.target.closest('.kmenu')) { if (openMenu !== null) { openMenu = null; render(); } }
+    const o = e.target.closest('.opt');
+    if (o) {
+      view = o.dataset.o;
+      openMenu = null;
+      document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+      render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>

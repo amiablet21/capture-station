@@ -1961,10 +1961,20 @@ function renderStock() {
   const dsAdd = (r) => (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
     ? `<button class="stock-ds-add" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">+ DS</button>`
     : '';
-  const delBtn = (r) => (state && !state.captureOnly && r.stockItemId)
-    ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
-    : '';
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}<button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>${dsAdd(r)}${delBtn(r)}</td>`;
+  // design B (owner pick 2026-08-08): actions live in a floating tray that
+  // appears on row hover — chart, "DS" enrollment, delete — one click each
+  const trayHtml = (r) => {
+    const ds = (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
+      ? `<button class="stock-ds-add tray-ds" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">DS</button>`
+      : '';
+    const del = (state && !state.captureOnly && r.stockItemId)
+      ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
+      : '';
+    return `<span class="stock-tray">
+      <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
+      ${ds}${del}</span>`;
+  };
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
