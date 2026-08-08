@@ -206,6 +206,22 @@ function sendPaneState() {
   });
 }
 
+// Pane zoom: buttons and Ctrl+wheel share one persisted factor, reapplied on
+// every navigation so Chromium's per-site zoom memory can't drift from it.
+let paneZoomSaveTimer = null;
+
+function paneSetZoom(dir) {
+  const wc = paneView.webContents;
+  const cur = wc.getZoomFactor();
+  const next = dir === 'reset' ? 1 : dir === 'in' ? cur * 1.1 : cur / 1.1;
+  const factor = Math.round(Math.min(3, Math.max(0.3, next)) * 100) / 100;
+  wc.setZoomFactor(factor);
+  clearTimeout(paneZoomSaveTimer); // wheel spins fire in bursts - settle first
+  paneZoomSaveTimer = setTimeout(() => config.save({ browserPane: { zoom: factor } }), 400);
+  if (win && !win.isDestroyed()) win.webContents.send('browser:zoom', { factor });
+  return factor;
+}
+
 function ensurePane() {
   if (paneView) return paneView;
   const ses = session.fromPartition(PANE_PARTITION);
@@ -241,6 +257,16 @@ function ensurePane() {
     },
   });
   const wc = paneView.webContents;
+  // Ctrl+wheel zooms (Chromium reports it as zoom-changed); the saved factor
+  // survives restarts and is re-imposed after every navigation
+  wc.on('zoom-changed', (_e, direction) => {
+    paneSetZoom(direction === 'in' ? 'in' : 'out');
+  });
+  wc.on('did-navigate', () => {
+    const z = Number((config.load().browserPane || {}).zoom) || 1;
+    wc.setZoomFactor(z);
+    if (win && !win.isDestroyed()) win.webContents.send('browser:zoom', { factor: z });
+  });
   // same copy/paste menu inside the marketplace pane — WITHOUT priming the
   // clipboard watcher: tracking numbers copied here are meant to be captured
   wc.on('context-menu', (_e, params) => {
@@ -2365,6 +2391,10 @@ function registerIpc() {
     else if (action === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
     else if (action === 'reload') wc.reload();
     return { ok: true };
+  });
+  ipcMain.handle('browser:zoom', (_e, { dir }) => {
+    if (!paneView) return { ok: false };
+    return { ok: true, factor: paneSetZoom(dir) };
   });
   ipcMain.handle('browser:print', () => {
     if (paneView) paneView.webContents.print();

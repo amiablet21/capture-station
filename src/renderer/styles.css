@@ -278,6 +278,18 @@ body {
 
 .bdock-domain.is-loading { color: var(--accent); }
 
+/* zoom % chip: only present while zoomed; click = back to 100% */
+.bdock-zoom {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  cursor: pointer;
+}
+.bdock-zoom:hover { color: var(--accent); }
+
 .bdock-view { flex: 1; min-height: 0; background: var(--surface-2); }
 
 /* pane loading screen: DOM panel under the (hidden) native view */

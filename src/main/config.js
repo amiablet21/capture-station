@@ -127,7 +127,7 @@ const DEFAULTS = {
   dropshipAlerted: {},
   // Embedded marketplace browser pane on the Capture page (sync mode only):
   // width and open/collapsed state survive restarts.
-  browserPane: { visible: false, width: 480 },
+  browserPane: { visible: false, width: 480, zoom: 1 },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
   lastSync: null, // { at, synced, failed, dryRun }

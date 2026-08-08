@@ -11,6 +11,7 @@ const EVENTS = [
   'tracking:clipped',
   'orders:imported',
   'browser:state',
+  'browser:zoom',
   'browser:download',
   'browser:loadstart',
   'browser:loadend',
@@ -93,6 +94,7 @@ contextBridge.exposeInMainWorld('api', {
   mappingUnlink: (rowId) => ipcRenderer.invoke('mapping:unlink', { rowId }),
   browserPlatformMenu: () => ipcRenderer.invoke('browser:platformMenu'),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
+  browserZoom: (dir) => ipcRenderer.invoke('browser:zoom', { dir }),
   browserPrint: () => ipcRenderer.invoke('browser:print'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   on: (channel, cb) => {

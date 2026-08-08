@@ -130,6 +130,12 @@ function channelLabel(c) {
 
 function toast(msg, ms = 2200) {
   const el = $('toast');
+  // the browser pane is a native layer that covers everything, toasts
+  // included: center the toast over the sheet side instead, never under it
+  const dock = $('bDock');
+  el.style.left = dock && !dock.hidden
+    ? `${dock.offsetWidth + (window.innerWidth - dock.offsetWidth) / 2}px`
+    : '';
   el.textContent = msg;
   el.hidden = false;
   el.classList.remove('is-out');
@@ -1442,6 +1448,17 @@ $('bBack').addEventListener('click', () => bManualNav('back'));
 $('bFwd').addEventListener('click', () => bManualNav('forward'));
 $('bReload').addEventListener('click', () => bManualNav('reload'));
 $('bPrint').addEventListener('click', () => api.browserPrint());
+
+// pane zoom: buttons here, Ctrl+wheel in main; the % chip resets to 100
+$('bZoomIn').addEventListener('click', () => api.browserZoom('in'));
+$('bZoomOut').addEventListener('click', () => api.browserZoom('out'));
+$('bZoomPct').addEventListener('click', () => api.browserZoom('reset'));
+
+api.on('browser:zoom', ({ factor }) => {
+  const pct = Math.round((Number(factor) || 1) * 100);
+  $('bZoomPct').textContent = `${pct}%`;
+  $('bZoomPct').hidden = pct === 100; // chip only shows when zoomed
+});
 
 api.on('browser:state', (s) => {
   $('bDomain').textContent = s.domain || '—'; // domain only, never the raw URL
