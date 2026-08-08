@@ -4373,7 +4373,9 @@ function makeCombo(input, listEl, onPick, opts) {
   // scroll container clips absolute children, and toggling its overflow
   // while a list is open made the whole page shift (owner report 2026-08-06)
   const positionList = () => {
-    if (!input.closest('.ret-sheet-scroll')) return;
+    // sheet containers clip absolute dropdowns (overflow:hidden): the
+    // returns log AND the receive popup's sheet anchor to the viewport
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
