@@ -802,7 +802,7 @@ body {
 .ret-page.has-browser > .bdock { align-self: stretch; }
 .ret-page.has-browser .ret-sheet-row { justify-content: flex-start; }
 .ret-page.has-browser .ret-main { flex: 1 1 auto; max-width: none; min-width: 0; width: auto !important; }
-.ret-page.has-browser .sheet-grip { display: none; } /* the pane divider resizes instead */
+.ret-page.has-browser .sheet-grip:not(.bdock-divider) { display: none; } /* the pane divider resizes instead */
 
 /* compact columns while the pane shares the window: Customer, Tracking,
    Received, By and Notes step aside (their values stay in cell tooltips)

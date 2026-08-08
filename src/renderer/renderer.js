@@ -1371,8 +1371,9 @@ function syncBrowserBounds() {
   requestAnimationFrame(() => {
     bSyncQueued = false;
     alignCaptureToolbar(); // the find bar tracks the sheet column's edges
-    // the native view yields to dialogs AND to the DOM loading panel
-    if ($('bDock').hidden || anyDialogOpen() || bLoad.active) {
+    // the native view yields to dialogs, the DOM loading panel, AND divider
+    // drags - while it is frontmost it swallows mousemove, killing the drag
+    if ($('bDock').hidden || anyDialogOpen() || bLoad.active || bDrag) {
       api.browserLayout({ visible: false });
       return;
     }
@@ -1413,6 +1414,7 @@ $('bDivider').addEventListener('mousedown', (e) => {
   e.preventDefault();
   bDrag = { startX: e.clientX, startW: $('bDock').offsetWidth };
   $('bDivider').classList.add('is-active');
+  syncBrowserBounds(); // hide the native view for the duration of the drag
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -1428,6 +1430,7 @@ window.addEventListener('mouseup', () => {
   bDrag = null;
   $('bDivider').classList.remove('is-active');
   api.setConfig({ browserPane: { width: bPane.width } });
+  syncBrowserBounds(); // the native view returns at the new width
 });
 
 // manual navs get the generic loading treatment
