@@ -12,6 +12,7 @@ const EVENTS = [
   'orders:imported',
   'browser:state',
   'browser:zoom',
+  'mapping:overlay',
   'browser:download',
   'browser:loadstart',
   'browser:loadend',

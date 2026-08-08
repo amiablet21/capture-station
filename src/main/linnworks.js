@@ -608,6 +608,16 @@ class LinnworksClient {
     return this.call('Stock/UpdateStockMinimumLevel', { stockItemId, locationId, minimumLevel });
   }
 
+  // Bulk SKU -> StockItemId (one call). Unknown SKUs are simply absent.
+  async getStockItemIdsBySkus(skus) {
+    const data = await this.call('Inventory/GetStockItemIdsBySKU', { request: { SKUS: skus } });
+    const map = new Map();
+    for (const it of (data && data.Items) || []) {
+      if (it.SKU && it.StockItemId) map.set(String(it.SKU).toUpperCase(), it.StockItemId);
+    }
+    return map;
+  }
+
   // Channel SKUs linked to a stock item (what Channel Mapping points here).
   async getChannelSkus(stockItemId) {
     const data = await this.call(`Inventory/GetInventoryItemChannelSKUs?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });

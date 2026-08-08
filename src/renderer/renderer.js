@@ -3146,6 +3146,18 @@ $('chmapBtn').addEventListener('click', () => chmapOpen());
 $('chmapClose').addEventListener('click', () => $('chmapDialog').close());
 $('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
 $('chmapHasQty').addEventListener('click', () => { chmap.hasQty = !chmap.hasQty; renderChmap(); });
+
+// links confirmed against Inventory's records (ahead of the channel scan)
+// stream in and flip their rows to linked on the spot
+api.on('mapping:overlay', (d) => {
+  if (chmap.local || !chmap.chan || chmap.chan.id !== d.channelId) return;
+  const it = chmap.items.find(w => w.sku === d.sku);
+  if (it && !it.linked) {
+    it.linked = true;
+    it.linkedItemId = d.stockItemId;
+    renderChmap();
+  }
+});
 $('chmapWmQ').addEventListener('input', () => renderChmap());
 $('chmapLwQ').addEventListener('input', () => renderChmap());
 

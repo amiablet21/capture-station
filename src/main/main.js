@@ -1454,6 +1454,33 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // Cross-check unlinked feed rows against Inventory's channel-SKU records
+  // (the truth the Stock page uses). Candidates: unlinked listings whose SKU
+  // exists as an inventory SKU - one bulk id lookup, then one throttled
+  // per-item call each. Mutates the cached items so later opens keep it.
+  async function overlayMappingLinks(cfg, key, items, channelId, source, subSource) {
+    const unlinked = items.filter(i => !i.linked && i.sku);
+    if (!unlinked.length) return;
+    const client = new LinnworksClient(cfg.linnworks);
+    const ids = await client.getStockItemIdsBySkus(unlinked.map(i => i.sku));
+    for (const it of unlinked) {
+      if (mappingCache.get(key)?.items !== items) return; // superseded fetch
+      const id = ids.get(String(it.sku).toUpperCase());
+      if (!id) continue;
+      let records = [];
+      try { records = await client.getChannelSkus(id); } catch { continue; }
+      const hit = records.some(r =>
+        r.source === source && r.subSource === subSource
+        && String(r.sku).toUpperCase() === String(it.sku).toUpperCase());
+      if (!hit) continue;
+      it.linked = true;
+      it.linkedItemId = id;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('mapping:overlay', { channelId, sku: it.sku, stockItemId: id });
+      }
+    }
+  }
+
   ipcMain.handle('mapping:items', async (_e, { channelId, source, subSource, force }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -1466,6 +1493,11 @@ function registerIpc() {
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.getChannelItems(channelId, source, subSource);
       mappingCache.set(key, { at: Date.now(), items });
+      // The scan feed lags: a link made in Linnworks' Product Details (or
+      // seconds ago in this dialog) stays "not linked" until the channel's
+      // next listing scan. Overlay the REAL link records in the background;
+      // confirmed links stream to the dialog as they are found.
+      overlayMappingLinks(cfg, key, items, channelId, source, subSource).catch(() => {});
       return { ok: true, items };
     } catch (e) {
       return { ok: false, error: e.message };
