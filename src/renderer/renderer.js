@@ -4154,11 +4154,32 @@ function imgStageSuccess(previewUrl) {
   imgControls(true);
   imgHint('The image saves to this SKU as soon as it is added.');
   $('imgUrl').value = '';
+  $('imgClose').textContent = 'Done'; // press Done, the new image is there
   if (previewUrl) imgTarget.preview = previewUrl;
   const src = imgTarget.preview || imgTarget.url || '';
   $('imgStage').innerHTML = `
     ${src ? `<img class="img-stage-img" src="${esc(src)}" alt="" />` : ''}
     <span class="img-ok">Image added to ${esc(imgTarget.sku)}</span>`;
+}
+
+// the grid shows the NEW image immediately from the local copy — no full
+// stock reload (that spinner was the "waiting" the owner flagged)
+function imgPatchGrid(dataUrl) {
+  if (!dataUrl) { loadStock(); return; }
+  const sku = imgTarget.sku;
+  if (stockCache) {
+    const it = stockCache.items.find(i => i.sku === sku);
+    if (it) it.image = dataUrl;
+  }
+  if (recvBySku) {
+    const it2 = recvBySku.get(String(sku).toLowerCase());
+    if (it2) it2.image = dataUrl;
+  }
+  if (unlistedDetail) {
+    const u = unlistedDetail.find(x => x.sku === String(sku).toUpperCase());
+    if (u) u.image = dataUrl;
+  }
+  if (activePage === 'stock' && stockCache) renderStock();
 }
 
 function openImgDialog(sku, sid, url) {
@@ -4183,7 +4204,7 @@ async function imgRunUrl(url) {
   if (!res.ok) { imgStageError(res.error || 'Could not add the image.'); return; }
   imgStageSuccess(res.dataUrl || '');
   toast(`Image added to ${imgTarget.sku}`);
-  loadStock(); // refresh the grid thumbnail
+  imgPatchGrid(res.dataUrl || '');
 }
 
 // shared completion for the file/drop paths
@@ -4193,7 +4214,7 @@ function imgFinishFile(res) {
   if (!res.ok) { imgStageError(res.error || 'Upload failed.'); return; }
   imgStageSuccess(res.dataUrl || '');
   toast(`Image added to ${imgTarget.sku}`);
-  loadStock();
+  imgPatchGrid(res.dataUrl || '');
 }
 
 async function imgRunFile() {

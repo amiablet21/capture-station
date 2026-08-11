@@ -489,13 +489,24 @@ class LinnworksClient {
     const fileId = ((Array.isArray(up) ? up[0] : up) || {}).FileId;
     if (!fileId) throw new LinnworksError('UploadFile returned no FileId');
     await this.call('Inventory/UploadImagesToInventoryItem', { inventoryItemId: stockItemId, imageIds: [fileId] });
+    // the fresh image becomes MAIN so it REPLACES what the grid shows
+    // (best effort — the upload itself already succeeded)
+    try {
+      const imgs = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' });
+      const newest = (imgs || [])[imgs.length - 1];
+      if (newest && newest.pkRowId && !newest.IsMain) {
+        await this.call('Inventory/SetInventoryItemImageAsMain', { inventoryItemId: stockItemId, mainImageId: newest.pkRowId });
+      }
+    } catch { /* main-flag is cosmetic; the image is attached either way */ }
     return { fileId };
   }
 
   // Attach an image by URL: Linnworks downloads it itself (handy for reusing
   // an existing listing's image). Some deployments expect a `request` wrapper.
   async addItemImageByUrl(sku, stockItemId, imageUrl) {
-    const payload = { ItemNumber: sku, StockItemId: stockItemId, ImageUrl: imageUrl, IsMain: false };
+    // IsMain: the added image replaces what the grid shows (owner request
+    // 2026-08-11 — adding without replacing looked like nothing happened)
+    const payload = { ItemNumber: sku, StockItemId: stockItemId, ImageUrl: imageUrl, IsMain: true };
     try {
       return await this.call('Inventory/AddImageToInventoryItem', payload);
     } catch {
