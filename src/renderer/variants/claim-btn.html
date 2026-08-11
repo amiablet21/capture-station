@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Upload Photos button — four designs</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow-y: auto; padding: 20px; display: flex; gap: 20px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .appmock { position: relative; width: 300px; height: 330px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .ghost { padding: 14px; color: var(--faint); font-size: 11px; }
+  .ghost .bar { height: 10px; background: var(--surface-2); border-radius: 4px; margin-bottom: 8px; }
+  svg.cam { width: 15px; height: 15px; }
+
+  /* shared QR popover */
+  .qrpop { position: absolute; right: 12px; bottom: 66px; width: 205px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 36px rgba(47,52,55,0.22); padding: 13px; display: none; }
+  .qrpop.on { display: block; }
+  .qrpop h4 { font-size: 12px; font-weight: 600; margin: 0 0 8px; }
+  .qr { width: 130px; height: 130px; margin: 0 auto 8px; background:
+    repeating-linear-gradient(0deg, var(--text) 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(90deg, var(--text) 0 5px, var(--surface) 5px 10px);
+    border: 6px solid var(--surface); outline: 1px solid var(--border); border-radius: 6px; opacity: .85; }
+  .qrpop .meta { font-size: 9.5px; color: var(--faint); text-align: center; line-height: 1.5; }
+
+  /* A: toolbar-flat (current) */
+  .fabA { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 13px; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 3px 10px rgba(47,52,55,0.10); }
+  .fabA:hover { border-color: var(--accent); }
+  .fabA .cam { color: var(--accent); }
+  .fabA .n { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; }
+
+  /* B: solid emerald block */
+  .fabB { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 14px; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(4,120,87,0.28); }
+  .fabB:hover { filter: brightness(1.06); }
+  .fabB .n { background: rgba(255,255,255,0.22); border-radius: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; }
+
+  /* C: compact icon square with badge */
+  .fabC { position: absolute; right: 12px; bottom: 12px; width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; box-shadow: 0 3px 10px rgba(47,52,55,0.12); }
+  .fabC:hover { border-color: var(--accent); }
+  .fabC .cam { width: 18px; height: 18px; color: var(--accent); }
+  .fabC .n { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; border-radius: 999px; background: var(--accent); color: #fff; font-family: var(--mono); font-size: 9.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; }
+
+  /* D: edge tab, expands on hover */
+  .fabD { position: absolute; right: 0; bottom: 18px; display: inline-flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-right: none; border-radius: 10px 0 0 10px; padding: 9px 10px 9px 12px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; box-shadow: -3px 3px 10px rgba(47,52,55,0.10); transform: translateX(calc(100% - 42px)); transition: transform 160ms var(--ease); }
+  .fabD:hover, .fabD.stay { transform: translateX(0); }
+  .fabD .cam { color: var(--accent); flex: 0 0 auto; }
+  .fabD .n { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; }
+</style></head>
+<body>
+  <div class="try"><b>Four takes on the Upload Photos button</b> — click each to see it with the QR popover. D tucks into the edge and slides out on hover.</div>
+
+  <div class="stage">
+    <div class="col"><span class="step">A · Toolbar flat</span>
+      <div class="appmock">
+        <div class="ghost"><div class="bar" style="width:60%"></div><div class="bar" style="width:90%"></div><div class="bar" style="width:82%"></div></div>
+        <div class="qrpop"><h4>Upload Photos</h4><div class="qr"></div><div class="meta">scan with the phone · kept 5 days</div></div>
+        <button class="fabA fabx"><svg class="cam" viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Upload Photos <span class="n">3</span></button>
+      </div>
+    </div>
+
+    <div class="col"><span class="step">B · Solid emerald</span>
+      <div class="appmock">
+        <div class="ghost"><div class="bar" style="width:60%"></div><div class="bar" style="width:90%"></div><div class="bar" style="width:82%"></div></div>
+        <div class="qrpop"><h4>Upload Photos</h4><div class="qr"></div><div class="meta">scan with the phone · kept 5 days</div></div>
+        <button class="fabB fabx"><svg class="cam" viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Upload Photos <span class="n">3</span></button>
+      </div>
+    </div>
+
+    <div class="col"><span class="step">C · Compact icon</span>
+      <div class="appmock">
+        <div class="ghost"><div class="bar" style="width:60%"></div><div class="bar" style="width:90%"></div><div class="bar" style="width:82%"></div></div>
+        <div class="qrpop"><h4>Upload Photos</h4><div class="qr"></div><div class="meta">scan with the phone · kept 5 days</div></div>
+        <button class="fabC fabx" title="Upload Photos"><svg class="cam" viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg><span class="n">3</span></button>
+      </div>
+    </div>
+
+    <div class="col"><span class="step">D · Edge tab (hover me)</span>
+      <div class="appmock">
+        <div class="ghost"><div class="bar" style="width:60%"></div><div class="bar" style="width:90%"></div><div class="bar" style="width:82%"></div></div>
+        <div class="qrpop"><h4>Upload Photos</h4><div class="qr"></div><div class="meta">scan with the phone · kept 5 days</div></div>
+        <button class="fabD fabx"><svg class="cam" viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Upload Photos <span class="n">3</span></button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.querySelectorAll('.fabx').forEach(b => b.addEventListener('click', () => {
+    const pop = b.closest('.appmock').querySelector('.qrpop');
+    pop.classList.toggle('on');
+    if (b.classList.contains('fabD')) b.classList.toggle('stay', pop.classList.contains('on'));
+  }));
+</script>
+</body>
+</html>

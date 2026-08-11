@@ -1,151 +1,211 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Claim photos — phone → station flow</title>
+<head><meta charset="UTF-8" /><title>Upload Photos — no-typing PO# flow</title>
 <link rel="stylesheet" href="_base.css" />
 <style>
   html, body { height: 100%; }
   body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
   .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
   .try b { color: var(--text); }
-  .stage { flex: 1; overflow-y: auto; padding: 20px; display: flex; gap: 22px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .stage { flex: 1; overflow-y: auto; padding: 20px; display: flex; gap: 24px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
   .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
   .step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
 
-  /* 1: desktop QR dialog */
-  .dlg1 { width: 330px; background: var(--surface); border-radius: 12px; box-shadow: 0 14px 40px rgba(47,52,55,0.18); padding: 18px 20px; }
-  .dlg1 h3 { font-size: 13.5px; font-weight: 600; margin: 0 0 3px; }
-  .dlg1 .sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
-  .qr { width: 168px; height: 168px; margin: 0 auto 10px; background:
-    repeating-linear-gradient(0deg, var(--text) 0 6px, transparent 6px 12px),
-    repeating-linear-gradient(90deg, var(--text) 0 6px, var(--surface) 6px 12px);
-    border: 8px solid var(--surface); outline: 1px solid var(--border); border-radius: 6px; opacity: .85; }
-  .qr-note { text-align: center; font-size: 10.5px; color: var(--faint); }
-  .qr-url { text-align: center; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; }
-  .live { display: flex; align-items: center; gap: 6px; justify-content: center; margin-top: 10px; font-size: 10.5px; color: var(--badge-green-text); font-weight: 600; }
-  .live .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--badge-green-text); animation: pulse 1.6s infinite; }
-  @keyframes pulse { 50% { opacity: .35; } }
+  /* ① returns log mini-mock with per-row QR */
+  .appmock { position: relative; width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; padding-bottom: 56px; }
+  .amhead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 9px 12px 5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+  th { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 4px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  .m { font-family: var(--mono); font-size: 10.5px; }
+  tbody tr { position: relative; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .rowcam { width: 24px; height: 22px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); box-shadow: 0 1px 4px rgba(47,52,55,0.10); }
+  tbody tr:hover .rowcam { display: inline-flex; }
+  .rowcam:hover { border-color: var(--accent); }
+  .rowcam svg { width: 12px; height: 12px; color: var(--accent); }
+  .tdlast { position: relative; }
+  .fab { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 13px; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 3px 10px rgba(47,52,55,0.10); }
+  .fab:hover { border-color: var(--accent); }
+  .fab svg { width: 14px; height: 14px; color: var(--accent); }
+  .fab .n { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; }
+  .qrpop { position: absolute; right: 12px; bottom: 62px; width: 218px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 36px rgba(47,52,55,0.22); padding: 13px; display: none; z-index: 5; }
+  .qrpop.on { display: block; }
+  .qrpop h4 { font-size: 12px; font-weight: 600; margin: 0 0 3px; }
+  .qrpop .sub { font-size: 10px; color: var(--faint); margin-bottom: 8px; }
+  .qrpop .sub .m { color: var(--accent-soft-text); font-weight: 600; }
+  .qr { width: 132px; height: 132px; margin: 0 auto 8px; background:
+    repeating-linear-gradient(0deg, var(--text) 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(90deg, var(--text) 0 5px, var(--surface) 5px 10px);
+    border: 6px solid var(--surface); outline: 1px solid var(--border); border-radius: 6px; opacity: .85; }
+  .qrpop .meta { font-size: 9.5px; color: var(--faint); text-align: center; line-height: 1.5; }
+  .hint { padding: 8px 12px; font-size: 10.5px; color: var(--faint); background: var(--surface-2); border-top: 1px solid var(--border); position: absolute; bottom: 0; left: 0; right: 0; box-sizing: border-box; }
 
-  /* 2: phone frame */
-  .phone { width: 250px; height: 470px; background: var(--text); border-radius: 26px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,0.28); }
+  /* ② phone */
+  .phone { width: 250px; height: 480px; background: var(--text); border-radius: 26px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,0.28); }
   .pscreen { width: 100%; height: 100%; background: var(--canvas); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
   .pbar { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; padding: 12px 14px 10px; }
-  .pbody { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .pbody { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
   .plabel { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
-  .pin { font-family: var(--mono); font-size: 13px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
-  .pcam { border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 13px; font-weight: 600; padding: 22px 10px; text-align: center; cursor: pointer; }
-  .pcam .big { font-size: 26px; display: block; margin-bottom: 4px; }
+  .pochip { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 9px 11px; cursor: pointer; }
+  .pochip:hover { border-color: var(--accent); }
+  .pochip .po { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .pochip .sk { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .pochip .tm { font-size: 9.5px; color: var(--faint); }
+  .ptype { font-size: 11px; color: var(--muted); text-align: center; text-decoration: underline; cursor: pointer; padding: 4px; }
+  .pin { font-family: var(--mono); font-size: 13px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); display: none; }
+  .pin.on { display: block; }
+  .polock { display: none; align-items: center; gap: 7px; background: var(--accent-soft); border-radius: 10px; padding: 8px 11px; }
+  .polock.on { display: flex; }
+  .polock .po { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--accent-soft-text); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .polock .chg { font-size: 10px; color: var(--muted); text-decoration: underline; cursor: pointer; white-space: nowrap; }
+  .pcam { border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 13px; font-weight: 600; padding: 18px 10px; text-align: center; cursor: pointer; display: none; }
+  .pcam.on { display: block; }
+  .pcam .big { font-size: 22px; display: block; margin-bottom: 3px; }
   .pshots { display: flex; gap: 6px; flex-wrap: wrap; }
-  .pshot { width: 52px; height: 52px; border-radius: 8px; background: linear-gradient(135deg, var(--border) 0%, var(--surface-2) 100%); border: 1px solid var(--border); position: relative; }
-  .pshot .x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 999px; background: var(--neg-text); color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-  .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; padding: 13px; cursor: pointer; }
+  .pshot { width: 44px; height: 44px; border-radius: 8px; background: linear-gradient(135deg, var(--border), var(--surface-2)); border: 1px solid var(--border); }
+  .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; padding: 12px; cursor: pointer; display: none; }
+  .psend.on { display: block; }
   .psend:disabled { opacity: .4; }
-  .pdone { text-align: center; color: var(--badge-green-text); font-weight: 600; font-size: 13px; padding: 20px 0; display: none; }
-  .pnote { font-size: 10px; color: var(--faint); text-align: center; }
+  .pnote { font-size: 9.5px; color: var(--faint); text-align: center; }
 
-  /* 3: returns log with clip + gallery */
-  .card { width: 480px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
-  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
-  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 9px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-  td { padding: 7px 9px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .m { font-family: var(--mono); font-size: 11px; }
-  .clip { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; cursor: pointer; }
-  .gallery { padding: 10px 12px; border-top: 1px solid var(--border); display: none; }
-  .gallery.on { display: block; }
-  .gallery .g-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 8px; }
-  .g-shots { display: flex; gap: 8px; flex-wrap: wrap; }
-  .g-shot { width: 84px; height: 84px; border-radius: 8px; background: linear-gradient(135deg, var(--border), var(--surface-2)); border: 1px solid var(--border); position: relative; cursor: pointer; }
-  .g-shot .when { position: absolute; bottom: 3px; left: 5px; font-size: 8.5px; color: var(--muted); font-family: var(--mono); }
+  /* ③ folder */
+  .folder { width: 370px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .fhead { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  .frow { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-bottom: 1px solid var(--border-soft); font-size: 11.5px; }
+  .frow:last-child { border-bottom: none; }
+  .frow .ic { width: 26px; height: 26px; border-radius: 5px; background: linear-gradient(135deg, var(--border), var(--surface-2)); flex: 0 0 auto; }
+  .frow .mono { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .frow .when { margin-left: auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
+  .frow.dying { opacity: .45; }
+  .fnote { padding: 8px 12px; font-size: 10.5px; color: var(--faint); background: var(--surface-2); border-top: 1px solid var(--border); }
 </style></head>
 <body>
-  <div class="try"><b>The flow, left to right:</b> ① Returns page → "Claim photos" opens the QR (a fresh secret each session) · ② phone scans it — PO# prefills if opened from a row, camera shoots straight to upload, <b>nothing saved on the phone</b> · ③ the log row grows a 📎 badge; click it for the photos. Try it: type a PO on the phone, add shots, Send.</div>
+  <div class="try"><b>No typing, no permanent icon:</b> ① the 📷 only appears when you <b>hover a log row</b> (same idea as the stock-page tray) — it opens the QR <b>locked to that PO#</b> · the corner button stays for "anything else" · ② the phone lists <b>today's received returns</b> as tap chips (typing is the last-resort link) · ③ files land in the folder as before.</div>
 
   <div class="stage">
     <div class="col">
-      <span class="step">① Station — QR dialog</span>
-      <div class="dlg1">
-        <h3>Claim photos</h3>
-        <div class="sub">Scan with the warehouse phone. Photos land on the matching return automatically.</div>
-        <div class="qr"></div>
-        <div class="qr-note">works on this wifi only · new code every app start</div>
-        <div class="qr-url">192.168.1.24:3117/claim#k8f2…</div>
-        <div class="live"><span class="dot"></span><span id="liveTxt">waiting for photos…</span></div>
+      <span class="step">① Returns log — 📷 per row + corner button</span>
+      <div class="appmock">
+        <div class="amhead">Returns log — today</div>
+        <table>
+          <thead><tr><th>PO#</th><th>Returned SKU</th><th style="width:60px">Time</th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+        <div class="qrpop" id="qrpop">
+          <h4>Upload Photos</h4>
+          <div class="sub" id="qrSub">any PO — pick it on the phone</div>
+          <div class="qr"></div>
+          <div class="meta">scan with the warehouse phone<br/><b>kept 5 days</b>, then deleted</div>
+        </div>
+        <button class="fab" id="fab"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Upload Photos <span class="n" id="fabN">0</span></button>
+        <div class="hint">Hover a row → 📷 slides in (locked QR). Corner button = generic QR, pick the PO on the phone.</div>
       </div>
     </div>
 
     <div class="col">
-      <span class="step">② Phone — no app, no gallery</span>
+      <span class="step">② Phone — tap the return, no typing</span>
       <div class="phone"><div class="pscreen">
-        <div class="pbar">Capture Station · Claim photos</div>
+        <div class="pbar" id="pbar">Upload Photos</div>
         <div class="pbody">
-          <span class="plabel">PO#</span>
-          <input class="pin" id="pPo" placeholder="Type or scan PO#…" value="" />
+          <div id="pickView" style="display:flex;flex-direction:column;gap:8px">
+            <span class="plabel">Today's returns — tap one</span>
+            <div id="poChips"></div>
+            <span class="ptype" id="pType">or type a PO#…</span>
+            <input class="pin" id="pPo" placeholder="PO#" />
+          </div>
+          <div class="polock" id="poLock"><span class="po" id="poLockTxt"></span><span class="chg" id="poChg">change</span></div>
           <div class="pcam" id="pCam"><span class="big">📷</span>Take photo</div>
           <div class="pshots" id="pShots"></div>
-          <div class="pdone" id="pDone">✓ 3 photos sent to the station</div>
           <button class="psend" id="pSend" disabled>Send 0 photos</button>
-          <div class="pnote">photos upload straight from the camera — nothing is saved to this phone</div>
         </div>
       </div></div>
     </div>
 
     <div class="col">
-      <span class="step">③ Returns log — the claim</span>
-      <div class="card">
-        <table>
-          <thead><tr><th style="width:130px">PO#</th><th>Returned SKU</th><th style="width:86px">Condition</th><th style="width:64px"></th></tr></thead>
-          <tbody>
-            <tr><td class="m">119120775455737</td><td class="m">S26-256GB-BLUE</td><td>New</td><td id="clipCell"></td></tr>
-            <tr><td class="m">119119354597966</td><td class="m">S25-FE-128GB-JETBLACK</td><td>Open box</td><td></td></tr>
-          </tbody>
-        </table>
-        <div class="gallery" id="gal">
-          <div class="g-head">Claim photos · 119120775455737</div>
-          <div class="g-shots" id="gShots"></div>
+      <span class="step">③ Local folder — 5-day shelf</span>
+      <div class="folder">
+        <div class="fhead">📂 <span class="mono">Documents\Capture Station\claim photos</span></div>
+        <div id="frows">
+          <div class="frow dying"><span class="ic"></span><span class="mono">119119354597966_0806-1412_1.jpg</span><span class="when">5 days ago · deletes tonight</span></div>
+          <div class="frow"><span class="ic"></span><span class="mono">119120671019601_0810-0931_1.jpg</span><span class="when">yesterday</span></div>
+          <div class="frow"><span class="ic"></span><span class="mono">119120671019601_0810-0931_2.jpg</span><span class="when">yesterday</span></div>
         </div>
+        <div class="fnote">Files older than 5 days are removed automatically when the app starts.</div>
       </div>
     </div>
   </div>
 
 <script>
-  let shots = 0, sent = 0;
-  const pShots = document.getElementById('pShots');
-  const pSend = document.getElementById('pSend');
-  document.getElementById('pCam').addEventListener('click', () => {
+  const RETURNS = [
+    { po: '119120775455737', sku: 'S26-ULTRA-512GB-BLACK', tm: '10:42a' },
+    { po: '119120771799124', sku: 'S25-256GB-SILVERSHADOW', tm: '10:18a' },
+    { po: '119120671019601', sku: 'OPEN-BOX-S25-FE-128GB', tm: '9:31a' },
+  ];
+  const camSvg = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>';
+
+  document.getElementById('logRows').innerHTML = RETURNS.map((r, i) =>
+    `<tr><td class="m">${r.po}</td><td class="m">${r.sku}</td><td class="m tdlast">${r.tm}<button class="rowcam" data-i="${i}" title="Upload photos for this PO">${camSvg}</button></td></tr>`).join('');
+  document.getElementById('poChips').innerHTML = RETURNS.map((r, i) =>
+    `<div class="pochip" data-i="${i}" style="margin-bottom:6px"><span class="po">${r.po}</span><span class="sk">${r.sku}</span><span class="tm">received ${r.tm}</span></div>`).join('');
+
+  let po = '', shots = 0, total = 0;
+  const perPo = {};
+  const $ = (id) => document.getElementById(id);
+  const lockPo = (v) => {
+    po = v;
+    $('pickView').style.display = 'none';
+    $('poLock').classList.add('on'); $('poLockTxt').textContent = v;
+    $('pCam').classList.add('on'); $('pSend').classList.add('on');
+    sync();
+  };
+  const unlock = () => {
+    po = ''; shots = 0; $('pShots').innerHTML = '';
+    $('pickView').style.display = 'flex';
+    $('poLock').classList.remove('on'); $('pCam').classList.remove('on'); $('pSend').classList.remove('on');
+  };
+  const sync = () => {
+    $('pSend').disabled = !shots || !po;
+    $('pSend').textContent = `Send ${shots} photo${shots === 1 ? '' : 's'}`;
+  };
+  document.getElementById('logRows').addEventListener('click', (e) => {
+    const b = e.target.closest('.rowcam'); if (!b) return;
+    const r = RETURNS[+b.dataset.i];
+    $('qrSub').innerHTML = `for <span class="m">${r.po}</span> — the phone opens ready to shoot`;
+    $('qrpop').classList.add('on');
+    lockPo(r.po);
+  });
+  $('fab').addEventListener('click', () => {
+    $('qrSub').textContent = 'any PO — pick it on the phone';
+    $('qrpop').classList.toggle('on');
+    if ($('qrpop').classList.contains('on')) unlock();
+  });
+  $('poChips').addEventListener('click', (e) => {
+    const c = e.target.closest('.pochip'); if (!c) return;
+    lockPo(RETURNS[+c.dataset.i].po);
+  });
+  $('pType').addEventListener('click', () => $('pPo').classList.toggle('on'));
+  $('pPo').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.value.trim()) lockPo(e.target.value.trim()); });
+  $('poChg').addEventListener('click', unlock);
+  $('pCam').addEventListener('click', () => {
     shots++;
-    const d = document.createElement('div');
-    d.className = 'pshot';
-    d.innerHTML = '<span class="x">✕</span>';
-    d.querySelector('.x').addEventListener('click', () => { d.remove(); shots--; sync(); });
-    pShots.appendChild(d);
-    sync();
+    const d = document.createElement('div'); d.className = 'pshot';
+    $('pShots').appendChild(d); sync();
   });
-  function sync() {
-    pSend.disabled = !shots || !document.getElementById('pPo').value.trim();
-    pSend.textContent = `Send ${shots} photo${shots === 1 ? '' : 's'}`;
-  }
-  document.getElementById('pPo').addEventListener('input', sync);
-  pSend.addEventListener('click', () => {
-    sent += shots;
-    document.getElementById('liveTxt').textContent = `${sent} photo${sent === 1 ? '' : 's'} received ✓`;
-    document.getElementById('clipCell').innerHTML = `<span class="clip" id="clip">📎 ${sent}</span>`;
-    const g = document.getElementById('gShots');
-    for (let i = 0; i < shots; i++) {
-      const s = document.createElement('div');
-      s.className = 'g-shot';
-      s.innerHTML = '<span class="when">14:0' + (i + sent) + '</span>';
-      g.appendChild(s);
+  $('pSend').addEventListener('click', () => {
+    const now = new Date();
+    const stamp = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    for (let i = 1; i <= shots; i++) {
+      total++;
+      perPo[po] = (perPo[po] || 0) + 1;
+      const row = document.createElement('div');
+      row.className = 'frow';
+      row.innerHTML = `<span class="ic"></span><span class="mono">${po}_${stamp}_${perPo[po]}.jpg</span><span class="when">just now</span>`;
+      $('frows').appendChild(row);
     }
-    document.getElementById('pDone').style.display = 'block';
-    document.getElementById('pDone').textContent = `✓ ${shots} photo${shots === 1 ? '' : 's'} sent to the station`;
-    pShots.innerHTML = '';
-    shots = 0;
-    sync();
-    document.getElementById('clip').addEventListener('click', () => {
-      document.getElementById('gal').classList.toggle('on');
-    });
+    $('fabN').textContent = total;
+    unlock();
   });
-  document.getElementById('pPo').value = '119120775455737';
-  sync();
 </script>
 </body>
 </html>
