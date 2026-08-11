@@ -377,6 +377,9 @@ class LinnworksClient {
           linkedItemId: r.LinkedItemId && r.LinkedItemId !== '00000000-0000-0000-0000-000000000000' ? r.LinkedItemId : '',
           rowId: r.ChannelSKURowId && r.ChannelSKURowId !== '00000000-0000-0000-0000-000000000000' ? r.ChannelSKURowId : '',
           ignoreSync: !!r.IgnoreSync,
+          // the marketplace's own listing id (eBay item number / Walmart
+          // item id) — the create call binds the listing with it
+          channelRefId: r.ChannelReferenceId || r.ItemNumber || '',
         });
       }
       if (!fresh) break; // page cursor ignored - nothing new, stop
@@ -384,10 +387,15 @@ class LinnworksClient {
     return out;
   }
 
-  // Create / remove a channel-SKU → stock-item link (the mapping itself)
-  async linkChannelSku(channelSku, source, subSource, stockItemId) {
+  // Create / remove a channel-SKU → stock-item link (the mapping itself).
+  // Linnworks can throw 500 "Could not update channel mappings" AND STILL
+  // create the record (verified live 2026-08-08) — callers must re-check
+  // before treating that error as a failure.
+  async linkChannelSku(channelSku, source, subSource, stockItemId, channelRefId) {
+    const row = { SKU: channelSku, Source: source, SubSource: subSource, StockItemId: stockItemId };
+    if (channelRefId) row.ChannelReferenceId = channelRefId;
     await this.call('Inventory/CreateInventoryItemChannelSKUs', {
-      inventoryItemChannelSKUs: [{ SKU: channelSku, Source: source, SubSource: subSource, StockItemId: stockItemId }],
+      inventoryItemChannelSKUs: [row],
     });
   }
 

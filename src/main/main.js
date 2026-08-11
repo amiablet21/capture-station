@@ -1566,14 +1566,32 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('mapping:link', async (_e, { channelSku, source, subSource, targetSku }) => {
+  ipcMain.handle('mapping:link', async (_e, { channelSku, source, subSource, targetSku, channelRefId }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const stockItemId = await client.findStockItemIdBySku(targetSku);
       if (!stockItemId) return { ok: false, error: `${targetSku} not found in Linnworks.` };
-      await client.linkChannelSku(channelSku, source, subSource, stockItemId);
+      const already = (r) => r.source === source && r.subSource === subSource
+        && String(r.sku).toUpperCase() === String(channelSku).toUpperCase();
+      // duplicate guard: a repeat click (or a half-landed earlier attempt)
+      // must not stack a second record
+      try {
+        if ((await client.getChannelSkus(stockItemId)).some(already)) {
+          mappingCache.clear();
+          return { ok: true, alreadyLinked: true };
+        }
+      } catch { /* pre-check is best-effort */ }
+      try {
+        await client.linkChannelSku(channelSku, source, subSource, stockItemId, channelRefId);
+      } catch (e) {
+        // Linnworks 500s "Could not update channel mappings" and STILL
+        // creates the record (verified live) — trust the re-check, not
+        // the status code
+        const landed = (await client.getChannelSkus(stockItemId).catch(() => [])).some(already);
+        if (!landed) throw e;
+      }
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
       return { ok: true };

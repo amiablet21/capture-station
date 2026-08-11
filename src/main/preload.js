@@ -91,7 +91,7 @@ contextBridge.exposeInMainWorld('api', {
   shipImport: () => ipcRenderer.invoke('ship:importFile'),
   mappingChannels: () => ipcRenderer.invoke('mapping:channels'),
   mappingItems: (channelId, source, subSource, force) => ipcRenderer.invoke('mapping:items', { channelId, source, subSource, force }),
-  mappingLink: (channelSku, source, subSource, targetSku) => ipcRenderer.invoke('mapping:link', { channelSku, source, subSource, targetSku }),
+  mappingLink: (channelSku, source, subSource, targetSku, channelRefId) => ipcRenderer.invoke('mapping:link', { channelSku, source, subSource, targetSku, channelRefId }),
   mappingUnlink: (rowId) => ipcRenderer.invoke('mapping:unlink', { rowId }),
   listingOpen: (sku, channel, external) => ipcRenderer.invoke('listing:open', { sku, channel, external }),
   mappingLinkedSets: () => ipcRenderer.invoke('mapping:linkedSets'),

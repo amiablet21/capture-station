@@ -3316,7 +3316,7 @@ $('chmapLwBody').addEventListener('click', async (e) => {
   if (!item) return;
   if (!chmap.local) {
     btn.disabled = true;
-    const res = await api.mappingLink(item.sku, chmap.chan.source, chmap.chan.subSource, target);
+    const res = await api.mappingLink(item.sku, chmap.chan.source, chmap.chan.subSource, target, item.channelRefId || '');
     if (!res.ok) { btn.disabled = false; toast(res.error || 'Could not link.'); return; }
   }
   item.linked = true;
