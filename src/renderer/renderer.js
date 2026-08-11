@@ -2098,10 +2098,12 @@ function renderUnlistedView() {
           <td class="num">${d.avail}</td>
           <td>${missChips}</td>
           <td class="num mono" title="available × channel listing price (highest stored)">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
-          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button></td>
+          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
+            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
         </tr>`).join('')}</tbody>
     </table>
-    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).</p>`;
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).${
+      unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
 }
 
 function fmtMoney(n) {
@@ -2487,9 +2489,22 @@ $('stockList').addEventListener('dblclick', (e) => {
   renderStock();
 });
 
-$('stockList').addEventListener('click', (e) => {
+$('stockList').addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
+  const ign = e.target.closest('[data-ign]');
+  const unign = e.target.closest('[data-unign]');
+  if (ign || unign) {
+    const sku = (ign || unign).dataset.ign || (unign && unign.dataset.unign);
+    const res = await api.unlistedIgnore(sku, !!unign);
+    if (!res.ok) { toast(res.error || 'Could not update.'); return; }
+    toast(unign ? `${sku} back on the listings list` : `${sku} will never ask for listings again`);
+    unlistedSkus = null;
+    unlistedDetail = null;
+    await loadUnlisted();
+    if (stockUnlistedActive) renderStock();
+    return;
+  }
   const del = e.target.closest('.stock-del-btn');
   if (del) { openStockDelete(del.dataset.delsku, del.dataset.delsid); return; }
   const th = e.target.closest('th[data-sort]');
@@ -3110,6 +3125,7 @@ let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-onl
 let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
 let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle value
 let unlistedChannels = []; // sources seen across the inventory ("missing on")
+let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
 
 async function loadUnlisted() {
@@ -3121,6 +3137,7 @@ async function loadUnlisted() {
       unlistedSkus = new Set(res.skus || []);
       unlistedDetail = res.detail || [];
       unlistedChannels = res.channels || [];
+      unlistedIgnored = res.ignored || [];
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
     }
@@ -3419,13 +3436,24 @@ function renderRetTodo() {
       <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Open the Stock page's Unlisted view filtered to this SKU">${esc(r.sku)}</button>
       <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
       <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
+      <button class="ret-todo-ign" data-ign="${esc(r.sku)}" title="Never list this SKU (claim bins, fakes) — remove it from this card and the Unlisted view for good">✕</button>
     </div>`).join('')}
     <div class="ret-todo-note">Create the listing on Walmart/eBay using exactly this SKU string — Linnworks links it automatically and the row leaves this list on the next refresh.</div>`;
 }
 
-$('retTodo').addEventListener('click', (e) => {
+$('retTodo').addEventListener('click', async (e) => {
   const c = e.target.closest('[data-copy]');
   if (c) { copyFromApp(c.dataset.copy); return; }
+  const ign = e.target.closest('[data-ign]');
+  if (ign) {
+    const res = await api.unlistedIgnore(ign.dataset.ign, false);
+    if (!res.ok) { toast(res.error || 'Could not ignore.'); return; }
+    toast(`${ign.dataset.ign} will never ask for listings again`);
+    unlistedSkus = null;
+    unlistedDetail = null;
+    loadUnlisted();
+    return;
+  }
   const g = e.target.closest('[data-goto]');
   if (g) showUnlistedFor(g.dataset.goto);
 });

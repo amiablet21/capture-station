@@ -2281,8 +2281,10 @@ function registerIpc() {
     if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) return unlistedCache;
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
+    const ignore = new Set((cfg.unlistedIgnore || []).map(s => String(s).toUpperCase()));
     const inStock = items.filter(it => {
       if (!it.stockItemId) return false;
+      if (ignore.has(String(it.sku).toUpperCase())) return false; // never-list SKUs
       const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
       return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
     }).slice(0, 300);
@@ -2328,10 +2330,21 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const c = await runUnlistedScan(cfg);
-      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels };
+      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  });
+  // never-list toggle: claim bins and fakes leave the listings nag for good
+  ipcMain.handle('stock:unlistedIgnore', (_e, { sku, remove }) => {
+    const cfg = config.load();
+    const key = String(sku || '').trim().toUpperCase();
+    if (!key) return { ok: false, error: 'Missing SKU.' };
+    const list = new Set((cfg.unlistedIgnore || []).map(s => String(s).toUpperCase()));
+    if (remove) list.delete(key); else list.add(key);
+    config.save({ unlistedIgnore: [...list].sort() });
+    unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+    return { ok: true, ignored: [...list].sort() };
   });
   // DropShip program + reorder points
   ipcMain.handle('dropship:setPad', async (_e, { sku, qty }) => {

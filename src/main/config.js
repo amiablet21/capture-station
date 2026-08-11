@@ -112,6 +112,9 @@ const DEFAULTS = {
     ebay: 'https://www.ebay.com/sh/lst/active?keyword={sku}&source=filterbar&action=search',
     temu: '', // Temu seller search URL unknown yet — clicking copies the SKU
   },
+  // SKUs deliberately excluded from the "needs marketplace listings"
+  // machinery (claim bins, fakes, write-offs — never to be listed)
+  unlistedIgnore: [],
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
