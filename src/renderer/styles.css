@@ -1581,6 +1581,21 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .unign-chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; font-size: 10px; padding: 1px 8px; cursor: pointer; color: var(--muted); }
 .unign-chip:hover { color: var(--text); border-color: var(--accent); }
 
+/* pending disputes card: same bones as the to-do card, blue accent */
+.ret-disputes { border-left-color: var(--badge-blue-text); border-color: var(--badge-blue-bg); border-left: 3px solid var(--badge-blue-text); }
+.ret-disp-sku { color: var(--muted); font-size: 11px; }
+.ret-disp-old { color: var(--neg-text); font-weight: 600; }
+.ret-disp-done {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--badge-green-text);
+  background: var(--badge-green-bg);
+  border: none;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+
 /* condition SKUs holding returns with no marketplace listing linked yet */
 .badge-unlisted {
   display: inline-block;

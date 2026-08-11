@@ -861,12 +861,26 @@ async function sha256Hex(s) {
 
 let settingsUnlocked = false; // stays unlocked for the rest of the session
 let pinExpected = '';
+let pinNext = null; // what the PIN unlocks (settings by default)
 
 function openPinPrompt() {
   $('pinInput').value = '';
   $('pinError').hidden = true;
   $('pinDialog').showModal();
   $('pinInput').focus();
+}
+
+// owner-only actions (never-list ✕, …) hide behind the Settings PIN when
+// one is set; the unlock lasts the session, same as Settings
+async function requireOwner(fn) {
+  const cfg = await api.getConfig();
+  if (cfg.settingsPinHash && !settingsUnlocked) {
+    pinExpected = cfg.settingsPinHash;
+    pinNext = fn;
+    openPinPrompt();
+    return;
+  }
+  fn();
 }
 
 $('pinForm').addEventListener('submit', async (e) => {
@@ -881,7 +895,9 @@ $('pinForm').addEventListener('submit', async (e) => {
   }
   settingsUnlocked = true;
   $('pinDialog').close();
-  openSettings();
+  const next = pinNext || openSettings;
+  pinNext = null;
+  next();
 });
 
 $('pinDialog').addEventListener('close', () => focusScan());
@@ -2496,13 +2512,15 @@ $('stockList').addEventListener('click', async (e) => {
   const unign = e.target.closest('[data-unign]');
   if (ign || unign) {
     const sku = (ign || unign).dataset.ign || (unign && unign.dataset.unign);
-    const res = await api.unlistedIgnore(sku, !!unign);
-    if (!res.ok) { toast(res.error || 'Could not update.'); return; }
-    toast(unign ? `${sku} back on the listings list` : `${sku} will never ask for listings again`);
-    unlistedSkus = null;
-    unlistedDetail = null;
-    await loadUnlisted();
-    if (stockUnlistedActive) renderStock();
+    requireOwner(async () => {
+      const res = await api.unlistedIgnore(sku, !!unign);
+      if (!res.ok) { toast(res.error || 'Could not update.'); return; }
+      toast(unign ? `${sku} back on the listings list` : `${sku} will never ask for listings again`);
+      unlistedSkus = null;
+      unlistedDetail = null;
+      await loadUnlisted();
+      if (stockUnlistedActive) renderStock();
+    });
     return;
   }
   const del = e.target.closest('.stock-del-btn');
@@ -3446,12 +3464,14 @@ $('retTodo').addEventListener('click', async (e) => {
   if (c) { copyFromApp(c.dataset.copy); return; }
   const ign = e.target.closest('[data-ign]');
   if (ign) {
-    const res = await api.unlistedIgnore(ign.dataset.ign, false);
-    if (!res.ok) { toast(res.error || 'Could not ignore.'); return; }
-    toast(`${ign.dataset.ign} will never ask for listings again`);
-    unlistedSkus = null;
-    unlistedDetail = null;
-    loadUnlisted();
+    requireOwner(async () => {
+      const res = await api.unlistedIgnore(ign.dataset.ign, false);
+      if (!res.ok) { toast(res.error || 'Could not ignore.'); return; }
+      toast(`${ign.dataset.ign} will never ask for listings again`);
+      unlistedSkus = null;
+      unlistedDetail = null;
+      loadUnlisted();
+    });
     return;
   }
   const g = e.target.closest('[data-goto]');
@@ -3533,6 +3553,64 @@ function renderRetLog() {
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
 }
 
+/* ---------- pending disputes (note protocol: "case: 12345") ---------- */
+// Any return whose note carries a case number is an OPEN dispute; it leaves
+// the card when the note also says resolved / closed / won / lost.
+
+const DISPUTE_RE = /(?:^|\W)case[:#\s]+([A-Za-z0-9-]{3,})/i;
+const DISPUTE_DONE_RE = /resolved|closed|won|lost/i;
+
+function renderRetDisputes() {
+  const box = $('retDisputes');
+  if (!box || !retLogAll) return;
+  const open = retLogAll.filter(({ r, i }) => {
+    const note = String((i && i.note) || r.note || '');
+    return DISPUTE_RE.test(note) && !DISPUTE_DONE_RE.test(note);
+  });
+  if (!open.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  box.innerHTML = `
+    <h4>${open.length} pending dispute${open.length === 1 ? '' : 's'} to check</h4>
+    ${open.map(({ r, i, ii }) => {
+      const note = String((i && i.note) || r.note || '');
+      const caseNo = (note.match(DISPUTE_RE) || [])[1] || '';
+      const age = days(r.created_at);
+      return `<div class="ret-todo-row">
+        <span class="mono">${esc(r.order_number)}</span>${retPoOpenBtn(r.order_number, r.source)}
+        <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
+        <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
+        <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
+        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}:${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
+      </div>`;
+    }).join('')}
+    <div class="ret-todo-note">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>`;
+}
+
+$('retDisputes').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-copy]');
+  if (c) { copyFromApp(c.dataset.copy); return; }
+  const open = e.target.closest('.ret-po-open');
+  if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
+  const done = e.target.closest('[data-dispdone]');
+  if (!done) return;
+  const [rid, ii] = done.dataset.dispdone.split(':').map(Number);
+  const entry = (retLogAll || []).find(x => x.r.id === rid && x.ii === ii);
+  if (!entry) return;
+  const { r, i } = entry;
+  const res = await api.returnsEditUnit({
+    id: r.id, itemIndex: ii,
+    po: r.order_number, day: String(r.created_at).slice(0, 10),
+    customer: r.customer || '', tracking: r.tracking || '',
+    sku: i.sku || '', condition: i.condition || 'new',
+    note: `${i.note || ''} — resolved`.trim(),
+    units: String(Number(i.qty) || 1), receivedBy: r.received_by || '',
+  }).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not mark resolved.'); return; }
+  toast(`Dispute on ${r.order_number} marked resolved`);
+  loadRetPast();
+});
+
 async function loadRetPast() {
   const returns = await api.returnsList();
   retLogAll = [];
@@ -3547,6 +3625,7 @@ async function loadRetPast() {
     r.items.forEach((i, ii) => retLogAll.push({ r, i, ii, un: 0 }));
   }
   renderRetLog();
+  renderRetDisputes();
 }
 
 $('retLogSearch').addEventListener('input', () => renderRetLog());

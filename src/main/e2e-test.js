@@ -398,6 +398,31 @@ module.exports = async function run({ app, win, db, clipboard }) {
       editBits);
     await exec(`$('retRecvDialog').close()`);
 
+    // 24d. disputes card: a "case:" note makes a pending dispute; resolved
+    // notes leave the card
+    db.createReturn({
+      orderNumber: 'WMR-DISPUTE-1', source: '', customer: '', note: '', unmatched: true,
+      tracking: '', receivedBy: 'IM',
+      items: [{ sku: 'S25-128GB-NAVY', condition: 'new', targetSku: 'S25-128GB-NAVY', qty: 1, price: 100, note: 'fake item — case: 88421' }],
+    });
+    db.createReturn({
+      orderNumber: 'WMR-DISPUTE-2', source: '', customer: '', note: '', unmatched: true,
+      tracking: '', receivedBy: 'IM',
+      items: [{ sku: 'S25-128GB-NAVY', condition: 'new', targetSku: 'S25-128GB-NAVY', qty: 1, price: 100, note: 'case: 999 — resolved' }],
+    });
+    await exec('loadRetPast()');
+    await sleep(250);
+    const disp = await exec(`[
+      !$('retDisputes').hidden,
+      document.querySelectorAll('#retDisputes .ret-todo-row').length,
+      ($('retDisputes').textContent || '').includes('88421'),
+      ($('retDisputes').textContent || '').includes('999'),
+      !!document.querySelector('#retDisputes [data-dispdone]'),
+    ]`);
+    check('disputes card lists open cases only, with a resolve button',
+      disp[0] === true && disp[1] === 1 && disp[2] === true && disp[3] === false && disp[4] === true,
+      disp);
+
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);
     check('returns:targets refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
