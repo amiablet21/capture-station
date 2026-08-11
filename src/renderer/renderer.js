@@ -2675,6 +2675,7 @@ function retCondLabel(key) {
 // the unchanged returns:create engine (a PO-only line logs without stock).
 
 let rv = null; // open popup state; null = closed
+let rvCreate = (payload) => api.returnsCreate(payload); // seam: e2e stubs the commit
 
 function rvBlank() {
   return {
@@ -3002,7 +3003,7 @@ async function rvCommit() {
   rv.busy = true;
   $('rvSave').disabled = true;
   rvFeedback('Receiving…', true);
-  const res = await api.returnsCreate({
+  const res = await rvCreate({
     orderId: rv.orderId || undefined,
     orderNumber: po,
     source: rv.source,

@@ -74,6 +74,9 @@ class LinnworksClient {
         Accept: 'application/json',
       },
       body: method === 'GET' ? undefined : JSON.stringify(payload ?? {}),
+      // a stalled request must surface as an error, never an eternal spinner
+      // (the receive popup once sat on "Receiving…" forever, 2026-08-11)
+      signal: AbortSignal.timeout(45000),
     });
     const body = await res.text();
     if (res.status === 401) {

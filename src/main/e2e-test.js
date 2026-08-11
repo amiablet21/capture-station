@@ -325,6 +325,25 @@ module.exports = async function run({ app, win, db, clipboard }) {
       /pick or create/i.test(blocked), blocked);
     await exec(`$('retRecvDialog').close()`);
     await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}`);
+
+    // 24c. Receive must CLOSE the popup after a successful single-line commit
+    await exec(`retOpenRecv();
+      rv.unmatched = false; rv.orderId = 'oid-9'; rv.source = 'WALMART';
+      $('rvPo').value = '119999000000001';
+      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
+      rv.received = [false];
+      rvLoadItemAt(0);
+      window.__origCreate = rvCreate;
+      rvCreate = async () => ({ ok: true });
+      0;`);
+    await exec(`$('rvSave').click()`);
+    await sleep(300);
+    const rvClosed = await exec(`[
+      !document.querySelector('#retRecvDialog[open]'),
+      ($('rvFeedback').hidden ? '' : $('rvFeedback').textContent),
+    ]`);
+    check('Receive closes the popup after a successful commit', rvClosed[0] === true, rvClosed);
+    await exec(`rvCreate = window.__origCreate; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
