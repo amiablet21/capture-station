@@ -2728,6 +2728,7 @@ function rvFeedback(msg, ok = false) {
 
 function retOpenRecv() {
   rv = rvBlank();
+  rvLastLookup = '';
   for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
@@ -2957,6 +2958,16 @@ $('rvCreate').addEventListener('click', async () => {
 $('rvPo').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
+  rvLookup();
+});
+
+// clicking off the PO# looks the order up by itself — no Enter needed
+// (owner request 2026-08-11); one attempt per typed value
+let rvLastLookup = '';
+$('rvPo').addEventListener('blur', () => {
+  const po = $('rvPo').value.trim();
+  if (!rv || rv.edit || rv.busy || !po || po === rvLastLookup || !rv.unmatched) return;
+  rvLastLookup = po;
   rvLookup();
 });
 
@@ -3557,7 +3568,9 @@ function renderRetLog() {
 // Any return whose note carries a case number is an OPEN dispute; it leaves
 // the card when the note also says resolved / closed / won / lost.
 
-const DISPUTE_RE = /(?:^|\W)case[:#\s]+([A-Za-z0-9-]{3,})/i;
+// STRICT protocol (owner, 2026-08-11): the note must literally say
+// "Case: <number>" — colon required, anything else is just a note
+const DISPUTE_RE = /(?:^|\W)case:\s*([A-Za-z0-9-]{3,})/i;
 const DISPUTE_DONE_RE = /resolved|closed|won|lost/i;
 
 function renderRetDisputes() {

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns attention area — two compact options</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .hide { display: none !important; }
+  .stage { flex: 1; overflow-y: auto; padding: 20px; display: flex; justify-content: center; }
+  .page { width: 1050px; }
+
+  .strip { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 7px 12px; margin-bottom: 6px; cursor: pointer; font-size: 12px; }
+  .strip .tag { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 4px; padding: 2px 7px; }
+  .strip.amber { border-left: 3px solid var(--badge-yellow-text); }
+  .strip.amber .tag { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .strip.blue { border-left: 3px solid var(--badge-blue-text); }
+  .strip.blue .tag { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .strip .peek { color: var(--muted); font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .strip .car { color: var(--faint); font-size: 9px; }
+  .drop { border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; background: var(--surface); margin: -7px 0 6px; padding: 4px 12px 8px; }
+  .drow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+  .drow:last-child { border-bottom: none; }
+  .m { font-family: var(--mono); font-size: 11px; }
+  .mut { color: var(--muted); }
+  .pill { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 2px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; border: none; }
+  .old { color: var(--neg-text); font-weight: 600; font-size: 11px; margin-left: auto; }
+  .ok { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .done { font-size: 10.5px; font-weight: 600; color: var(--badge-green-text); background: var(--badge-green-bg); border: none; border-radius: 999px; padding: 2px 9px; cursor: pointer; }
+
+  .logbar { display: flex; align-items: center; gap: 10px; margin: 10px 0 8px; }
+  .logbar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .chip2 { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 11px; cursor: pointer; border: 1px solid transparent; }
+  .chip2.amber { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .chip2.blue { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .chip2.on { outline: 2px solid currentColor; }
+  .search { margin-left: auto; width: 220px; font-size: 11.5px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--faint); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 9px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  td { padding: 7px 9px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rowdim td { opacity: .35; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Option</span>
+    <span class="opt on" data-o="a">A · Collapsed strips</span>
+    <span class="opt" data-o="b">B · Log filter chips</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage"><div class="page">
+    <!-- ============ A ============ -->
+    <div id="viewA">
+      <div class="strip amber" id="sList"><span class="tag">Listings</span><span>2 SKUs need marketplace listings</span><span class="peek">OPEN-BOX-S25-FE-128GB · S26-PLUS-256GB-WHITE</span><span class="car" id="carL">▾</span></div>
+      <div class="drop hide" id="dList">
+        <div class="drow"><span class="m">OPEN-BOX-S25-FE-128GB</span><button class="pill">copy</button><span class="ok">1 unit waiting</span></div>
+        <div class="drow"><span class="m">S26-PLUS-256GB-WHITE</span><button class="pill">copy</button><span class="ok">2 units waiting</span></div>
+      </div>
+      <div class="strip blue" id="sDisp"><span class="tag">Disputes</span><span>1 pending · oldest <b>9 days</b></span><span class="peek">119120671019601 · case 05589312</span><span class="car" id="carD">▾</span></div>
+      <div class="drop hide" id="dDisp">
+        <div class="drow"><span class="m">119120671019601</span><span class="m mut">S26-ULTRA-512GB-BLACK</span><button class="pill">case 05589312</button><span class="old">9 days open</span><button class="done">✓ resolved</button></div>
+      </div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div id="viewB" class="hide">
+      <div class="logbar" id="chips">
+        <b>Returns log — 3 entries</b>
+        <span class="chip2 amber" data-f="nl">⚠ not listed · 2</span>
+        <span class="chip2 blue" data-f="disp">⚖ disputes · 1</span>
+        <input class="search" placeholder="Search PO, SKU, customer…" disabled />
+      </div>
+    </div>
+
+    <div class="logbar" id="plainbar"><b>Returns log — 3 entries</b><input class="search" placeholder="Search PO, SKU, customer…" disabled /></div>
+    <div class="card">
+      <table>
+        <thead><tr><th style="width:135px">PO#</th><th>Returned SKU</th><th style="width:105px">Condition</th><th style="width:44px">Units</th><th>Notes / dispute</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div></div>
+
+<script>
+  const ROWS = [
+    { po: '119120671019601', sku: 'S26-ULTRA-512GB-BLACK', cond: 'Used', units: 2, note: 'scuffed corner — case: 05589312', disp: true, nl: true },
+    { po: '119119354597966', sku: 'S25-FE-128GB-JETBLACK', cond: 'Open box', units: 1, note: 'no issues', disp: false, nl: true },
+    { po: '119120771799124', sku: 'S25-256GB-SILVERSHADOW', cond: 'New', units: 1, note: 'brand new', disp: false, nl: false },
+  ];
+  let filter = '';
+  const render = () => {
+    document.getElementById('logBody').innerHTML = ROWS.map(r => {
+      const dim = filter && !((filter === 'disp' && r.disp) || (filter === 'nl' && r.nl));
+      return `<tr class="${dim ? 'rowdim' : ''}">
+        <td class="m">${r.po}</td><td class="m">${r.sku}</td><td>${r.cond}</td><td class="m">${r.units}</td>
+        <td class="mut">${r.note}${r.disp && filter === 'disp' ? ' <button class="done">✓ resolved</button>' : ''}</td></tr>`;
+    }).join('');
+  };
+  document.body.addEventListener('click', (e) => {
+    const s = e.target.closest('#sList, #sDisp');
+    if (s) {
+      const d = document.getElementById(s.id === 'sList' ? 'dList' : 'dDisp');
+      d.classList.toggle('hide');
+      document.getElementById(s.id === 'sList' ? 'carL' : 'carD').textContent = d.classList.contains('hide') ? '▾' : '▴';
+      return;
+    }
+    const c = e.target.closest('.chip2');
+    if (c) {
+      filter = filter === c.dataset.f ? '' : c.dataset.f;
+      document.querySelectorAll('.chip2').forEach(x => x.classList.toggle('on', x.dataset.f === filter));
+      render();
+      return;
+    }
+    const o = e.target.closest('.opt');
+    if (o) {
+      document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+      document.getElementById('viewA').classList.toggle('hide', o.dataset.o !== 'a');
+      document.getElementById('viewB').classList.toggle('hide', o.dataset.o !== 'b');
+      document.getElementById('plainbar').classList.toggle('hide', o.dataset.o === 'b');
+      filter = '';
+      render();
+      document.getElementById('note').textContent = o.dataset.o === 'a'
+        ? 'Two one-line strips (34px each, any count) — click to expand.'
+        : 'No cards at all: chips on the log bar filter the log itself; resolve inline.';
+    }
+  });
+  document.getElementById('note').textContent = 'Two one-line strips (34px each, any count) — click to expand.';
+  render();
+</script>
+</body>
+</html>
