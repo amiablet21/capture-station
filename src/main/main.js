@@ -2312,6 +2312,7 @@ function registerIpc() {
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
+          stockItemId: it.stockItemId, // the add-image button needs it
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
           retail: price,
         });

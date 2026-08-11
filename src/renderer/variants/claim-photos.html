@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Claim photos — phone → station flow</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow-y: auto; padding: 20px; display: flex; gap: 22px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+
+  /* 1: desktop QR dialog */
+  .dlg1 { width: 330px; background: var(--surface); border-radius: 12px; box-shadow: 0 14px 40px rgba(47,52,55,0.18); padding: 18px 20px; }
+  .dlg1 h3 { font-size: 13.5px; font-weight: 600; margin: 0 0 3px; }
+  .dlg1 .sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .qr { width: 168px; height: 168px; margin: 0 auto 10px; background:
+    repeating-linear-gradient(0deg, var(--text) 0 6px, transparent 6px 12px),
+    repeating-linear-gradient(90deg, var(--text) 0 6px, var(--surface) 6px 12px);
+    border: 8px solid var(--surface); outline: 1px solid var(--border); border-radius: 6px; opacity: .85; }
+  .qr-note { text-align: center; font-size: 10.5px; color: var(--faint); }
+  .qr-url { text-align: center; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+  .live { display: flex; align-items: center; gap: 6px; justify-content: center; margin-top: 10px; font-size: 10.5px; color: var(--badge-green-text); font-weight: 600; }
+  .live .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--badge-green-text); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* 2: phone frame */
+  .phone { width: 250px; height: 470px; background: var(--text); border-radius: 26px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,0.28); }
+  .pscreen { width: 100%; height: 100%; background: var(--canvas); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .pbar { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; padding: 12px 14px 10px; }
+  .pbody { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .plabel { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .pin { font-family: var(--mono); font-size: 13px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+  .pcam { border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 13px; font-weight: 600; padding: 22px 10px; text-align: center; cursor: pointer; }
+  .pcam .big { font-size: 26px; display: block; margin-bottom: 4px; }
+  .pshots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pshot { width: 52px; height: 52px; border-radius: 8px; background: linear-gradient(135deg, var(--border) 0%, var(--surface-2) 100%); border: 1px solid var(--border); position: relative; }
+  .pshot .x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 999px; background: var(--neg-text); color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; padding: 13px; cursor: pointer; }
+  .psend:disabled { opacity: .4; }
+  .pdone { text-align: center; color: var(--badge-green-text); font-weight: 600; font-size: 13px; padding: 20px 0; display: none; }
+  .pnote { font-size: 10px; color: var(--faint); text-align: center; }
+
+  /* 3: returns log with clip + gallery */
+  .card { width: 480px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 9px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  td { padding: 7px 9px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m { font-family: var(--mono); font-size: 11px; }
+  .clip { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; cursor: pointer; }
+  .gallery { padding: 10px 12px; border-top: 1px solid var(--border); display: none; }
+  .gallery.on { display: block; }
+  .gallery .g-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 8px; }
+  .g-shots { display: flex; gap: 8px; flex-wrap: wrap; }
+  .g-shot { width: 84px; height: 84px; border-radius: 8px; background: linear-gradient(135deg, var(--border), var(--surface-2)); border: 1px solid var(--border); position: relative; cursor: pointer; }
+  .g-shot .when { position: absolute; bottom: 3px; left: 5px; font-size: 8.5px; color: var(--muted); font-family: var(--mono); }
+</style></head>
+<body>
+  <div class="try"><b>The flow, left to right:</b> ① Returns page → "Claim photos" opens the QR (a fresh secret each session) · ② phone scans it — PO# prefills if opened from a row, camera shoots straight to upload, <b>nothing saved on the phone</b> · ③ the log row grows a 📎 badge; click it for the photos. Try it: type a PO on the phone, add shots, Send.</div>
+
+  <div class="stage">
+    <div class="col">
+      <span class="step">① Station — QR dialog</span>
+      <div class="dlg1">
+        <h3>Claim photos</h3>
+        <div class="sub">Scan with the warehouse phone. Photos land on the matching return automatically.</div>
+        <div class="qr"></div>
+        <div class="qr-note">works on this wifi only · new code every app start</div>
+        <div class="qr-url">192.168.1.24:3117/claim#k8f2…</div>
+        <div class="live"><span class="dot"></span><span id="liveTxt">waiting for photos…</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <span class="step">② Phone — no app, no gallery</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar">Capture Station · Claim photos</div>
+        <div class="pbody">
+          <span class="plabel">PO#</span>
+          <input class="pin" id="pPo" placeholder="Type or scan PO#…" value="" />
+          <div class="pcam" id="pCam"><span class="big">📷</span>Take photo</div>
+          <div class="pshots" id="pShots"></div>
+          <div class="pdone" id="pDone">✓ 3 photos sent to the station</div>
+          <button class="psend" id="pSend" disabled>Send 0 photos</button>
+          <div class="pnote">photos upload straight from the camera — nothing is saved to this phone</div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="col">
+      <span class="step">③ Returns log — the claim</span>
+      <div class="card">
+        <table>
+          <thead><tr><th style="width:130px">PO#</th><th>Returned SKU</th><th style="width:86px">Condition</th><th style="width:64px"></th></tr></thead>
+          <tbody>
+            <tr><td class="m">119120775455737</td><td class="m">S26-256GB-BLUE</td><td>New</td><td id="clipCell"></td></tr>
+            <tr><td class="m">119119354597966</td><td class="m">S25-FE-128GB-JETBLACK</td><td>Open box</td><td></td></tr>
+          </tbody>
+        </table>
+        <div class="gallery" id="gal">
+          <div class="g-head">Claim photos · 119120775455737</div>
+          <div class="g-shots" id="gShots"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let shots = 0, sent = 0;
+  const pShots = document.getElementById('pShots');
+  const pSend = document.getElementById('pSend');
+  document.getElementById('pCam').addEventListener('click', () => {
+    shots++;
+    const d = document.createElement('div');
+    d.className = 'pshot';
+    d.innerHTML = '<span class="x">✕</span>';
+    d.querySelector('.x').addEventListener('click', () => { d.remove(); shots--; sync(); });
+    pShots.appendChild(d);
+    sync();
+  });
+  function sync() {
+    pSend.disabled = !shots || !document.getElementById('pPo').value.trim();
+    pSend.textContent = `Send ${shots} photo${shots === 1 ? '' : 's'}`;
+  }
+  document.getElementById('pPo').addEventListener('input', sync);
+  pSend.addEventListener('click', () => {
+    sent += shots;
+    document.getElementById('liveTxt').textContent = `${sent} photo${sent === 1 ? '' : 's'} received ✓`;
+    document.getElementById('clipCell').innerHTML = `<span class="clip" id="clip">📎 ${sent}</span>`;
+    const g = document.getElementById('gShots');
+    for (let i = 0; i < shots; i++) {
+      const s = document.createElement('div');
+      s.className = 'g-shot';
+      s.innerHTML = '<span class="when">14:0' + (i + sent) + '</span>';
+      g.appendChild(s);
+    }
+    document.getElementById('pDone').style.display = 'block';
+    document.getElementById('pDone').textContent = `✓ ${shots} photo${shots === 1 ? '' : 's'} sent to the station`;
+    pShots.innerHTML = '';
+    shots = 0;
+    sync();
+    document.getElementById('clip').addEventListener('click', () => {
+      document.getElementById('gal').classList.toggle('on');
+    });
+  });
+  document.getElementById('pPo').value = '119120775455737';
+  sync();
+</script>
+</body>
+</html>

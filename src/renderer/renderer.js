@@ -2093,7 +2093,7 @@ function renderUnlistedView() {
       <tbody>${rows.map((d, idx) => `
         <tr>
           <td class="cell-gutter">${idx + 1}</td>
-          <td class="cell-img">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none"></span>'}</td>
+          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
           <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
           <td class="num">${d.avail}</td>
           <td>${missChips}</td>
@@ -2146,7 +2146,7 @@ function renderDropshipView() {
     return `
       <tr class="${hot && pad > 0 ? 'ds-hot' : warm && pad > 0 ? 'ds-warm' : ''}" data-dsrow="${esc(sku)}" title="Right-click to remove from the program">
         <td class="cell-gutter">${idx + 1}</td>
-        <td class="cell-img">${it.image ? `<img class="stock-img" src="${esc(it.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none"></span>'}</td>
+        <td class="cell-img"><button class="img-btn" data-imgsku="${esc(it.sku)}" data-sid="${esc(it.stockItemId || '')}" title="${it.image ? 'Click to add another image' : 'Click to add an image'}">${it.image ? `<img class="stock-img" src="${esc(it.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
         <td class="mono"><span title="${esc(it.title || '')}">${esc(it.sku)}</span></td>
         <td class="num mono ${Number(l.available) > 0 ? '' : 'ds-dim'}" title="Digital World Shop: ${Number(l.stockLevel) || 0} in stock · ${Number(l.inOrders) || 0} in orders · ${Number(l.available) || 0} available">${Number(l.available) || 0}</td>
         <td class="num"><button class="stock-num-btn ds-pad-btn ${pad === 0 ? 'ds-pad-zero' : ''}" data-padsku="${esc(sku)}" title="Units the app keeps at DropShip — click to change; 0 = listing dark">${pad}</button></td>
