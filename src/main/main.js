@@ -1479,27 +1479,14 @@ function registerIpc() {
     return { ok: true };
   });
   // Which stock items carry a link on each channel — for the per-channel
-  // "No eBay / No Walmart" stock filters. Derived from the mapping catalogs
-  // (same 10-min cache as the Mappings screen).
+  // "No eBay / No Walmart" stock filters. Derived from the item-level link
+  // records via the shared unlisted scan (the channel scan feed lies).
   ipcMain.handle('mapping:linkedSets', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const channels = await client.getMappingChannels();
-      const sets = {};
-      for (const ch of channels) {
-        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
-        let hit = mappingCache.get(key);
-        if (!hit || Date.now() - hit.at > 10 * 60 * 1000) {
-          hit = { at: Date.now(), items: await client.getChannelItems(ch.id, ch.source, ch.subSource) };
-          mappingCache.set(key, hit);
-        }
-        const label = /walmart/i.test(ch.source) ? 'walmart' : /ebay/i.test(ch.source) ? 'ebay' : /temu/i.test(ch.source) ? 'temu' : ch.source.toLowerCase();
-        if (!sets[label]) sets[label] = [];
-        for (const it of hit.items) if (it.linked && it.linkedItemId) sets[label].push(it.linkedItemId);
-      }
-      return { ok: true, sets };
+      const c = await runUnlistedScan(cfg);
+      return { ok: true, sets: c.sets || {} };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1594,7 +1581,9 @@ function registerIpc() {
       }
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
-      return { ok: true };
+      // the renderer patches its missing-listing sets with this id at once —
+      // the scan feed lags far behind the real link records
+      return { ok: true, stockItemId };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -2284,48 +2273,61 @@ function registerIpc() {
   // condition SKUs). One GetInventoryItemChannelSKUs call per in-stock item,
   // so the result is cached for an hour; `channels` is the set of sources
   // seen across the whole inventory (what "missing on" means here).
+  // ONE scan feeds both surfaces: the Unlisted view (no listing anywhere)
+  // and the per-channel missing sets — built from the item-level LINK
+  // RECORDS, the only truthful source (the channel scan feed's LinkedItemId
+  // is empty even on linked rows, verified live 2026-08-08).
+  async function runUnlistedScan(cfg) {
+    if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) return unlistedCache;
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const inStock = items.filter(it => {
+      if (!it.stockItemId) return false;
+      const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+      return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
+    }).slice(0, 300);
+    const universe = new Set();
+    const detail = [];
+    const sets = { walmart: [], ebay: [], temu: [] };
+    const label = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
+    for (const it of inStock) {
+      try {
+        const channels = await client.getChannelSkus(it.stockItemId);
+        for (const c of channels) {
+          if (!c.source) continue;
+          universe.add(String(c.source).toUpperCase());
+          const l2 = label(c.source);
+          if (l2 && !sets[l2].includes(it.stockItemId)) sets[l2].push(it.stockItemId);
+        }
+        if (channels.length) continue;
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
+        // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
+        // — Linnworks item retail prices are deliberately left empty here)
+        let price = 0;
+        try {
+          const prices = await client.getChannelPrices(it.stockItemId);
+          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
+        } catch { /* no stored channel price: the column shows an em-dash */ }
+        detail.push({
+          sku: String(it.sku).toUpperCase(),
+          title: it.title || '',
+          image: it.image || '',
+          avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
+          retail: price,
+        });
+      } catch { /* one bad lookup never hides the rest */ }
+    }
+    detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets };
+    return unlistedCache;
+  }
+
   ipcMain.handle('stock:unlisted', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
-      return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels };
-    }
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const items = await client.listInventory();
-      const inStock = items.filter(it => {
-        if (!it.stockItemId) return false;
-        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
-        return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
-      }).slice(0, 300);
-      const universe = new Set();
-      const detail = [];
-      for (const it of inStock) {
-        try {
-          const channels = await client.getChannelSkus(it.stockItemId);
-          for (const c of channels) if (c.source) universe.add(String(c.source).toUpperCase());
-          if (channels.length) continue;
-          const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-          // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
-          // — Linnworks item retail prices are deliberately left empty here)
-          let price = 0;
-          try {
-            const prices = await client.getChannelPrices(it.stockItemId);
-            price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-          } catch { /* no stored channel price: the column shows an em-dash */ }
-          detail.push({
-            sku: String(it.sku).toUpperCase(),
-            title: it.title || '',
-            image: it.image || '',
-            avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-            retail: price,
-          });
-        } catch { /* one bad lookup never hides the rest */ }
-      }
-      detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
-      const skus = detail.map(d => d.sku);
-      unlistedCache = { at: Date.now(), skus, detail, channels: [...universe].sort() };
-      return { ok: true, skus, detail, channels: unlistedCache.channels };
+      const c = await runUnlistedScan(cfg);
+      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels };
     } catch (e) {
       return { ok: false, error: e.message };
     }

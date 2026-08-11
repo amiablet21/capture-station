@@ -2313,7 +2313,10 @@ function beginStockMinEdit(btn) {
   input.select();
 }
 
-$('stockRefresh').addEventListener('click', loadStock);
+$('stockRefresh').addEventListener('click', () => {
+  chLinked = null; // Refresh re-derives the missing-listings sets too
+  loadStock();
+});
 $('stockSearch').addEventListener('input', renderStock);
 // whole-sheet resize: drag the handle on the right edge of the table
 let sheetDrag = null;
@@ -3295,6 +3298,13 @@ $('chmapWmBody').addEventListener('click', async (e) => {
     }
     const res = await api.mappingUnlink(item.rowId);
     if (!res.ok) { toast(res.error || 'Could not unlink.'); return; }
+    // mirror of the link path: the sets forget the id at once
+    if (item.linkedItemId && chLinked) {
+      const label = chmapChanLabel(chmap.chan).toLowerCase();
+      if (chLinked[label]) chLinked[label].delete(item.linkedItemId);
+      renderStockChips();
+      if (activePage === 'stock' && stockCache) renderStock();
+    }
     item.linked = false;
     item.linkedItemId = '';
     item.linkedSkuOverride = '';
@@ -3314,10 +3324,12 @@ $('chmapLwBody').addEventListener('click', async (e) => {
   const target = e.target.closest('tr[data-lw]').dataset.lw;
   const item = chmap.items.find(x => x.sku === chmap.sel);
   if (!item) return;
+  let linkedStockId = '';
   if (!chmap.local) {
     btn.disabled = true;
     const res = await api.mappingLink(item.sku, chmap.chan.source, chmap.chan.subSource, target, item.channelRefId || '');
     if (!res.ok) { btn.disabled = false; toast(res.error || 'Could not link.'); return; }
+    linkedStockId = res.stockItemId || '';
   }
   item.linked = true;
   item.linkedSkuOverride = target;
@@ -3325,6 +3337,14 @@ $('chmapLwBody').addEventListener('click', async (e) => {
   toast(`${item.sku} → ${target} linked — open orders relink on the next refresh`);
   renderChmap();
   if (!chmap.local) {
+    // the missing-listings sets learn about the link IMMEDIATELY — the scan
+    // feed they are built from lags by a full channel scan
+    if (linkedStockId && chLinked) {
+      const label = chmapChanLabel(chmap.chan).toLowerCase();
+      if (chLinked[label]) chLinked[label].add(linkedStockId);
+      renderStockChips();
+      if (activePage === 'stock' && stockCache) renderStock();
+    }
     chmapLoadItems(true); // silent re-pull picks up the new rowId for Unlink
     loadUnlisted();
   }
