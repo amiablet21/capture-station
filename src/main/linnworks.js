@@ -387,15 +387,18 @@ class LinnworksClient {
     return out;
   }
 
-  // Create / remove a channel-SKU → stock-item link (the mapping itself).
-  // Linnworks can throw 500 "Could not update channel mappings" AND STILL
-  // create the record (verified live 2026-08-08) — callers must re-check
-  // before treating that error as a failure.
-  async linkChannelSku(channelSku, source, subSource, stockItemId, channelRefId) {
-    const row = { SKU: channelSku, Source: source, SubSource: subSource, StockItemId: stockItemId };
-    if (channelRefId) row.ChannelReferenceId = channelRefId;
-    await this.call('Inventory/CreateInventoryItemChannelSKUs', {
-      inventoryItemChannelSKUs: [row],
+  // Create a channel-SKU → stock-item link. Orders/UpdateLinkItem is the
+  // route that actually works (verified live 2026-08-08): the documented
+  // CreateInventoryItemChannelSKUs 500s "Could not update channel mappings"
+  // for eBay and only sometimes lands. pkStockId zeroed = create-by-key
+  // (source + subSource + channelSKU).
+  async linkChannelSku(channelSku, source, subSource, stockItemId) {
+    await this.call('Orders/UpdateLinkItem', {
+      pkStockId: '00000000-0000-0000-0000-000000000000',
+      pkStockItemId: stockItemId,
+      source,
+      subSource,
+      channelSKU: channelSku,
     });
   }
 
