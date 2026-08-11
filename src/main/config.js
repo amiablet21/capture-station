@@ -109,7 +109,7 @@ const DEFAULTS = {
   // marketplace, searched by the channel SKU. {sku} is replaced.
   listingUrlTemplates: {
     walmart: 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}',
-    ebay: 'https://www.ebay.com/sh/lst/active?q={sku}',
+    ebay: 'https://www.ebay.com/sh/lst/active?keyword={sku}&source=filterbar&action=search',
     temu: '', // Temu seller search URL unknown yet — clicking copies the SKU
   },
   // "Received by" initials on the Returns worksheet: last-used value becomes
@@ -164,6 +164,12 @@ function load() {
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
   if (stored.orderUrlTemplates && !String(stored.orderUrlTemplates.temu || '').trim()) {
     stored.orderUrlTemplates.temu = DEFAULTS.orderUrlTemplates.temu;
+  }
+  // migration: the eBay listing search needs the filterbar form (the bare
+  // ?q= form ignored the query, owner-verified 2026-08-11)
+  if (stored.listingUrlTemplates
+      && stored.listingUrlTemplates.ebay === 'https://www.ebay.com/sh/lst/active?q={sku}') {
+    stored.listingUrlTemplates.ebay = DEFAULTS.listingUrlTemplates.ebay;
   }
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
