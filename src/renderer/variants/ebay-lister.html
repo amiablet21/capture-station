@@ -259,8 +259,8 @@
     // buyer preview — YOUR listing template (WirelessTechnoStore header/footer,
     // one condition block, spec table, package list)
     $('prev').innerHTML = `
-      <div style="border-bottom:3px solid #0FA3B1;padding:6px 0 8px;margin-bottom:12px;text-align:center">
-        <div style="font-size:17px;letter-spacing:4px;color:#101828">WIRELESS<span style="font-weight:700;color:#0FA3B1">TECHNO</span><span style="font-weight:700;color:#101828">STORE</span></div>
+      <div style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
+        <div style="font-size:17px;letter-spacing:4px;font-weight:700"><span style="color:#2361EB">WIRELESS</span><span style="color:#16181C">TECHNO</span><span style="color:#2361EB">STORE</span></div>
         <div style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
       </div>
       <h2 style="text-align:center">${$('fTitle').value}</h2>
@@ -276,7 +276,7 @@
         <tr><td style="border:1px solid #ddd;padding:4px 8px">Condition</td><td style="border:1px solid #ddd;padding:4px 8px">${cur.cond === 'openbox' ? 'Open Box' : cur.cond === 'used' ? 'Used — Tested & Working' : 'For Parts or Repair'}</td></tr>
       </table>
       <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
-      <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
+      <div class="foot" style="border-top:3px solid #2361EB;text-align:center;padding-top:6px"><b><span style="color:#2361EB">Wireless</span><span style="color:#16181C">Techno</span><span style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
     const kids = [
       ...(cur.vars || []).map(v => `Add,${v.sku},Variation,"${v.det}",,,,,,${v.price},${v.qty},`),
