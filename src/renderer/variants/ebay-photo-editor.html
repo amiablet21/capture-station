@@ -86,6 +86,9 @@
               <button class="chip" data-crop="4:3">4:3</button>
             </div>
           </div>
+          <div class="grp"><h5>Background</h5>
+            <button class="abtn main" id="bgBtn" style="width:100%">✨ White background</button>
+          </div>
           <div class="grp"><h5>Photo</h5>
             <div class="rowbtns">
               <button class="abtn" id="rot">⟳ Rotate</button>
@@ -103,11 +106,14 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const photos = [
-    { bright: 100, con: 100, warm: 0, rot: 0, main: true },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: true, bg: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
   ];
+  // the messy-desk vs cut-out-on-white looks (mock stand-ins for the model output)
+  const BG_RAW = 'radial-gradient(circle at 62% 40%, #3b4252 0 18%, transparent 19%), radial-gradient(circle at 62% 40%, #222 0 22%, transparent 23%), linear-gradient(135deg, #cfd2ce, #f0f0ec)';
+  const BG_WHITE = 'radial-gradient(circle at 50% 48%, #3b4252 0 20%, transparent 21%), radial-gradient(circle at 50% 48%, #222 0 24%, transparent 25%), linear-gradient(#ffffff, #ffffff)';
   let sel = 0;
 
   const filt = (p) => `brightness(${p.bright}%) contrast(${p.con}%) sepia(${Math.max(0, p.warm) / 100}) hue-rotate(${Math.min(0, p.warm) * 0.6}deg)`;
@@ -115,14 +121,16 @@
   function paint() {
     const p = photos[sel];
     $('pic').style.filter = filt(p);
+    $('pic').style.background = p.bg ? BG_WHITE : BG_RAW;
     $('pic').style.transform = `rotate(${p.rot}deg) scale(${p.rot % 180 ? 0.75 : 1})`;
+    $('bgBtn').textContent = p.bg ? '✓ Background removed' : '✨ White background';
     $('sBright').value = p.bright; $('vBright').textContent = p.bright - 100;
     $('sCon').value = p.con; $('vCon').textContent = p.con - 100;
     $('sWarm').value = p.warm; $('vWarm').textContent = p.warm;
     $('curN').textContent = sel + 1;
     $('mainBtn').textContent = p.main ? '★ This is the main photo' : '★ Use as main photo';
     $('strip').innerHTML = photos.map((q, i) =>
-      `<span class="th ${i === sel ? 'on' : ''} ${q.main ? 'main' : ''}" data-i="${i}" style="filter:${filt(q)};transform:rotate(${q.rot}deg)"><span class="n">${i + 1}</span></span>`).join('');
+      `<span class="th ${i === sel ? 'on' : ''} ${q.main ? 'main' : ''}" data-i="${i}" style="filter:${filt(q)};transform:rotate(${q.rot}deg);background:${q.bg ? '#fff' : ''}"><span class="n">${i + 1}</span></span>`).join('');
   }
 
   const wire = (id, key) => {
@@ -130,6 +138,11 @@
   };
   wire('sBright', 'bright'); wire('sCon', 'con'); wire('sWarm', 'warm');
 
+  $('bgBtn').addEventListener('click', () => {
+    if (photos[sel].bg) { photos[sel].bg = false; paint(); return; }
+    $('bgBtn').textContent = '… cutting out';
+    setTimeout(() => { photos[sel].bg = true; paint(); }, 700); // model takes ~1s for real
+  });
   $('rot').addEventListener('click', () => { photos[sel].rot = (photos[sel].rot + 90) % 360; paint(); });
   $('mainBtn').addEventListener('click', () => { photos.forEach((p, i) => p.main = i === sel); paint(); });
   $('reset').addEventListener('click', () => { photos[sel] = { ...photos[sel], bright: 100, con: 100, warm: 0, rot: 0 }; paint(); });
