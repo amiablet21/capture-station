@@ -5642,7 +5642,7 @@ function renderEbayForm() {
     + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">add photos</button>`
     + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint" style="width:100%">✎ edits bake into the exported photos</span>` : "");
   // preview + export note
-  $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue (or ➕ New listing) to start.</div>`;
+  $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue, or press New listing.</div>`;
   const missing = [];
   if (has && !ebCur.photos.length) missing.push("no photos yet");
   if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");

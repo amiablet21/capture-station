@@ -3452,3 +3452,11 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* description photo gallery (preview shows local files with their edits) */
 .ebay-prev .ebp-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ebay-prev .ebp-gallery img { width: 100%; border-radius: 4px; border: 1px solid #eee; }
+
+/* match the approved mock: content centered at a fixed width, panels split
+   the same width evenly (shipped version stretched edge-to-edge - wrong) */
+.ebay-sheetbar, .ebay-sheet, .ebay-cols { max-width: 1560px; margin-left: auto; margin-right: auto; }
+.ebay-sheetbar { display: flex; }
+.ebay-cols { display: flex; }
+.ebay-form { flex: 1 1 0; max-width: none; }
+.ebay-out { flex: 1 1 0; max-width: none; }
