@@ -23,6 +23,7 @@ const EVENTS = [
   'routing:done',
   'reorder:applied',
   'app:notice',
+  'claims:uploaded',
   'ui:open-settings',
   'ui:open-debug',
   'ui:open-history',
@@ -101,6 +102,8 @@ contextBridge.exposeInMainWorld('api', {
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),
   browserZoom: (dir) => ipcRenderer.invoke('browser:zoom', { dir }),
   browserPrint: () => ipcRenderer.invoke('browser:print'),
+  claimsInfo: (po) => ipcRenderer.invoke('claims:info', { po: po || '' }),
+  claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   on: (channel, cb) => {
     if (!EVENTS.includes(channel)) return;

@@ -1049,6 +1049,49 @@ module.exports = async function run({ app, win, db, clipboard }) {
       win.setContentSize(860, 1000);
     }
 
+    // 42. claim photos: LAN upload server — 5-day shelf, token gate, magic
+    // bytes, PO-continuing file numbering
+    {
+      const claims = require('./claims.js');
+      const cpath = require('path');
+      const cdir = cpath.join(app.getPath('userData'), 'claim-photos-test');
+      fs.mkdirSync(cdir, { recursive: true });
+      const oldFile = cpath.join(cdir, 'OLDPO_0101-0900_1.jpg');
+      fs.writeFileSync(oldFile, Buffer.alloc(16, 0xff));
+      const oldSec = (Date.now() - 6 * 86400000) / 1000;
+      fs.utimesSync(oldFile, oldSec, oldSec);
+      const uploads = [];
+      const crun = await claims.start({
+        dir: cdir, port: 0,
+        listToday: () => [{ po: '119990000000042', sku: 'TEST-SKU', tm: '9:00a' }],
+        onUpload: (u) => uploads.push(u),
+      });
+      check('claims: 5-day cleanup removed the old file', !fs.existsSync(oldFile) && crun.removed === 1, crun.removed);
+      const cbase = `http://127.0.0.1:${crun.port}`;
+      // a real-enough JPEG (magic bytes + padding past the sniff window)
+      const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0)]);
+      let cres = await fetch(`${cbase}/photo?t=WRONGTOKEN&po=X`, { method: 'POST', body: jpeg });
+      check('claims: bad token rejected', cres.status === 403, cres.status);
+      cres = await fetch(`${cbase}/up?t=WRONGTOKEN`);
+      check('claims: bad token gets the expired page', cres.status === 403 && /expired/i.test(await cres.text()), cres.status);
+      cres = await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: Buffer.from('this is not an image, whatever the phone claims') });
+      check('claims: non-image rejected by magic bytes', cres.status === 415, cres.status);
+      const up1 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: jpeg })).json();
+      const up2 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: jpeg })).json();
+      check('claims: files named PO_MMDD-HHMM_n, numbering continues',
+        up1.ok && up2.ok
+          && /^119990000000042_\d{4}-\d{4}_1\.jpg$/.test(up1.name)
+          && /^119990000000042_\d{4}-\d{4}_2\.jpg$/.test(up2.name)
+          && fs.existsSync(cpath.join(cdir, up2.name)),
+        { up1, up2 });
+      check('claims: upload events carried the running day count',
+        uploads.length === 2 && uploads[1].todayCount === 2, uploads);
+      const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
+      check('claims: phone page lists today\'s returns as tap chips',
+        cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);
+      await crun.close();
+    }
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

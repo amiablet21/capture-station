@@ -1193,6 +1193,49 @@ function startLowStockWatcher() {
   setInterval(() => runLowStockCheck(), 15 * 60 * 1000);
 }
 
+/* ---------- claim photos: LAN upload server ---------- */
+
+// The phone scans a QR from the app and shoots straight into
+// Documents\Capture Station\claim photos (kept 5 days). The QR token rotates
+// every app session, so an old QR (or a photo of one) dies on restart.
+let claimsRun = null; // { url, token, port, dir, todayCount, close }
+
+async function startClaims() {
+  const claims = require('./claims');
+  const dir = path.join(app.getPath('documents'), 'Capture Station', 'claim photos');
+  try {
+    claimsRun = await claims.start({
+      dir,
+      port: 0, // ephemeral — the QR carries the port, nobody types the URL
+      // tap chips on the phone: today's received returns, newest first
+      listToday: () => {
+        const today = new Date().toDateString();
+        const seen = new Set();
+        const out = [];
+        for (const r of db.listReturns(200)) {
+          if (new Date(r.created_at).toDateString() !== today) continue;
+          const po = String(r.order_number || '').trim();
+          if (!po || seen.has(po)) continue;
+          seen.add(po);
+          const d = new Date(r.created_at);
+          out.push({
+            po,
+            sku: (r.items[0] && r.items[0].sku) || '',
+            tm: `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}${d.getHours() < 12 ? 'a' : 'p'}`,
+          });
+          if (out.length >= 12) break;
+        }
+        return out;
+      },
+      onUpload: ({ po, name, todayCount }) => {
+        if (win && !win.isDestroyed()) win.webContents.send('claims:uploaded', { po, name, todayCount });
+      },
+    });
+  } catch (err) {
+    console.error('claims upload server failed to start:', err.message);
+  }
+}
+
 /* ---------- DropShip program: pad engine ---------- */
 
 // Keeps every enrolled SKU's DropShip level at its pad. One inventory fetch
@@ -2013,6 +2056,25 @@ function registerIpc() {
     }
   });
   ipcMain.handle('returns:list', () => db.listReturns());
+
+  // Claim photos: QR + status for the Upload Photos corner button. The QR is
+  // rendered here (qrcode lib) and handed over as a data URL; po locks the
+  // phone page to one order so the row-level 📷 needs zero typing.
+  ipcMain.handle('claims:info', async (_e, { po } = {}) => {
+    if (!claimsRun) return { ok: false, error: 'The upload server is not running — restart the app.' };
+    const url = claimsRun.url + (po ? `&po=${encodeURIComponent(String(po))}` : '');
+    try {
+      const qr = await require('qrcode').toDataURL(url, { margin: 1, width: 300, color: { dark: '#2f3437', light: '#ffffff' } });
+      return { ok: true, url, qr, dir: claimsRun.dir, todayCount: claimsRun.todayCount() };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle('claims:openFolder', () => {
+    if (!claimsRun) return { ok: false };
+    shell.openPath(claimsRun.dir);
+    return { ok: true };
+  });
   // Inline log editing: one UNIT of one return record. Record-level fields
   // (PO#, date, customer, tracking) apply to the whole record; SKU/condition
   // apply to the unit, splitting a qty>1 line when needed. Stock is
@@ -2715,6 +2777,7 @@ app.whenReady().then(() => {
   startStockRouter();
   startOrderImporter();
   startLowStockWatcher();
+  startClaims();
 
   if (process.env.CAPTURE_SMOKE === '1') {
     setTimeout(() => {

@@ -32,6 +32,7 @@
     }
   },
   "dependencies": {
-    "geist": "^1.7.2"
+    "geist": "^1.7.2",
+    "qrcode": "^1.5.4"
   }
 }

@@ -150,6 +150,7 @@ function toast(msg, ms = 2200) {
 
 // Phosphor bold icons (MIT), 256 viewBox
 const ICONS = {
+  camera: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>',
   barcode: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,52V92a12,12,0,0,1-24,0V64H180a12,12,0,0,1,0-24h40A12,12,0,0,1,232,52ZM76,192H48V164a12,12,0,0,0-24,0v40a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24Zm144-40a12,12,0,0,0-12,12v28H180a12,12,0,0,0,0,24h40a12,12,0,0,0,12-12V164A12,12,0,0,0,220,152ZM36,104A12,12,0,0,0,48,92V64H76a12,12,0,0,0,0-24H36A12,12,0,0,0,24,52V92A12,12,0,0,0,36,104ZM88,80A12,12,0,0,0,76,92v72a12,12,0,0,0,24,0V92A12,12,0,0,0,88,80Zm92,84V92a12,12,0,0,0-24,0v72a12,12,0,0,0,24,0ZM128,80a12,12,0,0,0-12,12v72a12,12,0,0,0,24,0V92A12,12,0,0,0,128,80Z"/></svg>',
   pencil: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg>',
   trash: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></svg>',
@@ -3511,6 +3512,7 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
       <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
       <td class="cell-actions"><span class="ret-log-act">
+        ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
         <button class="btn-icon ret-log-edit-btn" title="Edit this return">${ICONS.pencil}</button>
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
       </span></td>
@@ -3648,6 +3650,8 @@ let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
+  const cam = e.target.closest('.ret-log-cam');
+  if (cam) { openClaimsPop(cam.dataset.campo); return; }
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
   if (e.target.closest('.ret-log-edit-btn')) {
@@ -5342,3 +5346,63 @@ api.on('ui:open-history', openHistory);
 
 refresh().then(() => focusScan());
 initBrowserPane();
+
+/* ---------- Upload Photos (claim photos) ---------- */
+// Corner button -> QR popover; the row-level camera in the returns log opens
+// the QR locked to that PO#. Photos land in Documents\Capture Station\
+// claim photos (5-day shelf), counted live on the badge.
+
+let claimsCount = 0;
+
+function claimsBadge() {
+  const n = $('claimsFabN');
+  n.hidden = !claimsCount;
+  n.textContent = claimsCount;
+}
+
+async function openClaimsPop(po) {
+  const pop = $('claimsPop');
+  const res = await api.claimsInfo(po || '').catch((err) => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) {
+    $('claimsErr').textContent = (res && res.error) || 'Could not reach the upload server.';
+    $('claimsErr').hidden = false;
+    $('claimsQr').removeAttribute('src');
+  } else {
+    $('claimsErr').hidden = true;
+    $('claimsQr').src = res.qr;
+    claimsCount = res.todayCount || 0;
+    claimsBadge();
+  }
+  $('claimsSub').innerHTML = po
+    ? `for <span class="mono">${esc(po)}</span> — the phone opens ready to shoot`
+    : 'any PO — pick it on the phone';
+  pop.hidden = false;
+}
+
+$('claimsFab').addEventListener('click', () => {
+  if ($('claimsPop').hidden) openClaimsPop('');
+  else $('claimsPop').hidden = true;
+});
+
+$('claimsFolder').addEventListener('click', () => api.claimsOpenFolder());
+
+// click-away closes the popover (the fab itself toggles)
+document.addEventListener('click', (e) => {
+  if ($('claimsPop').hidden) return;
+  if (e.target.closest('#claimsPop') || e.target.closest('#claimsFab') || e.target.closest('.ret-log-cam')) return;
+  $('claimsPop').hidden = true;
+});
+
+api.on('claims:uploaded', ({ po, name, todayCount }) => {
+  claimsCount = todayCount;
+  claimsBadge();
+  toast(`Photo saved: ${name}`, 3000);
+});
+
+// boot: only show the button once the server answers (it carries the QR)
+api.claimsInfo('').then((res) => {
+  if (!res || !res.ok) return;
+  claimsCount = res.todayCount || 0;
+  claimsBadge();
+  $('claimsFab').hidden = false;
+}).catch(() => { /* server missing: button stays hidden */ });
