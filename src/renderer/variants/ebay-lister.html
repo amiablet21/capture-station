@@ -3,6 +3,22 @@
 <head><meta charset="UTF-8" /><title>eBay lister — returns → CSV upload</title>
 <link rel="stylesheet" href="_base.css" />
 <style>
+  /* self-contained tokens: the pane sometimes loads mockups as snapshots
+     where _base.css can't resolve — the page must style itself */
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --r-card: 8px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; color: var(--text); }
   html, body { height: 100%; }
   body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
   .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
@@ -43,6 +59,12 @@
   .spec label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
   .aibtn { font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 4px 12px; cursor: pointer; color: var(--accent-soft-text); }
   .aibtn:hover { border-color: var(--accent); }
+  .shots { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .shot { position: relative; width: 44px; height: 44px; border-radius: 6px; background: linear-gradient(135deg, var(--border), var(--surface-2)); border: 1px solid var(--border); }
+  .shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+  .shot.main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
+  .addshot { font-size: 10.5px; font-weight: 600; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 12px 8px; cursor: pointer; color: var(--muted); }
+  .addshot:hover { border-color: var(--accent); color: var(--accent-soft-text); }
   .factions { display: flex; gap: 8px; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); }
   .btn-x { font-size: 12px; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
   .btn-go { background: var(--accent); color: #fff; border-color: transparent; flex: 1; }
@@ -93,6 +115,10 @@
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
       <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
       <div class="frow"><span class="flabel">Flaws</span><input class="fin" id="fFlaws" placeholder="e.g. scuffed corner" /><span class="fhint">pulled from the return's note — shown honestly in the description</span></div>
+      <div class="frow"><span class="flabel">Photos</span>
+        <div class="shots" id="fShots"></div>
+        <span class="fhint">YOUR photos of this exact unit — first one is the gallery photo. They ride through the Linnworks item just long enough for eBay to copy them at upload, then eBay hosts its own copies.</span>
+      </div>
       <div class="frow"><span class="flabel">Description</span><button class="aibtn" id="aiBtn">✨ Polish with AI (optional)</button><span class="fhint">works without it — the template writes a full description from the fields above</span></div>
       <div class="factions">
         <button class="btn-x">Save draft</button>
@@ -114,9 +140,9 @@
 
 <script>
   const QUEUE = [
-    { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray' },
-    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black' },
-    { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray' },
+    { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray', po: '119120775455737', shots: 0 },
+    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black', po: '119120671019601', shots: 2 },
+    { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray', po: '119119354597966', shots: 0 },
   ];
   const CONDS = {
     openbox: { label: 'OPEN BOX', id: 1500, cls: 'c-open', prevBg: '#e7f0fb', prevFg: '#1c4a8a',
@@ -158,6 +184,12 @@
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
     $('fFlaws').value = cur.flaws;
+    // photos: from the claim-photos folder (matched by PO) or picked by hand
+    $('fShots').innerHTML =
+      Array.from({ length: cur.shots }, (_, i) =>
+        `<span class="shot ${i === 0 ? 'main' : ''}"><button class="x" data-shotx="${i}" title="Remove">✕</button></span>`).join('')
+      + `<button class="addshot" data-addshot="po">＋ claim photos (${cur.po.slice(-4)}…)</button>`
+      + `<button class="addshot" data-addshot="file">＋ browse</button>`;
     // buyer preview
     $('prev').innerHTML = `
       <h2>${$('fTitle').value}</h2>
@@ -171,9 +203,10 @@
         <li>30-day returns${cur.cond === 'scrap' ? ' — <b>not applicable on parts units</b>' : ''}</li>
       </ul>
       <div class="foot">Digital World Shop — thousands of devices tested &amp; shipped</div>`;
+    const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
     $('csv').textContent =
-`Action(SiteID=US|Country=US|Currency=USD|Version=1193),CustomLabel,Title,ConditionID,Quantity,StartPrice,Description,Format
-Add,${cur.sku},"${$('fTitle').value}",${c.id},${cur.qty},${cur.price.toFixed(2)},"<html…full description…>",FixedPrice`;
+`Action(SiteID=US|Country=US|Currency=USD|Version=1193),CustomLabel,Title,ConditionID,PicURL,Quantity,StartPrice,Description,Format
+Add,${cur.sku},"${$('fTitle').value}",${c.id},"${pics}",${cur.qty},${cur.price.toFixed(2)},"<html…full description…>",FixedPrice`;
   }
 
   $('qlist').innerHTML = QUEUE.map((q, i) => `
@@ -188,6 +221,10 @@ Add,${cur.sku},"${$('fTitle').value}",${c.id},${cur.qty},${cur.price.toFixed(2)}
     render();
   });
   document.querySelector('.form').addEventListener('click', (e) => {
+    const add = e.target.closest('[data-addshot]');
+    if (add && cur) { cur.shots += add.dataset.addshot === 'po' ? 2 : 1; render(); return; }
+    const del = e.target.closest('[data-shotx]');
+    if (del && cur) { cur.shots = Math.max(0, cur.shots - 1); render(); return; }
     const b = e.target.closest('.condbtn'); if (!b || !cur) return;
     cur.cond = b.dataset.c;
     render();
