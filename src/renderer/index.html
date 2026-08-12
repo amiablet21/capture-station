@@ -171,14 +171,21 @@
   <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
        Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
   <section id="ebayPage" class="ebay-page" hidden>
-    <div class="ebay-cols">
-      <div class="ebay-panel ebay-queue">
-        <div class="ebay-phead">To list on eBay
-          <button id="ebScratch" class="ebay-addbtn" title="Start a blank listing, any SKU">＋ New listing</button>
-        </div>
-        <div id="ebQueue" class="ebay-qlist"></div>
-      </div>
+    <!-- excel-sheet layout (owner pick 2026-08-12: variants/ebay-design.html C):
+         the queue is a sheet; the builder + buyer preview open under it -->
+    <div class="ebay-sheetbar">
+      <b>To list on eBay<span id="ebQueueCount"></span></b>
+      <button id="ebScratch" class="ebay-addbtn" title="Start a blank listing, any SKU">New listing</button>
+    </div>
+    <table class="ebay-sheet">
+      <thead><tr>
+        <th class="th-esku">SKU</th><th class="th-econd">Condition</th><th class="th-eunits">Units</th>
+        <th>Title</th><th class="th-eprice">Price</th><th class="th-ephotos">Photos</th>
+      </tr></thead>
+      <tbody id="ebQueue"></tbody>
+    </table>
 
+    <div class="ebay-cols">
       <div class="ebay-panel ebay-form">
         <div class="ebay-phead">Listing
           <button id="ebGear" class="ebay-addbtn" title="Business policy names, location, dispatch time">⚙</button>
@@ -220,7 +227,7 @@
 
       <div class="ebay-out">
         <div class="ebay-panel">
-          <div class="ebay-phead">Buyer sees</div>
+          <div class="ebay-chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">ebay.com — buyer preview</span></div>
           <div id="ebPrev" class="ebay-prev"></div>
         </div>
       </div>

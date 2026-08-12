@@ -5497,18 +5497,32 @@ function ebQueueRows() {
   return rows;
 }
 
+// the queue is a sheet: unbuilt rows say "click to build…", the selected
+// row carries the draft's live title/price/photo count
 function renderEbayQueue() {
   const box = $("ebQueue");
   const rows = ebQueueRows();
-  if (!rows.length) {
-    box.innerHTML = `<div class="ebay-qempty">No returned condition SKUs waiting — receive a return (or press ➕ New listing to start from scratch).</div>`;
+  $("ebQueueCount").textContent = rows.length ? ` — ${rows.length} SKU${rows.length === 1 ? "" : "s"}` : "";
+  const on = (sku) => ebCur && !ebCur.scratch && ebCur.sku === sku;
+  const scratchRow = ebCur && ebCur.scratch
+    ? `<tr class="is-on" data-scratch="1"><td class="mono">${esc(ebCur.sku) || "(new listing)"}</td>
+       <td><span class="ebay-qcond ${EB_BADGE[ebCur.cond]}">${EB_CONDL[ebCur.cond]}</span></td>
+       <td class="mono">${esc(String(ebCur.qty || 1))}</td><td>${esc(ebCur.title) || '<span class="eb-dim">building…</span>'}</td>
+       <td class="mono">${esc(String(ebCur.price || ""))}</td><td class="mono">${ebCur.photos.length || ""}</td></tr>`
+    : "";
+  if (!rows.length && !scratchRow) {
+    box.innerHTML = `<tr><td colspan="6" class="eb-dim">No returned condition SKUs waiting — receive a return, or press New listing to start from scratch.</td></tr>`;
     return;
   }
-  box.innerHTML = rows.map(r => `
-    <div class="ebay-qrow ${ebCur && ebCur.sku === r.sku ? "is-on" : ""}" data-sku="${esc(r.sku)}">
-      <span class="sku">${esc(r.sku)}</span>
-      <span class="sub"><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span><span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span></span>
-    </div>`).join("");
+  box.innerHTML = scratchRow + rows.map(r => `
+    <tr class="${on(r.sku) ? "is-on" : ""}" data-sku="${esc(r.sku)}">
+      <td class="mono">${esc(r.sku)}</td>
+      <td><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span></td>
+      <td class="mono">${r.qty}</td>
+      <td>${on(r.sku) ? esc(ebCur.title) : '<span class="eb-dim">click to build…</span>'}</td>
+      <td class="mono">${on(r.sku) ? esc(String(ebCur.price || "")) : ""}</td>
+      <td class="mono">${on(r.sku) ? (ebCur.photos.length || "") : ""}</td>
+    </tr>`).join("");
 }
 
 async function ebLoadCfg() {
@@ -5588,7 +5602,7 @@ function renderEbayForm() {
   // specifics grid: all card specs, editable; amber when empty in manual mode
   $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
     <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
-    + `<span class="ebay-spec"><label>&nbsp;</label><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">➕ specific</button></span>`;
+    + `<span class="ebay-spec"><label>&nbsp;</label><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">add specific</button></span>`;
   $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
     ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
     : ebCur.src === "manual"
@@ -5606,14 +5620,14 @@ function renderEbayForm() {
       <span class="vsku ${ebVarSku(v) ? "is-ok" : "is-empty"}">${ebVarSku(v) || "(fills in from storage + color)"}</span>
       <button class="ebay-varx" data-varx="${vi}">✕</button>
     </span>`).join("")
-    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">➕ add variation</button>`;
+    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">add variation</button>`;
   // photos: objects carrying edit params; thumbs preview the edits live.
   // Click a thumb to edit, ✕ removes, 📷 opens the phone QR for this draft.
   $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
     <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"
       style="background-image:url('${ebFileUrl(p.path)}');${ebThumbCss(p)}"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
     + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
-    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">➕ add photos</button>`
+    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">add photos</button>`
     + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint" style="width:100%">✎ edits bake into the exported photos</span>` : "");
   // preview + export note
   $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue (or ➕ New listing) to start.</div>`;
@@ -5632,7 +5646,7 @@ function enterEbay() {
 }
 
 $("ebQueue").addEventListener("click", (e) => {
-  const r = e.target.closest(".ebay-qrow");
+  const r = e.target.closest("tr[data-sku]");
   if (r) ebSelect(r.dataset.sku, false);
 });
 $("ebScratch").addEventListener("click", () => {

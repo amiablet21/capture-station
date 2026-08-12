@@ -3408,3 +3408,43 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .qrbtn { width: 30px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 1px 4px rgba(47,52,55,0.10); }
 .qrbtn:hover { border-color: var(--accent); }
 .qrbtn svg { width: 14px; height: 14px; color: var(--accent); }
+
+/* ---------- eBay tab: excel-sheet redesign (owner pick, variants/ebay-design.html C) ---------- */
+.ebay-sheetbar { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+.ebay-sheetbar b { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+.ebay-sheetbar .ebay-addbtn { margin-left: auto; }
+.ebay-sheet { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); font-size: 13.5px; }
+.ebay-sheet th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+.ebay-sheet td { padding: 11px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ebay-sheet tbody tr { cursor: pointer; }
+.ebay-sheet tbody tr:hover td { background: var(--surface-2); }
+.ebay-sheet tbody tr.is-on td { background: var(--accent-soft); }
+.ebay-sheet .th-esku { width: 250px; }
+.ebay-sheet .th-econd { width: 220px; }
+.ebay-sheet .th-eunits { width: 60px; }
+.ebay-sheet .th-eprice { width: 90px; }
+.ebay-sheet .th-ephotos { width: 70px; }
+.eb-dim { color: var(--faint); }
+.ebay-cols { margin-top: 16px; justify-content: flex-start; }
+.ebay-form { flex: 1 1 480px; min-width: 400px; max-width: 560px; }
+.ebay-out { flex: 1 1 480px; min-width: 380px; max-width: 560px; }
+.ebay-qcond { font-size: 10px; padding: 2px 8px; }
+
+/* comfortable scale (the shipped version ran too small, owner 2026-08-12) */
+.ebay-phead { padding: 13px 16px; font-size: 11px; }
+.ebay-frow { padding: 12px 16px; }
+.ebay-flabel { font-size: 10.5px; }
+.ebay-fin { font-size: 13.5px; padding: 9px 12px; }
+.ebay-fhint { font-size: 10.5px; }
+.ebay-spec label { font-size: 9.5px; margin-bottom: 3px; }
+.ebay-spec input { font-size: 13px; padding: 7px 10px; }
+.ebay-specgrid { gap: 10px; }
+.ebay-condbtn { font-size: 13px; padding: 10px 6px; }
+.ebay-addbtn { font-size: 12px; padding: 6px 14px; }
+.ebay-factions { padding: 14px 16px; }
+.ebay-prev { padding: 22px 26px; }
+
+/* browser-chrome frame on the buyer preview */
+.ebay-chrome { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: #F0F1F3; border-bottom: 1px solid var(--border); }
+.ebay-chrome .dot { width: 8px; height: 8px; border-radius: 999px; background: #D6D8DB; }
+.ebay-chrome .url { flex: 1; font-family: var(--mono); font-size: 11px; color: var(--muted); background: #fff; border-radius: 6px; padding: 4px 12px; margin-left: 6px; }
