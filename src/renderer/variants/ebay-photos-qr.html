@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Listing photos — QR + on-phone editing</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --r-card: 8px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; color: var(--text); padding: 0; margin: 0; overflow: auto; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow: auto; padding: 20px; display: flex; gap: 24px; justify-content: center; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+
+  /* ① the lister's Photos row */
+  .formmock { position: relative; width: 330px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .shots { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .shot { position: relative; width: 48px; height: 48px; border-radius: 8px; background: linear-gradient(135deg, var(--border), var(--surface-2)); border: 1px solid var(--border); }
+  .shot.main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
+  .addshot { font-size: 10.5px; font-weight: 600; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 12px 10px; cursor: pointer; color: var(--muted); font-family: inherit; }
+  .addshot:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  .qrpop { position: absolute; left: 12px; top: 84px; width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 36px rgba(47,52,55,0.22); padding: 13px; display: none; z-index: 5; }
+  .qrpop.on { display: block; }
+  .qrpop h4 { font-size: 12px; font-weight: 600; margin: 0 0 3px; }
+  .qrpop .sub { font-size: 10px; color: var(--faint); margin-bottom: 8px; }
+  .qr { width: 130px; height: 130px; margin: 0 auto 8px; background:
+    repeating-linear-gradient(0deg, var(--text) 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(90deg, var(--text) 0 5px, var(--surface) 5px 10px);
+    border: 6px solid var(--surface); outline: 1px solid var(--border); border-radius: 6px; opacity: .85; }
+  .qrpop .meta { font-size: 9.5px; color: var(--faint); text-align: center; line-height: 1.5; }
+  .livechip { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--accent-soft-text); font-weight: 600; background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; margin-top: 8px; }
+  .livechip .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--accent-soft-text); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  /* ② phone */
+  .phone { width: 260px; height: 520px; background: var(--text); border-radius: 26px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,0.28); }
+  .pscreen { width: 100%; height: 100%; background: #fff; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .pbar { background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; padding: 11px 14px 9px; }
+  .pbar .sku { display: block; font-family: var(--mono); font-size: 9px; opacity: .8; font-weight: 400; }
+  .pbody { flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+  .pcam { border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 12.5px; font-weight: 600; padding: 13px 10px; text-align: center; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .gshot { position: relative; aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg, #d8d8d5, #efefec); border: 1px solid var(--border); cursor: pointer; transition: transform 200ms; }
+  .gshot.sel { outline: 2px solid var(--accent); }
+  .gshot.main::after { content: '★ MAIN'; position: absolute; top: 3px; left: 3px; font-size: 7px; font-weight: 700; background: rgba(4,120,87,.9); color: #fff; border-radius: 3px; padding: 1px 4px; }
+  .gshot .n { position: absolute; bottom: 3px; right: 4px; font-size: 8px; color: #666; font-family: var(--mono); }
+  /* editor */
+  .editor { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--surface-2); display: none; }
+  .editor.on { display: block; }
+  .ed-canvas { width: 100%; aspect-ratio: 4/3; border-radius: 8px; background: linear-gradient(135deg, #d8d8d5, #efefec); border: 1px solid var(--border); transition: transform 250ms; margin-bottom: 8px; }
+  .ed-tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; }
+  .ed-btn { font-size: 10px; font-weight: 600; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 7px 2px; cursor: pointer; color: var(--text); font-family: inherit; text-align: center; }
+  .ed-btn:hover { border-color: var(--accent); }
+  .ed-btn.danger { color: var(--neg-text); }
+  .ed-btn.good { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .ed-hint { font-size: 9px; color: var(--faint); text-align: center; margin-top: 6px; }
+  .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 13.5px; font-weight: 600; padding: 12px; cursor: pointer; font-family: inherit; }
+</style></head>
+<body>
+  <div class="try"><b>Listing photos by QR:</b> ① the lister's Photos row gets a 📷 QR button — the QR is tied to THAT listing draft · ② the phone shoots into a review grid where every photo is <b>editable before sending</b>: tap one → crop, rotate, set as main, delete · ③ Send drops them straight into the draft's Photos row (watch it update live). Try it: tap a photo on the phone, rotate it, set main, then Send.</div>
+
+  <div class="stage">
+    <div class="col">
+      <span class="step">① Lister — Photos row with QR</span>
+      <div class="formmock">
+        <span class="flabel">Photos — OPEN-BOX-X133-64GB-GRAY</span>
+        <div class="shots" id="formShots">
+          <button class="addshot" id="qrBtn">📷 QR — shoot on the phone</button>
+          <button class="addshot">＋ add photos</button>
+        </div>
+        <div class="qrpop" id="qrpop">
+          <h4>Listing photos</h4>
+          <div class="sub">for <span style="font-family:var(--mono)">OPEN-BOX-X133-64GB-GRAY</span></div>
+          <div class="qr"></div>
+          <div class="meta">scan with the phone — photos land in this draft, not the dispute folder</div>
+          <span class="livechip" id="liveChip" hidden><span class="dot"></span><span id="liveTxt"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <span class="step">② Phone — shoot, then edit each photo</span>
+      <div class="phone"><div class="pscreen">
+        <div class="pbar">Listing Photos<span class="sku">OPEN-BOX-X133-64GB-GRAY</span></div>
+        <div class="pbody">
+          <div class="pcam" id="pCam">📷 Take photo</div>
+          <div class="grid" id="pGrid"></div>
+          <div class="editor" id="editor">
+            <div class="ed-canvas" id="edCanvas"></div>
+            <div class="ed-tools">
+              <button class="ed-btn" id="edRot">⟳ Rotate</button>
+              <button class="ed-btn" id="edCrop">✂ Crop</button>
+              <button class="ed-btn" id="edMain">★ Main</button>
+              <button class="ed-btn danger" id="edDel">🗑 Delete</button>
+            </div>
+            <div class="ed-hint" id="edHint">edits happen here on the phone — the PC gets the finished image</div>
+          </div>
+          <button class="psend" id="pSend">Send 0 photos to the draft</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let shots = [];       // { rot: degrees, main: bool }
+  let sel = -1;
+
+  $('qrBtn').addEventListener('click', () => $('qrpop').classList.toggle('on'));
+
+  const sync = () => {
+    $('pGrid').innerHTML = shots.map((s, i) =>
+      `<span class="gshot ${i === sel ? 'sel' : ''} ${s.main ? 'main' : ''}" data-i="${i}" style="transform:rotate(${s.rot}deg)"><span class="n">${i + 1}</span></span>`).join('');
+    $('pSend').textContent = `Send ${shots.length} photo${shots.length === 1 ? '' : 's'} to the draft`;
+    const ed = $('editor');
+    if (sel >= 0 && shots[sel]) {
+      ed.classList.add('on');
+      $('edCanvas').style.transform = `rotate(${shots[sel].rot}deg) scale(${shots[sel].rot % 180 ? 0.75 : 1})`;
+      $('edMain').classList.toggle('good', shots[sel].main);
+    } else ed.classList.remove('on');
+  };
+
+  $('pCam').addEventListener('click', () => { shots.push({ rot: 0, main: shots.length === 0 }); sel = shots.length - 1; sync(); });
+  $('pGrid').addEventListener('click', (e) => {
+    const g = e.target.closest('.gshot'); if (!g) return;
+    sel = sel === +g.dataset.i ? -1 : +g.dataset.i;
+    sync();
+  });
+  $('edRot').addEventListener('click', () => { shots[sel].rot = (shots[sel].rot + 90) % 360; sync(); });
+  $('edCrop').addEventListener('click', () => { $('edHint').textContent = 'crop: drag the corners on the real page (mock)'; });
+  $('edMain').addEventListener('click', () => { shots.forEach((s, i) => s.main = i === sel); sync(); });
+  $('edDel').addEventListener('click', () => { shots.splice(sel, 1); if (!shots.some(s => s.main) && shots.length) shots[0].main = true; sel = -1; sync(); });
+
+  $('pSend').addEventListener('click', () => {
+    if (!shots.length) return;
+    // photos appear in the lister draft, main first
+    const ordered = [...shots].sort((a, b) => (b.main ? 1 : 0) - (a.main ? 1 : 0));
+    $('formShots').innerHTML =
+      ordered.map((s, i) => `<span class="shot ${i === 0 ? 'main' : ''}" style="transform:rotate(${s.rot}deg)"></span>`).join('')
+      + '<button class="addshot" id="qrBtn2">📷 QR</button><button class="addshot">＋ add photos</button>';
+    $('liveChip').hidden = false;
+    $('liveTxt').textContent = `${shots.length} photo${shots.length === 1 ? '' : 's'} received ✓`;
+    $('qrpop').classList.add('on');
+    shots = []; sel = -1; sync();
+  });
+
+  sync();
+</script>
+</body>
+</html>
