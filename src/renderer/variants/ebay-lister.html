@@ -119,8 +119,8 @@
       </div>
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
       <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
-      <div class="frow" id="varRow" hidden><span class="flabel">Variations</span>
-        <div id="varList" style="display:flex;flex-direction:column;gap:3px"></div>
+      <div class="frow" id="varRow"><span class="flabel">Variations</span>
+        <div id="varList" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
       <div class="frow"><span class="flabel">Photos</span>
         <div class="shots" id="fShots"></div>
@@ -226,13 +226,14 @@
       $('moreGrid').innerHTML = Object.entries(more).map(([k, v]) =>
         `<span class="spec"><label>${k}</label><input class="fin" value="${v}" /></span>`).join('');
     }
-    // variation grouping: same model + condition queued together -> one listing
-    const varRow = document.getElementById('varRow');
-    if (cur.vars) {
-      varRow.hidden = false;
-      document.getElementById('varList').innerHTML = cur.vars.map(v =>
-        `<label style="display:flex;gap:6px;align-items:center;font-size:11px"><input type="checkbox" checked /><span style="font-family:var(--mono)">${v.sku}</span><span style="color:var(--faint)">×${v.qty} · $${v.price}</span></label>`).join('');
-    } else { varRow.hidden = true; }
+    // variations: queued same-model+condition units arrive pre-checked, and
+    // "+ add variation" creates new combos on the spot (storage/color/price/qty)
+    document.getElementById('varList').innerHTML =
+      (cur.vars || []).map(v =>
+        `<label style="display:flex;gap:6px;align-items:center;font-size:11px"><input type="checkbox" checked /><span style="font-family:var(--mono)">${v.sku}</span><span style="color:var(--faint)">×${v.qty} · $${v.price}</span></label>`).join('')
+      + (cur.newVars || []).map(v =>
+        `<span style="display:flex;gap:5px;align-items:center"><input class="fin mono" value="${v.storage}" placeholder="Storage" style="width:70px" /><input class="fin mono" value="${v.color}" placeholder="Color" style="width:80px" /><input class="fin mono" value="${v.price}" placeholder="$" style="width:70px" /><input class="fin mono" value="${v.qty}" placeholder="Qty" style="width:44px" /><button class="x" data-varx="1" style="position:static;width:16px;height:16px;border-radius:999px;background:var(--neg-bg);color:var(--neg-text);font-size:9px;border:none;cursor:pointer">✕</button></span>`).join('')
+      + `<button class="addshot" data-addvar="1" style="align-self:flex-start;padding:5px 10px">＋ add variation</button>`;
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
     // photos: from the claim-photos folder (matched by PO) or picked by hand
@@ -263,11 +264,14 @@
       <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
       <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
-    $('csv').textContent = cur.vars
+    const kids = [
+      ...(cur.vars || []).map(v => `Add,,Variation,"${v.det}",,,,,,${v.price},${v.qty},`),
+      ...(cur.newVars || []).filter(v => v.storage || v.color).map(v => `Add,,Variation,"Storage=${v.storage};Color=${v.color}",,,,,,${v.price || '?'},${v.qty},`),
+    ];
+    $('csv').textContent = kids.length
       ? `Action,CustomLabel,Relationship,RelationshipDetails,Title,ConditionID,C:Brand,…all specifics…,PicURL,StartPrice,Quantity,…profiles…
-Add,USED-S26-ULTRA,,,"${$('fTitle').value}",${c.id},${sp.brand},…,"${pics}",,,…        <- parent: title/specs/photos
-Add,,Variation,"Storage=512GB;Color=Black",,,,,,899.99,2,        <- child per unit combo
-Add,,Variation,"Storage=256GB;Color=Gray",,,,,,799.99,1,
+Add,${sp.model}-${cur.cond.toUpperCase()},,,"${$('fTitle').value}",${c.id},${sp.brand},…,"${pics}",,,…        <- parent: title/specs/photos
+${kids.join('\n')}
    ^ one listing, the buyer picks storage & color — quantities per variation`
       : `Action(SiteID=US|...|Version=1193),CustomLabel,Category,Title,ConditionID,C:Brand,C:Model,C:MPN,C:Screen Size,C:Processor,C:RAM Size,C:Storage Capacity,C:Color,C:Type,…14 more C: columns…,PicURL,Description,Format,StartPrice,Quantity,Location,DispatchTimeMax,ShippingProfileName,ReturnProfileName,PaymentProfileName
 Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${cur.specs.mpn || '—'},${cur.specs.screen || '—'},${cur.specs.cpu || '—'},${cur.specs.ram || '—'},${sp.storage},${sp.color},Tablet,…,"${pics}","<your template HTML>",FixedPrice,${cur.price.toFixed(2)},${cur.qty},US,1,"Standard shipping","30 day returns","eBay Payments"
@@ -286,6 +290,13 @@ Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${c
     render();
   });
   document.querySelector('.form').addEventListener('click', (e) => {
+    const av = e.target.closest('[data-addvar]');
+    if (av && cur) {
+      (cur.newVars = cur.newVars || []).push({ storage: '', color: '', price: '', qty: 1 });
+      render(); return;
+    }
+    const xv = e.target.closest('[data-varx]');
+    if (xv && cur) { cur.newVars.pop(); render(); return; }
     const add = e.target.closest('[data-addshot]');
     if (add && cur) { cur.shots += add.dataset.addshot === 'po' ? 2 : 1; render(); return; }
     const del = e.target.closest('[data-shotx]');
