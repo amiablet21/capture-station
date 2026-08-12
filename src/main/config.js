@@ -118,7 +118,15 @@ const DEFAULTS = {
   // eBay lister: per-model spec cards (copied once from a live NEW listing or
   // typed once by hand) + the business-policy names the CSV references
   ebayModelCards: {},
-  ebayProfiles: { shipping: '', returns: '', payment: '', location: '', dispatchDays: 1 },
+  // owner's live policy names (renamed on eBay 2026-08-12) — the CSV
+  // references business policies by exact name
+  ebayProfiles: {
+    shipping: 'FREE SHIPPING',
+    returns: '30-Day Returns - Buyer Pays',
+    payment: 'eBay Managed Payments - Immediate',
+    location: 'New York, NY',
+    dispatchDays: 1,
+  },
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
@@ -177,6 +185,15 @@ function load() {
   if (stored.listingUrlTemplates
       && stored.listingUrlTemplates.ebay === 'https://www.ebay.com/sh/lst/active?q={sku}') {
     stored.listingUrlTemplates.ebay = DEFAULTS.listingUrlTemplates.ebay;
+  }
+  // migration: eBay lister profiles saved before the real policy names were
+  // set on eBay hold empty strings — empty means "never configured", so the
+  // owner's live policy names take over
+  if (stored.ebayProfiles
+      && !String(stored.ebayProfiles.shipping || '').trim()
+      && !String(stored.ebayProfiles.returns || '').trim()
+      && !String(stored.ebayProfiles.payment || '').trim()) {
+    stored.ebayProfiles = structuredClone(DEFAULTS.ebayProfiles);
   }
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
