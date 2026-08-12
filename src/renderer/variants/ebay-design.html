@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>eBay tab — three design treatments</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .stage { flex: 1; overflow: auto; padding: 16px 20px; }
+  .hide { display: none !important; }
+  .mono { font-family: var(--mono); }
+
+  /* =========== shared bits =========== */
+  .cols { display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+  .qcond { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; }
+  .c-open { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .c-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .c-scrap { background: var(--neg-bg); color: var(--neg-text); }
+
+  /* =========== A · Refined panels =========== */
+  .a-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(47,52,55,0.05); }
+  .a-phead { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  .a-phead .t { font-size: 12.5px; font-weight: 600; }
+  .a-phead .n { font-family: var(--mono); font-size: 10.5px; background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 6px; padding: 1px 7px; }
+  .a-phead .right { margin-left: auto; display: flex; gap: 6px; }
+  .a-ghost { font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 4px 11px; cursor: pointer; color: var(--muted); }
+  .a-ghost:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  .a-queue { width: 270px; }
+  .a-qrow { display: flex; gap: 10px; padding: 10px 14px 10px 11px; border-bottom: 1px solid var(--border-soft); cursor: pointer; border-left: 3px solid transparent; }
+  .a-qrow:hover { background: var(--surface-2); }
+  .a-qrow.on { background: var(--accent-soft); border-left-color: var(--accent); }
+  .a-qrow .bar { width: 3px; border-radius: 2px; }
+  .a-qrow .b-open { background: var(--badge-blue-text); }
+  .a-qrow .b-used { background: var(--badge-yellow-text); }
+  .a-qrow .b-scrap { background: var(--neg-text); }
+  .a-qrow .mid { flex: 1; min-width: 0; }
+  .a-qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .a-qrow .meta { font-size: 10.5px; color: var(--faint); display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+  .a-form { width: 460px; }
+  .a-sect { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); }
+  .a-sect:last-of-type { border-bottom: none; }
+  .a-slabel { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
+  .a-slabel .src { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--accent-soft-text); margin-left: auto; font-size: 10px; }
+  .a-in { width: 100%; font-size: 12.5px; font-family: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+  .a-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .a-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .a-spec label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 2px; }
+  .a-condrow { display: flex; gap: 6px; }
+  .a-cond { flex: 1; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 8px 4px; cursor: pointer; color: var(--muted); text-align: center; }
+  .a-cond.on { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: var(--badge-blue-text); }
+  .a-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .a-export { background: var(--accent); color: #fff; border: none; border-radius: 9px; font-size: 12.5px; font-weight: 600; padding: 10px 18px; cursor: pointer; }
+  .a-export:hover { filter: brightness(1.05); }
+  .a-foot .sum { font-size: 10.5px; color: var(--faint); }
+  .a-prevwrap { width: 460px; }
+  .a-chrome { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #F0F1F3; border-bottom: 1px solid var(--border); }
+  .a-chrome .dot { width: 8px; height: 8px; border-radius: 999px; background: #D6D8DB; }
+  .a-chrome .url { flex: 1; font-family: var(--mono); font-size: 10px; color: var(--muted); background: #fff; border-radius: 6px; padding: 3px 10px; margin-left: 6px; }
+  .a-prev { padding: 18px 20px; font-family: Arial, sans-serif; }
+
+  /* =========== B · Studio (condition-tinted header) =========== */
+  .b-wrap { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 4px 18px rgba(47,52,55,0.07); max-width: 1200px; margin: 0 auto; }
+  .b-rail { width: 240px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 10px 0; }
+  .b-rail h5 { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 0 14px 8px; margin: 0; }
+  .b-qrow { padding: 8px 14px; cursor: pointer; }
+  .b-qrow.on { background: var(--surface); border-right: 2px solid var(--accent); }
+  .b-qrow .sku { font-family: var(--mono); font-size: 11px; font-weight: 600; display: block; }
+  .b-qrow .meta { font-size: 10px; color: var(--faint); }
+  .b-main { flex: 1; min-width: 0; }
+  .b-head { padding: 16px 22px 14px; border-bottom: 3px solid var(--badge-blue-text); background: linear-gradient(180deg, var(--badge-blue-bg), var(--surface)); }
+  .b-head .sku { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .b-head input.title { width: 100%; font-size: 16px; font-weight: 600; font-family: inherit; border: none; background: transparent; color: var(--text); padding: 4px 0 0; outline: none; }
+  .b-body { display: flex; }
+  .b-fields { flex: 1; padding: 14px 22px; }
+  .b-prev { width: 380px; border-left: 1px solid var(--border); padding: 14px; font-family: Arial, sans-serif; background: #FCFCFB; }
+
+  /* =========== C · Sheet (excel DNA) =========== */
+  .c-wrap { max-width: 1250px; margin: 0 auto; }
+  .c-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .c-bar b { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .c-table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); font-size: 12px; }
+  .c-table th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 5px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  .c-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+  .c-table tr.on td { background: var(--accent-soft); }
+  .c-table tr:hover td { background: var(--surface-2); }
+  .c-below { display: flex; gap: 14px; margin-top: 14px; align-items: flex-start; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Design</span>
+    <span class="opt on" data-o="c">C · Sheet (excel)</span>
+    <span class="opt" data-o="a">A · Refined panels</span>
+    <span class="opt" data-o="b">B · Studio</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage">
+    <!-- ============ A ============ -->
+    <div id="viewA" class="hide">
+      <div class="cols">
+        <div class="a-panel a-queue">
+          <div class="a-phead"><span class="t">To list</span><span class="n">3</span><span class="right"><button class="a-ghost">＋ New</button></span></div>
+          <div class="a-qrow on"><span class="bar b-open"></span><span class="mid"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="meta"><span class="qcond c-open">Open box</span>1 unit · ref $119</span></span></div>
+          <div class="a-qrow"><span class="bar b-used"></span><span class="mid"><span class="sku">USED-S26-ULTRA-512GB-BLACK</span><span class="meta"><span class="qcond c-used">Used</span>2 units · ref $899</span></span></div>
+          <div class="a-qrow"><span class="bar b-scrap"></span><span class="mid"><span class="sku">SCRAP-X133-64GB-GRAY</span><span class="meta"><span class="qcond c-scrap">Parts</span>1 unit · ref $39</span></span></div>
+        </div>
+
+        <div class="a-panel a-form">
+          <div class="a-phead"><span class="t">Listing</span><span class="right"><button class="a-ghost">⚙</button></span></div>
+          <div class="a-sect"><div class="a-slabel">SKU &amp; title</div>
+            <input class="a-in mono" value="OPEN-BOX-X133-64GB-GRAY" readonly style="margin-bottom:6px;color:var(--muted)" />
+            <input class="a-in" value="Samsung Galaxy Tab A11 8.7&quot; Wi-Fi Tablet SM-X133 64GB Gray - Open Box" />
+          </div>
+          <div class="a-sect"><div class="a-slabel">Condition</div>
+            <div class="a-condrow"><button class="a-cond on">Open Box</button><button class="a-cond">Used</button><button class="a-cond">Parts</button></div>
+          </div>
+          <div class="a-sect"><div class="a-slabel">Specifics<span class="src">✓ from listing 2781155…</span></div>
+            <div class="a-two">
+              <span class="a-spec"><label>Brand</label><input class="a-in" value="Samsung" /></span>
+              <span class="a-spec"><label>Model</label><input class="a-in" value="Samsung Galaxy Tab A11" /></span>
+              <span class="a-spec"><label>Screen size</label><input class="a-in" value="8.7 in" /></span>
+              <span class="a-spec"><label>Processor</label><input class="a-in" value="MediaTek Helio G99" /></span>
+              <span class="a-spec"><label>Storage</label><input class="a-in" value="64GB" /></span>
+              <span class="a-spec"><label>Color</label><input class="a-in" value="Gray" /></span>
+            </div>
+          </div>
+          <div class="a-sect"><div class="a-slabel">Price &amp; quantity</div>
+            <div class="a-two">
+              <span class="a-spec"><label>Price</label><input class="a-in mono" value="124.19" /></span>
+              <span class="a-spec"><label>Qty</label><input class="a-in mono" value="1" /></span>
+            </div>
+          </div>
+          <div class="a-foot"><button class="a-export">⬇ Export eBay CSV</button><span class="sum">1 listing · 0 photos</span></div>
+        </div>
+
+        <div class="a-panel a-prevwrap">
+          <div class="a-chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">ebay.com — buyer preview</span></div>
+          <div class="a-prev" id="prevA"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div id="viewB" class="hide">
+      <div class="b-wrap">
+        <div class="b-rail">
+          <h5>To list · 3</h5>
+          <div class="b-qrow on"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="meta">Open box · 1</span></div>
+          <div class="b-qrow"><span class="sku">USED-S26-ULTRA-512GB-BLACK</span><span class="meta">Used · 2</span></div>
+          <div class="b-qrow"><span class="sku">SCRAP-X133-64GB-GRAY</span><span class="meta">Parts · 1</span></div>
+        </div>
+        <div class="b-main">
+          <div class="b-head">
+            <span class="sku">OPEN-BOX-X133-64GB-GRAY · <span class="qcond c-open">Open box</span></span>
+            <input class="title" value="Samsung Galaxy Tab A11 8.7&quot; Wi-Fi Tablet SM-X133 64GB Gray - Open Box" />
+          </div>
+          <div class="b-body">
+            <div class="b-fields">
+              <div class="a-slabel" style="margin-bottom:7px">Specifics <span class="src">✓ from your live listing</span></div>
+              <div class="a-two" style="margin-bottom:12px">
+                <span class="a-spec"><label>Brand</label><input class="a-in" value="Samsung" /></span>
+                <span class="a-spec"><label>Screen</label><input class="a-in" value="8.7 in" /></span>
+                <span class="a-spec"><label>Storage</label><input class="a-in" value="64GB" /></span>
+                <span class="a-spec"><label>Color</label><input class="a-in" value="Gray" /></span>
+              </div>
+              <div class="a-slabel" style="margin-bottom:7px">Price &amp; qty</div>
+              <div class="a-two" style="margin-bottom:16px">
+                <span class="a-spec"><label>Price</label><input class="a-in mono" value="124.19" /></span>
+                <span class="a-spec"><label>Qty</label><input class="a-in mono" value="1" /></span>
+              </div>
+              <button class="a-export" style="width:100%">⬇ Export eBay CSV</button>
+            </div>
+            <div class="b-prev" id="prevB"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ C ============ -->
+    <div id="viewC">
+      <div class="c-wrap">
+        <div class="c-bar"><b>To list on eBay — 3 SKUs</b><span style="margin-left:auto"><button class="a-ghost">＋ New listing</button></span></div>
+        <table class="c-table">
+          <thead><tr><th style="width:230px">SKU</th><th style="width:90px">Condition</th><th style="width:52px">Units</th><th>Title</th><th style="width:80px">Price</th><th style="width:70px">Photos</th></tr></thead>
+          <tbody>
+            <tr class="on"><td class="mono">OPEN-BOX-X133-64GB-GRAY</td><td><span class="qcond c-open">Open box</span></td><td class="mono">1</td><td>Samsung Galaxy Tab A11 8.7" Wi-Fi Tablet… - Open Box</td><td class="mono">124.19</td><td class="mono">0</td></tr>
+            <tr><td class="mono">USED-S26-ULTRA-512GB-BLACK</td><td><span class="qcond c-used">Used</span></td><td class="mono">2</td><td style="color:var(--faint)">click to build…</td><td></td><td></td></tr>
+            <tr><td class="mono">SCRAP-X133-64GB-GRAY</td><td><span class="qcond c-scrap">Parts</span></td><td class="mono">1</td><td style="color:var(--faint)">click to build…</td><td></td><td></td></tr>
+          </tbody>
+        </table>
+        <div class="c-below">
+          <div class="a-panel a-form" style="flex:1;border-radius:0">
+            <div class="a-phead" style="background:var(--surface-2)"><span class="t mono" style="font-size:11.5px">OPEN-BOX-X133-64GB-GRAY</span><span class="qcond c-open">Open box</span><span class="right"><button class="a-ghost">⚙</button></span></div>
+            <div class="a-sect"><div class="a-slabel">Title</div>
+              <input class="a-in" value="Samsung Galaxy Tab A11 8.7&quot; Wi-Fi Tablet SM-X133 64GB Gray - Open Box" />
+              <div style="font-size:9.5px;color:var(--faint);margin-top:3px">71/80 characters</div>
+            </div>
+            <div class="a-sect"><div class="a-slabel">Condition</div>
+              <div class="a-condrow"><button class="a-cond on">Open Box</button><button class="a-cond">Used</button><button class="a-cond">Parts</button></div>
+            </div>
+            <div class="a-sect"><div class="a-slabel">Specifics<span class="src">✓ from your live listing 278115574901</span></div>
+              <div class="a-two">
+                <span class="a-spec"><label>Brand</label><input class="a-in" value="Samsung" /></span>
+                <span class="a-spec"><label>Model</label><input class="a-in" value="Samsung Galaxy Tab A11" /></span>
+                <span class="a-spec"><label>Screen size</label><input class="a-in" value="8.7 in" /></span>
+                <span class="a-spec"><label>Processor</label><input class="a-in" value="MediaTek Helio G99" /></span>
+                <span class="a-spec"><label>RAM</label><input class="a-in" value="4 GB/8 GB" /></span>
+                <span class="a-spec"><label>MPN</label><input class="a-in" value="SM-X133" /></span>
+                <span class="a-spec"><label>Storage</label><input class="a-in" value="64GB" /></span>
+                <span class="a-spec"><label>Color</label><input class="a-in" value="Gray" /></span>
+              </div>
+            </div>
+            <div class="a-sect"><div class="a-slabel">Price · Qty · Photos</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="a-in mono" value="124.19" style="width:100px" />
+                <input class="a-in mono" value="1" style="width:60px" />
+                <button class="a-ghost">＋ variation</button>
+                <button class="a-ghost">＋ photos</button>
+              </div>
+            </div>
+            <div class="a-foot"><button class="a-export">⬇ Export eBay CSV</button><span class="sum">1 listing · 0 photos</span></div>
+          </div>
+          <div class="a-panel" style="flex:1;border-radius:0">
+            <div class="a-chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">ebay.com — buyer preview</span></div>
+            <div class="a-prev" id="prevC"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const PREV = `
+    <div style="border-bottom:3px solid #2361EB;padding:4px 0 8px;margin-bottom:10px;text-align:center">
+      <div style="font-size:15px;letter-spacing:4px;font-weight:700"><span style="color:#2361EB">WIRELESS</span><span style="color:#16181C">TECHNO</span><span style="color:#2361EB">STORE</span></div>
+      <div style="font-size:8px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE · FAST MESSAGING RESPONSE</div>
+    </div>
+    <h2 style="font-size:14px;text-align:center;margin:4px 0">Samsung Galaxy Tab A11 8.7" Wi-Fi Tablet SM-X133 64GB Gray - Open Box</h2>
+    <p style="text-align:center;margin:6px 0"><span style="display:inline-block;background:#6a1b9a;color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:3px">OPEN BOX</span></p>
+    <p style="text-align:center;font-size:11px;color:#333">Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:10.5px;color:#333">
+      <tr><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;text-align:left;width:40%">Specification</th><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
+      <tr><td style="border:1px solid #ddd;padding:4px 8px">Brand</td><td style="border:1px solid #ddd;padding:4px 8px">Samsung</td></tr>
+      <tr><td style="border:1px solid #ddd;padding:4px 8px">Screen Size</td><td style="border:1px solid #ddd;padding:4px 8px">8.7 in</td></tr>
+      <tr><td style="border:1px solid #ddd;padding:4px 8px">Storage</td><td style="border:1px solid #ddd;padding:4px 8px">64GB</td></tr>
+    </table>
+    <div style="border-top:3px solid #2361EB;text-align:center;padding-top:5px;margin-top:8px;font-size:9.5px;color:#888"><b><span style="color:#2361EB">Wireless</span>Techno<span style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
+  document.getElementById('prevA').innerHTML = PREV;
+  document.getElementById('prevB').innerHTML = PREV;
+  document.getElementById('prevC').innerHTML = PREV;
+  const NOTES = {
+    a: 'Same 3 panels, better chrome: condition color bars in the queue, grouped form sections, browser-style preview frame, sticky export bar.',
+    b: 'One workspace card: queue as a quiet side rail, big title up top under a condition-tinted header, preview always beside the fields.',
+    c: 'Excel DNA like Returns: the queue is a sheet (SKU/condition/units/title/price/photos), the builder + preview open under the selected row.',
+  };
+  document.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    document.getElementById('viewA').classList.toggle('hide', o.dataset.o !== 'a');
+    document.getElementById('viewB').classList.toggle('hide', o.dataset.o !== 'b');
+    document.getElementById('viewC').classList.toggle('hide', o.dataset.o !== 'c');
+    document.getElementById('note').textContent = NOTES[o.dataset.o];
+  }));
+  document.getElementById('note').textContent = NOTES.c;
+</script>
+</body>
+</html>
