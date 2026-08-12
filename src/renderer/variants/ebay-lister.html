@@ -277,7 +277,11 @@
           .map(([k, v]) => `<tr><td style="border:1px solid #ddd;padding:4px 8px">${k}</td><td style="border:1px solid #ddd;padding:4px 8px">${v}</td></tr>`).join('')}
         <tr><td style="border:1px solid #ddd;padding:4px 8px">Condition</td><td style="border:1px solid #ddd;padding:4px 8px">${cur.cond === 'openbox' ? 'Open Box' : cur.cond === 'used' ? 'Used — Tested & Working' : 'For Parts or Repair'}</td></tr>
       </table>
-      <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
+      <p style="margin:6px 0"><b>Package Includes:</b> ${cur.cond === 'openbox'
+        ? 'the device + all original accessories, original box (may show light shelf wear).'
+        : cur.cond === 'used'
+          ? 'the device + accessories exactly as listed — original accessories may not be included. Wall charger not included.'
+          : 'the device only — sold as-is.'}</p>
       <div class="foot" style="border-top:3px solid #2361EB;text-align:center;padding-top:6px"><b><span style="color:#2361EB">Wireless</span><span style="color:#16181C">Techno</span><span style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
     const kids = [
