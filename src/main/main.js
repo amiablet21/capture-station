@@ -2529,6 +2529,10 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // a hand-raised count on an unlisted SKU (found returns: OPEN-BOX /
+      // USED / SCRAP) must reach the "needs listings" card at once, not
+      // after the hour cache
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       // a corrected count can change routing decisions (e.g. "actually we DO
       // have some"): re-route and re-import right away instead of waiting
       // for the 5-minute passes

@@ -2288,6 +2288,9 @@ function beginStockEdit(btn) {
     }
     renderStock();
     toast(`${sku}: stock set to ${res.stockLevel}`);
+    // found returns raised by hand (OPEN-BOX/USED/SCRAP): re-scan so the
+    // returns page's "needs listings" card hears about it right away
+    loadUnlisted(true);
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
