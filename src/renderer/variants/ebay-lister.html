@@ -239,7 +239,7 @@
     $('fShots').innerHTML =
       Array.from({ length: cur.shots }, (_, i) =>
         `<span class="shot ${i === 0 ? 'main' : ''}"><button class="x" data-shotx="${i}" title="Remove">✕</button></span>`).join('')
-      + `<button class="addshot" data-addshot="po">＋ claim photos (${cur.po.slice(-4)}…)</button>`
+      + `<button class="addshot" data-addshot="po" title="Photos taken with Upload Photos when this return was received">＋ phone photos for PO …${cur.po.slice(-4)}</button>`
       + `<button class="addshot" data-addshot="file">＋ browse</button>`;
     // buyer preview — YOUR listing template (WirelessTechnoStore header/footer,
     // one condition block, spec table, package list)
