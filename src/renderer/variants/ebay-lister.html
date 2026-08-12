@@ -119,6 +119,10 @@
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
       <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
       <div class="frow"><span class="flabel">Flaws</span><input class="fin" id="fFlaws" placeholder="e.g. scuffed corner" /><span class="fhint">pulled from the return's note — shown honestly in the description</span></div>
+      <div class="frow" id="varRow" hidden><span class="flabel">Variations</span>
+        <div id="varList" style="display:flex;flex-direction:column;gap:3px"></div>
+        <span class="fhint">other USED S26-ULTRA units waiting — combine them into ONE listing (buyer picks storage/color). Condition can't mix: Open Box units would be a separate listing.</span>
+      </div>
       <div class="frow"><span class="flabel">Photos</span>
         <div class="shots" id="fShots"></div>
         <span class="fhint">YOUR photos of this exact unit — first one is the gallery photo. They ride through the Linnworks item just long enough for eBay to copy them at upload, then eBay hosts its own copies.</span>
@@ -146,8 +150,12 @@
   const QUEUE = [
     { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray', po: '119120775455737', shots: 0,
       src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' } },
-    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black', po: '119120671019601', shots: 2,
-      src: 'ebay', item: '278109883317', specs: { screen: '6.9 in', cpu: 'Snapdragon 8 Elite 2', ram: '12 GB', mpn: 'SM-S948U' } },
+    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra Unlocked - Used', po: '119120671019601', shots: 2,
+      src: 'ebay', item: '278109883317', specs: { screen: '6.9 in', cpu: 'Snapdragon 8 Elite 2', ram: '12 GB', mpn: 'SM-S948U' },
+      // same model + same condition waiting in the queue -> offer to combine
+      // into ONE variation listing (Relationship/RelationshipDetails rows)
+      vars: [{ sku: 'USED-S26-ULTRA-512GB-BLACK', det: 'Storage=512GB;Color=Black', qty: 2, price: 899.99 },
+             { sku: 'USED-S26-ULTRA-256GB-GRAY', det: 'Storage=256GB;Color=Gray', qty: 1, price: 799.99 }] },
     // no NEW listing anywhere for this one -> manual fill, saved to the model card
     { sku: 'OPEN-BOX-Z-FLIP7-256GB-CREAM', cond: 'openbox', price: 749.99, qty: 1, flaws: '', title: 'Samsung Galaxy Z Flip7 256GB Unlocked Cream', po: '119120801122334', shots: 0,
       src: 'manual', item: '', specs: { screen: '', cpu: '', ram: '', mpn: '' } },
@@ -203,8 +211,15 @@
       $(id).style.borderColor = cur.src === 'manual' && !$(id).value ? 'var(--badge-yellow-text)' : '';
     });
     $('specSrc').innerHTML = cur.src === 'ebay'
-      ? `✓ copied from your live NEW listing (item <span style="font-family:var(--mono)">${cur.item}</span>) — edit anything that looks off`
+      ? `✓ copied from your live NEW listing (item <span style="font-family:var(--mono)">${cur.item}</span>) — <b>+ 14 more ride along</b> (Type, Series, OS, Connectivity, Features, Max Resolution…), edit anything that looks off`
       : `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ no NEW listing found for this model</span> — fill the amber fields once; they're saved to the model card and reused for every future ${sp.model} return`;
+    // variation grouping: same model + condition queued together -> one listing
+    const varRow = document.getElementById('varRow');
+    if (cur.vars) {
+      varRow.hidden = false;
+      document.getElementById('varList').innerHTML = cur.vars.map(v =>
+        `<label style="display:flex;gap:6px;align-items:center;font-size:11px"><input type="checkbox" checked /><span style="font-family:var(--mono)">${v.sku}</span><span style="color:var(--faint)">×${v.qty} · $${v.price}</span></label>`).join('');
+    } else { varRow.hidden = true; }
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
     $('fFlaws').value = cur.flaws;
@@ -236,10 +251,15 @@
       <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
       <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
-    $('csv').textContent =
-`Action(SiteID=US|...|Version=1193),CustomLabel,Category,Title,ConditionID,C:Brand,C:Model,C:MPN,C:Screen Size,C:Processor,C:RAM Size,C:Storage Capacity,C:Color,C:Type,PicURL,Description,Format,StartPrice,Quantity,Location,DispatchTimeMax,ShippingProfileName,ReturnProfileName,PaymentProfileName
-Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},SM-${sp.model},8.7 in,Octa Core,4 GB,${sp.storage},${sp.color},Tablet,"${pics}","<your template HTML>",FixedPrice,${cur.price.toFixed(2)},${cur.qty},US,1,"Standard shipping","30 day returns","eBay Payments"
-   ^ specifics copied from your live NEW listing of the same model · profiles = your existing eBay business policies by name`;
+    $('csv').textContent = cur.vars
+      ? `Action,CustomLabel,Relationship,RelationshipDetails,Title,ConditionID,C:Brand,…all specifics…,PicURL,StartPrice,Quantity,…profiles…
+Add,USED-S26-ULTRA,,,"${$('fTitle').value}",${c.id},${sp.brand},…,"${pics}",,,…        <- parent: title/specs/photos
+Add,,Variation,"Storage=512GB;Color=Black",,,,,,899.99,2,        <- child per unit combo
+Add,,Variation,"Storage=256GB;Color=Gray",,,,,,799.99,1,
+   ^ one listing, the buyer picks storage & color — quantities per variation`
+      : `Action(SiteID=US|...|Version=1193),CustomLabel,Category,Title,ConditionID,C:Brand,C:Model,C:MPN,C:Screen Size,C:Processor,C:RAM Size,C:Storage Capacity,C:Color,C:Type,…14 more C: columns…,PicURL,Description,Format,StartPrice,Quantity,Location,DispatchTimeMax,ShippingProfileName,ReturnProfileName,PaymentProfileName
+Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${cur.specs.mpn || '—'},${cur.specs.screen || '—'},${cur.specs.cpu || '—'},${cur.specs.ram || '—'},${sp.storage},${sp.color},Tablet,…,"${pics}","<your template HTML>",FixedPrice,${cur.price.toFixed(2)},${cur.qty},US,1,"Standard shipping","30 day returns","eBay Payments"
+   ^ every specific from your live NEW listing rides along · profiles = your existing eBay business policies by name`;
   }
 
   $('qlist').innerHTML = QUEUE.map((q, i) => `
