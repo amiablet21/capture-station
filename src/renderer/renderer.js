@@ -5679,11 +5679,27 @@ $("ebSpecs").addEventListener("change", (e) => {
   const f = e.target.closest("[data-spec]");
   if (f && ebCur) { ebCur.specs[f.dataset.spec] = e.target.value; $("ebPrev").innerHTML = ebDescription(); }
 });
+// window.prompt does not exist in Electron (the button silently no-opped,
+// owner report 2026-08-12) — the button becomes an inline name field instead
 $("ebSpecs").addEventListener("click", (e) => {
-  if (e.target.closest("#ebSpecAdd") && ebCur) {
-    const name = prompt("Specific name (e.g. Processor):");
-    if (name && name.trim()) { ebCur.specs[name.trim()] = ""; renderEbayForm(); }
-  }
+  const btn = e.target.closest("#ebSpecAdd");
+  if (!btn || !ebCur) return;
+  const cell = btn.parentElement;
+  cell.innerHTML = `<label>New specific</label><input class="input" id="ebSpecNew" placeholder="e.g. Processor" />`;
+  const inp = cell.querySelector("#ebSpecNew");
+  inp.focus();
+  inp.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && inp.value.trim()) {
+      const name = inp.value.trim();
+      if (!(name in ebCur.specs)) ebCur.specs[name] = "";
+      renderEbayForm();
+      const field = document.querySelector(`#ebSpecs [data-spec="${CSS.escape(name)}"]`);
+      if (field) field.focus();
+    } else if (ev.key === "Escape") {
+      renderEbayForm();
+    }
+  });
+  inp.addEventListener("blur", () => { if (!inp.value.trim()) renderEbayForm(); });
 });
 $("ebVars").addEventListener("click", (e) => {
   if (e.target.closest("#ebVarAdd") && ebCur) { ebCur.vars.push({ storage: "", color: "", price: "", qty: 1 }); renderEbayForm(); return; }
