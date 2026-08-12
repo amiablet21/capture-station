@@ -3,6 +3,9 @@
 @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
 
 :root {
+  /* mockups are designed light-only: block the browser's forced dark mode
+     from inverting them into unreadable soup (seen 2026-08-12) */
+  color-scheme: only light;
   --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
   --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
   --text: #2F3437; --muted: #787774; --faint: #A5A29C;
