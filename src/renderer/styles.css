@@ -3460,3 +3460,24 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-cols { display: flex; }
 .ebay-form { flex: 1 1 0; max-width: none; }
 .ebay-out { flex: 1 1 0; max-width: none; }
+
+/* REVERT to the three-panel design (owner: "I like the previous design / the
+   3 split", 2026-08-12). These restore the pre-sheet sizes; the sheet rules
+   above are inert (their elements are gone). */
+.ebay-cols { margin-top: 0; justify-content: center; max-width: none; }
+.ebay-queue { flex: 0 1 290px; min-width: 220px; }
+.ebay-form { flex: 1 1 430px; min-width: 380px; max-width: 500px; }
+.ebay-out { flex: 1 1 430px; min-width: 360px; max-width: 500px; }
+.ebay-phead { padding: 10px 13px; font-size: 10.5px; }
+.ebay-frow { padding: 9px 13px; }
+.ebay-flabel { font-size: 10px; }
+.ebay-fin { font-size: 12.5px; padding: 7px 10px; }
+.ebay-fhint { font-size: 10px; }
+.ebay-spec label { font-size: 9px; }
+.ebay-spec input { font-size: 12px; padding: 6px 9px; }
+.ebay-specgrid { gap: 8px; }
+.ebay-condbtn { font-size: 12px; padding: 8px 5px; }
+.ebay-addbtn { font-size: 11px; padding: 4px 12px; }
+.ebay-factions { padding: 11px 13px; }
+.ebay-prev { padding: 18px 20px; }
+.ebay-qcond { font-size: 9px; padding: 1px 6px; }

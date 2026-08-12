@@ -5509,32 +5509,18 @@ function ebQueueRows() {
   return rows;
 }
 
-// the queue is a sheet: unbuilt rows say "click to build…", the selected
-// row carries the draft's live title/price/photo count
 function renderEbayQueue() {
   const box = $("ebQueue");
   const rows = ebQueueRows();
-  $("ebQueueCount").textContent = rows.length ? ` — ${rows.length} SKU${rows.length === 1 ? "" : "s"}` : "";
-  const on = (sku) => ebCur && !ebCur.scratch && ebCur.sku === sku;
-  const scratchRow = ebCur && ebCur.scratch
-    ? `<tr class="is-on" data-scratch="1"><td class="mono">${esc(ebCur.sku) || "(new listing)"}</td>
-       <td><span class="ebay-qcond ${EB_BADGE[ebCur.cond]}">${EB_CONDL[ebCur.cond]}</span></td>
-       <td class="mono">${esc(String(ebCur.qty || 1))}</td><td>${esc(ebCur.title) || '<span class="eb-dim">building…</span>'}</td>
-       <td class="mono">${esc(String(ebCur.price || ""))}</td><td class="mono">${ebCur.photos.length || ""}</td></tr>`
-    : "";
-  if (!rows.length && !scratchRow) {
-    box.innerHTML = `<tr><td colspan="6" class="eb-dim">No returned condition SKUs waiting — receive a return, or press New listing to start from scratch.</td></tr>`;
+  if (!rows.length) {
+    box.innerHTML = `<div class="ebay-qempty">No returned condition SKUs waiting — receive a return, or press New listing to start from scratch.</div>`;
     return;
   }
-  box.innerHTML = scratchRow + rows.map(r => `
-    <tr class="${on(r.sku) ? "is-on" : ""}" data-sku="${esc(r.sku)}">
-      <td class="mono">${esc(r.sku)}</td>
-      <td><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span></td>
-      <td class="mono">${r.qty}</td>
-      <td>${on(r.sku) ? esc(ebCur.title) : '<span class="eb-dim">click to build…</span>'}</td>
-      <td class="mono">${on(r.sku) ? esc(String(ebCur.price || "")) : ""}</td>
-      <td class="mono">${on(r.sku) ? (ebCur.photos.length || "") : ""}</td>
-    </tr>`).join("");
+  box.innerHTML = rows.map(r => `
+    <div class="ebay-qrow ${ebCur && ebCur.sku === r.sku ? "is-on" : ""}" data-sku="${esc(r.sku)}">
+      <span class="sku">${esc(r.sku)}</span>
+      <span class="sub"><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span><span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span></span>
+    </div>`).join("");
 }
 
 async function ebLoadCfg() {
@@ -5658,7 +5644,7 @@ function enterEbay() {
 }
 
 $("ebQueue").addEventListener("click", (e) => {
-  const r = e.target.closest("tr[data-sku]");
+  const r = e.target.closest(".ebay-qrow");
   if (r) ebSelect(r.dataset.sku, false);
 });
 $("ebScratch").addEventListener("click", () => {
