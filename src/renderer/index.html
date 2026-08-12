@@ -13,6 +13,7 @@
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabReturns" class="tab" hidden>Returns</button>
+      <button id="tabEbay" class="tab" hidden>eBay</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -166,6 +167,82 @@
       </div>
     </div>
   </section>
+
+  <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
+       Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
+  <section id="ebayPage" class="ebay-page" hidden>
+    <div class="ebay-cols">
+      <div class="ebay-panel ebay-queue">
+        <div class="ebay-phead">To list on eBay
+          <button id="ebScratch" class="ebay-addbtn" title="Start a blank listing, any SKU">＋ New listing</button>
+        </div>
+        <div id="ebQueue" class="ebay-qlist"></div>
+      </div>
+
+      <div class="ebay-panel ebay-form">
+        <div class="ebay-phead">Listing
+          <button id="ebGear" class="ebay-addbtn" title="Business policy names, location, dispatch time">⚙</button>
+        </div>
+        <div class="ebay-frows">
+          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="ebSku" class="input mono ebay-fin" readonly /></div>
+          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
+            <div><input id="ebTitle" class="input ebay-fin" maxlength="80" /><div class="ebay-fhint"><span id="ebTitleN">0</span>/80 characters</div></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Condition</span>
+            <div class="ebay-condrow">
+              <button class="ebay-condbtn" data-cond="openbox">Open Box</button>
+              <button class="ebay-condbtn" data-cond="used">Used</button>
+              <button class="ebay-condbtn" data-cond="scrap">Parts</button>
+            </div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Specifics</span>
+            <div>
+              <div id="ebSpecs" class="ebay-specgrid"></div>
+              <div class="ebay-fhint" id="ebSpecSrc"></div>
+            </div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
+            <div><input id="ebPrice" class="input mono ebay-fin" style="width:110px" /><div class="ebay-fhint" id="ebPriceHint"></div></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="ebQty" class="input mono ebay-fin" style="width:70px" /></div>
+          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
+            <div id="ebVars" class="ebay-vars"></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
+            <div id="ebShots" class="ebay-shots"></div>
+          </div>
+        </div>
+        <div class="ebay-factions">
+          <button id="ebExport" class="btn btn-primary">⬇ Export eBay CSV</button>
+          <span id="ebExportNote" class="ebay-fhint"></span>
+        </div>
+      </div>
+
+      <div class="ebay-out">
+        <div class="ebay-panel">
+          <div class="ebay-phead">Buyer sees</div>
+          <div id="ebPrev" class="ebay-prev"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- eBay lister settings: business policy names live on the eBay account -->
+  <dialog id="ebGearDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">eBay listing settings</h2>
+      <div class="settings-row"><label>Shipping policy name<input id="ebgShip" class="input" placeholder="e.g. Standard shipping" /></label></div>
+      <div class="settings-row"><label>Return policy name<input id="ebgRet" class="input" placeholder="e.g. 30 day returns" /></label></div>
+      <div class="settings-row"><label>Payment policy name<input id="ebgPay" class="input" placeholder="e.g. eBay Payments" /></label></div>
+      <div class="settings-row"><label>Item location<input id="ebgLoc" class="input" placeholder="e.g. Brooklyn, NY" /></label></div>
+      <div class="settings-row"><label>Dispatch time (days)<input id="ebgDisp" class="input mono" type="number" min="0" value="1" style="width:80px" /></label></div>
+      <p class="dlg-note">The three policy names must match your eBay business policies exactly — the CSV references them by name.</p>
+      <div class="dlg-actions">
+        <button id="ebgCancel" class="btn btn-ghost">Cancel</button>
+        <button id="ebgSave" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Receiving worksheet: lives on the Stock page as a dialog -->
   <dialog id="recvDialog" class="dlg dlg-recv">
