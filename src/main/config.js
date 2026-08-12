@@ -124,7 +124,7 @@ const DEFAULTS = {
     shipping: 'FREE SHIPPING',
     returns: '30-Day Returns - Buyer Pays',
     payment: 'eBay Managed Payments - Immediate',
-    location: 'New York, NY',
+    location: 'Fairfield, NJ',
     dispatchDays: 1,
   },
   // "Received by" initials on the Returns worksheet: last-used value becomes
