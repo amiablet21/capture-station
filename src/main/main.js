@@ -1206,6 +1206,11 @@ async function startClaims() {
   try {
     claimsRun = await claims.start({
       dir,
+      // eBay lister QR capture: raw shots per draft SKU, swept after 14 days
+      listingDir: path.join(app.getPath('documents'), 'Capture Station', 'listing photos'),
+      onListingUpload: ({ sku, file }) => {
+        if (win && !win.isDestroyed()) win.webContents.send('ebay:photoUploaded', { sku, file });
+      },
       port: 0, // ephemeral — the QR carries the port, nobody types the URL
       // tap chips on the phone: today's received returns, newest first
       listToday: () => {
@@ -2179,6 +2184,19 @@ function registerIpc() {
     }
   });
 
+  // QR for the lister's Photos row: the phone page is locked to the draft SKU
+  ipcMain.handle('ebay:qr', async (_e, { sku }) => {
+    if (!claimsRun || !claimsRun.listingUrl) return { ok: false, error: 'The upload server is not running — restart the app.' };
+    if (!String(sku || '').trim()) return { ok: false, error: 'Type a SKU first.' };
+    try {
+      const url = claimsRun.listingUrl(sku);
+      const qr = await require('qrcode').toDataURL(url, { margin: 1, width: 300, color: { dark: '#2f3437', light: '#ffffff' } });
+      return { ok: true, url, qr };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('ebay:photosPick', async () => {
     const r = await dialog.showOpenDialog(win, {
       title: 'Listing photos',
@@ -2202,11 +2220,21 @@ function registerIpc() {
         let stockItemId = listing.stockItemId;
         if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
         if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.` };
-        const files = photoPaths.map(fp => ({
-          buffer: fs.readFileSync(fp),
-          name: path.basename(fp),
-          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-        }));
+        // entries are plain paths (untouched photos) or {dataUrl, name}
+        // (baked in the editor — the EDITED pixels are what eBay gets)
+        const files = photoPaths.map((p, i) => {
+          if (p && typeof p === 'object' && p.dataUrl) {
+            const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+            if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
+            return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
+          }
+          const fp = typeof p === 'object' ? p.path : p;
+          return {
+            buffer: fs.readFileSync(fp),
+            name: path.basename(fp),
+            mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
+          };
+        });
         picUrls = await client.addItemImages(stockItemId, files);
       }
       const csv = buildEbayCsv([{ ...listing, picUrls }], cfg.ebayProfiles || {});

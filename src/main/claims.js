@@ -236,16 +236,126 @@ function phonePage(token, po, pos) {
 
 const expiredPage = '<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font-family:sans-serif;padding:40px 20px;text-align:center;color:#2f3437"><h3>This QR code has expired</h3><p style="color:#6b6f76">Open Upload Photos in Capture Station and scan the new one.</p></body>';
 
+/* ---------- the LISTING photos phone page (eBay lister) ---------- */
+// Capture ONLY: shoot, tap a thumbnail to drop a bad shot, send. All editing
+// happens in the app's photo editor on the PC.
+
+function listingPage(token, sku) {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Listing Photos</title>
+<style>
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f7f7f5; color: #2f3437; min-height: 100vh; display: flex; flex-direction: column; }
+  header { background: #047857; color: #fff; padding: 12px 16px 10px; }
+  header .t { font-weight: 600; font-size: 16px; }
+  header .sku { font-family: ui-monospace, Menlo, monospace; font-size: 11px; opacity: .85; }
+  main { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px; max-width: 480px; width: 100%; margin: 0 auto; }
+  #camBtn { border: 2px dashed #047857; border-radius: 14px; background: #ecf5f0; color: #047857; font-size: 16px; font-weight: 600; padding: 24px 12px; text-align: center; cursor: pointer; }
+  #grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  #grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid #e0e0dd; }
+  .hint { font-size: 11px; color: #9b9a97; text-align: center; }
+  #send { margin-top: auto; background: #047857; color: #fff; border: none; border-radius: 12px; font-size: 17px; font-weight: 600; padding: 15px; cursor: pointer; }
+  #send:disabled { opacity: .4; }
+  #ok { display: none; text-align: center; padding: 30px 10px; }
+  #ok.on { display: block; }
+  #ok .mark { font-size: 44px; }
+  #ok button { margin-top: 18px; background: #047857; color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; padding: 12px 22px; cursor: pointer; }
+  #err { display: none; background: #fdecec; color: #b91c1c; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+</style></head><body>
+<header><div class="t">Listing Photos</div><div class="sku">${sku}</div></header>
+<main>
+  <div id="camBtn">&#128247; Take photo</div>
+  <input id="camIn" type="file" accept="image/*" capture="environment" style="display:none">
+  <div id="grid"></div>
+  <div class="hint">tap a photo to remove it &mdash; editing happens on the PC</div>
+  <div id="err"></div>
+  <button id="send" disabled>Send 0 photos to the draft</button>
+  <div id="ok"><div class="mark">&#9989;</div><p id="okTxt"></p><button id="more">Shoot more</button></div>
+</main>
+<script>
+  var TOKEN = ${JSON.stringify(token)}, SKU = ${JSON.stringify(sku)};
+  var files = [];
+  var $ = function (id) { return document.getElementById(id); };
+  function sync() {
+    $('grid').innerHTML = '';
+    files.forEach(function (f, i) {
+      var img = document.createElement('img');
+      img.src = URL.createObjectURL(f);
+      img.dataset.i = i;
+      $('grid').appendChild(img);
+    });
+    $('send').disabled = !files.length;
+    $('send').textContent = 'Send ' + files.length + ' photo' + (files.length === 1 ? '' : 's') + ' to the draft';
+  }
+  $('camBtn').addEventListener('click', function () { $('camIn').click(); });
+  $('camIn').addEventListener('change', function () {
+    if ($('camIn').files[0]) files.push($('camIn').files[0]);
+    $('camIn').value = '';
+    sync();
+  });
+  $('grid').addEventListener('click', function (e) {
+    if (e.target.dataset.i !== undefined) { files.splice(+e.target.dataset.i, 1); sync(); }
+  });
+  $('send').addEventListener('click', async function () {
+    $('send').disabled = true; $('err').style.display = 'none';
+    var sent = 0;
+    for (var i = 0; i < files.length; i++) {
+      $('send').textContent = 'Sending ' + (i + 1) + ' of ' + files.length + '\\u2026';
+      try {
+        var res = await fetch('/lphoto?t=' + encodeURIComponent(TOKEN) + '&sku=' + encodeURIComponent(SKU), { method: 'POST', body: files[i] });
+        var j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'upload failed');
+        sent++;
+      } catch (err) {
+        $('err').textContent = 'Upload failed after ' + sent + ': ' + err.message + ' \\u2014 check the Wi-Fi and try again.';
+        $('err').style.display = 'block';
+        files = files.slice(i); sync();
+        return;
+      }
+    }
+    files = []; sync();
+    $('okTxt').textContent = sent + ' photo' + (sent === 1 ? '' : 's') + ' in the draft';
+    $('ok').classList.add('on');
+  });
+  $('more').addEventListener('click', function () { $('ok').classList.remove('on'); });
+  sync();
+</script></body></html>`;
+}
+
 /* ---------- server ---------- */
 
-// opts: { dir, port (0 = ephemeral), listToday() -> [{po, sku, tm}], onUpload({po, name, todayCount}) }
+// opts: { dir, port (0 = ephemeral), listToday() -> [{po, sku, tm}],
+//         onUpload({po, name, todayCount}),
+//         listingDir, onListingUpload({sku, file}) }  <- eBay lister capture
 function start(opts) {
   const dir = opts.dir;
   fs.mkdirSync(dir, { recursive: true });
+  const listingDir = opts.listingDir || '';
+  if (listingDir) fs.mkdirSync(listingDir, { recursive: true });
+  const sweepListings = () => {
+    if (!listingDir) return;
+    // per-SKU subfolders; drafts are exported within days — 14-day shelf
+    try {
+      for (const sub of fs.readdirSync(listingDir)) {
+        const d = path.join(listingDir, sub);
+        try {
+          if (!fs.statSync(d).isDirectory()) continue;
+          const cutoff = Date.now() - 14 * 86400000;
+          for (const n of fs.readdirSync(d)) {
+            const f = path.join(d, n);
+            if (fs.statSync(f).mtimeMs < cutoff) fs.unlinkSync(f);
+          }
+          if (!fs.readdirSync(d).length) fs.rmdirSync(d);
+        } catch { /* per-folder best effort */ }
+      }
+    } catch { /* sweep is best effort */ }
+  };
   const removed = cleanupOld(dir);
+  sweepListings();
   // the shelf life must hold even if the app stays open for days: re-sweep
   // every 6 hours, not only at startup
-  const sweeper = setInterval(() => cleanupOld(dir), 6 * 3600 * 1000);
+  const sweeper = setInterval(() => { cleanupOld(dir); sweepListings(); }, 6 * 3600 * 1000);
   const token = crypto.randomBytes(12).toString('base64url'); // rotates every app session
   const listToday = opts.listToday || (() => []);
 
@@ -260,6 +370,53 @@ function start(opts) {
       const po = sanitizePo(u.searchParams.get('po'));
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(phonePage(token, po, pos));
+      return;
+    }
+
+    // eBay lister capture page: QR carries the draft's SKU, phone just shoots
+    if (req.method === 'GET' && u.pathname === '/lup') {
+      if (!tokenOk(token, t)) { res.writeHead(403, { 'Content-Type': 'text/html' }); res.end(expiredPage); return; }
+      const sku = sanitizePo(u.searchParams.get('sku'));
+      if (!sku || !listingDir) { res.writeHead(400, { 'Content-Type': 'text/plain' }); res.end('missing sku'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(listingPage(token, sku));
+      return;
+    }
+
+    if (req.method === 'POST' && u.pathname === '/lphoto') {
+      if (!tokenOk(token, t)) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"expired"}'); return; }
+      const sku = sanitizePo(u.searchParams.get('sku'));
+      if (!sku || !listingDir) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"missing sku"}'); return; }
+      const chunks = [];
+      let size = 0, dead = false;
+      req.on('data', (c) => {
+        size += c.length;
+        if (size > MAX_BYTES) { dead = true; res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"photo too large"}'); req.destroy(); return; }
+        chunks.push(c);
+      });
+      req.on('end', () => {
+        if (dead) return;
+        let buf = Buffer.concat(chunks);
+        let ext = magicExt(buf);
+        if (!ext) { res.writeHead(415, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"not an image"}'); return; }
+        if (ext !== '.png') {
+          const png = toPng(buf);
+          if (png) { buf = png; ext = '.png'; }
+        }
+        const skuDir = path.join(listingDir, sku);
+        try {
+          fs.mkdirSync(skuDir, { recursive: true });
+          const name = `${sku}_${nextIndex(skuDir, sku)}${ext}`;
+          const file = path.join(skuDir, name);
+          fs.writeFileSync(file, buf);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, name }));
+          if (opts.onListingUpload) { try { opts.onListingUpload({ sku, file }); } catch { /* best effort */ } }
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+      });
       return;
     }
 
@@ -310,8 +467,9 @@ function start(opts) {
     server.listen(opts.port ?? 0, '0.0.0.0', () => {
       const port = server.address().port;
       resolve({
-        server, token, port, dir, removed,
+        server, token, port, dir, removed, listingDir,
         url: `http://${lanIp()}:${port}/up?t=${token}`,
+        listingUrl: (sku) => `http://${lanIp()}:${port}/lup?t=${token}&sku=${encodeURIComponent(sanitizePo(sku))}`,
         todayCount: () => todayCount(dir),
         close: () => { clearInterval(sweeper); return new Promise((r) => server.close(r)); },
       });

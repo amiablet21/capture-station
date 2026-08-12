@@ -5607,10 +5607,14 @@ function renderEbayForm() {
       <button class="ebay-varx" data-varx="${vi}">✕</button>
     </span>`).join("")
     + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">➕ add variation</button>`;
-  // photos
-  $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((f, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" style="background-image:url('file:///${esc(String(f).replace(/\\\\/g, "/"))}')"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
-    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">➕ add photos</button>`;
+  // photos: objects carrying edit params; thumbs preview the edits live.
+  // Click a thumb to edit, ✕ removes, 📷 opens the phone QR for this draft.
+  $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"
+      style="background-image:url('${ebFileUrl(p.path)}');${ebThumbCss(p)}"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
+    + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
+    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">➕ add photos</button>`
+    + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint" style="width:100%">✎ edits bake into the exported photos</span>` : "");
   // preview + export note
   $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue (or ➕ New listing) to start.</div>`;
   const missing = [];
@@ -5681,11 +5685,14 @@ $("ebVars").addEventListener("change", (e) => {
 $("ebShots").addEventListener("click", async (e) => {
   if (e.target.closest("#ebShotAdd") && ebCur) {
     const r = await api.ebayPhotosPick();
-    if (r && r.ok && r.files.length) { ebCur.photos.push(...r.files); renderEbayForm(); }
+    if (r && r.ok && r.files.length) { ebCur.photos.push(...r.files.map(ebPhotoObj)); renderEbayForm(); }
     return;
   }
+  if (e.target.closest("#ebShotQr") && ebCur) { ebOpenQr(); return; }
   const x = e.target.closest("[data-shotx]");
-  if (x && ebCur) { ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); }
+  if (x && ebCur) { e.stopPropagation(); ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); return; }
+  const th = e.target.closest("[data-shoti]");
+  if (th && ebCur) ebEditOpen(Number(th.dataset.shoti));
 });
 $("ebExport").addEventListener("click", async () => {
   if (!ebCur || ebBusy) return;
@@ -5704,7 +5711,16 @@ $("ebExport").addEventListener("click", async () => {
     price: ebCur.price, qty: Number(ebCur.qty) || 1,
     variations: vars,
   };
-  const res = await api.ebayExport(listing, ebCur.photos).catch(err => ({ ok: false, error: err.message }));
+  let photos;
+  try {
+    photos = await ebBakePhotos(ebCur.photos); // edited pixels, not originals
+  } catch (err) {
+    ebBusy = false;
+    $("ebExport").textContent = "⬇ Export eBay CSV";
+    toast(`Could not process a photo: ${err.message}`);
+    return;
+  }
+  const res = await api.ebayExport(listing, photos).catch(err => ({ ok: false, error: err.message }));
   ebBusy = false;
   $("ebExport").textContent = "⬇ Export eBay CSV";
   if (res && res.ok) {
@@ -5738,3 +5754,185 @@ $("ebgSave").addEventListener("click", async () => {
   toast("eBay listing settings saved");
 });
 $("tabEbay").addEventListener("click", () => showPage("ebay"));
+
+/* ---------- eBay lister: photo objects, QR capture, editor ---------- */
+// Approved designs: variants/ebay-photos-qr.html (phone = capture only) and
+// variants/ebay-photo-editor.html (Canva-style editing on the PC).
+
+function ebPhotoObj(path) {
+  return { path, bright: 100, con: 100, warm: 0, rot: 0, crop: "free" };
+}
+function ebPhotoEdited(p) {
+  return p.bright !== 100 || p.con !== 100 || p.warm !== 0 || p.rot !== 0 || p.crop !== "free";
+}
+function ebFileUrl(p) {
+  return "file:///" + esc(String(p).replace(/\\/g, "/"));
+}
+function ebFilter(p) {
+  return `brightness(${p.bright}%) contrast(${p.con}%) sepia(${Math.max(0, p.warm) / 100}) hue-rotate(${Math.min(0, p.warm) * 0.6}deg)`;
+}
+function ebThumbCss(p) {
+  return `filter:${ebFilter(p)};transform:rotate(${p.rot}deg)`;
+}
+
+/* ----- QR: phone shoots straight into this draft ----- */
+async function ebOpenQr() {
+  if (!ebCur || !ebCur.sku) { toast("Type a SKU first."); return; }
+  const res = await api.ebayQr(ebCur.sku).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { toast((res && res.error) || "QR unavailable."); return; }
+  $("ebQrImg").src = res.qr;
+  $("ebQrSku").innerHTML = `<span class="mono">${esc(ebCur.sku)}</span>`;
+  $("ebQrPop").hidden = false;
+}
+$("ebQrClose").addEventListener("click", () => { $("ebQrPop").hidden = true; });
+document.addEventListener("click", (e) => {
+  if ($("ebQrPop").hidden) return;
+  if (e.target.closest("#ebQrPop") || e.target.closest("#ebShotQr")) return;
+  $("ebQrPop").hidden = true;
+});
+api.on("ebay:photoUploaded", ({ sku, file }) => {
+  if (!ebCur || String(ebCur.sku).toUpperCase() !== String(sku).toUpperCase()) return;
+  ebCur.photos.push(ebPhotoObj(file));
+  renderEbayForm();
+  toast(`Photo from the phone added to ${sku}`, 2500);
+});
+
+/* ----- editor: edits live on the photo object, baked at export ----- */
+let ebedIdx = 0;
+let ebedHist = [];
+let ebedHi = 0;
+
+function ebedSnap() {
+  ebedHist = ebedHist.slice(0, ebedHi + 1);
+  ebedHist.push(JSON.stringify(ebCur.photos));
+  ebedHi++;
+  ebedHistBtns();
+}
+function ebedHistBtns() {
+  $("ebedUndo").disabled = ebedHi === 0;
+  $("ebedRedo").disabled = ebedHi === ebedHist.length - 1;
+}
+function ebedRestore() {
+  ebCur.photos.splice(0, ebCur.photos.length, ...JSON.parse(ebedHist[ebedHi]));
+  ebedHistBtns();
+  if (ebedIdx >= ebCur.photos.length) ebedIdx = Math.max(0, ebCur.photos.length - 1);
+  ebedPaint();
+}
+
+function ebEditOpen(i) {
+  if (!ebCur || !ebCur.photos.length) return;
+  ebedIdx = Math.min(i, ebCur.photos.length - 1);
+  ebedHist = [JSON.stringify(ebCur.photos)];
+  ebedHi = 0;
+  ebedHistBtns();
+  ebedPaint();
+  $("ebEditDialog").showModal();
+}
+
+function ebedPaint() {
+  const list = ebCur.photos;
+  if (!list.length) { $("ebEditDialog").close(); renderEbayForm(); return; }
+  const p = list[ebedIdx];
+  const img = $("ebedImg");
+  img.src = ebFileUrl(p.path).replace(/&#039;/g, "'");
+  img.style.filter = ebFilter(p);
+  img.style.transform = `rotate(${p.rot}deg) scale(${p.rot % 180 ? 0.72 : 1})`;
+  $("ebedN").textContent = ebedIdx + 1;
+  $("ebedM").textContent = list.length;
+  $("ebedBright").value = p.bright; $("ebedBrightV").textContent = p.bright - 100;
+  $("ebedCon").value = p.con; $("ebedConV").textContent = p.con - 100;
+  $("ebedWarm").value = p.warm; $("ebedWarmV").textContent = p.warm;
+  document.querySelectorAll(".ebed-chip").forEach(c => c.classList.toggle("is-on", c.dataset.crop === p.crop));
+  $("ebedMain").textContent = ebedIdx === 0 ? "★ This is the main photo" : "★ Use as main photo";
+  $("ebedStrip").innerHTML = list.map((q, i) => `
+    <span class="ebed-th ${i === ebedIdx ? "is-on" : ""} ${i === 0 ? "is-main" : ""}" data-ebedth="${i}"
+      style="background-image:url('${ebFileUrl(q.path)}');${ebThumbCss(q)}"></span>`).join("");
+}
+
+const ebedWire = (id, key) => {
+  $(id).addEventListener("input", (e) => {
+    const p = ebCur && ebCur.photos[ebedIdx];
+    if (!p) return;
+    p[key] = Number(e.target.value);
+    ebedPaint();
+  });
+  $(id).addEventListener("change", () => ebedSnap());
+};
+ebedWire("ebedBright", "bright");
+ebedWire("ebedCon", "con");
+ebedWire("ebedWarm", "warm");
+
+$("ebedRot").addEventListener("click", () => {
+  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
+  p.rot = (p.rot + 90) % 360; ebedSnap(); ebedPaint();
+});
+document.querySelectorAll(".ebed-chip").forEach(c => c.addEventListener("click", () => {
+  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
+  p.crop = c.dataset.crop; ebedSnap(); ebedPaint();
+}));
+$("ebedMain").addEventListener("click", () => {
+  if (!ebCur || ebedIdx === 0) return;
+  const [p] = ebCur.photos.splice(ebedIdx, 1);
+  ebCur.photos.unshift(p);
+  ebedIdx = 0; ebedSnap(); ebedPaint();
+});
+$("ebedDel").addEventListener("click", () => {
+  if (!ebCur) return;
+  ebCur.photos.splice(ebedIdx, 1);
+  if (ebedIdx >= ebCur.photos.length) ebedIdx = Math.max(0, ebCur.photos.length - 1);
+  ebedSnap(); ebedPaint();
+});
+$("ebedReset").addEventListener("click", () => {
+  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
+  Object.assign(p, { bright: 100, con: 100, warm: 0, rot: 0, crop: "free" });
+  ebedSnap(); ebedPaint();
+});
+$("ebedStrip").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-ebedth]");
+  if (t) { ebedIdx = Number(t.dataset.ebedth); ebedPaint(); }
+});
+$("ebedUndo").addEventListener("click", () => { if (ebedHi > 0) { ebedHi--; ebedRestore(); } });
+$("ebedRedo").addEventListener("click", () => { if (ebedHi < ebedHist.length - 1) { ebedHi++; ebedRestore(); } });
+$("ebEditDialog").addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); $("ebedUndo").click(); }
+  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); $("ebedRedo").click(); }
+});
+$("ebedDone").addEventListener("click", () => { $("ebEditDialog").close(); renderEbayForm(); });
+
+/* ----- bake: apply the edits to real pixels for export ----- */
+function ebLoadImage(path) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`could not read ${path.split("\\").pop()}`));
+    img.src = "file:///" + String(path).replace(/\\/g, "/");
+  });
+}
+
+async function ebBakePhotos(photos) {
+  const out = [];
+  for (const p of photos) {
+    if (!ebPhotoEdited(p)) { out.push(p.path); continue; }
+    const img = await ebLoadImage(p.path);
+    // crop from the center first, in source pixels
+    let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+    if (p.crop === "1:1") {
+      const side = Math.min(sw, sh);
+      sx = (sw - side) / 2; sy = (sh - side) / 2; sw = side; sh = side;
+    } else if (p.crop === "4:3") {
+      if (sw / sh > 4 / 3) { const w = sh * 4 / 3; sx = (sw - w) / 2; sw = w; }
+      else { const h = sw * 3 / 4; sy = (sh - h) / 2; sh = h; }
+    }
+    const rot = ((p.rot % 360) + 360) % 360;
+    const cvs = document.createElement("canvas");
+    cvs.width = rot % 180 ? sh : sw;
+    cvs.height = rot % 180 ? sw : sh;
+    const ctx = cvs.getContext("2d");
+    ctx.filter = ebFilter(p);
+    ctx.translate(cvs.width / 2, cvs.height / 2);
+    ctx.rotate(rot * Math.PI / 180);
+    ctx.drawImage(img, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh);
+    out.push({ dataUrl: cvs.toDataURL("image/jpeg", 0.92), name: (p.path.split("\\").pop() || "photo").replace(/\.[a-z0-9]+$/i, "") + "-edited.jpg" });
+  }
+  return out;
+}

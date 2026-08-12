@@ -1148,6 +1148,32 @@ module.exports = async function run({ app, win, db, clipboard }) {
       await crun.close();
     }
 
+    // 44. eBay lister QR capture: the /lup + /lphoto listing routes
+    {
+      const claims = require('./claims.js');
+      const cpath = require('path');
+      const ldir = cpath.join(app.getPath('userData'), 'listing-photos-test');
+      const lrun = await claims.start({
+        dir: cpath.join(app.getPath('userData'), 'claim-photos-test2'),
+        listingDir: ldir, port: 0,
+      });
+      const lbase = `http://127.0.0.1:${lrun.port}`;
+      const jpeg2 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0)]);
+      let lres = await fetch(`${lbase}/lup?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`);
+      check('listing photos: phone page carries the draft SKU',
+        lres.status === 200 && (await lres.text()).includes('OPEN-BOX-TEST-64GB-GRAY'), lres.status);
+      lres = await fetch(`${lbase}/lphoto?t=WRONG&sku=X`, { method: 'POST', body: jpeg2 });
+      check('listing photos: bad token rejected', lres.status === 403, lres.status);
+      const lup = await (await fetch(`${lbase}/lphoto?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`, { method: 'POST', body: jpeg2 })).json();
+      check('listing photos: file lands in the per-SKU folder',
+        lup.ok && /^OPEN-BOX-TEST-64GB-GRAY_1\.(png|jpg)$/.test(lup.name)
+          && fs.existsSync(cpath.join(ldir, 'OPEN-BOX-TEST-64GB-GRAY', lup.name)), lup);
+      const lurl = lrun.listingUrl('OPEN-BOX-TEST-64GB-GRAY');
+      check('listing photos: QR url carries route, token and sku',
+        lurl.includes('/lup?t=') && lurl.includes('sku=OPEN-BOX-TEST-64GB-GRAY'), lurl);
+      await lrun.close();
+    }
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

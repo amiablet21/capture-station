@@ -3365,3 +3365,46 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-page { overflow-x: auto; }
 .ebay-frow > div { min-width: 0; }
 .ebay-spec input { min-width: 0; width: 100%; box-sizing: border-box; }
+
+/* ---------- eBay lister: QR popover + photo editor ---------- */
+.ebqr-pop { right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: 120px; }
+
+.ebed-dlg { border: none; border-radius: 14px; padding: 0; width: 900px; max-width: 94vw; background: var(--surface); box-shadow: 0 24px 60px rgba(47,52,55,0.3); }
+.ebed-dlg::backdrop { background: rgba(47,52,55,0.35); }
+.ebed-tbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.ebed-t { font-weight: 600; font-size: 13px; }
+.ebed-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ebed-hist { margin-left: auto; display: inline-flex; gap: 4px; }
+.ebed-histbtn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; font-size: 13px; color: var(--text); }
+.ebed-histbtn:hover:not(:disabled) { border-color: var(--accent); }
+.ebed-histbtn:disabled { opacity: .35; cursor: default; }
+.ebed-mid { display: flex; min-height: 380px; }
+.ebed-work { flex: 1; background: #EBECF0; display: flex; align-items: center; justify-content: center; overflow: hidden; min-width: 0; }
+.ebed-work img { max-width: 92%; max-height: 360px; border-radius: 4px; box-shadow: 0 8px 28px rgba(0,0,0,0.18); transition: transform 200ms, filter 80ms; }
+.ebed-props { width: 240px; border-left: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+.ebed-grp h5 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin: 0 0 8px; }
+.ebed-sl { display: grid; grid-template-columns: 58px 1fr 30px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ebed-sl label { font-size: 11px; color: var(--muted); }
+.ebed-sl input[type=range] { appearance: none; height: 4px; border-radius: 999px; background: var(--border); outline: none; }
+.ebed-sl input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 999px; background: var(--surface); border: 2px solid var(--accent); cursor: pointer; }
+.ebed-sl .v { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: right; }
+.ebed-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ebed-chip { font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 6px 12px; cursor: pointer; color: var(--text); font-family: inherit; }
+.ebed-chip:hover { border-color: var(--accent); }
+.ebed-chip.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+.ebed-hint { font-size: 9.5px; color: var(--faint); margin-top: 6px; }
+.ebed-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ebed-abtn { font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 8px; cursor: pointer; font-family: inherit; color: var(--text); }
+.ebed-abtn:hover { border-color: var(--accent); }
+.ebed-abtn.is-danger { color: var(--neg-text); }
+.ebed-abtn.is-main { grid-column: 1 / -1; background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+.ebed-reset { font-size: 11px; color: var(--muted); text-decoration: underline; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; align-self: flex-start; }
+.ebed-strip { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--surface-2); overflow-x: auto; }
+.ebed-th { position: relative; width: 56px; height: 56px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; background-size: cover; background-position: center; background-color: var(--border); flex: 0 0 auto; }
+.ebed-th.is-on { border-color: var(--accent); }
+.ebed-th.is-main::after { content: '★'; position: absolute; top: 0; left: 4px; font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+
+/* subtle camera button (same look as the returns-log tray) */
+.qrbtn { width: 30px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 1px 4px rgba(47,52,55,0.10); }
+.qrbtn:hover { border-color: var(--accent); }
+.qrbtn svg { width: 14px; height: 14px; color: var(--accent); }

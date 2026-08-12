@@ -227,6 +227,55 @@
     </div>
   </section>
 
+  <!-- eBay lister: QR for shooting draft photos on the phone -->
+  <div id="ebQrPop" class="claims-pop ebqr-pop" hidden>
+    <button id="ebQrClose" class="claims-close" title="Close">✕</button>
+    <h4>Listing Photos</h4>
+    <div id="ebQrSku" class="claims-sub"></div>
+    <img id="ebQrImg" class="claims-qr" alt="Scan with the phone" />
+  </div>
+
+  <!-- eBay lister: photo editor (Canva-style; approved design:
+       variants/ebay-photo-editor.html). Edits bake into the exported pixels. -->
+  <dialog id="ebEditDialog" class="dlg ebed-dlg">
+    <div class="ebed-tbar">
+      <span class="ebed-t">Edit photos</span>
+      <span class="ebed-sub"><span id="ebedN">1</span> of <span id="ebedM">1</span></span>
+      <span class="ebed-hist">
+        <button id="ebedUndo" class="ebed-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
+        <button id="ebedRedo" class="ebed-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
+      </span>
+      <button id="ebedDone" class="btn btn-primary">✓ Done</button>
+    </div>
+    <div class="ebed-mid">
+      <div class="ebed-work"><img id="ebedImg" alt="" /></div>
+      <div class="ebed-props">
+        <div class="ebed-grp"><h5>Light</h5>
+          <div class="ebed-sl"><label>Brightness</label><input type="range" id="ebedBright" min="50" max="150" value="100" /><span class="v" id="ebedBrightV">0</span></div>
+          <div class="ebed-sl"><label>Contrast</label><input type="range" id="ebedCon" min="50" max="150" value="100" /><span class="v" id="ebedConV">0</span></div>
+          <div class="ebed-sl"><label>Warmth</label><input type="range" id="ebedWarm" min="-50" max="50" value="0" /><span class="v" id="ebedWarmV">0</span></div>
+        </div>
+        <div class="ebed-grp"><h5>Crop</h5>
+          <div class="ebed-chips">
+            <button class="ebed-chip" data-crop="free">Free</button>
+            <button class="ebed-chip" data-crop="1:1">1:1 eBay</button>
+            <button class="ebed-chip" data-crop="4:3">4:3</button>
+          </div>
+          <div class="ebed-hint">presets crop from the center when the photo is saved</div>
+        </div>
+        <div class="ebed-grp"><h5>Photo</h5>
+          <div class="ebed-btns">
+            <button id="ebedRot" class="ebed-abtn">⟳ Rotate</button>
+            <button id="ebedDel" class="ebed-abtn is-danger">🗑 Remove</button>
+            <button id="ebedMain" class="ebed-abtn is-main">★ Use as main photo</button>
+          </div>
+        </div>
+        <button id="ebedReset" class="ebed-reset">Reset this photo</button>
+      </div>
+    </div>
+    <div class="ebed-strip" id="ebedStrip"></div>
+  </dialog>
+
   <!-- eBay lister settings: business policy names live on the eBay account -->
   <dialog id="ebGearDialog" class="dlg ebg-dlg">
     <div class="dlg-body">
