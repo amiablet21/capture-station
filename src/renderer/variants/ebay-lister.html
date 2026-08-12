@@ -131,7 +131,6 @@
       <div class="frow"><span class="flabel">Photos</span>
         <div class="shots" id="fShots"></div>
       </div>
-      <div class="frow"><span class="flabel">Description</span><button class="aibtn" id="aiBtn">✨ Polish with AI (optional)</button></div>
       <div class="factions">
         <button class="btn-x">Save draft</button>
         <button class="btn-x btn-go" id="exportBtn">⬇ Export eBay CSV (1 listing)</button>
@@ -343,11 +342,6 @@ Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${c
     const f = e.target.closest('[data-vf]'); if (!f || !cur) return;
     cur.newVars[+f.dataset.vi][f.dataset.vf] = e.target.value.trim();
     render();
-  });
-  $('aiBtn').addEventListener('click', () => {
-    if (!cur) return;
-    $('aiBtn').textContent = '✨ Polished (mock)';
-    setTimeout(() => $('aiBtn').textContent = '✨ Polish with AI (optional)', 1500);
   });
   $('exportBtn').addEventListener('click', () => {
     $('exportBtn').textContent = '✓ Saved to Downloads (mock)';
