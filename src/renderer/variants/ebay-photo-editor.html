@@ -35,6 +35,13 @@
     box-shadow: 0 8px 28px rgba(0,0,0,0.18); transition: transform 250ms, filter 100ms; }
   .cropbox { position: absolute; border: 2px dashed #fff; box-shadow: 0 0 0 4000px rgba(0,0,0,0.35); border-radius: 2px; display: none; pointer-events: none; }
   .cropbox.on { display: block; }
+  /* magic eraser: the stray cable in the shot + the brush overlay */
+  .decoy { position: absolute; width: 90px; height: 14px; border-radius: 8px; background: #6b6f76; transform: rotate(-24deg); box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: opacity 500ms; pointer-events: none; }
+  .decoy.gone { opacity: 0; }
+  .brushdot { position: absolute; border-radius: 999px; background: rgba(151, 71, 255, 0.4); pointer-events: none; }
+  .work.brushing { cursor: crosshair; }
+  .erasehint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 10.5px; background: rgba(28,28,30,.85); color: #fff; border-radius: 999px; padding: 4px 12px; display: none; }
+  .erasehint.on { display: block; }
   .zoombar { position: absolute; bottom: 10px; left: 14px; font-size: 10.5px; color: var(--muted); background: rgba(255,255,255,0.85); border-radius: 999px; padding: 3px 10px; }
 
   .props { width: 240px; border-left: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
@@ -68,9 +75,11 @@
     <div class="dlg">
       <div class="tbar"><span class="t">Edit photos</span><span class="sku">OPEN-BOX-X133-64GB-GRAY · photo <span id="curN">1</span> of 4</span><button class="done">✓ Done — save to draft</button></div>
       <div class="mid">
-        <div class="work">
+        <div class="work" id="work">
           <div class="pic" id="pic"></div>
+          <div class="decoy" id="decoy"></div>
           <div class="cropbox" id="cropbox"></div>
+          <span class="erasehint" id="eraseHint">brush over what you want gone, then hit Erase</span>
           <span class="zoombar">scroll to zoom · drag to pan</span>
         </div>
         <div class="props">
@@ -89,6 +98,11 @@
           <div class="grp"><h5>Background</h5>
             <button class="abtn main" id="bgBtn" style="width:100%">✨ White background</button>
           </div>
+          <div class="grp"><h5>Magic eraser</h5>
+            <button class="abtn" id="brushBtn" style="width:100%">🖌 Brush</button>
+            <div class="sl" style="margin-top:8px"><label>Brush size</label><input type="range" id="brushSize" min="10" max="50" value="24" /><span class="v" id="vBrush">24</span></div>
+            <button class="abtn main" id="eraseBtn" style="width:100%" disabled>🪄 Erase brushed area</button>
+          </div>
           <div class="grp"><h5>Photo</h5>
             <div class="rowbtns">
               <button class="abtn" id="rot">⟳ Rotate</button>
@@ -106,11 +120,13 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const photos = [
-    { bright: 100, con: 100, warm: 0, rot: 0, main: true, bg: false },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
-    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: true, bg: false, erased: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false, erased: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false, erased: false },
+    { bright: 100, con: 100, warm: 0, rot: 0, main: false, bg: false, erased: false },
   ];
+  let brushing = false;
+  let dots = 0;
   // the messy-desk vs cut-out-on-white looks (mock stand-ins for the model output)
   const BG_RAW = 'radial-gradient(circle at 62% 40%, #3b4252 0 18%, transparent 19%), radial-gradient(circle at 62% 40%, #222 0 22%, transparent 23%), linear-gradient(135deg, #cfd2ce, #f0f0ec)';
   const BG_WHITE = 'radial-gradient(circle at 50% 48%, #3b4252 0 20%, transparent 21%), radial-gradient(circle at 50% 48%, #222 0 24%, transparent 25%), linear-gradient(#ffffff, #ffffff)';
@@ -124,6 +140,12 @@
     $('pic').style.background = p.bg ? BG_WHITE : BG_RAW;
     $('pic').style.transform = `rotate(${p.rot}deg) scale(${p.rot % 180 ? 0.75 : 1})`;
     $('bgBtn').textContent = p.bg ? '✓ Background removed' : '✨ White background';
+    // the stray cable sits in the shot until this photo's eraser has run
+    const pr = $('pic').getBoundingClientRect(), wr = $('work').getBoundingClientRect();
+    const d = $('decoy');
+    d.style.left = `${pr.left - wr.left + pr.width * 0.14}px`;
+    d.style.top = `${pr.top - wr.top + pr.height * 0.72}px`;
+    d.classList.toggle('gone', p.erased || p.bg);
     $('sBright').value = p.bright; $('vBright').textContent = p.bright - 100;
     $('sCon').value = p.con; $('vCon').textContent = p.con - 100;
     $('sWarm').value = p.warm; $('vWarm').textContent = p.warm;
@@ -138,6 +160,47 @@
   };
   wire('sBright', 'bright'); wire('sCon', 'con'); wire('sWarm', 'warm');
 
+  // magic eraser: brush a purple mask, then the inpainting model fills it in
+  $('vBrush').textContent = $('brushSize').value;
+  $('brushSize').addEventListener('input', (e) => $('vBrush').textContent = e.target.value);
+  $('brushBtn').addEventListener('click', () => {
+    brushing = !brushing;
+    $('work').classList.toggle('brushing', brushing);
+    $('eraseHint').classList.toggle('on', brushing);
+    $('brushBtn').textContent = brushing ? '🖌 Brushing… (click to stop)' : '🖌 Brush';
+  });
+  let painting = false;
+  const paintDot = (e) => {
+    const wr = $('work').getBoundingClientRect();
+    const s = +$('brushSize').value;
+    const dot = document.createElement('span');
+    dot.className = 'brushdot';
+    dot.style.width = dot.style.height = `${s}px`;
+    dot.style.left = `${e.clientX - wr.left - s / 2}px`;
+    dot.style.top = `${e.clientY - wr.top - s / 2}px`;
+    $('work').appendChild(dot);
+    dots++;
+    $('eraseBtn').disabled = false;
+  };
+  $('work').addEventListener('mousedown', (e) => { if (brushing) { painting = true; paintDot(e); } });
+  $('work').addEventListener('mousemove', (e) => { if (brushing && painting) paintDot(e); });
+  document.addEventListener('mouseup', () => painting = false);
+  $('eraseBtn').addEventListener('click', () => {
+    $('eraseBtn').textContent = '… erasing';
+    setTimeout(() => { // the inpainting model takes a few seconds for real
+      document.querySelectorAll('.brushdot').forEach(d => d.remove());
+      dots = 0;
+      photos[sel].erased = true;
+      brushing = false;
+      $('work').classList.remove('brushing');
+      $('eraseHint').classList.remove('on');
+      $('brushBtn').textContent = '🖌 Brush';
+      $('eraseBtn').textContent = '✓ Erased';
+      $('eraseBtn').disabled = true;
+      setTimeout(() => $('eraseBtn').textContent = '🪄 Erase brushed area', 1200);
+      paint();
+    }, 900);
+  });
   $('bgBtn').addEventListener('click', () => {
     if (photos[sel].bg) { photos[sel].bg = false; paint(); return; }
     $('bgBtn').textContent = '… cutting out';
