@@ -24,7 +24,10 @@
   .tbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
   .tbar .t { font-weight: 600; font-size: 13px; }
   .tbar .sku { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .tbar .done { margin-left: auto; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 8px 18px; cursor: pointer; font-family: inherit; }
+  .tbar .done { background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 8px 18px; cursor: pointer; font-family: inherit; }
+  .histbtn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; font-size: 13px; color: var(--text); }
+  .histbtn:hover:not(:disabled) { border-color: var(--accent); }
+  .histbtn:disabled { opacity: .35; cursor: default; }
 
   .mid { flex: 1; display: flex; min-height: 0; }
   .work { flex: 1; background: #EBECF0; display: flex; align-items: center; justify-content: center; position: relative; }
@@ -38,8 +41,11 @@
   /* magic eraser: the stray cable in the shot + the brush overlay */
   .decoy { position: absolute; width: 90px; height: 14px; border-radius: 8px; background: #6b6f76; transform: rotate(-24deg); box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: opacity 500ms; pointer-events: none; }
   .decoy.gone { opacity: 0; }
-  .brushdot { position: absolute; border-radius: 999px; background: rgba(151, 71, 255, 0.4); pointer-events: none; }
-  .work.brushing { cursor: crosshair; }
+  .brushdot { position: absolute; border-radius: 999px; background: rgba(151, 71, 255, 0.35); filter: blur(2px); pointer-events: none; }
+  .work.brushing { cursor: none; }
+  /* the brush itself: a soft ring that follows the mouse */
+  .brushcur { position: absolute; border: 2px solid rgba(151, 71, 255, 0.9); background: rgba(151, 71, 255, 0.15); border-radius: 999px; pointer-events: none; display: none; transform: translate(-50%, -50%); }
+  .work.brushing .brushcur { display: block; }
   .erasehint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 10.5px; background: rgba(28,28,30,.85); color: #fff; border-radius: 999px; padding: 4px 12px; display: none; }
   .erasehint.on { display: block; }
   .zoombar { position: absolute; bottom: 10px; left: 14px; font-size: 10.5px; color: var(--muted); background: rgba(255,255,255,0.85); border-radius: 999px; padding: 3px 10px; }
@@ -73,13 +79,19 @@
 
   <div class="stage">
     <div class="dlg">
-      <div class="tbar"><span class="t">Edit photos</span><span class="sku">OPEN-BOX-X133-64GB-GRAY · photo <span id="curN">1</span> of 4</span><button class="done">✓ Done — save to draft</button></div>
+      <div class="tbar"><span class="t">Edit photos</span><span class="sku">OPEN-BOX-X133-64GB-GRAY · photo <span id="curN">1</span> of 4</span>
+        <span style="margin-left:auto;display:inline-flex;gap:4px">
+          <button class="histbtn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↩</button>
+          <button class="histbtn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↪</button>
+        </span>
+        <button class="done">✓ Done</button></div>
       <div class="mid">
         <div class="work" id="work">
           <div class="pic" id="pic"></div>
           <div class="decoy" id="decoy"></div>
           <div class="cropbox" id="cropbox"></div>
           <span class="erasehint" id="eraseHint">brush over what you want gone, then hit Erase</span>
+          <span class="brushcur" id="brushCur"></span>
           <span class="zoombar">scroll to zoom · drag to pan</span>
         </div>
         <div class="props">
@@ -157,40 +169,74 @@
 
   const wire = (id, key) => {
     $(id).addEventListener('input', (e) => { photos[sel][key] = +e.target.value; paint(); });
+    $(id).addEventListener('change', () => snap()); // one history step per drag
   };
   wire('sBright', 'bright'); wire('sCon', 'con'); wire('sWarm', 'warm');
 
-  // magic eraser: brush a purple mask, then the inpainting model fills it in
+  /* ---------- undo / redo: every edit is a snapshot ---------- */
+  let hist = [JSON.stringify(photos)], hi = 0;
+  const histBtns = () => { $('undoBtn').disabled = hi === 0; $('redoBtn').disabled = hi === hist.length - 1; };
+  const snap = () => { hist = hist.slice(0, hi + 1); hist.push(JSON.stringify(photos)); hi++; histBtns(); };
+  const restore = () => { photos.splice(0, photos.length, ...JSON.parse(hist[hi])); histBtns(); paint(); };
+  $('undoBtn').addEventListener('click', () => { if (hi > 0) { hi--; restore(); } });
+  $('redoBtn').addEventListener('click', () => { if (hi < hist.length - 1) { hi++; restore(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); $('undoBtn').click(); }
+    if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); $('redoBtn').click(); }
+  });
+  histBtns();
+
+  /* ---------- magic eraser: soft ring cursor + continuous stroke ---------- */
   $('vBrush').textContent = $('brushSize').value;
-  $('brushSize').addEventListener('input', (e) => $('vBrush').textContent = e.target.value);
+  $('brushSize').addEventListener('input', (e) => {
+    $('vBrush').textContent = e.target.value;
+    $('brushCur').style.width = $('brushCur').style.height = `${e.target.value}px`;
+  });
+  $('brushCur').style.width = $('brushCur').style.height = `${$('brushSize').value}px`;
   $('brushBtn').addEventListener('click', () => {
     brushing = !brushing;
     $('work').classList.toggle('brushing', brushing);
     $('eraseHint').classList.toggle('on', brushing);
     $('brushBtn').textContent = brushing ? '🖌 Brushing… (click to stop)' : '🖌 Brush';
   });
-  let painting = false;
-  const paintDot = (e) => {
-    const wr = $('work').getBoundingClientRect();
+  let painting = false, lastPt = null;
+  const dotAt = (x, y) => {
     const s = +$('brushSize').value;
     const dot = document.createElement('span');
     dot.className = 'brushdot';
     dot.style.width = dot.style.height = `${s}px`;
-    dot.style.left = `${e.clientX - wr.left - s / 2}px`;
-    dot.style.top = `${e.clientY - wr.top - s / 2}px`;
+    dot.style.left = `${x - s / 2}px`;
+    dot.style.top = `${y - s / 2}px`;
     $('work').appendChild(dot);
     dots++;
+  };
+  // interpolate between mouse events so fast strokes stay solid, not dotted
+  const strokeTo = (e) => {
+    const wr = $('work').getBoundingClientRect();
+    const x = e.clientX - wr.left, y = e.clientY - wr.top;
+    if (lastPt) {
+      const dist = Math.hypot(x - lastPt.x, y - lastPt.y);
+      const steps = Math.max(1, Math.floor(dist / 4));
+      for (let i = 1; i <= steps; i++) dotAt(lastPt.x + (x - lastPt.x) * i / steps, lastPt.y + (y - lastPt.y) * i / steps);
+    } else dotAt(x, y);
+    lastPt = { x, y };
     $('eraseBtn').disabled = false;
   };
-  $('work').addEventListener('mousedown', (e) => { if (brushing) { painting = true; paintDot(e); } });
-  $('work').addEventListener('mousemove', (e) => { if (brushing && painting) paintDot(e); });
-  document.addEventListener('mouseup', () => painting = false);
+  $('work').addEventListener('mousemove', (e) => {
+    const wr = $('work').getBoundingClientRect();
+    $('brushCur').style.left = `${e.clientX - wr.left}px`;
+    $('brushCur').style.top = `${e.clientY - wr.top}px`;
+    if (brushing && painting) strokeTo(e);
+  });
+  $('work').addEventListener('mousedown', (e) => { if (brushing) { painting = true; lastPt = null; strokeTo(e); } });
+  document.addEventListener('mouseup', () => { painting = false; lastPt = null; });
   $('eraseBtn').addEventListener('click', () => {
     $('eraseBtn').textContent = '… erasing';
     setTimeout(() => { // the inpainting model takes a few seconds for real
       document.querySelectorAll('.brushdot').forEach(d => d.remove());
       dots = 0;
       photos[sel].erased = true;
+      snap();
       brushing = false;
       $('work').classList.remove('brushing');
       $('eraseHint').classList.remove('on');
@@ -204,11 +250,11 @@
   $('bgBtn').addEventListener('click', () => {
     if (photos[sel].bg) { photos[sel].bg = false; paint(); return; }
     $('bgBtn').textContent = '… cutting out';
-    setTimeout(() => { photos[sel].bg = true; paint(); }, 700); // model takes ~1s for real
+    setTimeout(() => { photos[sel].bg = true; snap(); paint(); }, 700); // model takes ~1s for real
   });
-  $('rot').addEventListener('click', () => { photos[sel].rot = (photos[sel].rot + 90) % 360; paint(); });
-  $('mainBtn').addEventListener('click', () => { photos.forEach((p, i) => p.main = i === sel); paint(); });
-  $('reset').addEventListener('click', () => { photos[sel] = { ...photos[sel], bright: 100, con: 100, warm: 0, rot: 0 }; paint(); });
+  $('rot').addEventListener('click', () => { photos[sel].rot = (photos[sel].rot + 90) % 360; snap(); paint(); });
+  $('mainBtn').addEventListener('click', () => { photos.forEach((p, i) => p.main = i === sel); snap(); paint(); });
+  $('reset').addEventListener('click', () => { photos[sel] = { ...photos[sel], bright: 100, con: 100, warm: 0, rot: 0 }; snap(); paint(); });
   $('strip').addEventListener('click', (e) => { const t = e.target.closest('.th'); if (t) { sel = +t.dataset.i; paint(); } });
   document.querySelectorAll('[data-crop]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-crop]').forEach(x => x.classList.toggle('on', x === b));
