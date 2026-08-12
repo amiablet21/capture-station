@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>eBay form bottom — button redesign</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --r-card: 8px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .stage { flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center; align-items: flex-start; }
+  .hide { display: none !important; }
+
+  .panel { width: 480px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .frow { display: grid; grid-template-columns: 86px 1fr; gap: 8px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--border-soft); }
+  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .fin { font-size: 12.5px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); width: 100%; font-family: inherit; }
+
+  /* pillbtn: the app's channel-mapping button language — flat, 1px border, 6px */
+  .pill { font-size: 12px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 7px 14px; cursor: pointer; color: var(--text); font-family: inherit; }
+  .pill:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  .pill.icon { display: inline-flex; align-items: center; gap: 7px; }
+  .pill.icon svg { width: 14px; height: 14px; color: var(--accent); }
+
+  /* A: buttons live IN the value column, left-aligned, input-height */
+  .actions-a { display: flex; align-items: center; gap: 10px; padding: 12px 13px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .export { background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 9px 18px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .uplink { font-size: 11.5px; color: var(--muted); text-decoration: underline; cursor: pointer; background: none; border: none; font-family: inherit; white-space: nowrap; }
+  .uplink:hover { color: var(--accent-soft-text); }
+  .hint-a { padding: 6px 13px 10px; font-size: 10px; color: var(--faint); background: var(--surface-2); }
+
+  /* B: segmented row of equal quiet buttons above the footer */
+  .btnrow-b { display: flex; gap: 8px; padding: 12px 13px; border-bottom: 1px solid var(--border-soft); }
+  .btnrow-b .pill { flex: 1; text-align: center; }
+</style></head>
+<body>
+  <div class="switcher">
+    <span class="lbl">Design</span>
+    <span class="opt on" data-o="a">A · In-row buttons</span>
+    <span class="opt" data-o="b">B · Button bar</span>
+    <span class="note" id="note"></span>
+  </div>
+
+  <div class="stage">
+    <!-- ============ A ============ -->
+    <div class="panel" id="viewA">
+      <div class="frow"><span class="flabel">Price</span><input class="fin mono" value="49.99" style="width:120px" /></div>
+      <div class="frow"><span class="flabel">Qty</span><input class="fin mono" value="1" style="width:70px" /></div>
+      <div class="frow"><span class="flabel">Variations</span>
+        <span><button class="pill">Add variation</button></span>
+      </div>
+      <div class="frow"><span class="flabel">Photos</span>
+        <span style="display:inline-flex;gap:8px">
+          <button class="pill icon"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Phone camera</button>
+          <button class="pill">Add photos</button>
+        </span>
+      </div>
+      <div class="actions-a">
+        <button class="export">Export eBay CSV</button>
+        <button class="uplink">Seller Hub upload page ↗</button>
+      </div>
+      <div class="hint-a">no photos yet · category copies from a live listing</div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div class="panel hide" id="viewB">
+      <div class="frow"><span class="flabel">Price</span><input class="fin mono" value="49.99" style="width:120px" /></div>
+      <div class="frow"><span class="flabel">Qty</span><input class="fin mono" value="1" style="width:70px" /></div>
+      <div class="btnrow-b">
+        <button class="pill">Add variation</button>
+        <button class="pill icon"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>Phone camera</button>
+        <button class="pill">Add photos</button>
+      </div>
+      <div class="actions-a">
+        <button class="export">Export eBay CSV</button>
+        <button class="uplink">Seller Hub upload page ↗</button>
+      </div>
+      <div class="hint-a">no photos yet · category copies from a live listing</div>
+    </div>
+  </div>
+
+<script>
+  const NOTES = {
+    a: 'Buttons sit left in the value column at input height — same flat pill language as Channel mapping. Upload page becomes a quiet text link beside Export.',
+    b: 'One row of three equal pills above the footer — Variations and Photos share it, labels stay in their rows above.',
+  };
+  document.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    document.getElementById('viewA').classList.toggle('hide', o.dataset.o !== 'a');
+    document.getElementById('viewB').classList.toggle('hide', o.dataset.o !== 'b');
+    document.getElementById('note').textContent = NOTES[o.dataset.o];
+  }));
+  document.getElementById('note').textContent = NOTES.a;
+</script>
+</body>
+</html>
