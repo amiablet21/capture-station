@@ -5706,6 +5706,9 @@ $("ebGear").addEventListener("click", async () => {
   $("ebGearDialog").showModal();
 });
 $("ebgCancel").addEventListener("click", () => $("ebGearDialog").close());
+// the names live at Seller Hub -> Account settings -> Business Policies;
+// the marketplace pane doesn't exist on this page, so open the real browser
+$("ebgOpen").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/bp/manage"));
 $("ebgSave").addEventListener("click", async () => {
   ebCfg.ebayProfiles = {
     shipping: $("ebgShip").value.trim(), returns: $("ebgRet").value.trim(),

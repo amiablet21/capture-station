@@ -228,15 +228,16 @@
   </section>
 
   <!-- eBay lister settings: business policy names live on the eBay account -->
-  <dialog id="ebGearDialog" class="dlg">
+  <dialog id="ebGearDialog" class="dlg ebg-dlg">
     <div class="dlg-body">
       <h2 class="dlg-title">eBay listing settings</h2>
-      <div class="settings-row"><label>Shipping policy name<input id="ebgShip" class="input" placeholder="e.g. Standard shipping" /></label></div>
-      <div class="settings-row"><label>Return policy name<input id="ebgRet" class="input" placeholder="e.g. 30 day returns" /></label></div>
-      <div class="settings-row"><label>Payment policy name<input id="ebgPay" class="input" placeholder="e.g. eBay Payments" /></label></div>
-      <div class="settings-row"><label>Item location<input id="ebgLoc" class="input" placeholder="e.g. Brooklyn, NY" /></label></div>
-      <div class="settings-row"><label>Dispatch time (days)<input id="ebgDisp" class="input mono" type="number" min="0" value="1" style="width:80px" /></label></div>
-      <p class="dlg-note">The three policy names must match your eBay business policies exactly — the CSV references them by name.</p>
+      <div class="ebg-row"><label for="ebgShip">Shipping policy name</label><input id="ebgShip" class="input" placeholder="e.g. Standard shipping" /></div>
+      <div class="ebg-row"><label for="ebgRet">Return policy name</label><input id="ebgRet" class="input" placeholder="e.g. 30 day returns" /></div>
+      <div class="ebg-row"><label for="ebgPay">Payment policy name</label><input id="ebgPay" class="input" placeholder="e.g. eBay Payments" /></div>
+      <div class="ebg-row"><label for="ebgLoc">Item location</label><input id="ebgLoc" class="input" placeholder="e.g. Brooklyn, NY" /></div>
+      <div class="ebg-row"><label for="ebgDisp">Dispatch time (days)</label><input id="ebgDisp" class="input mono" type="number" min="0" value="1" style="width:90px" /></div>
+      <p class="dlg-note">The three names must match your eBay business policies exactly — the CSV references them by name.
+        <button id="ebgOpen" class="ebay-addbtn" style="margin-left:6px">Open them on eBay</button></p>
       <div class="dlg-actions">
         <button id="ebgCancel" class="btn btn-ghost">Cancel</button>
         <button id="ebgSave" class="btn btn-primary">Save</button>

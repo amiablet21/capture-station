@@ -2702,6 +2702,12 @@ function registerIpc() {
   });
   // embedded marketplace browser pane
   ipcMain.handle('browser:layout', (_e, b) => layoutPane(b || {}));
+  // generic external open (default browser) — https only
+  ipcMain.handle('app:openExternal', (_e, { url }) => {
+    if (!/^https:\/\//i.test(String(url || ''))) return { ok: false, error: 'Only https links.' };
+    shell.openExternal(String(url));
+    return { ok: true };
+  });
   ipcMain.handle('browser:open', (_e, { orderNumber, channel, url, kind }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

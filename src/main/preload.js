@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('api', {
   browserLayout: (bounds) => ipcRenderer.invoke('browser:layout', bounds),
   browserOpen: (orderNumber, channel, kind) => ipcRenderer.invoke('browser:open', { orderNumber, channel, kind }),
   browserOpenUrl: (url) => ipcRenderer.invoke('browser:open', { url }),
+  openExternalUrl: (url) => ipcRenderer.invoke('app:openExternal', { url }),
   appFocus: () => ipcRenderer.invoke('app:focus'),
   shipImport: () => ipcRenderer.invoke('ship:importFile'),
   mappingChannels: () => ipcRenderer.invoke('mapping:channels'),
