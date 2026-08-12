@@ -256,11 +256,12 @@
       ${cur.flaws ? `<p style="text-align:center"><b>${cur.cond === 'scrap' ? 'Fault' : 'Condition notes'}:</b> ${cur.flaws}.</p>` : ''}
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">
         <tr><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
-        <tr><td style="border:1px solid #ddd;padding:4px 8px">Brand</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.brand}</td></tr>
-        <tr><td style="border:1px solid #ddd;padding:4px 8px">Model</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.model}</td></tr>
-        <tr><td style="border:1px solid #ddd;padding:4px 8px">Storage</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.storage}</td></tr>
-        <tr><td style="border:1px solid #ddd;padding:4px 8px">Color</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.color}</td></tr>
-        <tr><td style="border:1px solid #ddd;padding:4px 8px;color:#888" colspan="2">+ screen size, processor, RAM, MPN… copied from your live NEW listing of this model</td></tr>
+        ${[['Brand', sp.brand], ['Model', sp.model], ['Model Number', cur.specs.mpn], ['Storage', sp.storage], ['Color', sp.color],
+           ['Screen Size', cur.specs.screen], ['Processor', cur.specs.cpu], ['RAM', cur.specs.ram],
+           ...(more ? Object.entries(more) : [])]
+          .filter(([, v]) => v)
+          .map(([k, v]) => `<tr><td style="border:1px solid #ddd;padding:4px 8px">${k}</td><td style="border:1px solid #ddd;padding:4px 8px">${v}</td></tr>`).join('')}
+        <tr><td style="border:1px solid #ddd;padding:4px 8px">Condition</td><td style="border:1px solid #ddd;padding:4px 8px">${cur.cond === 'openbox' ? 'Open Box' : cur.cond === 'used' ? 'Used — Tested & Working' : 'For Parts or Repair'}</td></tr>
       </table>
       <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
       <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
