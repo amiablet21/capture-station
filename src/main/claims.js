@@ -88,6 +88,18 @@ function lanIp() {
   return all[0] || '127.0.0.1';
 }
 
+// JPEG/WebP -> PNG via Electron's decoder; null if the format is beyond it
+function toPng(buf) {
+  try {
+    const { nativeImage } = require('electron');
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return null;
+    return img.toPNG();
+  } catch {
+    return null;
+  }
+}
+
 function tokenOk(token, t) {
   const a = Buffer.from(String(t || ''));
   const b = Buffer.from(token);
@@ -264,9 +276,16 @@ function start(opts) {
       });
       req.on('end', () => {
         if (dead) return;
-        const buf = Buffer.concat(chunks);
-        const ext = magicExt(buf);
+        let buf = Buffer.concat(chunks);
+        let ext = magicExt(buf);
         if (!ext) { res.writeHead(415, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"not an image"}'); return; }
+        // owner wants uniform PNGs in the folder: re-encode whatever the
+        // phone sent (JPEG, usually). Formats Electron can't decode (HEIC)
+        // keep their real extension rather than being lost.
+        if (ext !== '.png') {
+          const png = toPng(buf);
+          if (png) { buf = png; ext = '.png'; }
+        }
         const name = `${po}_${stamp(new Date())}_${nextIndex(dir, po)}${ext}`;
         try {
           fs.writeFileSync(path.join(dir, name), buf);

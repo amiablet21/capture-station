@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>eBay lister — returns → CSV upload</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  html, body { height: 100%; }
+  body { padding: 0; margin: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--canvas); }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow: auto; padding: 16px; display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .phead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 9px 12px 7px; background: var(--surface-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+
+  /* ① queue: unlisted condition SKUs */
+  .queue { width: 300px; }
+  .qrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+  .qrow:hover, .qrow.on { background: var(--accent-soft); }
+  .qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+  .qrow .sub { font-size: 10.5px; color: var(--faint); display: flex; gap: 8px; }
+  .qrow .cond { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; }
+  .c-open { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .c-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .c-scrap { background: var(--neg-bg); color: var(--neg-text); }
+  .qnote { padding: 8px 12px; font-size: 10px; color: var(--faint); background: var(--surface-2); border-top: 1px solid var(--border); }
+
+  /* ② the listing form */
+  .form { width: 420px; }
+  .frow { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--border-soft); }
+  .frow:last-child { border-bottom: none; }
+  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .fin { font-size: 12px; font-family: inherit; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); width: 100%; box-sizing: border-box; }
+  .fin.mono { font-family: var(--mono); font-size: 11.5px; }
+  .fhint { grid-column: 2; font-size: 9.5px; color: var(--faint); margin-top: -2px; }
+  .condrow { display: flex; gap: 6px; }
+  .condbtn { flex: 1; font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 6px 4px; cursor: pointer; color: var(--muted); }
+  .condbtn.on.c1 { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
+  .condbtn.on.c2 { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
+  .condbtn.on.c3 { background: var(--neg-bg); color: var(--neg-text); border-color: transparent; }
+  .condbtn small { display: block; font-weight: 400; font-size: 9px; color: inherit; opacity: .7; }
+  .specgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .spec { display: flex; flex-direction: column; gap: 2px; }
+  .spec label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
+  .aibtn { font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 4px 12px; cursor: pointer; color: var(--accent-soft-text); }
+  .aibtn:hover { border-color: var(--accent); }
+  .factions { display: flex; gap: 8px; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .btn-x { font-size: 12px; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  .btn-go { background: var(--accent); color: #fff; border-color: transparent; flex: 1; }
+
+  /* ③ description preview + csv */
+  .out { width: 430px; display: flex; flex-direction: column; gap: 14px; }
+  .prev { background: #fff; border: 1px solid var(--border); padding: 16px; font-family: Arial, sans-serif; }
+  .prev h2 { font-size: 16px; margin: 0 0 4px; color: #111; }
+  .prev .cline { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 3px; margin-bottom: 10px; }
+  .prev ul { font-size: 12px; color: #333; padding-left: 18px; margin: 8px 0; line-height: 1.6; }
+  .prev p { font-size: 12px; color: #333; margin: 8px 0; }
+  .prev .foot { font-size: 10.5px; color: #888; border-top: 1px solid #eee; padding-top: 8px; margin-top: 10px; }
+  .csv { font-family: var(--mono); font-size: 9.5px; color: var(--muted); background: var(--surface-2); padding: 10px 12px; overflow-x: auto; white-space: pre; border-top: 1px solid var(--border); }
+  .csvhead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .csvhead .t { font-size: 11px; font-weight: 600; }
+  .csvhead .n { font-size: 10px; color: var(--faint); margin-left: auto; }
+</style></head>
+<body>
+  <div class="try"><b>eBay lister tab:</b> ① queue = your unlisted condition SKUs (from the same scan as the "needs listings" card) · ② click one — the SKU parses itself into specs, the condition picks the eBay condition ID, the description writes itself (✨ = optional AI polish) · ③ live buyer preview + the CSV row · <b>Export</b> downloads the file you upload at Seller Hub → Reports → Upload.</div>
+
+  <div class="stage">
+    <div class="panel queue">
+      <div class="phead">To list on eBay <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">3 waiting</span></div>
+      <div id="qlist"></div>
+      <div class="qnote">Fed by the listings scan — a SKU leaves this queue when its eBay listing links in Linnworks.</div>
+    </div>
+
+    <div class="panel form">
+      <div class="phead">Listing</div>
+      <div class="frow"><span class="flabel">SKU</span><input class="fin mono" id="fSku" readonly /></div>
+      <div class="frow"><span class="flabel">Title</span><input class="fin" id="fTitle" maxlength="80" /><span class="fhint"><span id="fTitleN">0</span>/80 characters</span></div>
+      <div class="frow"><span class="flabel">Condition</span>
+        <div class="condrow">
+          <button class="condbtn c1" data-c="openbox">Open Box<small>eBay 1500 · New other</small></button>
+          <button class="condbtn c2" data-c="used">Used<small>eBay 3000 · Used</small></button>
+          <button class="condbtn c3" data-c="scrap">Parts<small>eBay 7000 · Not working</small></button>
+        </div>
+      </div>
+      <div class="frow"><span class="flabel">Specifics</span>
+        <div class="specgrid">
+          <span class="spec"><label>Brand</label><input class="fin" id="sBrand" /></span>
+          <span class="spec"><label>Model</label><input class="fin" id="sModel" /></span>
+          <span class="spec"><label>Storage</label><input class="fin" id="sStorage" /></span>
+          <span class="spec"><label>Color</label><input class="fin" id="sColor" /></span>
+        </div>
+        <span class="fhint">parsed from the SKU — edit anything that looks off</span>
+      </div>
+      <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
+      <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
+      <div class="frow"><span class="flabel">Flaws</span><input class="fin" id="fFlaws" placeholder="e.g. scuffed corner" /><span class="fhint">pulled from the return's note — shown honestly in the description</span></div>
+      <div class="frow"><span class="flabel">Description</span><button class="aibtn" id="aiBtn">✨ Polish with AI (optional)</button><span class="fhint">works without it — the template writes a full description from the fields above</span></div>
+      <div class="factions">
+        <button class="btn-x">Save draft</button>
+        <button class="btn-x btn-go" id="exportBtn">⬇ Export eBay CSV (1 listing)</button>
+      </div>
+    </div>
+
+    <div class="out">
+      <div class="panel">
+        <div class="phead">Buyer sees</div>
+        <div class="prev" id="prev"></div>
+      </div>
+      <div class="panel">
+        <div class="csvhead"><span class="t">upload-ebay-0812.csv</span><span class="n">Seller Hub → Reports → Upload</span></div>
+        <div class="csv" id="csv"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const QUEUE = [
+    { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray' },
+    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black' },
+    { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray' },
+  ];
+  const CONDS = {
+    openbox: { label: 'OPEN BOX', id: 1500, cls: 'c-open', prevBg: '#e7f0fb', prevFg: '#1c4a8a',
+      blurb: 'Open box — the item was returned unused or barely handled. Inspected, fully tested, and factory reset by our team. Includes original accessories unless noted.' },
+    used: { label: 'USED', id: 3000, cls: 'c-used', prevBg: '#fbf3db', prevFg: '#8a6116',
+      blurb: 'Used — fully functional and tested, with normal signs of prior use. Factory reset and ready for a new owner. Cosmetic condition is described honestly below.' },
+    scrap: { label: 'FOR PARTS', id: 7000, cls: 'c-scrap', prevBg: '#fdebec', prevFg: '#9f2f2d',
+      blurb: 'For parts / not working — sold AS-IS for repair or salvage. No returns on parts units. Exact fault listed below.' },
+  };
+  const $ = (id) => document.getElementById(id);
+  let cur = null;
+
+  function parseSku(sku) {
+    const m = sku.match(/(\d+GB|\d+TB)/i);
+    const parts = sku.split('-');
+    return {
+      brand: 'Samsung',
+      model: sku.replace(/^(OPEN-BOX|USED|SCRAP)-/, '').split('-')[0],
+      storage: m ? m[1] : '',
+      color: parts[parts.length - 1][0] + parts[parts.length - 1].slice(1).toLowerCase(),
+    };
+  }
+
+  function titleFor(q, cond) {
+    const tag = cond === 'openbox' ? ' - Open Box' : cond === 'used' ? ' - Used' : ' - For Parts';
+    return (q.title + tag).slice(0, 80);
+  }
+
+  function render() {
+    if (!cur) return;
+    const c = CONDS[cur.cond];
+    $('fSku').value = cur.sku;
+    $('fTitle').value = titleFor(cur, cur.cond);
+    $('fTitleN').textContent = $('fTitle').value.length;
+    document.querySelectorAll('.condbtn').forEach(b => b.classList.toggle('on', b.dataset.c === cur.cond));
+    const sp = parseSku(cur.sku);
+    $('sBrand').value = sp.brand; $('sModel').value = sp.model;
+    $('sStorage').value = sp.storage; $('sColor').value = sp.color;
+    $('fPrice').value = cur.price.toFixed(2);
+    $('fQty').value = cur.qty;
+    $('fFlaws').value = cur.flaws;
+    // buyer preview
+    $('prev').innerHTML = `
+      <h2>${$('fTitle').value}</h2>
+      <span class="cline" style="background:${c.prevBg};color:${c.prevFg}">${c.label}</span>
+      <p>${c.blurb}</p>
+      ${cur.flaws ? `<p><b>Condition notes:</b> ${cur.flaws}.</p>` : ''}
+      <ul>
+        <li><b>Brand:</b> ${sp.brand} &nbsp; <b>Model:</b> ${sp.model}</li>
+        <li><b>Storage:</b> ${sp.storage} &nbsp; <b>Color:</b> ${sp.color}</li>
+        <li>Ships within 1 business day from our US warehouse</li>
+        <li>30-day returns${cur.cond === 'scrap' ? ' — <b>not applicable on parts units</b>' : ''}</li>
+      </ul>
+      <div class="foot">Digital World Shop — thousands of devices tested &amp; shipped</div>`;
+    $('csv').textContent =
+`Action(SiteID=US|Country=US|Currency=USD|Version=1193),CustomLabel,Title,ConditionID,Quantity,StartPrice,Description,Format
+Add,${cur.sku},"${$('fTitle').value}",${c.id},${cur.qty},${cur.price.toFixed(2)},"<html…full description…>",FixedPrice`;
+  }
+
+  $('qlist').innerHTML = QUEUE.map((q, i) => `
+    <div class="qrow" data-i="${i}">
+      <span class="sku">${q.sku}</span>
+      <span class="sub"><span class="cond ${CONDS[q.cond].cls}">${CONDS[q.cond].label}</span><span>${q.qty} unit${q.qty === 1 ? '' : 's'} · ref $${q.price}</span></span>
+    </div>`).join('');
+  $('qlist').addEventListener('click', (e) => {
+    const r = e.target.closest('.qrow'); if (!r) return;
+    document.querySelectorAll('.qrow').forEach(x => x.classList.toggle('on', x === r));
+    cur = { ...QUEUE[+r.dataset.i] };
+    render();
+  });
+  document.querySelector('.form').addEventListener('click', (e) => {
+    const b = e.target.closest('.condbtn'); if (!b || !cur) return;
+    cur.cond = b.dataset.c;
+    render();
+  });
+  $('fFlaws').addEventListener('input', (e) => { if (cur) { cur.flaws = e.target.value; render(); $('fFlaws').focus(); } });
+  $('aiBtn').addEventListener('click', () => {
+    if (!cur) return;
+    $('aiBtn').textContent = '✨ Polished (mock)';
+    setTimeout(() => $('aiBtn').textContent = '✨ Polish with AI (optional)', 1500);
+  });
+  $('exportBtn').addEventListener('click', () => {
+    $('exportBtn').textContent = '✓ Saved to Downloads (mock)';
+    setTimeout(() => $('exportBtn').textContent = '⬇ Export eBay CSV (1 listing)', 1500);
+  });
+  // open with the first row selected
+  document.querySelector('.qrow').click();
+</script>
+</body>
+</html>

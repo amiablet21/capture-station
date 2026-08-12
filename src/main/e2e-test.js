@@ -1088,6 +1088,13 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { up1, up2 });
       check('claims: upload events carried the running day count',
         uploads.length === 2 && uploads[1].todayCount === 2, uploads);
+      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (owner
+      // wants uniform PNGs); the fake-JPEG uploads above cannot decode, so
+      // they keep .jpg — which doubles as the fallback-path check
+      const realJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
+      const up3 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: realJpeg })).json();
+      check('claims: real photos re-encode to PNG',
+        up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, up3.name)), up3);
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);
