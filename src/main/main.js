@@ -2409,10 +2409,12 @@ function registerIpc() {
     return unlistedCache;
   }
 
-  ipcMain.handle('stock:unlisted', async () => {
+  ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
+      // Refresh must see SKUs created a minute ago: drop the hour-long cache
+      if (force) unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       const c = await runUnlistedScan(cfg);
       return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
     } catch (e) {

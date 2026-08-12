@@ -31,7 +31,7 @@ const DEMO_SEED = `(() => {
       items: [{ sku: 'S25-256GB-SILVERSHADOW', qty: 1, title: 'Galaxy S25 256GB', img: '' }] },
     '119121888000111#LW-B': { source: 'WALMART', despatchBy: now.toISOString(), dropship: true, split: { part: 2, of: 2 },
       items: [{ sku: 'X400-64GB-BLACK', qty: 1, title: 'X400 64GB', img: '' }] },
-    '119121525565007': { source: 'WALMART', despatchBy: '2026-08-05T00:00:00',
+    '119121525565007': { source: 'WALMART', despatchBy: '2026-08-05T00:00:00', parked: true,
       items: [{ sku: 'S26-PLUS-256GB-WHITE', qty: 2, title: 'Galaxy S26+', img: '' }] },
     '02-14818-21581': { source: 'EBAY', despatchBy: now.toISOString(),
       items: [{ sku: 'Z-FOLD-256GB-JBLK', qty: 1, title: 'Galaxy Z Fold', img: '' }] },

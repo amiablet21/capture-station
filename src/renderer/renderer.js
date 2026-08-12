@@ -2348,6 +2348,7 @@ function beginStockMinEdit(btn) {
 $('stockRefresh').addEventListener('click', () => {
   chLinked = null; // Refresh re-derives the missing-listings sets too
   loadStock();
+  loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
 $('stockSearch').addEventListener('input', renderStock);
 // whole-sheet resize: drag the handle on the right edge of the table
@@ -3171,11 +3172,11 @@ let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
 
-async function loadUnlisted() {
+async function loadUnlisted(force) {
   if (unlistedLoading || (state && state.captureOnly)) return;
   unlistedLoading = true;
   try {
-    const res = await api.stockUnlisted();
+    const res = await api.stockUnlisted(!!force);
     if (res.ok) {
       unlistedSkus = new Set(res.skus || []);
       unlistedDetail = res.detail || [];
