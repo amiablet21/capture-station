@@ -172,6 +172,12 @@
       blurb: 'Item is sold as-is for parts or repair and does not function as intended. Sold with no guarantee of functionality. No returns for non-working condition — please review photos carefully before purchasing.' },
   };
   const $ = (id) => document.getElementById(id);
+  // each variation IS a condition SKU — auto-derived so Linnworks
+  // auto-links every variation the moment the listing goes live
+  const PREFIX = { openbox: 'OPEN-BOX', used: 'USED', scrap: 'SCRAP' };
+  const varSku = (v, sp) => v.storage && v.color
+    ? `${PREFIX[cur.cond]}-${sp.model}-${v.storage.toUpperCase()}-${v.color.toUpperCase()}`
+    : '(fills in from storage + color)';
   let cur = null;
   let moreOpen = true; // owner: the full specifics grid is always open
   document.addEventListener('click', (e) => {
@@ -231,8 +237,8 @@
     document.getElementById('varList').innerHTML =
       (cur.vars || []).map(v =>
         `<label style="display:flex;gap:6px;align-items:center;font-size:11px"><input type="checkbox" checked /><span style="font-family:var(--mono)">${v.sku}</span><span style="color:var(--faint)">×${v.qty} · $${v.price}</span></label>`).join('')
-      + (cur.newVars || []).map(v =>
-        `<span style="display:flex;gap:5px;align-items:center"><input class="fin mono" value="${v.storage}" placeholder="Storage" style="width:70px" /><input class="fin mono" value="${v.color}" placeholder="Color" style="width:80px" /><input class="fin mono" value="${v.price}" placeholder="$" style="width:70px" /><input class="fin mono" value="${v.qty}" placeholder="Qty" style="width:44px" /><button class="x" data-varx="1" style="position:static;width:16px;height:16px;border-radius:999px;background:var(--neg-bg);color:var(--neg-text);font-size:9px;border:none;cursor:pointer">✕</button></span>`).join('')
+      + (cur.newVars || []).map((v, vi) =>
+        `<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><input class="fin mono" data-vf="storage" data-vi="${vi}" value="${v.storage}" placeholder="Storage" style="width:70px" /><input class="fin mono" data-vf="color" data-vi="${vi}" value="${v.color}" placeholder="Color" style="width:80px" /><input class="fin mono" data-vf="price" data-vi="${vi}" value="${v.price}" placeholder="$" style="width:70px" /><input class="fin mono" data-vf="qty" data-vi="${vi}" value="${v.qty}" placeholder="Qty" style="width:44px" /><button class="x" data-varx="1" style="position:static;width:16px;height:16px;border-radius:999px;background:var(--neg-bg);color:var(--neg-text);font-size:9px;border:none;cursor:pointer">✕</button><span style="font-family:var(--mono);font-size:9.5px;color:${v.storage && v.color ? 'var(--accent-soft-text)' : 'var(--faint)'};width:100%">SKU: ${varSku(v, sp)}</span></span>`).join('')
       + `<button class="addshot" data-addvar="1" style="align-self:flex-start;padding:5px 10px">＋ add variation</button>`;
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
@@ -265,8 +271,8 @@
       <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
     const kids = [
-      ...(cur.vars || []).map(v => `Add,,Variation,"${v.det}",,,,,,${v.price},${v.qty},`),
-      ...(cur.newVars || []).filter(v => v.storage || v.color).map(v => `Add,,Variation,"Storage=${v.storage};Color=${v.color}",,,,,,${v.price || '?'},${v.qty},`),
+      ...(cur.vars || []).map(v => `Add,${v.sku},Variation,"${v.det}",,,,,,${v.price},${v.qty},`),
+      ...(cur.newVars || []).filter(v => v.storage || v.color).map(v => `Add,${varSku(v, sp)},Variation,"Storage=${v.storage};Color=${v.color}",,,,,,${v.price || '?'},${v.qty},`),
     ];
     $('csv').textContent = kids.length
       ? `Action,CustomLabel,Relationship,RelationshipDetails,Title,ConditionID,C:Brand,…all specifics…,PicURL,StartPrice,Quantity,…profiles…
@@ -303,6 +309,12 @@ Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${c
     if (del && cur) { cur.shots = Math.max(0, cur.shots - 1); render(); return; }
     const b = e.target.closest('.condbtn'); if (!b || !cur) return;
     cur.cond = b.dataset.c;
+    render();
+  });
+  // typing storage/color re-derives the variation SKU on blur
+  document.getElementById('varList').addEventListener('change', (e) => {
+    const f = e.target.closest('[data-vf]'); if (!f || !cur) return;
+    cur.newVars[+f.dataset.vi][f.dataset.vf] = e.target.value.trim();
     render();
   });
   $('aiBtn').addEventListener('click', () => {
