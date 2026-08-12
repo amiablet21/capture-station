@@ -231,6 +231,9 @@ function start(opts) {
   const dir = opts.dir;
   fs.mkdirSync(dir, { recursive: true });
   const removed = cleanupOld(dir);
+  // the shelf life must hold even if the app stays open for days: re-sweep
+  // every 6 hours, not only at startup
+  const sweeper = setInterval(() => cleanupOld(dir), 6 * 3600 * 1000);
   const token = crypto.randomBytes(12).toString('base64url'); // rotates every app session
   const listToday = opts.listToday || (() => []);
 
@@ -291,7 +294,7 @@ function start(opts) {
         server, token, port, dir, removed,
         url: `http://${lanIp()}:${port}/up?t=${token}`,
         todayCount: () => todayCount(dir),
-        close: () => new Promise((r) => server.close(r)),
+        close: () => { clearInterval(sweeper); return new Promise((r) => server.close(r)); },
       });
     });
   });
