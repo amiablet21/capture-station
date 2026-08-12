@@ -77,7 +77,7 @@
   .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 13.5px; font-weight: 600; padding: 12px; cursor: pointer; font-family: inherit; }
 </style></head>
 <body>
-  <div class="try"><b>Listing photos by QR:</b> ① the lister's Photos row gets a 📷 QR button — the QR is tied to THAT listing draft · ② the phone shoots into a review grid where every photo is <b>editable before sending</b>: tap one → crop, rotate, set as main, delete · ③ Send drops them straight into the draft's Photos row (watch it update live). Try it: tap a photo on the phone, rotate it, set main, then Send.</div>
+  <div class="try"><b>Listing photos by QR — capture only:</b> ① the lister's Photos row has the subtle 📷 button — its QR is tied to THAT draft · ② the phone just shoots; tap a thumbnail to delete a bad shot, then <b>Send</b> · ③ photos land in the draft, where the Canva-style editor does all the editing on the big screen.</div>
 
   <div class="stage">
     <div class="col">
@@ -105,17 +105,7 @@
         <div class="pbody">
           <div class="pcam" id="pCam">📷 Take photo</div>
           <div class="grid" id="pGrid"></div>
-          <div class="editor" id="editor">
-            <div class="ed-canvas" id="edCanvas"></div>
-            <div class="ed-slider"><span class="ic">☀️</span><input type="range" id="edLight" min="50" max="150" value="100" /><span class="val" id="edLightVal">100%</span></div>
-            <div class="ed-tools">
-              <button class="ed-btn" id="edRot">⟳ Rotate</button>
-              <button class="ed-btn" id="edCrop">✂ Crop</button>
-              <button class="ed-btn" id="edMain">★ Main</button>
-              <button class="ed-btn danger" id="edDel">🗑 Delete</button>
-            </div>
-            <div class="ed-hint" id="edHint">edits happen here on the phone — the PC gets the finished image</div>
-          </div>
+          <div class="ed-hint" style="color:#8E8E93">tap a photo to remove it — all editing happens on the PC</div>
           <button class="psend" id="pSend">Send 0 photos to the draft</button>
         </div>
       </div></div>
@@ -136,49 +126,28 @@
 
   const sync = () => {
     $('pGrid').innerHTML = shots.map((s, i) =>
-      `<span class="gshot ${i === sel ? 'sel' : ''} ${s.main ? 'main' : ''}" data-i="${i}" style="transform:rotate(${s.rot}deg);filter:brightness(${s.bright}%)"><span class="n">${i + 1}</span></span>`).join('');
+      `<span class="gshot" data-i="${i}"><span class="n">${i + 1}</span></span>`).join('');
     $('pSend').textContent = `Send ${shots.length} photo${shots.length === 1 ? '' : 's'} to the draft`;
-    const ed = $('editor');
-    if (sel >= 0 && shots[sel]) {
-      ed.classList.add('on');
-      $('edCanvas').style.transform = `rotate(${shots[sel].rot}deg) scale(${shots[sel].rot % 180 ? 0.75 : 1})`;
-      $('edCanvas').style.filter = `brightness(${shots[sel].bright}%)`;
-      $('edLight').value = shots[sel].bright;
-      $('edLightVal').textContent = `${shots[sel].bright}%`;
-      $('edMain').classList.toggle('good', shots[sel].main);
-    } else ed.classList.remove('on');
   };
 
-  $('pCam').addEventListener('click', () => { shots.push({ rot: 0, main: shots.length === 0, bright: 100 }); sel = shots.length - 1; sync(); });
-  // relight: live brightness while dragging, applied to the saved image on send
-  $('edLight').addEventListener('input', (e) => {
-    if (sel < 0) return;
-    shots[sel].bright = +e.target.value;
-    $('edCanvas').style.filter = `brightness(${shots[sel].bright}%)`;
-    $('edLightVal').textContent = `${shots[sel].bright}%`;
-  });
-  $('edLight').addEventListener('change', sync);
+  $('pCam').addEventListener('click', () => { shots.push({}); sync(); });
+  // tap a thumbnail = remove a bad shot; that's ALL the phone does
   $('pGrid').addEventListener('click', (e) => {
     const g = e.target.closest('.gshot'); if (!g) return;
-    sel = sel === +g.dataset.i ? -1 : +g.dataset.i;
+    shots.splice(+g.dataset.i, 1);
     sync();
   });
-  $('edRot').addEventListener('click', () => { shots[sel].rot = (shots[sel].rot + 90) % 360; sync(); });
-  $('edCrop').addEventListener('click', () => { $('edHint').textContent = 'crop: drag the corners on the real page (mock)'; });
-  $('edMain').addEventListener('click', () => { shots.forEach((s, i) => s.main = i === sel); sync(); });
-  $('edDel').addEventListener('click', () => { shots.splice(sel, 1); if (!shots.some(s => s.main) && shots.length) shots[0].main = true; sel = -1; sync(); });
 
   $('pSend').addEventListener('click', () => {
     if (!shots.length) return;
-    // photos appear in the lister draft, main first
-    const ordered = [...shots].sort((a, b) => (b.main ? 1 : 0) - (a.main ? 1 : 0));
+    // raw photos land in the draft — the PC editor takes it from here
     $('formShots').innerHTML =
-      ordered.map((s, i) => `<span class="shot ${i === 0 ? 'main' : ''}" style="transform:rotate(${s.rot}deg);filter:brightness(${s.bright}%)"></span>`).join('')
+      shots.map((s, i) => `<span class="shot ${i === 0 ? 'main' : ''}"></span>`).join('')
       + `<button class="qrbtn" id="qrBtn2" title="Shoot on the phone">${CAM}</button><button class="addshot">＋ add photos</button>`;
     $('liveChip').hidden = false;
     $('liveTxt').textContent = `${shots.length} photo${shots.length === 1 ? '' : 's'} received ✓`;
     $('qrpop').classList.add('on');
-    shots = []; sel = -1; sync();
+    shots = []; sync();
   });
 
   sync();
