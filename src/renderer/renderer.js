@@ -5453,7 +5453,7 @@ function ebCleanSpecs(specs) {
 }
 
 // mirror of main/ebaycsv.js buildDescription: the live preview IS the export
-function ebDescription() {
+function ebDescription(forExport) {
   const c = {
     openbox: { label: "OPEN BOX", bg: "#6a1b9a", fg: "#ffffff",
       blurb: "Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original. Original box may show light shelf wear.",
@@ -5484,7 +5484,19 @@ function ebDescription() {
       <tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">Condition</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${c.row}</td></tr>
     </table>
     <p class="ebp-body" style="font-size:12px;color:#333;margin:6px 0"><b>Package Includes:</b> ${c.inc}</p>
+    ${ebGallery(forExport)}
     <div class="ebp-foot" style="border-top:3px solid #2361EB;text-align:center;padding-top:6px;margin-top:10px;font-size:10.5px;color:#888"><b><span class="ebp-blue" style="color:#2361EB">Wireless</span><span class="ebp-black" style="color:#16181C">Techno</span><span class="ebp-blue" style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
+}
+
+// photo section inside the description: the preview shows the local files
+// (with their edits); the export carries a token the main process swaps for
+// the hosted Linnworks URLs once the photos are uploaded
+function ebGallery(forExport) {
+  if (!ebCur.photos.length) return forExport ? "" : "";
+  if (forExport) return "{{PHOTO_GALLERY}}";
+  return `<h3 class="ebp-h3" style="margin:10px 0 4px">Photos</h3>
+    <div class="ebp-gallery">${ebCur.photos.map(p =>
+      `<img src="${ebFileUrl(p.path)}" style="${ebThumbCss(p)}" alt="" />`).join("")}</div>`;
 }
 
 function ebQueueRows() {
@@ -5712,7 +5724,7 @@ $("ebExport").addEventListener("click", async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast("Type a SKU first."); return; }
   ebBusy = true;
-  $("ebExport").textContent = "⏳ Exporting…";
+  $("ebExport").textContent = "Exporting…";
   const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
     sku: ebVarSku(v),
     details: `Storage=${v.storage};Color=${v.color}`,
@@ -5721,7 +5733,7 @@ $("ebExport").addEventListener("click", async () => {
   const listing = {
     sku: ebCur.sku, stockItemId: ebCur.stockItemId, categoryId: ebCur.categoryId || "",
     title: ebCur.title, cond: ebCur.cond, specs: ebCur.specs,
-    description: ebDescription().replace(/\n\s*/g, " "),
+    description: ebDescription(true).replace(/\n\s*/g, " "),
     price: ebCur.price, qty: Number(ebCur.qty) || 1,
     variations: vars,
   };
@@ -5730,19 +5742,21 @@ $("ebExport").addEventListener("click", async () => {
     photos = await ebBakePhotos(ebCur.photos); // edited pixels, not originals
   } catch (err) {
     ebBusy = false;
-    $("ebExport").textContent = "⬇ Export eBay CSV";
+    $("ebExport").textContent = "Export eBay CSV";
     toast(`Could not process a photo: ${err.message}`);
     return;
   }
   const res = await api.ebayExport(listing, photos).catch(err => ({ ok: false, error: err.message }));
   ebBusy = false;
-  $("ebExport").textContent = "⬇ Export eBay CSV";
+  $("ebExport").textContent = "Export eBay CSV";
   if (res && res.ok) {
     toast(`Saved ${res.path.split("\\\\").pop()} — upload it at Seller Hub → Reports → Upload${res.picCount ? ` (${res.picCount} photos hosted)` : ""}`, 6000);
   } else if (res && !res.canceled) {
     toast(res.error || "Export failed.");
   }
 });
+// where the exported file gets uploaded: Seller Hub -> Reports -> Upload
+$("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/sh/reports/uploads"));
 $("ebGear").addEventListener("click", async () => {
   const cfg = await ebLoadCfg();
   const p = cfg.ebayProfiles || {};

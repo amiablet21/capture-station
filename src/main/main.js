@@ -2237,7 +2237,13 @@ function registerIpc() {
         });
         picUrls = await client.addItemImages(stockItemId, files);
       }
-      const csv = buildEbayCsv([{ ...listing, picUrls }], cfg.ebayProfiles || {});
+      // the description's photo section gets the hosted URLs (the preview
+      // showed local files; buyers get the same images from Linnworks' CDN)
+      const gallery = picUrls.length
+        ? `<h3>Photos</h3><div>${picUrls.map(u => `<img src="${u}" style="max-width:100%;margin:8px 0;border-radius:4px" alt="" />`).join('')}</div>`
+        : '';
+      const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
+      const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
       const stamp = new Date();
       const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
       const r = await dialog.showSaveDialog(win, {
