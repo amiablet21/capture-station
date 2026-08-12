@@ -2097,6 +2097,130 @@ function registerIpc() {
     shell.openPath(claimsRun.dir);
     return { ok: true };
   });
+
+  /* ---------- eBay lister ---------- */
+
+  // eBay 403s plain fetches (bot detection), so the listing page is read by a
+  // real hidden Chromium window on the marketplace session (the seller's own
+  // cookies ride along) and the specifics come straight off the DOM.
+  async function fetchEbayListingDom(itemId) {
+    const w = new BrowserWindow({
+      show: false, width: 1100, height: 900,
+      webPreferences: { partition: PANE_PARTITION, sandbox: true },
+    });
+    try {
+      await w.loadURL(`https://www.ebay.com/itm/${encodeURIComponent(itemId)}`);
+      await new Promise(r => setTimeout(r, 4000)); // lazy sections settle
+      // specifics live in dl dt/dd pairs (verified live 2026-08-12); the
+      // category id rides the deepest breadcrumb /b/ link
+      return await w.webContents.executeJavaScript(`(() => {
+        const specs = {};
+        document.querySelectorAll('dl').forEach(dl => {
+          const dts = [...dl.querySelectorAll('dt')];
+          const dds = [...dl.querySelectorAll('dd')];
+          dts.forEach((dt, i) => {
+            const k = dt.innerText.trim().replace(/:$/, '');
+            const v = (dds[i] ? dds[i].innerText : '').replace(/\\s*Read more[\\s\\S]*$/i, '').trim();
+            if (k && v && !/^condition$/i.test(k) && !specs[k]) specs[k] = v;
+          });
+        });
+        const h1 = document.querySelector('h1');
+        const title = (h1 ? h1.innerText.trim() : document.title.replace(/\\s*\\|\\s*eBay\\s*$/i, '')).trim();
+        const priceEl = document.querySelector('.x-price-primary');
+        const priceM = ((priceEl && priceEl.innerText) || '').match(/([\\d,]+\\.?\\d*)/);
+        let categoryId = '';
+        for (const a of [...document.querySelectorAll('a[href*="/b/"]')].reverse()) {
+          const m = String(a.href).match(/\\/(\\d{3,8})\\//);
+          if (m) { categoryId = m[1]; break; }
+        }
+        return {
+          title,
+          price: priceM ? Number(priceM[1].replace(/,/g, '')) : 0,
+          categoryId,
+          specs,
+        };
+      })()`, true);
+    } finally {
+      w.destroy();
+    }
+  }
+
+  // Copy the item specifics off the seller's own LIVE listing of the base
+  // model: base SKU -> eBay link record (channelRefId = the item number) ->
+  // public listing page -> "About this item" table. The renderer caches the
+  // result per model in config.ebayModelCards, so this runs once per family.
+  ipcMain.handle('ebay:specs', async (_e, { baseSku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const channels = await client.getMappingChannels();
+      const eb = channels.find(ch => /ebay/i.test(ch.source));
+      if (!eb) return { ok: false, error: 'No eBay channel in Linnworks.' };
+      const key = `${eb.id}|${eb.source}|${eb.subSource}`;
+      let items = mappingCache.get(key)?.items;
+      if (!items || Date.now() - mappingCache.get(key).at > 10 * 60 * 1000) {
+        items = await client.getChannelItems(eb.id, eb.source, eb.subSource);
+        mappingCache.set(key, { at: Date.now(), items });
+      }
+      const want = String(baseSku).trim().toUpperCase();
+      const hit = items.find(i => String(i.sku).trim().toUpperCase() === want && i.channelRefId);
+      if (!hit) return { ok: false, error: `No live eBay listing found for ${baseSku}.` };
+      const parsed = await fetchEbayListingDom(hit.channelRefId);
+      if (!parsed || !Object.keys(parsed.specs || {}).length) {
+        return { ok: false, error: 'Could not read the specifics off the listing page.' };
+      }
+      return { ok: true, itemId: String(hit.channelRefId), ...parsed };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ebay:photosPick', async () => {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Listing photos',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+    });
+    return { ok: true, files: r.canceled ? [] : r.filePaths };
+  });
+
+  // Export: host the chosen photos on the Linnworks item (eBay's CSV upload
+  // fetches PicURL over the internet), build the CSV, save where the user
+  // picks. Nothing touches eBay until they upload the file in Seller Hub.
+  ipcMain.handle('ebay:export', async (_e, { listing, photoPaths }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const { buildEbayCsv } = require('./ebaycsv.js');
+      const client = new LinnworksClient(cfg.linnworks);
+      let picUrls = [];
+      if (photoPaths && photoPaths.length) {
+        let stockItemId = listing.stockItemId;
+        if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
+        if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.` };
+        const files = photoPaths.map(fp => ({
+          buffer: fs.readFileSync(fp),
+          name: path.basename(fp),
+          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
+        }));
+        picUrls = await client.addItemImages(stockItemId, files);
+      }
+      const csv = buildEbayCsv([{ ...listing, picUrls }], cfg.ebayProfiles || {});
+      const stamp = new Date();
+      const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
+      const r = await dialog.showSaveDialog(win, {
+        title: 'Save the eBay upload file',
+        defaultPath: path.join(app.getPath('downloads'), name),
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+      fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8'); // BOM: Seller Hub reads UTF-8 reliably
+      return { ok: true, path: r.filePath, picCount: picUrls.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // Inline log editing: one UNIT of one return record. Record-level fields
   // (PO#, date, customer, tracking) apply to the whole record; SKU/condition
   // apply to the unit, splitting a qty>1 line when needed. Stock is

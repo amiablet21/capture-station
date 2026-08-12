@@ -250,13 +250,15 @@ function render() {
 
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
-  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns };
+  // the eBay lister rides the Returns flag: same installs, same people
+  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
   }
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
+  $('tabEbay').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
 
@@ -1101,10 +1103,14 @@ function showPage(page) {
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
   $('returnsPage').hidden = page !== 'returns';
+  $('ebayPage').hidden = page !== 'ebay';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
-  if (page === 'stock') {
+  $('tabEbay').classList.toggle('is-active', page === 'ebay');
+  if (page === 'ebay') {
+    enterEbay();
+  } else if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
     $('stockSearch').value = '';
@@ -5397,3 +5403,317 @@ document.addEventListener('click', (e) => {
 api.on('claims:uploaded', ({ po, name, todayCount }) => {
   toast(`Photo saved: ${name}`, 3000);
 });
+
+/* ---------- eBay lister tab ---------- */
+// Approved design: variants/ebay-lister.html. Queue = the unlisted scan
+// filtered to condition SKUs; specifics copy once per model from the live
+// NEW listing (config.ebayModelCards); Export writes the Seller Hub CSV.
+
+const EB_PREFIX = { openbox: "OPEN-BOX", used: "USED", scrap: "SCRAP" };
+const EB_CONDL = { openbox: "Open Box", used: "USED • TESTED & WORKING", scrap: "FOR PARTS OR REPAIR — NOT WORKING" };
+const EB_BADGE = { openbox: "c-open", used: "c-used", scrap: "c-scrap" };
+
+let ebCur = null;      // the listing being built
+let ebCfg = null;      // config snapshot (model cards + profiles)
+let ebBusy = false;
+
+function ebParseSku(sku) {
+  const s = String(sku || "").toUpperCase();
+  const cond = s.startsWith("OPEN-BOX-") ? "openbox" : s.startsWith("USED-") ? "used" : s.startsWith("SCRAP-") ? "scrap" : "";
+  const base = s.replace(/^(OPEN-BOX|USED|SCRAP)-/, "");
+  const m = base.match(/(\d+(?:GB|TB))/i);
+  const parts = base.split("-").filter(Boolean);
+  const last = parts[parts.length - 1] || "";
+  return {
+    cond, base,
+    model: m ? base.slice(0, Math.max(0, base.indexOf(m[1]) - 1)) : (parts[0] || ""),
+    storage: m ? m[1] : "",
+    color: last && !/GB|TB/i.test(last) ? last[0] + last.slice(1).toLowerCase() : "",
+  };
+}
+
+function ebTitleFor(baseTitle, cond) {
+  const tag = cond === "openbox" ? " - Open Box" : cond === "used" ? " - Used" : " - For Parts";
+  return (String(baseTitle || "").replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "") + tag).slice(0, 80);
+}
+
+// mirror of main/ebaycsv.js buildDescription: the live preview IS the export
+function ebDescription() {
+  const c = {
+    openbox: { label: "OPEN BOX", bg: "#6a1b9a", fg: "#ffffff",
+      blurb: "Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original. Original box may show light shelf wear.",
+      inc: "the device + all original accessories, original box (may show light shelf wear).", row: "Open Box" },
+    used: { label: "USED • TESTED & WORKING", bg: "#fbc02d", fg: "#222222",
+      blurb: "Item has been previously used and may show cosmetic wear such as light scratches or scuffs (see photos for actual condition). Fully tested and 100% functional.",
+      inc: "the device + accessories exactly as listed — original accessories may not be included. Wall charger not included.", row: "Used — Tested & Working" },
+    scrap: { label: "FOR PARTS OR REPAIR — NOT WORKING", bg: "#c62828", fg: "#ffffff",
+      blurb: "Item is sold as-is for parts or repair and does not function as intended. Sold with no guarantee of functionality. No returns for non-working condition — please review photos carefully before purchasing.",
+      inc: "the device only — sold as-is.", row: "For Parts or Repair" },
+  }[ebCur.cond];
+  const specRows = Object.entries(ebCur.specs).filter(([, v]) => String(v || "").trim())
+    .map(([k, v]) => `<tr><td style="border:1px solid #ddd;padding:8px">${esc(k)}</td><td style="border:1px solid #ddd;padding:8px">${esc(v)}</td></tr>`).join("");
+  return `
+    <div style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
+      <div style="font-size:17px;letter-spacing:4px;font-weight:700"><span style="color:#2361EB">WIRELESS</span><span style="color:#16181C">TECHNO</span><span style="color:#2361EB">STORE</span></div>
+      <div style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
+    </div>
+    <h2>${esc(ebCur.title)}</h2>
+    <p style="text-align:center;margin:6px 0"><span style="display:inline-block;background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:2px 10px;border-radius:3px">${c.label}</span></p>
+    <p style="text-align:center;font-size:12px;color:#333">${c.blurb}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;color:#333">
+      <tr><th style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
+      ${specRows}
+      <tr><td style="border:1px solid #ddd;padding:8px">Condition</td><td style="border:1px solid #ddd;padding:8px">${c.row}</td></tr>
+    </table>
+    <p style="font-size:12px;color:#333;margin:6px 0"><b>Package Includes:</b> ${c.inc}</p>
+    <div style="border-top:3px solid #2361EB;text-align:center;padding-top:6px;margin-top:10px;font-size:10.5px;color:#888"><b><span style="color:#2361EB">Wireless</span><span style="color:#16181C">Techno</span><span style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
+}
+
+function ebQueueRows() {
+  const rows = [];
+  for (const d of unlistedDetail || []) {
+    const p = ebParseSku(d.sku);
+    if (!p.cond) continue;
+    rows.push({ sku: d.sku, cond: p.cond, qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
+  }
+  return rows;
+}
+
+function renderEbayQueue() {
+  const box = $("ebQueue");
+  const rows = ebQueueRows();
+  if (!rows.length) {
+    box.innerHTML = `<div class="ebay-qempty">No returned condition SKUs waiting — receive a return (or press ➕ New listing to start from scratch).</div>`;
+    return;
+  }
+  box.innerHTML = rows.map(r => `
+    <div class="ebay-qrow ${ebCur && ebCur.sku === r.sku ? "is-on" : ""}" data-sku="${esc(r.sku)}">
+      <span class="sku">${esc(r.sku)}</span>
+      <span class="sub"><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span><span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span></span>
+    </div>`).join("");
+}
+
+async function ebLoadCfg() {
+  if (!ebCfg) ebCfg = await api.getConfig().catch(() => ({}));
+  return ebCfg;
+}
+
+// pick a queue row (or scratch): fill the form, resolve the model card
+async function ebSelect(sku, scratch) {
+  const p = ebParseSku(sku);
+  const q = ebQueueRows().find(r => r.sku === sku);
+  ebCur = {
+    sku, scratch: !!scratch,
+    cond: p.cond || "openbox",
+    stockItemId: (q && q.stockItemId) || "",
+    title: "", price: "", qty: q ? q.qty : 1,
+    specs: {}, vars: [], photos: [],
+    src: "", item: "",
+  };
+  renderEbayQueue();
+  renderEbayForm();
+  if (!sku || scratch) return;
+  const cfg = await ebLoadCfg();
+  const card = (cfg.ebayModelCards || {})[p.model];
+  if (card) {
+    ebApplyCard(card, p);
+    renderEbayForm();
+    return;
+  }
+  // no card yet: read the live NEW listing once, save the card for good
+  $("ebSpecSrc").innerHTML = "⏳ reading your live eBay listing for " + esc(p.base) + "…";
+  const res = await api.ebaySpecs(p.base).catch(e => ({ ok: false, error: e.message }));
+  if (ebCur.sku !== sku) return; // user moved on
+  if (res && res.ok) {
+    const newCard = { title: res.title, item: res.itemId, categoryId: res.categoryId, price: res.price, specs: res.specs };
+    ebCfg.ebayModelCards = { ...(ebCfg.ebayModelCards || {}), [p.model]: newCard };
+    api.setConfig({ ebayModelCards: ebCfg.ebayModelCards }).catch(() => {});
+    ebApplyCard(newCard, p);
+  } else {
+    ebCur.src = "manual";
+    ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
+    ebCur.specs = { Brand: "Samsung", Model: p.model, "Storage Capacity": p.storage, Color: p.color };
+    ebCur.err = (res && res.error) || "no listing found";
+  }
+  renderEbayForm();
+}
+
+function ebApplyCard(card, p) {
+  ebCur.src = "ebay";
+  ebCur.item = card.item || "";
+  ebCur.categoryId = card.categoryId || "";
+  ebCur.title = ebTitleFor(card.title, ebCur.cond);
+  ebCur.price = card.price ? (Math.max(1, card.price * 0.92)).toFixed(2) : "";
+  ebCur.specs = { ...card.specs };
+  // the SKU knows better than the card for these three
+  if (p.storage) ebCur.specs["Storage Capacity"] = p.storage;
+  if (p.color) ebCur.specs["Color"] = p.color;
+}
+
+function ebVarSku(v) {
+  const p = ebParseSku(ebCur.sku);
+  return v.storage && v.color
+    ? `${EB_PREFIX[ebCur.cond]}-${p.model}-${String(v.storage).toUpperCase()}-${String(v.color).toUpperCase()}`
+    : "";
+}
+
+function renderEbayForm() {
+  const has = !!ebCur;
+  $("ebSku").value = has ? ebCur.sku : "";
+  $("ebSku").readOnly = !has || !ebCur.scratch;
+  $("ebTitle").value = has ? ebCur.title : "";
+  $("ebTitleN").textContent = ($("ebTitle").value || "").length;
+  document.querySelectorAll(".ebay-condbtn").forEach(b => b.classList.toggle("is-on", has && b.dataset.cond === ebCur.cond));
+  $("ebPrice").value = has ? ebCur.price : "";
+  $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
+  $("ebQty").value = has ? ebCur.qty : "";
+  // specifics grid: all card specs, editable; amber when empty in manual mode
+  $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
+    <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
+    + `<span class="ebay-spec"><label>&nbsp;</label><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">➕ specific</button></span>`;
+  $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
+    ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
+    : ebCur.src === "manual"
+      ? `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ ${esc(ebCur.err || "no NEW listing found")}</span> — fill once, saved for every future ${esc(ebParseSku(ebCur.sku).model || "")} return`
+      : "";
+  // variations
+  $("ebVars").innerHTML = !has ? "" : ebCur.vars.map((v, vi) => `
+    <span class="ebay-varcard">
+      <span class="vgrid">
+        <span class="ebay-spec"><label>Storage</label><input class="input mono" data-vf="storage" data-vi="${vi}" value="${esc(v.storage)}" /></span>
+        <span class="ebay-spec"><label>Color</label><input class="input mono" data-vf="color" data-vi="${vi}" value="${esc(v.color)}" /></span>
+        <span class="ebay-spec"><label>Price</label><input class="input mono" data-vf="price" data-vi="${vi}" value="${esc(v.price)}" /></span>
+        <span class="ebay-spec"><label>Qty</label><input class="input mono" data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" /></span>
+      </span>
+      <span class="vsku ${ebVarSku(v) ? "is-ok" : "is-empty"}">${ebVarSku(v) || "(fills in from storage + color)"}</span>
+      <button class="ebay-varx" data-varx="${vi}">✕</button>
+    </span>`).join("")
+    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">➕ add variation</button>`;
+  // photos
+  $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((f, i) => `
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" style="background-image:url('file:///${esc(String(f).replace(/\\\\/g, "/"))}')"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
+    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">➕ add photos</button>`;
+  // preview + export note
+  $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue (or ➕ New listing) to start.</div>`;
+  const missing = [];
+  if (has && !ebCur.photos.length) missing.push("no photos yet");
+  if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
+  $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
+  $("ebExport").disabled = !has;
+}
+
+function enterEbay() {
+  ebLoadCfg();
+  if (!unlistedDetail) loadUnlisted();
+  renderEbayQueue();
+  renderEbayForm();
+}
+
+$("ebQueue").addEventListener("click", (e) => {
+  const r = e.target.closest(".ebay-qrow");
+  if (r) ebSelect(r.dataset.sku, false);
+});
+$("ebScratch").addEventListener("click", () => {
+  ebSelect("", true);
+  $("ebSku").readOnly = false;
+  $("ebSku").placeholder = "type any SKU — OPEN-BOX-…, USED-…, SCRAP-…";
+  $("ebSku").focus();
+});
+$("ebSku").addEventListener("change", (e) => {
+  if (!ebCur || !ebCur.scratch) return;
+  const sku = e.target.value.trim().toUpperCase();
+  const p = ebParseSku(sku);
+  ebCur.sku = sku;
+  if (p.cond) ebCur.cond = p.cond;
+  ebCur.specs = { Brand: "Samsung", Model: p.model, "Storage Capacity": p.storage, Color: p.color };
+  ebCur.src = "manual";
+  ebCur.err = "from-scratch listing";
+  ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
+  renderEbayForm();
+});
+$("ebTitle").addEventListener("input", (e) => { if (ebCur) { ebCur.title = e.target.value; $("ebTitleN").textContent = e.target.value.length; $("ebPrev").innerHTML = ebDescription(); } });
+$("ebPrice").addEventListener("input", (e) => { if (ebCur) ebCur.price = e.target.value; });
+$("ebQty").addEventListener("input", (e) => { if (ebCur) ebCur.qty = e.target.value; });
+document.querySelector(".ebay-condrow").addEventListener("click", (e) => {
+  const b = e.target.closest(".ebay-condbtn");
+  if (!b || !ebCur) return;
+  ebCur.cond = b.dataset.cond;
+  ebCur.title = ebTitleFor(ebCur.title, ebCur.cond);
+  renderEbayForm();
+});
+$("ebSpecs").addEventListener("change", (e) => {
+  const f = e.target.closest("[data-spec]");
+  if (f && ebCur) { ebCur.specs[f.dataset.spec] = e.target.value; $("ebPrev").innerHTML = ebDescription(); }
+});
+$("ebSpecs").addEventListener("click", (e) => {
+  if (e.target.closest("#ebSpecAdd") && ebCur) {
+    const name = prompt("Specific name (e.g. Processor):");
+    if (name && name.trim()) { ebCur.specs[name.trim()] = ""; renderEbayForm(); }
+  }
+});
+$("ebVars").addEventListener("click", (e) => {
+  if (e.target.closest("#ebVarAdd") && ebCur) { ebCur.vars.push({ storage: "", color: "", price: "", qty: 1 }); renderEbayForm(); return; }
+  const x = e.target.closest("[data-varx]");
+  if (x && ebCur) { ebCur.vars.splice(Number(x.dataset.varx), 1); renderEbayForm(); }
+});
+$("ebVars").addEventListener("change", (e) => {
+  const f = e.target.closest("[data-vf]");
+  if (f && ebCur) { ebCur.vars[Number(f.dataset.vi)][f.dataset.vf] = e.target.value.trim(); renderEbayForm(); }
+});
+$("ebShots").addEventListener("click", async (e) => {
+  if (e.target.closest("#ebShotAdd") && ebCur) {
+    const r = await api.ebayPhotosPick();
+    if (r && r.ok && r.files.length) { ebCur.photos.push(...r.files); renderEbayForm(); }
+    return;
+  }
+  const x = e.target.closest("[data-shotx]");
+  if (x && ebCur) { ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); }
+});
+$("ebExport").addEventListener("click", async () => {
+  if (!ebCur || ebBusy) return;
+  if (!ebCur.sku) { toast("Type a SKU first."); return; }
+  ebBusy = true;
+  $("ebExport").textContent = "⏳ Exporting…";
+  const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
+    sku: ebVarSku(v),
+    details: `Storage=${v.storage};Color=${v.color}`,
+    price: v.price || ebCur.price, qty: Number(v.qty) || 1,
+  }));
+  const listing = {
+    sku: ebCur.sku, stockItemId: ebCur.stockItemId, categoryId: ebCur.categoryId || "",
+    title: ebCur.title, cond: ebCur.cond, specs: ebCur.specs,
+    description: ebDescription().replace(/\n\s*/g, " "),
+    price: ebCur.price, qty: Number(ebCur.qty) || 1,
+    variations: vars,
+  };
+  const res = await api.ebayExport(listing, ebCur.photos).catch(err => ({ ok: false, error: err.message }));
+  ebBusy = false;
+  $("ebExport").textContent = "⬇ Export eBay CSV";
+  if (res && res.ok) {
+    toast(`Saved ${res.path.split("\\\\").pop()} — upload it at Seller Hub → Reports → Upload${res.picCount ? ` (${res.picCount} photos hosted)` : ""}`, 6000);
+  } else if (res && !res.canceled) {
+    toast(res.error || "Export failed.");
+  }
+});
+$("ebGear").addEventListener("click", async () => {
+  const cfg = await ebLoadCfg();
+  const p = cfg.ebayProfiles || {};
+  $("ebgShip").value = p.shipping || "";
+  $("ebgRet").value = p.returns || "";
+  $("ebgPay").value = p.payment || "";
+  $("ebgLoc").value = p.location || "";
+  $("ebgDisp").value = p.dispatchDays ?? 1;
+  $("ebGearDialog").showModal();
+});
+$("ebgCancel").addEventListener("click", () => $("ebGearDialog").close());
+$("ebgSave").addEventListener("click", async () => {
+  ebCfg.ebayProfiles = {
+    shipping: $("ebgShip").value.trim(), returns: $("ebgRet").value.trim(),
+    payment: $("ebgPay").value.trim(), location: $("ebgLoc").value.trim(),
+    dispatchDays: Math.max(0, Number($("ebgDisp").value) || 1),
+  };
+  await api.setConfig({ ebayProfiles: ebCfg.ebayProfiles }).catch(() => {});
+  $("ebGearDialog").close();
+  toast("eBay listing settings saved");
+});
+$("tabEbay").addEventListener("click", () => showPage("ebay"));

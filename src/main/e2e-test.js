@@ -783,6 +783,53 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.unparkOrder('119990000000001')`);
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+
+    // 43. eBay lister: refusals + the pure CSV/description builders
+    res = await exec(`api.ebaySpecs('X133-64GB-GRAY')`);
+    check('ebay:specs refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.ebayExport({ sku: 'X' }, [])`);
+    check('ebay:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    {
+      const ecsv = require('./ebaycsv.js');
+      const desc = ecsv.buildDescription({ title: 'Tab A9+', cond: 'used', specs: { Brand: 'Samsung', 'Screen Size': '8.7 in' } });
+      check('ebay description: store template + condition block + spec rows',
+        desc.includes('WIRELESS') && desc.includes('USED') && desc.includes('8.7 in')
+          && desc.includes('#2361EB') && desc.includes('Wall charger not included'), desc.length);
+      const scrapDesc = ecsv.buildDescription({ title: 'T', cond: 'scrap', specs: {} });
+      check('ebay description: scrap block, no charger line',
+        scrapDesc.includes('FOR PARTS OR REPAIR') && scrapDesc.includes('sold as-is') && !scrapDesc.includes('Wall charger'), null);
+      const csv1 = ecsv.buildEbayCsv([{
+        sku: 'USED-X133-64GB-GRAY', categoryId: '171485', title: 'Tab, "quoted"', cond: 'used',
+        specs: { Brand: 'Samsung', Model: 'X133' }, picUrls: ['http://a/1.jpg', 'http://a/2.jpg'],
+        description: '<d>', price: '99.99', qty: 2,
+      }], { shipping: 'Ship1', returns: 'Ret1', payment: 'Pay1', location: 'Brooklyn, NY', dispatchDays: 1 });
+      const l1 = csv1.trim().split('\n');
+      check('ebay csv: header carries C: columns + profile columns',
+        l1[0].includes('C:Brand') && l1[0].includes('C:Model') && l1[0].includes('ShippingProfileName'), l1[0]);
+      check('ebay csv: row has condition id, piped pics, quoted title, profiles',
+        l1.length === 2 && l1[1].includes(',3000,') && l1[1].includes('http://a/1.jpg|http://a/2.jpg')
+          && l1[1].includes('"Tab, ""quoted"""') && l1[1].includes('Ship1') && l1[1].includes('FixedPrice'), l1[1]);
+      const csv2 = ecsv.buildEbayCsv([{
+        sku: 'USED-S26-ULTRA', categoryId: '9355', title: 'S26 Ultra', cond: 'used',
+        specs: { Brand: 'Samsung' }, picUrls: [], description: 'd', price: '899.99', qty: 2,
+        variations: [
+          { sku: 'USED-S26-ULTRA-512GB-BLACK', details: 'Storage=512GB;Color=Black', price: '899.99', qty: 2 },
+          { sku: 'USED-S26-ULTRA-256GB-GRAY', details: 'Storage=256GB;Color=Gray', price: '799.99', qty: 1 },
+        ],
+      }], {});
+      const l2 = csv2.trim().split('\n');
+      check('ebay csv: variation listing = parent + child rows with own SKUs',
+        l2.length === 4 && !l2[1].includes('Variation')
+          && l2[2].includes('USED-S26-ULTRA-512GB-BLACK') && l2[2].includes('Variation') && l2[2].includes('Storage=512GB;Color=Black')
+          && l2[3].includes('799.99'), l2.length);
+      const parsed = ecsv.parseEbayPage(`<meta property="og:title" content="Samsung Tab A9+ | eBay">
+        {"categoryId":"171485","price":"119.99"}
+        <div class="ux-labels-values__labels"><span>Brand</span></div><div class="ux-labels-values__values"><span>Samsung</span></div>
+        <div class="ux-labels-values__labels"><span>Screen Size</span></div><div class="ux-labels-values__values"><span>8.7 in</span></div>`);
+      check('ebay page parser: title, category, price, specifics',
+        parsed.title === 'Samsung Tab A9+' && parsed.categoryId === '171485' && parsed.price === 119.99
+          && parsed.specs.Brand === 'Samsung' && parsed.specs['Screen Size'] === '8.7 in', parsed);
+    }
     const prevLookup2 = await exec('recvLookup');
     await exec(`
       chmap.local = true;
