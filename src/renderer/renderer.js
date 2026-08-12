@@ -5385,6 +5385,7 @@ async function openClaimsPop(po) {
 }
 
 $('claimsFolder').addEventListener('click', () => api.claimsOpenFolder());
+$('claimsClose').addEventListener('click', () => { $('claimsPop').hidden = true; });
 
 // click-away closes the popover
 document.addEventListener('click', (e) => {

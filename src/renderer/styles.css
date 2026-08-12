@@ -3255,6 +3255,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   box-shadow: 0 14px 36px rgba(47, 52, 55, 0.22); padding: 14px;
 }
 .claims-pop h4 { font-size: 12.5px; font-weight: 600; margin: 0 0 3px; }
+.claims-close { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border: none; border-radius: 6px; background: transparent; color: var(--faint); font-size: 11px; cursor: pointer; line-height: 1; }
+.claims-close:hover { background: var(--surface-2); color: var(--text); }
 .claims-sub { font-size: 10.5px; color: var(--faint); margin-bottom: 8px; }
 .claims-sub .mono { color: var(--accent-soft-text); font-weight: 600; }
 .claims-qr { display: block; width: 170px; height: 170px; margin: 0 auto 8px; border: 1px solid var(--border-soft); border-radius: 6px; }
