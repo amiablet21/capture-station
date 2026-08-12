@@ -92,7 +92,9 @@
 
   <div class="stage">
     <div class="panel queue">
-      <div class="phead">To list on eBay <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">3 waiting</span></div>
+      <div class="phead">To list on eBay
+        <button class="addshot" id="scratchBtn" style="margin-left:auto;padding:3px 10px;text-transform:none;letter-spacing:0">＋ New listing</button>
+      </div>
       <div id="qlist"></div>
       <div class="qnote">Fed by the listings scan — a SKU leaves this queue when its eBay listing links in Linnworks.</div>
     </div>
@@ -194,7 +196,7 @@
       // the model is everything before the storage segment (Z-FLIP7, X133…)
       model: m ? base.slice(0, base.indexOf(m[1]) - 1) : parts[0],
       storage: m ? m[1] : '',
-      color: parts[parts.length - 1][0] + parts[parts.length - 1].slice(1).toLowerCase(),
+      color: parts[parts.length - 1] ? parts[parts.length - 1][0] + parts[parts.length - 1].slice(1).toLowerCase() : '',
     };
   }
   // the rest of the item specifics, copied 1:1 from the live NEW listing
@@ -300,8 +302,22 @@ Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${c
   $('qlist').addEventListener('click', (e) => {
     const r = e.target.closest('.qrow'); if (!r) return;
     document.querySelectorAll('.qrow').forEach(x => x.classList.toggle('on', x === r));
+    $('fSku').readOnly = true;
     cur = { ...QUEUE[+r.dataset.i] };
     render();
+  });
+  // from scratch: blank form, any SKU/condition — not tied to the returns queue
+  document.getElementById('scratchBtn').addEventListener('click', () => {
+    document.querySelectorAll('.qrow').forEach(x => x.classList.remove('on'));
+    cur = { sku: '', cond: 'openbox', price: 0, qty: 1, title: '', po: '', shots: 0,
+      src: 'manual', item: '', specs: { screen: '', cpu: '', ram: '', mpn: '' } };
+    render();
+    $('fSku').readOnly = false;
+    $('fSku').placeholder = 'type any SKU — OPEN-BOX-…, USED-…, or brand new';
+    $('fSku').focus();
+  });
+  $('fSku').addEventListener('change', (e) => {
+    if (cur && !$('fSku').readOnly) { cur.sku = e.target.value.trim().toUpperCase(); cur.title = ''; render(); }
   });
   document.querySelector('.form').addEventListener('click', (e) => {
     const av = e.target.closest('[data-addvar]');
