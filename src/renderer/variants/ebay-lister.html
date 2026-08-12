@@ -184,10 +184,6 @@
     ? `${PREFIX[cur.cond]}-${sp.model}-${v.storage.toUpperCase()}-${v.color.toUpperCase()}`
     : '(fills in from storage + color)';
   let cur = null;
-  let moreOpen = true; // owner: the full specifics grid is always open
-  document.addEventListener('click', (e) => {
-    if (e.target.id === 'moreTgl') { e.preventDefault(); moreOpen = !moreOpen; render(); }
-  });
 
   function parseSku(sku) {
     const base = sku.replace(/^(OPEN-BOX|USED|SCRAP)-/, '');
@@ -230,13 +226,11 @@
     });
     const more = cur.moreKey === 'x133' ? MORE_X133 : cur.moreKey === 's26' ? MORE_S26 : null;
     $('specSrc').innerHTML = cur.src === 'ebay'
-      ? `✓ copied from your live NEW listing <span style="font-family:var(--mono)">${cur.item}</span> · <a href="#" id="moreTgl" style="color:var(--accent-soft-text)">${moreOpen ? 'hide' : 'show'} the other ${Object.keys(more).length} specifics</a>`
+      ? `✓ copied from your live NEW listing <span style="font-family:var(--mono)">${cur.item}</span>`
       : `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ no NEW listing found</span> — fill once, reused for every future ${sp.model} return`;
-    $('moreGrid').hidden = !more || !moreOpen;
-    if (more && moreOpen) {
-      $('moreGrid').innerHTML = Object.entries(more).map(([k, v]) =>
-        `<span class="spec"><label>${k}</label><input class="fin" value="${v}" /></span>`).join('');
-    }
+    $('moreGrid').hidden = !more;
+    $('moreGrid').innerHTML = more ? Object.entries(more).map(([k, v]) =>
+      `<span class="spec"><label>${k}</label><input class="fin" value="${v}" /></span>`).join('') : '';
     // variations: queued same-model+condition units arrive pre-checked, and
     // "+ add variation" creates new combos on the spot (storage/color/price/qty)
     document.getElementById('varList').innerHTML =
