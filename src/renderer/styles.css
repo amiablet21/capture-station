@@ -1110,6 +1110,9 @@ body.ret-compact .ret-sheet { min-width: 0; }
 /* spacing: the actions column is a fixed sliver, so the header band ends
    flush with the last column instead of leaving a dead zone */
 .ret-sheet th.th-actions { width: 56px; }
+/* the log's tray holds THREE icons (camera + edit + delete): the 56px cell
+   silently clipped edit/delete once the camera landed (owner report 2026-08-12) */
+.ret-log-table th.th-actions { width: 96px; }
 
 /* re-editable picked SKU on the worksheet: pencil rides beside the SKU */
 .ret-cell-sku .ret-sku-edit {
