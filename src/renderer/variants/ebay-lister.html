@@ -109,8 +109,12 @@
           <span class="spec"><label>Model</label><input class="fin" id="sModel" /></span>
           <span class="spec"><label>Storage</label><input class="fin" id="sStorage" /></span>
           <span class="spec"><label>Color</label><input class="fin" id="sColor" /></span>
+          <span class="spec"><label>Screen size</label><input class="fin" id="sScreen" /></span>
+          <span class="spec"><label>Processor</label><input class="fin" id="sCpu" /></span>
+          <span class="spec"><label>RAM</label><input class="fin" id="sRam" /></span>
+          <span class="spec"><label>MPN</label><input class="fin" id="sMpn" /></span>
         </div>
-        <span class="fhint">parsed from the SKU — edit anything that looks off</span>
+        <span class="fhint" id="specSrc"></span>
       </div>
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
       <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
@@ -140,9 +144,15 @@
 
 <script>
   const QUEUE = [
-    { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray', po: '119120775455737', shots: 0 },
-    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black', po: '119120671019601', shots: 2 },
-    { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray', po: '119119354597966', shots: 0 },
+    { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray', po: '119120775455737', shots: 0,
+      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' } },
+    { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black', po: '119120671019601', shots: 2,
+      src: 'ebay', item: '278109883317', specs: { screen: '6.9 in', cpu: 'Snapdragon 8 Elite 2', ram: '12 GB', mpn: 'SM-S948U' } },
+    // no NEW listing anywhere for this one -> manual fill, saved to the model card
+    { sku: 'OPEN-BOX-Z-FLIP7-256GB-CREAM', cond: 'openbox', price: 749.99, qty: 1, flaws: '', title: 'Samsung Galaxy Z Flip7 256GB Unlocked Cream', po: '119120801122334', shots: 0,
+      src: 'manual', item: '', specs: { screen: '', cpu: '', ram: '', mpn: '' } },
+    { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray', po: '119119354597966', shots: 0,
+      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' } },
   ];
   // your listing template's condition blocks (WirelessTechnoStore):
   // Open Box = purple, Used = yellow, Scrap = red — wording matches eBay's
@@ -184,6 +194,17 @@
     const sp = parseSku(cur.sku);
     $('sBrand').value = sp.brand; $('sModel').value = sp.model;
     $('sStorage').value = sp.storage; $('sColor').value = sp.color;
+    // full specifics: copied from the live NEW listing when one exists,
+    // typed ONCE otherwise (saved to the model card for every later unit)
+    $('sScreen').value = cur.specs.screen; $('sCpu').value = cur.specs.cpu;
+    $('sRam').value = cur.specs.ram; $('sMpn').value = cur.specs.mpn;
+    ['sScreen', 'sCpu', 'sRam', 'sMpn'].forEach(id => {
+      $(id).placeholder = cur.src === 'manual' ? 'type once…' : '';
+      $(id).style.borderColor = cur.src === 'manual' && !$(id).value ? 'var(--badge-yellow-text)' : '';
+    });
+    $('specSrc').innerHTML = cur.src === 'ebay'
+      ? `✓ copied from your live NEW listing (item <span style="font-family:var(--mono)">${cur.item}</span>) — edit anything that looks off`
+      : `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ no NEW listing found for this model</span> — fill the amber fields once; they're saved to the model card and reused for every future ${sp.model} return`;
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
     $('fFlaws').value = cur.flaws;
