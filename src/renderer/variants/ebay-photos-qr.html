@@ -30,6 +30,10 @@
   .shot.main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
   .addshot { font-size: 10.5px; font-weight: 600; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 12px 10px; cursor: pointer; color: var(--muted); font-family: inherit; }
   .addshot:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  /* the subtle camera button — same as the returns-log row tray */
+  .qrbtn { width: 26px; height: 24px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 1px 4px rgba(47,52,55,0.10); }
+  .qrbtn:hover { border-color: var(--accent); }
+  .qrbtn svg { width: 13px; height: 13px; color: var(--accent); }
   .qrpop { position: absolute; left: 12px; top: 84px; width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 36px rgba(47,52,55,0.22); padding: 13px; display: none; z-index: 5; }
   .qrpop.on { display: block; }
   .qrpop h4 { font-size: 12px; font-weight: 600; margin: 0 0 3px; }
@@ -55,16 +59,21 @@
   .gshot.sel { outline: 2px solid var(--accent); }
   .gshot.main::after { content: '★ MAIN'; position: absolute; top: 3px; left: 3px; font-size: 7px; font-weight: 700; background: rgba(4,120,87,.9); color: #fff; border-radius: 3px; padding: 1px 4px; }
   .gshot .n { position: absolute; bottom: 3px; right: 4px; font-size: 8px; color: #666; font-family: var(--mono); }
-  /* editor */
-  .editor { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--surface-2); display: none; }
+  /* editor — pro dark surface, like a real photo app */
+  .editor { border-radius: 12px; padding: 10px; background: #1C1C1E; display: none; }
   .editor.on { display: block; }
-  .ed-canvas { width: 100%; aspect-ratio: 4/3; border-radius: 8px; background: linear-gradient(135deg, #d8d8d5, #efefec); border: 1px solid var(--border); transition: transform 250ms; margin-bottom: 8px; }
+  .ed-canvas { width: 100%; aspect-ratio: 4/3; border-radius: 8px; background: linear-gradient(135deg, #b9b9b4, #e8e8e4); transition: transform 250ms, filter 120ms; margin-bottom: 10px; }
+  .ed-slider { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .ed-slider .ic { font-size: 12px; }
+  .ed-slider input[type=range] { flex: 1; appearance: none; height: 3px; border-radius: 999px; background: linear-gradient(90deg, #555, #fff); outline: none; }
+  .ed-slider input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 999px; background: #fff; border: none; box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: pointer; }
+  .ed-slider .val { font-family: var(--mono); font-size: 9.5px; color: #EBEBF0; width: 34px; text-align: right; }
   .ed-tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; }
-  .ed-btn { font-size: 10px; font-weight: 600; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 7px 2px; cursor: pointer; color: var(--text); font-family: inherit; text-align: center; }
-  .ed-btn:hover { border-color: var(--accent); }
-  .ed-btn.danger { color: var(--neg-text); }
-  .ed-btn.good { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
-  .ed-hint { font-size: 9px; color: var(--faint); text-align: center; margin-top: 6px; }
+  .ed-btn { font-size: 9.5px; font-weight: 600; border: none; border-radius: 8px; background: #2C2C2E; padding: 8px 2px; cursor: pointer; color: #EBEBF0; font-family: inherit; text-align: center; }
+  .ed-btn:hover { background: #3A3A3C; }
+  .ed-btn.danger { color: #FF6B6B; }
+  .ed-btn.good { background: var(--accent); color: #fff; }
+  .ed-hint { font-size: 9px; color: #8E8E93; text-align: center; margin-top: 8px; }
   .psend { margin-top: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 13.5px; font-weight: 600; padding: 12px; cursor: pointer; font-family: inherit; }
 </style></head>
 <body>
@@ -76,7 +85,7 @@
       <div class="formmock">
         <span class="flabel">Photos — OPEN-BOX-X133-64GB-GRAY</span>
         <div class="shots" id="formShots">
-          <button class="addshot" id="qrBtn">📷 QR — shoot on the phone</button>
+          <button class="qrbtn" id="qrBtn" title="Shoot on the phone — QR for this draft"></button>
           <button class="addshot">＋ add photos</button>
         </div>
         <div class="qrpop" id="qrpop">
@@ -98,6 +107,7 @@
           <div class="grid" id="pGrid"></div>
           <div class="editor" id="editor">
             <div class="ed-canvas" id="edCanvas"></div>
+            <div class="ed-slider"><span class="ic">☀️</span><input type="range" id="edLight" min="50" max="150" value="100" /><span class="val" id="edLightVal">100%</span></div>
             <div class="ed-tools">
               <button class="ed-btn" id="edRot">⟳ Rotate</button>
               <button class="ed-btn" id="edCrop">✂ Crop</button>
@@ -114,24 +124,40 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
-  let shots = [];       // { rot: degrees, main: bool }
+  const CAM = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>';
+  let shots = [];       // { rot: degrees, main: bool, bright: percent }
   let sel = -1;
 
-  $('qrBtn').addEventListener('click', () => $('qrpop').classList.toggle('on'));
+  document.getElementById('qrBtn').innerHTML = CAM;
+  // delegation: the button is re-rendered after a send, so listen on the row
+  $('formShots').addEventListener('click', (e) => {
+    if (e.target.closest('.qrbtn')) $('qrpop').classList.toggle('on');
+  });
 
   const sync = () => {
     $('pGrid').innerHTML = shots.map((s, i) =>
-      `<span class="gshot ${i === sel ? 'sel' : ''} ${s.main ? 'main' : ''}" data-i="${i}" style="transform:rotate(${s.rot}deg)"><span class="n">${i + 1}</span></span>`).join('');
+      `<span class="gshot ${i === sel ? 'sel' : ''} ${s.main ? 'main' : ''}" data-i="${i}" style="transform:rotate(${s.rot}deg);filter:brightness(${s.bright}%)"><span class="n">${i + 1}</span></span>`).join('');
     $('pSend').textContent = `Send ${shots.length} photo${shots.length === 1 ? '' : 's'} to the draft`;
     const ed = $('editor');
     if (sel >= 0 && shots[sel]) {
       ed.classList.add('on');
       $('edCanvas').style.transform = `rotate(${shots[sel].rot}deg) scale(${shots[sel].rot % 180 ? 0.75 : 1})`;
+      $('edCanvas').style.filter = `brightness(${shots[sel].bright}%)`;
+      $('edLight').value = shots[sel].bright;
+      $('edLightVal').textContent = `${shots[sel].bright}%`;
       $('edMain').classList.toggle('good', shots[sel].main);
     } else ed.classList.remove('on');
   };
 
-  $('pCam').addEventListener('click', () => { shots.push({ rot: 0, main: shots.length === 0 }); sel = shots.length - 1; sync(); });
+  $('pCam').addEventListener('click', () => { shots.push({ rot: 0, main: shots.length === 0, bright: 100 }); sel = shots.length - 1; sync(); });
+  // relight: live brightness while dragging, applied to the saved image on send
+  $('edLight').addEventListener('input', (e) => {
+    if (sel < 0) return;
+    shots[sel].bright = +e.target.value;
+    $('edCanvas').style.filter = `brightness(${shots[sel].bright}%)`;
+    $('edLightVal').textContent = `${shots[sel].bright}%`;
+  });
+  $('edLight').addEventListener('change', sync);
   $('pGrid').addEventListener('click', (e) => {
     const g = e.target.closest('.gshot'); if (!g) return;
     sel = sel === +g.dataset.i ? -1 : +g.dataset.i;
@@ -147,8 +173,8 @@
     // photos appear in the lister draft, main first
     const ordered = [...shots].sort((a, b) => (b.main ? 1 : 0) - (a.main ? 1 : 0));
     $('formShots').innerHTML =
-      ordered.map((s, i) => `<span class="shot ${i === 0 ? 'main' : ''}" style="transform:rotate(${s.rot}deg)"></span>`).join('')
-      + '<button class="addshot" id="qrBtn2">📷 QR</button><button class="addshot">＋ add photos</button>';
+      ordered.map((s, i) => `<span class="shot ${i === 0 ? 'main' : ''}" style="transform:rotate(${s.rot}deg);filter:brightness(${s.bright}%)"></span>`).join('')
+      + `<button class="qrbtn" id="qrBtn2" title="Shoot on the phone">${CAM}</button><button class="addshot">＋ add photos</button>`;
     $('liveChip').hidden = false;
     $('liveTxt').textContent = `${shots.length} photo${shots.length === 1 ? '' : 's'} received ✓`;
     $('qrpop').classList.add('on');
