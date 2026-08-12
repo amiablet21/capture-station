@@ -3339,3 +3339,23 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebg-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .ebg-row label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
 .ebg-row .input { width: 100%; box-sizing: border-box; padding: 8px 10px; }
+
+/* eBay buyer preview: the CSP strips the template inline styles in-app, so
+   these .ebp-* classes mirror them 1:1 (eBay itself uses the inline styles) */
+.ebay-prev .ebp-head { border-bottom: 3px solid #2361EB; padding: 6px 0 8px; margin-bottom: 12px; text-align: center; }
+.ebay-prev .ebp-brand { font-size: 17px; letter-spacing: 4px; font-weight: 700; }
+.ebay-prev .ebp-blue { color: #2361EB; }
+.ebay-prev .ebp-black { color: #16181C; }
+.ebay-prev .ebp-tagline { font-size: 8.5px; letter-spacing: 2px; color: #5B6472; margin-top: 2px; }
+.ebay-prev .ebp-title { text-align: center; }
+.ebay-prev .ebp-center { text-align: center; margin: 6px 0; }
+.ebay-prev .ebp-body { font-size: 12px; color: #333; margin: 6px 0; }
+.ebay-prev .ebp-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 3px; }
+.ebay-prev .ebp-badge-openbox { background: #6a1b9a; color: #fff; }
+.ebay-prev .ebp-badge-used { background: #fbc02d; color: #222; }
+.ebay-prev .ebp-badge-scrap { background: #c62828; color: #fff; }
+.ebay-prev .ebp-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 8px 0; color: #333; }
+.ebay-prev .ebp-th { border: 1px solid #ddd; padding: 6px 8px; background: #f5f5f5; text-align: left; }
+.ebay-prev .ebp-th:first-child { width: 38%; }
+.ebay-prev .ebp-td { border: 1px solid #ddd; padding: 8px; }
+.ebay-prev .ebp-foot { border-top: 3px solid #2361EB; text-align: center; padding-top: 6px; margin-top: 10px; font-size: 10.5px; color: #888; }

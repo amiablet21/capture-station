@@ -5450,23 +5450,26 @@ function ebDescription() {
       blurb: "Item is sold as-is for parts or repair and does not function as intended. Sold with no guarantee of functionality. No returns for non-working condition — please review photos carefully before purchasing.",
       inc: "the device only — sold as-is.", row: "For Parts or Repair" },
   }[ebCur.cond];
+  // Every element wears BOTH a class and the inline style: the app's CSP
+  // strips inline styles, so the preview leans on .ebp-* rules; eBay's page
+  // knows nothing of our classes and uses the inline styles. Same string.
   const specRows = Object.entries(ebCur.specs).filter(([, v]) => String(v || "").trim())
-    .map(([k, v]) => `<tr><td style="border:1px solid #ddd;padding:8px">${esc(k)}</td><td style="border:1px solid #ddd;padding:8px">${esc(v)}</td></tr>`).join("");
+    .map(([k, v]) => `<tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(k)}</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(v)}</td></tr>`).join("");
   return `
-    <div style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
-      <div style="font-size:17px;letter-spacing:4px;font-weight:700"><span style="color:#2361EB">WIRELESS</span><span style="color:#16181C">TECHNO</span><span style="color:#2361EB">STORE</span></div>
-      <div style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
+    <div class="ebp-head" style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
+      <div class="ebp-brand" style="font-size:17px;letter-spacing:4px;font-weight:700"><span class="ebp-blue" style="color:#2361EB">WIRELESS</span><span class="ebp-black" style="color:#16181C">TECHNO</span><span class="ebp-blue" style="color:#2361EB">STORE</span></div>
+      <div class="ebp-tagline" style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
     </div>
-    <h2>${esc(ebCur.title)}</h2>
-    <p style="text-align:center;margin:6px 0"><span style="display:inline-block;background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:2px 10px;border-radius:3px">${c.label}</span></p>
-    <p style="text-align:center;font-size:12px;color:#333">${c.blurb}</p>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;color:#333">
-      <tr><th style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
+    <h2 class="ebp-title">${esc(ebCur.title)}</h2>
+    <p class="ebp-center" style="text-align:center;margin:6px 0"><span class="ebp-badge ebp-badge-${ebCur.cond}" style="display:inline-block;background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:2px 10px;border-radius:3px">${c.label}</span></p>
+    <p class="ebp-center ebp-body" style="text-align:center;font-size:12px;color:#333">${c.blurb}</p>
+    <table class="ebp-table" style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;color:#333">
+      <tr><th class="ebp-th" style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th class="ebp-th" style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
       ${specRows}
-      <tr><td style="border:1px solid #ddd;padding:8px">Condition</td><td style="border:1px solid #ddd;padding:8px">${c.row}</td></tr>
+      <tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">Condition</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${c.row}</td></tr>
     </table>
-    <p style="font-size:12px;color:#333;margin:6px 0"><b>Package Includes:</b> ${c.inc}</p>
-    <div style="border-top:3px solid #2361EB;text-align:center;padding-top:6px;margin-top:10px;font-size:10.5px;color:#888"><b><span style="color:#2361EB">Wireless</span><span style="color:#16181C">Techno</span><span style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
+    <p class="ebp-body" style="font-size:12px;color:#333;margin:6px 0"><b>Package Includes:</b> ${c.inc}</p>
+    <div class="ebp-foot" style="border-top:3px solid #2361EB;text-align:center;padding-top:6px;margin-top:10px;font-size:10.5px;color:#888"><b><span class="ebp-blue" style="color:#2361EB">Wireless</span><span class="ebp-black" style="color:#16181C">Techno</span><span class="ebp-blue" style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
 }
 
 function ebQueueRows() {
