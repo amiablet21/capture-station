@@ -5434,7 +5434,22 @@ function ebParseSku(sku) {
 
 function ebTitleFor(baseTitle, cond) {
   const tag = cond === "openbox" ? " - Open Box" : cond === "used" ? " - Used" : " - For Parts";
-  return (String(baseTitle || "").replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "") + tag).slice(0, 80);
+  // drop a trailing "New" (wrong for condition listings) and any old suffix,
+  // then trim the BASE so the suffix always fits whole inside 80 chars
+  const base = String(baseTitle || "")
+    .replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "")
+    .replace(/\s+New\s*$/i, "")
+    .trim();
+  return base.slice(0, 80 - tag.length).trim() + tag;
+}
+
+// junk the live-page reader may have cached before it learned better —
+// cards clean themselves on every use
+const EB_SPEC_JUNK = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
+function ebCleanSpecs(specs) {
+  const out = {};
+  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = v;
+  return out;
 }
 
 // mirror of main/ebaycsv.js buildDescription: the live preview IS the export
@@ -5547,7 +5562,7 @@ function ebApplyCard(card, p) {
   ebCur.categoryId = card.categoryId || "";
   ebCur.title = ebTitleFor(card.title, ebCur.cond);
   ebCur.price = card.price ? (Math.max(1, card.price * 0.92)).toFixed(2) : "";
-  ebCur.specs = { ...card.specs };
+  ebCur.specs = ebCleanSpecs(card.specs);
   // the SKU knows better than the card for these three
   if (p.storage) ebCur.specs["Storage Capacity"] = p.storage;
   if (p.color) ebCur.specs["Color"] = p.color;

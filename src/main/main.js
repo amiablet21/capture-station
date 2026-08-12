@@ -2115,13 +2115,16 @@ function registerIpc() {
       // category id rides the deepest breadcrumb /b/ link
       return await w.webContents.executeJavaScript(`(() => {
         const specs = {};
+        // seller-view rows (Views, Buyer ID, timings, shipping blocks) are
+        // page furniture, not item specifics — keep them out of the card
+        const junk = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
         document.querySelectorAll('dl').forEach(dl => {
           const dts = [...dl.querySelectorAll('dt')];
           const dds = [...dl.querySelectorAll('dd')];
           dts.forEach((dt, i) => {
             const k = dt.innerText.trim().replace(/:$/, '');
             const v = (dds[i] ? dds[i].innerText : '').replace(/\\s*Read more[\\s\\S]*$/i, '').trim();
-            if (k && v && !/^condition$/i.test(k) && !specs[k]) specs[k] = v;
+            if (k && v && !junk.test(k) && !specs[k]) specs[k] = v;
           });
         });
         const h1 = document.querySelector('h1');
