@@ -115,6 +115,10 @@ const DEFAULTS = {
   // SKUs deliberately excluded from the "needs marketplace listings"
   // machinery (claim bins, fakes, write-offs — never to be listed)
   unlistedIgnore: [],
+  // eBay lister: per-model spec cards (copied once from a live NEW listing or
+  // typed once by hand) + the business-policy names the CSV references
+  ebayModelCards: {},
+  ebayProfiles: { shipping: '', returns: '', payment: '', location: '', dispatchDays: 1 },
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',

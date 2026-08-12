@@ -5380,9 +5380,7 @@ async function openClaimsPop(po) {
     $('claimsErr').hidden = true;
     $('claimsQr').src = res.qr;
   }
-  $('claimsSub').innerHTML = po
-    ? `for <span class="mono">${esc(po)}</span> — the phone opens ready to shoot`
-    : 'any PO — pick it on the phone';
+  $('claimsSub').innerHTML = po ? `<span class="mono">${esc(po)}</span>` : '';
   pop.hidden = false;
 }
 

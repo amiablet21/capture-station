@@ -522,6 +522,43 @@ class LinnworksClient {
     }
   }
 
+  // eBay lister: attach a BATCH of listing photos to the condition SKU's item
+  // and hand back their hosted URLs — Linnworks is the public host eBay's
+  // CSV upload fetches PicURL from. First photo becomes the main image.
+  async addItemImages(stockItemId, files) {
+    if (!this.session) await this.auth();
+    const ids = [];
+    for (const f of files) {
+      await this.throttle();
+      const form = new FormData();
+      form.append('file', new Blob([f.buffer], { type: f.mime || 'image/jpeg' }), f.name || 'photo.jpg');
+      const res = await fetch(`${this.session.server}/api/Uploader/UploadFile?type=Image&expiredInHours=24`, {
+        method: 'POST',
+        headers: { Authorization: this.session.token },
+        body: form,
+      });
+      const body = await res.text();
+      if (!res.ok) throw new LinnworksError(`UploadFile failed (${res.status}): ${trim(body)}`, { status: res.status, endpoint: 'Uploader/UploadFile' });
+      const up = JSON.parse(body);
+      const fileId = ((Array.isArray(up) ? up[0] : up) || {}).FileId;
+      if (!fileId) throw new LinnworksError('UploadFile returned no FileId');
+      ids.push(fileId);
+    }
+    if (!ids.length) return [];
+    const before = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }).catch(() => []) || [];
+    await this.call('Inventory/UploadImagesToInventoryItem', { inventoryItemId: stockItemId, imageIds: ids });
+    const after = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }) || [];
+    const seen = new Set(before.map(i => i.pkRowId));
+    const fresh = after.filter(i => !seen.has(i.pkRowId));
+    // first of the batch = the gallery/main photo
+    try {
+      if (fresh[0] && fresh[0].pkRowId) {
+        await this.call('Inventory/SetInventoryItemImageAsMain', { inventoryItemId: stockItemId, mainImageId: fresh[0].pkRowId });
+      }
+    } catch { /* main-flag is cosmetic */ }
+    return fresh.map(i => i.FullSource || i.Source).filter(Boolean);
+  }
+
   // Find a PROCESSED order by its channel reference (for returns): search,
   // then pull the full order for its item lines.
   // opts.light: skip the per-order items fetch (the sync's already-processed

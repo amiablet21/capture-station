@@ -3270,3 +3270,64 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 /* row-level camera in the returns-log hover tray */
 .ret-log-cam { color: var(--accent); }
+
+/* ---------- eBay lister tab ---------- */
+/* Approved design: variants/ebay-lister.html — queue | form | buyer preview.
+   The queue is the unlisted scan filtered to condition SKUs; export writes a
+   Seller Hub CSV (Reports -> Upload). */
+
+.ebay-page { padding: 0 24px 16px; overflow-y: auto; flex: 1; }
+.ebay-cols { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
+.ebay-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+.ebay-phead { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 9px 12px 7px; background: var(--surface-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.ebay-addbtn { margin-left: auto; font-size: 10.5px; font-weight: 600; border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 3px 10px; cursor: pointer; color: var(--muted); font-family: inherit; text-transform: none; letter-spacing: 0; }
+.ebay-addbtn:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+
+/* queue */
+.ebay-queue { width: 290px; flex: 0 0 auto; }
+.ebay-qlist { max-height: calc(100vh - 190px); overflow-y: auto; }
+.ebay-qrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+.ebay-qrow:hover, .ebay-qrow.is-on { background: var(--accent-soft); }
+.ebay-qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+.ebay-qrow .sub { font-size: 10.5px; color: var(--faint); display: flex; gap: 8px; align-items: center; }
+.ebay-qcond { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; }
+.ebay-qcond.c-open { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ebay-qcond.c-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.ebay-qcond.c-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.ebay-qempty { padding: 14px 12px; font-size: 11.5px; color: var(--faint); }
+
+/* form */
+.ebay-form { width: 430px; flex: 0 0 auto; }
+.ebay-frows { }
+.ebay-frow { display: grid; grid-template-columns: 86px 1fr; gap: 8px; align-items: start; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); }
+.ebay-flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding-top: 7px; }
+.ebay-fin { width: 100%; box-sizing: border-box; font-size: 12px; padding: 6px 9px; }
+.ebay-fhint { font-size: 9.5px; color: var(--faint); margin-top: 3px; line-height: 1.45; }
+.ebay-condrow { display: flex; gap: 6px; }
+.ebay-condbtn { flex: 1; font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 7px 4px; cursor: pointer; color: var(--muted); font-family: inherit; }
+.ebay-condbtn.is-on[data-cond="openbox"] { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
+.ebay-condbtn.is-on[data-cond="used"] { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
+.ebay-condbtn.is-on[data-cond="scrap"] { background: var(--neg-bg); color: var(--neg-text); border-color: transparent; }
+.ebay-specgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ebay-spec { display: flex; flex-direction: column; gap: 2px; }
+.ebay-spec label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
+.ebay-spec input { font-size: 11.5px; padding: 5px 8px; }
+.ebay-spec input.is-missing { border-color: var(--badge-yellow-text); }
+.ebay-vars { display: flex; flex-direction: column; gap: 6px; }
+.ebay-varcard { position: relative; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.ebay-varcard .vgrid { display: grid; grid-template-columns: 1fr 1fr 1fr 60px; gap: 6px; }
+.ebay-varcard .vsku { font-family: var(--mono); font-size: 10px; }
+.ebay-varcard .vsku.is-ok { color: var(--accent-soft-text); }
+.ebay-varcard .vsku.is-empty { color: var(--faint); }
+.ebay-varx { position: absolute; top: -7px; right: -7px; width: 17px; height: 17px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; }
+.ebay-shots { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ebay-shot { position: relative; width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); background-size: cover; background-position: center; background-color: var(--surface-2); }
+.ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
+.ebay-shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); }
+
+/* buyer preview: renders the WirelessTechnoStore template */
+.ebay-out { width: 430px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.ebay-prev { background: #fff; padding: 16px; font-family: Arial, sans-serif; max-height: calc(100vh - 190px); overflow-y: auto; }
+.ebay-prev h2 { font-size: 16px; margin: 0 0 4px; color: #111; text-align: center; }
+.ebay-prev-empty { padding: 24px 12px; font-size: 11.5px; color: var(--faint); font-family: var(--font); text-align: center; }
