@@ -3241,20 +3241,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 
 /* ---------- Upload Photos (claim photos) ---------- */
-/* Corner button (design: toolbar-flat) + QR popover. The QR token rotates per
-   app session; photos land in Documents\Capture Station\claim photos. */
-
-.claims-fab {
-  position: fixed; right: 16px; bottom: 16px; z-index: 60;
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px; padding: 8px 13px;
-  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  box-shadow: 0 3px 10px rgba(47, 52, 55, 0.10);
-}
-.claims-fab:hover { border-color: var(--accent); box-shadow: 0 3px 12px rgba(4, 120, 87, 0.18); }
-.claims-fab svg { width: 14px; height: 14px; color: var(--accent); }
-.claims-fab-n { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; }
+/* QR popover, opened from the returns-log row camera. The QR token rotates
+   per app session; photos land in Documents\Capture Station\claim photos. */
 
 .claims-pop {
   position: fixed; right: 16px; bottom: 64px; z-index: 61; width: 250px;

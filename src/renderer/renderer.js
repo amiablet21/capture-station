@@ -5365,17 +5365,9 @@ refresh().then(() => focusScan());
 initBrowserPane();
 
 /* ---------- Upload Photos (claim photos) ---------- */
-// Corner button -> QR popover; the row-level camera in the returns log opens
-// the QR locked to that PO#. Photos land in Documents\Capture Station\
-// claim photos (5-day shelf), counted live on the badge.
-
-let claimsCount = 0;
-
-function claimsBadge() {
-  const n = $('claimsFabN');
-  n.hidden = !claimsCount;
-  n.textContent = claimsCount;
-}
+// Opened from the 📷 on a returns-log row: QR popover locked to that PO#.
+// Photos land in Documents\Capture Station\claim photos (5-day shelf).
+// (The generic corner button was retired 2026-08-12 — redundant per owner.)
 
 async function openClaimsPop(po) {
   const pop = $('claimsPop');
@@ -5387,8 +5379,6 @@ async function openClaimsPop(po) {
   } else {
     $('claimsErr').hidden = true;
     $('claimsQr').src = res.qr;
-    claimsCount = res.todayCount || 0;
-    claimsBadge();
   }
   $('claimsSub').innerHTML = po
     ? `for <span class="mono">${esc(po)}</span> — the phone opens ready to shoot`
@@ -5396,30 +5386,15 @@ async function openClaimsPop(po) {
   pop.hidden = false;
 }
 
-$('claimsFab').addEventListener('click', () => {
-  if ($('claimsPop').hidden) openClaimsPop('');
-  else $('claimsPop').hidden = true;
-});
-
 $('claimsFolder').addEventListener('click', () => api.claimsOpenFolder());
 
-// click-away closes the popover (the fab itself toggles)
+// click-away closes the popover
 document.addEventListener('click', (e) => {
   if ($('claimsPop').hidden) return;
-  if (e.target.closest('#claimsPop') || e.target.closest('#claimsFab') || e.target.closest('.ret-log-cam')) return;
+  if (e.target.closest('#claimsPop') || e.target.closest('.ret-log-cam')) return;
   $('claimsPop').hidden = true;
 });
 
 api.on('claims:uploaded', ({ po, name, todayCount }) => {
-  claimsCount = todayCount;
-  claimsBadge();
   toast(`Photo saved: ${name}`, 3000);
 });
-
-// boot: only show the button once the server answers (it carries the QR)
-api.claimsInfo('').then((res) => {
-  if (!res || !res.ok) return;
-  claimsCount = res.todayCount || 0;
-  claimsBadge();
-  $('claimsFab').hidden = false;
-}).catch(() => { /* server missing: button stays hidden */ });
