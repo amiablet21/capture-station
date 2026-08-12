@@ -173,7 +173,7 @@
   };
   const $ = (id) => document.getElementById(id);
   let cur = null;
-  let moreOpen = false;
+  let moreOpen = true; // owner: the full specifics grid is always open
   document.addEventListener('click', (e) => {
     if (e.target.id === 'moreTgl') { e.preventDefault(); moreOpen = !moreOpen; render(); }
   });
