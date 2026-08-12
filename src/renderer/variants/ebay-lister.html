@@ -119,7 +119,6 @@
       </div>
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
       <div class="frow"><span class="flabel">Qty</span><input class="fin mono" id="fQty" style="width:70px" /></div>
-      <div class="frow"><span class="flabel">Flaws</span><input class="fin" id="fFlaws" placeholder="e.g. scuffed corner" /><span class="fhint">pulled from the return's note — shown honestly in the description</span></div>
       <div class="frow" id="varRow" hidden><span class="flabel">Variations</span>
         <div id="varList" style="display:flex;flex-direction:column;gap:3px"></div>
       </div>
@@ -236,7 +235,6 @@
     } else { varRow.hidden = true; }
     $('fPrice').value = cur.price.toFixed(2);
     $('fQty').value = cur.qty;
-    $('fFlaws').value = cur.flaws;
     // photos: from the claim-photos folder (matched by PO) or picked by hand
     $('fShots').innerHTML =
       Array.from({ length: cur.shots }, (_, i) =>
@@ -253,7 +251,6 @@
       <h2 style="text-align:center">${$('fTitle').value}</h2>
       <p style="text-align:center;margin:6px 0"><span class="cline" style="background:${c.prevBg};color:${c.prevFg}">${c.label}</span></p>
       <p style="text-align:center">${c.blurb}</p>
-      ${cur.flaws ? `<p style="text-align:center"><b>${cur.cond === 'scrap' ? 'Fault' : 'Condition notes'}:</b> ${cur.flaws}.</p>` : ''}
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">
         <tr><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
         ${[['Brand', sp.brand], ['Model', sp.model], ['Model Number', cur.specs.mpn], ['Storage', sp.storage], ['Color', sp.color],
@@ -297,7 +294,6 @@ Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},${c
     cur.cond = b.dataset.c;
     render();
   });
-  $('fFlaws').addEventListener('input', (e) => { if (cur) { cur.flaws = e.target.value; render(); $('fFlaws').focus(); } });
   $('aiBtn').addEventListener('click', () => {
     if (!cur) return;
     $('aiBtn').textContent = '✨ Polished (mock)';
