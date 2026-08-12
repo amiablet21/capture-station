@@ -98,9 +98,9 @@
       <div class="frow"><span class="flabel">Title</span><input class="fin" id="fTitle" maxlength="80" /><span class="fhint"><span id="fTitleN">0</span>/80 characters</span></div>
       <div class="frow"><span class="flabel">Condition</span>
         <div class="condrow">
-          <button class="condbtn c1" data-c="openbox">Open Box<small>eBay 1500 · New other</small></button>
-          <button class="condbtn c2" data-c="used">Used<small>eBay 3000 · Used</small></button>
-          <button class="condbtn c3" data-c="scrap">Parts<small>eBay 7000 · Not working</small></button>
+          <button class="condbtn c1" data-c="openbox">Open Box</button>
+          <button class="condbtn c2" data-c="used">Used</button>
+          <button class="condbtn c3" data-c="scrap">Parts</button>
         </div>
       </div>
       <div class="frow"><span class="flabel">Specifics</span>
@@ -114,6 +114,7 @@
           <span class="spec"><label>RAM</label><input class="fin" id="sRam" /></span>
           <span class="spec"><label>MPN</label><input class="fin" id="sMpn" /></span>
         </div>
+        <div class="specgrid" id="moreGrid" hidden style="grid-column:2;margin-top:6px"></div>
         <span class="fhint" id="specSrc"></span>
       </div>
       <div class="frow"><span class="flabel">Price</span><input class="fin mono" id="fPrice" style="width:110px" /><span class="fhint">prefilled from the Walmart listing price − 8%</span></div>
@@ -121,13 +122,11 @@
       <div class="frow"><span class="flabel">Flaws</span><input class="fin" id="fFlaws" placeholder="e.g. scuffed corner" /><span class="fhint">pulled from the return's note — shown honestly in the description</span></div>
       <div class="frow" id="varRow" hidden><span class="flabel">Variations</span>
         <div id="varList" style="display:flex;flex-direction:column;gap:3px"></div>
-        <span class="fhint">other USED S26-ULTRA units waiting — combine them into ONE listing (buyer picks storage/color). Condition can't mix: Open Box units would be a separate listing.</span>
       </div>
       <div class="frow"><span class="flabel">Photos</span>
         <div class="shots" id="fShots"></div>
-        <span class="fhint">YOUR photos of this exact unit — first one is the gallery photo. They ride through the Linnworks item just long enough for eBay to copy them at upload, then eBay hosts its own copies.</span>
       </div>
-      <div class="frow"><span class="flabel">Description</span><button class="aibtn" id="aiBtn">✨ Polish with AI (optional)</button><span class="fhint">works without it — the template writes a full description from the fields above</span></div>
+      <div class="frow"><span class="flabel">Description</span><button class="aibtn" id="aiBtn">✨ Polish with AI (optional)</button></div>
       <div class="factions">
         <button class="btn-x">Save draft</button>
         <button class="btn-x btn-go" id="exportBtn">⬇ Export eBay CSV (1 listing)</button>
@@ -149,9 +148,9 @@
 <script>
   const QUEUE = [
     { sku: 'OPEN-BOX-X133-64GB-GRAY', cond: 'openbox', price: 119.99, qty: 1, flaws: '', title: 'Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet Gray', po: '119120775455737', shots: 0,
-      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' } },
+      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' }, moreKey: 'x133' },
     { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra Unlocked - Used', po: '119120671019601', shots: 2,
-      src: 'ebay', item: '278109883317', specs: { screen: '6.9 in', cpu: 'Snapdragon 8 Elite 2', ram: '12 GB', mpn: 'SM-S948U' },
+      src: 'ebay', item: '278109883317', specs: { screen: '6.9 in', cpu: 'Snapdragon 8 Elite 2', ram: '12 GB', mpn: 'SM-S948U' }, moreKey: 's26',
       // same model + same condition waiting in the queue -> offer to combine
       // into ONE variation listing (Relationship/RelationshipDetails rows)
       vars: [{ sku: 'USED-S26-ULTRA-512GB-BLACK', det: 'Storage=512GB;Color=Black', qty: 2, price: 899.99 },
@@ -160,7 +159,7 @@
     { sku: 'OPEN-BOX-Z-FLIP7-256GB-CREAM', cond: 'openbox', price: 749.99, qty: 1, flaws: '', title: 'Samsung Galaxy Z Flip7 256GB Unlocked Cream', po: '119120801122334', shots: 0,
       src: 'manual', item: '', specs: { screen: '', cpu: '', ram: '', mpn: '' } },
     { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray', po: '119119354597966', shots: 0,
-      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' } },
+      src: 'ebay', item: '278115574901', specs: { screen: '8.7 in', cpu: 'MediaTek Helio G99', ram: '4 GB', mpn: 'SM-X133' }, moreKey: 'x133' },
   ];
   // your listing template's condition blocks (WirelessTechnoStore):
   // Open Box = purple, Used = yellow, Scrap = red — wording matches eBay's
@@ -175,17 +174,26 @@
   };
   const $ = (id) => document.getElementById(id);
   let cur = null;
+  let moreOpen = false;
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'moreTgl') { e.preventDefault(); moreOpen = !moreOpen; render(); }
+  });
 
   function parseSku(sku) {
-    const m = sku.match(/(\d+GB|\d+TB)/i);
-    const parts = sku.split('-');
+    const base = sku.replace(/^(OPEN-BOX|USED|SCRAP)-/, '');
+    const m = base.match(/(\d+GB|\d+TB)/i);
+    const parts = base.split('-');
     return {
       brand: 'Samsung',
-      model: sku.replace(/^(OPEN-BOX|USED|SCRAP)-/, '').split('-')[0],
+      // the model is everything before the storage segment (Z-FLIP7, X133…)
+      model: m ? base.slice(0, base.indexOf(m[1]) - 1) : parts[0],
       storage: m ? m[1] : '',
       color: parts[parts.length - 1][0] + parts[parts.length - 1].slice(1).toLowerCase(),
     };
   }
+  // the rest of the item specifics, copied 1:1 from the live NEW listing
+  const MORE_X133 = { 'Type': 'Tablet', 'Internet Connectivity': 'Wi-Fi', 'Series': 'Samsung Galaxy Tab', 'Operating System': 'Android', 'Network': 'Not Applicable', 'Connectivity': 'Bluetooth, USB-C', 'Features': 'Accelerometer, Bluetooth, Front Camera…', 'Maximum Resolution': '1340 x 800', 'Processor Speed': '2.2GHz, 2GHz', 'Display Type': 'TFT LCD', 'RAM Size': '4 GB/8 GB', 'Charger Included': 'Yes', 'Unit Type': 'Unit', 'Country of Origin': 'United States' };
+  const MORE_S26 = { 'Type': 'Smartphone', 'Network': 'Unlocked', 'Series': 'Samsung Galaxy S', 'Operating System': 'Android', 'Connectivity': '5G, Bluetooth, NFC, USB-C', 'Features': 'Fast Charging, Wireless Charging…', 'Maximum Resolution': '3120 x 1440', 'Camera Resolution': '200 MP', 'Display Type': 'Dynamic AMOLED', 'SIM Card Slot': 'Dual SIM', 'Lock Status': 'Factory Unlocked', 'Charger Included': 'No', 'Contract': 'Without Contract', 'Country of Origin': 'South Korea' };
 
   function titleFor(q, cond) {
     const tag = cond === 'openbox' ? ' - Open Box' : cond === 'used' ? ' - Used' : ' - For Parts';
@@ -210,9 +218,15 @@
       $(id).placeholder = cur.src === 'manual' ? 'type once…' : '';
       $(id).style.borderColor = cur.src === 'manual' && !$(id).value ? 'var(--badge-yellow-text)' : '';
     });
+    const more = cur.moreKey === 'x133' ? MORE_X133 : cur.moreKey === 's26' ? MORE_S26 : null;
     $('specSrc').innerHTML = cur.src === 'ebay'
-      ? `✓ copied from your live NEW listing (item <span style="font-family:var(--mono)">${cur.item}</span>) — <b>+ 14 more ride along</b> (Type, Series, OS, Connectivity, Features, Max Resolution…), edit anything that looks off`
-      : `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ no NEW listing found for this model</span> — fill the amber fields once; they're saved to the model card and reused for every future ${sp.model} return`;
+      ? `✓ copied from your live NEW listing <span style="font-family:var(--mono)">${cur.item}</span> · <a href="#" id="moreTgl" style="color:var(--accent-soft-text)">${moreOpen ? 'hide' : 'show'} the other ${Object.keys(more).length} specifics</a>`
+      : `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ no NEW listing found</span> — fill once, reused for every future ${sp.model} return`;
+    $('moreGrid').hidden = !more || !moreOpen;
+    if (more && moreOpen) {
+      $('moreGrid').innerHTML = Object.entries(more).map(([k, v]) =>
+        `<span class="spec"><label>${k}</label><input class="fin" value="${v}" /></span>`).join('');
+    }
     // variation grouping: same model + condition queued together -> one listing
     const varRow = document.getElementById('varRow');
     if (cur.vars) {
