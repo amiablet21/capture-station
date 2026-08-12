@@ -1701,6 +1701,28 @@ function registerIpc() {
   });
   // Per-order location move (same Orders/MoveToLocation call the router uses):
   // DS chip -> back to the warehouse; row action -> out to the fallback.
+  // Unpark: clear the parked tag AND the lock in Linnworks so the stock
+  // router can move the order again. The chip clears at once; the next
+  // routing pass (or a manual refresh) does the actual moving.
+  ipcMain.handle('orders:unpark', async (_e, { orderNumber }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const ref = String(orderNumber || '').trim();
+    if (!ref) return { ok: false, error: 'Missing order number.' };
+    try {
+      const orders = await getOpenOrdersCached(cfg);
+      const hit = (orders || []).find(o => String(o.reference).trim() === ref);
+      if (!hit) return { ok: false, error: 'Order not found among open orders — refresh and try again.' };
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.unparkOrder(hit.orderId);
+      routerRefusedRefs.delete(ref);
+      pushState();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('orders:move', async (_e, { orderNumber, target, force }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };

@@ -205,6 +205,14 @@ class LinnworksClient {
 
   // All open orders at a location with the item info routing and the Stock
   // page's per-SKU order list need.
+  // Un-park AND unlock in one go: the PARKED chip covers both states (the
+  // router's refusal string does not say which one it hit).
+  // ChangeOrderTag with tag:null clears the parked tag; LockOrder false unlocks.
+  async unparkOrder(orderId) {
+    await this.call('Orders/ChangeOrderTag', { orderIds: [orderId], tag: null });
+    await this.call('Orders/LockOrder', { orderIds: [orderId], lockOrder: false });
+  }
+
   async listOpenOrders(fulfilmentCenter) {
     const out = [];
     for (let page = 1; ; page++) {

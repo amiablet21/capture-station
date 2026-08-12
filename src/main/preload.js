@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
   openOrderPage: (orderNumber, channel, kind) => ipcRenderer.invoke('order:openExternal', { orderNumber, channel, kind }),
   refreshOrders: () => ipcRenderer.invoke('orders:refresh'),
   moveOrder: (orderNumber, target, force) => ipcRenderer.invoke('orders:move', { orderNumber, target, force: !!force }),
+  unparkOrder: (orderNumber) => ipcRenderer.invoke('orders:unpark', { orderNumber }),
   undo: () => ipcRenderer.invoke('undo'),
   updateRow: (id, fields) => ipcRenderer.invoke('rows:update', { id, fields }),
   substituteRow: (id, sku, qty, note, clear, subFor) => ipcRenderer.invoke('rows:substitute', { id, sku, qty, note, clear: !!clear, subFor: subFor || '' }),

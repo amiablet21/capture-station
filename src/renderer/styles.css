@@ -533,6 +533,10 @@ body {
 
 .badge-walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .badge-parked { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+/* clickable variant: one click un-parks + unlocks the order in Linnworks */
+.badge-parked-btn { border: none; font: inherit; font-size: inherit; cursor: pointer; }
+.badge-parked-btn:hover { filter: brightness(0.94); }
+.badge-parked-btn:disabled { opacity: 0.5; cursor: default; }
 /* split-order part marker: "1/2" — same order number, ships separately */
 .badge-split { background: var(--badge-blue-bg); color: var(--badge-blue-text); font-family: var(--mono); }
 /* logo badge (Walmart spark on order rows): the mark itself, no pill chrome */

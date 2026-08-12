@@ -781,6 +781,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:link refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.mappingUnlink('rid')`);
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.unparkOrder('119990000000001')`);
+    check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     const prevLookup2 = await exec('recvLookup');
     await exec(`
       chmap.local = true;

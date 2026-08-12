@@ -448,7 +448,7 @@ function render() {
       <td class="cell-gutter st-${esc(row.status)}" title="${esc(statusTitle(row))} · ${fmtTime(row.created_at)}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}">
         ${meta && meta.dropship ? '<span class="badge badge-dropship" title="Routed to the dropship location - the supplier ships this">DS</span>' : ''}
-        ${meta && meta.parked ? '<span class="badge badge-parked" title="Parked or locked in Linnworks — the stock router cannot move it. Unpark it in Linnworks if that is unintended.">PARKED</span>' : ''}
+        ${meta && meta.parked ? `<button class="badge badge-parked badge-parked-btn" data-unpark="${esc(row.order_number)}" title="Parked or locked in Linnworks — the stock router cannot move it. Click to unpark.">PARKED ✕</button>` : ''}
         ${meta && meta.split ? `<span class="badge badge-split" title="Linnworks split this order across locations — this row is part ${meta.split.part} of ${meta.split.of} and ships separately (its own tracking, its own process)">${meta.split.part}/${meta.split.of}</span>` : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
@@ -722,6 +722,19 @@ $('clearFailedBtn').addEventListener('click', async () => {
 });
 
 $('rowsBody').addEventListener('click', async (e) => {
+  // PARKED chip: one click clears the parked tag + lock in Linnworks
+  const unpark = e.target.closest('[data-unpark]');
+  if (unpark) {
+    unpark.disabled = true;
+    const res = await api.unparkOrder(unpark.dataset.unpark).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) {
+      unpark.disabled = false;
+      toast((res && res.error) || 'Could not unpark.');
+      return;
+    }
+    toast(`${unpark.dataset.unpark} unparked — the stock router can move it again`);
+    return; // pushState re-renders the list without the chip
+  }
   // PO# with a marketplace link: select the row (so the tracking you copy
   // next lands here) and open the order page in the browser
   const link = e.target.closest('.order-link');
