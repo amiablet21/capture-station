@@ -144,13 +144,16 @@
     { sku: 'USED-S26-ULTRA-512GB-BLACK', cond: 'used', price: 899.99, qty: 2, flaws: 'scuffed corner', title: 'Samsung Galaxy S26 Ultra 512GB Unlocked Black', po: '119120671019601', shots: 2 },
     { sku: 'SCRAP-X133-64GB-GRAY', cond: 'scrap', price: 39.99, qty: 1, flaws: 'no power', title: 'Samsung Galaxy Tab A9+ 64GB Gray', po: '119119354597966', shots: 0 },
   ];
+  // your listing template's condition blocks (WirelessTechnoStore):
+  // Open Box = purple, Used = yellow, Scrap = red — wording matches eBay's
+  // condition dropdown so the mismatch banner never fires
   const CONDS = {
-    openbox: { label: 'OPEN BOX', id: 1500, cls: 'c-open', prevBg: '#e7f0fb', prevFg: '#1c4a8a',
-      blurb: 'Open box — the item was returned unused or barely handled. Inspected, fully tested, and factory reset by our team. Includes original accessories unless noted.' },
-    used: { label: 'USED', id: 3000, cls: 'c-used', prevBg: '#fbf3db', prevFg: '#8a6116',
-      blurb: 'Used — fully functional and tested, with normal signs of prior use. Factory reset and ready for a new owner. Cosmetic condition is described honestly below.' },
-    scrap: { label: 'FOR PARTS', id: 7000, cls: 'c-scrap', prevBg: '#fdebec', prevFg: '#9f2f2d',
-      blurb: 'For parts / not working — sold AS-IS for repair or salvage. No returns on parts units. Exact fault listed below.' },
+    openbox: { label: 'OPEN BOX', id: 1500, cls: 'c-open', prevBg: '#6a1b9a', prevFg: '#ffffff',
+      blurb: 'Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original Samsung. Original box may show light shelf wear.' },
+    used: { label: 'USED • TESTED & WORKING', id: 3000, cls: 'c-used', prevBg: '#fbc02d', prevFg: '#222222',
+      blurb: 'Item has been previously used and may show cosmetic wear such as light scratches or scuffs (see photos for actual condition). Fully tested and 100% functional.' },
+    scrap: { label: 'FOR PARTS OR REPAIR — NOT WORKING', id: 7000, cls: 'c-scrap', prevBg: '#c62828', prevFg: '#ffffff',
+      blurb: 'Item is sold as-is for parts or repair and does not function as intended. Sold with no guarantee of functionality. No returns for non-working condition — please review photos carefully before purchasing.' },
   };
   const $ = (id) => document.getElementById(id);
   let cur = null;
@@ -190,23 +193,32 @@
         `<span class="shot ${i === 0 ? 'main' : ''}"><button class="x" data-shotx="${i}" title="Remove">✕</button></span>`).join('')
       + `<button class="addshot" data-addshot="po">＋ claim photos (${cur.po.slice(-4)}…)</button>`
       + `<button class="addshot" data-addshot="file">＋ browse</button>`;
-    // buyer preview
+    // buyer preview — YOUR listing template (WirelessTechnoStore header/footer,
+    // one condition block, spec table, package list)
     $('prev').innerHTML = `
-      <h2>${$('fTitle').value}</h2>
-      <span class="cline" style="background:${c.prevBg};color:${c.prevFg}">${c.label}</span>
-      <p>${c.blurb}</p>
-      ${cur.flaws ? `<p><b>Condition notes:</b> ${cur.flaws}.</p>` : ''}
-      <ul>
-        <li><b>Brand:</b> ${sp.brand} &nbsp; <b>Model:</b> ${sp.model}</li>
-        <li><b>Storage:</b> ${sp.storage} &nbsp; <b>Color:</b> ${sp.color}</li>
-        <li>Ships within 1 business day from our US warehouse</li>
-        <li>30-day returns${cur.cond === 'scrap' ? ' — <b>not applicable on parts units</b>' : ''}</li>
-      </ul>
-      <div class="foot">Digital World Shop — thousands of devices tested &amp; shipped</div>`;
+      <div style="border-bottom:3px solid #0FA3B1;padding:6px 0 8px;margin-bottom:12px;text-align:center">
+        <div style="font-size:17px;letter-spacing:4px;color:#101828">WIRELESS<span style="font-weight:700;color:#0FA3B1">TECHNO</span><span style="font-weight:700;color:#101828">STORE</span></div>
+        <div style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
+      </div>
+      <h2 style="text-align:center">${$('fTitle').value}</h2>
+      <p style="text-align:center;margin:6px 0"><span class="cline" style="background:${c.prevBg};color:${c.prevFg}">${c.label}</span></p>
+      <p style="text-align:center">${c.blurb}</p>
+      ${cur.flaws ? `<p style="text-align:center"><b>${cur.cond === 'scrap' ? 'Fault' : 'Condition notes'}:</b> ${cur.flaws}.</p>` : ''}
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">
+        <tr><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
+        <tr><td style="border:1px solid #ddd;padding:4px 8px">Brand</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.brand}</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:4px 8px">Model</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.model}</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:4px 8px">Storage</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.storage}</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:4px 8px">Color</td><td style="border:1px solid #ddd;padding:4px 8px">${sp.color}</td></tr>
+        <tr><td style="border:1px solid #ddd;padding:4px 8px;color:#888" colspan="2">+ screen size, processor, RAM, MPN… copied from your live NEW listing of this model</td></tr>
+      </table>
+      <p style="margin:6px 0"><b>Package Includes:</b> the device${cur.cond === 'openbox' ? ' + original accessories, original box (may show light shelf wear)' : cur.cond === 'used' ? ' + accessories exactly as listed' : ' only — sold as-is'}. Wall charger not included.</p>
+      <div class="foot" style="border-top:3px solid #0FA3B1;text-align:center;padding-top:6px"><b>Wireless<span style="color:#0FA3B1">Techno</span>Store</b> — Every device inspected and tested before shipping</div>`;
     const pics = Array.from({ length: cur.shots }, (_, i) => `https://…linnworks…/${cur.sku}_${i + 1}.jpg`).join('|');
     $('csv').textContent =
-`Action(SiteID=US|Country=US|Currency=USD|Version=1193),CustomLabel,Title,ConditionID,PicURL,Quantity,StartPrice,Description,Format
-Add,${cur.sku},"${$('fTitle').value}",${c.id},"${pics}",${cur.qty},${cur.price.toFixed(2)},"<html…full description…>",FixedPrice`;
+`Action(SiteID=US|...|Version=1193),CustomLabel,Category,Title,ConditionID,C:Brand,C:Model,C:MPN,C:Screen Size,C:Processor,C:RAM Size,C:Storage Capacity,C:Color,C:Type,PicURL,Description,Format,StartPrice,Quantity,Location,DispatchTimeMax,ShippingProfileName,ReturnProfileName,PaymentProfileName
+Add,${cur.sku},171485,"${$('fTitle').value}",${c.id},${sp.brand},${sp.model},SM-${sp.model},8.7 in,Octa Core,4 GB,${sp.storage},${sp.color},Tablet,"${pics}","<your template HTML>",FixedPrice,${cur.price.toFixed(2)},${cur.qty},US,1,"Standard shipping","30 day returns","eBay Payments"
+   ^ specifics copied from your live NEW listing of the same model · profiles = your existing eBay business policies by name`;
   }
 
   $('qlist').innerHTML = QUEUE.map((q, i) => `
