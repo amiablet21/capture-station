@@ -3506,3 +3506,35 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-chev { color: var(--faint); font-size: 10px; margin-right: 7px; }
 .ret-todo.is-collapsed > *:not(h4) { display: none; }
 .ret-todo.is-collapsed { padding-bottom: 10px; }
+
+/* ---------- returns cards: task-row dropdowns (owner reference design) ---------- */
+:root { --rc-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes rc-fade-up { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.ret-todo { padding: 0; border: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 5px rgba(47,52,55,0.05); transition: border-radius 300ms var(--rc-ease); }
+.ret-todo.open { border-radius: 11px; }
+.rc-head { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 44px; padding: 0 12px; background: none; border: none; cursor: pointer; font-family: inherit; text-align: left; transition: background 100ms; }
+.rc-head:hover { background: var(--surface-2); }
+.rc-badge { width: 23px; height: 23px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; flex: 0 0 auto; }
+.rc-amber { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.rc-blue { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.rc-label { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc-chev { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; color: var(--faint); flex: 0 0 auto; }
+.rc-chev svg { transition: transform 300ms var(--rc-ease); }
+.ret-todo.open .rc-chev svg { transform: rotate(180deg); }
+.rc-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms var(--rc-ease), opacity 300ms var(--rc-ease); }
+.ret-todo.open .rc-body { grid-template-rows: 1fr; opacity: 1; }
+.rc-inner { overflow: hidden; }
+.rc-rows { display: grid; grid-template-columns: 23px 1fr; gap: 0 11px; padding: 0 12px 12px; }
+.rc-vline { justify-self: center; width: 1px; background: var(--border); }
+.rc-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rc-grow { flex: 1; }
+.ret-todo .ret-todo-row.rc-drow { padding: 3px 0; border: none; }
+.ret-todo.open .rc-drow { animation: rc-fade-up 300ms var(--rc-ease) both; }
+.ret-todo.open .rc-drow:nth-child(1) { animation-delay: 120ms; }
+.ret-todo.open .rc-drow:nth-child(2) { animation-delay: 200ms; }
+.ret-todo.open .rc-drow:nth-child(3) { animation-delay: 280ms; }
+.ret-todo.open .rc-drow:nth-child(4) { animation-delay: 360ms; }
+.ret-todo.open .rc-drow:nth-child(5) { animation-delay: 440ms; }
+.ret-todo.open .rc-drow:nth-child(n+6) { animation-delay: 520ms; }
+.ret-todo .ret-todo-note.rc-drow { padding-top: 6px; border-top: none; margin: 0; }

@@ -3514,22 +3514,35 @@ function renderRetTodo() {
     return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
   }).sort((a, b) => (b.units || 0) - (a.units || 0));
   box.hidden = false;
-  const col = localStorage.getItem('retTodoCol') === '1';
-  box.classList.toggle('is-collapsed', col);
+  // task-row card (owner-supplied reference design 2026-08-12): count badge,
+  // one-line header, rotating chevron, details sweep open with a stagger.
+  // Default: >4 rows starts CLOSED, otherwise open — a manual toggle sticks.
+  const stored = localStorage.getItem('retTodoCol');
+  const col = stored === null ? rows.length > 4 : stored === '1';
+  box.classList.toggle('open', !col);
+  const totalUnits = rows.reduce((s, r) => s + (Number(r.units) || 0), 0);
   box.innerHTML = `
-    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
-    ${rows.map(r => `<div class="ret-todo-row">
-      <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Open the Stock page's Unlisted view filtered to this SKU">${esc(r.sku)}</button>
-      <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
-      <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
-      <button class="ret-todo-ign" data-ign="${esc(r.sku)}" title="Never list this SKU (claim bins, fakes) — remove it from this card and the Unlisted view for good">✕</button>
-    </div>`).join('')}
-    <div class="ret-todo-note">Create the listing on Walmart/eBay using exactly this SKU string — Linnworks links it automatically and the row leaves this list on the next refresh.</div>`;
+    <button class="rc-head" aria-expanded="${!col}">
+      <span class="rc-badge rc-amber">${rows.length}</span>
+      <span class="rc-label">In-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</span>
+      <span class="rc-meta">${totalUnits} unit${totalUnits === 1 ? '' : 's'} waiting</span>
+      <span class="rc-chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+    </button>
+    <div class="rc-body"><div class="rc-inner"><div class="rc-rows"><span class="rc-vline"></span><div class="rc-list">
+      ${rows.map(r => `<div class="ret-todo-row rc-drow">
+        <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Build this listing in the eBay tab">${esc(r.sku)}</button>
+        <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
+        <span class="rc-grow"></span>
+        <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'}`}</span>
+        <button class="ret-todo-ign" data-ign="${esc(r.sku)}" title="Never list this SKU (claim bins, fakes) — remove it from this card and the Unlisted view for good">✕</button>
+      </div>`).join('')}
+      <div class="ret-todo-note rc-drow">Click a SKU to build its eBay listing — Linnworks links it automatically once it goes live.</div>
+    </div></div></div></div>`;
 }
 
 $('retTodo').addEventListener('click', async (e) => {
-  if (e.target.closest('h4')) {
-    localStorage.setItem('retTodoCol', localStorage.getItem('retTodoCol') === '1' ? '0' : '1');
+  if (e.target.closest('.rc-head')) {
+    localStorage.setItem('retTodoCol', $('retTodo').classList.contains('open') ? '1' : '0');
     renderRetTodo();
     return;
   }
@@ -3548,7 +3561,12 @@ $('retTodo').addEventListener('click', async (e) => {
     return;
   }
   const g = e.target.closest('[data-goto]');
-  if (g) showUnlistedFor(g.dataset.goto);
+  if (g) {
+    // straight to the eBay tab with this SKU's listing started (owner
+    // request 2026-08-12 — was the Stock Unlisted view before)
+    showPage('ebay');
+    ebSelect(g.dataset.goto, false);
+  }
 });
 
 // the log wears the SAME sheet as the worksheet (same columns, same
@@ -3645,29 +3663,40 @@ function renderRetDisputes() {
   });
   if (!open.length) { box.hidden = true; return; }
   box.hidden = false;
-  const col = localStorage.getItem('retDispCol') === '1';
-  box.classList.toggle('is-collapsed', col);
   const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  // same default rule as the listings card: >4 disputes starts closed
+  const stored = localStorage.getItem('retDispCol');
+  const col = stored === null ? open.length > 4 : stored === '1';
+  box.classList.toggle('open', !col);
+  const oldest = Math.max(0, ...open.map(({ r }) => days(r.created_at)));
   box.innerHTML = `
-    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${open.length} pending dispute${open.length === 1 ? '' : 's'} to check</h4>
+    <button class="rc-head" aria-expanded="${!col}">
+      <span class="rc-badge rc-blue">${open.length}</span>
+      <span class="rc-label">Pending dispute${open.length === 1 ? '' : 's'} to check</span>
+      <span class="rc-meta">${oldest === 0 ? 'opened today' : `oldest ${oldest} day${oldest === 1 ? '' : 's'}`}</span>
+      <span class="rc-chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+    </button>
+    <div class="rc-body"><div class="rc-inner"><div class="rc-rows"><span class="rc-vline"></span><div class="rc-list">
     ${open.map(({ r, i, ii }) => {
       const note = String((i && i.note) || r.note || '');
       const caseNo = (note.match(DISPUTE_RE) || [])[1] || '';
       const age = days(r.created_at);
-      return `<div class="ret-todo-row">
+      return `<div class="ret-todo-row rc-drow">
         <span class="mono">${esc(r.order_number)}</span>${retPoOpenBtn(r.order_number, r.source)}
         <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
         <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
+        <span class="rc-grow"></span>
         <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
         ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}:${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
       </div>`;
     }).join('')}
-    <div class="ret-todo-note">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>`;
+      <div class="ret-todo-note rc-drow">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>
+    </div></div></div></div>`;
 }
 
 $('retDisputes').addEventListener('click', async (e) => {
-  if (e.target.closest('h4')) {
-    localStorage.setItem('retDispCol', localStorage.getItem('retDispCol') === '1' ? '0' : '1');
+  if (e.target.closest('.rc-head')) {
+    localStorage.setItem('retDispCol', $('retDisputes').classList.contains('open') ? '1' : '0');
     renderRetDisputes();
     return;
   }
