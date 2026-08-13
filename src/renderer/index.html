@@ -158,6 +158,7 @@
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
           <button id="retAddBtn" class="btn btn-primary">+ Receive a return</button>
+          <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
         <div id="retPastBox" class="recv-past-box"></div>
@@ -176,7 +177,10 @@
     <div class="ebay-cols">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on eBay
-          <button id="ebScratch" class="ebay-addbtn" title="Start a blank listing, any SKU">New listing</button>
+          <span class="eb-right">
+            <button id="ebRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the eBay link set">Refresh</button>
+            <button id="ebScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
+          </span>
         </div>
         <div id="ebQueue" class="ebay-qlist"></div>
       </div>

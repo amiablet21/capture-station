@@ -6356,3 +6356,16 @@ $("rnSave").addEventListener("click", async () => {
   rnCtx = null;
   loadStock();
 });
+
+/* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
+$("retRefreshBtn").addEventListener("click", () => {
+  loadRetPast();
+  loadUnlisted(true); // fresh scan: cards update the moment it lands
+  toast("Refreshing the log and listing scan…", 2000);
+});
+$("ebRefresh").addEventListener("click", () => {
+  chLinked = null;
+  loadChLinked();
+  loadUnlisted(true);
+  toast("Re-scanning listings…", 2000);
+});
