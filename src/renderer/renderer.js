@@ -5532,7 +5532,10 @@ function ebDescription(forExport) {
   // Every element wears BOTH a class and the inline style: the app's CSP
   // strips inline styles, so the preview leans on .ebp-* rules; eBay's page
   // knows nothing of our classes and uses the inline styles. Same string.
-  const specRows = Object.entries(ebCur.specs).filter(([, v]) => String(v || "").trim())
+  // Version (US vs Global/International) rides the description ONLY — it is
+  // deliberately kept out of the CSV item specifics (owner, 2026-08-13)
+  const specRows = [...Object.entries(ebCur.specs), ["Version", ebCur.version || "US"]]
+    .filter(([, v]) => String(v || "").trim())
     .map(([k, v]) => `<tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(k)}</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(v)}</td></tr>`).join("");
   return `
     <div class="ebp-head" style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
@@ -5731,6 +5734,8 @@ function renderEbayForm() {
   $("ebTitle").value = has ? ebCur.title : "";
   $("ebTitleN").textContent = ($("ebTitle").value || "").length;
   document.querySelectorAll(".ebay-condbtn").forEach(b => b.classList.toggle("is-on", has && b.dataset.cond === ebCur.cond));
+  $("ebVersion").value = has ? (ebCur.version || "US") : "US";
+  $("ebVersion").disabled = !has;
   $("ebPrice").value = has ? ebCur.price : "";
   $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
   $("ebQty").value = has ? ebCur.qty : "";
@@ -5841,6 +5846,11 @@ function ebHistGo(delta) {
 }
 // blur on the free-typed fields lands one clean history step + draft save
 ["ebTitle", "ebPrice", "ebQty"].forEach(id => $(id).addEventListener("change", () => { if (ebCur) renderEbayForm(); }));
+$("ebVersion").addEventListener("change", (e) => {
+  if (!ebCur) return;
+  ebCur.version = e.target.value;
+  renderEbayForm(); // preview + history + draft in one go
+});
 $("ebUndo").addEventListener("click", () => ebHistGo(-1));
 $("ebRedo").addEventListener("click", () => ebHistGo(1));
 document.addEventListener("keydown", (e) => {
