@@ -3560,3 +3560,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .rc-body { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 14px 34px rgba(47,52,55,0.16); }
 .ret-todo:not(.open) .rc-body { pointer-events: none; }
 .rc-rows { padding: 10px 12px 12px; }
+
+/* roomier dropdown rows with hairline dividers */
+.ret-todo .ret-todo-row.rc-drow { padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.ret-todo .rc-list > .rc-drow:last-of-type { border-bottom: none; }
+.ret-todo .ret-todo-note.rc-drow { border-bottom: none; padding-top: 8px; }
