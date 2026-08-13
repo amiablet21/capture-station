@@ -1887,12 +1887,25 @@ let stockSort = { key: 'stockLevel', dir: -1 }; // default: highest stock first
 let stockColWidths = {};
 try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'); } catch { /* fresh start */ }
 
+// user-arranged column ORDER for the main sheet, persisted (owner request
+// 2026-08-12: drag a header to move the column)
+const STOCK_COL_DEFAULT = ['sku', 'stockLevel', 'inOrders', 'minimumLevel', 'available'];
+let stockColOrder = STOCK_COL_DEFAULT.slice();
+try {
+  const saved = JSON.parse(localStorage.getItem('stockColOrder') || 'null');
+  // tolerate old saves when columns are added/removed later
+  if (Array.isArray(saved)) {
+    stockColOrder = saved.filter(k => STOCK_COL_DEFAULT.includes(k));
+    for (const k of STOCK_COL_DEFAULT) if (!stockColOrder.includes(k)) stockColOrder.push(k);
+  }
+} catch { /* fresh start */ }
+
 function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
   const w = stockColWidths[key];
   const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
-  return `<th class="sortable ${extraClass}" data-sort="${key}"${style} title="Click to sort · drag edge to resize">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}"${style} title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
 }
 
 async function loadStock() {
@@ -2057,31 +2070,37 @@ function renderStock() {
             <td class="num ${r.home.stockLevel <= 0 ? 'stock-home-zero' : ''}"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Your warehouse count — click to correct">${r.home.stockLevel}</button></td>
           </tr>`).join('')}</tbody>
       </table>`
-      : `<table class="stock-table">
+      : (() => {
+        // the data columns render in the USER'S order (drag a header to move)
+        const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
+        const cellFor = (key, r) => {
+          switch (key) {
+            case 'sku': return skuCell(r);
+            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
+            case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
+            case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
+              const sug = minSuggestionFor(r, r.l);
+              // the suggestion IS the button: dashed = proposal, click = apply
+              return sug === null ? '' : `<button class="min-apply mono" title="Suggested reorder point: ${((reorderStats[String(r.sku).toUpperCase()] || {}).perDay || 0)}/day × ${reorderMeta.leadTimeDays}d lead × 1.5 — click to set Min to ${sug}" data-applysid="${esc(r.stockItemId || '')}" data-applysku="${esc(r.sku)}" data-applymin="${sug}">→ ${sug}</button>`;
+            })()}</td>`;
+            case 'available': return `<td class="num stock-avail ${stockIsLow(r) ? 'is-low' : ''}" ${stockIsLow(r) ? `title="Below the minimum of ${r.l.minimumLevel}"` : ''}>${r.l.available}</td>`;
+            default: return '<td></td>';
+          }
+        };
+        return `<table class="stock-table">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
-          ${stockTh('sku')}
-          ${stockTh('stockLevel', 'num th-level')}
-          ${stockTh('inOrders', 'num')}
-          ${stockTh('minimumLevel', 'num')}
-          ${stockTh('available', 'num')}
+          ${stockColOrder.map(k => stockTh(k, TH_EXTRA[k])).join('')}
         </tr></thead>
         <tbody>${rows.map((r, idx) => `
           <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
             <td class="cell-gutter">${idx + 1}</td>
             ${imgCell(r)}
-            ${skuCell(r)}
-            <td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>
-            <td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>
-            <td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
-              const sug = minSuggestionFor(r, r.l);
-              // the suggestion IS the button: dashed = proposal, click = apply
-              return sug === null ? '' : `<button class="min-apply mono" title="Suggested reorder point: ${((reorderStats[String(r.sku).toUpperCase()] || {}).perDay || 0)}/day × ${reorderMeta.leadTimeDays}d lead × 1.5 — click to set Min to ${sug}" data-applysid="${esc(r.stockItemId || '')}" data-applysku="${esc(r.sku)}" data-applymin="${sug}">→ ${sug}</button>`;
-            })()}</td>
-            <td class="num stock-avail ${stockIsLow(r) ? 'is-low' : ''}" ${stockIsLow(r) ? `title="Below the minimum of ${r.l.minimumLevel}"` : ''}>${r.l.available}</td>
+            ${stockColOrder.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
       </table>`;
+      })();
   // one-click bulk apply for every differing suggested minimum
   const applyAll = $('minApplyAll');
   if (applyAll) {
@@ -5966,3 +5985,45 @@ async function ebBakePhotos(photos) {
   }
   return out;
 }
+
+/* ---------- stock columns: drag a header to rearrange ---------- */
+// HTML5 drag on the th; the resize grip keeps its own mousedown (dragging
+// from the grip is suppressed so resizing never turns into a move)
+let stockDragKey = null;
+$("stockList").addEventListener("dragstart", (e) => {
+  const th = e.target.closest("th.sortable");
+  if (!th || !stockColOrder.includes(th.dataset.sort) || e.target.closest(".col-grip")) { e.preventDefault(); return; }
+  stockDragKey = th.dataset.sort;
+  e.dataTransfer.effectAllowed = "move";
+  try { e.dataTransfer.setData("text/plain", stockDragKey); } catch { /* some drivers need it */ }
+});
+$("stockList").addEventListener("dragover", (e) => {
+  const th = e.target.closest("th.sortable");
+  if (!th || !stockDragKey || !stockColOrder.includes(th.dataset.sort)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".stock-table th.col-drop").forEach(x => x.classList.remove("col-drop"));
+  if (th.dataset.sort !== stockDragKey) th.classList.add("col-drop");
+});
+$("stockList").addEventListener("dragleave", (e) => {
+  const th = e.target.closest("th.sortable");
+  if (th) th.classList.remove("col-drop");
+});
+$("stockList").addEventListener("drop", (e) => {
+  const th = e.target.closest("th.sortable");
+  if (!th || !stockDragKey) return;
+  e.preventDefault();
+  const to = th.dataset.sort;
+  if (stockColOrder.includes(to) && to !== stockDragKey) {
+    const arr = stockColOrder.filter(k => k !== stockDragKey);
+    arr.splice(arr.indexOf(to) + (arr.indexOf(to) < stockColOrder.indexOf(stockDragKey) ? 0 : 1), 0, stockDragKey);
+    stockColOrder = arr;
+    localStorage.setItem("stockColOrder", JSON.stringify(stockColOrder));
+    renderStock();
+  }
+  stockDragKey = null;
+});
+$("stockList").addEventListener("dragend", () => {
+  stockDragKey = null;
+  document.querySelectorAll(".stock-table th.col-drop").forEach(x => x.classList.remove("col-drop"));
+});

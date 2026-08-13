@@ -3481,3 +3481,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-factions { padding: 11px 13px; }
 .ebay-prev { padding: 18px 20px; }
 .ebay-qcond { font-size: 9px; padding: 1px 6px; }
+
+/* column being dragged over: the drop target wears an accent edge */
+.stock-table th.col-drop { box-shadow: inset 3px 0 0 var(--accent); }
+.stock-table th.sortable { cursor: pointer; }
