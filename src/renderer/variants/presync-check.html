@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Pre-sync checklist</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --badge-green-bg: #EDF3EC; --badge-green-text: #346538;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center; align-items: flex-start; }
+
+  .dlg { width: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 18px 48px rgba(47,52,55,0.2); overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .head h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  .head .when { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+  .sect { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 12px 18px 6px; }
+  .row { display: flex; align-items: flex-start; gap: 11px; padding: 9px 18px; border-bottom: 1px solid var(--border-soft); }
+  .row:last-of-type { border-bottom: none; }
+  .st { width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex: 0 0 auto; margin-top: 1px; }
+  .st.ok { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .st.warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .st.bad { background: var(--neg-bg); color: var(--neg-text); }
+  .row .txt { flex: 1; min-width: 0; }
+  .row .t { font-size: 12.5px; font-weight: 600; }
+  .row .d { font-size: 11px; color: var(--muted); margin-top: 1px; line-height: 1.45; }
+  .row .d .mono { font-size: 10.5px; }
+  .fixlink { font-size: 11px; font-weight: 600; color: var(--accent-soft-text); text-decoration: underline; cursor: pointer; white-space: nowrap; margin-top: 2px; }
+  .row label.man { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .row label.man input { width: 15px; height: 15px; accent-color: var(--accent); }
+  .foot { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .recheck { font-size: 11.5px; font-weight: 600; border: 1px dotted var(--faint); border-radius: 6px; background: var(--surface); padding: 7px 14px; cursor: pointer; font-family: inherit; color: var(--text); }
+  .syncbtn { margin-left: auto; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 9px 20px; cursor: pointer; font-family: inherit; }
+  .syncbtn:disabled { opacity: .45; cursor: default; }
+  .gate { font-size: 10.5px; color: var(--faint); }
+</style></head>
+<body>
+  <div class="try"><b>Pre-sync checklist</b> — opens from the Sync button. Top section = checks the app runs itself against Linnworks (green ✓ / amber count with a jump-to-fix link / red blocker). Bottom = the two things only you can verify on the marketplace, remembered per day. Sync unlocks when nothing is red and the manual boxes are ticked. Try the checkboxes.</div>
+
+  <div class="stage">
+    <div class="dlg">
+      <div class="head"><h3>Ready to sync?</h3><span class="when">checked just now · re-run any time</span></div>
+
+      <div class="sect">Checked automatically</div>
+      <div class="row"><span class="st ok">✓</span><span class="txt"><span class="t">Linnworks connection</span><span class="d">authenticated · 46 open orders visible</span></span></div>
+      <div class="row"><span class="st ok">✓</span><span class="txt"><span class="t">Every open-order line is mapped</span><span class="d">stock will deduct on every processed order</span></span></div>
+      <div class="row"><span class="st warn">2</span><span class="txt"><span class="t">In-stock SKUs without a listing</span><span class="d">2 SKUs hold stock nobody can buy — <span class="mono">SCRAP-X133-64GB-GRAY, USED-S26-ULTRA-512GB-BLACK</span></span></span><span class="fixlink">open eBay tab</span></div>
+      <div class="row"><span class="st ok">✓</span><span class="txt"><span class="t">DropShip pads healthy</span><span class="d">all 38 enrolled SKUs padded at the DropShip location</span></span></div>
+      <div class="row"><span class="st ok">✓</span><span class="txt"><span class="t">No negative or duplicate counts</span><span class="d">stock levels sane · no duplicate order rows</span></span></div>
+
+      <div class="sect">Confirm on the marketplace (once per day)</div>
+      <div class="row"><span class="st warn">!</span><span class="txt"><label class="man"><input type="checkbox" id="c1" /> "Inventory – Price Change" is OFF on every channel</label><span class="d">Walmart verified off 08-08 — re-check eBay &amp; Temu after any channel settings change; prices must stay on the channels</span></span></div>
+      <div class="row"><span class="st warn">!</span><span class="txt"><label class="man"><input type="checkbox" id="c2" /> WFS listings excluded from stock sync</label><span class="d">Walmart fulfils those — the app must not overwrite their counts</span></span></div>
+
+      <div class="foot">
+        <button class="recheck">Re-run checks</button>
+        <span class="gate" id="gate">2 confirmations left</span>
+        <button class="syncbtn" id="syncBtn" disabled>Sync Walmart</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const boxes = [document.getElementById('c1'), document.getElementById('c2')];
+  const sync = () => {
+    const left = boxes.filter(b => !b.checked).length;
+    document.getElementById('syncBtn').disabled = left > 0;
+    document.getElementById('gate').textContent = left ? `${left} confirmation${left === 1 ? '' : 's'} left` : 'amber items are warnings — sync allowed';
+  };
+  boxes.forEach(b => b.addEventListener('change', sync));
+  sync();
+</script>
+</body>
+</html>

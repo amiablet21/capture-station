@@ -34,13 +34,16 @@
   /* equation editor: gear in the Order header -> quiet popover */
   .eqbtn { border: none; background: none; cursor: pointer; font-size: 11px; color: var(--faint); padding: 0 2px; }
   .eqbtn:hover { color: var(--accent-soft-text); }
-  .eqpop { position: absolute; top: 26px; right: 0; z-index: 5; width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(47,52,55,0.18); padding: 12px; display: flex; flex-direction: column; gap: 9px; text-transform: none; letter-spacing: 0; }
+  .eqpop { position: absolute; top: 26px; right: 0; z-index: 5; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(47,52,55,0.18); text-transform: none; letter-spacing: 0; overflow: hidden; text-align: left; font-weight: 400; }
   .eqpop[hidden] { display: none; }
-  .eqrow { display: grid; grid-template-columns: 90px 64px 1fr; gap: 8px; align-items: center; }
-  .eqrow label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint); }
-  .eqrow input { font-family: var(--mono); font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%; }
-  .eqrow em { font-style: normal; font-size: 10px; color: var(--faint); font-weight: 400; }
-  .eqformula { font-size: 10.5px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 6px 9px; font-weight: 400; }
+  .eqhead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 10px 14px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .eqrow { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-soft); }
+  .eqrow .txt { flex: 1; min-width: 0; }
+  .eqrow label { display: block; font-size: 12px; font-weight: 600; color: var(--text); }
+  .eqrow em { display: block; font-style: normal; font-size: 10px; color: var(--faint); margin-top: 1px; }
+  .eqrow input { font-family: var(--mono); font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; width: 62px; text-align: right; flex: 0 0 auto; }
+  .eqrow input:focus { outline: none; border-color: var(--accent); }
+  .eqformula { display: block; font-size: 10.5px; color: var(--accent-soft-text); background: var(--accent-soft); padding: 8px 14px; font-weight: 400; }
 </style></head>
 <body>
   <div class="try"><b>Order column on the Stock sheet:</b> <span class="mono">sells/day × (lead 7d + cover 21d) − available</span>, rounded up. Quiet number + the daily rate beside it; amber when you're already below the lead-time buffer; dash when there's nothing to order. Hover a number for the math.</div>
@@ -52,10 +55,11 @@
         <th class="num" style="width:90px">Min</th><th class="num" style="width:100px">Available</th>
         <th class="num" style="width:130px; position:relative">Order <button id="eqBtn" class="eqbtn" title="Edit the equation">⚙</button>
           <span id="eqPop" class="eqpop" hidden>
-            <span class="eqrow"><label>Sales window</label><input id="eqWin" type="number" value="30" min="7" /><em>days of history the rate averages</em></span>
-            <span class="eqrow"><label>Lead time</label><input id="eqLead" type="number" value="7" min="0" /><em>days until an order arrives</em></span>
-            <span class="eqrow"><label>Cover</label><input id="eqCover" type="number" value="21" min="1" /><em>days of stock to hold after it lands</em></span>
-            <span class="eqrow"><label>Safety ×</label><input id="eqSafe" type="number" value="1.0" step="0.1" min="0.5" /><em>multiplier on the demand</em></span>
+            <span class="eqhead">Order equation</span>
+            <span class="eqrow"><span class="txt"><label>Sales window</label><em>days of history the rate averages</em></span><input id="eqWin" type="number" value="30" min="7" /></span>
+            <span class="eqrow"><span class="txt"><label>Lead time</label><em>days until an order arrives</em></span><input id="eqLead" type="number" value="7" min="0" /></span>
+            <span class="eqrow"><span class="txt"><label>Cover</label><em>days of stock to hold after it lands</em></span><input id="eqCover" type="number" value="21" min="1" /></span>
+            <span class="eqrow"><span class="txt"><label>Safety multiplier</label><em>extra buffer on the demand</em></span><input id="eqSafe" type="number" value="1.0" step="0.1" min="0.5" /></span>
             <span class="eqformula mono" id="eqFormula"></span>
           </span>
         </th><th></th>
