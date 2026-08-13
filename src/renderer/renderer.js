@@ -5537,7 +5537,7 @@ function renderEbayQueue() {
   }
   box.innerHTML = rows.map(r => `
     <div class="ebay-qrow ${ebCur && ebCur.sku === r.sku ? "is-on" : ""}" data-sku="${esc(r.sku)}">
-      <span class="sku">${esc(r.sku)}</span>
+      <span class="sku">${esc(r.sku)}${ebDrafts[r.sku] ? '<span class="ebay-qdraft" title="Draft in progress — click to resume">draft</span>' : ""}</span>
       <span class="sub"><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span><span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span></span>
     </div>`).join("");
 }
@@ -5551,6 +5551,15 @@ async function ebLoadCfg() {
 async function ebSelect(sku, scratch) {
   const p = ebParseSku(sku);
   const q = ebQueueRows().find(r => r.sku === sku);
+  ebHist = []; ebHistIdx = -1; // history is per-listing
+  // a saved draft resumes exactly where it was left
+  const draft = !scratch && sku && ebDrafts[sku];
+  if (draft) {
+    ebCur = JSON.parse(JSON.stringify(draft));
+    renderEbayQueue();
+    renderEbayForm();
+    return;
+  }
   ebCur = {
     sku, scratch: !!scratch,
     cond: p.cond || "openbox",
@@ -5581,7 +5590,7 @@ async function ebSelect(sku, scratch) {
   } else {
     ebCur.src = "manual";
     ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
-    ebCur.specs = { Brand: "Samsung", Model: p.model, "Storage Capacity": p.storage, Color: p.color };
+    ebCur.specs = ebManualSpecs(p);
     ebCur.err = (res && res.error) || "no listing found";
   }
   renderEbayForm();
@@ -5597,6 +5606,20 @@ function ebApplyCard(card, p) {
   // the SKU knows better than the card for these three
   if (p.storage) ebCur.specs["Storage Capacity"] = p.storage;
   if (p.color) ebCur.specs["Color"] = p.color;
+}
+
+// manual mode opens with the FULL standard spec sheet already laid out —
+// eBay's usual phone/tablet specifics, empty fields simply stay off the
+// listing (owner request 2026-08-12: no add-specific clicking)
+const EB_SPEC_TEMPLATE = ['Brand', 'Model', 'MPN', 'Storage Capacity', 'Color', 'Screen Size', 'Processor', 'RAM Size', 'Type', 'Internet Connectivity', 'Operating System', 'Network', 'Connectivity', 'Display Type', 'Maximum Resolution', 'Features', 'Charger Included', 'Country of Origin'];
+function ebManualSpecs(p) {
+  const s = {};
+  for (const k of EB_SPEC_TEMPLATE) s[k] = '';
+  s.Brand = 'Samsung';
+  s.Model = p.model;
+  s['Storage Capacity'] = p.storage;
+  s.Color = p.color;
+  return s;
 }
 
 function ebVarSku(v) {
@@ -5617,8 +5640,9 @@ function renderEbayForm() {
   $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
   $("ebQty").value = has ? ebCur.qty : "";
   // specifics grid: all card specs, editable; amber when empty in manual mode
+  const EB_CORE_SPECS = ["Brand", "Model", "Storage Capacity", "Color"];
   $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
-    <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
+    <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v && EB_CORE_SPECS.includes(k) ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
     + `<span class="ebay-spec"><label>&nbsp;</label><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">add specific</button></span>`;
   $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
     ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
@@ -5653,7 +5677,74 @@ function renderEbayForm() {
   if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
   $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
   $("ebExport").disabled = !has;
+  ebHistPush();  // every rendered state is one undo step
+  ebSaveDraft(); // and the draft survives restarts / tab switches
 }
+
+/* ----- drafts: one per SKU, resumed on selection ----- */
+let ebDrafts = {};
+try { ebDrafts = JSON.parse(localStorage.getItem("ebayDrafts") || "{}"); } catch { /* fresh start */ }
+function ebSaveDraft() {
+  if (!ebCur || !ebCur.sku) return;
+  ebDrafts[ebCur.sku] = JSON.parse(JSON.stringify(ebCur));
+  try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* storage full: drafts are a convenience */ }
+}
+
+/* ----- undo / redo across the whole form ----- */
+let ebHist = [];
+let ebHistIdx = -1;
+let ebHistNav = false;
+function ebHistBtns() {
+  $("ebUndo").disabled = ebHistIdx <= 0;
+  $("ebRedo").disabled = ebHistIdx >= ebHist.length - 1;
+}
+function ebHistPush() {
+  if (!ebCur || ebHistNav) { ebHistBtns(); return; }
+  const snap = JSON.stringify(ebCur);
+  if (ebHist[ebHistIdx] === snap) { ebHistBtns(); return; }
+  ebHist = ebHist.slice(0, ebHistIdx + 1);
+  ebHist.push(snap);
+  ebHistIdx++;
+  ebHistBtns();
+}
+function ebHistGo(delta) {
+  const next = ebHistIdx + delta;
+  if (next < 0 || next >= ebHist.length) return;
+  ebHistIdx = next;
+  ebHistNav = true;
+  ebCur = JSON.parse(ebHist[next]);
+  renderEbayQueue();
+  renderEbayForm();
+  ebHistNav = false;
+  ebSaveDraft();
+  ebHistBtns();
+}
+// blur on the free-typed fields lands one clean history step + draft save
+["ebTitle", "ebPrice", "ebQty"].forEach(id => $(id).addEventListener("change", () => { if (ebCur) renderEbayForm(); }));
+$("ebUndo").addEventListener("click", () => ebHistGo(-1));
+$("ebRedo").addEventListener("click", () => ebHistGo(1));
+document.addEventListener("keydown", (e) => {
+  if (activePage !== "ebay" || anyDialogOpen()) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return; // native text undo wins
+  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); ebHistGo(-1); }
+  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); ebHistGo(1); }
+});
+
+/* ----- discard: throw the draft away, rebuild fresh ----- */
+$("ebDiscard").addEventListener("click", () => {
+  if (!ebCur) return;
+  const sku = ebCur.sku;
+  const scratch = ebCur.scratch;
+  if (sku) {
+    delete ebDrafts[sku];
+    try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
+  }
+  ebHist = []; ebHistIdx = -1;
+  if (scratch || !sku) $("ebScratch").click();
+  else ebSelect(sku, false);
+  toast("Draft discarded — rebuilt fresh");
+});
 
 function enterEbay() {
   ebLoadCfg();
@@ -5678,7 +5769,7 @@ $("ebSku").addEventListener("change", (e) => {
   const p = ebParseSku(sku);
   ebCur.sku = sku;
   if (p.cond) ebCur.cond = p.cond;
-  ebCur.specs = { Brand: "Samsung", Model: p.model, "Storage Capacity": p.storage, Color: p.color };
+  ebCur.specs = ebManualSpecs(p);
   ebCur.src = "manual";
   ebCur.err = "from-scratch listing";
   ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
@@ -5753,7 +5844,9 @@ $("ebExport").addEventListener("click", async () => {
   }));
   const listing = {
     sku: ebCur.sku, stockItemId: ebCur.stockItemId, categoryId: ebCur.categoryId || "",
-    title: ebCur.title, cond: ebCur.cond, specs: ebCur.specs,
+    title: ebCur.title, cond: ebCur.cond,
+    // untouched template fields stay off the listing entirely
+    specs: Object.fromEntries(Object.entries(ebCur.specs).filter(([, v]) => String(v || "").trim())),
     description: ebDescription(true).replace(/\n\s*/g, " "),
     price: ebCur.price, qty: Number(ebCur.qty) || 1,
     variations: vars,

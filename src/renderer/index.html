@@ -183,7 +183,12 @@
 
       <div class="ebay-panel ebay-form">
         <div class="ebay-phead">Listing
-          <button id="ebGear" class="ebay-addbtn" title="Business policy names, location, dispatch time">⚙</button>
+          <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">
+            <button id="ebUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
+            <button id="ebRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
+            <button id="ebDiscard" class="ebay-addbtn" style="margin-left:0" title="Throw this draft away and rebuild it fresh">Discard</button>
+            <button id="ebGear" class="ebay-addbtn" style="margin-left:0" title="Business policy names, location, dispatch time">⚙</button>
+          </span>
         </div>
         <div class="ebay-frows">
           <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="ebSku" class="input mono ebay-fin" readonly /></div>

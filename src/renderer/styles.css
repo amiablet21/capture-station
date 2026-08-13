@@ -3485,3 +3485,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* column being dragged over: the drop target wears an accent edge */
 .stock-table th.col-drop { box-shadow: inset 3px 0 0 var(--accent); }
 .stock-table th.sortable { cursor: pointer; }
+
+/* eBay form history + draft affordances */
+.ebay-histbtn { width: 26px; height: 24px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 12px; color: var(--text); padding: 0; }
+.ebay-histbtn:hover:not(:disabled) { border-color: var(--accent); }
+.ebay-histbtn:disabled { opacity: .35; cursor: default; }
+.ebay-qdraft { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
