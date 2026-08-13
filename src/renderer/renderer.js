@@ -1647,6 +1647,9 @@ let stockCache = null;
 /* condition view chips: config-driven filters over SKU/title (AND with search) */
 
 let stockViews = null; // loaded once from config.stockViews
+// built-in "New" view: brand-new sealed stock has NO condition marker in the
+// SKU/title, so it filters as "matches none of the configured views"
+const STOCK_VIEW_NEW = { label: 'New', plain: true, tint: 'green' };
 let stockActiveView = null; // null = All
 let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed location
 let stockLowActive = false; // Low stock view: Available below the minimum level
@@ -1802,6 +1805,9 @@ function renderStockChips() {
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   box.innerHTML = [
     `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
+    ...(views.length ? [
+      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
+    ] : []),
     ...views.map((v, i) =>
       `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
@@ -1857,7 +1863,8 @@ $('stockChips').addEventListener('click', (e) => {
   } else {
     stockWfsActive = false;
     stockLowActive = false;
-    stockActiveView = chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
+    stockActiveView = chip.dataset.view === 'new' ? STOCK_VIEW_NEW
+      : chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
     if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
   }
   renderStockChips();
@@ -2020,7 +2027,9 @@ function renderStock() {
     .filter(it => !stockMissingCh || (it.stockItemId && chLinked && chLinked[stockMissingCh]
       && !chLinked[stockMissingCh].has(it.stockItemId) && (it.l.stockLevel > 0 || it.l.available > 0)))
     .filter(it => !stockLowActive || stockIsLow(it))
-    .filter(it => !stockActiveView || stockViewMatch(it, stockActiveView.pattern))
+    .filter(it => !stockActiveView || (stockActiveView.plain
+      ? !(stockViews || []).some(v => stockViewMatch(it, v.pattern))
+      : stockViewMatch(it, stockActiveView.pattern)))
     .filter(it => !q
       || it.sku.toLowerCase().includes(q)
       || it.title.toLowerCase().includes(q)

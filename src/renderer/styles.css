@@ -2086,6 +2086,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .view-chip.is-active.tint-blue { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .view-chip.is-active.tint-yellow { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 .view-chip.is-active.tint-red { background: var(--badge-red-bg); color: var(--badge-red-text); }
+.view-chip.is-active.tint-green { background: var(--badge-green-bg); color: var(--badge-green-text); }
 
 /* right-aligned action group, separated from search + chips by a hairline */
 .stock-actions {
