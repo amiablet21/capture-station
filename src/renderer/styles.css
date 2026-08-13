@@ -3597,3 +3597,5 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* Brand New condition: green, per the store template */
 .ebay-condbtn.is-on[data-cond="new"] { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; }
 .ebay-qcond.c-new { background: var(--badge-green-bg); color: var(--badge-green-text); }
+
+.eb-ml8 { margin-left: 8px !important; }

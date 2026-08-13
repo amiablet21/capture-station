@@ -1295,6 +1295,26 @@ function openNewSkuDialog(prefill = {}, onCreated = null) {
   $('skuSku').focus();
 }
 
+// Tab out of the SKU field auto-fills an empty title: the BASE item's title
+// plus the condition, or a humanized SKU when the base is unknown
+function skuTitleSuggestion(sku) {
+  const s = String(sku || '').trim().toUpperCase();
+  if (!s) return '';
+  const m = s.match(/^(OPEN-BOX|USED|SCRAP)-(.+)$/);
+  const suffix = m ? ({ 'OPEN-BOX': ' - Open Box', USED: ' - Used', SCRAP: ' - For Parts' })[m[1]] : '';
+  const base = m ? m[2] : s;
+  const known = recvBySku && recvBySku.get(base.toLowerCase());
+  if (known && known.title) return `${known.title}${suffix}`;
+  const human = base.split('-').filter(Boolean)
+    .map(p => (/\d/.test(p) ? p : p[0] + p.slice(1).toLowerCase())).join(' ');
+  return `${human}${suffix}`;
+}
+$('skuSku').addEventListener('blur', () => {
+  if (!$('skuTitle').value.trim() && $('skuSku').value.trim()) {
+    $('skuTitle').value = skuTitleSuggestion($('skuSku').value);
+  }
+});
+
 // SKUs live uppercase in Linnworks: normalize as the user types
 $('skuSku').addEventListener('input', () => {
   const el = $('skuSku');
@@ -2053,9 +2073,14 @@ function renderStock() {
   const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
+  // dead-end searches offer the missing SKU as a one-click create; inside a
+  // condition view the suggestion wears that view's prefix (owner 2026-08-13:
+  // typing S25-128GB-BLUE in Open Box should offer OPEN-BOX-S25-128GB-BLUE)
+  const condPrefix = stockActiveView ? ({ 'open box': 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' })[String(stockActiveView.label).toLowerCase()] : '';
+  const qUp = q.toUpperCase();
+  const suggested = condPrefix && !qUp.startsWith(condPrefix) ? condPrefix + qUp : qUp;
   $('stockList').innerHTML = rows.length === 0
-    // dead-end searches offer the missing SKU as a one-click create
-    ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn" data-quickadd="${esc(q.toUpperCase())}" style="margin-left:8px">Create ${esc(q.toUpperCase())} in Linnworks</button>` : ''}</p>`
+    ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn eb-ml8" data-quickadd="${esc(suggested)}">Create ${esc(suggested)} in Linnworks</button>` : ''}</p>`
     : wfsLoc
       ? `<table class="stock-table">
         <thead><tr>
