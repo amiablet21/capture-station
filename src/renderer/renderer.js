@@ -4277,6 +4277,7 @@ async function openChannelSkus(sku, stockItemId) {
         <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
         <span class="chs-sub">${esc(c.subSource)}</span>
         <button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
+          data-lref="${esc(c.refId || '')}"
           title="Open this listing on ${esc(channelLabel((c.source || '').toLowerCase()))} (right-click: copy the SKU)">${esc(c.sku)}</button>
         ${c.price != null
           ? `<span class="mono chs-price" title="${c.priceKind === 'default'
@@ -4293,7 +4294,7 @@ $('chsList').addEventListener('click', async (e) => {
   const b = e.target.closest('.chs-sku-link');
   if (!b) return;
   const external = $('bDock').hidden;
-  const res = await api.listingOpen(b.dataset.lsku, b.dataset.lch, external);
+  const res = await api.listingOpen(b.dataset.lsku, b.dataset.lch, external, b.dataset.lref);
   if (!res.ok) {
     copyFromApp(b.dataset.lsku);
     toast(`${res.error || 'No listing link for this channel.'} SKU copied instead.`);

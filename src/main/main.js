@@ -1549,12 +1549,19 @@ function registerIpc() {
     }
   });
 
-  // A listing search page for a channel SKU, in the pane or externally
-  ipcMain.handle('listing:open', (_e, { sku, channel, external }) => {
+  // A listing page for a channel SKU, in the pane or externally. With an
+  // eBay item number (ChannelReferenceId) the exact product page opens;
+  // otherwise the channel's SKU-search template.
+  ipcMain.handle('listing:open', (_e, { sku, channel, external, refId }) => {
     const cfg = config.load();
-    const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
-    if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
-    const url = tpl.replace('{sku}', encodeURIComponent(String(sku)));
+    let url = '';
+    if (String(channel || '').toLowerCase() === 'ebay' && /^\d{9,15}$/.test(String(refId || '').trim())) {
+      url = `https://www.ebay.com/itm/${String(refId).trim()}`;
+    } else {
+      const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
+      if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
+      url = tpl.replace('{sku}', encodeURIComponent(String(sku)));
+    }
     if (external || cfg.captureOnly) {
       shell.openExternal(url);
       return { ok: true, external: true };

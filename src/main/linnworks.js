@@ -711,6 +711,7 @@ class LinnworksClient {
       subSource: c.SubSource || '',
       listedQuantity: c.ListedQuantity ?? null,
       ignoreSync: !!c.IgnoreSync,
+      refId: String(c.ChannelReferenceId || c.ChannelReferenceID || '').trim(), // eBay item number etc.
     }));
   }
 
