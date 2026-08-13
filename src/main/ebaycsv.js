@@ -3,9 +3,15 @@
 // description HTML (WirelessTechnoStore template, logo colors). No I/O here —
 // everything is unit-testable from the e2e suite.
 
-const CONDITION_IDS = { openbox: 1500, used: 3000, scrap: 7000 };
+const CONDITION_IDS = { new: 1000, openbox: 1500, used: 3000, scrap: 7000 };
 
 const COND_BLOCKS = {
+  new: {
+    label: 'BRAND NEW • FACTORY SEALED', bg: '#2e7d32', fg: '#ffffff',
+    blurb: 'Item is brand new in its original, unopened retail packaging with the factory seal intact. All original contents are included. Never opened, never activated.',
+    includes: 'everything, factory sealed in the original retail box.',
+    condRow: 'New',
+  },
   openbox: {
     label: 'OPEN BOX', bg: '#6a1b9a', fg: '#ffffff',
     blurb: 'Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original. Original box may show light shelf wear.',

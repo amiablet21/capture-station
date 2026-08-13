@@ -3589,3 +3589,11 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .eb-w50 { width: 50px !important; }
 
 .eb-w180 { width: 180px !important; }
+
+/* auto-variation card: the full SKU gets its own line, never truncated */
+.ebay-varcard.is-auto .vline { flex-wrap: wrap; row-gap: 3px; }
+.ebay-varcard.is-auto .vline .vsku { flex: 1 1 100%; order: 5; white-space: normal; overflow: visible; text-overflow: unset; }
+
+/* Brand New condition: green, per the store template */
+.ebay-condbtn.is-on[data-cond="new"] { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; }
+.ebay-qcond.c-new { background: var(--badge-green-bg); color: var(--badge-green-text); }

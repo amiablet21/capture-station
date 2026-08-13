@@ -5473,9 +5473,9 @@ api.on('claims:uploaded', ({ po, name, todayCount }) => {
 // filtered to condition SKUs; specifics copy once per model from the live
 // NEW listing (config.ebayModelCards); Export writes the Seller Hub CSV.
 
-const EB_PREFIX = { openbox: "OPEN-BOX", used: "USED", scrap: "SCRAP" };
-const EB_CONDL = { openbox: "Open Box", used: "USED • TESTED & WORKING", scrap: "FOR PARTS OR REPAIR — NOT WORKING" };
-const EB_BADGE = { openbox: "c-open", used: "c-used", scrap: "c-scrap" };
+const EB_PREFIX = { new: "", openbox: "OPEN-BOX", used: "USED", scrap: "SCRAP" };
+const EB_CONDL = { new: "Brand New", openbox: "Open Box", used: "USED • TESTED & WORKING", scrap: "FOR PARTS OR REPAIR — NOT WORKING" };
+const EB_BADGE = { new: "c-new", openbox: "c-open", used: "c-used", scrap: "c-scrap" };
 
 let ebCur = null;      // the listing being built
 let ebCfg = null;      // config snapshot (model cards + profiles)
@@ -5497,14 +5497,14 @@ function ebParseSku(sku) {
 }
 
 function ebTitleFor(baseTitle, cond) {
-  const tag = cond === "openbox" ? " - Open Box" : cond === "used" ? " - Used" : " - For Parts";
+  const tag = cond === "new" ? "" : cond === "openbox" ? " - Open Box" : cond === "used" ? " - Used" : " - For Parts";
   // drop a trailing "New" (wrong for condition listings) and any old suffix,
   // then trim the BASE so the suffix always fits whole inside 80 chars
   const base = String(baseTitle || "")
     .replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "")
     .replace(/\s+New\s*$/i, "")
     .trim();
-  return base.slice(0, 80 - tag.length).trim() + tag;
+  return (base.slice(0, 80 - tag.length).trim() + tag) || base;
 }
 
 // junk the live-page reader may have cached before it learned better —
@@ -5519,6 +5519,9 @@ function ebCleanSpecs(specs) {
 // mirror of main/ebaycsv.js buildDescription: the live preview IS the export
 function ebDescription(forExport) {
   const c = {
+    new: { label: "BRAND NEW • FACTORY SEALED", bg: "#2e7d32", fg: "#ffffff",
+      blurb: "Item is brand new in its original, unopened retail packaging with the factory seal intact. All original contents are included. Never opened, never activated.",
+      inc: "everything, factory sealed in the original retail box.", row: "New" },
     openbox: { label: "OPEN BOX", bg: "#6a1b9a", fg: "#ffffff",
       blurb: "Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original. Original box may show light shelf wear.",
       inc: "the device + all original accessories, original box (may show light shelf wear).", row: "Open Box" },
@@ -5688,8 +5691,9 @@ function ebManualSpecs(p) {
 function ebVarSku(v) {
   if (v.sku) return v.sku; // auto-filled siblings carry their real SKU
   const p = ebParseSku(ebCur.sku);
+  const prefix = EB_PREFIX[ebCur.cond] ? `${EB_PREFIX[ebCur.cond]}-` : ""; // New has no prefix
   return v.storage && v.color
-    ? `${EB_PREFIX[ebCur.cond]}-${p.model}-${String(v.storage).toUpperCase()}-${String(v.color).toUpperCase()}`
+    ? `${prefix}${p.model}-${String(v.storage).toUpperCase()}-${String(v.color).toUpperCase()}`
     : "";
 }
 
