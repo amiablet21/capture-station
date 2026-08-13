@@ -1175,6 +1175,20 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('listing photos: QR url carries route, token and sku',
         lurl.includes('/lup?t=') && lurl.includes('sku=OPEN-BOX-TEST-64GB-GRAY'), lurl);
       await lrun.close();
+
+      // EXIF orientation parser: a handcrafted JPEG APP1 with Orientation=6
+      const exif = Buffer.concat([
+        Buffer.from([0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x20]),
+        Buffer.from('Exif\0\0', 'ascii'),
+        Buffer.from('II', 'ascii'), Buffer.from([0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]),
+        Buffer.from([0x01, 0x00]),                                  // 1 IFD entry
+        Buffer.from([0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00]), // tag 0x0112 = 6
+        Buffer.from([0x00, 0x00, 0x00, 0x00]),
+      ]);
+      const claimsT = require('./claims.js')._test;
+      check('claims: EXIF orientation tag parsed (sideways phone photos)',
+        claimsT.jpegOrientation(exif) === 6 && claimsT.jpegOrientation(Buffer.from([0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x04, 0, 0])) === 1,
+        claimsT.jpegOrientation(exif));
     }
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);

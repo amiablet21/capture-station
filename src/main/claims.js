@@ -88,13 +88,63 @@ function lanIp() {
   return all[0] || '127.0.0.1';
 }
 
-// JPEG/WebP -> PNG via Electron's decoder; null if the format is beyond it
+// Read the EXIF Orientation tag out of a JPEG (1 = upright). Phones save
+// sideways pixels + this flag; Electron's decoder drops the flag without
+// applying it, so we must rotate the pixels ourselves.
+function jpegOrientation(buf) {
+  try {
+    if (!(buf[0] === 0xFF && buf[1] === 0xD8)) return 1;
+    let i = 2;
+    while (i + 4 < buf.length && buf[i] === 0xFF) {
+      const marker = buf[i + 1];
+      if (marker === 0xDA) break; // start of scan: no EXIF past here
+      const size = buf.readUInt16BE(i + 2);
+      if (marker === 0xE1 && buf.slice(i + 4, i + 10).toString('ascii') === 'Exif\0\0') {
+        const t = i + 10; // TIFF header
+        const le = buf.slice(t, t + 2).toString('ascii') === 'II';
+        const rd16 = (o) => (le ? buf.readUInt16LE(o) : buf.readUInt16BE(o));
+        const rd32 = (o) => (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o));
+        const ifd = t + rd32(t + 4);
+        const n = rd16(ifd);
+        for (let k = 0; k < n; k++) {
+          const e = ifd + 2 + k * 12;
+          if (rd16(e) === 0x0112) return rd16(e + 8) || 1;
+        }
+        return 1;
+      }
+      i += 2 + size;
+    }
+  } catch { /* malformed EXIF: assume upright */ }
+  return 1;
+}
+
+// JPEG/WebP -> upright PNG via Electron's decoder (EXIF rotation applied);
+// null if the format is beyond it
 function toPng(buf) {
   try {
     const { nativeImage } = require('electron');
     const img = nativeImage.createFromBuffer(buf);
     if (img.isEmpty()) return null;
-    return img.toPNG();
+    const o = jpegOrientation(buf);
+    if (o !== 3 && o !== 6 && o !== 8) return img.toPNG();
+    const { width: w, height: h } = img.getSize();
+    const src = img.toBitmap(); // BGRA
+    const rot90 = o !== 3;
+    const dw = rot90 ? h : w;
+    const dh = rot90 ? w : h;
+    const dst = Buffer.alloc(src.length);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let nx, ny;
+        if (o === 6) { nx = h - 1 - y; ny = x; }      // rotate 90° CW
+        else if (o === 8) { nx = y; ny = w - 1 - x; } // rotate 90° CCW
+        else { nx = w - 1 - x; ny = h - 1 - y; }      // 180°
+        const si = (y * w + x) * 4;
+        const di = (ny * dw + nx) * 4;
+        dst[di] = src[si]; dst[di + 1] = src[si + 1]; dst[di + 2] = src[si + 2]; dst[di + 3] = src[si + 3];
+      }
+    }
+    return nativeImage.createFromBitmap(dst, { width: dw, height: dh }).toPNG();
   } catch {
     return null;
   }
@@ -477,4 +527,4 @@ function start(opts) {
   });
 }
 
-module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount } };
+module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation } };
