@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>eBay lister — sibling detection</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow: auto; padding: 20px; display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .phead { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 10px 13px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .queue { width: 280px; }
+  .qrow { padding: 9px 13px; border-bottom: 1px solid var(--border-soft); cursor: default; }
+  .qrow.on { background: var(--accent-soft); }
+  .qrow.merged { opacity: .45; }
+  .qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; display: block; }
+  .qrow .sub { font-size: 10.5px; color: var(--faint); }
+  .qrow .merged-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .form { width: 470px; }
+  .frow { padding: 10px 13px; border-bottom: 1px solid var(--border-soft); }
+  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); display: block; margin-bottom: 5px; }
+  .mono { font-family: var(--mono); }
+
+  /* THE feature: the sibling banner */
+  .sib { margin: 10px 13px; border: 1px solid var(--badge-blue-text); border-left-width: 3px; border-radius: 8px; background: var(--badge-blue-bg); padding: 10px 12px; }
+  .sib .t { font-size: 12px; font-weight: 600; color: var(--badge-blue-text); }
+  .sib .d { font-size: 11px; color: var(--badge-blue-text); opacity: .85; margin-top: 2px; }
+  .sib .d .mono { font-size: 10.5px; }
+  .sib .acts { display: flex; gap: 8px; margin-top: 8px; }
+  .sib button { font-size: 11px; font-weight: 600; border: 1px solid var(--badge-blue-text); border-radius: 6px; background: var(--surface); padding: 5px 12px; cursor: pointer; color: var(--badge-blue-text); font-family: inherit; }
+  .sib button.primary { background: var(--badge-blue-text); color: #fff; }
+  .sib.live { border-color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+  .sib.live .t, .sib.live .d { color: var(--badge-yellow-text); }
+  .sib.live button { border-color: var(--badge-yellow-text); color: var(--badge-yellow-text); }
+
+  .varcard { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 8px 11px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  .varcard .vsku { font-family: var(--mono); font-size: 10.5px; color: var(--accent-soft-text); flex: 1; }
+  .varcard .qty { font-family: var(--mono); color: var(--muted); }
+</style></head>
+<body>
+  <div class="try"><b>Sibling detection:</b> picking a SKU scans the queue, your drafts, and the live eBay catalog for the same model + condition. ① Queue sibling → blue banner offers to <b>combine into one variation listing</b> (click it). ② Already live on eBay → amber banner says add stock to the existing listing instead of creating a twin.</div>
+
+  <div class="stage">
+    <div class="panel queue">
+      <div class="phead">To list on eBay</div>
+      <div class="qrow on"><span class="sku">OPEN-BOX-A15-64GB-BLACK</span><span class="sub">Open box · 9 units</span></div>
+      <div class="qrow" id="sibRow"><span class="sku">OPEN-BOX-A15-128GB-BLACK<span class="merged-tag" id="mergedTag" hidden>in this listing</span></span><span class="sub">Open box · 7 units</span></div>
+      <div class="qrow"><span class="sku">OPEN-BOX-A54-128GB-BLACK</span><span class="sub">Open box · 1 unit</span></div>
+      <div class="qrow"><span class="sku">SCRAP-X133-64GB-GRAY</span><span class="sub">Parts · 1 unit</span></div>
+    </div>
+
+    <div class="panel form">
+      <div class="phead">Listing — OPEN-BOX-A15-64GB-BLACK</div>
+
+      <div class="sib" id="sibBanner">
+        <span class="t">1 sibling in the queue — same model, same condition</span>
+        <span class="d"><span class="mono">OPEN-BOX-A15-128GB-BLACK</span> · 7 units — one listing with a storage dropdown beats two twins</span>
+        <span class="acts">
+          <button class="primary" id="combineBtn">Combine as variations</button>
+          <button id="ignoreBtn">List separately</button>
+        </span>
+      </div>
+
+      <div class="sib live">
+        <span class="t">Similar listing already LIVE on eBay</span>
+        <span class="d"><span class="mono">OPEN-BOX-A15-256GB-BLACK</span> is live as item <span class="mono">2781159…</span> — add stock to it instead of creating a twin</span>
+        <span class="acts"><button>Open the live listing</button></span>
+      </div>
+
+      <div class="frow"><span class="flabel">Variations</span>
+        <div id="vars">
+          <div class="varcard"><span>64GB · Black</span><span class="vsku">OPEN-BOX-A15-64GB-BLACK</span><span class="qty">×9</span></div>
+        </div>
+      </div>
+      <div class="frow" style="color:var(--faint);font-size:11px">…title, condition, specifics, price as usual…</div>
+    </div>
+  </div>
+
+<script>
+  document.getElementById('combineBtn').addEventListener('click', () => {
+    const v = document.createElement('div');
+    v.className = 'varcard';
+    v.innerHTML = '<span>128GB · Black</span><span class="vsku">OPEN-BOX-A15-128GB-BLACK</span><span class="qty">×7</span>';
+    document.getElementById('vars').appendChild(v);
+    document.getElementById('sibBanner').remove();
+    document.getElementById('sibRow').classList.add('merged');
+    document.getElementById('mergedTag').hidden = false;
+  });
+  document.getElementById('ignoreBtn').addEventListener('click', () => document.getElementById('sibBanner').remove());
+</script>
+</body>
+</html>
