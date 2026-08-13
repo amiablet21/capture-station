@@ -5748,7 +5748,7 @@ function renderEbayForm() {
   const EB_CORE_SPECS = ["Brand", "Model", "Storage Capacity", "Color"];
   $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
     <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v && EB_CORE_SPECS.includes(k) ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
-    + `<span class="ebay-spec"><label>&nbsp;</label><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">add specific</button></span>`;
+    + `<span class="ebay-spec ebay-spec-add"><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">add specific</button></span>`;
   $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
     ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
     : ebCur.src === "manual"

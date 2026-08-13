@@ -3538,3 +3538,17 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-todo.open .rc-drow:nth-child(5) { animation-delay: 440ms; }
 .ret-todo.open .rc-drow:nth-child(n+6) { animation-delay: 520ms; }
 .ret-todo .ret-todo-note.rc-drow { padding-top: 6px; border-top: none; margin: 0; }
+
+/* add-specific: its own full-width row, left-aligned under the fields */
+.ebay-spec-add { grid-column: 1 / -1; justify-self: start; margin-top: 2px; }
+
+/* auto-filled sibling variation: ONE tidy line, inline remove */
+.ebay-varcard.is-auto { flex-direction: row; align-items: center; gap: 10px; padding: 8px 11px; }
+.ebay-varcard.is-auto .vline { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ebay-varcard.is-auto .vline > span:first-child { white-space: nowrap; font-weight: 600; font-size: 12px; }
+.ebay-varcard.is-auto .vline .vsku { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ebay-varcard.is-auto .vline input { flex: 0 0 auto; padding: 5px 8px; font-size: 11.5px; }
+.ebay-varcard.is-auto .ebay-varx { position: static; width: 18px; height: 18px; flex: 0 0 auto; }
+.ebay-varcard.is-live { flex-direction: row; align-items: center; gap: 10px; padding: 8px 11px; }
+.ebay-varcard.is-live .vline { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ebay-varcard.is-live .vline > span:first-child { white-space: nowrap; font-size: 12px; }
