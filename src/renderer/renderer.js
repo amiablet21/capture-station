@@ -3525,7 +3525,7 @@ function renderRetTodo() {
     <button class="rc-head" aria-expanded="${!col}">
       <span class="rc-badge rc-amber">${rows.length}</span>
       <span class="rc-label">In-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</span>
-      <span class="rc-meta">${totalUnits} unit${totalUnits === 1 ? '' : 's'} waiting</span>
+      <span class="rc-meta">${totalUnits > 0 ? `${totalUnits} unit${totalUnits === 1 ? '' : 's'} waiting` : ''}</span>
       <span class="rc-chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
     </button>
     <div class="rc-body"><div class="rc-inner"><div class="rc-rows"><span class="rc-vline"></span><div class="rc-list">

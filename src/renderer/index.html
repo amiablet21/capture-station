@@ -144,11 +144,15 @@
       <!-- one shared width drives BOTH sheets (worksheet + past returns),
            since they must stay pixel-identical; the grip mirrors Stock's -->
       <div id="retMain" class="ret-main">
-      <!-- created-but-unlisted condition SKUs: the employee's work queue -->
-      <div id="retTodo" class="ret-todo" hidden></div>
-      <!-- pending disputes: any return whose note carries "case: <number>"
-           stays here, aging, until the note says resolved/closed/won/lost -->
-      <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
+      <!-- attention cards side by side: each dropdown opens under its OWN
+           header, overlaying the log without ever colliding with the other -->
+      <div class="ret-cards">
+        <!-- created-but-unlisted condition SKUs: the employee's work queue -->
+        <div id="retTodo" class="ret-todo" hidden></div>
+        <!-- pending disputes: any return whose note carries "case: <number>"
+             stays here, aging, until the note says resolved/closed/won/lost -->
+        <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
+      </div>
       <!-- design C (2026-08-07): the log owns the page; receiving happens in
            the popup opened from the bar button -->
       <div class="recv-past ret-log-page">

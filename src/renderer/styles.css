@@ -3565,3 +3565,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-todo .ret-todo-row.rc-drow { padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .ret-todo .rc-list > .rc-drow:last-of-type { border-bottom: none; }
 .ret-todo .ret-todo-note.rc-drow { border-bottom: none; padding-top: 8px; }
+
+/* attention cards share one row; each dropdown owns the space under its card */
+.ret-cards { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+.ret-cards .ret-todo { flex: 1; min-width: 0; margin: 0; }
+.ret-cards .ret-todo[hidden] { display: none; }
