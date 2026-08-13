@@ -5705,6 +5705,12 @@ function ebAutoSiblings() {
     if (ps.cond !== p.cond || ps.model !== p.model) continue;
     if (ebCur.vars.some(v => ebVarSku(v) === r.sku)) continue;
     ebCur.vars.push({ sku: r.sku, storage: ps.storage, color: ps.color, price: "", qty: r.qty, auto: true });
+    // one product, one draft: absorbing a sibling retires its own draft
+    // immediately (owner, 2026-08-13) — ejecting it later rebuilds fresh
+    if (ebDrafts[r.sku]) {
+      delete ebDrafts[r.sku];
+      try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
+    }
   }
 }
 
