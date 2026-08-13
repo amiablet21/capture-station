@@ -3644,6 +3644,12 @@ function renderRetLog() {
      i.sku, i.targetSku, i.note, retCondLabel(i.condition)]
       .some(v => String(v || '').toLowerCase().includes(q)));
   $('retLogCount').textContent = ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`;
+  // numbered pages once the log outgrows one comfortable screen (owner
+  // request 2026-08-13); search always spans the WHOLE log, then pages
+  const RET_PAGE = 50;
+  const pages = Math.max(1, Math.ceil(rows.length / RET_PAGE));
+  if (retLogPage >= pages) retLogPage = pages - 1;
+  const pageRows = rows.slice(retLogPage * RET_PAGE, (retLogPage + 1) * RET_PAGE);
   box.innerHTML = `
     <div class="ret-sheet-scroll">
     <table class="recv-sheet-table ret-sheet ret-log-table">
@@ -3662,10 +3668,13 @@ function renderRetLog() {
           <th class="th-actions"></th>
         </tr>
       </thead>
-      <tbody>${rows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, idx + 1)).join('')
+      <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
         || `<tr><td colspan="${document.body.classList.contains('ret-compact') ? 6 : 11}" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
     </table>
-    </div>`;
+    </div>
+    ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
+      `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
+      <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
 }
 
@@ -3755,7 +3764,12 @@ async function loadRetPast() {
   renderRetDisputes();
 }
 
-$('retLogSearch').addEventListener('input', () => renderRetLog());
+let retLogPage = 0;
+$('retLogSearch').addEventListener('input', () => { retLogPage = 0; renderRetLog(); });
+$('retPastBox').addEventListener('click', (e) => {
+  const pg = e.target.closest('[data-retpage]');
+  if (pg) { retLogPage = Number(pg.dataset.retpage); renderRetLog(); }
+});
 
 let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
 

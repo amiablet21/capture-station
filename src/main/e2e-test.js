@@ -339,7 +339,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
       rvCreate = async () => ({ ok: true });
       0;`);
     await exec(`$('rvSave').click()`);
-    await sleep(700); // commit -> close is async; 300ms flaked once (2026-08-12)
+    // commit -> close is async and occasionally slow under load: poll up to
+    // 3s instead of a fixed sleep (flaked at 300ms and again at 700ms)
+    for (let w = 0; w < 15; w++) {
+      await sleep(200);
+      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
+    }
     const rvClosed = await exec(`[
       !document.querySelector('#retRecvDialog[open]'),
       ($('rvFeedback').hidden ? '' : $('rvFeedback').textContent),

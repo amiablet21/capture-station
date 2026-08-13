@@ -3599,3 +3599,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-qcond.c-new { background: var(--badge-green-bg); color: var(--badge-green-text); }
 
 .eb-ml8 { margin-left: 8px !important; }
+
+/* returns log pager: quiet numbered pages under the sheet */
+.ret-pager { display: flex; align-items: center; gap: 5px; padding: 9px 2px; }
+.ret-page-btn { min-width: 26px; height: 24px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; color: var(--muted); padding: 0 6px; }
+.ret-page-btn:hover { border-color: var(--accent); }
+.ret-page-btn.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 700; }
+.ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
