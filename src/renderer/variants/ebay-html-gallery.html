@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Listing description — photo gallery preview</title>
+<style>
+  :root { color-scheme: only light; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; font-size: 13px; color: #2F3437; margin: 0; height: 100vh; display: flex; flex-direction: column; background: #F7F6F3; overflow: hidden; }
+  .try { font-size: 11.5px; color: #787774; padding: 6px 12px; background: #F9F9F8; border-bottom: 1px solid #EAEAEA; font-family: 'Segoe UI', sans-serif; }
+  .try b { color: #2F3437; }
+  .switcher { display: flex; gap: 8px; padding: 7px 12px; background: #F9F9F8; border-bottom: 1px solid #EAEAEA; align-items: center; }
+  .opt { font-size: 12px; color: #787774; border: 1px solid #EAEAEA; border-radius: 999px; padding: 3px 12px; background: #fff; cursor: pointer; font-family: inherit; }
+  .opt.on { background: #E3F2EB; color: #065F46; border-color: transparent; font-weight: 600; }
+  .stage { flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center; }
+  .page { width: 640px; background: #fff; border: 1px solid #EAEAEA; border-radius: 8px; padding: 26px 30px; font-family: Arial, Helvetica, sans-serif; color: #222; line-height: 1.5; align-self: flex-start; }
+  .hide { display: none !important; }
+</style></head>
+<body>
+  <div class="try"><b>The description HTML a buyer sees, photos included.</b> A = what exports today (full-width stacked). B = two-column grid option. The images here are stand-ins — your exports use the actual photos, hosted on Linnworks' CDN.</div>
+  <div class="switcher">
+    <span class="opt on" data-o="a">A · Stacked full-width (current)</span>
+    <span class="opt" data-o="b">B · Two-column grid</span>
+  </div>
+
+  <div class="stage">
+    <div class="page">
+      <div style="border-bottom:3px solid #2361EB; padding:10px 0 8px 0; margin-bottom:18px; text-align:center;">
+        <div style="font-size:22px; letter-spacing:5px; font-weight:700;"><span style="color:#2361EB;">WIRELESS</span><span style="color:#16181C;">TECHNO</span><span style="color:#2361EB;">STORE</span></div>
+        <div style="font-size:11px; letter-spacing:3px; color:#5B6472; margin-top:4px;">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
+      </div>
+      <h2 style="text-align:center; color:#111; margin:0 0 6px;">Samsung Galaxy Tab A11 8.7" Wi-Fi Tablet 64GB Gray - Open Box</h2>
+      <p style="text-align:center; margin:6px 0;"><span style="display:inline-block; background:#6a1b9a; color:#fff; font-size:15px; font-weight:700; padding:5px 16px; border-radius:4px;">OPEN BOX</span></p>
+      <p style="text-align:center; font-size:14px;">Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working.</p>
+      <h3 style="margin:16px 0 6px;">Full Specifications</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <tr><th style="border:1px solid #ddd; padding:8px; background:#f5f5f5; width:35%; text-align:left;">Specification</th><th style="border:1px solid #ddd; padding:8px; background:#f5f5f5; text-align:left;">Details</th></tr>
+        <tr><td style="border:1px solid #ddd; padding:8px;">Brand</td><td style="border:1px solid #ddd; padding:8px;">Samsung</td></tr>
+        <tr><td style="border:1px solid #ddd; padding:8px;">Screen Size</td><td style="border:1px solid #ddd; padding:8px;">8.7 in</td></tr>
+        <tr><td style="border:1px solid #ddd; padding:8px;">Condition</td><td style="border:1px solid #ddd; padding:8px;">Open Box</td></tr>
+      </table>
+      <p style="font-size:13px;"><b>Package Includes:</b> the device + all original accessories, original box (may show light shelf wear).</p>
+
+      <h3 style="margin:16px 0 6px;">Photos</h3>
+      <div id="galA">
+        <img class="ph" style="max-width:100%; width:100%; margin:8px 0; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; margin:8px 0; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; margin:8px 0; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; margin:8px 0; border-radius:4px;" alt="" />
+      </div>
+      <div id="galB" class="hide" style="display:none; grid-template-columns:1fr 1fr; gap:10px;">
+        <img class="ph" style="max-width:100%; width:100%; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; border-radius:4px;" alt="" />
+        <img class="ph" style="max-width:100%; width:100%; border-radius:4px;" alt="" />
+      </div>
+
+      <div style="border-top:3px solid #2361EB; margin-top:22px; padding-top:12px; text-align:center;">
+        <div style="font-size:15px;"><b><span style="color:#2361EB;">Wireless</span><span style="color:#16181C;">Techno</span><span style="color:#2361EB;">Store</span></b></div>
+        <div style="font-size:12px; color:#5B6472; margin-top:3px;">Every device inspected and tested before shipping &middot; Fast shipping &middot; Questions? Message us — we respond quickly.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // stand-in product shots: simple SVG tablets on neutral sweeps
+  const shot = (n, bg1, bg2) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520">
+      <rect width="800" height="520" fill="${bg1}"/>
+      <rect width="800" height="520" fill="${bg2}" opacity="0.35"/>
+      <rect x="250" y="90" width="300" height="340" rx="26" fill="#2b2f36" transform="rotate(${n % 2 ? -4 : 3} 400 260)"/>
+      <rect x="266" y="106" width="268" height="308" rx="14" fill="#11141a" transform="rotate(${n % 2 ? -4 : 3} 400 260)"/>
+      <circle cx="400" cy="470" r="5" fill="#9aa0a8"/>
+      <text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="20" fill="#8a8f96">photo ${n}</text>
+    </svg>`);
+  const fills = [['#e8e6e1', '#d8d5cf'], ['#e3e6ea', '#cfd4da'], ['#eae7e0', '#dcd7cd'], ['#e6e8e6', '#d2d6d2']];
+  document.querySelectorAll('#galA .ph').forEach((img, i) => img.src = shot(i + 1, fills[i][0], fills[i][1]));
+  document.querySelectorAll('#galB .ph').forEach((img, i) => img.src = shot(i + 1, fills[i][0], fills[i][1]));
+  document.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === o));
+    const b = o.dataset.o === 'b';
+    document.getElementById('galA').classList.toggle('hide', b);
+    const gb = document.getElementById('galB');
+    gb.classList.toggle('hide', !b);
+    gb.style.display = b ? 'grid' : 'none';
+  }));
+</script>
+</body>
+</html>
