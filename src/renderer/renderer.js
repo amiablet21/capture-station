@@ -3212,6 +3212,14 @@ let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
 
+// a background rescan finished in main: swap the fresh sets in wherever shown
+api.on('unlisted:refreshed', () => {
+  unlistedSkus = null;
+  chLinked = null;
+  loadUnlisted();
+  loadChLinked();
+});
+
 async function loadUnlisted(force) {
   if (unlistedLoading || (state && state.captureOnly)) return;
   unlistedLoading = true;
@@ -3224,6 +3232,7 @@ async function loadUnlisted(force) {
       unlistedIgnored = res.ignored || [];
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
+      if (activePage === 'ebay') renderEbayQueue();
     }
   } finally {
     unlistedLoading = false;
@@ -5729,7 +5738,7 @@ function renderEbayForm() {
   const EB_CORE_SPECS = ["Brand", "Model", "Storage Capacity", "Color"];
   $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
     <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v && EB_CORE_SPECS.includes(k) ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
-    + `<span class="ebay-spec ebay-spec-add"><button class="ebay-addbtn" id="ebSpecAdd" style="margin:0">add specific</button></span>`;
+    + `<span class="ebay-spec ebay-spec-add"><button class="ebay-addbtn eb-m0" id="ebSpecAdd">add specific</button></span>`;
   $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
     ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
     : ebCur.src === "manual"
@@ -5741,8 +5750,8 @@ function renderEbayForm() {
   $("ebVars").innerHTML = !has ? "" : ebCur.vars.map((v, vi) => v.auto ? `
     <span class="ebay-varcard is-auto">
       <span class="vline"><span>${esc(v.storage)} · ${esc(v.color)}</span><span class="vsku is-ok">${esc(v.sku)}</span>
-        <input class="input mono" data-vf="price" data-vi="${vi}" value="${esc(v.price)}" placeholder="${esc(ebCur.price || "price")}" title="Price for this variation (blank = the listing price)" style="width:76px" />
-        <input class="input mono" data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" title="Units" style="width:50px" /></span>
+        <input data-vf="price" data-vi="${vi}" value="${esc(v.price)}" placeholder="${esc(ebCur.price || "price")}" title="Price for this variation (blank = the listing price)" class="input mono eb-w76" />
+        <input data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" title="Units" class="input mono eb-w50" /></span>
       <button class="ebay-varx" data-varx="${vi}" title="Not this one — it keeps its own place in the queue">✕</button>
     </span>` : `
     <span class="ebay-varcard">
@@ -5761,16 +5770,26 @@ function renderEbayForm() {
         <span class="ebay-livetag">live on eBay</span>
         <button class="ebay-liveopen" data-liveopen="${esc(g.sku)}" title="Already listed — add stock there instead of a twin">open ↗</button></span>
     </span>`).join("")
-    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">add variation</button>`
+    + `<button class="ebay-addbtn eb-m0 eb-selfstart" id="ebVarAdd">add variation</button>`
     + (has && ebCur.vars.some(v => v.auto) ? `<span class="ebay-fhint">siblings from the queue auto-filled — ✕ ejects one back; exporting removes every included SKU from the queue</span>` : "");
   // photos: objects carrying edit params; thumbs preview the edits live.
   // Click a thumb to edit, ✕ removes, 📷 opens the phone QR for this draft.
+  // the app CSP strips style attributes from injected HTML — thumbnails are
+  // painted via CSSOM right after render (owner hit blank thumbs 2026-08-13)
   $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"
-      style="background-image:url('${ebFileUrl(p.path)}');${ebThumbCss(p)}"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
     + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
-    + `<button class="ebay-addbtn" id="ebShotAdd" style="margin:0">add photos</button>`
-    + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint" style="width:100%">✎ edits bake into the exported photos</span>` : "");
+    + `<button class="ebay-addbtn eb-m0" id="ebShotAdd">add photos</button>`
+    + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint eb-fullrow">✎ edits bake into the exported photos</span>` : "");
+  if (has) {
+    document.querySelectorAll("#ebShots .ebay-shot[data-shoti]").forEach(el => {
+      const p = ebCur.photos[Number(el.dataset.shoti)];
+      if (!p) return;
+      el.style.backgroundImage = `url("file:///${String(p.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
+      el.style.filter = ebFilter(p);
+      el.style.transform = `rotate(${p.rot}deg)`;
+    });
+  }
   // preview + export note
   $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue, or press New listing.</div>`;
   const missing = [];
@@ -6110,8 +6129,15 @@ function ebedPaint() {
   document.querySelectorAll(".ebed-chip").forEach(c => c.classList.toggle("is-on", c.dataset.crop === p.crop));
   $("ebedMain").textContent = ebedIdx === 0 ? "★ This is the main photo" : "★ Use as main photo";
   $("ebedStrip").innerHTML = list.map((q, i) => `
-    <span class="ebed-th ${i === ebedIdx ? "is-on" : ""} ${i === 0 ? "is-main" : ""}" data-ebedth="${i}"
-      style="background-image:url('${ebFileUrl(q.path)}');${ebThumbCss(q)}"></span>`).join("");
+    <span class="ebed-th ${i === ebedIdx ? "is-on" : ""} ${i === 0 ? "is-main" : ""}" data-ebedth="${i}"></span>`).join("");
+  // CSP strips inline styles from injected HTML: paint the strip via CSSOM
+  document.querySelectorAll("#ebedStrip .ebed-th").forEach(el => {
+    const q = list[Number(el.dataset.ebedth)];
+    if (!q) return;
+    el.style.backgroundImage = `url("file:///${String(q.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
+    el.style.filter = ebFilter(q);
+    el.style.transform = `rotate(${q.rot}deg)`;
+  });
 }
 
 const ebedWire = (id, key) => {

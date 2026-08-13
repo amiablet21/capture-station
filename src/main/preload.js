@@ -25,6 +25,7 @@ const EVENTS = [
   'app:notice',
   'claims:uploaded',
   'ebay:photoUploaded',
+  'unlisted:refreshed',
   'ui:open-settings',
   'ui:open-debug',
   'ui:open-history',

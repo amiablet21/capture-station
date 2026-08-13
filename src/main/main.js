@@ -2604,7 +2604,18 @@ function registerIpc() {
     }
     detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
     unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets };
+    // the scan takes minutes: persist it so the NEXT boot shows cards at
+    // once (stale-while-revalidate), and tell the renderer fresh data landed
+    try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
+    if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
     return unlistedCache;
+  }
+
+  function loadUnlistedDisk() {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), 'utf8'));
+      if (j && Array.isArray(j.detail)) unlistedCache = j;
+    } catch { /* no saved scan yet */ }
   }
 
   ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
@@ -2613,12 +2624,29 @@ function registerIpc() {
     try {
       // Refresh must see SKUs created a minute ago: drop the hour-long cache
       if (force) unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      // cold boot: last session's scan answers INSTANTLY while a fresh scan
+      // runs behind it ('unlisted:refreshed' swaps the cards when it lands)
+      if (!unlistedCache.detail) loadUnlistedDisk();
+      if (unlistedCache.detail) {
+        const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
+        if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
+        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], stale };
+      }
       const c = await runUnlistedScan(cfg);
       return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
+  // warm the listing scan shortly after boot so the cards never wait on a
+  // page visit (the disk cache already answered; this refreshes it)
+  setTimeout(() => {
+    const cfg = config.load();
+    if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
+      runUnlistedScan(cfg).catch(() => { /* next visit retries */ });
+    }
+  }, 8000);
+
   // never-list toggle: claim bins and fakes leave the listings nag for good
   ipcMain.handle('stock:unlistedIgnore', (_e, { sku, remove }) => {
     const cfg = config.load();
