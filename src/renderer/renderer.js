@@ -1412,9 +1412,18 @@ function applyBrowserPane() {
   $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
     dock.style.width = `${bPane.width}px`;
-    if (activePage === 'capture') $('rowsMain').style.width = ''; // the sheet takes whatever remains
-    else $('retMain').style.width = '';
+    if (activePage === 'capture') {
+      $('rowsMain').style.width = ''; // the sheet takes whatever remains
+      // pull the pane UP level with the search bar (owner 2026-08-13): the
+      // toolbar hugs the sheet on the right, so the space above is empty
+      const fb = $('findBar');
+      dock.style.marginTop = fb && !fb.hidden ? `-${fb.offsetHeight + 20}px` : '';
+    } else {
+      $('retMain').style.width = '';
+      dock.style.marginTop = '';
+    }
   } else {
+    dock.style.marginTop = '';
     // a saved width wider than the window leaves the sheet overflowing with
     // a stray horizontal scrollbar after the pane closes: clamp to the room
     // actually available, and fall back to "fill" when it does not fit
