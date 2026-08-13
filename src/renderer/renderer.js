@@ -1412,16 +1412,12 @@ function applyBrowserPane() {
   $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
     dock.style.width = `${bPane.width}px`;
-    if (activePage === 'capture') {
-      $('rowsMain').style.width = ''; // the sheet takes whatever remains
-      // pull the pane UP level with the search bar (owner 2026-08-13): the
-      // toolbar hugs the sheet on the right, so the space above is empty
-      const fb = $('findBar');
-      dock.style.marginTop = fb && !fb.hidden ? `-${fb.offsetHeight + 20}px` : '';
-    } else {
-      $('retMain').style.width = '';
-      dock.style.marginTop = '';
-    }
+    // (a negative-margin lift to the search bar was tried 2026-08-13 and
+    // reverted same day: the native view overlapped the tab bar when the
+    // toolbar wrapped — the pane stays below the toolbar)
+    if (activePage === 'capture') $('rowsMain').style.width = ''; // the sheet takes whatever remains
+    else $('retMain').style.width = '';
+    dock.style.marginTop = '';
   } else {
     dock.style.marginTop = '';
     // a saved width wider than the window leaves the sheet overflowing with
