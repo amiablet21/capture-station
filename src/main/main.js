@@ -2275,8 +2275,9 @@ function registerIpc() {
       }
       // the description's photo section gets the hosted URLs (the preview
       // showed local files; buyers get the same images from Linnworks' CDN)
+      // two-column grid (owner pick 2026-08-13); a single photo stays full width
       const gallery = picUrls.length
-        ? `<h3>Photos</h3><div>${picUrls.map(u => `<img src="${u}" style="max-width:100%;margin:8px 0;border-radius:4px" alt="" />`).join('')}</div>`
+        ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
         : '';
       const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
       const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
