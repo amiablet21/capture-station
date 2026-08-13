@@ -114,12 +114,8 @@
     const sibs = siblingsOf(item);
     sibs.forEach(s => { mergedInto[s.sku] = item.sku; });
     Object.keys(mergedInto).forEach(k => { if (mergedInto[k] === item.sku && !sibs.some(s => s.sku === k)) delete mergedInto[k]; });
-    const liveWarn = item.model === 'A15'
-      ? `<div class="live"><span class="t">Similar listing already LIVE on eBay</span><span class="d"><span class="mono">OPEN-BOX-A15-256GB-BLACK</span> is live as item <span class="mono">2781159…</span> — add stock to it instead of a twin. Never auto-added.</span></div>`
-      : '';
     $('form').innerHTML = `
       <div class="phead">Listing — ${item.sku}</div>
-      ${liveWarn}
       <div class="frow"><span class="flabel">Title</span><input class="fin" value="Samsung Galaxy ${item.model} ${item.storage} ${item.color} - ${item.cond === 'scrap' ? 'For Parts' : 'Open Box'}" /></div>
       <div class="frow"><span class="flabel">Condition</span>
         <div class="condrow"><span class="cond ${item.cond === 'openbox' ? 'on' : ''}">Open Box</span><span class="cond">Used</span><span class="cond ${item.cond === 'scrap' ? 'on' : ''}">Parts</span></div>
