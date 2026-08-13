@@ -3552,3 +3552,11 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-varcard.is-live { flex-direction: row; align-items: center; gap: 10px; padding: 8px 11px; }
 .ebay-varcard.is-live .vline { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ebay-varcard.is-live .vline > span:first-child { white-space: nowrap; font-size: 12px; }
+
+/* the card bodies OVERLAY instead of pushing the log around (owner request
+   2026-08-12: opening/closing must not shift the returns history) */
+.ret-todo { overflow: visible; position: relative; }
+.ret-todo.open { border-radius: 14px; }
+.rc-body { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 14px 34px rgba(47,52,55,0.16); }
+.ret-todo:not(.open) .rc-body { pointer-events: none; }
+.rc-rows { padding: 10px 12px 12px; }
