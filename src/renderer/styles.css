@@ -3500,3 +3500,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-livetag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--badge-green-text); background: var(--badge-green-bg); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .ebay-liveopen { font-size: 10.5px; color: var(--muted); text-decoration: underline; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; white-space: nowrap; }
 .ebay-liveopen:hover { color: var(--accent-soft-text); }
+
+/* collapsible returns cards: the header is the toggle */
+.ret-card-h { cursor: pointer; user-select: none; }
+.ret-chev { color: var(--faint); font-size: 10px; margin-right: 7px; }
+.ret-todo.is-collapsed > *:not(h4) { display: none; }
+.ret-todo.is-collapsed { padding-bottom: 10px; }

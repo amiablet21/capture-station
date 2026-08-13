@@ -327,7 +327,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}`);
 
     // 24c. Receive must CLOSE the popup after a successful single-line commit
-    await exec(`retOpenRecv();
+    await exec(`window.__err = ''; window.addEventListener('error', (e) => { window.__err += String(e.error && e.error.stack || e.message) + ' | '; });
+      window.addEventListener('unhandledrejection', (e) => { window.__err += 'REJ:' + String(e.reason && e.reason.stack || e.reason) + ' | '; });
+      retOpenRecv();
       rv.unmatched = false; rv.orderId = 'oid-9'; rv.source = 'WALMART';
       $('rvPo').value = '119999000000001';
       rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
@@ -337,10 +339,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       rvCreate = async () => ({ ok: true });
       0;`);
     await exec(`$('rvSave').click()`);
-    await sleep(300);
+    await sleep(700); // commit -> close is async; 300ms flaked once (2026-08-12)
     const rvClosed = await exec(`[
       !document.querySelector('#retRecvDialog[open]'),
       ($('rvFeedback').hidden ? '' : $('rvFeedback').textContent),
+      String(window.__err || ''),
     ]`);
     check('Receive closes the popup after a successful commit', rvClosed[0] === true, rvClosed);
     await exec(`rvCreate = window.__origCreate; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);

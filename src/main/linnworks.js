@@ -205,6 +205,17 @@ class LinnworksClient {
 
   // All open orders at a location with the item info routing and the Stock
   // page's per-SKU order list need.
+  // Rename an inventory item's SKU. The item id survives, so stock levels,
+  // history and channel links all hold — only string-matched config needs
+  // updating (the caller handles that).
+  async renameSku(stockItemId, newSku) {
+    await this.call('Inventory/UpdateInventoryItemField', {
+      inventoryItemId: stockItemId,
+      fieldName: 'SKU',
+      fieldValue: String(newSku).trim().toUpperCase(),
+    });
+  }
+
   // Un-park AND unlock in one go: the PARKED chip covers both states (the
   // router's refusal string does not say which one it hit).
   // ChangeOrderTag with tag:null clears the parked tag; LockOrder false unlocks.

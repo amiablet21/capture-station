@@ -2040,12 +2040,15 @@ function renderStock() {
     const ds = (state && !state.captureOnly && dsPads && !(String(r.sku).toUpperCase() in dsPads))
       ? `<button class="stock-ds-add tray-ds" data-dssku="${esc(r.sku)}" title="Add to the dropship program: keeps 10 at DropShip so the listing stays live with zero warehouse stock">DS</button>`
       : '';
+    const ren = (state && !state.captureOnly && r.stockItemId)
+      ? `<button class="btn-icon stock-ren-btn" data-rensku="${esc(r.sku)}" data-rensid="${esc(r.stockItemId)}" title="Rename this SKU in Linnworks">${ICONS.pencil}</button>`
+      : '';
     const del = (state && !state.captureOnly && r.stockItemId)
       ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
       : '';
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
-      ${ds}${del}</span>`;
+      ${ds}${ren}${del}</span>`;
   };
   const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
@@ -2581,6 +2584,8 @@ $('stockList').addEventListener('click', async (e) => {
     renderStock();
     return;
   }
+  const renBtn = e.target.closest('button.stock-ren-btn');
+  if (renBtn) { openRenameDialog(renBtn.dataset.rensku, renBtn.dataset.rensid); return; }
   const quickAdd = e.target.closest('[data-quickadd]');
   if (quickAdd) {
     // fresh SKU straight from the dead-end search, grid refreshes on create
@@ -3509,8 +3514,10 @@ function renderRetTodo() {
     return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
   }).sort((a, b) => (b.units || 0) - (a.units || 0));
   box.hidden = false;
+  const col = localStorage.getItem('retTodoCol') === '1';
+  box.classList.toggle('is-collapsed', col);
   box.innerHTML = `
-    <h4>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
+    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
     ${rows.map(r => `<div class="ret-todo-row">
       <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Open the Stock page's Unlisted view filtered to this SKU">${esc(r.sku)}</button>
       <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
@@ -3521,6 +3528,11 @@ function renderRetTodo() {
 }
 
 $('retTodo').addEventListener('click', async (e) => {
+  if (e.target.closest('h4')) {
+    localStorage.setItem('retTodoCol', localStorage.getItem('retTodoCol') === '1' ? '0' : '1');
+    renderRetTodo();
+    return;
+  }
   const c = e.target.closest('[data-copy]');
   if (c) { copyFromApp(c.dataset.copy); return; }
   const ign = e.target.closest('[data-ign]');
@@ -3633,9 +3645,11 @@ function renderRetDisputes() {
   });
   if (!open.length) { box.hidden = true; return; }
   box.hidden = false;
+  const col = localStorage.getItem('retDispCol') === '1';
+  box.classList.toggle('is-collapsed', col);
   const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
   box.innerHTML = `
-    <h4>${open.length} pending dispute${open.length === 1 ? '' : 's'} to check</h4>
+    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${open.length} pending dispute${open.length === 1 ? '' : 's'} to check</h4>
     ${open.map(({ r, i, ii }) => {
       const note = String((i && i.note) || r.note || '');
       const caseNo = (note.match(DISPUTE_RE) || [])[1] || '';
@@ -3652,6 +3666,11 @@ function renderRetDisputes() {
 }
 
 $('retDisputes').addEventListener('click', async (e) => {
+  if (e.target.closest('h4')) {
+    localStorage.setItem('retDispCol', localStorage.getItem('retDispCol') === '1' ? '0' : '1');
+    renderRetDisputes();
+    return;
+  }
   const c = e.target.closest('[data-copy]');
   if (c) { copyFromApp(c.dataset.copy); return; }
   const open = e.target.closest('.ret-po-open');
@@ -6213,4 +6232,46 @@ $("stockList").addEventListener("drop", (e) => {
 $("stockList").addEventListener("dragend", () => {
   stockDragKey = null;
   document.querySelectorAll(".stock-table th.col-drop").forEach(x => x.classList.remove("col-drop"));
+});
+
+/* ---------- rename a Linnworks SKU (stock hover tray pencil) ---------- */
+let rnCtx = null;
+function openRenameDialog(sku, stockItemId) {
+  rnCtx = { sku, stockItemId };
+  $("rnOld").textContent = sku;
+  $("rnNew").value = sku;
+  $("rnErr").hidden = true;
+  $("renameDialog").showModal();
+  $("rnNew").focus();
+  $("rnNew").select();
+}
+$("rnCancel").addEventListener("click", () => $("renameDialog").close());
+$("rnNew").addEventListener("input", () => { $("rnNew").value = $("rnNew").value.toUpperCase(); });
+$("rnNew").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
+$("rnSave").addEventListener("click", async () => {
+  if (!rnCtx) return;
+  const next = $("rnNew").value.trim().toUpperCase();
+  $("rnSave").disabled = true;
+  const res = await api.stockRenameSku(rnCtx.stockItemId, rnCtx.sku, next).catch(err => ({ ok: false, error: err.message }));
+  $("rnSave").disabled = false;
+  if (!res || !res.ok) {
+    $("rnErr").textContent = (res && res.error) || "Rename failed.";
+    $("rnErr").hidden = false;
+    return;
+  }
+  // local caches follow immediately; the grid reloads for everything else
+  if (stockCache) {
+    const it = stockCache.items.find(i => i.sku === rnCtx.sku);
+    if (it) it.sku = res.sku;
+  }
+  if (recvBySku && recvBySku.has(rnCtx.sku.toLowerCase())) {
+    const it = recvBySku.get(rnCtx.sku.toLowerCase());
+    recvBySku.delete(rnCtx.sku.toLowerCase());
+    it.sku = res.sku;
+    recvBySku.set(res.sku.toLowerCase(), it);
+  }
+  $("renameDialog").close();
+  toast(`${rnCtx.sku} renamed to ${res.sku} — links and history followed`);
+  rnCtx = null;
+  loadStock();
 });

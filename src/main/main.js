@@ -1492,6 +1492,42 @@ function registerIpc() {
   });
   // Permanently delete a stock item from Linnworks (guarded by a consent
   // dialog in the UI — this is irreversible)
+  // Rename a Linnworks SKU in place: the stockItemId anchors everything, so
+  // levels/history/links survive; string-matched config follows the rename
+  ipcMain.handle('stock:renameSku', async (_e, { stockItemId, oldSku, newSku }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    const next = String(newSku || '').trim().toUpperCase();
+    const prev = String(oldSku || '').trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,49}$/.test(next)) return { ok: false, error: 'SKUs are letters, numbers, dashes and underscores.' };
+    if (next === prev) return { ok: false, error: 'That is already the SKU.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const clash = await client.findStockItemIdBySku(next).catch(() => null);
+      if (clash) return { ok: false, error: `${next} already exists in Linnworks.` };
+      await client.renameSku(stockItemId, next);
+      // string-matched local config follows the item to its new name
+      const patch = {};
+      if ((cfg.unlistedIgnore || []).includes(prev)) {
+        patch.unlistedIgnore = cfg.unlistedIgnore.map(s => (s === prev ? next : s));
+      }
+      if (cfg.dropshipPads && prev in cfg.dropshipPads) {
+        const pads = { ...cfg.dropshipPads };
+        pads[next] = pads[prev];
+        delete pads[prev];
+        patch.dropshipPads = pads;
+      }
+      if (Object.keys(patch).length) config.save(patch);
+      mappingCache.clear();
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      skuImageCache = { at: 0, map: null, skus: null, promise: null };
+      return { ok: true, sku: next };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('stock:deleteSku', async (_e, { stockItemId, sku }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

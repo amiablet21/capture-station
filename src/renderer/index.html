@@ -284,6 +284,21 @@
     <div class="ebed-strip" id="ebedStrip"></div>
   </dialog>
 
+  <!-- rename a Linnworks SKU: the item survives, only the string changes -->
+  <dialog id="renameDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Rename SKU</h2>
+      <p class="dlg-note mono" id="rnOld" style="margin-bottom:10px"></p>
+      <div class="ebg-row"><label for="rnNew">New SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
+      <p class="dlg-note">Stock, history and channel links follow the item automatically. Marketplace listings keep their own channel SKUs — future auto-linking matches the new name.</p>
+      <p class="dlg-note" id="rnErr" style="color:var(--neg-text)" hidden></p>
+      <div class="dlg-actions">
+        <button id="rnCancel" class="btn btn-ghost">Cancel</button>
+        <button id="rnSave" class="btn btn-primary">Rename</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- eBay lister settings: business policy names live on the eBay account -->
   <dialog id="ebGearDialog" class="dlg ebg-dlg">
     <div class="dlg-body">
