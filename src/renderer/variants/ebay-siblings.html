@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>eBay lister — sibling detection</title>
+<head><meta charset="UTF-8" /><title>eBay lister — sibling auto-fill, in action</title>
 <link rel="stylesheet" href="_base.css" />
 <style>
   :root {
@@ -11,6 +11,7 @@
     --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
     --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
     --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
     --font: 'Geist', 'Segoe UI', sans-serif;
     --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
   }
@@ -18,94 +19,161 @@
   body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
   .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
   .try b { color: var(--text); }
-  .stage { flex: 1; overflow: auto; padding: 20px; display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+  .stage { flex: 1; overflow: auto; padding: 18px; display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .phead { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 10px 13px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-  .queue { width: 280px; }
-  .qrow { padding: 9px 13px; border-bottom: 1px solid var(--border-soft); cursor: default; }
-  .qrow.on { background: var(--accent-soft); }
-  .qrow.merged { opacity: .45; }
-  .qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; display: block; }
-  .qrow .sub { font-size: 10.5px; color: var(--faint); }
-  .qrow .merged-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
-  .form { width: 470px; }
-  .frow { padding: 10px 13px; border-bottom: 1px solid var(--border-soft); }
-  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); display: block; margin-bottom: 5px; }
   .mono { font-family: var(--mono); }
 
-  /* THE feature: the sibling banner */
-  .sib { margin: 10px 13px; border: 1px solid var(--badge-blue-text); border-left-width: 3px; border-radius: 8px; background: var(--badge-blue-bg); padding: 10px 12px; }
-  .sib .t { font-size: 12px; font-weight: 600; color: var(--badge-blue-text); }
-  .sib .d { font-size: 11px; color: var(--badge-blue-text); opacity: .85; margin-top: 2px; }
-  .sib .d .mono { font-size: 10.5px; }
-  .sib .acts { display: flex; gap: 8px; margin-top: 8px; }
-  .sib button { font-size: 11px; font-weight: 600; border: 1px solid var(--badge-blue-text); border-radius: 6px; background: var(--surface); padding: 5px 12px; cursor: pointer; color: var(--badge-blue-text); font-family: inherit; }
-  .sib button.primary { background: var(--badge-blue-text); color: #fff; }
-  .sib.live { border-color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
-  .sib.live .t, .sib.live .d { color: var(--badge-yellow-text); }
-  .sib.live button { border-color: var(--badge-yellow-text); color: var(--badge-yellow-text); }
+  .queue { width: 280px; flex: 0 0 auto; }
+  .qrow { padding: 9px 13px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+  .qrow:hover { background: var(--surface-2); }
+  .qrow.on { background: var(--accent-soft); }
+  .qrow.gone { opacity: .4; cursor: default; }
+  .qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; display: block; }
+  .qrow .sub { font-size: 10.5px; color: var(--faint); }
+  .qtag { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .qtag.listed { color: var(--accent-soft-text); background: var(--accent-soft); }
+  .qtag.merged { color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+  .qempty { padding: 14px 13px; font-size: 11.5px; color: var(--faint); }
+
+  .form { width: 470px; flex: 0 0 auto; }
+  .frow { padding: 10px 13px; border-bottom: 1px solid var(--border-soft); }
+  .flabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); display: block; margin-bottom: 5px; }
+  .fin { font-size: 12.5px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); width: 100%; font-family: inherit; }
+  .condrow { display: flex; gap: 6px; }
+  .cond { flex: 1; font-size: 12px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 8px 5px; color: var(--muted); text-align: center; }
+  .cond.on { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .spec label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 2px; }
+
+  .live { margin: 10px 13px 0; border: 1px solid var(--badge-yellow-text); border-left-width: 3px; border-radius: 8px; background: var(--badge-yellow-bg); padding: 9px 12px; }
+  .live .t { font-size: 11.5px; font-weight: 600; color: var(--badge-yellow-text); display: block; }
+  .live .d { font-size: 10.5px; color: var(--badge-yellow-text); opacity: .9; }
 
   .varcard { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 8px 11px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  .varcard.auto { border-style: dashed; border-color: var(--badge-blue-text); }
   .varcard .vsku { font-family: var(--mono); font-size: 10.5px; color: var(--accent-soft-text); flex: 1; }
   .varcard .qty { font-family: var(--mono); color: var(--muted); }
+  .varcard .self { font-size: 9.5px; color: var(--faint); }
+  .vx { width: 17px; height: 17px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; }
+  .vhint { font-size: 10px; color: var(--faint); margin-top: 2px; }
+
+  .facts { display: flex; gap: 10px; align-items: center; padding: 12px 13px; background: var(--surface-2); }
+  .export { background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 9px 18px; cursor: pointer; font-family: inherit; }
+  .export:disabled { opacity: .45; cursor: default; }
+  .fhint { font-size: 10.5px; color: var(--faint); }
 </style></head>
 <body>
-  <div class="try"><b>Sibling auto-fill:</b> picking a SKU pulls its queue siblings (same model + condition) straight INTO the variations — already filled, each with a ✕ if you don't want it. Export = accept: every SKU in the listing <b>leaves the queue</b>. Try: ✕ one, or hit Export and watch the queue. Amber = a sibling already live on eBay (never auto-added).</div>
+  <div class="try"><b>In action:</b> click through the queue. A15 has a sibling → it lands in Variations already filled (dashed blue = auto-added, ✕ ejects it). A54 and the SCRAP have none → no variations appear. <b>Export</b> marks every included SKU listed and drops it from the queue — then click the next SKU and keep going.</div>
 
   <div class="stage">
     <div class="panel queue">
       <div class="phead">To list on eBay</div>
-      <div class="qrow on"><span class="sku">OPEN-BOX-A15-64GB-BLACK</span><span class="sub">Open box · 9 units</span></div>
-      <div class="qrow" id="sibRow"><span class="sku">OPEN-BOX-A15-128GB-BLACK<span class="merged-tag" id="mergedTag" hidden>in this listing</span></span><span class="sub">Open box · 7 units</span></div>
-      <div class="qrow"><span class="sku">OPEN-BOX-A54-128GB-BLACK</span><span class="sub">Open box · 1 unit</span></div>
-      <div class="qrow"><span class="sku">SCRAP-X133-64GB-GRAY</span><span class="sub">Parts · 1 unit</span></div>
+      <div id="qlist"></div>
     </div>
-
-    <div class="panel form">
-      <div class="phead">Listing — OPEN-BOX-A15-64GB-BLACK</div>
-
-      <div class="sib live">
-        <span class="t">Similar listing already LIVE on eBay</span>
-        <span class="d"><span class="mono">OPEN-BOX-A15-256GB-BLACK</span> is live as item <span class="mono">2781159…</span> — add stock to it instead of creating a twin</span>
-        <span class="acts"><button>Open the live listing</button></span>
-      </div>
-
-      <div class="frow"><span class="flabel">Variations — siblings auto-filled</span>
-        <div id="vars">
-          <div class="varcard" data-vsku="OPEN-BOX-A15-64GB-BLACK"><span>64GB · Black</span><span class="vsku">OPEN-BOX-A15-64GB-BLACK</span><span class="qty">×9</span><span style="font-size:9.5px;color:var(--faint)">this listing</span></div>
-          <div class="varcard" data-vsku="OPEN-BOX-A15-128GB-BLACK"><span>128GB · Black</span><span class="vsku">OPEN-BOX-A15-128GB-BLACK</span><span class="qty">×7</span><button class="vx" title="Not this one — keeps its own place in the queue">✕</button></div>
-        </div>
-        <div style="font-size:10px;color:var(--faint);margin-top:4px">found in the queue, same model + condition — ✕ any you'd rather list separately</div>
-      </div>
-      <div class="frow" style="color:var(--faint);font-size:11px">…title, condition, specifics, price as usual…</div>
-      <div class="frow" style="display:flex;gap:10px;align-items:center">
-        <button id="exportBtn" style="background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;padding:9px 18px;cursor:pointer;font-family:inherit">Export eBay CSV</button>
-        <span style="font-size:10.5px;color:var(--faint)">accepting removes every included SKU from the queue</span>
-      </div>
-    </div>
+    <div class="panel form" id="form"></div>
   </div>
 
-<style>
-  .vx { width: 17px; height: 17px; border-radius: 999px; background: var(--neg-bg, #FDEBEC); color: #9F2F2D; font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; }
-</style>
 <script>
+  const QUEUE = [
+    { sku: 'OPEN-BOX-A15-64GB-BLACK', model: 'A15', cond: 'openbox', storage: '64GB', color: 'Black', qty: 9, price: '109.99' },
+    { sku: 'OPEN-BOX-A15-128GB-BLACK', model: 'A15', cond: 'openbox', storage: '128GB', color: 'Black', qty: 7, price: '129.99' },
+    { sku: 'OPEN-BOX-A54-128GB-BLACK', model: 'A54', cond: 'openbox', storage: '128GB', color: 'Black', qty: 1, price: '159.99' },
+    { sku: 'SCRAP-X133-64GB-GRAY', model: 'X133', cond: 'scrap', storage: '64GB', color: 'Gray', qty: 1, price: '39.99' },
+  ];
+  const CONDL = { openbox: 'Open box', scrap: 'Parts' };
+  let cur = null;        // selected sku
+  let removedSibs = {};  // sku -> Set of ejected sibling skus
+  let listed = new Set();
+  let mergedInto = {};   // sibling -> primary
+
   const $ = (id) => document.getElementById(id);
-  document.getElementById('vars').addEventListener('click', (e) => {
-    if (!e.target.closest('.vx')) return;
-    e.target.closest('.varcard').remove();
-  });
-  $('exportBtn').addEventListener('click', () => {
-    const included = [...document.querySelectorAll('#vars .varcard')].map(v => v.dataset.vsku);
-    document.querySelectorAll('.qrow').forEach(row => {
-      const sku = row.querySelector('.sku').textContent.replace('in this listing', '').trim();
-      if (included.includes(sku)) {
-        row.classList.add('merged');
-        row.querySelector('.sku').insertAdjacentHTML('beforeend', '<span class="merged-tag">listed ✓</span>');
-      }
+
+  function siblingsOf(item) {
+    return QUEUE.filter(x => x.sku !== item.sku && x.model === item.model && x.cond === item.cond
+      && !listed.has(x.sku) && !(removedSibs[item.sku] || new Set()).has(x.sku));
+  }
+
+  function renderQueue() {
+    $('qlist').innerHTML = QUEUE.filter(x => true).map(x => {
+      const gone = listed.has(x.sku);
+      const merged = mergedInto[x.sku] && !gone;
+      return `<div class="qrow ${cur === x.sku ? 'on' : ''} ${gone ? 'gone' : ''}" data-sku="${x.sku}">
+        <span class="sku">${x.sku}${gone ? '<span class="qtag listed">listed ✓</span>' : merged ? `<span class="qtag merged">in ${mergedInto[x.sku].split('-')[2]} listing</span>` : ''}</span>
+        <span class="sub">${CONDL[x.cond]} · ${x.qty} unit${x.qty === 1 ? '' : 's'}</span>
+      </div>`;
+    }).join('') + (QUEUE.every(x => listed.has(x.sku)) ? '<div class="qempty">Queue clear — everything is listed 🎉</div>' : '');
+  }
+
+  function renderForm() {
+    const item = QUEUE.find(x => x.sku === cur);
+    if (!item || listed.has(item.sku)) {
+      $('form').innerHTML = '<div class="phead">Listing</div><div class="qempty">Pick a SKU from the queue.</div>';
+      return;
+    }
+    const sibs = siblingsOf(item);
+    sibs.forEach(s => { mergedInto[s.sku] = item.sku; });
+    Object.keys(mergedInto).forEach(k => { if (mergedInto[k] === item.sku && !sibs.some(s => s.sku === k)) delete mergedInto[k]; });
+    const liveWarn = item.model === 'A15'
+      ? `<div class="live"><span class="t">Similar listing already LIVE on eBay</span><span class="d"><span class="mono">OPEN-BOX-A15-256GB-BLACK</span> is live as item <span class="mono">2781159…</span> — add stock to it instead of a twin. Never auto-added.</span></div>`
+      : '';
+    $('form').innerHTML = `
+      <div class="phead">Listing — ${item.sku}</div>
+      ${liveWarn}
+      <div class="frow"><span class="flabel">Title</span><input class="fin" value="Samsung Galaxy ${item.model} ${item.storage} ${item.color} - ${item.cond === 'scrap' ? 'For Parts' : 'Open Box'}" /></div>
+      <div class="frow"><span class="flabel">Condition</span>
+        <div class="condrow"><span class="cond ${item.cond === 'openbox' ? 'on' : ''}">Open Box</span><span class="cond">Used</span><span class="cond ${item.cond === 'scrap' ? 'on' : ''}">Parts</span></div>
+      </div>
+      <div class="frow"><span class="flabel">Specifics</span>
+        <div class="two">
+          <span class="spec"><label>Brand</label><input class="fin" value="Samsung" /></span>
+          <span class="spec"><label>Model</label><input class="fin" value="${item.model}" /></span>
+          <span class="spec"><label>Storage</label><input class="fin" value="${item.storage}" /></span>
+          <span class="spec"><label>Color</label><input class="fin" value="${item.color}" /></span>
+        </div>
+      </div>
+      <div class="frow"><span class="flabel">Price · Qty</span>
+        <div style="display:flex;gap:8px"><input class="fin mono" value="${item.price}" style="width:110px" /><input class="fin mono" value="${item.qty}" style="width:70px" /></div>
+      </div>
+      <div class="frow"><span class="flabel">Variations${sibs.length ? ' — siblings auto-filled' : ''}</span>
+        <div id="vars">
+          ${sibs.length ? `<div class="varcard"><span>${item.storage} · ${item.color}</span><span class="vsku">${item.sku}</span><span class="qty">×${item.qty}</span><span class="self">this listing</span></div>` : ''}
+          ${sibs.map(s => `<div class="varcard auto" data-vx="${s.sku}"><span>${s.storage} · ${s.color}</span><span class="vsku">${s.sku}</span><span class="qty">×${s.qty}</span><button class="vx" title="Not this one — it keeps its place in the queue">✕</button></div>`).join('')}
+        </div>
+        ${sibs.length ? '<div class="vhint">found in the queue — same model, same condition · ✕ ejects it back to the queue</div>' : '<div class="vhint">no siblings in the queue — lists on its own</div>'}
+      </div>
+      <div class="facts">
+        <button class="export" id="exportBtn">Export eBay CSV${sibs.length ? ` (${sibs.length + 1} SKUs)` : ''}</button>
+        <span class="fhint">accepting removes every included SKU from the queue</span>
+      </div>`;
+    $('exportBtn').addEventListener('click', () => {
+      listed.add(item.sku);
+      sibs.forEach(s => { listed.add(s.sku); delete mergedInto[s.sku]; });
+      cur = null;
+      renderQueue();
+      renderForm();
     });
-    $('exportBtn').textContent = '✓ Exported — gone from the queue';
-    $('exportBtn').disabled = true;
+    document.querySelectorAll('[data-vx] .vx').forEach(b => b.addEventListener('click', (e) => {
+      const sku = e.target.closest('[data-vx]').dataset.vx;
+      (removedSibs[item.sku] = removedSibs[item.sku] || new Set()).add(sku);
+      delete mergedInto[sku];
+      renderQueue();
+      renderForm();
+    }));
+    renderQueue();
+  }
+
+  $('qlist').addEventListener('click', (e) => {
+    const r = e.target.closest('.qrow');
+    if (!r || listed.has(r.dataset.sku)) return;
+    cur = r.dataset.sku;
+    renderQueue();
+    renderForm();
   });
+
+  cur = 'OPEN-BOX-A15-64GB-BLACK';
+  renderQueue();
+  renderForm();
 </script>
 </body>
 </html>
