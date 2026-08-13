@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Stock — Order column</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; }
+  .try { font-size: 11.5px; color: var(--muted); padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .try b { color: var(--text); }
+  .stage { flex: 1; overflow: auto; padding: 20px; display: flex; justify-content: center; align-items: flex-start; }
+  table { border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); font-size: 13px; width: 1050px; }
+  th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 6px 11px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  td { padding: 9px 11px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num { text-align: right; }
+  tr:hover td { background: var(--surface-2); }
+  .dim { color: var(--faint); }
+  /* the Order suggestion: quiet mono number, amber when it's urgent
+     (cover already broken), tooltip carries the math */
+  .ord { font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); cursor: default; }
+  .ord.urgent { color: var(--badge-yellow-text); }
+  .ord .rate { font-weight: 400; color: var(--faint); font-size: 10.5px; margin-left: 6px; }
+</style></head>
+<body>
+  <div class="try"><b>Order column on the Stock sheet:</b> <span class="mono">sells/day × (lead 7d + cover 21d) − available</span>, rounded up. Quiet number + the daily rate beside it; amber when you're already below the lead-time buffer; dash when there's nothing to order. Hover a number for the math.</div>
+
+  <div class="stage">
+    <table>
+      <thead><tr>
+        <th style="width:260px">SKU</th><th class="num" style="width:90px">In stock</th><th class="num" style="width:90px">In orders</th>
+        <th class="num" style="width:90px">Min</th><th class="num" style="width:100px">Available</th><th class="num" style="width:130px">Order</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">S26-ULTRA-512GB-BLACK</td><td class="mono num">48</td><td class="mono num">6</td><td class="mono num">20</td><td class="mono num">42</td>
+          <td class="num"><span class="ord" title="sells 3.4/day (last 30d) × 28 days cover = 96 needed − 42 available → order 54">54<span class="rate">3.4/d</span></span></td><td></td>
+        </tr>
+        <tr>
+          <td class="mono">S25-256GB-SILVERSHADOW</td><td class="mono num">9</td><td class="mono num">4</td><td class="mono num">12</td><td class="mono num">5</td>
+          <td class="num"><span class="ord urgent" title="sells 2.1/day × 28 days = 59 needed − 5 available → order 54 — you're already below the 7-day lead buffer">54<span class="rate">2.1/d</span></span></td><td></td>
+        </tr>
+        <tr>
+          <td class="mono">X133-64GB-GRAY</td><td class="mono num">31</td><td class="mono num">2</td><td class="mono num">8</td><td class="mono num">29</td>
+          <td class="num"><span class="ord" title="sells 0.9/day × 28 days = 26 needed − 29 available → covered">—<span class="rate">0.9/d</span></span></td><td></td>
+        </tr>
+        <tr>
+          <td class="mono">Z-FOLD-256GB-JETBLACK</td><td class="mono num">3</td><td class="mono num">0</td><td class="mono num">2</td><td class="mono num">3</td>
+          <td class="num"><span class="dim" title="fewer than 14 days of sales history — no suggestion yet">—</span></td><td></td>
+        </tr>
+        <tr>
+          <td class="mono">OPEN-BOX-S25-FE-128GB</td><td class="mono num">1</td><td class="mono num">0</td><td class="mono num">0</td><td class="mono num">1</td>
+          <td class="num"><span class="dim" title="condition SKU — returns feed it, you don't order these">—</span></td><td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
