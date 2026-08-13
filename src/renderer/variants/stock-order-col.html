@@ -31,6 +31,16 @@
   .ord { font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); cursor: default; }
   .ord.urgent { color: var(--badge-yellow-text); }
   .ord .rate { font-weight: 400; color: var(--faint); font-size: 10.5px; margin-left: 6px; }
+  /* equation editor: gear in the Order header -> quiet popover */
+  .eqbtn { border: none; background: none; cursor: pointer; font-size: 11px; color: var(--faint); padding: 0 2px; }
+  .eqbtn:hover { color: var(--accent-soft-text); }
+  .eqpop { position: absolute; top: 26px; right: 0; z-index: 5; width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(47,52,55,0.18); padding: 12px; display: flex; flex-direction: column; gap: 9px; text-transform: none; letter-spacing: 0; }
+  .eqpop[hidden] { display: none; }
+  .eqrow { display: grid; grid-template-columns: 90px 64px 1fr; gap: 8px; align-items: center; }
+  .eqrow label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint); }
+  .eqrow input { font-family: var(--mono); font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%; }
+  .eqrow em { font-style: normal; font-size: 10px; color: var(--faint); font-weight: 400; }
+  .eqformula { font-size: 10.5px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 6px 9px; font-weight: 400; }
 </style></head>
 <body>
   <div class="try"><b>Order column on the Stock sheet:</b> <span class="mono">sells/day × (lead 7d + cover 21d) − available</span>, rounded up. Quiet number + the daily rate beside it; amber when you're already below the lead-time buffer; dash when there's nothing to order. Hover a number for the math.</div>
@@ -39,20 +49,29 @@
     <table>
       <thead><tr>
         <th style="width:260px">SKU</th><th class="num" style="width:90px">In stock</th><th class="num" style="width:90px">In orders</th>
-        <th class="num" style="width:90px">Min</th><th class="num" style="width:100px">Available</th><th class="num" style="width:130px">Order</th><th></th>
+        <th class="num" style="width:90px">Min</th><th class="num" style="width:100px">Available</th>
+        <th class="num" style="width:130px; position:relative">Order <button id="eqBtn" class="eqbtn" title="Edit the equation">⚙</button>
+          <span id="eqPop" class="eqpop" hidden>
+            <span class="eqrow"><label>Sales window</label><input id="eqWin" type="number" value="30" min="7" /><em>days of history the rate averages</em></span>
+            <span class="eqrow"><label>Lead time</label><input id="eqLead" type="number" value="7" min="0" /><em>days until an order arrives</em></span>
+            <span class="eqrow"><label>Cover</label><input id="eqCover" type="number" value="21" min="1" /><em>days of stock to hold after it lands</em></span>
+            <span class="eqrow"><label>Safety ×</label><input id="eqSafe" type="number" value="1.0" step="0.1" min="0.5" /><em>multiplier on the demand</em></span>
+            <span class="eqformula mono" id="eqFormula"></span>
+          </span>
+        </th><th></th>
       </tr></thead>
-      <tbody>
-        <tr>
+      <tbody id="rows">
+        <tr data-rate="3.4" data-avail="42">
           <td class="mono">S26-ULTRA-512GB-BLACK</td><td class="mono num">48</td><td class="mono num">6</td><td class="mono num">20</td><td class="mono num">42</td>
-          <td class="num"><span class="ord" title="sells 3.4/day (last 30d) × 28 days cover = 96 needed − 42 available → order 54">54<span class="rate">3.4/d</span></span></td><td></td>
+          <td class="num ordcell"></td><td></td>
         </tr>
-        <tr>
+        <tr data-rate="2.1" data-avail="5">
           <td class="mono">S25-256GB-SILVERSHADOW</td><td class="mono num">9</td><td class="mono num">4</td><td class="mono num">12</td><td class="mono num">5</td>
-          <td class="num"><span class="ord urgent" title="sells 2.1/day × 28 days = 59 needed − 5 available → order 54 — you're already below the 7-day lead buffer">54<span class="rate">2.1/d</span></span></td><td></td>
+          <td class="num ordcell"></td><td></td>
         </tr>
-        <tr>
+        <tr data-rate="0.9" data-avail="29">
           <td class="mono">X133-64GB-GRAY</td><td class="mono num">31</td><td class="mono num">2</td><td class="mono num">8</td><td class="mono num">29</td>
-          <td class="num"><span class="ord" title="sells 0.9/day × 28 days = 26 needed − 29 available → covered">—<span class="rate">0.9/d</span></span></td><td></td>
+          <td class="num ordcell"></td><td></td>
         </tr>
         <tr>
           <td class="mono">Z-FOLD-256GB-JETBLACK</td><td class="mono num">3</td><td class="mono num">0</td><td class="mono num">2</td><td class="mono num">3</td>
@@ -65,5 +84,34 @@
       </tbody>
     </table>
   </div>
+
+<script>
+  // the equation is EDITABLE: gear on the Order header -> sales window, lead,
+  // cover, safety multiplier; every row recomputes live as you type
+  const $ = (id) => document.getElementById(id);
+  function recompute() {
+    const lead = Number($('eqLead').value) || 0;
+    const cover = Number($('eqCover').value) || 0;
+    const safe = Number($('eqSafe').value) || 1;
+    const win = Number($('eqWin').value) || 30;
+    $('eqFormula').textContent = `order = ceil(rate(${win}d) × ${safe} × ${lead + cover}d − available)`;
+    document.querySelectorAll('#rows tr[data-rate]').forEach(tr => {
+      const rate = Number(tr.dataset.rate);
+      const avail = Number(tr.dataset.avail);
+      const need = rate * safe * (lead + cover);
+      const order = Math.max(0, Math.ceil(need - avail));
+      const urgent = avail < rate * lead; // stockout before a shipment could land
+      const cell = tr.querySelector('.ordcell');
+      cell.innerHTML = order
+        ? `<span class="ord ${urgent ? 'urgent' : ''}" title="sells ${rate}/day (last ${win}d) × ${safe} safety × ${lead + cover} days = ${Math.ceil(need)} needed − ${avail} available → order ${order}${urgent ? ' — below the lead-time buffer, order now' : ''}">${order}<span class="rate">${rate}/d</span></span>`
+        : `<span class="ord" title="sells ${rate}/day × ${lead + cover} days = ${Math.ceil(need)} needed − ${avail} available → covered">—<span class="rate">${rate}/d</span></span>`;
+    });
+  }
+  $('eqBtn').addEventListener('click', (e) => { e.stopPropagation(); $('eqPop').hidden = !$('eqPop').hidden; });
+  $('eqPop').addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => { $('eqPop').hidden = true; });
+  ['eqWin', 'eqLead', 'eqCover', 'eqSafe'].forEach(id => $(id).addEventListener('input', recompute));
+  recompute();
+</script>
 </body>
 </html>
