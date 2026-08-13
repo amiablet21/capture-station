@@ -57,6 +57,11 @@
   .varcard .self { font-size: 9.5px; color: var(--faint); }
   .vx { width: 17px; height: 17px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; }
   .vhint { font-size: 10px; color: var(--faint); margin-top: 2px; }
+  /* family member that's ALREADY live: ghost card, informative not shouty */
+  .varcard.islive { opacity: .65; background: var(--surface); }
+  .livetag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--badge-green-text, #346538); background: var(--badge-green-bg, #EDF3EC); border-radius: 4px; padding: 1px 6px; }
+  .liveopen { font-size: 10.5px; color: var(--muted); text-decoration: underline; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; }
+  .liveopen:hover { color: var(--accent-soft-text); }
 
   .facts { display: flex; gap: 10px; align-items: center; padding: 12px 13px; background: var(--surface-2); }
   .export { background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; padding: 9px 18px; cursor: pointer; font-family: inherit; }
@@ -135,8 +140,9 @@
         <div id="vars">
           ${sibs.length ? `<div class="varcard"><span>${item.storage} · ${item.color}</span><span class="vsku">${item.sku}</span><span class="qty">×${item.qty}</span><span class="self">this listing</span></div>` : ''}
           ${sibs.map(s => `<div class="varcard auto" data-vx="${s.sku}"><span>${s.storage} · ${s.color}</span><span class="vsku">${s.sku}</span><span class="qty">×${s.qty}</span><button class="vx" title="Not this one — it keeps its place in the queue">✕</button></div>`).join('')}
+          ${item.model === 'A15' ? `<div class="varcard islive"><span>256GB · Black</span><span class="vsku">OPEN-BOX-A15-256GB-BLACK</span><span class="livetag">live on eBay</span><button class="liveopen" title="Already listed — add stock there instead of a twin">open ↗</button></div>` : ''}
         </div>
-        ${sibs.length ? '<div class="vhint">found in the queue — same model, same condition · ✕ ejects it back to the queue</div>' : '<div class="vhint">no siblings in the queue — lists on its own</div>'}
+        ${sibs.length ? '<div class="vhint">found in the queue — same model, same condition · ✕ ejects it back to the queue · grayed = already live, stock goes there</div>' : '<div class="vhint">no siblings in the queue — lists on its own</div>'}
       </div>
       <div class="facts">
         <button class="export" id="exportBtn">Export eBay CSV${sibs.length ? ` (${sibs.length + 1} SKUs)` : ''}</button>
