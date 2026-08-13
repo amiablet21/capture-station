@@ -2051,7 +2051,8 @@ function renderStock() {
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   $('stockList').innerHTML = rows.length === 0
-    ? '<p class="dlg-note">No SKUs match.</p>'
+    // dead-end searches offer the missing SKU as a one-click create
+    ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn" data-quickadd="${esc(q.toUpperCase())}" style="margin-left:8px">Create ${esc(q.toUpperCase())} in Linnworks</button>` : ''}</p>`
     : wfsLoc
       ? `<table class="stock-table">
         <thead><tr>
@@ -2578,6 +2579,12 @@ $('stockList').addEventListener('click', async (e) => {
       stockSort = { key, dir: STOCK_COLS[key].text ? 1 : -1 }; // text A→Z, numbers high→low
     }
     renderStock();
+    return;
+  }
+  const quickAdd = e.target.closest('[data-quickadd]');
+  if (quickAdd) {
+    // fresh SKU straight from the dead-end search, grid refreshes on create
+    openNewSkuDialog({ sku: quickAdd.dataset.quickadd }, () => loadStock());
     return;
   }
   const salesBtn = e.target.closest('button.stock-sales-btn');
@@ -5518,11 +5525,25 @@ function ebGallery(forExport) {
       `<img src="${ebFileUrl(p.path)}" style="${ebThumbCss(p)}" alt="" />`).join("")}</div>`;
 }
 
+// SKUs "claimed" by an accepted export leave the queue at once; the claim
+// clears itself when the scan stops reporting the SKU as unlisted (listing
+// went live + linked), or after 14 days if the upload never happened
+let ebClaimed = {};
+try { ebClaimed = JSON.parse(localStorage.getItem("ebayClaimed") || "{}"); } catch { /* fresh start */ }
+function ebClaim(skus) {
+  const now = Date.now();
+  for (const s of skus) ebClaimed[String(s).toUpperCase()] = now;
+  try { localStorage.setItem("ebayClaimed", JSON.stringify(ebClaimed)); } catch { /* best effort */ }
+}
+
 function ebQueueRows() {
   const rows = [];
+  const cutoff = Date.now() - 14 * 86400000;
   for (const d of unlistedDetail || []) {
     const p = ebParseSku(d.sku);
     if (!p.cond) continue;
+    const claim = ebClaimed[String(d.sku).toUpperCase()];
+    if (claim && claim > cutoff) continue; // exported — off the to-do list
     rows.push({ sku: d.sku, cond: p.cond, qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
   }
   return rows;
@@ -5568,6 +5589,7 @@ async function ebSelect(sku, scratch) {
     specs: {}, vars: [], photos: [],
     src: "", item: "",
   };
+  if (sku && !scratch) ebAutoSiblings();
   renderEbayQueue();
   renderEbayForm();
   if (!sku || scratch) return;
@@ -5623,10 +5645,45 @@ function ebManualSpecs(p) {
 }
 
 function ebVarSku(v) {
+  if (v.sku) return v.sku; // auto-filled siblings carry their real SKU
   const p = ebParseSku(ebCur.sku);
   return v.storage && v.color
     ? `${EB_PREFIX[ebCur.cond]}-${p.model}-${String(v.storage).toUpperCase()}-${String(v.color).toUpperCase()}`
     : "";
+}
+
+// queue siblings (same model + condition) land in the variations already
+// filled — ✕ ejects one back to its own place in the queue
+function ebAutoSiblings() {
+  if (!ebCur || !ebCur.sku) return;
+  const p = ebParseSku(ebCur.sku);
+  if (!p.cond || !p.model) return;
+  for (const r of ebQueueRows()) {
+    if (r.sku === ebCur.sku) continue;
+    const ps = ebParseSku(r.sku);
+    if (ps.cond !== p.cond || ps.model !== p.model) continue;
+    if (ebCur.vars.some(v => ebVarSku(v) === r.sku)) continue;
+    ebCur.vars.push({ sku: r.sku, storage: ps.storage, color: ps.color, price: "", qty: r.qty, auto: true });
+  }
+}
+
+// family members ALREADY live on eBay: ghost cards, never exported.
+// Best-effort — needs the inventory cache + the eBay link set loaded.
+function ebLiveFamily() {
+  if (!ebCur || !ebCur.sku || !recvItems || !chLinked || !chLinked.ebay) return [];
+  const p = ebParseSku(ebCur.sku);
+  if (!p.cond || !p.model) return [];
+  const prefix = `${EB_PREFIX[p.cond || ebCur.cond]}-${p.model}-`;
+  const inListing = new Set([ebCur.sku, ...ebCur.vars.map(v => ebVarSku(v))]);
+  const out = [];
+  for (const it of recvItems) {
+    const sku = String(it.sku).toUpperCase();
+    if (!sku.startsWith(prefix) || inListing.has(sku)) continue;
+    if (!it.stockItemId || !chLinked.ebay.has(it.stockItemId)) continue;
+    const ps = ebParseSku(sku);
+    out.push({ sku, storage: ps.storage, color: ps.color });
+  }
+  return out;
 }
 
 function renderEbayForm() {
@@ -5650,7 +5707,15 @@ function renderEbayForm() {
       ? `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ ${esc(ebCur.err || "no NEW listing found")}</span> — fill once, saved for every future ${esc(ebParseSku(ebCur.sku).model || "")} return`
       : "";
   // variations
-  $("ebVars").innerHTML = !has ? "" : ebCur.vars.map((v, vi) => `
+  // auto-filled queue siblings render as compact cards; hand-added ones stay
+  // editable; family members already live on eBay show as ghost cards
+  $("ebVars").innerHTML = !has ? "" : ebCur.vars.map((v, vi) => v.auto ? `
+    <span class="ebay-varcard is-auto">
+      <span class="vline"><span>${esc(v.storage)} · ${esc(v.color)}</span><span class="vsku is-ok">${esc(v.sku)}</span>
+        <input class="input mono" data-vf="price" data-vi="${vi}" value="${esc(v.price)}" placeholder="${esc(ebCur.price || "price")}" title="Price for this variation (blank = the listing price)" style="width:76px" />
+        <input class="input mono" data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" title="Units" style="width:50px" /></span>
+      <button class="ebay-varx" data-varx="${vi}" title="Not this one — it keeps its own place in the queue">✕</button>
+    </span>` : `
     <span class="ebay-varcard">
       <span class="vgrid">
         <span class="ebay-spec"><label>Storage</label><input class="input mono" data-vf="storage" data-vi="${vi}" value="${esc(v.storage)}" /></span>
@@ -5661,7 +5726,14 @@ function renderEbayForm() {
       <span class="vsku ${ebVarSku(v) ? "is-ok" : "is-empty"}">${ebVarSku(v) || "(fills in from storage + color)"}</span>
       <button class="ebay-varx" data-varx="${vi}">✕</button>
     </span>`).join("")
-    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">add variation</button>`;
+    + ebLiveFamily().map(g => `
+    <span class="ebay-varcard is-live">
+      <span class="vline"><span>${esc(g.storage)} · ${esc(g.color)}</span><span class="vsku">${esc(g.sku)}</span>
+        <span class="ebay-livetag">live on eBay</span>
+        <button class="ebay-liveopen" data-liveopen="${esc(g.sku)}" title="Already listed — add stock there instead of a twin">open ↗</button></span>
+    </span>`).join("")
+    + `<button class="ebay-addbtn" id="ebVarAdd" style="margin:0;align-self:flex-start">add variation</button>`
+    + (has && ebCur.vars.some(v => v.auto) ? `<span class="ebay-fhint">siblings from the queue auto-filled — ✕ ejects one back; exporting removes every included SKU from the queue</span>` : "");
   // photos: objects carrying edit params; thumbs preview the edits live.
   // Click a thumb to edit, ✕ removes, 📷 opens the phone QR for this draft.
   $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
@@ -5749,6 +5821,8 @@ $("ebDiscard").addEventListener("click", () => {
 function enterEbay() {
   ebLoadCfg();
   if (!unlistedDetail) loadUnlisted();
+  ensureInventory(); // ghost cards need sku -> stockItemId
+  loadChLinked();    // ...and the eBay link set
   renderEbayQueue();
   renderEbayForm();
 }
@@ -5812,6 +5886,8 @@ $("ebSpecs").addEventListener("click", (e) => {
   inp.addEventListener("blur", () => { if (!inp.value.trim()) renderEbayForm(); });
 });
 $("ebVars").addEventListener("click", (e) => {
+  const lo = e.target.closest("[data-liveopen]");
+  if (lo) { api.listingOpen(lo.dataset.liveopen, "ebay", true); return; }
   if (e.target.closest("#ebVarAdd") && ebCur) { ebCur.vars.push({ storage: "", color: "", price: "", qty: 1 }); renderEbayForm(); return; }
   const x = e.target.closest("[data-varx]");
   if (x && ebCur) { ebCur.vars.splice(Number(x.dataset.varx), 1); renderEbayForm(); }
@@ -5842,6 +5918,16 @@ $("ebExport").addEventListener("click", async () => {
     details: `Storage=${v.storage};Color=${v.color}`,
     price: v.price || ebCur.price, qty: Number(v.qty) || 1,
   }));
+  if (vars.length) {
+    // the primary SKU is itself one of the variations — without this row its
+    // own price/qty would fall off the parent listing
+    const ps = ebParseSku(ebCur.sku);
+    vars.unshift({
+      sku: ebCur.sku,
+      details: `Storage=${ps.storage || ebCur.specs["Storage Capacity"] || ""};Color=${ps.color || ebCur.specs["Color"] || ""}`,
+      price: ebCur.price, qty: Number(ebCur.qty) || 1,
+    });
+  }
   const listing = {
     sku: ebCur.sku, stockItemId: ebCur.stockItemId, categoryId: ebCur.categoryId || "",
     title: ebCur.title, cond: ebCur.cond,
@@ -5864,7 +5950,15 @@ $("ebExport").addEventListener("click", async () => {
   ebBusy = false;
   $("ebExport").textContent = "Export eBay CSV";
   if (res && res.ok) {
-    toast(`Saved ${res.path.split("\\\\").pop()} — upload it at Seller Hub → Reports → Upload${res.picCount ? ` (${res.picCount} photos hosted)` : ""}`, 6000);
+    // accepting removes every included SKU from the queue and its draft
+    const included = [...new Set([ebCur.sku, ...vars.map(v => v.sku)])].filter(Boolean);
+    ebClaim(included);
+    for (const s of included) delete ebDrafts[s];
+    try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
+    toast(`Saved ${res.path.split(/[\\/]/).pop()} — ${included.length > 1 ? `${included.length} SKUs left the queue · ` : ""}upload it at Seller Hub → Reports → Upload${res.picCount ? ` (${res.picCount} photos hosted)` : ""}`, 6000);
+    ebCur = null;
+    renderEbayQueue();
+    renderEbayForm();
   } else if (res && !res.canceled) {
     toast(res.error || "Export failed.");
   }

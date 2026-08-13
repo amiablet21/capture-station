@@ -3491,3 +3491,12 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-histbtn:hover:not(:disabled) { border-color: var(--accent); }
 .ebay-histbtn:disabled { opacity: .35; cursor: default; }
 .ebay-qdraft { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+
+/* sibling auto-fill + live ghost cards in the variations list */
+.ebay-varcard.is-auto { border-style: dashed; border-color: var(--badge-blue-text); }
+.ebay-varcard.is-live { opacity: .65; background: var(--surface); }
+.ebay-varcard .vline { display: flex; align-items: center; gap: 10px; font-size: 12px; min-width: 0; }
+.ebay-varcard .vline .vsku { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ebay-livetag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--badge-green-text); background: var(--badge-green-bg); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.ebay-liveopen { font-size: 10.5px; color: var(--muted); text-decoration: underline; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; white-space: nowrap; }
+.ebay-liveopen:hover { color: var(--accent-soft-text); }
