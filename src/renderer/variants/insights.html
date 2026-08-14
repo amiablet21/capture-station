@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Insights tab — APPROVED design (2026-08-14, do not build until owner says go)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-text: #9F2F2D; --blue-text: #1F6C9F;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 14px 22px 10px; justify-content: center; flex-wrap: wrap; }
+  .chip { font-size: 11.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: #fff; cursor: pointer; font-family: inherit; }
+  .chip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .chip .ct { font-family: var(--mono); font-weight: 400; margin-left: 4px; }
+  .sum { text-align: center; font-size: 11px; color: var(--faint); padding-bottom: 10px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 22px 22px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; background: #fff; border: 1px solid var(--border); }
+  th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+  tr:hover td { background: var(--surface-2); }
+  .mono { font-family: var(--mono); font-size: 11.5px; }
+  .sku { font-weight: 600; color: var(--blue-text); }
+  .go { color: var(--accent-soft-text); font-weight: 600; }
+  .bad { color: var(--neg-text); font-weight: 600; }
+  .dim { color: var(--faint); }
+</style>
+</head>
+<body>
+<!-- APPROVED by owner in chat 2026-08-14 ("ok save ... but do not add it to the
+     software just yet"). Chips switch ONE sheet; the last column is always the
+     verdict. Data: 60-day processed-order history (DropShip velocity engine
+     widened to everything) + per-location levels + stored channel prices.
+     Also planned for this tab: the WFS guard (item holds WFS stock while its
+     Walmart link still syncs -> amber warning strip). -->
+<div class="topbar"><div class="tabs">
+  <button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Returns</button><button class="tab">Listings</button><button class="tab on">Insights</button>
+</div></div>
+<div class="toolbar" id="chips"></div>
+<div class="sum" id="sum"></div>
+<div class="wrap"><table id="sheet"></table></div>
+<script>
+const VIEWS = [
+  { k: 'wfs', t: 'Send to WFS', n: 6, sum: '6 SKUs selling hard from your shelf · suggested 520 units to send',
+    cols: ['SKU', 'Sold/wk', 'On shelf', 'At WFS', 'Days of cover', 'Send to WFS'],
+    rows: [['SM-X133-64GB-GREY', 38, 1179, 435, 217, '+ 120'], ['TABA9+64GB', 31, 696, 0, 157, '+ 124'], ['X230-256GB-GRAY', 24, 272, 0, 79, '+ 96'], ['X520-128GB-SILVER', 19, 174, 0, 64, '+ 76'], ['R640-BLACK-US', 14, 240, 0, 120, '+ 56'], ['X135-128GB-SILVER', 12, 87, 0, 51, '+ 48']], cls: 'go' },
+  { k: 'miss', t: 'Missed sales', n: 4, sum: '4 SKUs were selling and hit zero · about $10,010 missed so far',
+    cols: ['SKU', 'Was selling/wk', 'Zero since', 'Channels', 'Est. missed'],
+    rows: [['X620-128GB-SILVER', 7, 'Aug 09', 'Walmart ×2', '$3,190'], ['X730-512GB-GRAY', 4, 'Aug 06', 'Walmart', '$4,970'], ['X400-256GB-SILVER', 3, 'Aug 02', 'Walmart', '$1,610'], ['BUDS-3-WHITE', 2, 'Aug 07', 'Walmart · eBay', '$240']], cls: 'bad' },
+  { k: 'buy', t: 'Buy soon', n: 9, sum: '9 SKUs run out inside lead time at current pace',
+    cols: ['SKU', 'Sold/wk', 'Available', 'Days left', 'Suggested buy'],
+    rows: [['X730-128GB-GRAY', 11, 16, 10, '+ 44'], ['X400-128GB-RED', 3, 5, 12, '+ 12'], ['A15-128GB-BLACK-US', 4, 10, 18, '+ 16'], ['X520-256GB-SILVER', 5, 2, 3, '+ 22']], cls: 'go' },
+  { k: 'dead', t: 'Dead stock', n: 11, sum: '11 SKUs with no sale in 60 days · $101,470 sitting idle',
+    cols: ['SKU', 'Units', 'Last sale', 'Listed on', 'Value idle'],
+    rows: [['X400-128GB-GRAY-CASE', 862, '—', 'Walmart ×2 · eBay', '$68,098'], ['SGTT220GRAY', 215, 'Jun 21', 'Walmart ×3 · eBay', '$17,200'], ['HKOS9BLKAM-0', 48, 'Aug 07', 'Walmart', '$9,024'], ['X406-128GB-GRAY-INT', 65, 'Jun 30', 'Walmart', '$7,150']], cls: 'dim' },
+];
+let cur = 'wfs';
+function render() {
+  document.getElementById('chips').innerHTML = VIEWS.map(v =>
+    '<button class="chip' + (v.k === cur ? ' on' : '') + '" data-k="' + v.k + '">' + v.t + '<span class="ct">· ' + v.n + '</span></button>').join('');
+  const v = VIEWS.find(x => x.k === cur);
+  document.getElementById('sum').textContent = v.sum;
+  document.getElementById('sheet').innerHTML =
+    '<tr>' + v.cols.map((c, i) => '<th class="' + (i ? 'rr' : '') + '">' + c + '</th>').join('') + '</tr>'
+    + v.rows.map(r => '<tr>' + r.map((c, i) => {
+      const last = i === r.length - 1;
+      const cls = (i === 0 ? 'mono sku' : (typeof c === 'number' || /^[+$]|^—/.test(String(c)) ? 'rr mono' : 'rr')) + (last ? ' ' + v.cls : '');
+      return '<td class="' + cls + '">' + c + '</td>';
+    }).join('') + '</tr>').join('');
+  document.querySelectorAll('.chip').forEach(b => { b.onclick = () => { cur = b.dataset.k; render(); }; });
+}
+render();
+</script>
+</body>
+</html>

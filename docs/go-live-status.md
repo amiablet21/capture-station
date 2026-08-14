@@ -82,9 +82,16 @@ eBay channel). Owner: "this project is separate, we can deal with later."
 ## Next agreed work (in order)
 1. Support the go-live (spot-checks, first-morning triage).
 2. First real Temu workbook upload tuning.
-3. INSIGHTS tab (mockup first): fast sellers → send to WFS; was-selling-now-zero
-   (missed sales); low-stock buy recommendations w/ estimated qty; dead stock.
-   Include a WFS-guard chip (item holds WFS stock but Walmart link still syncs).
+3. INSIGHTS tab — **design APPROVED 2026-08-14, DO NOT BUILD until owner says
+   go** ("save it... but do not add it to the software just yet"). Approved
+   mockup: src/renderer/variants/insights.html — a fifth top tab; four view
+   chips (Send to WFS · Missed sales · Buy soon · Dead stock, counts inline)
+   switching ONE stock-style sheet; summary line under the toolbar; last column
+   is always the verdict (send qty / est. missed $ / buy qty / value idle);
+   plus the WFS-guard amber strip (item holds WFS stock while its Walmart link
+   still syncs). Data: 60-day processed lines + per-location levels + stored
+   channel prices. An earlier stacked-cards design was REJECTED ("design isn't
+   too great") — build the chip version only.
 4. HUBX integration when keys arrive.
 
 House rules unchanged: mockups in src/renderer/variants shown before UI builds;
