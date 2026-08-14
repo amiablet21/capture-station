@@ -176,7 +176,6 @@
     <div class="lst-switch">
       <button class="lst-pill is-on" data-lst="ebay">eBay</button>
       <button class="lst-pill" data-lst="temu">Temu</button>
-      <button class="lst-pill" data-lst="walmart">Walmart</button>
     </div>
     <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
          "I like the previous design") -->
@@ -258,7 +257,6 @@
     <div class="lst-switch">
       <button class="lst-pill" data-lst="ebay">eBay</button>
       <button class="lst-pill is-on" data-lst="temu">Temu</button>
-      <button class="lst-pill" data-lst="walmart">Walmart</button>
     </div>
     <div class="ebay-cols">
       <div class="ebay-panel ebay-queue">
@@ -353,42 +351,6 @@
           <div class="ebay-phead">Upload sheet<span class="eb-right"><span id="tmSheetN" class="ebay-fhint"></span></span></div>
           <div id="tmSheet" class="tm-sheet"></div>
           <div class="tm-sheetnote">Rows write into a copy of Temu's own template workbook. Contribution SKU = your Linnworks SKU, so listings auto-link. Temu recommends 15 or fewer products on the first upload.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Walmart lister: attach offers to catalog items by UPC (the owner's
-       flow, minus the typing). Approved design: variants/walmart-lister.html -->
-  <section id="walmartPage" class="ebay-page" hidden>
-    <div class="lst-switch">
-      <button class="lst-pill" data-lst="ebay">eBay</button>
-      <button class="lst-pill" data-lst="temu">Temu</button>
-      <button class="lst-pill is-on" data-lst="walmart">Walmart</button>
-    </div>
-    <div class="ebay-cols">
-      <div class="ebay-panel wm-queue">
-        <div class="ebay-phead">To list on Walmart
-          <span class="eb-right">
-            <button id="wmRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the Walmart link set">Refresh</button>
-          </span>
-        </div>
-        <div id="wmQueue" class="wm-qlist"></div>
-        <div class="wm-bar">
-          <button id="wmSearch" class="btn btn-primary">Search on Walmart</button>
-          <button id="wmSheet" class="ebay-addbtn eb-m0" title="A simple UPC/SKU/price/qty sheet for Seller Center's no-template Beta uploader">Export offer sheet</button>
-          <span id="wmBarNote" class="ebay-fhint"></span>
-        </div>
-      </div>
-      <div class="ebay-panel wm-help">
-        <div class="ebay-phead">How it flows</div>
-        <div class="wm-step"><span class="num">0</span><span class="t">Linnworks carries no GTINs — <b>find UPC</b> lifts it off your live eBay listing's specifics and saves it into the Linnworks barcode for good.</span></div>
-        <div class="wm-step"><span class="num">1</span><span class="t">Tick the SKUs (up to 50) — New and Open Box both — and press <b>Search on Walmart</b>: the UPC list is copied and Seller Center's item search opens in your browser, ready to paste.</span></div>
-        <div class="wm-step"><span class="num">2</span><span class="t">Walmart shows the matching catalog items. Press <b>Add offer</b> on each — the cheat sheet below carries the SKU, price, and qty.</span></div>
-        <div class="wm-step"><span class="num">3</span><span class="t">Because the offer SKU is your Linnworks SKU, the new listing links itself on the next channel scan.</span></div>
-        <div class="wm-cheat">
-          <h5>Cheat sheet — ticked SKUs</h5>
-          <div id="wmCheat"></div>
         </div>
       </div>
     </div>

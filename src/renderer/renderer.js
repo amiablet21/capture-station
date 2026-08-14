@@ -251,7 +251,7 @@ function render() {
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
-  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns, walmart: !!pages.returns };
+  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -1105,20 +1105,17 @@ function showPage(page) {
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
-  $('walmartPage').hidden = page !== 'walmart';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
-  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu' || page === 'walmart');
-  if (page === 'ebay' || page === 'temu' || page === 'walmart') {
+  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
+  if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
   }
   if (page === 'ebay') {
     enterEbay();
   } else if (page === 'temu') {
     enterTemu();
-  } else if (page === 'walmart') {
-    enterWalmart();
   } else if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
@@ -6145,10 +6142,7 @@ $("ebgSave").addEventListener("click", async () => {
 // one Listings tab covers every marketplace lister; the pills inside switch
 $("tabListings").addEventListener("click", () => {
   let ch = "ebay";
-  try {
-    const saved = localStorage.getItem("listingsChannel");
-    if (saved === "temu" || saved === "walmart") ch = saved;
-  } catch { /* default */ }
+  try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
   showPage(ch);
 });
 document.querySelectorAll(".lst-pill").forEach(b => b.addEventListener("click", () => {
@@ -6802,154 +6796,6 @@ function enterTemu() {
   renderTmQueue();
   renderTmForm();
 }
-
-/* ==================== Walmart lister (Listings pill) ==================== */
-// Attach offers to Walmart catalog items by UPC — the owner's flow, minus
-// the typing. New + Open Box SKUs both. Approved: variants/walmart-lister.html
-
-let wmSel = new Set();
-
-function wmQueueRows() {
-  const out = [];
-  if (!recvItems) return out;
-  for (const it of recvItems) {
-    const lvl = (it.levels || []).find(l => l.locationId === recvLocationId) || {};
-    const avail = Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0);
-    if (avail <= 0) continue;
-    const p = ebParseSku(it.sku);
-    if (p.cond && p.cond !== "openbox") continue; // new + open box only
-    if (chLinked && chLinked.walmart && chLinked.walmart.has(it.stockItemId)) continue;
-    out.push({
-      sku: it.sku, stockItemId: it.stockItemId, cond: p.cond || "new",
-      upc: /^\d{12,14}$/.test(String(it.barcode || "").trim()) ? String(it.barcode).trim() : "",
-      qty: avail, price: Number(it.retailPrice) || 0, model: p.model || it.sku,
-    });
-  }
-  out.sort((a, b) => b.qty - a.qty);
-  return out;
-}
-
-function renderWmQueue() {
-  const rows = wmQueueRows();
-  for (const s of [...wmSel]) if (!rows.some(r => r.sku === s)) wmSel.delete(s);
-  $("wmQueue").innerHTML = !recvItems
-    ? `<div class="wm-empty">Loading the inventory…</div>`
-    : rows.length === 0
-      ? `<div class="wm-empty">Every new and open-box in-stock SKU already has a Walmart listing.</div>`
-      : rows.map(r => `
-        <label class="wm-qrow">
-          <input type="checkbox" data-wmck="${esc(r.sku)}" ${wmSel.has(r.sku) ? "checked" : ""} />
-          <span class="sku">${esc(r.sku)}</span>
-          ${r.upc ? `<span class="upc">${esc(r.upc)}</span>` : `<button class="wm-findbtn" data-wmfind="${esc(r.sku)}">no UPC · find from eBay ↻</button>`}
-          <span class="meta">
-            <span class="wm-cond ${r.cond === "openbox" ? "c-open" : "c-new"}">${r.cond === "openbox" ? "Open Box" : "New"}</span>
-            <span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span>
-            <span class="price">${r.price ? "$" + r.price.toFixed(2) : "—"}</span>
-          </span>
-        </label>`).join("");
-  renderWmCheat();
-}
-
-function renderWmCheat() {
-  const rows = wmQueueRows().filter(r => wmSel.has(r.sku));
-  $("wmSearch").textContent = rows.length ? `Search ${rows.length} on Walmart` : "Search on Walmart";
-  $("wmBarNote").textContent = rows.length
-    ? `${rows.filter(r => r.upc).length} of ${rows.length} carry a UPC — the list copies on Search`
-    : "tick SKUs first";
-  $("wmCheat").innerHTML = !rows.length
-    ? `<div class="wm-empty">Tick SKUs in the queue — they line up here with copy buttons.</div>`
-    : rows.map(r => `
-      <div class="wm-crow">
-        <span class="sku">${esc(r.sku)}</span>
-        <span class="v">${r.price ? "$" + r.price.toFixed(2) : "—"} · ${r.qty}</span>
-        <button class="wm-copy" data-wmcopy="${esc(r.sku)}">copy SKU</button>
-      </div>`).join("");
-}
-
-// no UPC in Linnworks: lift it off the live eBay listing's item specifics
-// (the model card the eBay lister already copies) and save it for good
-async function wmFindUpc(sku, btn) {
-  const p = ebParseSku(sku);
-  if (btn) { btn.disabled = true; btn.textContent = "reading your eBay listing…"; }
-  try {
-    const cfg2 = await ebLoadCfg();
-    let card = (cfg2.ebayModelCards || {})[p.model];
-    if (!card) {
-      const res = await api.ebaySpecs(p.base).catch(() => null);
-      if (res && res.ok) {
-        card = { title: res.title, item: res.itemId, categoryId: res.categoryId, price: res.price, specs: res.specs };
-        ebCfg.ebayModelCards = { ...(ebCfg.ebayModelCards || {}), [p.model]: card };
-        api.setConfig({ ebayModelCards: ebCfg.ebayModelCards }).catch(() => {});
-      }
-    }
-    let upc = "";
-    for (const [k, v] of Object.entries((card && card.specs) || {})) {
-      if (!/^(UPC|EAN|GTIN)/i.test(k)) continue;
-      const digits = String(v).replace(/\D/g, "");
-      if (/^\d{12,14}$/.test(digits)) { upc = digits; break; }
-    }
-    if (!upc) { toast(`No UPC on the eBay listing for ${p.model} — Walmart search will need the product name.`); return; }
-    const item = recvBySku && recvBySku.get(String(sku).toLowerCase());
-    const res = await api.setBarcode(item && item.stockItemId, upc);
-    if (!res.ok) { toast(res.error || "Could not save the barcode."); return; }
-    if (item) item.barcode = res.barcode;
-    toast(`${sku} → UPC ${res.barcode} saved into Linnworks`);
-    renderWmQueue();
-  } finally {
-    if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = "no UPC · find from eBay ↻"; }
-  }
-}
-
-function enterWalmart() {
-  Promise.all([ensureInventory(), loadStockViews()]).then(renderWmQueue);
-  loadChLinked();
-  renderWmQueue();
-}
-
-$("wmQueue").addEventListener("change", (e) => {
-  const ck = e.target.closest("[data-wmck]");
-  if (!ck) return;
-  if (ck.checked) wmSel.add(ck.dataset.wmck); else wmSel.delete(ck.dataset.wmck);
-  if (wmSel.size > 50) { wmSel.delete(ck.dataset.wmck); ck.checked = false; toast("Walmart's search takes 50 at most."); }
-  renderWmCheat();
-});
-$("wmQueue").addEventListener("click", (e) => {
-  const f = e.target.closest("[data-wmfind]");
-  if (f) { e.preventDefault(); wmFindUpc(f.dataset.wmfind, f); }
-});
-$("wmCheat").addEventListener("click", (e) => {
-  const c = e.target.closest("[data-wmcopy]");
-  if (c) { copyFromApp(c.dataset.wmcopy); toast(`${c.dataset.wmcopy} copied`); }
-});
-$("wmRefresh").addEventListener("click", () => {
-  chLinked = null;
-  loadChLinked();
-  ensureInventory().then(renderWmQueue);
-  toast("Re-scanning the Walmart link set…", 2000);
-});
-$("wmSearch").addEventListener("click", () => {
-  const rows = wmQueueRows().filter(r => wmSel.has(r.sku));
-  if (!rows.length) { toast("Tick SKUs in the queue first."); return; }
-  const upcs = rows.filter(r => r.upc).map(r => r.upc);
-  if (!upcs.length) { toast("None of the ticked SKUs carry a UPC yet — use find from eBay first."); return; }
-  copyFromApp([...new Set(upcs)].join(","));
-  api.openExternalUrl("https://seller.walmart.com/item-setup");
-  toast(`${upcs.length} UPC${upcs.length === 1 ? "" : "s"} copied — paste into "Search for items" on the page that just opened.`, 7000);
-});
-$("wmSheet").addEventListener("click", async () => {
-  const rows = wmQueueRows().filter(r => wmSel.has(r.sku));
-  if (!rows.length) { toast("Tick SKUs in the queue first."); return; }
-  const sheet = rows.map(r => ({
-    upc: r.upc, sku: r.sku, price: r.price ? r.price.toFixed(2) : "",
-    qty: r.qty, cond: r.cond === "openbox" ? "Open Box" : "New",
-    title: tmFillTitle((tmState.titles || {})[String(r.model).toUpperCase()]
-      || (tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color}",
-    tmTitleCtx({ sku: r.sku, brand: /IPAD|IPHONE|APPLE/i.test(r.sku) ? "APPLE" : "SAMSUNG", cat: tmGuessCat(r.sku, ""), colorSrc: ebParseSku(r.sku).color, rom: ebParseSku(r.sku).storage, ram: "" })),
-  }));
-  const res = await api.walmartOfferSheet(sheet);
-  if (res && res.ok) toast(`Saved ${res.path} — upload it via "Upload any spreadsheet" in Seller Center.`, 7000);
-  else if (res && !res.canceled) toast(res.error || "Export failed.");
-});
 
 $("tmQueue").addEventListener("click", (e) => {
   const row = e.target.closest("[data-tmq]");

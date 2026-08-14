@@ -116,8 +116,6 @@ contextBridge.exposeInMainWorld('api', {
   temuPackages: (model, pack) => ipcRenderer.invoke('temu:packages', { model, pack }),
   temuTitles: (model, title) => ipcRenderer.invoke('temu:titles', { model, title }),
   titleLookup: (upc, query) => ipcRenderer.invoke('listing:titleLookup', { upc, query }),
-  setBarcode: (stockItemId, barcode) => ipcRenderer.invoke('stock:setBarcode', { stockItemId, barcode }),
-  walmartOfferSheet: (rows) => ipcRenderer.invoke('walmart:offerSheet', { rows }),
   temuExport: (products) => ipcRenderer.invoke('temu:export', { products }),
   claimsInfo: (po) => ipcRenderer.invoke('claims:info', { po: po || '' }),
   claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),

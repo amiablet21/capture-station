@@ -2367,49 +2367,6 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  /* ---------- Walmart lister: UPC write-back + offer sheet ---------- */
-
-  // Found UPCs (lifted off live eBay listings) persist into the Linnworks
-  // barcode field — fills the GTIN gap for good (Walmart search, Temu
-  // product IDs, receiving scans all read it)
-  ipcMain.handle('stock:setBarcode', async (_e, { stockItemId, barcode }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const code = String(barcode || '').replace(/\D/g, '');
-    if (!/^\d{12,14}$/.test(code)) return { ok: false, error: 'That does not look like a UPC/EAN (12-14 digits).' };
-    if (!stockItemId) return { ok: false, error: 'Missing item id.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      await client.setBarcode(stockItemId, code);
-      return { ok: true, barcode: code };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  // Stage 2: a simple product-ID sheet for Walmart's no-template Beta
-  // uploader — UPC, offer SKU, price, qty, title, condition per row
-  ipcMain.handle('walmart:offerSheet', async (_e, { rows }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!rows || !rows.length) return { ok: false, error: 'Nothing selected.' };
-    const q = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
-    const csv = [
-      ['UPC', 'SKU', 'Price', 'Quantity', 'Product Name', 'Condition'].join(','),
-      ...rows.map(r => [r.upc, r.sku, r.price, r.qty, r.title, r.cond].map(q).join(',')),
-    ].join('\n') + '\n';
-    const stamp = new Date();
-    const name = `Walmart-offers-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
-    const r = await dialog.showSaveDialog(win, {
-      title: 'Save the Walmart offer sheet',
-      defaultPath: path.join(app.getPath('downloads'), name),
-      filters: [{ name: 'CSV', extensions: ['csv'] }],
-    });
-    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-    fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8');
-    return { ok: true, path: r.filePath };
-  });
-
   /* ---------- Temu lister: template intake + workbook export ---------- */
 
   const temuTemplatePath = () => path.join(app.getPath('userData'), 'temu-template.xlsx');
