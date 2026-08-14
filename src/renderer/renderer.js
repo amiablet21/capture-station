@@ -3475,16 +3475,27 @@ $('chmapLwBody').addEventListener('click', async (e) => {
   const item = chmap.items.find(x => x.sku === chmap.sel);
   if (!item) return;
   let linkedStockId = '';
+  let lastMapOrders = null;
   if (!chmap.local) {
     btn.disabled = true;
     const res = await api.mappingLink(item.sku, chmap.chan.source, chmap.chan.subSource, target, item.channelRefId || '');
     if (!res.ok) { btn.disabled = false; toast(res.error || 'Could not link.'); return; }
     linkedStockId = res.stockItemId || '';
+    lastMapOrders = res.orders || null;
   }
   item.linked = true;
   item.linkedSkuOverride = target;
   chmap.sel = null;
-  toast(`${item.sku} → ${target} linked — open orders relink on the next refresh`);
+  // the retro-link check ran in main: say what actually happened to open
+  // orders already carrying this channel SKU instead of guessing
+  const ord = chmap.local ? null : lastMapOrders;
+  if (!ord || ord.count === 0) {
+    toast(`${item.sku} → ${target} linked`);
+  } else if (ord.pending === 0) {
+    toast(`${item.sku} → ${target} linked — ${ord.count} open order${ord.count === 1 ? '' : 's'} picked up the link, stock deducts when they ship`, 6000);
+  } else {
+    toast(`${item.sku} → ${target} linked — ${ord.pending} open order${ord.pending === 1 ? '' : 's'} did NOT pick up the link. If they ship that way, deduct ${ord.units} unit${ord.units === 1 ? '' : 's'} by hand.`, 9000);
+  }
   renderChmap();
   if (!chmap.local) {
     // the missing-listings sets learn about the link IMMEDIATELY — the scan

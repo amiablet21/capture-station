@@ -1672,9 +1672,42 @@ function registerIpc() {
       }
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
+      // Retro-link check (owner 2026-08-14): whether Linnworks attaches a NEW
+      // link to open orders that already carried this channel SKU was an open
+      // question — so it is verified per-mapping instead of assumed. Their
+      // lines are re-read fresh; unlinked lines ship without deducting stock,
+      // and the renderer warns with the exact unit count.
+      let orders = null;
+      try {
+        const want = String(channelSku).toUpperCase();
+        const match = (li) => String(li.channelSku || li.sku || '').toUpperCase() === want;
+        const read = async () => {
+          openOrdersCache = { at: 0, data: null, promise: null }; // linkage flags must be re-read
+          const all = await getOpenOrdersCached(cfg);
+          const lines = [];
+          for (const o of all) {
+            for (const li of o.items || []) {
+              if (li.isService) continue;
+              if (match(li)) lines.push(li);
+              for (const ch of li.children || []) if (match(ch)) lines.push(ch);
+            }
+          }
+          return lines;
+        };
+        let lines = await read();
+        if (lines.some(l => l.unlinked)) {
+          await new Promise(r => setTimeout(r, 2500)); // Linnworks may attach lazily
+          lines = await read();
+        }
+        orders = {
+          count: lines.length,
+          units: lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0),
+          pending: lines.filter(l => l.unlinked).length,
+        };
+      } catch { /* the link itself succeeded; the order check is best-effort */ }
       // the renderer patches its missing-listing sets with this id at once —
       // the scan feed lags far behind the real link records
-      return { ok: true, stockItemId };
+      return { ok: true, stockItemId, orders };
     } catch (e) {
       return { ok: false, error: e.message };
     }
