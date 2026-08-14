@@ -2347,7 +2347,19 @@ function registerIpc() {
       template: cfg.temuTemplate || null,
       profiles: cfg.temuProfiles || {},
       packages: cfg.temuPackages || {},
+      titles: cfg.temuTitles || {},
     };
+  });
+
+  // a typed title teaches the model family: stored with {storage}/{color}
+  // tokens so every sibling SKU fills it in for itself
+  ipcMain.handle('temu:titles', (_e, { model, title }) => {
+    const cfg = config.load();
+    const all = { ...(cfg.temuTitles || {}) };
+    if (String(title || '').trim()) all[String(model).toUpperCase()] = String(title).trim();
+    else delete all[String(model).toUpperCase()];
+    config.save({ temuTitles: all });
+    return { ok: true };
   });
 
   // The seller downloads Temu's category template once; the app keeps a copy

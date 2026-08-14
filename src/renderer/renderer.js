@@ -6463,6 +6463,42 @@ function tmGuessCat(sku, title) {
   return "phone";
 }
 
+/* ----- titles: template + one-typed-title-per-model memory ----- */
+const tmNice = (w) => String(w || "").toLowerCase().replace(/(^|[ -])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+function tmTitleCtx(cur) {
+  const p = ebParseSku(cur.sku);
+  return {
+    brand: tmNice(cur.brand || ""), model: p.model || cur.sku,
+    storage: p.storage || cur.rom || "", ram: cur.ram || "",
+    color: tmNice(cur.colorSrc || cur.color || ""),
+    type: cur.cat === "tablet" ? "Tablet" : "Phone",
+  };
+}
+function tmFillTitle(tpl, ctx) {
+  return String(tpl || "")
+    .replace(/\{brand\}/g, ctx.brand).replace(/\{model\}/g, ctx.model)
+    .replace(/\{storage\}/g, ctx.storage).replace(/\{ram\}/g, ctx.ram)
+    .replace(/\{color\}/g, ctx.color).replace(/\{type\}/g, ctx.type)
+    .replace(/\s+/g, " ").trim();
+}
+function tmAutoTitle(cur) {
+  const ctx = tmTitleCtx(cur);
+  const learned = (tmState.titles || {})[String(ctx.model).toUpperCase()];
+  if (learned) return tmFillTitle(learned, ctx);
+  return tmFillTitle((tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color} {type} - Brand New Sealed", ctx);
+}
+// a typed title teaches the model: the storage and color words become tokens
+// so every sibling color/size fills the same title for itself
+function tmLearnTitle(cur, title) {
+  const ctx = tmTitleCtx(cur);
+  let t = String(title || "").trim();
+  if (!t || !ctx.model) return;
+  if (ctx.storage) t = t.replace(new RegExp(ctx.storage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "{storage}");
+  if (ctx.color) t = t.replace(new RegExp(ctx.color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "{color}");
+  tmState.titles = { ...(tmState.titles || {}), [String(ctx.model).toUpperCase()]: t };
+  api.temuTitles(ctx.model, t).catch(() => {});
+}
+
 function tmClaim(skus) {
   const now = Date.now();
   for (const s of skus) tmClaimed[String(s).toUpperCase()] = now;
@@ -6529,7 +6565,7 @@ function tmSelect(sku, fresh) {
   if (draft) { tmCur = JSON.parse(JSON.stringify(draft)); renderTmQueue(); renderTmForm(); return; }
   const p = ebParseSku(sku);
   const cat = tmGuessCat(sku, (item && item.title) || "");
-  const title = (item && item.title) || "";
+  const title = ""; // filled from the template below (Linnworks titles are empty here)
   const apple = /IPAD|IPHONE|APPLE/i.test(`${sku} ${title}`);
   const five = /5G/i.test(`${sku} ${title}`);
   const model = p.model || sku;
@@ -6549,6 +6585,8 @@ function tmSelect(sku, fresh) {
   };
   const lvl = item && (item.levels || []).find(l => l.locationId === recvLocationId);
   if (lvl) tmCur.qty = String(Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0));
+  tmCur.title = tmAutoTitle(tmCur);
+  tmCur.titleAuto = true; // regenerates while untouched; a typed title wins
   renderTmQueue();
   renderTmForm();
 }
@@ -6576,7 +6614,12 @@ function renderTmForm() {
   $("tmSku").value = has ? tmCur.sku : "";
   $("tmSku").readOnly = !(has && tmCur.scratch && !tmCur.sku);
   $("tmTitle").value = has ? tmCur.title : "";
-  $("tmTitleHint").textContent = has && tmCur.title ? "from Linnworks — edit freely (500 max)" : "";
+  $("tmTitleHint").textContent = !has ? ""
+    : tmCur.titleAuto
+      ? ((tmState.titles || {})[String(ebParseSku(tmCur.sku).model || "").toUpperCase()]
+        ? "from the saved title for this model — edit to reteach it"
+        : "from the title template (⚙) — type once and this model remembers")
+      : "your title — saved for every future " + esc(ebParseSku(tmCur.sku).model || "") + " listing";
   $("tmBrand").value = has ? tmCur.brand : "SAMSUNG";
   $("tmOrigin").value = has ? tmCur.origin : "Vietnam";
   $("tmCatPhone").classList.toggle("is-on", has && tmCur.cat === "phone");
@@ -6693,16 +6736,23 @@ $("tmDiscard").addEventListener("click", () => {
 document.querySelectorAll("[data-tmcat]").forEach(btn => btn.addEventListener("click", () => {
   if (!tmCur) return;
   tmCur.cat = btn.dataset.tmcat;
+  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur);
   renderTmForm();
 }));
 ["tmTitle", "tmBrand", "tmOrigin", "tmBase", "tmList", "tmQty"].forEach(id => $(id).addEventListener("change", () => {
   if (!tmCur) return;
-  tmCur.title = $("tmTitle").value;
+  const typed = $("tmTitle").value.trim();
+  if (id === "tmTitle" && typed && typed !== tmCur.title) {
+    tmCur.titleAuto = false;
+    tmLearnTitle(tmCur, typed); // one typed title serves the whole model
+  }
+  tmCur.title = typed;
   tmCur.brand = $("tmBrand").value;
   tmCur.origin = $("tmOrigin").value;
   tmCur.base = $("tmBase").value.trim();
   tmCur.list = $("tmList").value.trim();
   tmCur.qty = $("tmQty").value.trim();
+  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur); // brand changes re-fill
   renderTmForm();
 }));
 ["tmRam", "tmRom", "tmColor"].forEach(id => $(id).addEventListener("change", () => {
@@ -6710,6 +6760,7 @@ document.querySelectorAll("[data-tmcat]").forEach(btn => btn.addEventListener("c
   tmCur.ram = $("tmRam").value;
   tmCur.rom = $("tmRom").value;
   tmCur.color = $("tmColor").value;
+  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur);
   renderTmForm();
 }));
 $("tmSpecs").addEventListener("change", (e) => {
@@ -6774,6 +6825,7 @@ $("tmGear").addEventListener("click", async () => {
     : "No template yet — download the Cell Phones/Tablets template from Temu Seller Central (Add Products via Upload), then pick it here.";
   $("tmShipTpl").value = (tmState.profiles && tmState.profiles.shippingTemplate) || "FREE SHIPPING";
   $("tmHandling").value = (tmState.profiles && tmState.profiles.handlingTime) || "1 Day";
+  $("tmTitleTpl").value = (tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color} {type} - Brand New Sealed";
   $("tmGearDialog").showModal();
 });
 $("tmTplPick").addEventListener("click", async () => {
@@ -6788,7 +6840,11 @@ $("tmTplPick").addEventListener("click", async () => {
   }
 });
 $("tmGearSave").addEventListener("click", async () => {
-  const profiles = { shippingTemplate: $("tmShipTpl").value.trim() || "FREE SHIPPING", handlingTime: $("tmHandling").value };
+  const profiles = {
+    shippingTemplate: $("tmShipTpl").value.trim() || "FREE SHIPPING",
+    handlingTime: $("tmHandling").value,
+    titleTemplate: $("tmTitleTpl").value.trim() || "{brand} {model} {storage} {color} {type} - Brand New Sealed",
+  };
   tmState.profiles = profiles;
   await api.setConfig({ temuProfiles: profiles }).catch(() => {});
   $("tmGearDialog").close();

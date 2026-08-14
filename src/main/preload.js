@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('api', {
   temuState: () => ipcRenderer.invoke('temu:state'),
   temuTemplate: () => ipcRenderer.invoke('temu:template'),
   temuPackages: (model, pack) => ipcRenderer.invoke('temu:packages', { model, pack }),
+  temuTitles: (model, title) => ipcRenderer.invoke('temu:titles', { model, title }),
   temuExport: (products) => ipcRenderer.invoke('temu:export', { products }),
   claimsInfo: (po) => ipcRenderer.invoke('claims:info', { po: po || '' }),
   claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),

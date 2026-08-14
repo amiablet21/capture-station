@@ -3609,6 +3609,14 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
 /* ---------- Temu lister (reuses the eBay three-panel skeleton) ---------- */
+/* centered columns clip their LEFT side unreachably when they overflow the
+   window — "safe" keeps the start edge scrollable (owner hit it 2026-08-14) */
+.ebay-cols { justify-content: safe center; }
+/* selects keep an intrinsic min-width that 1fr respects — clamp the tracks
+   so the spec grid never pushes past the panel */
+.ebay-specgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ebay-spec select.input { width: 100%; min-width: 0; box-sizing: border-box; }
+#temuPage .ebay-condbtn.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
 .ebay-qfoot { padding: 9px 14px; font-size: 10.5px; color: var(--faint); border-top: 1px solid var(--border-soft); }
 .tm-two { display: flex; gap: 8px; }
 .tm-two .input { flex: 1; min-width: 0; }

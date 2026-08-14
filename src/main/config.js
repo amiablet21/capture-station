@@ -129,9 +129,17 @@ const DEFAULTS = {
   },
   // Temu lister: the seller-downloaded upload template lives in userData
   // (temu-template.xlsx); these name what the export references
-  temuProfiles: { shippingTemplate: 'FREE SHIPPING', handlingTime: '1 Day' },
+  temuProfiles: {
+    shippingTemplate: 'FREE SHIPPING',
+    handlingTime: '1 Day',
+    // listing names build themselves from the SKU; the owner types a title
+    // once per model at most (learned into temuTitles) — Linnworks item
+    // titles are deliberately empty in this account
+    titleTemplate: '{brand} {model} {storage} {color} {type} - Brand New Sealed',
+  },
   temuTemplate: null, // { name, savedAt } once a template file is picked
   temuPackages: {}, // per model family: { weightLb, lenIn, widIn, heiIn }
+  temuTitles: {}, // per model family: learned title with {storage}/{color} tokens
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
