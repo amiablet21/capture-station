@@ -251,7 +251,7 @@ function render() {
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
-  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns };
+  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
