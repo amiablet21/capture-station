@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>HUBX sandbox playground</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-bg: #FBF3DB; --amber-text: #956400;
+    --blue-bg: #E1F3FE; --blue-text: #1F6C9F;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); padding: 16px 20px; }
+  h1 { font-size: 16px; margin: 0; }
+  .sub { font-size: 11.5px; color: var(--muted); margin: 2px 0 14px; }
+  .tok { font-size: 10.5px; font-family: var(--mono); color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 2px 8px; margin-left: 10px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(47,52,55,0.05); margin-bottom: 14px; }
+  .phead { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12.5px; }
+  .phead .hint { font-weight: 400; font-size: 10.5px; color: var(--faint); margin-left: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  tr:hover td { background: var(--surface-2); }
+  .mono { font-family: var(--mono); }
+  .r { text-align: right; }
+  .chip { font-size: 9.5px; font-weight: 700; border-radius: 4px; padding: 1px 7px; }
+  .c-ok { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .c-low { background: var(--amber-bg); color: var(--amber-text); }
+  .c-out { background: var(--neg-bg); color: var(--neg-text); }
+  .c-open { background: var(--blue-bg); color: var(--blue-text); }
+  .c-proc { background: var(--amber-bg); color: var(--amber-text); }
+  .c-closed { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .c-cancel { background: var(--neg-bg); color: var(--neg-text); }
+  input, select { font-family: inherit; font-size: 12px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button { font-family: inherit; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.05); color: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
+  .lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
+  .ordercard { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); }
+  .ordercard .top { display: flex; gap: 10px; align-items: center; }
+  .ordercard .doc { font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .ordercard .meta { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
+  .ordercard .serials { font-family: var(--mono); font-size: 10px; color: var(--faint); word-break: break-all; }
+  .log { font-family: var(--mono); font-size: 10px; color: var(--muted); max-height: 260px; overflow: auto; padding: 8px 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .log .req { color: var(--blue-text); }
+  .log .err { color: var(--neg-text); }
+  .pad { font-family: var(--mono); font-weight: 700; }
+  .empty { padding: 16px; font-size: 11.5px; color: var(--faint); }
+</style>
+</head>
+<body>
+<h1>HUBX sandbox <span id="tok" class="tok">getting token…</span></h1>
+<p class="sub">A faithful local replica of the HUBX Customer API — same auth flow, same shapes, same validation. Stock drifts on its own; orders progress Open → Processing (tracking + serials) → Closed. Nothing here is real.</p>
+
+<div class="grid">
+<div>
+  <div class="panel">
+    <div class="phead">Catalog — GET /api/products <span class="hint">refreshes every 10s · availability moves like a live book</span></div>
+    <div class="row"><input id="q" placeholder="search MPN or description" style="flex:1" /><button id="search">Search</button></div>
+    <table id="cat"><tr><th>Item</th><th>MPN</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr></table>
+  </div>
+
+  <div class="panel">
+    <div class="phead">Live pads — what Capture Station would do with this feed <span class="hint">pad = min(their stock, your cap 25)</span></div>
+    <table id="pads"><tr><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr></table>
+  </div>
+
+  <div class="panel">
+    <div class="phead">Raw wire — every request this page makes</div>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<div>
+  <div class="panel">
+    <div class="phead">Place a dropship order — POST /api/orders</div>
+    <div class="row"><span class="lbl">Item</span><select id="oItem" style="flex:1"></select></div>
+    <div class="row"><span class="lbl">Qty</span><input id="oQty" value="1" style="width:60px" />
+      <span class="lbl">Your PO#</span><input id="oPo" style="width:150px" />
+      <span class="lbl">Your SKU</span><input id="oSku" style="width:170px" /></div>
+    <div class="row"><span class="lbl">Ship to</span><input id="oName" value="John Buyer" style="width:130px" /><input id="oAddr" value="482 Cedar Ave" style="flex:1" /><input id="oCity" value="Austin" style="width:90px" /><input id="oState" value="TX" style="width:44px" /><input id="oZip" value="78703" style="width:70px" /></div>
+    <div class="row"><button id="place" class="primary">Place order</button><span id="oNote" class="sub" style="margin:0"></span></div>
+  </div>
+
+  <div class="panel">
+    <div class="phead">Orders — POST /api/orders/getorders <span class="hint">polled every 5s, like the app would</span></div>
+    <div id="orders"><div class="empty">No orders yet — place one. Tracking and serial numbers appear on their own ~20s after placing.</div></div>
+  </div>
+</div>
+</div>
+
+<script>
+let TOKEN = '';
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+function log(line, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = new Date().toTimeString().slice(0, 8) + '  ' + line;
+  logEl.prepend(d);
+  while (logEl.children.length > 60) logEl.lastChild.remove();
+}
+async function call(method, path, body, form) {
+  log(method + ' ' + path + (body && !form ? ' ' + JSON.stringify(body).slice(0, 110) : ''), 'req');
+  const headers = {};
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+  let payload;
+  if (form) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; payload = new URLSearchParams(body).toString(); }
+  else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
+  const r = await fetch(path, { method, headers, body: payload });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok && r.status !== 202) log(r.status + ' ' + JSON.stringify(j).slice(0, 160), 'err');
+  return { status: r.status, body: j };
+}
+
+// his real dropship SKUs mapped to sandbox items by MPN — in the real build
+// this map comes from a one-time confirm-per-model matching step
+const PADMAP = [
+  ['S26-ULTRA-256GB-BLACK', 'SM-S938UZKEXAA', 10],
+  ['S26-ULTRA-256GB-WHITE', 'SM-S938UZWEXAA', 10],
+  ['S26-256GB-BLACK', 'SM-S931UZKAXAA', 10],
+  ['S26-256GB-BLUE', 'SM-S931UZBAXAA', 10],
+  ['ZFold-512GB-JETBLACK', 'SM-F966UZKEXAA', 10],
+  ['S25-FE-128GB-BLACK', 'SM-S731ULBEXAA', 10],
+  ['X930-256GB-GRAY', 'SM-X930NZAEXAR', 10],
+];
+let CAT = [];
+
+function chip(av, moq) {
+  if (av <= 0) return '<span class="chip c-out">out</span>';
+  if (av <= 10) return '<span class="chip c-low">' + av + '</span>';
+  return '<span class="chip c-ok">' + av + '</span>';
+}
+
+async function loadCatalog(q) {
+  const res = await call('GET', '/api/products?pageSize=100&onlyActive=false' + (q ? '&searchQuery=' + encodeURIComponent(q) : ''));
+  if (res.status !== 200) return;
+  CAT = res.body.products;
+  $('cat').innerHTML = '<tr><th>Item</th><th>MPN</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr>'
+    + CAT.map(p => {
+      const t10 = (p.prices.find(t => t.fromQty >= 10) || {}).unitPrice;
+      return '<tr><td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
+        + '<td class="r">' + chip(p.availability) + '</td>'
+        + '<td class="r mono">$' + p.unitPrice.toFixed(2) + '</td>'
+        + '<td class="r mono">' + (t10 ? '$' + t10.toFixed(2) : '—') + '</td>'
+        + '<td>' + p.exw + '</td><td class="r">' + p.leadTimeDays + 'd</td>'
+        + '<td><button data-buy="' + p.id + '">order</button></td></tr>';
+    }).join('');
+  $('oItem').innerHTML = CAT.map(p => '<option value="' + p.id + '">' + p.description.slice(0, 60) + ' — $' + p.unitPrice.toFixed(2) + ' (' + p.availability + ')</option>').join('');
+  renderPads();
+}
+
+function renderPads() {
+  $('pads').innerHTML = '<tr><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr>'
+    + PADMAP.map(([sku, mpn, cap]) => {
+      const p = CAT.find(x => x.mpn === mpn);
+      const av = p ? p.availability : 0;
+      const live = Math.min(av, 25);
+      const cls = live === 0 ? 'c-out' : live < cap ? 'c-low' : 'c-ok';
+      return '<tr><td class="mono">' + sku + '</td><td class="mono">' + mpn + '</td>'
+        + '<td class="r">' + chip(av) + '</td>'
+        + '<td class="r pad">' + cap + '</td>'
+        + '<td class="r"><span class="chip ' + cls + '">' + live + '</span></td></tr>';
+    }).join('');
+}
+
+async function loadOrders() {
+  const res = await call('POST', '/api/orders/getorders', { status: '', pagination: { pageSize: 10, pageNumber: 1 } });
+  if (res.status !== 200) return;
+  const rows = res.body.orders;
+  $('orders').innerHTML = !rows.length
+    ? '<div class="empty">No orders yet — place one. Tracking and serial numbers appear on their own ~20s after placing.</div>'
+    : rows.map(o => {
+      const s = o.status;
+      const cls = s === 'Open' ? 'c-open' : s === 'Processing' ? 'c-proc' : s === 'Canceled' ? 'c-cancel' : 'c-closed';
+      const d = o.orderDetails[0] || {};
+      const ship = o.shipmentInformation;
+      return '<div class="ordercard"><div class="top">'
+        + '<span class="doc">' + o.hubxDocumentNumber + '</span>'
+        + '<span class="chip ' + cls + '">' + s + '</span>'
+        + '<span style="margin-left:auto;font-size:10.5px;color:var(--faint)">PO ' + o.externalReference + '</span>'
+        + (s === 'Open' ? '<button data-cancel="' + o.hubxDocumentNumber + '">cancel</button>' : '')
+        + '</div><div class="meta">'
+        + d.quantity + ' × ' + (d.itemDescription || '') + ' @ $' + (d.price || 0).toFixed(2)
+        + (d.buyerPartNumber ? ' · your SKU <span class="mono">' + d.buyerPartNumber + '</span>' : '')
+        + '<br>→ ' + (o.recipientName || '') + ', ' + (o.shippingAddress || '')
+        + (ship ? '<br><b>' + ship.carrier + ' ' + ship.trackingNumber + '</b> · ETA ' + ship.eta : '')
+        + (d.serialNumbers && d.serialNumbers.length ? '<br><span class="serials">SN: ' + d.serialNumbers.join(', ') + '</span>' : '')
+        + '</div></div>';
+    }).join('');
+}
+
+$('search').onclick = () => loadCatalog($('q').value.trim());
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') loadCatalog($('q').value.trim()); });
+$('cat').addEventListener('click', e => {
+  const b = e.target.closest('[data-buy]');
+  if (!b) return;
+  $('oItem').value = b.dataset.buy;
+  $('oPo').value = 'PO-' + String(Date.now()).slice(-8);
+});
+$('orders').addEventListener('click', async e => {
+  const b = e.target.closest('[data-cancel]');
+  if (!b) return;
+  await call('POST', '/api/orders/' + b.dataset.cancel + '/cancellation');
+  loadOrders(); loadCatalog($('q').value.trim());
+});
+$('place').onclick = async () => {
+  const p = CAT.find(x => x.id === $('oItem').value);
+  if (!p) return;
+  const qty = Math.max(1, Number($('oQty').value) || 1);
+  const tier = [...p.prices].reverse().find(t => qty >= t.fromQty) || { unitPrice: p.unitPrice };
+  const res = await call('POST', '/api/orders', {
+    purchaseOrdernumber: $('oPo').value.trim() || ('PO-' + String(Date.now()).slice(-8)),
+    comments: 'Sandbox dropship test',
+    shippingAddress: {
+      companyName: '', recipientName: $('oName').value, recipientPhoneNumber: '555-0100',
+      line1: $('oAddr').value, line2: '', country: 'US',
+      city: $('oCity').value, state: $('oState').value, zipCode: $('oZip').value,
+    },
+    shippingCost: 0,
+    details: [{
+      vendorPartNumber: p.id, quantity: qty, unitPrice: tier.unitPrice,
+      buyerPartNumber: $('oSku').value.trim(), itemDescription: p.description, unitOfMeasure: 'Each',
+    }],
+    creationDate: new Date().toISOString(), version: 0,
+  });
+  $('oNote').textContent = res.status === 202
+    ? res.body.metadata.hubxDocumentNumber + ' accepted — watch it progress on the right'
+    : (res.body.metadata && res.body.metadata.errorList || ['rejected']).join(' · ');
+  loadOrders(); loadCatalog($('q').value.trim());
+};
+
+(async () => {
+  const t = await call('POST', '/connect/token', { grant_type: 'client_credentials', client_id: 'sandbox', client_secret: 'sandbox' }, true);
+  TOKEN = t.body.access_token;
+  $('tok').textContent = 'token ✓ expires in ' + t.body.expires_in + 's';
+  $('oPo').value = 'PO-' + String(Date.now()).slice(-8);
+  $('oSku').value = 'S26-ULTRA-256GB-BLACK';
+  await loadCatalog('');
+  setInterval(() => loadCatalog($('q').value.trim()), 10000);
+  setInterval(loadOrders, 5000);
+  loadOrders();
+})();
+</script>
+</body>
+</html>
