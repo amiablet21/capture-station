@@ -3608,6 +3608,13 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-page-btn.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 700; }
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
+/* one Listings tab: marketplace pills switch between the lister pages */
+.lst-switch { display: flex; gap: 6px; justify-content: center; padding: 12px 0 0; }
+.lst-pill { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 16px; background: var(--surface); cursor: pointer; }
+.lst-pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-soft-text); }
+.lst-pill.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+.lst-pill:disabled { opacity: 0.45; cursor: default; }
+
 /* ---------- Temu lister (reuses the eBay three-panel skeleton) ---------- */
 /* centered columns clip their LEFT side unreachably when they overflow the
    window — "safe" keeps the start edge scrollable (owner hit it 2026-08-14) */

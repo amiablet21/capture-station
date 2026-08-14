@@ -13,8 +13,7 @@
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabReturns" class="tab" hidden>Returns</button>
-      <button id="tabEbay" class="tab" hidden>eBay</button>
-      <button id="tabTemu" class="tab" hidden>Temu</button>
+      <button id="tabListings" class="tab" hidden>Listings</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -173,6 +172,12 @@
   <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
        Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
   <section id="ebayPage" class="ebay-page" hidden>
+    <!-- one Listings tab, marketplace pills switch the page (owner 2026-08-14) -->
+    <div class="lst-switch">
+      <button class="lst-pill is-on" data-lst="ebay">eBay</button>
+      <button class="lst-pill" data-lst="temu">Temu</button>
+      <button class="lst-pill" data-lst="walmart" disabled title="Walmart listing flow is coming next">Walmart</button>
+    </div>
     <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
          "I like the previous design") -->
     <div class="ebay-cols">
@@ -250,6 +255,11 @@
   <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
        SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
   <section id="temuPage" class="ebay-page" hidden>
+    <div class="lst-switch">
+      <button class="lst-pill" data-lst="ebay">eBay</button>
+      <button class="lst-pill is-on" data-lst="temu">Temu</button>
+      <button class="lst-pill" data-lst="walmart" disabled title="Walmart listing flow is coming next">Walmart</button>
+    </div>
     <div class="ebay-cols">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on Temu

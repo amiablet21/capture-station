@@ -258,8 +258,7 @@ function render() {
   }
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
-  $('tabEbay').hidden = !pages.returns;
-  $('tabTemu').hidden = !pages.returns;
+  $('tabListings').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
 
@@ -1109,8 +1108,10 @@ function showPage(page) {
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
-  $('tabEbay').classList.toggle('is-active', page === 'ebay');
-  $('tabTemu').classList.toggle('is-active', page === 'temu');
+  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
+  if (page === 'ebay' || page === 'temu') {
+    try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
+  }
   if (page === 'ebay') {
     enterEbay();
   } else if (page === 'temu') {
@@ -6127,7 +6128,15 @@ $("ebgSave").addEventListener("click", async () => {
   $("ebGearDialog").close();
   toast("eBay listing settings saved");
 });
-$("tabEbay").addEventListener("click", () => showPage("ebay"));
+// one Listings tab covers every marketplace lister; the pills inside switch
+$("tabListings").addEventListener("click", () => {
+  let ch = "ebay";
+  try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
+  showPage(ch);
+});
+document.querySelectorAll(".lst-pill").forEach(b => b.addEventListener("click", () => {
+  if (!b.disabled && b.dataset.lst !== activePage) showPage(b.dataset.lst);
+}));
 
 /* ---------- eBay lister: photo objects, QR capture, editor ---------- */
 // Approved designs: variants/ebay-photos-qr.html (phone = capture only) and
@@ -6699,7 +6708,6 @@ function enterTemu() {
   renderTmForm();
 }
 
-$("tabTemu").addEventListener("click", () => showPage("temu"));
 $("tmQueue").addEventListener("click", (e) => {
   const row = e.target.closest("[data-tmq]");
   if (row) tmSelect(row.dataset.tmq, false);
