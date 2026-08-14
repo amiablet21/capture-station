@@ -48,13 +48,13 @@ const CATALOG = [
   item('SM-S938UZBEXAA', 'Samsung Galaxy S26 Ultra 512GB Titanium Black US Spec', 22, 1041, [[1, 1041], [10, 1026]], 'Connecticut', 3),
   item('SM-S931UZKAXAA', 'Samsung Galaxy S26 256GB Black US Spec', 118, 641, [[1, 641], [10, 630], [50, 619]], 'Miami', 2),
   item('SM-S931UZBAXAA', 'Samsung Galaxy S26 256GB Blue US Spec', 73, 643, [[1, 643], [10, 632]], 'Miami', 2),
-  item('SM-S926BZKGINS', 'Samsung Galaxy S26 Plus 512GB Black Intl Spec', 35, 744, [[1, 744], [10, 733]], 'Dubai', 5),
+  item('SM-S926BZKGINS', 'Samsung Galaxy S26 Plus 512GB Black Intl Spec', 35, 744, [[5, 744], [10, 733]], 'Dubai', 5, 5),
   item('SM-F966UZKEXAA', 'Samsung Galaxy Z Fold7 512GB Jet Black US Spec', 17, 1418, [[1, 1418], [5, 1401]], 'Miami', 2),
-  item('SM-S731ULBEXAA', 'Samsung Galaxy S25 FE 128GB Jet Black US Spec', 96, 431, [[1, 431], [10, 422], [50, 414]], 'Connecticut', 2),
+  item('SM-S731ULBEXAA', 'Samsung Galaxy S25 FE 128GB Jet Black US Spec', 96, 431, [[10, 431], [50, 414]], 'Connecticut', 2, 10),
   item('SM-X930NZAEXAR', 'Samsung Galaxy Tab S11 256GB Gray Wi-Fi', 28, 689, [[1, 689], [10, 676]], 'Miami', 3),
-  item('SM-X133NZAAXAR', 'Samsung Galaxy Tab A9+ Lite 64GB Gray Wi-Fi', 240, 84, [[1, 84], [25, 81], [100, 78]], 'Miami', 2),
-  item('MPXY3LL/A', 'Apple iPad 11th Gen 128GB Blue Wi-Fi', 55, 271, [[1, 271], [10, 266]], 'Miami', 2),
-  item('SM-R640WHT', 'Samsung Galaxy Buds 3 White', 130, 61, [[1, 61], [25, 58]], 'Connecticut', 1),
+  item('SM-X133NZAAXAR', 'Samsung Galaxy Tab A9+ Lite 64GB Gray Wi-Fi', 240, 84, [[25, 84], [100, 78]], 'Miami', 2, 25),
+  item('MPXY3LL/A', 'Apple iPad 11th Gen 128GB Blue Wi-Fi', 55, 271, [[5, 271], [10, 266]], 'Miami', 2, 5),
+  item('SM-R640WHT', 'Samsung Galaxy Buds 3 White', 130, 61, [[10, 61], [25, 58]], 'Connecticut', 1, 10),
 ];
 
 /* ---------- orders ---------- */
@@ -277,6 +277,24 @@ const server = http.createServer(async (req, res) => {
     ORDERS.push(o);
     progressOrder(o);
     json(res, 202, { metadata: { hubxDocumentNumber: doc }, success: true, orderStatus: 'Accepted' });
+    return;
+  }
+
+  // sandbox-only helper (not part of the HUBX API): write the Walmart bulk
+  // sheet the playground builds straight into Downloads
+  if (req.method === 'POST' && u.pathname === '/sandbox/export-walmart') {
+    let rows;
+    try { rows = JSON.parse(await readBody(req)); } catch { json(res, 400, { error: 'bad body' }); return; }
+    if (!Array.isArray(rows) || !rows.length) { json(res, 400, { error: 'nothing selected' }); return; }
+    const q = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+    const csv = [
+      ['SKU', 'Product Name', 'Brand', 'MPN', 'Product ID Type', 'Product ID', 'Price', 'Quantity', 'Condition'].join(','),
+      ...rows.map(r => [r.sku, r.name, r.brand, r.mpn, r.idType || '', r.id || '', r.price, r.qty, 'New'].map(q).join(',')),
+    ].join('\n') + '\n';
+    const file = path.join(require('os').homedir(), 'Downloads',
+      `Walmart-from-HUBX-${new Date().toISOString().slice(5, 10).replace('-', '')}.csv`);
+    fs.writeFileSync(file, '﻿' + csv, 'utf8');
+    json(res, 200, { ok: true, path: file, rows: rows.length });
     return;
   }
 

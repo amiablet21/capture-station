@@ -66,7 +66,15 @@
   <div class="panel">
     <div class="phead">Catalog — GET /api/products <span class="hint">refreshes every 10s · availability moves like a live book</span></div>
     <div class="row"><input id="q" placeholder="search MPN or description" style="flex:1" /><button id="search">Search</button></div>
-    <table id="cat"><tr><th>Item</th><th>MPN</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr></table>
+    <table id="cat"><tr><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr></table>
+  </div>
+
+  <div class="panel">
+    <div class="phead">Walmart bulk sheet — tick catalog items above <span class="hint">sell price = best tier cost + margin, qty starts at MOQ</span></div>
+    <div class="row"><span class="lbl">Margin %</span><input id="wmMargin" value="15" style="width:56px" />
+      <button id="wmExport" class="primary">Export Walmart sheet</button>
+      <span id="wmNote" class="sub" style="margin:0"></span></div>
+    <table id="wmSheet"><tr><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr></table>
   </div>
 
   <div class="panel">
@@ -145,16 +153,19 @@ async function loadCatalog(q) {
   const res = await call('GET', '/api/products?pageSize=100&onlyActive=false' + (q ? '&searchQuery=' + encodeURIComponent(q) : ''));
   if (res.status !== 200) return;
   CAT = res.body.products;
-  $('cat').innerHTML = '<tr><th>Item</th><th>MPN</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr>'
+  $('cat').innerHTML = '<tr><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr>'
     + CAT.map(p => {
       const t10 = (p.prices.find(t => t.fromQty >= 10) || {}).unitPrice;
-      return '<tr><td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
+      return '<tr><td><input type="checkbox" data-wmck="' + p.id + '"' + (WMSEL.has(p.id) ? ' checked' : '') + ' /></td>'
+        + '<td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
+        + '<td class="r mono">' + p.moq + '</td>'
         + '<td class="r">' + chip(p.availability) + '</td>'
         + '<td class="r mono">$' + p.unitPrice.toFixed(2) + '</td>'
         + '<td class="r mono">' + (t10 ? '$' + t10.toFixed(2) : '—') + '</td>'
         + '<td>' + p.exw + '</td><td class="r">' + p.leadTimeDays + 'd</td>'
         + '<td><button data-buy="' + p.id + '">order</button></td></tr>';
     }).join('');
+  renderWmSheet();
   $('oItem').innerHTML = CAT.map(p => '<option value="' + p.id + '">' + p.description.slice(0, 60) + ' — $' + p.unitPrice.toFixed(2) + ' (' + p.availability + ')</option>').join('');
   renderPads();
 }
@@ -198,6 +209,64 @@ async function loadOrders() {
         + '</div></div>';
     }).join('');
 }
+
+/* ----- Walmart bulk sheet from ticked catalog items ----- */
+const WMSEL = new Set();
+const WMEDIT = {}; // id -> { price, qty } user overrides
+
+function bestTier(p, qty) {
+  return ([...p.prices].reverse().find(t => qty >= t.fromQty) || { unitPrice: p.unitPrice }).unitPrice;
+}
+function wmDefaults(p) {
+  const qty = WMEDIT[p.id] && WMEDIT[p.id].qty !== undefined ? WMEDIT[p.id].qty : p.moq;
+  const cost = bestTier(p, Number(qty) || p.moq);
+  const margin = 1 + (Number($('wmMargin').value) || 15) / 100;
+  const price = WMEDIT[p.id] && WMEDIT[p.id].price !== undefined
+    ? WMEDIT[p.id].price
+    : (Math.ceil(cost * margin) - 0.01).toFixed(2);
+  return { qty, cost, price };
+}
+function renderWmSheet() {
+  const rows = CAT.filter(p => WMSEL.has(p.id));
+  $('wmSheet').innerHTML = '<tr><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr>'
+    + (rows.length ? rows.map(p => {
+      const d = wmDefaults(p);
+      const m = Number(d.price) - d.cost;
+      return '<tr><td class="mono">' + p.mpn.replace(/[^A-Za-z0-9-]/g, '') + '</td>'
+        + '<td>' + p.description.slice(0, 44) + '</td>'
+        + '<td class="r mono">$' + d.cost.toFixed(2) + '</td>'
+        + '<td class="r"><input class="mono" data-wmprice="' + p.id + '" value="' + d.price + '" style="width:76px;text-align:right" /></td>'
+        + '<td class="r mono" style="color:' + (m > 0 ? 'var(--accent-soft-text)' : 'var(--neg-text)') + '">$' + m.toFixed(2) + '</td>'
+        + '<td class="r"><input class="mono" data-wmqty="' + p.id + '" value="' + d.qty + '" style="width:52px;text-align:right" /></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="empty">Nothing ticked yet.</td></tr>');
+}
+$('cat').addEventListener('change', e => {
+  const ck = e.target.closest('[data-wmck]');
+  if (!ck) return;
+  if (ck.checked) WMSEL.add(ck.dataset.wmck); else WMSEL.delete(ck.dataset.wmck);
+  renderWmSheet();
+});
+$('wmSheet').addEventListener('change', e => {
+  const pr = e.target.closest('[data-wmprice]');
+  const qt = e.target.closest('[data-wmqty]');
+  if (pr) { WMEDIT[pr.dataset.wmprice] = { ...WMEDIT[pr.dataset.wmprice], price: pr.value.trim() }; }
+  if (qt) { WMEDIT[qt.dataset.wmqty] = { ...WMEDIT[qt.dataset.wmqty], qty: qt.value.trim() }; }
+  renderWmSheet();
+});
+$('wmMargin').addEventListener('change', renderWmSheet);
+$('wmExport').onclick = async () => {
+  const rows = CAT.filter(p => WMSEL.has(p.id)).map(p => {
+    const d = wmDefaults(p);
+    return {
+      sku: p.mpn.replace(/[^A-Za-z0-9-]/g, ''), name: p.description,
+      brand: p.manufacturer, mpn: p.mpn, idType: '', id: '',
+      price: d.price, qty: d.qty,
+    };
+  });
+  if (!rows.length) { $('wmNote').textContent = 'tick catalog items first'; return; }
+  const res = await call('POST', '/sandbox/export-walmart', rows);
+  $('wmNote').textContent = res.status === 200 ? 'saved ' + res.body.path : 'export failed';
+};
 
 $('search').onclick = () => loadCatalog($('q').value.trim());
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') loadCatalog($('q').value.trim()); });
