@@ -2616,11 +2616,71 @@ function registerIpc() {
       } catch { /* one bad lookup never hides the rest */ }
     }
     detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
-    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets };
+    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
     if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
+    return unlistedCache;
+  }
+
+  // Fast path: the full scan costs one throttled API call per in-stock SKU
+  // (no truthful bulk endpoint exists), so it runs hourly at most. This
+  // checks ONLY the items that scan never saw — the SKUs receiving/returns
+  // just created — a handful of calls, seconds instead of minutes.
+  async function runUnlistedDelta(cfg) {
+    const stale = !unlistedCache.detail || Date.now() - unlistedCache.at > 60 * 60 * 1000;
+    if (stale || !Array.isArray(unlistedCache.covered)) return runUnlistedScan(cfg);
+    if (unlistedScanRunning) return unlistedScanRunning; // a full scan is already underway
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const ignore = new Set((cfg.unlistedIgnore || []).map(s => String(s).toUpperCase()));
+    const inStock = items.filter(it => {
+      if (!it.stockItemId) return false;
+      if (ignore.has(String(it.sku).toUpperCase())) return false;
+      const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+      return l && (Number(l.stockLevel) > 0 || Number(l.available) > 0);
+    }).slice(0, 300);
+    const covered = new Set(unlistedCache.covered);
+    const freshItems = inStock.filter(it => !covered.has(it.stockItemId));
+    // rows whose stock is gone (sold / corrected away) leave the list too
+    const stillStocked = new Set(inStock.map(i => String(i.sku).toUpperCase()));
+    const kept = unlistedCache.detail.filter(d => stillStocked.has(d.sku));
+    let changed = kept.length !== unlistedCache.detail.length;
+    const label = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
+    for (const it of freshItems) {
+      try {
+        const channels = await client.getChannelSkus(it.stockItemId);
+        covered.add(it.stockItemId);
+        changed = true;
+        for (const c of channels) {
+          if (!c.source) continue;
+          const l2 = label(c.source);
+          if (l2 && unlistedCache.sets && !unlistedCache.sets[l2].includes(it.stockItemId)) unlistedCache.sets[l2].push(it.stockItemId);
+        }
+        if (channels.length) continue;
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
+        let price = 0;
+        try {
+          const prices = await client.getChannelPrices(it.stockItemId);
+          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
+        } catch { /* no stored channel price: the column shows an em-dash */ }
+        kept.push({
+          sku: String(it.sku).toUpperCase(),
+          title: it.title || '',
+          image: it.image || '',
+          stockItemId: it.stockItemId,
+          avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
+          retail: price,
+        });
+      } catch { /* one bad lookup never hides the rest */ }
+    }
+    if (changed) {
+      kept.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+      unlistedCache = { ...unlistedCache, skus: kept.map(d => d.sku), detail: kept, covered: [...covered] };
+      try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
+      if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
+    }
     return unlistedCache;
   }
 
@@ -2638,11 +2698,15 @@ function registerIpc() {
       // cold boot: last session's scan answers INSTANTLY while a fresh scan
       // runs behind it ('unlisted:refreshed' swaps the cards when it lands)
       if (!unlistedCache.detail) loadUnlistedDisk();
-      // Refresh must see SKUs created a minute ago: a fresh scan starts NOW
-      // no matter how young the cache is (the disk reload above used to
-      // resurrect the old timestamp and quietly skip the rescan). The old
-      // view still answers this call; 'unlisted:refreshed' swaps it after.
+      // Refresh must see SKUs created a minute ago. Young cache: only NEW
+      // items can be missing, so the delta check answers in seconds — wait
+      // for it and return an already-correct view. Stale cache: full rescan
+      // in the background while the old view answers this call.
       if (force) {
+        if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
+          const c = await runUnlistedDelta(cfg);
+          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+        }
         const prev = unlistedCache;
         unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
         const scan = runUnlistedScan(cfg);
@@ -2665,11 +2729,13 @@ function registerIpc() {
     }
   });
   // warm the listing scan shortly after boot so the cards never wait on a
-  // page visit (the disk cache already answered; this refreshes it)
+  // page visit: SKUs created since the last scan get checked within seconds
+  // (delta), and a stale cache triggers the full rescan behind the old view
   setTimeout(() => {
     const cfg = config.load();
     if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
-      runUnlistedScan(cfg).catch(() => { /* next visit retries */ });
+      loadUnlistedDisk();
+      runUnlistedDelta(cfg).catch(() => { /* next visit retries */ });
     }
   }, 8000);
 
