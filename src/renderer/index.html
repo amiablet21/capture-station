@@ -14,6 +14,7 @@
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabReturns" class="tab" hidden>Returns</button>
       <button id="tabEbay" class="tab" hidden>eBay</button>
+      <button id="tabTemu" class="tab" hidden>Temu</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -245,6 +246,121 @@
       </div>
     </div>
   </section>
+
+  <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
+       SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
+  <section id="temuPage" class="ebay-page" hidden>
+    <div class="ebay-cols">
+      <div class="ebay-panel ebay-queue">
+        <div class="ebay-phead">To list on Temu
+          <span class="eb-right">
+            <button id="tmRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the Temu link set">Refresh</button>
+            <button id="tmScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
+          </span>
+        </div>
+        <div id="tmQueue" class="ebay-qlist"></div>
+        <div class="ebay-qfoot">New in-stock SKUs with no Temu listing — Temu sells new only.</div>
+      </div>
+
+      <div class="ebay-panel ebay-form">
+        <div class="ebay-phead">Listing
+          <span class="eb-right">
+            <button id="tmDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
+            <button id="tmGear" class="ebay-addbtn eb-ml0" title="Temu template file and export defaults">⚙</button>
+          </span>
+        </div>
+        <div class="ebay-frows">
+          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="tmSku" class="input mono ebay-fin" readonly /></div>
+          <div class="ebay-frow"><span class="ebay-flabel">Type</span>
+            <div class="ebay-condrow">
+              <button class="ebay-condbtn" id="tmCatPhone" data-tmcat="phone">Phone</button>
+              <button class="ebay-condbtn" id="tmCatTablet" data-tmcat="tablet">Tablet</button>
+            </div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
+            <div><input id="tmTitle" class="input ebay-fin" maxlength="500" /><div class="ebay-fhint" id="tmTitleHint"></div></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Brand</span>
+            <div class="tm-two">
+              <select id="tmBrand" class="input ebay-fin"><option>SAMSUNG</option><option>APPLE</option><option value="">(no brand)</option></select>
+              <select id="tmOrigin" class="input ebay-fin"><option>Vietnam</option><option>Mainland China</option><option>South Korea</option><option>India</option><option>United States</option></select>
+            </div>
+            <div class="ebay-fhint tm-hint2">brand · country of origin</div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Temu specs</span>
+            <div>
+              <div id="tmSpecs" class="ebay-specgrid"></div>
+              <div class="ebay-fhint">fixed Temu menus — pre-picked, change what's wrong</div>
+            </div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">RAM+ROM</span>
+            <div class="tm-two">
+              <select id="tmRam" class="input ebay-fin"></select>
+              <select id="tmRom" class="input ebay-fin"></select>
+            </div>
+            <div class="ebay-fhint tm-hint2">Temu variation axis — RAM · storage</div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Color</span>
+            <div><select id="tmColor" class="input ebay-fin eb-w180"></select>
+            <div class="ebay-fhint" id="tmColorHint"></div></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
+            <div class="tm-two">
+              <input id="tmBase" class="input mono ebay-fin eb-w110" placeholder="base" />
+              <input id="tmList" class="input mono ebay-fin eb-w110" placeholder="list" />
+            </div>
+            <div class="ebay-fhint tm-hint2">base (your price) · list (compare-at)</div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="tmQty" class="input mono ebay-fin eb-w70" /></div>
+          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
+            <div id="tmVars" class="ebay-vars"></div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Package</span>
+            <div class="tm-pack">
+              <span class="ebay-spec"><label>Weight lb</label><input id="tmWt" class="input mono" /></span>
+              <span class="ebay-spec"><label>Length in</label><input id="tmLen" class="input mono" /></span>
+              <span class="ebay-spec"><label>Width in</label><input id="tmWid" class="input mono" /></span>
+              <span class="ebay-spec"><label>Height in</label><input id="tmHei" class="input mono" /></span>
+            </div>
+            <div class="ebay-fhint tm-hint2" id="tmPackHint">saved per model — reused next time</div>
+          </div>
+          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
+            <div id="tmShots" class="ebay-shots"></div>
+          </div>
+        </div>
+        <div class="ebay-factions">
+          <button id="tmExport" class="btn btn-primary">Export Temu workbook</button>
+          <button id="tmUploadPage" class="ebay-addbtn" title="Seller Central → Add Products via Upload — where the exported file goes">Open Temu upload page</button>
+          <span id="tmExportNote" class="ebay-fhint"></span>
+        </div>
+      </div>
+
+      <div class="ebay-out">
+        <div class="ebay-panel">
+          <div class="ebay-phead">Upload sheet<span class="eb-right"><span id="tmSheetN" class="ebay-fhint"></span></span></div>
+          <div id="tmSheet" class="tm-sheet"></div>
+          <div class="tm-sheetnote">Rows write into a copy of Temu's own template workbook. Contribution SKU = your Linnworks SKU, so listings auto-link. Temu recommends 15 or fewer products on the first upload.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Temu lister: template + defaults -->
+  <dialog id="tmGearDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Temu export setup</h2>
+      <p class="dlg-note" id="tmTplState"></p>
+      <div class="ebg-row"><label>Template</label><button id="tmTplPick" class="ebay-addbtn eb-m0">Pick the downloaded template file…</button></div>
+      <div class="ebg-row"><label for="tmShipTpl">Shipping template</label><input id="tmShipTpl" class="input" /></div>
+      <div class="ebg-row"><label for="tmHandling">Handling time</label>
+        <select id="tmHandling" class="input"><option>1 Day</option><option>2 Days</option></select>
+      </div>
+      <div class="dlg-actions">
+        <button id="tmGearSave" class="btn btn-primary">Save</button>
+        <button id="tmGearClose" class="btn">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- eBay lister: QR for shooting draft photos on the phone -->
   <div id="ebQrPop" class="claims-pop ebqr-pop" hidden>

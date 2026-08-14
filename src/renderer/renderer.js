@@ -259,6 +259,7 @@ function render() {
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
   $('tabEbay').hidden = !pages.returns;
+  $('tabTemu').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
 
@@ -1104,12 +1105,16 @@ function showPage(page) {
   $('stockPage').hidden = page !== 'stock';
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
+  $('temuPage').hidden = page !== 'temu';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
   $('tabEbay').classList.toggle('is-active', page === 'ebay');
+  $('tabTemu').classList.toggle('is-active', page === 'temu');
   if (page === 'ebay') {
     enterEbay();
+  } else if (page === 'temu') {
+    enterTemu();
   } else if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
@@ -6156,7 +6161,7 @@ async function ebOpenQr() {
 $("ebQrClose").addEventListener("click", () => { $("ebQrPop").hidden = true; });
 document.addEventListener("click", (e) => {
   if ($("ebQrPop").hidden) return;
-  if (e.target.closest("#ebQrPop") || e.target.closest("#ebShotQr")) return;
+  if (e.target.closest("#ebQrPop") || e.target.closest("#ebShotQr") || e.target.closest("#tmShotQr")) return;
   $("ebQrPop").hidden = true;
 });
 api.on("ebay:photoUploaded", ({ sku, file }) => {
@@ -6408,4 +6413,428 @@ $("ebRefresh").addEventListener("click", () => {
   loadChLinked();
   loadUnlisted(true);
   toast("Re-scanning listings…", 2000);
+});
+
+/* ==================== Temu lister tab ==================== */
+// Fill Temu's own upload workbook from NEW in-stock SKUs (Temu sells new
+// only). Approved design: variants/temu-lister.html — the eBay three-panel
+// skeleton with an upload-sheet preview instead of a buyer preview.
+
+let tmCur = null;
+let tmState = { hasTemplate: false, template: null, profiles: {}, packages: {} };
+let tmClaimed = {};
+try { tmClaimed = JSON.parse(localStorage.getItem("temuClaimed") || "{}"); } catch { /* fresh start */ }
+let tmDrafts = {};
+try { tmDrafts = JSON.parse(localStorage.getItem("temuDrafts") || "{}"); } catch { /* fresh start */ }
+
+// Temu's fixed menus for phones (24388) and tablets (4080) — copied from the
+// template's dropdown sheets; the export writes these exact strings
+const TM_COLORS = ["Black", "White", "Red", "Orange", "Yellow", "Green", "Blue"];
+const TM_COLOR_MAP = { BLACK: "Black", JETBLACK: "Black", JBLK: "Black", BLK: "Black", GRAPHITE: "Black", GRAY: "Black", GREY: "Black", TITANIUM: "Black", PHANTOM: "Black", WHITE: "White", SILVER: "White", CREAM: "White", BEIGE: "White", GOLD: "White", PLATINUM: "White", SHADOW: "White", RED: "Red", BURGUNDY: "Red", CORAL: "Red", PINK: "Red", ROSE: "Red", ORANGE: "Orange", PEACH: "Orange", YELLOW: "Yellow", LEMON: "Yellow", GREEN: "Green", MINT: "Green", LIME: "Green", OLIVE: "Green", BLUE: "Blue", NAVY: "Blue", ICYBLUE: "Blue", ICEBLUE: "Blue", SKYBLUE: "Blue", VIOLET: "Blue", PURPLE: "Blue", LAVENDER: "Blue", SILVERBLUE: "Blue" };
+function tmColorFor(text) {
+  const t = String(text || "").toUpperCase().replace(/[^A-Z]/g, "");
+  for (const [k, v] of Object.entries(TM_COLOR_MAP)) if (t.includes(k)) return v;
+  return "Black";
+}
+const TM_SPECS = {
+  phone: [
+    ["os", "OS", ["Android", "Ios"]],
+    ["cell", "Cellular", ["4g", "5g", "3g", "2g", "none"]],
+    ["sim", "SIM slots", ["1", "2", "0"]],
+    ["power", "Power", ["USB Charging", "Battery Powered/USB Dual Use", "Battery Powered"]],
+    ["battery", "Battery", ["Rechargeable Battery", "Without Battery"]],
+    ["wireless", "Wireless", ["With Wi-Fi function", "Including 2.4G/3G/4G/5G and other func", "NFC"]],
+  ],
+  tablet: [
+    ["os", "OS", ["Android", "Ios", "Windows", "Chromeos"]],
+    ["cell", "Cellular", ["none", "4g", "5g", "3g", "2g"]],
+    ["power", "Power", ["USB Charging", "Battery Powered/USB Dual Use", "Battery Powered"]],
+    ["battery", "Battery", ["Rechargeable Battery", "Without Battery"]],
+    ["wireless", "Wireless", ["With Wi-Fi function", "Including 2.4G/3G/4G/5G and other func", "NFC"]],
+    ["material", "Material", ["Plastic", "Aluminum", "Aluminum Alloy", "Stainless Steel"]],
+    ["age", "Age group", ["14 Years+", "18 Years+", "6 Years+", "3 Years+"]],
+  ],
+};
+const TM_SPEC_IDS = { os: "318", cell: "162", sim: "461", power: "1067", battery: "2153", wireless: "2149", material: "1920", age: "1117" };
+
+function tmGuessCat(sku, title) {
+  const t = `${sku} ${title}`.toUpperCase();
+  if (/IPAD|\bTAB\b|TABLET|SM-?[TX]\d|^[TX]\d{3}/.test(t)) return "tablet";
+  return "phone";
+}
+
+function tmClaim(skus) {
+  const now = Date.now();
+  for (const s of skus) tmClaimed[String(s).toUpperCase()] = now;
+  try { localStorage.setItem("temuClaimed", JSON.stringify(tmClaimed)); } catch { /* best effort */ }
+}
+
+function tmSaveDraft() {
+  if (!tmCur || !tmCur.sku) return;
+  tmDrafts[tmCur.sku] = JSON.parse(JSON.stringify(tmCur));
+  try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
+}
+
+function tmQueueRows() {
+  const out = [];
+  if (!recvItems) return out;
+  const cutoff = Date.now() - 14 * 86400000;
+  for (const it of recvItems) {
+    const lvl = (it.levels || []).find(l => l.locationId === recvLocationId) || {};
+    const avail = Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0);
+    if (avail <= 0) continue;
+    const p = ebParseSku(it.sku);
+    if (p.cond) continue; // condition SKUs never appear — Temu is new-only
+    if (stockViews && stockViews.some(v => stockViewMatch(it, v.pattern))) continue;
+    if (chLinked && chLinked.temu && chLinked.temu.has(it.stockItemId)) continue;
+    const claim = tmClaimed[String(it.sku).toUpperCase()];
+    if (claim && claim > cutoff) continue;
+    out.push({ sku: it.sku, stockItemId: it.stockItemId, title: it.title || "", qty: avail, cat: tmGuessCat(it.sku, it.title), barcode: it.barcode || "", price: Number(it.retailPrice) || 0 });
+  }
+  out.sort((a, b) => b.qty - a.qty);
+  return out;
+}
+
+function renderTmQueue() {
+  const box = $("tmQueue");
+  const rows = tmQueueRows();
+  box.innerHTML = !recvItems
+    ? `<div class="ebay-qempty">Loading the inventory…</div>`
+    : rows.length === 0
+      ? `<div class="ebay-qempty">Every new in-stock SKU already has a Temu listing.</div>`
+      : rows.map(r => `
+        <div class="ebay-qrow ${tmCur && tmCur.sku === r.sku ? "is-on" : ""}" data-tmq="${esc(r.sku)}">
+          <span class="ebay-qsku mono">${esc(r.sku)}</span>
+          <span class="ebay-qmeta"><span class="ebay-qcond c-new">${r.cat === "tablet" ? "Tablet" : "Phone"}</span> ${r.qty} unit${r.qty === 1 ? "" : "s"}${tmDrafts[r.sku] ? " · <b>draft</b>" : ""}</span>
+        </div>`).join("");
+}
+
+// siblings: same model, NEW, still in the queue — pre-filled as variations
+function tmSiblings(sku) {
+  const p = ebParseSku(sku);
+  if (!p.model) return [];
+  return tmQueueRows().filter(r => {
+    if (r.sku === sku) return false;
+    const ps = ebParseSku(r.sku);
+    return ps.model === p.model;
+  }).map(r => {
+    const ps = ebParseSku(r.sku);
+    return { sku: r.sku, stockItemId: r.stockItemId, rom: ps.storage || "", color: tmColorFor(ps.color || r.sku), colorSrc: ps.color || "", qty: r.qty, price: "", auto: true, barcode: r.barcode };
+  });
+}
+
+function tmSelect(sku, fresh) {
+  const item = recvBySku && recvBySku.get(String(sku).toLowerCase());
+  const draft = !fresh && tmDrafts[sku];
+  if (draft) { tmCur = JSON.parse(JSON.stringify(draft)); renderTmQueue(); renderTmForm(); return; }
+  const p = ebParseSku(sku);
+  const cat = tmGuessCat(sku, (item && item.title) || "");
+  const title = (item && item.title) || "";
+  const apple = /IPAD|IPHONE|APPLE/i.test(`${sku} ${title}`);
+  const five = /5G/i.test(`${sku} ${title}`);
+  const model = p.model || sku;
+  const pack = (tmState.packages || {})[String(model).toUpperCase()] || {};
+  tmCur = {
+    sku, stockItemId: (item && item.stockItemId) || "", scratch: !item,
+    cat, title, brand: apple ? "APPLE" : "SAMSUNG", origin: "Vietnam",
+    os: apple ? "Ios" : "Android",
+    cell: cat === "tablet" ? (five ? "5g" : /LTE|CELL/i.test(`${sku} ${title}`) ? "4g" : "none") : (five ? "5g" : "4g"),
+    sim: "1", power: "USB Charging", battery: "Rechargeable Battery",
+    wireless: "With Wi-Fi function", material: "Plastic", age: "14 Years+",
+    ram: cat === "tablet" ? "4GB" : "8GB", rom: p.storage || "64GB",
+    color: tmColorFor(p.color || sku), colorSrc: p.color || "",
+    base: item && item.retailPrice ? String(item.retailPrice) : "", list: "",
+    qty: "", photos: [], vars: tmSiblings(sku),
+    barcode: (item && item.barcode) || "",
+  };
+  const lvl = item && (item.levels || []).find(l => l.locationId === recvLocationId);
+  if (lvl) tmCur.qty = String(Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0));
+  renderTmQueue();
+  renderTmForm();
+}
+
+function tmRows() { // upload-sheet rows: primary first, then included siblings
+  if (!tmCur) return [];
+  const ram = tmCur.ram || "8GB";
+  const rows = [{
+    sku: tmCur.sku, stockItemId: tmCur.stockItemId, color: tmCur.color,
+    ramrom: `${ram}+${tmCur.rom || "64GB"}`, qty: tmCur.qty, base: tmCur.base,
+    list: tmCur.list, barcode: tmCur.barcode,
+  }];
+  for (const v of tmCur.vars || []) {
+    rows.push({
+      sku: v.sku, stockItemId: v.stockItemId, color: v.color,
+      ramrom: `${ram}+${v.rom || tmCur.rom || "64GB"}`, qty: v.qty,
+      base: v.price || tmCur.base, list: tmCur.list, barcode: v.barcode,
+    });
+  }
+  return rows;
+}
+
+function renderTmForm() {
+  const has = !!tmCur;
+  $("tmSku").value = has ? tmCur.sku : "";
+  $("tmSku").readOnly = !(has && tmCur.scratch && !tmCur.sku);
+  $("tmTitle").value = has ? tmCur.title : "";
+  $("tmTitleHint").textContent = has && tmCur.title ? "from Linnworks — edit freely (500 max)" : "";
+  $("tmBrand").value = has ? tmCur.brand : "SAMSUNG";
+  $("tmOrigin").value = has ? tmCur.origin : "Vietnam";
+  $("tmCatPhone").classList.toggle("is-on", has && tmCur.cat === "phone");
+  $("tmCatTablet").classList.toggle("is-on", has && tmCur.cat === "tablet");
+  // spec selects for the active category
+  $("tmSpecs").innerHTML = !has ? "" : TM_SPECS[tmCur.cat].map(([key, label, opts]) => `
+    <span class="ebay-spec"><label>${esc(label)}</label>
+      <select class="input" data-tmspec="${key}">${opts.map(o => `<option ${tmCur[key] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></span>`).join("");
+  // RAM / ROM
+  const rams = ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"];
+  const roms = ["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB"];
+  $("tmRam").innerHTML = rams.map(r => `<option ${has && tmCur.ram === r ? "selected" : ""}>${r}</option>`).join("");
+  $("tmRom").innerHTML = roms.map(r => `<option ${has && tmCur.rom === r ? "selected" : ""}>${r}</option>`).join("");
+  $("tmColor").innerHTML = TM_COLORS.map(c => `<option ${has && tmCur.color === c ? "selected" : ""}>${c}</option>`).join("");
+  $("tmColorHint").textContent = has && tmCur.colorSrc && tmColorFor(tmCur.colorSrc) === tmCur.color
+    ? `${tmCur.colorSrc} → ${tmCur.color} (nearest Temu color — only 7 allowed)` : "Temu allows only these 7 colors";
+  $("tmBase").value = has ? tmCur.base : "";
+  $("tmList").value = has ? tmCur.list : "";
+  $("tmQty").value = has ? tmCur.qty : "";
+  const model = has ? (ebParseSku(tmCur.sku).model || tmCur.sku) : "";
+  const pack = (tmState.packages || {})[String(model).toUpperCase()] || {};
+  if (has) {
+    if (!$("tmWt").value && pack.weightLb) $("tmWt").value = pack.weightLb;
+    if (!$("tmLen").value && pack.lenIn) $("tmLen").value = pack.lenIn;
+    if (!$("tmWid").value && pack.widIn) $("tmWid").value = pack.widIn;
+    if (!$("tmHei").value && pack.heiIn) $("tmHei").value = pack.heiIn;
+  } else {
+    ["tmWt", "tmLen", "tmWid", "tmHei"].forEach(id => { $(id).value = ""; });
+  }
+  $("tmPackHint").textContent = has ? `saved for ${model} — reused next time` : "saved per model — reused next time";
+  // variations
+  $("tmVars").innerHTML = !has ? "" : (tmCur.vars || []).map((v, vi) => `
+    <span class="ebay-varcard is-auto">
+      <span class="vline"><span>${v.colorSrc ? `<span class="tm-cmap-from">${esc(v.colorSrc)}</span>` : ""}${esc(v.color)} · ${esc(v.rom || "")}</span><span class="vsku is-ok">${esc(v.sku)}</span>
+        <select class="input eb-w76" data-tmvcolor="${vi}" title="Temu color for this variation">${TM_COLORS.map(c => `<option ${v.color === c ? "selected" : ""}>${c}</option>`).join("")}</select>
+        <input data-tmvprice="${vi}" value="${esc(v.price)}" placeholder="${esc(tmCur.base || "price")}" title="Base price for this variation (blank = the listing price)" class="input mono eb-w76" />
+        <input data-tmvqty="${vi}" value="${esc(v.qty)}" title="Units" class="input mono eb-w50" /></span>
+      <button class="ebay-varx" data-tmvarx="${vi}" title="Not this one — it keeps its own place in the queue">✕</button>
+    </span>`).join("")
+    + ((tmCur.vars || []).length ? `<span class="ebay-fhint">siblings from the queue auto-filled — ✕ ejects one; exporting removes every included SKU from the queue</span>` : `<span class="ebay-fhint">no queue siblings for this model — single-SKU product</span>`);
+  // photos (shared across the variations; painted via CSSOM — CSP)
+  $("tmShots").innerHTML = !has ? "" : (tmCur.photos || []).map((p, i) => `
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-tmshoti="${i}"><button class="x" data-tmshotx="${i}">✕</button></span>`).join("")
+    + `<button class="qrbtn" id="tmShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
+    + `<button class="ebay-addbtn eb-m0" id="tmShotAdd">add photos</button>`;
+  if (has) {
+    document.querySelectorAll("#tmShots .ebay-shot[data-tmshoti]").forEach(el => {
+      const p = tmCur.photos[Number(el.dataset.tmshoti)];
+      if (p) el.style.backgroundImage = `url("file:///${String(p.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
+    });
+  }
+  renderTmSheet();
+  const missing = [];
+  if (has && !tmState.hasTemplate) missing.push("no template picked yet (⚙)");
+  if (has && !(tmCur.photos || []).length) missing.push("no photos yet");
+  if (has && (!tmCur.base || !tmCur.list)) missing.push("base + list price required");
+  if (has && !($("tmWt").value && $("tmLen").value && $("tmWid").value && $("tmHei").value)) missing.push("package weight + size required");
+  $("tmExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
+  $("tmExport").disabled = !has;
+  tmSaveDraft();
+}
+
+function renderTmSheet() {
+  const rows = tmRows();
+  $("tmSheetN").textContent = tmCur ? `1 product · ${rows.length} row${rows.length === 1 ? "" : "s"}` : "";
+  $("tmSheet").innerHTML = !tmCur
+    ? `<div class="tm-sheet-empty">Pick a SKU from the queue, or press New listing.</div>`
+    : `<table><tr><th>Contribution SKU</th><th>Color</th><th>RAM+ROM</th><th>Qty</th><th>Base $</th><th>List $</th></tr>
+      ${rows.map(r => `<tr><td>${esc(r.sku)}</td><td>${esc(r.color)}</td><td>${esc(r.ramrom)}</td><td>${esc(r.qty)}</td><td>${esc(r.base)}</td><td>${esc(r.list)}</td></tr>`).join("")}</table>`;
+}
+
+function enterTemu() {
+  api.temuState().then(s => { if (s && s.ok) tmState = s; renderTmForm(); }).catch(() => {});
+  Promise.all([ensureInventory(), loadStockViews()]).then(() => { renderTmQueue(); if (tmCur) renderTmForm(); });
+  loadChLinked();
+  renderTmQueue();
+  renderTmForm();
+}
+
+$("tabTemu").addEventListener("click", () => showPage("temu"));
+$("tmQueue").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-tmq]");
+  if (row) tmSelect(row.dataset.tmq, false);
+});
+$("tmRefresh").addEventListener("click", () => {
+  chLinked = null;
+  loadChLinked();
+  ensureInventory().then(renderTmQueue);
+  toast("Re-scanning the Temu link set…", 2000);
+});
+$("tmScratch").addEventListener("click", () => {
+  tmCur = { sku: "", stockItemId: "", scratch: true, cat: "phone", title: "", brand: "SAMSUNG", origin: "Vietnam", os: "Android", cell: "4g", sim: "1", power: "USB Charging", battery: "Rechargeable Battery", wireless: "With Wi-Fi function", material: "Plastic", age: "14 Years+", ram: "8GB", rom: "64GB", color: "Black", colorSrc: "", base: "", list: "", qty: "", photos: [], vars: [], barcode: "" };
+  renderTmQueue();
+  renderTmForm();
+  $("tmSku").readOnly = false;
+  $("tmSku").placeholder = "type any SKU — new items only";
+  $("tmSku").focus();
+});
+$("tmSku").addEventListener("change", () => {
+  if (!tmCur || !tmCur.scratch) return;
+  const sku = $("tmSku").value.trim().toUpperCase();
+  if (sku) tmSelect(sku, true);
+});
+$("tmDiscard").addEventListener("click", () => {
+  if (!tmCur) return;
+  const sku = tmCur.sku;
+  if (sku) {
+    delete tmDrafts[sku];
+    try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
+  }
+  if (sku && !tmCur.scratch) tmSelect(sku, true);
+  else { tmCur = null; renderTmQueue(); renderTmForm(); }
+});
+document.querySelectorAll("[data-tmcat]").forEach(btn => btn.addEventListener("click", () => {
+  if (!tmCur) return;
+  tmCur.cat = btn.dataset.tmcat;
+  renderTmForm();
+}));
+["tmTitle", "tmBrand", "tmOrigin", "tmBase", "tmList", "tmQty"].forEach(id => $(id).addEventListener("change", () => {
+  if (!tmCur) return;
+  tmCur.title = $("tmTitle").value;
+  tmCur.brand = $("tmBrand").value;
+  tmCur.origin = $("tmOrigin").value;
+  tmCur.base = $("tmBase").value.trim();
+  tmCur.list = $("tmList").value.trim();
+  tmCur.qty = $("tmQty").value.trim();
+  renderTmForm();
+}));
+["tmRam", "tmRom", "tmColor"].forEach(id => $(id).addEventListener("change", () => {
+  if (!tmCur) return;
+  tmCur.ram = $("tmRam").value;
+  tmCur.rom = $("tmRom").value;
+  tmCur.color = $("tmColor").value;
+  renderTmForm();
+}));
+$("tmSpecs").addEventListener("change", (e) => {
+  const sel = e.target.closest("[data-tmspec]");
+  if (!sel || !tmCur) return;
+  tmCur[sel.dataset.tmspec] = sel.value;
+  tmSaveDraft();
+});
+["tmWt", "tmLen", "tmWid", "tmHei"].forEach(id => $(id).addEventListener("change", () => {
+  if (!tmCur) return;
+  const model = ebParseSku(tmCur.sku).model || tmCur.sku;
+  const pack = { weightLb: $("tmWt").value.trim(), lenIn: $("tmLen").value.trim(), widIn: $("tmWid").value.trim(), heiIn: $("tmHei").value.trim() };
+  tmState.packages = { ...(tmState.packages || {}), [String(model).toUpperCase()]: pack };
+  api.temuPackages(model, pack).catch(() => {});
+  renderTmForm();
+}));
+$("tmVars").addEventListener("click", (e) => {
+  const x = e.target.closest("[data-tmvarx]");
+  if (x && tmCur) { tmCur.vars.splice(Number(x.dataset.tmvarx), 1); renderTmForm(); }
+});
+$("tmVars").addEventListener("change", (e) => {
+  if (!tmCur) return;
+  const c = e.target.closest("[data-tmvcolor]");
+  const p = e.target.closest("[data-tmvprice]");
+  const q = e.target.closest("[data-tmvqty]");
+  if (c) tmCur.vars[Number(c.dataset.tmvcolor)].color = c.value;
+  if (p) tmCur.vars[Number(p.dataset.tmvprice)].price = p.value.trim();
+  if (q) tmCur.vars[Number(q.dataset.tmvqty)].qty = q.value.trim();
+  renderTmForm();
+});
+$("tmShots").addEventListener("click", async (e) => {
+  if (e.target.closest("#tmShotQr") && tmCur) {
+    const res = await api.ebayQr(tmCur.sku).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { toast((res && res.error) || "QR unavailable."); return; }
+    $("ebQrImg").src = res.qr;
+    $("ebQrSku").innerHTML = `<span class="mono">${esc(tmCur.sku)}</span>`;
+    $("ebQrPop").hidden = false;
+    return;
+  }
+  if (e.target.closest("#tmShotAdd") && tmCur) {
+    const r = await api.ebayPhotosPick();
+    if (r && r.files && r.files.length) {
+      for (const p of r.files) tmCur.photos.push({ path: p });
+      renderTmForm();
+    }
+    return;
+  }
+  const x = e.target.closest("[data-tmshotx]");
+  if (x && tmCur) { tmCur.photos.splice(Number(x.dataset.tmshotx), 1); renderTmForm(); }
+});
+api.on("ebay:photoUploaded", ({ sku, file }) => {
+  if (activePage !== "temu" || !tmCur || String(tmCur.sku).toUpperCase() !== String(sku).toUpperCase()) return;
+  tmCur.photos.push({ path: file });
+  renderTmForm();
+  toast(`Photo from the phone added to ${sku}`, 2500);
+});
+$("tmGear").addEventListener("click", async () => {
+  const s = await api.temuState().catch(() => null);
+  if (s && s.ok) tmState = s;
+  $("tmTplState").textContent = tmState.hasTemplate
+    ? `Template saved: ${(tmState.template && tmState.template.name) || "temu-template.xlsx"}`
+    : "No template yet — download the Cell Phones/Tablets template from Temu Seller Central (Add Products via Upload), then pick it here.";
+  $("tmShipTpl").value = (tmState.profiles && tmState.profiles.shippingTemplate) || "FREE SHIPPING";
+  $("tmHandling").value = (tmState.profiles && tmState.profiles.handlingTime) || "1 Day";
+  $("tmGearDialog").showModal();
+});
+$("tmTplPick").addEventListener("click", async () => {
+  const r = await api.temuTemplate();
+  if (r && r.ok) {
+    tmState.hasTemplate = true;
+    tmState.template = { name: r.name };
+    $("tmTplState").textContent = `Template saved: ${r.name} (${r.columns} columns)`;
+    toast(`Temu template saved — ${r.columns} columns read`);
+  } else if (r && !r.canceled) {
+    toast(r.error || "That file is not a Temu template.");
+  }
+});
+$("tmGearSave").addEventListener("click", async () => {
+  const profiles = { shippingTemplate: $("tmShipTpl").value.trim() || "FREE SHIPPING", handlingTime: $("tmHandling").value };
+  tmState.profiles = profiles;
+  await api.setConfig({ temuProfiles: profiles }).catch(() => {});
+  $("tmGearDialog").close();
+  renderTmForm();
+});
+$("tmGearClose").addEventListener("click", () => $("tmGearDialog").close());
+$("tmUploadPage").addEventListener("click", () => api.openExternalUrl("https://seller.temu.com/"));
+
+$("tmExport").addEventListener("click", async () => {
+  if (!tmCur) return;
+  if (!tmState.hasTemplate) { toast("Pick the Temu template file first (⚙)."); return; }
+  if (!tmCur.sku) { toast("Type a SKU first."); return; }
+  if (!tmCur.base || !tmCur.list) { toast("Base and list price are both required."); return; }
+  const wt = $("tmWt").value.trim(), len = $("tmLen").value.trim(), wid = $("tmWid").value.trim(), hei = $("tmHei").value.trim();
+  if (!wt || !len || !wid || !hei) { toast("Package weight and size are required."); return; }
+  const specs = {};
+  for (const [key] of TM_SPECS[tmCur.cat]) specs[TM_SPEC_IDS[key]] = tmCur[key];
+  const photoPaths = (tmCur.photos || []).map(p => p.path);
+  const variations = tmRows().map(r => ({
+    sku: r.sku, goods: tmCur.sku, stockItemId: r.stockItemId, color: r.color,
+    ramrom: r.ramrom, qty: r.qty || "1", base: r.base, list: r.list,
+    weightLb: wt, lenIn: len, widIn: wid, heiIn: hei,
+    photoPaths, upc: r.barcode,
+  }));
+  const product = {
+    category: tmCur.cat === "tablet" ? "4080" : "24388",
+    name: tmCur.title || tmCur.sku,
+    brand: tmCur.brand, origin: tmCur.origin, description: "",
+    variationTheme: tmCur.cat === "tablet" ? "RAM+ROM × Color" : "Color × RAM+ROM",
+    specs, variations,
+  };
+  $("tmExport").disabled = true;
+  $("tmExport").textContent = "Exporting…";
+  const res = await api.temuExport([product]).catch(err => ({ ok: false, error: err.message }));
+  $("tmExport").disabled = false;
+  $("tmExport").textContent = "Export Temu workbook";
+  if (!res || !res.ok) {
+    if (!res || !res.canceled) toast((res && res.error) || "Export failed.");
+    return;
+  }
+  const skus = variations.map(v => v.sku);
+  tmClaim(skus);
+  for (const s of skus) delete tmDrafts[s];
+  try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
+  toast(`Saved ${res.path} — upload it in Temu Seller Central. ${skus.length} SKU${skus.length === 1 ? "" : "s"} left the queue.`, 8000);
+  tmCur = null;
+  renderTmQueue();
+  renderTmForm();
 });

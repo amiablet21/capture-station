@@ -127,6 +127,11 @@ const DEFAULTS = {
     location: 'Fairfield, NJ',
     dispatchDays: 1,
   },
+  // Temu lister: the seller-downloaded upload template lives in userData
+  // (temu-template.xlsx); these name what the export references
+  temuProfiles: { shippingTemplate: 'FREE SHIPPING', handlingTime: '1 Day' },
+  temuTemplate: null, // { name, savedAt } once a template file is picked
+  temuPackages: {}, // per model family: { weightLb, lenIn, widIn, heiIn }
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',

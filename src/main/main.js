@@ -2335,6 +2335,100 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  /* ---------- Temu lister: template intake + workbook export ---------- */
+
+  const temuTemplatePath = () => path.join(app.getPath('userData'), 'temu-template.xlsx');
+
+  ipcMain.handle('temu:state', () => {
+    const cfg = config.load();
+    return {
+      ok: true,
+      hasTemplate: fs.existsSync(temuTemplatePath()),
+      template: cfg.temuTemplate || null,
+      profiles: cfg.temuProfiles || {},
+      packages: cfg.temuPackages || {},
+    };
+  });
+
+  // The seller downloads Temu's category template once; the app keeps a copy
+  // in userData and writes every export into a fresh copy of it.
+  ipcMain.handle('temu:template', async () => {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Pick the Temu upload template (downloaded from Seller Central)',
+      defaultPath: app.getPath('downloads'),
+      properties: ['openFile'],
+      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const { readTemplate } = require('./temuxlsx.js');
+      const info = readTemplate(r.filePaths[0]); // throws when it is not a Temu template
+      fs.copyFileSync(r.filePaths[0], temuTemplatePath());
+      config.save({ temuTemplate: { name: path.basename(r.filePaths[0]), savedAt: new Date().toISOString() } });
+      return { ok: true, name: path.basename(r.filePaths[0]), columns: info.columns.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('temu:packages', (_e, { model, pack }) => {
+    const cfg = config.load();
+    const all = { ...(cfg.temuPackages || {}) };
+    if (pack) all[String(model).toUpperCase()] = pack;
+    config.save({ temuPackages: all });
+    return { ok: true };
+  });
+
+  // Export: host each variation's photos on its Linnworks item (Temu fetches
+  // image URLs over the internet, same as eBay's PicURL), fill the template
+  // copy, save to Documents. Nothing touches Temu until the seller uploads
+  // the workbook in Seller Central.
+  ipcMain.handle('temu:export', async (_e, { products }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!fs.existsSync(temuTemplatePath())) return { ok: false, error: 'Pick the Temu template file first (gear button).' };
+    try {
+      const { fillWorkbook } = require('./temuxlsx.js');
+      const client = new LinnworksClient(cfg.linnworks);
+      for (const prod of products || []) {
+        for (const v of prod.variations || []) {
+          const paths = v.photoPaths || [];
+          if (!paths.length) { v.images = v.images || []; continue; }
+          let stockItemId = v.stockItemId;
+          if (!stockItemId) stockItemId = await client.findStockItemIdBySku(v.sku).catch(() => null);
+          if (!stockItemId) return { ok: false, error: `${v.sku} is not in Linnworks - photos need a home item.` };
+          const files = paths.map((p, i) => {
+            if (p && typeof p === 'object' && p.dataUrl) {
+              const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+              if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
+              return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
+            }
+            const fp = typeof p === 'object' ? p.path : p;
+            return {
+              buffer: fs.readFileSync(fp),
+              name: path.basename(fp),
+              mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
+            };
+          });
+          v.images = await client.addItemImages(stockItemId, files);
+        }
+      }
+      const out = fillWorkbook(temuTemplatePath(), products, cfg.temuProfiles || {});
+      const stamp = new Date();
+      const name = `Temu-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.xlsx`;
+      const r = await dialog.showSaveDialog(win, {
+        title: 'Save the Temu upload workbook',
+        defaultPath: path.join(app.getPath('downloads'), name),
+        filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+      });
+      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+      fs.writeFileSync(r.filePath, out);
+      return { ok: true, path: r.filePath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // Inline log editing: one UNIT of one return record. Record-level fields
   // (PO#, date, customer, tracking) apply to the whole record; SKU/condition
   // apply to the unit, splitting a qty>1 line when needed. Stock is

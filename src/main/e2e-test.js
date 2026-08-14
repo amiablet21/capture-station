@@ -797,6 +797,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('ebay:specs refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.ebayExport({ sku: 'X' }, [])`);
     check('ebay:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.temuExport([{ sku: 'X' }])`);
+    check('temu:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     {
       const ecsv = require('./ebaycsv.js');
       const desc = ecsv.buildDescription({ title: 'Tab A9+', cond: 'used', specs: { Brand: 'Samsung', 'Screen Size': '8.7 in' } });
@@ -837,6 +839,81 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('ebay page parser: title, category, price, specifics',
         parsed.title === 'Samsung Tab A9+' && parsed.categoryId === '171485' && parsed.price === 119.99
           && parsed.specs.Brand === 'Samsung' && parsed.specs['Screen Size'] === '8.7 in', parsed);
+    }
+    {
+      // Temu workbook writer: pure pieces + a zip round-trip
+      const tx = require('./temuxlsx.js');
+      check('temu color map: nearest allowed color',
+        tx.temuColorFor('GRAPHITE') === 'Black' && tx.temuColorFor('Silver Shadow') === 'White'
+          && tx.temuColorFor('ICY-BLUE') === 'Blue' && tx.temuColorFor('unknowncolor') === 'Black', null);
+      check('temu column letters', tx._internal.colLetter(0) === 'A' && tx._internal.colLetter(27) === 'AB'
+        && tx._internal.colLetter(302) === 'KQ', tx._internal.colLetter(302));
+      const cols = [
+        { idx: 0, name: 'Category', key: 't_1_Category' },
+        { idx: 1, name: 'Product Name', key: 't_1_Product Name' },
+        { idx: 2, name: 'Contribution Goods', key: 't_1_Contribution Goods' },
+        { idx: 3, name: 'Contribution SKU', key: 't_1_Contribution SKU' },
+        { idx: 4, name: '318 - Operating System', key: 't_3_Property:318' },
+        { idx: 5, name: 'Variation Theme', key: 't_4_Variation Theme' },
+        { idx: 6, name: 'RAM+ROM', key: 't_4_Sale Property:75557797' },
+        { idx: 7, name: 'Color', key: 't_4_Sale Property:1001' },
+        { idx: 8, name: 'Quantity', key: 't_4_Custom Spec:15998553' }, // the theme axis DECOY
+        { idx: 9, name: 'SKU Images URL', key: 't_6_SKU Images URL' },
+        { idx: 10, name: 'Quantity', key: 't_6_Quantity' },
+        { idx: 11, name: 'Base Price - USD', key: 't_6_Base Price - USD' },
+        { idx: 12, name: 'California Proposition 65 Warning Type', key: 't_8_Governance Property:1000000001' },
+      ];
+      const rows = tx.buildRows(cols, [{
+        category: '24388', name: 'Phone', variationTheme: 'Color × RAM+ROM',
+        specs: { 318: 'Android' },
+        variations: [{ sku: 'R640-BLACK-US', goods: 'R640-BLACK-US', color: 'Black', ramrom: '8GB+256GB', qty: '9', base: '99.99', images: ['http://i/1.jpg'] }],
+      }], {});
+      const r0 = rows[0];
+      check('temu rows: right columns, decoy Quantity untouched, prop65 by name',
+        rows.length === 1 && r0.get(0) === '24388' && r0.get(4) === 'Android' && r0.get(6) === '8GB+256GB'
+          && r0.get(7) === 'Black' && !r0.has(8) && r0.get(10) === '9' && r0.get(12) === 'No Warning Applicable', [...r0.entries()]);
+      // zip round-trip: store-method fixture -> rebuild with a replacement -> re-read
+      const mkEntry = (name, body) => {
+        const nb = Buffer.from(name), db = Buffer.from(body);
+        const lh = Buffer.alloc(30);
+        lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0, 6); lh.writeUInt16LE(0, 8);
+        lh.writeUInt32LE(tx._internal.crc32(db), 14); lh.writeUInt32LE(db.length, 18); lh.writeUInt32LE(db.length, 22);
+        lh.writeUInt16LE(nb.length, 26);
+        return { nb, db, lh };
+      };
+      const ents = [mkEntry('a.xml', '<a>1</a>'), mkEntry('b.xml', '<b>2</b>')];
+      const chunks = []; const cds = []; let zoff = 0;
+      for (const e of ents) {
+        chunks.push(e.lh, e.nb, e.db);
+        const cdh = Buffer.alloc(46);
+        cdh.writeUInt32LE(0x02014b50, 0); cdh.writeUInt16LE(0, 10);
+        cdh.writeUInt32LE(tx._internal.crc32(e.db), 16); cdh.writeUInt32LE(e.db.length, 20); cdh.writeUInt32LE(e.db.length, 24);
+        cdh.writeUInt16LE(e.nb.length, 28); cdh.writeUInt32LE(zoff, 42);
+        cds.push(cdh, e.nb);
+        zoff += 30 + e.nb.length + e.db.length;
+      }
+      const cdBuf = Buffer.concat(cds);
+      const eo = Buffer.alloc(22);
+      eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(2, 8); eo.writeUInt16LE(2, 10);
+      eo.writeUInt32LE(cdBuf.length, 12); eo.writeUInt32LE(zoff, 16);
+      const fixture = Buffer.concat([...chunks, cdBuf, eo]);
+      const rebuilt = tx._internal.rebuildZip(fixture, new Map([['b.xml', '<b>CHANGED</b>']]));
+      const re = tx._internal.zipEntries(rebuilt);
+      check('temu zip rebuild: untouched part identical, replaced part swapped',
+        tx._internal.zipReadText(rebuilt, re, 'a.xml') === '<a>1</a>'
+          && tx._internal.zipReadText(rebuilt, re, 'b.xml') === '<b>CHANGED</b>', re.map(e => e.name));
+      // real-template smoke: only on machines that have the download
+      const tpl = path.join(require('os').homedir(), 'Downloads', 'TEMU_CELL-PHONES_TABLETS.xlsx');
+      if (fs.existsSync(tpl)) {
+        const out = tx.fillWorkbook(tpl, [{
+          category: '4080', name: 'Smoke tablet', variationTheme: 'RAM+ROM × Color', specs: { 318: 'Android' },
+          variations: [{ sku: 'SMOKE-1', goods: 'SMOKE-1', color: 'Black', ramrom: '4GB+64GB', qty: '1', base: '1.00', list: '2.00', weightLb: '1', lenIn: '1', widIn: '1', heiIn: '1', images: [] }],
+        }], {});
+        const oe = tx._internal.zipEntries(out);
+        const sheet = tx._internal.zipReadText(out, oe, tx.readTemplate(tpl).sheetPath);
+        check('temu real template: row 5 filled, token row untouched',
+          sheet.includes('SMOKE-1') && sheet.includes('prohibit any operation'), out.length);
+      }
     }
     const prevLookup2 = await exec('recvLookup');
     await exec(`
