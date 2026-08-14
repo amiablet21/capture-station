@@ -251,7 +251,7 @@ function render() {
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
-  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
+  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns, walmart: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -1105,17 +1105,20 @@ function showPage(page) {
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
+  $('walmartPage').hidden = page !== 'walmart';
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
-  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
-  if (page === 'ebay' || page === 'temu') {
+  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu' || page === 'walmart');
+  if (page === 'ebay' || page === 'temu' || page === 'walmart') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
   }
   if (page === 'ebay') {
     enterEbay();
   } else if (page === 'temu') {
     enterTemu();
+  } else if (page === 'walmart') {
+    enterWalmart();
   } else if (page === 'stock') {
     const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
     $('stockList').style.width = savedW ? `${savedW}px` : '';
@@ -6142,7 +6145,10 @@ $("ebgSave").addEventListener("click", async () => {
 // one Listings tab covers every marketplace lister; the pills inside switch
 $("tabListings").addEventListener("click", () => {
   let ch = "ebay";
-  try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
+  try {
+    const saved = localStorage.getItem("listingsChannel");
+    if (saved === "temu" || saved === "walmart") ch = saved;
+  } catch { /* default */ }
   showPage(ch);
 });
 document.querySelectorAll(".lst-pill").forEach(b => b.addEventListener("click", () => {
