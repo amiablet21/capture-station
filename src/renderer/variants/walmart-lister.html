@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart lister — mockup</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --wm: #0071DC; --wm-soft: #E1F0FC; --wm-soft-text: #0B5CAB;
+    --new-bg: #EDF3EC; --new-text: #346538;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; min-height: 100vh; background: var(--canvas); }
+  .topnote { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--muted); }
+  .topnote b { color: var(--wm-soft-text); }
+  .stage { padding: 16px 20px; }
+  .mono { font-family: var(--mono); }
+  .pills { display: flex; gap: 10px; justify-content: center; padding: 2px 0 16px; }
+  .pill { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 16px; background: var(--surface); }
+  .pill.on { background: var(--wm-soft); color: var(--wm-soft-text); border-color: transparent; }
+  .cols { display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(47,52,55,0.05); }
+  .phead { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12.5px; }
+  .phead .n { font-family: var(--mono); font-size: 10.5px; background: var(--wm-soft); color: var(--wm-soft-text); border-radius: 6px; padding: 1px 7px; font-weight: 400; }
+  .ghost { font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 4px 11px; cursor: pointer; color: var(--muted); margin-left: auto; }
+
+  .queue { width: 560px; }
+  .qrow { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border-soft); }
+  .qrow:hover { background: var(--surface-2); }
+  .qrow input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--wm); flex: none; }
+  .qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qrow .upc { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 110px; }
+  .qrow .upc.miss { color: #B3752D; }
+  .qrow .meta { font-size: 10.5px; color: var(--faint); margin-left: auto; display: flex; gap: 10px; }
+  .qrow .price { font-family: var(--mono); color: var(--text); }
+  .newpill { font-size: 9px; font-weight: 700; text-transform: uppercase; background: var(--new-bg); color: var(--new-text); border-radius: 4px; padding: 1px 6px; }
+  .qbar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .go { background: var(--accent); color: #fff; border: none; border-radius: 9px; font-size: 12.5px; font-weight: 600; padding: 9px 16px; cursor: pointer; }
+  .go2 { background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 9px; font-size: 12px; font-weight: 600; padding: 8px 14px; cursor: pointer; }
+  .qbar .sum { font-size: 10.5px; color: var(--faint); }
+
+  .help { width: 380px; }
+  .hstep { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-soft); }
+  .hstep .num { flex: none; width: 20px; height: 20px; border-radius: 999px; background: var(--wm-soft); color: var(--wm-soft-text); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .hstep .t { font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .hstep .t b { color: var(--text); font-weight: 600; }
+  .cheat { padding: 12px 14px; }
+  .cheat h5 { margin: 0 0 8px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .crow { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--border-soft); font-size: 11px; }
+  .crow .sku { font-family: var(--mono); font-weight: 600; flex: 1; }
+  .crow .v { font-family: var(--mono); color: var(--muted); }
+  .crow .copy { font-size: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); padding: 1px 7px; cursor: pointer; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="topnote">Mockup — the <b>Walmart</b> pill: attach offers to catalog items by UPC (your flow, minus the typing). Stage 2 adds the spreadsheet export for their no-template Beta uploader.</div>
+<div class="stage">
+  <div class="pills"><span class="pill">eBay</span><span class="pill">Temu</span><span class="pill on">Walmart</span></div>
+  <div class="cols">
+
+    <div class="panel queue">
+      <div class="phead">To list on Walmart <span class="n">12</span><button class="ghost">Refresh</button></div>
+      <div class="qrow"><input type="checkbox" checked /><span class="sku">X135-64GB-SILVER</span><span class="upc">887276802441</span><span class="meta"><span class="newpill">New</span><span>196 units</span><span class="price">$94.99</span></span></div>
+      <div class="qrow"><input type="checkbox" checked /><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="upc">887276708850</span><span class="meta"><span class="newpill" style="background:#F1E9F8;color:#6A2E9E">Open Box</span><span>20 units</span><span class="price">$99.99</span></span></div>
+      <div class="qrow"><input type="checkbox" checked /><span class="sku">A15-64GB-BLK</span><span class="upc">887276790801</span><span class="meta"><span class="newpill">New</span><span>89 units</span><span class="price">$119.99</span></span></div>
+      <div class="qrow"><input type="checkbox" /><span class="sku">T220RES</span><span class="upc miss">no UPC · find from eBay ↻</span><span class="meta"><span class="newpill">New</span><span>5 units</span><span class="price">—</span></span></div>
+      <div class="qrow"><input type="checkbox" /><span class="sku">OPEN-BOX-X210-128GB-GRAY</span><span class="upc miss">no UPC · find from eBay ↻</span><span class="meta"><span class="newpill" style="background:#F1E9F8;color:#6A2E9E">Open Box</span><span>2 units</span><span class="price">$139.99</span></span></div>
+      <div class="qrow"><input type="checkbox" /><span class="sku">X620-128GB-BLUE</span><span class="upc">887276708768</span><span class="meta"><span class="newpill">New</span><span>170 units</span><span class="price">$219.99</span></span></div>
+      <div class="qbar">
+        <button class="go">Search 3 on Walmart</button>
+        <button class="go2">Export offer sheet (Beta uploader)</button>
+        <span class="sum">copies the UPC list · opens Seller Central in the pane</span>
+      </div>
+    </div>
+
+    <div class="panel help">
+      <div class="phead">How it flows</div>
+      <div class="hstep"><span class="num">0</span><span class="t">Linnworks carries no GTINs — <b>find from eBay</b> lifts the UPC off your live listing's item specifics and saves it into the Linnworks barcode for good (also feeds the Temu export). No UPC found = the search falls back to the product name.</span></div>
+      <div class="hstep"><span class="num">1</span><span class="t">Tick the SKUs (up to 50) — New and <b>Open Box</b> both — and press <b>Search on Walmart</b>: the UPC list is copied and the pane opens Seller Central's item search, ready to paste.</span></div>
+      <div class="hstep"><span class="num">2</span><span class="t">Walmart shows the matching catalog items. Press <b>Add offer</b> on each — the cheat sheet below has the SKU, price, and qty to fill in.</span></div>
+      <div class="hstep"><span class="num">3</span><span class="t">Because the offer SKU is your <b>Linnworks SKU</b>, Linnworks links the new listing on its next channel scan — no mapping needed.</span></div>
+      <div class="cheat">
+        <h5>Cheat sheet — the 3 you picked</h5>
+        <div class="crow"><span class="sku">X135-64GB-SILVER</span><span class="v">$94.99 · 196</span><button class="copy">copy SKU</button></div>
+        <div class="crow"><span class="sku">X400-128GB-RED</span><span class="v">$149.99 · 5</span><button class="copy">copy SKU</button></div>
+        <div class="crow"><span class="sku">A15-64GB-BLK</span><span class="v">$119.99 · 89</span><button class="copy">copy SKU</button></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

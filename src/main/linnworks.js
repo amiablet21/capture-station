@@ -216,6 +216,16 @@ class LinnworksClient {
     });
   }
 
+  // Fill the barcode (GTIN/UPC) field on an item — same endpoint the SKU
+  // rename uses; the id survives, only the field changes.
+  async setBarcode(stockItemId, barcode) {
+    await this.call('Inventory/UpdateInventoryItemField', {
+      inventoryItemId: stockItemId,
+      fieldName: 'BarcodeNumber',
+      fieldValue: String(barcode).trim(),
+    });
+  }
+
   // Un-park AND unlock in one go: the PARKED chip covers both states (the
   // router's refusal string does not say which one it hit).
   // ChangeOrderTag with tag:null clears the parked tag; LockOrder false unlocks.
