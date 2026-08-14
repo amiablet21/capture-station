@@ -158,7 +158,7 @@ async function loadCatalog(q) {
       const t10 = (p.prices.find(t => t.fromQty >= 10) || {}).unitPrice;
       return '<tr><td><input type="checkbox" data-wmck="' + p.id + '"' + (WMSEL.has(p.id) ? ' checked' : '') + ' /></td>'
         + '<td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
-        + '<td class="r mono">' + p.moq + '</td>'
+        + '<td class="r">' + (p.moq > 1 ? '<span class="chip c-low" title="Minimum order quantity — HUBX rejects lines below this">MOQ ' + p.moq + '</span>' : '<span class="mono" style="color:var(--faint)">1</span>') + '</td>'
         + '<td class="r">' + chip(p.availability) + '</td>'
         + '<td class="r mono">$' + p.unitPrice.toFixed(2) + '</td>'
         + '<td class="r mono">' + (t10 ? '$' + t10.toFixed(2) : '—') + '</td>'
