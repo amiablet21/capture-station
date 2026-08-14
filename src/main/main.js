@@ -2229,6 +2229,38 @@ function registerIpc() {
     }
   }
 
+  // Public catalog title lookup: an eBay search resolves a UPC (or a model
+  // query) to the product's full marketing title — independent of the
+  // seller's own listings. First real result tile wins.
+  ipcMain.handle('listing:titleLookup', async (_e, { upc, query }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const q = String(upc || '').trim() || String(query || '').trim();
+    if (!q) return { ok: false, error: 'No UPC on the item and nothing to search with.' };
+    const w = new BrowserWindow({
+      show: false, width: 1100, height: 900,
+      webPreferences: { partition: PANE_PARTITION, sandbox: true },
+    });
+    try {
+      await w.loadURL(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}`);
+      await new Promise(r => setTimeout(r, 3000)); // result tiles settle
+      const title = await w.webContents.executeJavaScript(`(() => {
+        const bad = /^(shop on ebay|results matching|tell us what)/i;
+        for (const el of document.querySelectorAll('.s-item__title, .s-card__title')) {
+          const t = el.innerText.replace(/^New listing\\s*/i, '').trim();
+          if (t && !bad.test(t) && t.length > 15) return t;
+        }
+        return '';
+      })()`, true);
+      if (!title) return { ok: false, error: 'No catalog match for that search.' };
+      return { ok: true, title };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      w.destroy();
+    }
+  });
+
   // Copy the item specifics off the seller's own LIVE listing of the base
   // model: base SKU -> eBay link record (channelRefId = the item number) ->
   // public listing page -> "About this item" table. The renderer caches the

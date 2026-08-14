@@ -5729,6 +5729,17 @@ async function ebSelect(sku, scratch) {
     ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
     ebCur.specs = ebManualSpecs(p);
     ebCur.err = (res && res.error) || "no listing found";
+    // public catalog rescue: the item's UPC resolves to a real marketing
+    // title even when we have no live listing of the model anywhere
+    const inv = recvBySku && recvBySku.get(String(sku).toLowerCase());
+    const upc = (inv && inv.barcode) || "";
+    api.titleLookup(upc, `${p.model} ${p.storage} ${p.color}`.trim()).then(lk => {
+      if (!lk || !lk.ok || !lk.title || !ebCur || ebCur.sku !== sku || ebCur.src !== "manual") return;
+      ebCur.title = ebTitleFor(lk.title, ebCur.cond);
+      ebCur.err = "";
+      ebCur.src = "catalog";
+      renderEbayForm();
+    }).catch(() => { /* the manual title stands */ });
   }
   renderEbayForm();
 }
@@ -6496,6 +6507,49 @@ function tmAutoTitle(cur) {
   if (learned) return tmFillTitle(learned, ctx);
   return tmFillTitle((tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color} {type} - Brand New Sealed", ctx);
 }
+// a marketing title from anywhere (his live eBay listing, a typed one)
+// becomes a model template: storage numbers and color words turn into tokens
+function tmTemplateFromTitle(title) {
+  let t = String(title || "")
+    .replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "")
+    .replace(/\b\d+\s?(GB|TB)\b/ig, "{storage}")
+    .replace(/\b(black|jet ?black|white|red|orange|yellow|green|blue|gray|grey|silver|navy|graphite|gold|pink|violet|purple|mint|beige|cream|titanium|shadow)\b/ig, "{color}");
+  return t.replace(/\{storage\}([\s,/]*\{storage\})+/g, "{storage}")
+    .replace(/\{color\}([\s,/]*\{color\})+/g, "{color}")
+    .replace(/\s+/g, " ").trim();
+}
+
+// no learned title yet: borrow the model's title from his live eBay listing
+// (the same card the eBay lister copies) — fetched once, remembered for good
+async function tmFetchTitle(cur) {
+  const p = ebParseSku(cur.sku);
+  if (!p.model) return;
+  const cfg2 = await ebLoadCfg();
+  let card = (cfg2.ebayModelCards || {})[p.model];
+  if (!card) {
+    const res = await api.ebaySpecs(p.base).catch(() => null);
+    if (res && res.ok && res.title) {
+      card = { title: res.title, item: res.itemId, categoryId: res.categoryId, price: res.price, specs: res.specs };
+      ebCfg.ebayModelCards = { ...(ebCfg.ebayModelCards || {}), [p.model]: card };
+      api.setConfig({ ebayModelCards: ebCfg.ebayModelCards }).catch(() => {});
+    }
+  }
+  if (!card || !card.title) {
+    // no listing of ours anywhere — ask the public catalog by UPC (or by a
+    // model query when the item carries no barcode)
+    const lk = await api.titleLookup(cur.barcode || "", `${cur.brand} ${p.model} ${p.storage}`.trim()).catch(() => null);
+    if (lk && lk.ok && lk.title) card = { title: lk.title };
+  }
+  if (!card || !card.title || tmCur !== cur) return;
+  const tpl = tmTemplateFromTitle(card.title);
+  tmState.titles = { ...(tmState.titles || {}), [String(p.model).toUpperCase()]: tpl };
+  api.temuTitles(p.model, tpl).catch(() => {});
+  if (cur.titleAuto) {
+    cur.title = tmAutoTitle(cur);
+    renderTmForm();
+  }
+}
+
 // a typed title teaches the model: the storage and color words become tokens
 // so every sibling color/size fills the same title for itself
 function tmLearnTitle(cur, title) {
@@ -6598,6 +6652,9 @@ function tmSelect(sku, fresh) {
   tmCur.titleAuto = true; // regenerates while untouched; a typed title wins
   renderTmQueue();
   renderTmForm();
+  // no saved title for this model yet: borrow it from his live eBay listing
+  const modelKey = String(ebParseSku(sku).model || "").toUpperCase();
+  if (modelKey && !(tmState.titles || {})[modelKey] && !tmCur.scratch) tmFetchTitle(tmCur);
 }
 
 function tmRows() { // upload-sheet rows: primary first, then included siblings
@@ -6687,8 +6744,40 @@ function renderTmForm() {
   if (has && (!tmCur.base || !tmCur.list)) missing.push("base + list price required");
   if (has && !($("tmWt").value && $("tmLen").value && $("tmWid").value && $("tmHei").value)) missing.push("package weight + size required");
   $("tmExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
+  $("tmSavedNote").textContent = has && tmCur.sku ? "draft saved" : "";
   $("tmExport").disabled = !has;
+  tmHistPush(); // every rendered state is one undo step
   tmSaveDraft();
+}
+
+/* ----- undo / redo across the Temu form, mirroring the eBay lister ----- */
+let tmHist = [];
+let tmHistIdx = -1;
+let tmHistNav = false;
+function tmHistBtns() {
+  $("tmUndo").disabled = tmHistIdx <= 0;
+  $("tmRedo").disabled = tmHistIdx >= tmHist.length - 1;
+}
+function tmHistPush() {
+  if (!tmCur || tmHistNav) { tmHistBtns(); return; }
+  const snap = JSON.stringify(tmCur);
+  if (tmHist[tmHistIdx] === snap) { tmHistBtns(); return; }
+  tmHist = tmHist.slice(0, tmHistIdx + 1);
+  tmHist.push(snap);
+  tmHistIdx++;
+  tmHistBtns();
+}
+function tmHistGo(delta) {
+  const next = tmHistIdx + delta;
+  if (next < 0 || next >= tmHist.length) return;
+  tmHistIdx = next;
+  tmHistNav = true;
+  tmCur = JSON.parse(tmHist[next]);
+  renderTmQueue();
+  renderTmForm();
+  tmHistNav = false;
+  tmSaveDraft();
+  tmHistBtns();
 }
 
 function renderTmSheet() {
@@ -6742,11 +6831,20 @@ $("tmDiscard").addEventListener("click", () => {
   else { tmCur = null; renderTmQueue(); renderTmForm(); }
 });
 document.querySelectorAll("[data-tmcat]").forEach(btn => btn.addEventListener("click", () => {
-  if (!tmCur) return;
+  if (!tmCur) { toast("Pick a SKU from the queue first, or press New listing."); return; }
   tmCur.cat = btn.dataset.tmcat;
   if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur);
   renderTmForm();
 }));
+$("tmUndo").addEventListener("click", () => tmHistGo(-1));
+$("tmRedo").addEventListener("click", () => tmHistGo(1));
+document.addEventListener("keydown", (e) => {
+  if (activePage !== "temu" || anyDialogOpen()) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return; // native text undo wins
+  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); tmHistGo(-1); }
+  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); tmHistGo(1); }
+});
 ["tmTitle", "tmBrand", "tmOrigin", "tmBase", "tmList", "tmQty"].forEach(id => $(id).addEventListener("change", () => {
   if (!tmCur) return;
   const typed = $("tmTitle").value.trim();

@@ -41,6 +41,7 @@
 
   /* muted pastel badges */
   --badge-blue-bg: #E1F3FE;   --badge-blue-text: #1F6C9F;
+  --badge-purple-bg: #F1E9F8; --badge-purple-text: #6A2E9E;
   --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
   --badge-red-bg: #FDEBEC;    --badge-red-text: #9F2F2D;
   --badge-green-bg: #EDF3EC;  --badge-green-text: #346538;
@@ -3296,7 +3297,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-qrow .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
 .ebay-qrow .sub { font-size: 10.5px; color: var(--faint); display: flex; gap: 8px; align-items: center; }
 .ebay-qcond { font-size: 9px; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; }
-.ebay-qcond.c-open { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ebay-qcond.c-open { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
 .ebay-qcond.c-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 .ebay-qcond.c-scrap { background: var(--neg-bg); color: var(--neg-text); }
 .ebay-qempty { padding: 14px 12px; font-size: 11.5px; color: var(--faint); }
@@ -3310,7 +3311,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ebay-fhint { font-size: 9.5px; color: var(--faint); margin-top: 3px; line-height: 1.45; }
 .ebay-condrow { display: flex; gap: 6px; }
 .ebay-condbtn { flex: 1; font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 7px 4px; cursor: pointer; color: var(--muted); font-family: inherit; }
-.ebay-condbtn.is-on[data-cond="openbox"] { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; }
+/* condition colors mirror the description blocks: open box purple, used
+   yellow, parts red, new green (owner 2026-08-14) */
+.ebay-condbtn.is-on[data-cond="openbox"] { background: var(--badge-purple-bg); color: var(--badge-purple-text); border-color: transparent; }
 .ebay-condbtn.is-on[data-cond="used"] { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; }
 .ebay-condbtn.is-on[data-cond="scrap"] { background: var(--neg-bg); color: var(--neg-text); border-color: transparent; }
 .ebay-specgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -3609,7 +3612,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
 /* one Listings tab: marketplace pills switch between the lister pages */
-.lst-switch { display: flex; gap: 6px; justify-content: center; padding: 12px 0 0; }
+.lst-switch { display: flex; gap: 10px; justify-content: center; padding: 14px 0 16px; }
 .lst-pill { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 16px; background: var(--surface); cursor: pointer; }
 .lst-pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-soft-text); }
 .lst-pill.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }

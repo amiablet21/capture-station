@@ -275,8 +275,10 @@
       <div class="ebay-panel ebay-form">
         <div class="ebay-phead">Listing
           <span class="eb-right">
+            <button id="tmUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
+            <button id="tmRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
             <button id="tmDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
-            <button id="tmGear" class="ebay-addbtn eb-ml0" title="Temu template file and export defaults">⚙</button>
+            <button id="tmGear" class="ebay-addbtn eb-ml0" title="Temu template file, title template, export defaults">⚙</button>
           </span>
         </div>
         <div class="ebay-frows">
@@ -341,6 +343,7 @@
         <div class="ebay-factions">
           <button id="tmExport" class="btn btn-primary">Export Temu workbook</button>
           <button id="tmUploadPage" class="ebay-addbtn" title="Seller Central → Add Products via Upload — where the exported file goes">Open Temu upload page</button>
+          <span id="tmSavedNote" class="ebay-fhint" title="Every change saves into this SKU's draft on its own — come back any time"></span>
           <span id="tmExportNote" class="ebay-fhint"></span>
         </div>
       </div>
