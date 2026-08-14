@@ -340,8 +340,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       0;`);
     await exec(`$('rvSave').click()`);
     // commit -> close is async and occasionally slow under load: poll up to
-    // 3s instead of a fixed sleep (flaked at 300ms and again at 700ms)
-    for (let w = 0; w < 15; w++) {
+    // 8s instead of a fixed sleep (flaked at 300ms, 700ms, and at 3s while
+    // an installer build ran beside the suite 2026-08-14)
+    for (let w = 0; w < 40; w++) {
       await sleep(200);
       if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
     }
