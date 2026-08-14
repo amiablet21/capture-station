@@ -2566,8 +2566,14 @@ function registerIpc() {
   // and the per-channel missing sets — built from the item-level LINK
   // RECORDS, the only truthful source (the channel scan feed's LinkedItemId
   // is empty even on linked rows, verified live 2026-08-08).
+  let unlistedScanRunning = null; // in-flight scan: boot timer + Refresh never race
   async function runUnlistedScan(cfg) {
     if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) return unlistedCache;
+    if (unlistedScanRunning) return unlistedScanRunning;
+    unlistedScanRunning = runUnlistedScanBody(cfg).finally(() => { unlistedScanRunning = null; });
+    return unlistedScanRunning;
+  }
+  async function runUnlistedScanBody(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
     const ignore = new Set((cfg.unlistedIgnore || []).map(s => String(s).toUpperCase()));
@@ -2629,11 +2635,24 @@ function registerIpc() {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
-      // Refresh must see SKUs created a minute ago: drop the hour-long cache
-      if (force) unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       // cold boot: last session's scan answers INSTANTLY while a fresh scan
       // runs behind it ('unlisted:refreshed' swaps the cards when it lands)
       if (!unlistedCache.detail) loadUnlistedDisk();
+      // Refresh must see SKUs created a minute ago: a fresh scan starts NOW
+      // no matter how young the cache is (the disk reload above used to
+      // resurrect the old timestamp and quietly skip the rescan). The old
+      // view still answers this call; 'unlisted:refreshed' swaps it after.
+      if (force) {
+        const prev = unlistedCache;
+        unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+        const scan = runUnlistedScan(cfg);
+        if (prev.detail) {
+          scan.catch(() => { if (!unlistedCache.detail) unlistedCache = prev; });
+          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], stale: true };
+        }
+        const c = await scan;
+        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+      }
       if (unlistedCache.detail) {
         const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
         if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
