@@ -2057,26 +2057,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   font-weight: 600;
 }
 
-/* pages swap with a quick fade (animation option B) */
+/* pages swap with a quick fade (animation option B); a spinner veil on
+   landings was tried and REMOVED same day (owner: "i dont like it") */
 .page-fadein { animation: pageFade 180ms var(--ease); }
 @keyframes pageFade { from { opacity: 0; } }
-
-/* landing veil: switching is instant, and instead of a frozen stale page the
-   destination wears the spinner until its fresh render is in */
-#rowsRow, #stockPage, #returnsPage, #ebayPage, #temuPage { position: relative; }
-.page-veil {
-  position: absolute;
-  inset: 0;
-  background: rgba(247, 246, 243, 0.78);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-  opacity: 1;
-  transition: opacity 160ms var(--ease);
-  pointer-events: none;
-}
-.page-veil.is-done { opacity: 0; }
 
 /* stock page */
 

@@ -1116,26 +1116,6 @@ window.addEventListener('resize', positionTabInd);
 
 const PAGE_SECTIONS = { capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
-
-// the landing page wears a spinner veil until its fresh render is in — the
-// switch itself never waits (owner: "quick switch ... add a loading screen")
-function pageVeilShow(page) {
-  const host = $(PAGE_SECTIONS[page] || 'rowsRow');
-  if (!host) return;
-  let v = host.querySelector(':scope > .page-veil');
-  if (!v) {
-    v = document.createElement('div');
-    v.className = 'page-veil';
-    v.innerHTML = '<span class="spinner" aria-label="Loading"></span>';
-    host.appendChild(v);
-  }
-  v.classList.remove('is-done');
-}
-function pageVeilHide(page) {
-  const host = $(PAGE_SECTIONS[page] || 'rowsRow');
-  const v = host && host.querySelector(':scope > .page-veil');
-  if (v) requestAnimationFrame(() => v.classList.add('is-done'));
-}
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
   if (!el) return;
@@ -1165,10 +1145,9 @@ function showPage(page) {
   // heavy entry work — table renders, data refreshes — waits until the user
   // SETTLES here for a beat, so flying across tabs never stacks re-renders
   // (owner hit the lag rapid-clicking, 2026-08-14)
-  if (switching) pageVeilShow(page);
   clearTimeout(showPageSettle);
   showPageSettle = setTimeout(() => {
-    if (activePage !== page) { pageVeilHide(page); return; } // flew past this tab
+    if (activePage !== page) return; // flew past this tab
     if (page === 'ebay') {
       enterEbay();
     } else if (page === 'temu') {
@@ -1187,7 +1166,6 @@ function showPage(page) {
       focusScan();
     }
     if (state) render(); // footer buttons depend on the active page
-    pageVeilHide(page); // fresh content is painted — the veil lifts
   }, switching ? 120 : 0);
   if (bReady) applyBrowserPane(); // the pane only exists on the Capture page
   positionTabInd();
