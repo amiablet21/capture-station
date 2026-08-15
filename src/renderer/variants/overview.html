@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview tab — dashboard mockup (replaces the Insights-tab idea; pending approval)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg: #C0392B; --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --amber: #C97B12; --amber-soft: #FBF3DB; --amber-text: #956400;
+    --wm: #2E86D9; --tm: #C97B12; --eb: #047857;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 14px 22px 26px; }
+  .head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .head .d { font-size: 11.5px; color: var(--faint); }
+  .ranges { margin-left: auto; display: flex; gap: 6px; }
+  .rchip { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 11px; background: #fff; cursor: pointer; font-family: inherit; }
+  .rchip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+
+  .cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+  .card { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 10px; overflow: hidden; transition: transform .15s ease, box-shadow .15s ease; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(47,52,55,.08); }
+  .card h5 { margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); display: flex; align-items: center; gap: 6px; }
+  .dotc { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .card .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; line-height: 1.1; }
+  .card .delta { font-size: 10.5px; color: var(--muted); }
+  .delta b { font-family: var(--mono); font-weight: 700; }
+  .up { color: var(--accent-deep); }
+  .down { color: var(--neg-text); }
+  .card svg { position: absolute; right: 10px; bottom: 8px; }
+  .card.total { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .card.total h5 { color: #A7E3CD; }
+  .card.total .big { color: #fff; }
+  .card.total .delta { color: #CDEEDF; }
+
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .panel h4 { margin: 0 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
+  .panel h4 .lg { margin-left: auto; display: flex; gap: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+  .lg i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; margin-right: 4px; }
+  .chart { display: flex; align-items: flex-end; gap: 7px; height: 150px; padding-top: 14px; }
+  .bcol { flex: 1; display: flex; flex-direction: column-reverse; gap: 2px; position: relative; }
+  .bseg { border-radius: 2px; min-height: 2px; }
+  .bcol .tot { position: absolute; top: -15px; width: 100%; text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .bcol.today .tot { color: var(--accent-deep); font-weight: 700; }
+  .xlabs { display: flex; gap: 7px; margin-top: 6px; }
+  .xlabs span { flex: 1; text-align: center; font-size: 9px; color: var(--faint); font-family: var(--mono); }
+
+  .att { display: flex; flex-direction: column; gap: 0; }
+  .arow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 9px 2px; border-bottom: 1px solid var(--border-soft); cursor: pointer; border-radius: 6px; }
+  .arow:hover { background: var(--surface-2); }
+  .arow:last-child { border-bottom: none; }
+  .arow .t { font-size: 12px; font-weight: 600; }
+  .arow .s { font-size: 10.5px; color: var(--faint); grid-column: 1; }
+  .arow .v { font-family: var(--mono); font-size: 15px; font-weight: 700; grid-row: 1 / span 2; align-self: center; }
+  .v.g { color: var(--accent-deep); } .v.r { color: var(--neg-text); } .v.a { color: var(--amber-text); } .v.d { color: var(--muted); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-2); }
+  .mono { font-family: var(--mono); font-size: 11px; }
+  .sku { font-weight: 600; color: #1F6C9F; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .pill.r { background: var(--neg-soft); color: var(--neg-text); }
+  .guard { margin-top: 10px; font-size: 11px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 8px; padding: 7px 12px; }
+</style>
+</head>
+<body>
+<!-- OVERVIEW dashboard mockup (owner 2026-08-15: Insights becomes an
+     "Overview" tab placed BEFORE Capture; top = orders dropped per
+     marketplace, stats below, "like a real dashboard"). PENDING APPROVAL.
+     Chart palette validated: Walmart #2E86D9 / eBay #047857 / Temu #C97B12. -->
+<div class="topbar"><div class="tabs">
+  <button class="tab on">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Returns</button><button class="tab">Listings</button>
+</div></div>
+<div class="wrap">
+  <div class="head"><h1>Overview</h1><span class="d">Friday, August 15 · updated 2 min ago</span>
+    <span class="ranges"><button class="rchip on">Today</button><button class="rchip">7 days</button><button class="rchip">30 days</button></span>
+  </div>
+
+  <div class="cards">
+    <div class="card total"><h5>Orders today</h5><div class="big">47</div><div class="delta">▲ <b>+9</b> vs yesterday</div>
+      <svg width="58" height="22"><polyline points="0,18 10,15 20,16 30,11 40,12 50,6 58,3" fill="none" stroke="#A7E3CD" stroke-width="1.5"/></svg></div>
+    <div class="card"><h5><span class="dotc" style="background:#2E86D9"></span>Walmart</h5><div class="big">31</div><div class="delta up">▲ <b>+7</b> · 66% of today</div>
+      <svg width="58" height="22"><polyline points="0,17 10,14 20,15 30,10 40,11 50,5 58,3" fill="none" stroke="#2E86D9" stroke-width="1.5"/></svg></div>
+    <div class="card"><h5><span class="dotc" style="background:#047857"></span>eBay</h5><div class="big">11</div><div class="delta up">▲ <b>+3</b> · 23% of today</div>
+      <svg width="58" height="22"><polyline points="0,16 10,17 20,13 30,14 40,10 50,9 58,6" fill="none" stroke="#047857" stroke-width="1.5"/></svg></div>
+    <div class="card"><h5><span class="dotc" style="background:#C97B12"></span>Temu</h5><div class="big">5</div><div class="delta down">▼ <b>−1</b> · 11% of today</div>
+      <svg width="58" height="22"><polyline points="0,10 10,12 20,9 30,13 40,12 50,15 58,13" fill="none" stroke="#C97B12" stroke-width="1.5"/></svg></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h4>Orders · last 14 days
+        <span class="lg"><span><i style="background:#2E86D9"></i>Walmart</span><span><i style="background:#047857"></i>eBay</span><span><i style="background:#C97B12"></i>Temu</span></span>
+      </h4>
+      <div class="chart" id="chart"></div>
+      <div class="xlabs" id="xlabs"></div>
+    </div>
+    <div class="panel">
+      <h4>Needs attention</h4>
+      <div class="att">
+        <div class="arow"><span class="t">Send to WFS</span><span class="v g">520</span><span class="s">6 fast sellers outrunning your shelf</span></div>
+        <div class="arow"><span class="t">Missed sales</span><span class="v r">$10,010</span><span class="s">4 SKUs at zero that were selling</span></div>
+        <div class="arow"><span class="t">Buy soon</span><span class="v a">9</span><span class="s">run out inside lead time</span></div>
+        <div class="arow"><span class="t">Dead stock</span><span class="v d">$101k</span><span class="s">11 SKUs idle for 60+ days</span></div>
+      </div>
+      <div class="guard">WFS guard: all Walmart-fulfilled listings protected</div>
+    </div>
+  </div>
+
+  <div class="duo">
+    <div class="panel">
+      <h4>Fast sellers — send to WFS</h4>
+      <table>
+        <tr><th>SKU</th><th class="rr">Sold/wk</th><th class="rr">Send</th></tr>
+        <tr><td class="mono sku">SM-X133-64GB-GREY</td><td class="rr mono">38</td><td class="rr"><span class="pill">+ 120</span></td></tr>
+        <tr><td class="mono sku">TABA9+64GB</td><td class="rr mono">31</td><td class="rr"><span class="pill">+ 124</span></td></tr>
+        <tr><td class="mono sku">X230-256GB-GRAY</td><td class="rr mono">24</td><td class="rr"><span class="pill">+ 96</span></td></tr>
+        <tr><td class="mono sku">X520-128GB-SILVER</td><td class="rr mono">19</td><td class="rr"><span class="pill">+ 76</span></td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h4>Missed sales</h4>
+      <table>
+        <tr><th>SKU</th><th class="rr">Zero since</th><th class="rr">Missed</th></tr>
+        <tr><td class="mono sku">X730-512GB-GRAY</td><td class="rr mono">Aug 06</td><td class="rr"><span class="pill r">$4,970</span></td></tr>
+        <tr><td class="mono sku">X620-128GB-SILVER</td><td class="rr mono">Aug 09</td><td class="rr"><span class="pill r">$3,190</span></td></tr>
+        <tr><td class="mono sku">X400-256GB-SILVER</td><td class="rr mono">Aug 02</td><td class="rr"><span class="pill r">$1,610</span></td></tr>
+        <tr><td class="mono sku">BUDS-3-WHITE</td><td class="rr mono">Aug 07</td><td class="rr"><span class="pill r">$240</span></td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+const DAYS = [
+  ['Aug 2',[18,7,3]],['Aug 3',[22,9,4]],['Aug 4',[19,6,5]],['Aug 5',[25,8,3]],
+  ['Aug 6',[21,10,4]],['Aug 7',[27,9,6]],['Aug 8',[24,12,5]],['Aug 9',[29,8,4]],
+  ['Aug 10',[26,11,6]],['Aug 11',[31,9,5]],['Aug 12',[28,13,4]],['Aug 13',[33,10,6]],
+  ['Aug 14',[30,12,5]],['Today',[31,11,5]],
+];
+const COLORS = ['#2E86D9','#047857','#C97B12'];
+const maxTot = Math.max(...DAYS.map(d => d[1][0]+d[1][1]+d[1][2]));
+const H = 132;
+document.getElementById('chart').innerHTML = DAYS.map(([lab,segs],di) => {
+  const tot = segs[0]+segs[1]+segs[2];
+  return '<div class="bcol'+(di===DAYS.length-1?' today':'')+'" title="'+lab+': Walmart '+segs[0]+' · eBay '+segs[1]+' · Temu '+segs[2]+'">'
+    + '<span class="tot">'+tot+'</span>'
+    + segs.map((s,i)=>'<span class="bseg" style="height:'+Math.max(2,Math.round(s/maxTot*H))+'px;background:'+COLORS[i]+'"></span>').join('')
+    + '</div>';
+}).join('');
+document.getElementById('xlabs').innerHTML = DAYS.map(([lab],i)=>'<span>'+(i%2===1||lab==='Today'?lab.replace('Aug ',''):'')+'</span>').join('');
+</script>
+</body>
+</html>
