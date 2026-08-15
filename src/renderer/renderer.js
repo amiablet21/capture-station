@@ -1139,6 +1139,7 @@ function showPage(page) {
       const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
       $('stockList').style.width = savedW ? `${savedW}px` : '';
       $('stockSearch').value = '';
+      $('stockSearchClear').hidden = true;
       loadStockViews();
       loadStock().then(() => { if (activePage === 'stock') $('stockSearch').focus(); });
     } else if (page === 'returns') {
@@ -1857,7 +1858,9 @@ function renderStockChips() {
   const lowCount = stockLowCount();
   box.hidden = views.length === 0 && !wfsLoc && !lowCount && !stockLowActive
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
-  box.innerHTML = [
+  // the view chips share one main-menu style tray; Unlisted sits outside it
+  // as the amber alert pill (it flags work, it isn't a view you live in)
+  box.innerHTML = '<div class="stock-tray">' + [
     `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
     ...(views.length ? [
       `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
@@ -1872,12 +1875,12 @@ function renderStockChips() {
     ...(!state || state.captureOnly ? [] : [
       `<button class="view-chip ${stockDsActive ? 'is-active' : ''}" data-view="ds" title="The dropship program: pads, sales pace, and BUY signals">DropShip${dsPads && Object.keys(dsPads).length ? ` · ${Object.keys(dsPads).length}` : ''}</button>`,
     ]),
+  ].join('') + '</div>'
     // only exists while there is something to fix — in-stock SKUs no
     // marketplace can currently sell
-    ...(unlistedDetail && unlistedDetail.length ? [
-      `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`,
-    ] : []),
-  ].join('');
+    + (unlistedDetail && unlistedDetail.length
+      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`
+      : '');
   renderStockGaps();
 }
 
@@ -2475,7 +2478,17 @@ $('stockRefresh').addEventListener('click', () => {
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
-$('stockSearch').addEventListener('input', renderStock);
+$('stockSearch').addEventListener('input', () => {
+  $('stockSearchClear').hidden = !$('stockSearch').value;
+  renderStock();
+});
+// the same ✕ the capture find bar has: clears and refilters in place
+$('stockSearchClear').addEventListener('click', () => {
+  $('stockSearch').value = '';
+  $('stockSearchClear').hidden = true;
+  renderStock();
+  $('stockSearch').focus();
+});
 // whole-sheet resize: drag the handle on the right edge of the table
 let sheetDrag = null;
 
@@ -3635,6 +3648,7 @@ function showUnlistedFor(sku) {
   stockDsActive = false;
   stockActiveView = null;
   $('stockSearch').value = sku || '';
+  $('stockSearchClear').hidden = !sku;
   showPage('stock');
   renderStockChips();
   renderStock();

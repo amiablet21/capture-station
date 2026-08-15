@@ -112,7 +112,12 @@
   <!-- Stock page: live warehouse inventory with inline level editing -->
   <section id="stockPage" class="stock-page" hidden>
     <div class="stock-toolbar">
-      <input id="stockSearch" type="text" class="input" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
+      <!-- same pill as the capture page's find bar (owner pick 2026-08-15) -->
+      <div class="search-field stock-search">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+        <input id="stockSearch" class="search-input" type="text" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
+        <button id="stockSearchClear" class="search-clear" title="Clear" aria-label="Clear search" hidden>✕</button>
+      </div>
       <div id="stockChips" class="stock-chips" hidden></div>
       <div class="stock-actions">
         <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden

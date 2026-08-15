@@ -2071,7 +2071,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   max-width: 100%;
 }
 
-.stock-toolbar .input { width: 210px; }
+.stock-toolbar .stock-search { flex: 0 1 280px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -2101,6 +2101,20 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .view-chip.is-active.tint-yellow { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 .view-chip.is-active.tint-red { background: var(--badge-red-bg); color: var(--badge-red-text); }
 .view-chip.is-active.tint-green { background: var(--badge-green-bg); color: var(--badge-green-text); }
+
+/* the view chips ride in a main-menu style tray (owner pick 2026-08-15:
+   "I like how the third one looks"): gray tray, white active pill, instant
+   switch. Active condition chips keep their tint as a dot + tinted text.
+   The Unlisted chip stays OUTSIDE the tray in its amber pill. */
+.stock-tray { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; }
+.stock-tray .view-chip { font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 8px; border: none; background: none; color: var(--muted); transition: color 160ms var(--ease); }
+.stock-tray .view-chip:hover { color: var(--text); }
+.stock-tray .view-chip.is-active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+.stock-tray .view-chip.is-active[class*="tint-"]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 6px; background: currentColor; }
+.stock-tray .view-chip.is-active.tint-blue { color: var(--badge-blue-text); }
+.stock-tray .view-chip.is-active.tint-yellow { color: var(--badge-yellow-text); }
+.stock-tray .view-chip.is-active.tint-red { color: var(--badge-red-text); }
+.stock-tray .view-chip.is-active.tint-green { color: var(--badge-green-text); }
 
 /* right-aligned action group, separated from search + chips by a hairline */
 .stock-actions {
