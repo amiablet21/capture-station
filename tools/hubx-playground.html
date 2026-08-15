@@ -45,7 +45,16 @@
   button.primary:hover { filter: brightness(1.05); color: #fff; }
   .row { display: flex; gap: 8px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
   .lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
-  .ordercard { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); }
+  .oform { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 12px; padding: 12px 14px; }
+  .oform .full { grid-column: 1 / -1; }
+  .ofield { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .ofield input, .ofield select { width: 100%; }
+  .ofoot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .ofoot .cost { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .ofoot .cost b { color: var(--text); }
+  .ordercard { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-soft); }
+  .ordercard .rail { width: 3px; border-radius: 2px; flex: none; align-self: stretch; }
+  .ordercard .obody { flex: 1; min-width: 0; }
   .ordercard .top { display: flex; gap: 10px; align-items: center; }
   .ordercard .doc { font-family: var(--mono); font-weight: 700; font-size: 12px; }
   .ordercard .meta { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
@@ -91,12 +100,18 @@
 <div>
   <div class="panel">
     <div class="phead">Place a dropship order — POST /api/orders</div>
-    <div class="row"><span class="lbl">Item</span><select id="oItem" style="flex:1"></select></div>
-    <div class="row"><span class="lbl">Qty</span><input id="oQty" value="1" style="width:60px" />
-      <span class="lbl">Your PO#</span><input id="oPo" style="width:150px" />
-      <span class="lbl">Your SKU</span><input id="oSku" style="width:170px" /></div>
-    <div class="row"><span class="lbl">Ship to</span><input id="oName" value="John Buyer" style="width:130px" /><input id="oAddr" value="482 Cedar Ave" style="flex:1" /><input id="oCity" value="Austin" style="width:90px" /><input id="oState" value="TX" style="width:44px" /><input id="oZip" value="78703" style="width:70px" /></div>
-    <div class="row"><button id="place" class="primary">Place order</button><span id="oNote" class="sub" style="margin:0"></span></div>
+    <div class="oform">
+      <div class="ofield full"><span class="lbl">Item</span><select id="oItem"></select></div>
+      <div class="ofield"><span class="lbl">Qty</span><input id="oQty" value="1" /></div>
+      <div class="ofield"><span class="lbl">Your PO#</span><input id="oPo" /></div>
+      <div class="ofield"><span class="lbl">Your SKU</span><input id="oSku" /></div>
+      <div class="ofield full"><span class="lbl">Recipient</span><input id="oName" value="John Buyer" /></div>
+      <div class="ofield full"><span class="lbl">Address</span><input id="oAddr" value="482 Cedar Ave" /></div>
+      <div class="ofield"><span class="lbl">City</span><input id="oCity" value="Austin" /></div>
+      <div class="ofield"><span class="lbl">State</span><input id="oState" value="TX" /></div>
+      <div class="ofield"><span class="lbl">ZIP</span><input id="oZip" value="78703" /></div>
+    </div>
+    <div class="ofoot"><button id="place" class="primary">Place order</button><span id="oNote" class="sub" style="margin:0"></span><span id="oCost" class="cost"></span></div>
   </div>
 
   <div class="panel">
@@ -143,10 +158,19 @@ const PADMAP = [
 ];
 let CAT = [];
 
+const money = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function chip(av, moq) {
   if (av <= 0) return '<span class="chip c-out">out</span>';
   if (av <= 10) return '<span class="chip c-low">' + av + '</span>';
-  return '<span class="chip c-ok">' + av + '</span>';
+  return '<span class="chip c-ok">' + av.toLocaleString('en-US') + '</span>';
+}
+// the live "1 × $875.73 = $875.73" footer, tier-aware like the real order
+function updateCost() {
+  const p = CAT.find(x => x.id === $('oItem').value);
+  if (!p) { $('oCost').textContent = ''; return; }
+  const qty = Math.max(1, Number($('oQty').value) || 1);
+  const tier = [...p.prices].reverse().find(t => qty >= t.fromQty) || { unitPrice: p.unitPrice };
+  $('oCost').innerHTML = qty + ' × ' + money(tier.unitPrice) + ' = <b>' + money(qty * tier.unitPrice) + '</b>';
 }
 
 async function loadCatalog(q) {
@@ -160,13 +184,16 @@ async function loadCatalog(q) {
         + '<td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
         + '<td class="r">' + (p.moq > 1 ? '<span class="chip c-low" title="Minimum order quantity — HUBX rejects lines below this">MOQ ' + p.moq + '</span>' : '<span class="mono" style="color:var(--faint)">1</span>') + '</td>'
         + '<td class="r">' + chip(p.availability) + '</td>'
-        + '<td class="r mono">$' + p.unitPrice.toFixed(2) + '</td>'
-        + '<td class="r mono">' + (t10 ? '$' + t10.toFixed(2) : '—') + '</td>'
+        + '<td class="r mono">' + money(p.unitPrice) + '</td>'
+        + '<td class="r mono">' + (t10 ? money(t10) : '—') + '</td>'
         + '<td>' + p.exw + '</td><td class="r">' + p.leadTimeDays + 'd</td>'
         + '<td><button data-buy="' + p.id + '">order</button></td></tr>';
     }).join('');
   renderWmSheet();
-  $('oItem').innerHTML = CAT.map(p => '<option value="' + p.id + '">' + p.description.slice(0, 60) + ' — $' + p.unitPrice.toFixed(2) + ' (' + p.availability + ')</option>').join('');
+  const sel = $('oItem').value;
+  $('oItem').innerHTML = CAT.map(p => '<option value="' + p.id + '">' + p.description.slice(0, 60) + ' — ' + money(p.unitPrice) + ' (' + p.availability + ')</option>').join('');
+  if (sel && CAT.some(p => p.id === sel)) $('oItem').value = sel; // 10s refresh must not steal the picked item
+  updateCost();
   renderPads();
 }
 
@@ -193,20 +220,21 @@ async function loadOrders() {
     : rows.map(o => {
       const s = o.status;
       const cls = s === 'Open' ? 'c-open' : s === 'Processing' ? 'c-proc' : s === 'Canceled' ? 'c-cancel' : 'c-closed';
+      const rail = s === 'Open' ? 'var(--blue-text)' : s === 'Processing' ? 'var(--amber-text)' : s === 'Canceled' ? 'var(--neg-text)' : 'var(--border)';
       const d = o.orderDetails[0] || {};
       const ship = o.shipmentInformation;
-      return '<div class="ordercard"><div class="top">'
+      return '<div class="ordercard"><div class="rail" style="background:' + rail + '"></div><div class="obody"><div class="top">'
         + '<span class="doc">' + o.hubxDocumentNumber + '</span>'
         + '<span class="chip ' + cls + '">' + s + '</span>'
         + '<span style="margin-left:auto;font-size:10.5px;color:var(--faint)">PO ' + o.externalReference + '</span>'
         + (s === 'Open' ? '<button data-cancel="' + o.hubxDocumentNumber + '">cancel</button>' : '')
         + '</div><div class="meta">'
-        + d.quantity + ' × ' + (d.itemDescription || '') + ' @ $' + (d.price || 0).toFixed(2)
+        + d.quantity + ' × ' + (d.itemDescription || '') + ' @ ' + money(d.price || 0)
         + (d.buyerPartNumber ? ' · your SKU <span class="mono">' + d.buyerPartNumber + '</span>' : '')
         + '<br>→ ' + (o.recipientName || '') + ', ' + (o.shippingAddress || '')
         + (ship ? '<br><b>' + ship.carrier + ' ' + ship.trackingNumber + '</b> · ETA ' + ship.eta : '')
         + (d.serialNumbers && d.serialNumbers.length ? '<br><span class="serials">SN: ' + d.serialNumbers.join(', ') + '</span>' : '')
-        + '</div></div>';
+        + '</div></div></div>';
     }).join('');
 }
 
@@ -275,7 +303,10 @@ $('cat').addEventListener('click', e => {
   if (!b) return;
   $('oItem').value = b.dataset.buy;
   $('oPo').value = 'PO-' + String(Date.now()).slice(-8);
+  updateCost();
 });
+$('oItem').addEventListener('change', updateCost);
+$('oQty').addEventListener('input', updateCost);
 $('orders').addEventListener('click', async e => {
   const b = e.target.closest('[data-cancel]');
   if (!b) return;
