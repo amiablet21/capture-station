@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview — five dashboard treatments (pick one)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg: #C0392B; --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-text: #956400;
+    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
+    --ink: #101D16; --ink2: #16281F; --ink-line: rgba(255,255,255,.08);
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 9; flex-wrap: wrap; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 13px; background: #fff; cursor: pointer; font-family: inherit; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .stage { min-height: 560px; }
+  .mono { font-family: var(--mono); }
+  .up { color: var(--accent-deep); } .down { color: var(--neg-text); }
+  .sku { font-weight: 600; color: #1F6C9F; }
+  svg text { font-family: var(--mono); }
+
+  /* A · Ledger (Stripe school) */
+  .a-wrap { max-width: 1020px; margin: 0 auto; padding: 20px 22px; }
+  .a-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .a-head h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .a-head .d { font-size: 11px; color: var(--faint); }
+  .a-metrics { display: flex; gap: 34px; padding: 14px 0 6px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .a-m { cursor: default; }
+  .a-m h6 { margin: 0; font-size: 10.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .a-m .v { font-family: var(--mono); font-size: 21px; font-weight: 700; margin-top: 1px; }
+  .a-m .dl { font-size: 10.5px; }
+  .a-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 14px; }
+  .a-l h5 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .a-row { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; align-items: baseline; }
+  .a-row:last-child { border-bottom: none; }
+  .a-row .r { margin-left: auto; font-family: var(--mono); font-weight: 700; }
+
+  /* B · Commerce (Shopify school) */
+  .b-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 22px; }
+  .b-cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 10px; }
+  .b-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; }
+  .b-card h6 { margin: 0; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+  .b-card .v { font-family: var(--mono); font-size: 22px; font-weight: 700; margin: 2px 0; }
+  .b-chip { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 8px; font-family: var(--mono); }
+  .b-chip.up { background: var(--accent-soft); color: var(--accent-deep); }
+  .b-chip.down { background: var(--neg-soft); color: var(--neg-text); }
+  .b-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+  .b-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .b-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+  .b-ch { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+  .b-ch:last-child { border-bottom: none; }
+  .b-ch .nm { width: 64px; font-weight: 600; }
+  .b-ch .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .b-ch .bar i { display: block; height: 100%; border-radius: 4px; }
+  .b-ch .n { font-family: var(--mono); font-weight: 700; width: 30px; text-align: right; }
+  .b-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .b-tbl td { padding: 6px 4px; border-bottom: 1px solid var(--border-soft); }
+  .b-tbl tr:last-child td { border-bottom: none; }
+  .b-tbl .r { text-align: right; font-family: var(--mono); font-weight: 700; }
+
+  /* C · Terminal (Grafana school, dark) */
+  .c-wrap { background: var(--ink); padding: 18px 22px 24px; }
+  .c-in { max-width: 1100px; margin: 0 auto; }
+  .c-head { display: flex; align-items: center; gap: 10px; color: #7FA893; font-size: 11px; font-family: var(--mono); margin-bottom: 12px; }
+  .c-head b { color: #E8F3ED; font-size: 13px; font-family: var(--font); }
+  .c-live { width: 7px; height: 7px; border-radius: 999px; background: #2BB183; }
+  .c-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 8px; }
+  .c-cell { background: var(--ink2); border: 1px solid var(--ink-line); border-radius: 10px; padding: 10px 12px; }
+  .c-cell h6 { margin: 0; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #7FA893; }
+  .c-cell .v { font-family: var(--mono); font-size: 24px; font-weight: 700; color: #E8F3ED; margin-top: 2px; }
+  .c-cell .s { font-size: 10px; color: #7FA893; font-family: var(--mono); }
+  .c-panel { background: var(--ink2); border: 1px solid var(--ink-line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .c-panel h4 { margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #7FA893; display: flex; }
+  .c-panel h4 .lg { margin-left: auto; display: flex; gap: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 10px; color: #9DBFAE; }
+  .c-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .c-row { display: flex; font-family: var(--mono); font-size: 11px; color: #CFE5D9; padding: 5px 0; border-bottom: 1px solid var(--ink-line); }
+  .c-row:last-child { border-bottom: none; }
+  .c-row .r { margin-left: auto; font-weight: 700; }
+
+  /* D · Editorial */
+  .d-wrap { max-width: 860px; margin: 0 auto; padding: 26px 22px; }
+  .d-line { font-size: 25px; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; }
+  .d-line b { font-family: var(--mono); font-weight: 700; color: var(--accent-deep); }
+  .d-sub { font-size: 12px; color: var(--muted); margin: 6px 0 18px; }
+  .d-story { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 16px; }
+  .d-story p { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+  .d-story b { color: var(--text); font-weight: 600; }
+  .d-story .num { font-family: var(--mono); font-weight: 700; }
+
+  /* E · Mission control */
+  .e-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 22px; }
+  .e-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 10px; }
+  .e-tile { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; text-align: center; }
+  .e-tile h6 { margin: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+  .e-tile .v { font-family: var(--mono); font-size: 40px; font-weight: 700; line-height: 1.15; }
+  .e-tile .s { font-size: 11px; color: var(--muted); }
+  .e-tile.hero { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .e-tile.hero h6 { color: #A7E3CD; } .e-tile.hero .v { color: #fff; } .e-tile.hero .s { color: #CDEEDF; }
+  .e-panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .e-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; }
+  .e-panel h4 .lg { margin-left: auto; display: flex; gap: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 10.5px; color: var(--muted); }
+  .lgdot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; margin-right: 4px; }
+</style>
+</head>
+<body>
+<!-- Five dashboard treatments for the OVERVIEW tab (before Capture): orders
+     per marketplace on top, insight stats below, LINE charts per owner note.
+     Schools: A Stripe ledger · B Shopify commerce · C dark terminal ·
+     D editorial · E mission control. PENDING owner pick + go. -->
+<div class="switcher"><span class="lbl">Dashboard</span>
+  <button class="opt on" data-d="A">A · Ledger</button>
+  <button class="opt" data-d="B">B · Commerce</button>
+  <button class="opt" data-d="C">C · Terminal</button>
+  <button class="opt" data-d="D">D · Editorial</button>
+  <button class="opt" data-d="E">E · Mission control</button>
+</div>
+<div class="stage" id="stage"></div>
+<script>
+const DAYS = [
+  ['Aug 2',18,7,3],['Aug 3',22,9,4],['Aug 4',19,6,5],['Aug 5',25,8,3],
+  ['Aug 6',21,10,4],['Aug 7',27,9,6],['Aug 8',24,12,5],['Aug 9',29,8,4],
+  ['Aug 10',26,11,6],['Aug 11',31,9,5],['Aug 12',28,13,4],['Aug 13',33,10,6],
+  ['Aug 14',30,12,5],['Today',31,11,5],
+];
+const CH = [
+  { n: 'Walmart', c: '#2E86D9', cd: '#4D9EE3', dash: '' },
+  { n: 'eBay', c: '#047857', cd: '#2BB183', dash: '6 3' },
+  { n: 'Temu', c: '#C97B12', cd: '#D98F2B', dash: '2 3' },
+];
+const TOTALS = DAYS.map(d => d[1] + d[2] + d[3]);
+const FAST = [['SM-X133-64GB-GREY','38/wk','+ 120'],['TABA9+64GB','31/wk','+ 124'],['X230-256GB-GRAY','24/wk','+ 96'],['X520-128GB-SILVER','19/wk','+ 76']];
+const MISS = [['X730-512GB-GRAY','Aug 06','$4,970'],['X620-128GB-SILVER','Aug 09','$3,190'],['X400-256GB-SILVER','Aug 02','$1,610'],['BUDS-3-WHITE','Aug 07','$240']];
+
+// shared line-chart builder: y grid, series polylines, end dots + end labels
+function lineChart(o) {
+  const W = o.w || 640, H = o.h || 170, padL = 30, padR = 46, padT = 12, padB = 20;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const max = Math.ceil(Math.max(...o.series.flatMap(s => s.pts)) / 10) * 10;
+  const X = i => padL + (i / (DAYS.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  const grid = [0, .5, 1].map(f => {
+    const v = Math.round(max * f), y = Y(v);
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${o.gridC}" stroke-width="1"/>`
+      + `<text x="${padL - 6}" y="${y + 3}" font-size="9" fill="${o.mutC}" text-anchor="end">${v}</text>`;
+  }).join('');
+  const xl = DAYS.map((d, i) => (i % 2 === 1 || d[0] === 'Today')
+    ? `<text x="${X(i)}" y="${H - 6}" font-size="8.5" fill="${o.mutC}" text-anchor="middle">${d[0].replace('Aug ', '')}</text>` : '').join('');
+  const lines = o.series.map(s => {
+    const pts = s.pts.map((v, i) => `${X(i)},${Y(v)}`).join(' ');
+    const lastV = s.pts[s.pts.length - 1];
+    const area = o.fill && o.series.length === 1
+      ? `<polygon points="${padL},${Y(0)} ${pts} ${W - padR},${Y(0)}" fill="${s.c}" opacity="0.09"/>` : '';
+    return area
+      + `<polyline points="${pts}" fill="none" stroke="${s.c}" stroke-width="2" ${s.dash ? `stroke-dasharray="${s.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`
+      + s.pts.map((v, i) => `<circle cx="${X(i)}" cy="${Y(v)}" r="6" fill="transparent"><title>${DAYS[i][0]}: ${s.n} ${v}</title></circle>`).join('')
+      + `<circle cx="${X(s.pts.length - 1)}" cy="${Y(lastV)}" r="3.5" fill="${s.c}"/>`
+      + `<text x="${X(s.pts.length - 1) + 8}" y="${Y(lastV) + 3}" font-size="10" font-weight="700" fill="${s.c}">${s.lbl || lastV}</text>`;
+  }).join('');
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block">${grid}${xl}${lines}</svg>`;
+}
+const chSeries = (dark) => CH.map((c, ci) => ({ n: c.n, c: dark ? c.cd : c.c, dash: dark ? c.dash : '', pts: DAYS.map(d => d[1 + ci]) }));
+const totSeries = [{ n: 'Orders', c: '#047857', pts: TOTALS, lbl: TOTALS[TOTALS.length - 1] }];
+
+const spark = (pts, w, h, color) => {
+  const max = Math.max(...pts), min = Math.min(...pts);
+  const xy = pts.map((p, i) => `${(i / (pts.length - 1)) * w},${h - ((p - min) / (max - min || 1)) * (h - 2) - 1}`).join(' ');
+  return `<svg width="${w}" height="${h}"><polyline points="${xy}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+};
+
+function renderA() {
+  return `<div class="a-wrap">
+    <div class="a-head"><h1>Overview</h1><span class="d">Friday, August 15 · updated 2 min ago</span></div>
+    <div class="a-metrics">
+      <div class="a-m"><h6>Orders today</h6><div class="v">47</div><div class="dl up">+9 vs yesterday</div></div>
+      <div class="a-m"><h6><span class="lgdot" style="background:#2E86D9"></span>Walmart</h6><div class="v">31</div><div class="dl up">+7</div></div>
+      <div class="a-m"><h6><span class="lgdot" style="background:#047857"></span>eBay</h6><div class="v">11</div><div class="dl up">+3</div></div>
+      <div class="a-m"><h6><span class="lgdot" style="background:#C97B12"></span>Temu</h6><div class="v">5</div><div class="dl down">−1</div></div>
+      <div class="a-m" style="margin-left:auto"><h6>Missed sales</h6><div class="v" style="color:var(--neg-text)">$10,010</div><div class="dl" style="color:var(--faint)">4 SKUs at zero</div></div>
+    </div>
+    ${lineChart({ series: chSeries(false), gridC: '#F0EFEC', mutC: '#A5A29C', h: 190 })}
+    <div class="a-lists">
+      <div class="a-l"><h5>Send to WFS · 520 units suggested</h5>
+        ${FAST.map(f => `<div class="a-row"><span class="mono sku">${f[0]}</span><span class="mono" style="color:var(--faint)">${f[1]}</span><span class="r up">${f[2]}</span></div>`).join('')}</div>
+      <div class="a-l"><h5>Missed sales · growing weekly</h5>
+        ${MISS.map(m => `<div class="a-row"><span class="mono sku">${m[0]}</span><span class="mono" style="color:var(--faint)">${m[1]}</span><span class="r down">${m[2]}</span></div>`).join('')}</div>
+    </div>
+  </div>`;
+}
+function renderB() {
+  return `<div class="b-wrap">
+    <div class="b-cards">
+      <div class="b-card"><h6>Orders today</h6><div class="v">47</div><span class="b-chip up">▲ 24%</span></div>
+      <div class="b-card"><h6>Units moved</h6><div class="v">61</div><span class="b-chip up">▲ 11%</span></div>
+      <div class="b-card"><h6>Send to WFS</h6><div class="v" style="color:var(--accent-deep)">520</div><span class="b-chip up">6 SKUs</span></div>
+      <div class="b-card"><h6>Missed sales</h6><div class="v" style="color:var(--neg-text)">$10,010</div><span class="b-chip down">4 SKUs</span></div>
+    </div>
+    <div class="b-grid">
+      <div class="b-panel">
+        <h4>Total orders · last 14 days</h4>
+        ${lineChart({ series: totSeries, gridC: '#F0EFEC', mutC: '#A5A29C', fill: true, h: 180 })}
+        <h4 style="margin-top:12px">By marketplace today</h4>
+        <div class="b-ch"><span class="nm">Walmart</span><span class="bar"><i style="width:66%;background:#2E86D9"></i></span><span class="n">31</span></div>
+        <div class="b-ch"><span class="nm">eBay</span><span class="bar"><i style="width:23%;background:#047857"></i></span><span class="n">11</span></div>
+        <div class="b-ch"><span class="nm">Temu</span><span class="bar"><i style="width:11%;background:#C97B12"></i></span><span class="n">5</span></div>
+      </div>
+      <div class="b-panel">
+        <h4>Top movers this week</h4>
+        <table class="b-tbl">${FAST.map(f => `<tr><td class="mono sku">${f[0]}</td><td class="r">${f[1]}</td></tr>`).join('')}</table>
+        <h4 style="margin-top:14px">Buy soon</h4>
+        <table class="b-tbl">
+          <tr><td class="mono sku">X520-256GB-SILVER</td><td class="r" style="color:var(--neg-text)">3 days</td></tr>
+          <tr><td class="mono sku">X730-128GB-GRAY</td><td class="r" style="color:var(--amber-text)">10 days</td></tr>
+          <tr><td class="mono sku">X400-128GB-RED</td><td class="r" style="color:var(--amber-text)">12 days</td></tr>
+        </table>
+        <h4 style="margin-top:14px">Dead stock</h4>
+        <table class="b-tbl">
+          <tr><td class="mono sku">X400-128GB-GRAY-CASE</td><td class="r" style="color:var(--muted)">$68,098</td></tr>
+          <tr><td class="mono sku">SGTT220GRAY</td><td class="r" style="color:var(--muted)">$17,200</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+function renderC() {
+  return `<div class="c-wrap"><div class="c-in">
+    <div class="c-head"><span class="c-live"></span><b>Capture Station</b> · overview · 20:41:07 · sync ON</div>
+    <div class="c-grid">
+      <div class="c-cell"><h6>Orders today</h6><div class="v">47</div><div class="s">+9 vs yday</div></div>
+      <div class="c-cell"><h6>WMT / EBY / TMU</h6><div class="v">31·11·5</div><div class="s">66 / 23 / 11 %</div></div>
+      <div class="c-cell"><h6>Send to WFS</h6><div class="v" style="color:#2BB183">520</div><div class="s">6 SKUs</div></div>
+      <div class="c-cell"><h6>Missed</h6><div class="v" style="color:#E86A5E">$10,010</div><div class="s">4 SKUs at zero</div></div>
+    </div>
+    <div class="c-panel">
+      <h4>Orders · 14d
+        <span class="lg">${CH.map(c => `<span><span class="lgdot" style="background:${c.cd}"></span>${c.n}</span>`).join('')}</span>
+      </h4>
+      ${lineChart({ series: chSeries(true), gridC: 'rgba(255,255,255,.06)', mutC: '#5F7A6B', h: 180 })}
+    </div>
+    <div class="c-duo">
+      <div class="c-panel"><h4>Send to WFS</h4>${FAST.map(f => `<div class="c-row"><span>${f[0]}</span><span class="r" style="color:#2BB183">${f[2]}</span></div>`).join('')}</div>
+      <div class="c-panel"><h4>Missed sales</h4>${MISS.map(m => `<div class="c-row"><span>${m[0]}</span><span class="r" style="color:#E86A5E">${m[2]}</span></div>`).join('')}</div>
+    </div>
+  </div></div>`;
+}
+function renderD() {
+  return `<div class="d-wrap">
+    <div class="d-line"><b>47 orders</b> dropped today — <b style="color:#1F6C9F">31</b> Walmart, <b>11</b> eBay, <b style="color:var(--amber-text)">5</b> Temu. Nine more than yesterday.</div>
+    <div class="d-sub">Friday, August 15 · the fortnight below · hover any point</div>
+    ${lineChart({ series: totSeries, gridC: '#F0EFEC', mutC: '#A5A29C', fill: true, h: 200 })}
+    <div class="d-story">
+      <p><b>Worth doing:</b> six fast sellers have outrun your shelf — <span class="num up">520 units</span> belong in WFS, led by <b>SM-X133-64GB-GREY</b> at <span class="num">38/wk</span>.</p>
+      <p><b>Leaking:</b> four listings sit at zero mid-run — about <span class="num down">$10,010</span> missed so far, mostly <b>X730-512GB-GRAY</b>. Nine SKUs run dry inside lead time; <span class="num">$101k</span> hasn't moved in 60 days.</p>
+    </div>
+  </div>`;
+}
+function renderE() {
+  return `<div class="e-wrap">
+    <div class="e-grid">
+      <div class="e-tile hero"><h6>Orders today</h6><div class="v">47</div><div class="s">▲ +9 vs yesterday</div></div>
+      <div class="e-tile"><h6>Walmart</h6><div class="v" style="color:#2E86D9">31</div><div class="s">66% of today</div></div>
+      <div class="e-tile"><h6>eBay</h6><div class="v" style="color:#047857">11</div><div class="s">23% of today</div></div>
+      <div class="e-tile"><h6>Temu</h6><div class="v" style="color:#C97B12">5</div><div class="s">11% of today</div></div>
+    </div>
+    <div class="e-grid">
+      <div class="e-tile"><h6>Send to WFS</h6><div class="v" style="color:var(--accent-deep)">520</div><div class="s">units suggested</div></div>
+      <div class="e-tile"><h6>Missed</h6><div class="v" style="color:var(--neg-text)">$10k</div><div class="s">4 SKUs at zero</div></div>
+      <div class="e-tile"><h6>Buy soon</h6><div class="v" style="color:var(--amber-text)">9</div><div class="s">inside lead time</div></div>
+      <div class="e-tile"><h6>Idle</h6><div class="v" style="color:var(--muted)">$101k</div><div class="s">60+ days still</div></div>
+    </div>
+    <div class="e-panel">
+      <h4>Orders · last 14 days
+        <span class="lg">${CH.map(c => `<span><span class="lgdot" style="background:${c.c}"></span>${c.n}</span>`).join('')}</span>
+      </h4>
+      ${lineChart({ series: chSeries(false), gridC: '#F0EFEC', mutC: '#A5A29C', h: 185 })}
+    </div>
+  </div>`;
+}
+const R = { A: renderA, B: renderB, C: renderC, D: renderD, E: renderE };
+let design = 'A';
+function render() {
+  document.getElementById('stage').innerHTML = R[design]();
+  document.querySelectorAll('.opt').forEach(b => {
+    b.classList.toggle('on', b.dataset.d === design);
+    b.onclick = () => { design = b.dataset.d; render(); };
+  });
+}
+render();
+</script>
+</body>
+</html>
