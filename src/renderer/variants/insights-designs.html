@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Insights — four design treatments (pick one)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --ink: #16281F;
+    --neg: #C0392B; --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --blue-text: #1F6C9F; --amber-bg: #FBF3DB; --amber-text: #956400;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 13px; background: #fff; cursor: pointer; font-family: inherit; }
+  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .stage { padding: 18px 22px 26px; }
+  .hide { display: none !important; }
+  .mono { font-family: var(--mono); }
+  .sku { font-weight: 600; color: var(--blue-text); }
+  table.sheet { border-collapse: collapse; width: 100%; font-size: 12.5px; background: #fff; border: 1px solid var(--border); }
+  .sheet th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  .sheet th.rr, .sheet td.rr { text-align: right; }
+  .sheet td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+  .sheet tr:hover td { background: var(--surface-2); }
+  .verdict { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 10px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .verdict.neg { background: var(--neg-soft); color: var(--neg-text); }
+  .verdict.dim { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .bar { position: relative; height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; min-width: 130px; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent-soft); border-right: 2px solid var(--accent); transition: width .5s ease; }
+  .bar.neg i { background: var(--neg-soft); border-right-color: var(--neg); }
+  .bar.dim i { background: #EFEEEA; border-right-color: #B9B6AE; }
+  .bar b { position: relative; z-index: 1; font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding-left: 6px; line-height: 14px; display: block; }
+  .rise { animation: rise .22s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* A · Tiles (the v3 look) */
+  .a-tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; max-width: 1080px; margin: 0 auto 14px; }
+  .a-tile { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 10px; cursor: pointer; text-align: left; font-family: inherit; transition: transform .15s ease, box-shadow .15s ease; overflow: hidden; }
+  .a-tile:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(47,52,55,.08); }
+  .a-tile.on { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .a-tile h5 { margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .a-tile.on h5 { color: #A7E3CD; }
+  .a-tile .big { font-family: var(--mono); font-size: 26px; font-weight: 700; margin: 3px 0 1px; line-height: 1.1; }
+  .a-tile.on .big { color: #fff; }
+  .a-tile .kick { font-size: 10.5px; color: var(--muted); }
+  .a-tile.on .kick { color: #CDEEDF; }
+  .a-tile svg { position: absolute; right: 10px; bottom: 8px; }
+  .a-wrap { max-width: 1080px; margin: 0 auto; }
+  .a-sum { text-align: center; font-size: 11px; color: var(--faint); padding: 0 0 10px; }
+
+  /* B · Rail (command center) */
+  .b-grid { display: flex; gap: 14px; max-width: 1120px; margin: 0 auto; align-items: flex-start; }
+  .b-rail { width: 218px; flex: none; background: var(--ink); border-radius: 14px; padding: 10px; }
+  .b-rt { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #7FA893; padding: 4px 8px 8px; }
+  .b-item { width: 100%; text-align: left; background: transparent; border: none; border-radius: 10px; padding: 9px 10px; cursor: pointer; font-family: inherit; display: block; }
+  .b-item:hover { background: rgba(255,255,255,.06); }
+  .b-item.on { background: #0B4534; }
+  .b-item h6 { margin: 0; font-size: 10.5px; font-weight: 600; color: #9DBFAE; }
+  .b-item.on h6 { color: #CDEEDF; }
+  .b-item .n { font-family: var(--mono); font-size: 19px; font-weight: 700; color: #E8F3ED; }
+  .b-item .d { font-size: 10px; color: #7FA893; }
+  .b-main { flex: 1; min-width: 0; }
+  .b-head { display: flex; align-items: baseline; gap: 12px; padding: 2px 2px 10px; }
+  .b-head .big { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--accent-deep); }
+  .b-head .big.neg { color: var(--neg-text); }
+  .b-head .t { font-size: 13px; font-weight: 600; }
+  .b-head .sub { font-size: 11px; color: var(--faint); margin-left: auto; }
+
+  /* C · Headline (editorial ledger) */
+  .c-wrap { max-width: 940px; margin: 0 auto; }
+  .c-tabs { display: flex; gap: 22px; border-bottom: 2px solid var(--border); margin-bottom: 18px; }
+  .c-tab { background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--faint); padding: 6px 2px 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .c-tab.on { color: var(--accent-deep); border-bottom-color: var(--accent); }
+  .c-tab .ct { font-family: var(--mono); font-weight: 400; color: var(--faint); margin-left: 5px; font-size: 11px; }
+  .c-hero { padding: 4px 0 16px; }
+  .c-hero .line { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; }
+  .c-hero .line b { font-family: var(--mono); font-weight: 700; color: var(--accent-deep); }
+  .c-hero .line b.neg { color: var(--neg-text); }
+  .c-hero .under { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+  /* D · Cards (mosaic) */
+  .d-chips { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+  .d-chip { font-size: 11.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: #fff; cursor: pointer; font-family: inherit; }
+  .d-chip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+  .d-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; max-width: 1080px; margin: 0 auto; }
+  .d-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; transition: transform .15s ease, box-shadow .15s ease; }
+  .d-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(47,52,55,.08); }
+  .d-card .sk { font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-card .row2 { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 2px; }
+  .d-card .n { font-family: var(--mono); font-size: 22px; font-weight: 700; }
+  .d-card .u { font-size: 10.5px; color: var(--faint); }
+  .d-card .meta { font-size: 10.5px; color: var(--muted); display: flex; justify-content: space-between; margin-top: 6px; }
+  .d-card .foot { margin-top: 8px; }
+</style>
+</head>
+<body>
+<!-- Four treatments of the SAME Insights data — owner picks one. Do not build
+     any until he chooses AND says go. A=v3 tiles; B=dark command rail;
+     C=editorial headline; D=card mosaic. -->
+<div class="switcher"><span class="lbl">Design</span>
+  <button class="opt on" data-d="A">A · Stat tiles</button>
+  <button class="opt" data-d="B">B · Command rail</button>
+  <button class="opt" data-d="C">C · Headline</button>
+  <button class="opt" data-d="D">D · Card wall</button>
+  <span style="font-size:11px;color:var(--faint);margin-left:8px">every design switches between the four views — click around inside each</span>
+</div>
+<div class="stage" id="stage"></div>
+<script>
+const spark = (pts, w, h, color) => {
+  const max = Math.max(...pts), min = Math.min(...pts);
+  const xy = pts.map((p, i) => `${(i / (pts.length - 1)) * w},${h - ((p - min) / (max - min || 1)) * (h - 2) - 1}`).join(' ');
+  return `<svg width="${w}" height="${h}"><polyline points="${xy}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+};
+const money = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
+const VIEWS = [
+  { k: 'wfs', t: 'Send to WFS', big: '520', unit: 'units', kick: 'ready to send in', trend: [3,5,6,8,9,12],
+    hero: ['Six SKUs are outselling your shelf — ', '520 units', ' belong in WFS.'],
+    sum: '6 SKUs selling hard from your shelf — suggested quantities cover four weeks',
+    cols: ['SKU','Trend','Sold/wk','On shelf','At WFS','Days of cover','Send to WFS'], bar: 5, barMax: 220, verdict: '',
+    rows: [
+      ['SM-X133-64GB-GREY',[22,26,30,31,35,38],38,1179,435,217,'+ 120'],
+      ['TABA9+64GB',[18,20,24,26,29,31],31,696,0,157,'+ 124'],
+      ['X230-256GB-GRAY',[12,15,17,20,22,24],24,272,0,79,'+ 96'],
+      ['X520-128GB-SILVER',[11,12,14,16,18,19],19,174,0,64,'+ 76'],
+      ['R640-BLACK-US',[8,9,10,12,13,14],14,240,0,120,'+ 56'],
+      ['X135-128GB-SILVER',[6,7,8,10,11,12],12,87,0,51,'+ 48']] },
+  { k: 'miss', t: 'Missed sales', big: '$10,010', unit: '', kick: 'missed while at zero', trend: [2,4,5,7,9,11], neg: true,
+    hero: ['Four listings went dark mid-run — about ', '$10,010', ' missed so far.'],
+    sum: '4 SKUs were selling and hit zero — the estimate grows every week they stay out',
+    cols: ['SKU','Was selling/wk','Zero since','Channels','Est. missed'], bar: 4, barMax: 5000, verdict: 'neg',
+    rows: [
+      ['X620-128GB-SILVER',7,'Aug 09','Walmart ×2','$3,190'],
+      ['X730-512GB-GRAY',4,'Aug 06','Walmart','$4,970'],
+      ['X400-256GB-SILVER',3,'Aug 02','Walmart','$1,610'],
+      ['BUDS-3-WHITE',2,'Aug 07','Walmart · eBay','$240']] },
+  { k: 'buy', t: 'Buy soon', big: '9', unit: 'SKUs', kick: 'run out in lead time', trend: [2,3,3,5,7,9],
+    hero: ['Nine SKUs run dry inside lead time — ', '94 units', ' cover you.'],
+    sum: 'Suggested buys cover lead time plus three weeks at the current pace',
+    cols: ['SKU','Sold/wk','Available','Days left','Suggested buy'], bar: 3, barMax: 20, barInvert: true, verdict: '',
+    rows: [
+      ['X520-256GB-SILVER',5,2,3,'+ 22'],
+      ['X730-128GB-GRAY',11,16,10,'+ 44'],
+      ['X400-128GB-RED',3,5,12,'+ 12'],
+      ['A15-128GB-BLACK-US',4,10,18,'+ 16']] },
+  { k: 'dead', t: 'Dead stock', big: '$101k', unit: '', kick: 'sitting idle 60+ days', trend: [11,11,10,11,11,11], dim: true,
+    hero: ['Eleven SKUs haven’t sold in 60 days — ', '$101,470', ' sitting still.'],
+    sum: '11 SKUs with no sale in 60 days — oldest and heaviest first',
+    cols: ['SKU','Units','Last sale','Listed on','Value idle'], bar: 4, barMax: 70000, verdict: 'dim',
+    rows: [
+      ['X400-128GB-GRAY-CASE',862,'—','Walmart ×2 · eBay','$68,098'],
+      ['SGTT220GRAY',215,'Jun 21','Walmart ×3 · eBay','$17,200'],
+      ['HKOS9BLKAM-0',48,'Aug 07','Walmart','$9,024'],
+      ['X406-128GB-GRAY-INT',65,'Jun 30','Walmart','$7,150']] },
+];
+let design = 'A', cur = 'wfs';
+const V = () => VIEWS.find(x => x.k === cur);
+
+function sheetHtml(v) {
+  const barCls = v.verdict === 'neg' ? 'neg' : v.verdict === 'dim' ? 'dim' : '';
+  return '<table class="sheet"><tr>' + v.cols.map((c, i) => `<th class="${i ? 'rr' : ''}">${c}</th>`).join('') + '</tr>'
+    + v.rows.map(r => '<tr>' + r.map((c, i) => {
+      const last = i === r.length - 1;
+      if (Array.isArray(c)) return `<td>${spark(c, 64, 16, '#047857')}</td>`;
+      if (i === v.bar) {
+        const val = typeof c === 'number' ? c : money(c);
+        const pct = Math.min(100, Math.round((v.barInvert ? (v.barMax - val) : val) / v.barMax * 100));
+        return `<td><div class="bar ${barCls}"><i data-w="${pct}"></i><b>${c}</b></div></td>`;
+      }
+      if (last) return `<td class="rr"><span class="verdict ${v.verdict}">${c}</span></td>`;
+      return `<td class="${i === 0 ? 'mono sku' : 'rr ' + (typeof c === 'number' ? 'mono' : '')}">${c}</td>`;
+    }).join('') + '</tr>').join('') + '</table>';
+}
+
+function renderA() {
+  const v = V();
+  return `<div class="a-tiles">` + VIEWS.map(x => `
+    <button class="a-tile ${x.k === cur ? 'on' : ''}" data-view="${x.k}">
+      <h5>${x.t}</h5><div class="big" style="${x.neg && x.k !== cur ? 'color:var(--neg-text)' : ''}">${x.big}</div>
+      <div class="kick">${x.kick}</div>${spark(x.trend, 54, 20, x.k === cur ? '#A7E3CD' : x.neg ? '#C0392B' : '#047857')}</button>`).join('')
+    + `</div><div class="a-sum">${v.sum}</div><div class="a-wrap rise">${sheetHtml(v)}</div>`;
+}
+function renderB() {
+  const v = V();
+  return `<div class="b-grid"><div class="b-rail"><div class="b-rt">Insights</div>`
+    + VIEWS.map(x => `<button class="b-item ${x.k === cur ? 'on' : ''}" data-view="${x.k}">
+        <h6>${x.t}</h6><span class="n">${x.big}</span> <span class="d">${x.kick}</span></button>`).join('')
+    + `</div><div class="b-main rise"><div class="b-head"><span class="big ${v.neg ? 'neg' : ''}">${v.big}</span><span class="t">${v.t}</span><span class="sub">${v.sum}</span></div>${sheetHtml(v)}</div></div>`;
+}
+function renderC() {
+  const v = V();
+  return `<div class="c-wrap"><div class="c-tabs">`
+    + VIEWS.map(x => `<button class="c-tab ${x.k === cur ? 'on' : ''}" data-view="${x.k}">${x.t}<span class="ct">${x.big}</span></button>`).join('')
+    + `</div><div class="c-hero rise"><div class="line">${v.hero[0]}<b class="${v.neg ? 'neg' : ''}">${v.hero[1]}</b>${v.hero[2]}</div>
+       <div class="under">${v.sum}</div></div><div class="rise">${sheetHtml(v)}</div></div>`;
+}
+function renderD() {
+  const v = V();
+  const nCls = v.verdict === 'neg' ? 'style="color:var(--neg-text)"' : v.verdict === 'dim' ? 'style="color:var(--muted)"' : 'style="color:var(--accent-deep)"';
+  return `<div class="d-chips">` + VIEWS.map(x => `<button class="d-chip ${x.k === cur ? 'on' : ''}" data-view="${x.k}">${x.t} · ${x.big}</button>`).join('')
+    + `</div><div class="d-grid rise">` + v.rows.map(r => {
+      const skuN = r[0], verdict = r[r.length - 1];
+      const mid = v.k === 'wfs' ? `${r[2]}/wk · shelf ${r[3]} · WFS ${r[4]}`
+        : v.k === 'miss' ? `was ${r[1]}/wk · zero since ${r[2]} · ${r[3]}`
+        : v.k === 'buy' ? `${r[1]}/wk · ${r[2]} available · ${r[3]} days left`
+        : `${r[1]} units · last sale ${r[2]} · ${r[3]}`;
+      const barVal = typeof r[v.bar] === 'number' ? r[v.bar] : money(r[v.bar]);
+      const pct = Math.min(100, Math.round((v.barInvert ? (v.barMax - barVal) : barVal) / v.barMax * 100));
+      const barCls = v.verdict === 'neg' ? 'neg' : v.verdict === 'dim' ? 'dim' : '';
+      return `<div class="d-card"><div class="sk">${skuN}</div>
+        <div class="row2"><span class="n" ${nCls}>${verdict}</span><span class="u">${v.k === 'wfs' ? 'send to WFS' : v.k === 'miss' ? 'missed' : v.k === 'buy' ? 'suggested buy' : 'value idle'}</span></div>
+        <div class="meta"><span>${mid}</span></div>
+        <div class="foot"><div class="bar ${barCls}"><i data-w="${pct}"></i><b>${v.cols[v.bar]}: ${r[v.bar]}</b></div></div></div>`;
+    }).join('') + `</div>`;
+}
+
+function render() {
+  const fn = { A: renderA, B: renderB, C: renderC, D: renderD }[design];
+  document.getElementById('stage').innerHTML = fn();
+  requestAnimationFrame(() => requestAnimationFrame(() =>
+    document.querySelectorAll('.bar i').forEach(el => { el.style.width = el.dataset.w + '%'; })));
+  document.querySelectorAll('[data-view]').forEach(b => { b.onclick = () => { cur = b.dataset.view; render(); }; });
+  document.querySelectorAll('.opt').forEach(b => {
+    b.classList.toggle('on', b.dataset.d === design);
+    b.onclick = () => { design = b.dataset.d; render(); };
+  });
+}
+render();
+</script>
+</body>
+</html>
