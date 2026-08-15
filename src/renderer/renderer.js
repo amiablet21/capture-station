@@ -261,6 +261,7 @@ function render() {
   $('tabListings').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
+  positionTabInd(); // tab visibility just changed — the pill follows
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
   const openToday = (state.todayCount || 0) - (state.todayProcessed || 0);
@@ -1096,7 +1097,34 @@ $('syncDialog').addEventListener('close', () => focusScan());
 
 let activePage = 'capture';
 
+/* ----- tab pill glide + page fade (animation option B, owner pick) ----- */
+let tabIndReady = false;
+function positionTabInd() {
+  const ind = $('tabInd');
+  const active = document.querySelector('#pageTabs .tab.is-active');
+  if (!active || $('pageTabs').hidden || active.hidden) { ind.hidden = true; tabIndReady = false; return; }
+  // first placement after boot/visibility snaps without a glide-from-zero
+  if (!tabIndReady) ind.style.transition = 'none';
+  ind.hidden = false;
+  ind.style.left = `${active.offsetLeft}px`;
+  ind.style.width = `${active.offsetWidth}px`;
+  if (!tabIndReady) {
+    requestAnimationFrame(() => { ind.style.transition = ''; tabIndReady = true; });
+  }
+}
+window.addEventListener('resize', positionTabInd);
+
+const PAGE_SECTIONS = { capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+function pageFadeIn(page) {
+  const el = $(PAGE_SECTIONS[page] || 'rowsRow');
+  if (!el) return;
+  el.classList.remove('page-fadein');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('page-fadein');
+}
+
 function showPage(page) {
+  const switching = activePage !== page;
   activePage = page;
   if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
   updateScanPanel();
@@ -1131,6 +1159,8 @@ function showPage(page) {
   }
   if (state) render(); // footer buttons depend on the active page
   if (bReady) applyBrowserPane(); // the pane only exists on the Capture page
+  positionTabInd();
+  if (switching) pageFadeIn(page);
 }
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
