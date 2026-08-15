@@ -2940,6 +2940,16 @@ function retOpenEdit({ r, i, ii }) {
       if (tr.ok && rv && rv.edit) { rv.targets = tr.targets; rvRenderCond(); }
     });
   }
+  // the original order, looked up fresh by PO#: the sheet shows what was
+  // ordered next to what came back — even for returns logged as unmatched,
+  // since the order may have processed after the return was received
+  if (r.order_number) {
+    api.returnsLookup(r.order_number).then(res => {
+      if (!res || !res.ok || !rv || !rv.edit || rv.edit.rid !== r.id) return;
+      rv.items = (res.order && res.order.items) || [];
+      rvRenderOrder();
+    }).catch(() => {});
+  }
   ensureInventory();
   rvBesidePane();
   $('retRecvDialog').showModal();
@@ -2982,8 +2992,21 @@ async function rvLookup() {
 // Nothing forces receiving every line, and Units can be fewer than ordered.
 function rvRenderOrder() {
   const row = $('rvOrderRow');
-  if (!rv || rv.unmatched || !rv.items.length) { row.hidden = true; return; }
+  if (!rv || (rv.unmatched && !rv.edit) || !rv.items.length) { row.hidden = true; return; }
   row.hidden = false;
+  if (rv.edit) {
+    // edit mode: read-only — the highlighted chip is the line this return
+    // came from; the amber note means the returned SKU matches NO ordered line
+    const cur = String(rv.sku || '').trim().toUpperCase();
+    const hit = rv.items.some(it => String(it.sku || '').toUpperCase() === cur);
+    $('rvOrder').innerHTML = rv.items.map(it => `
+      <span class="rv-item is-info ${String(it.sku || '').toUpperCase() === cur ? 'on' : ''}"
+        title="${esc(it.title || '')}${it.price ? ` — $${Number(it.price).toFixed(2)}` : ''}">
+        <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}
+      </span>`).join('')
+      + (cur && !hit ? '<span class="rv-order-note">returned SKU isn’t one of the ordered lines</span>' : '');
+    return;
+  }
   $('rvOrder').innerHTML = rv.items.map((it, i) => `
     <button type="button" class="rv-item ${i === rv.itemIdx ? 'on' : ''} ${rv.received[i] ? 'done' : ''}" data-i="${i}"
       title="${rv.received[i] ? 'Already received — click to receive more of it' : 'Click to receive this line'}">
@@ -2993,7 +3016,7 @@ function rvRenderOrder() {
 
 $('rvOrder').addEventListener('click', (e) => {
   const b = e.target.closest('.rv-item');
-  if (!b || !rv) return;
+  if (!b || !rv || rv.edit) return; // edit mode: the chips are informational
   rvLoadItemAt(Number(b.dataset.i));
   $('rvQty').focus();
 });
@@ -3122,7 +3145,9 @@ $('rvPo').addEventListener('blur', () => {
 // editing the PO after a match voids the match — a stale orderId must never
 // ride along with a hand-changed number
 $('rvPo').addEventListener('input', () => {
-  if (!rv || rv.edit) return;
+  if (!rv) return;
+  // edit mode: a hand-changed PO no longer matches the displayed order lines
+  if (rv.edit) { rv.items = []; rvRenderOrder(); return; }
   rv.orderId = null;
   rv.source = '';
   rv.unmatched = true;

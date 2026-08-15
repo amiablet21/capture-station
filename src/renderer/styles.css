@@ -1486,6 +1486,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .rv-item:hover { border-color: var(--accent); }
 .rv-item.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
 .rv-item.done { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; }
+/* edit mode: the chips only SHOW the order — nothing to click */
+.rv-item.is-info { cursor: default; }
+.rv-item.is-info:not(.on):hover { border-color: var(--border); }
+.rv-order-note { font-size: 11px; color: var(--badge-yellow-text); align-self: center; }
 
 /* the log table IS the worksheet sheet (recv-sheet-table ret-sheet classes
    carry the gridlines, widths and density) — only log extras live here */
