@@ -20,14 +20,21 @@
   .sub { font-size: 11.5px; color: var(--muted); margin: 2px 0 14px; }
   .tok { font-size: 10.5px; font-family: var(--mono); color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 2px 8px; margin-left: 10px; }
   .grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(47,52,55,0.05); margin-bottom: 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; overflow-y: hidden; box-shadow: 0 2px 10px rgba(47,52,55,0.05); margin-bottom: 14px; }
   .phead { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12.5px; }
   .phead .hint { font-weight: 400; font-size: 10.5px; color: var(--faint); margin-left: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  th { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-  td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 7px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  th:last-child { border-right: none; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); height: 34px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
   tr:hover td { background: var(--surface-2); }
-  .mono { font-family: var(--mono); }
+  .gut { width: 34px; min-width: 34px; text-align: center; color: var(--faint); font-family: var(--mono); font-size: 10.5px; background: var(--surface-2); border-right: 1px solid var(--border); }
+  tr:hover td.gut { background: var(--surface-2); }
+  td:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+  .cellin { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; border: none; background: transparent; padding: 0; border-radius: 0; }
+  .cellin:focus { outline: none; box-shadow: none; border: none; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .r { text-align: right; }
   .chip { font-size: 9.5px; font-weight: 700; border-radius: 4px; padding: 1px 7px; }
   .c-ok { background: var(--accent-soft); color: var(--accent-soft-text); }
@@ -75,7 +82,7 @@
   <div class="panel">
     <div class="phead">Catalog — GET /api/products <span class="hint">refreshes every 10s · availability moves like a live book</span></div>
     <div class="row"><input id="q" placeholder="search MPN or description" style="flex:1" /><button id="search">Search</button></div>
-    <table id="cat"><tr><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr></table>
+    <table id="cat"><tr><th class="gut"></th><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr></table>
   </div>
 
   <div class="panel">
@@ -83,12 +90,12 @@
     <div class="row"><span class="lbl">Margin %</span><input id="wmMargin" value="15" style="width:56px" />
       <button id="wmExport" class="primary">Export Walmart sheet</button>
       <span id="wmNote" class="sub" style="margin:0"></span></div>
-    <table id="wmSheet"><tr><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr></table>
+    <table id="wmSheet"><tr><th class="gut"></th><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr></table>
   </div>
 
   <div class="panel">
     <div class="phead">Live pads — what Capture Station would do with this feed <span class="hint">pad = min(their stock, your cap 25)</span></div>
-    <table id="pads"><tr><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr></table>
+    <table id="pads"><tr><th class="gut"></th><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr></table>
   </div>
 
   <div class="panel">
@@ -177,10 +184,10 @@ async function loadCatalog(q) {
   const res = await call('GET', '/api/products?pageSize=100&onlyActive=false' + (q ? '&searchQuery=' + encodeURIComponent(q) : ''));
   if (res.status !== 200) return;
   CAT = res.body.products;
-  $('cat').innerHTML = '<tr><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr>'
-    + CAT.map(p => {
+  $('cat').innerHTML = '<tr><th class="gut"></th><th></th><th>Item</th><th>MPN</th><th class="r">MOQ</th><th class="r">Avail</th><th class="r">Price</th><th class="r">10+</th><th>EXW</th><th class="r">Lead</th><th></th></tr>'
+    + CAT.map((p, ri) => {
       const t10 = (p.prices.find(t => t.fromQty >= 10) || {}).unitPrice;
-      return '<tr><td><input type="checkbox" data-wmck="' + p.id + '"' + (WMSEL.has(p.id) ? ' checked' : '') + ' /></td>'
+      return '<tr><td class="gut">' + (ri + 1) + '</td><td><input type="checkbox" data-wmck="' + p.id + '"' + (WMSEL.has(p.id) ? ' checked' : '') + ' /></td>'
         + '<td>' + p.description + '</td><td class="mono">' + p.mpn + '</td>'
         + '<td class="r">' + (p.moq > 1 ? '<span class="chip c-low" title="Minimum order quantity — HUBX rejects lines below this">MOQ ' + p.moq + '</span>' : '<span class="mono" style="color:var(--faint)">1</span>') + '</td>'
         + '<td class="r">' + chip(p.availability) + '</td>'
@@ -198,13 +205,13 @@ async function loadCatalog(q) {
 }
 
 function renderPads() {
-  $('pads').innerHTML = '<tr><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr>'
-    + PADMAP.map(([sku, mpn, cap]) => {
+  $('pads').innerHTML = '<tr><th class="gut"></th><th>Your dropship SKU</th><th>HUBX item</th><th class="r">Their stock</th><th class="r">Pad today</th><th class="r">Pad with live feed</th></tr>'
+    + PADMAP.map(([sku, mpn, cap], ri) => {
       const p = CAT.find(x => x.mpn === mpn);
       const av = p ? p.availability : 0;
       const live = Math.min(av, 25);
       const cls = live === 0 ? 'c-out' : live < cap ? 'c-low' : 'c-ok';
-      return '<tr><td class="mono">' + sku + '</td><td class="mono">' + mpn + '</td>'
+      return '<tr><td class="gut">' + (ri + 1) + '</td><td class="mono">' + sku + '</td><td class="mono">' + mpn + '</td>'
         + '<td class="r">' + chip(av) + '</td>'
         + '<td class="r pad">' + cap + '</td>'
         + '<td class="r"><span class="chip ' + cls + '">' + live + '</span></td></tr>';
@@ -256,17 +263,17 @@ function wmDefaults(p) {
 }
 function renderWmSheet() {
   const rows = CAT.filter(p => WMSEL.has(p.id));
-  $('wmSheet').innerHTML = '<tr><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr>'
-    + (rows.length ? rows.map(p => {
+  $('wmSheet').innerHTML = '<tr><th class="gut"></th><th>SKU</th><th>Item</th><th class="r">Their cost</th><th class="r">Sell $</th><th class="r">Margin</th><th class="r">Qty</th></tr>'
+    + (rows.length ? rows.map((p, ri) => {
       const d = wmDefaults(p);
       const m = Number(d.price) - d.cost;
-      return '<tr><td class="mono">' + p.mpn.replace(/[^A-Za-z0-9-]/g, '') + '</td>'
+      return '<tr><td class="gut">' + (ri + 1) + '</td><td class="mono">' + p.mpn.replace(/[^A-Za-z0-9-]/g, '') + '</td>'
         + '<td>' + p.description.slice(0, 44) + '</td>'
-        + '<td class="r mono">$' + d.cost.toFixed(2) + '</td>'
-        + '<td class="r"><input class="mono" data-wmprice="' + p.id + '" value="' + d.price + '" style="width:76px;text-align:right" /></td>'
-        + '<td class="r mono" style="color:' + (m > 0 ? 'var(--accent-soft-text)' : 'var(--neg-text)') + '">$' + m.toFixed(2) + '</td>'
-        + '<td class="r"><input class="mono" data-wmqty="' + p.id + '" value="' + d.qty + '" style="width:52px;text-align:right" /></td></tr>';
-    }).join('') : '<tr><td colspan="6" class="empty">Nothing ticked yet.</td></tr>');
+        + '<td class="r mono">' + money(d.cost) + '</td>'
+        + '<td class="r"><input class="cellin" data-wmprice="' + p.id + '" value="' + d.price + '" style="width:76px;text-align:right" /></td>'
+        + '<td class="r mono" style="color:' + (m > 0 ? 'var(--accent-soft-text)' : 'var(--neg-text)') + '">' + money(m) + '</td>'
+        + '<td class="r"><input class="cellin" data-wmqty="' + p.id + '" value="' + d.qty + '" style="width:52px;text-align:right" /></td></tr>';
+    }).join('') : '<tr><td colspan="7" class="empty">Nothing ticked yet.</td></tr>');
 }
 $('cat').addEventListener('change', e => {
   const ck = e.target.closest('[data-wmck]');
