@@ -66,6 +66,16 @@ orders picked up a new link or need hand deduction).
 - Release chains are now gated on E2E_ALL_PASS (popup-close test flakes under
   post-install load; suite must be green standalone).
 
+## Late-day releases v1.19.3-v1.19.8 (all installed)
+Rounded segmented tab bar + whole-app Ctrl+scroll zoom (persisted, Ctrl+0
+resets, pane bounds scale with zoom). Tab animation saga: glide+fade shipped,
+rapid-click lag fixed via 120ms settle-defer of heavy page-entry work, then
+the spinner landing veil AND the gliding pill were both removed at owner
+request. Final state: instant active pill, 180ms page fade, settle-defer.
+Owner motion taste: subtle fades yes, chrome animation no. Insights final
+design locked (stat tiles + per-view graphs, variants/insights.html) - build
+only on his explicit go.
+
 ## HUBX (dropship supplier) — separate project, owner-parked
 Customer API docs read in full (hubxteam.atlassian.net/wiki/spaces/HDP): OAuth
 client-credentials (NO KEYS YET — Customer Management Team issues), catalog w/
