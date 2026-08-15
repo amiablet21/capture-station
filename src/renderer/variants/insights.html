@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Insights tab — v3 dynamic (pending owner approval; do not build yet)</title>
+<head><meta charset="UTF-8" /><title>Insights tab — CHOSEN design: stat tiles + graphs (pending final go)</title>
 <style>
   :root {
     color-scheme: only light;
@@ -9,6 +9,7 @@
     --text: #2F3437; --muted: #787774; --faint: #A5A29C;
     --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
     --neg: #C0392B; --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --amber: #B7791F; --amber-soft: #FBF3DB; --amber-text: #956400;
     --blue-text: #1F6C9F;
     --font: 'Geist', 'Segoe UI', sans-serif;
     --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
@@ -20,131 +21,150 @@
   .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; }
   .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
 
-  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; max-width: 1100px; margin: 16px auto 14px; padding: 0 22px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; max-width: 1080px; margin: 16px auto 14px; padding: 0 22px; }
   .tile { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 10px; cursor: pointer; text-align: left; font-family: inherit; transition: transform .15s ease, box-shadow .15s ease; overflow: hidden; }
   .tile:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(47,52,55,.08); }
   .tile.on { background: var(--accent-deep); border-color: var(--accent-deep); }
   .tile h5 { margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
   .tile.on h5 { color: #A7E3CD; }
-  .tile .big { font-family: var(--mono); font-size: 26px; font-weight: 700; margin: 3px 0 1px; color: var(--text); line-height: 1.1; }
+  .tile .big { font-family: var(--mono); font-size: 26px; font-weight: 700; margin: 3px 0 1px; line-height: 1.1; }
   .tile.on .big { color: #fff; }
   .tile .kick { font-size: 10.5px; color: var(--muted); }
   .tile.on .kick { color: #CDEEDF; }
-  .tile svg { position: absolute; right: 10px; bottom: 8px; opacity: .9; }
-  .tile .sl { stroke: var(--accent); }
-  .tile.on .sl { stroke: #A7E3CD; }
-  .tile.t-miss .sl { stroke: var(--neg); }
-  .tile.on.t-miss .sl { stroke: #F5B9B1; }
+  .tile svg { position: absolute; right: 10px; bottom: 8px; }
 
-  .sum { text-align: center; font-size: 11px; color: var(--faint); padding-bottom: 10px; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 22px 22px; }
-  .sheetbox { animation: rise .22s ease; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px 22px; }
+  .sum { text-align: center; font-size: 11px; color: var(--faint); padding-bottom: 12px; }
+  .rise { animation: rise .22s ease; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  table { border-collapse: collapse; width: 100%; font-size: 12.5px; background: #fff; border: 1px solid var(--border); }
-  th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
-  th.rr, td.rr { text-align: right; }
-  td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); vertical-align: middle; }
-  tr:hover td { background: var(--surface-2); }
+
+  .chartcard { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 10px; margin-bottom: 12px; }
+  .chartcard h4 { margin: 0 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; }
+  .chartcard h4 span { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .crow { display: grid; grid-template-columns: 170px 1fr 74px; gap: 10px; align-items: center; padding: 4px 0; border-radius: 6px; }
+  .crow:hover { background: var(--surface-2); }
+  .crow .lb { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .crow .track { position: relative; height: 14px; }
+  .crow .track i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 0 4px 4px 0; background: var(--accent); transition: width .55s cubic-bezier(.2,.7,.3,1); }
+  .crow.neg .track i { background: var(--neg); }
+  .crow.amb .track i { background: var(--amber); }
+  .crow.dim .track i { background: #B9B6AE; }
+  .crow .val { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text); }
+  .thresh { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px dashed var(--neg); }
+  .threshlbl { font-size: 9.5px; color: var(--neg-text); position: absolute; top: -16px; transform: translateX(-50%); white-space: nowrap; }
+  .chartzone { position: relative; }
+
+  table.sheet { border-collapse: collapse; width: 100%; font-size: 12.5px; background: #fff; border: 1px solid var(--border); }
+  .sheet th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); }
+  .sheet th.rr, .sheet td.rr { text-align: right; }
+  .sheet td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); vertical-align: middle; }
+  .sheet tr:hover td { background: var(--surface-2); }
   .mono { font-family: var(--mono); font-size: 11.5px; }
   .sku { font-weight: 600; color: var(--blue-text); }
-  .rowspark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-  .barcell { min-width: 150px; }
-  .bar { position: relative; height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-  .bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent-soft); border-right: 2px solid var(--accent); transition: width .5s ease; }
-  .bar.neg i { background: var(--neg-soft); border-right-color: var(--neg); }
-  .bar.dim i { background: #EFEEEA; border-right-color: #B9B6AE; }
-  .bar b { position: relative; z-index: 1; font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding-left: 6px; line-height: 14px; color: var(--text); display: block; }
   .verdict { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 10px; background: var(--accent-soft); color: var(--accent-soft-text); }
   .verdict.neg { background: var(--neg-soft); color: var(--neg-text); }
   .verdict.dim { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 </style>
 </head>
 <body>
-<!-- v3 "dynamic" iteration (owner: previous chip version approved but "too
-     bland... more dynamic, more inspired"). PENDING APPROVAL — do not build.
-     Additions over v2: stat TILES with sparklines + count-up (active = deep
-     emerald), animated flat data-bars inside the sheet, verdict pills,
-     rise-in transition on view switch. Same data model as v2. -->
+<!-- CHOSEN design 2026-08-14: stat tiles (option A) + per-view graph, after
+     "use graphs as well, that way it is easier to read". STILL DO NOT BUILD
+     until the owner gives the explicit go. One hue per chart (emerald / red /
+     amber / gray), every bar direct-labeled — nothing reads by color alone. -->
 <div class="topbar"><div class="tabs">
   <button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Returns</button><button class="tab">Listings</button><button class="tab on">Insights</button>
 </div></div>
 <div class="tiles" id="tiles"></div>
-<div class="sum" id="sum"></div>
-<div class="wrap"><div class="sheetbox" id="box"><table id="sheet"></table></div></div>
+<div class="wrap">
+  <div class="sum" id="sum"></div>
+  <div id="chart"></div>
+  <div class="rise" id="box"><table class="sheet" id="sheet"></table></div>
+</div>
 <script>
-const spark = (pts, w, h) => {
+const spark = (pts, w, h, color) => {
   const max = Math.max(...pts), min = Math.min(...pts);
   const xy = pts.map((p, i) => `${(i / (pts.length - 1)) * w},${h - ((p - min) / (max - min || 1)) * (h - 2) - 1}`).join(' ');
-  return `<svg width="${w}" height="${h}"><polyline class="sl" points="${xy}" fill="none" stroke-width="1.5"/></svg>`;
+  return `<svg width="${w}" height="${h}"><polyline points="${xy}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
 };
+const money = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
 const VIEWS = [
-  { k: 'wfs', t: 'Send to WFS', big: '520', kick: 'units ready to send in', trend: [3, 5, 6, 8, 9, 12],
+  { k: 'wfs', t: 'Send to WFS', big: '520', kick: 'units ready to send in', trend: [3,5,6,8,9,12],
     sum: '6 SKUs selling hard from your shelf — suggested quantities cover four weeks',
-    cols: ['SKU', 'Trend', 'Sold/wk', 'On shelf', 'At WFS', 'Days of cover', 'Send to WFS'],
-    bar: 5, barMax: 220, verdict: '',
+    chart: { title: 'Weekly sales pace', note: 'units sold per week, last 60 days', col: 2, fmt: v => v + '/wk', cls: '' },
+    cols: ['SKU','Trend','Sold/wk','On shelf','At WFS','Days of cover','Send to WFS'], verdict: '',
     rows: [
-      ['SM-X133-64GB-GREY', [22, 26, 30, 31, 35, 38], 38, 1179, 435, 217, '+ 120'],
-      ['TABA9+64GB', [18, 20, 24, 26, 29, 31], 31, 696, 0, 157, '+ 124'],
-      ['X230-256GB-GRAY', [12, 15, 17, 20, 22, 24], 24, 272, 0, 79, '+ 96'],
-      ['X520-128GB-SILVER', [11, 12, 14, 16, 18, 19], 19, 174, 0, 64, '+ 76'],
-      ['R640-BLACK-US', [8, 9, 10, 12, 13, 14], 14, 240, 0, 120, '+ 56'],
-      ['X135-128GB-SILVER', [6, 7, 8, 10, 11, 12], 12, 87, 0, 51, '+ 48']] },
-  { k: 'miss', t: 'Missed sales', big: '$10,010', kick: 'missed while at zero', trend: [2, 4, 5, 7, 9, 11], neg: true,
+      ['SM-X133-64GB-GREY',[22,26,30,31,35,38],38,1179,435,217,'+ 120'],
+      ['TABA9+64GB',[18,20,24,26,29,31],31,696,0,157,'+ 124'],
+      ['X230-256GB-GRAY',[12,15,17,20,22,24],24,272,0,79,'+ 96'],
+      ['X520-128GB-SILVER',[11,12,14,16,18,19],19,174,0,64,'+ 76'],
+      ['R640-BLACK-US',[8,9,10,12,13,14],14,240,0,120,'+ 56'],
+      ['X135-128GB-SILVER',[6,7,8,10,11,12],12,87,0,51,'+ 48']] },
+  { k: 'miss', t: 'Missed sales', big: '$10,010', kick: 'missed while at zero', trend: [2,4,5,7,9,11], neg: true,
     sum: '4 SKUs were selling and hit zero — the estimate grows every week they stay out',
-    cols: ['SKU', 'Was selling/wk', 'Zero since', 'Channels', 'Est. missed'],
-    bar: 4, barMax: 5000, verdict: 'neg',
+    chart: { title: 'Money missed so far', note: 'old weekly pace × price, per week out', col: 4, fmt: v => '$' + money(v).toLocaleString(), cls: 'neg' },
+    cols: ['SKU','Was selling/wk','Zero since','Channels','Est. missed'], verdict: 'neg',
     rows: [
-      ['X620-128GB-SILVER', 7, 'Aug 09', 'Walmart ×2', '$3,190'],
-      ['X730-512GB-GRAY', 4, 'Aug 06', 'Walmart', '$4,970'],
-      ['X400-256GB-SILVER', 3, 'Aug 02', 'Walmart', '$1,610'],
-      ['BUDS-3-WHITE', 2, 'Aug 07', 'Walmart · eBay', '$240']] },
-  { k: 'buy', t: 'Buy soon', big: '9', kick: 'SKUs run out in lead time', trend: [2, 3, 3, 5, 7, 9],
+      ['X730-512GB-GRAY',4,'Aug 06','Walmart','$4,970'],
+      ['X620-128GB-SILVER',7,'Aug 09','Walmart ×2','$3,190'],
+      ['X400-256GB-SILVER',3,'Aug 02','Walmart','$1,610'],
+      ['BUDS-3-WHITE',2,'Aug 07','Walmart · eBay','$240']] },
+  { k: 'buy', t: 'Buy soon', big: '9', kick: 'SKUs run out in lead time', trend: [2,3,3,5,7,9],
     sum: 'Suggested buys cover lead time plus three weeks at the current pace',
-    cols: ['SKU', 'Sold/wk', 'Available', 'Days left', 'Suggested buy'],
-    bar: 3, barMax: 20, barInvert: true, verdict: '',
+    chart: { title: 'Days of stock left', note: 'dashed line = your 14-day lead time', col: 3, fmt: v => v + ' days', cls: 'amb', threshold: 14, max: 21 },
+    cols: ['SKU','Sold/wk','Available','Days left','Suggested buy'], verdict: '',
     rows: [
-      ['X520-256GB-SILVER', 5, 2, 3, '+ 22'],
-      ['X730-128GB-GRAY', 11, 16, 10, '+ 44'],
-      ['X400-128GB-RED', 3, 5, 12, '+ 12'],
-      ['A15-128GB-BLACK-US', 4, 10, 18, '+ 16']] },
-  { k: 'dead', t: 'Dead stock', big: '$101k', kick: 'sitting idle 60+ days', trend: [11, 11, 10, 11, 11, 11], dim: true,
+      ['X520-256GB-SILVER',5,2,3,'+ 22'],
+      ['X730-128GB-GRAY',11,16,10,'+ 44'],
+      ['X400-128GB-RED',3,5,12,'+ 12'],
+      ['A15-128GB-BLACK-US',4,10,18,'+ 16']] },
+  { k: 'dead', t: 'Dead stock', big: '$101k', kick: 'sitting idle 60+ days', trend: [11,11,10,11,11,11], dim: true,
     sum: '11 SKUs with no sale in 60 days — oldest and heaviest first',
-    cols: ['SKU', 'Units', 'Last sale', 'Listed on', 'Value idle'],
-    bar: 4, barMax: 70000, verdict: 'dim',
+    chart: { title: 'Value sitting idle', note: 'units × best stored channel price', col: 4, fmt: v => '$' + money(v).toLocaleString(), cls: 'dim' },
+    cols: ['SKU','Units','Last sale','Listed on','Value idle'], verdict: 'dim',
     rows: [
-      ['X400-128GB-GRAY-CASE', 862, '—', 'Walmart ×2 · eBay', '$68,098'],
-      ['SGTT220GRAY', 215, 'Jun 21', 'Walmart ×3 · eBay', '$17,200'],
-      ['HKOS9BLKAM-0', 48, 'Aug 07', 'Walmart', '$9,024'],
-      ['X406-128GB-GRAY-INT', 65, 'Jun 30', 'Walmart', '$7,150']] },
+      ['X400-128GB-GRAY-CASE',862,'—','Walmart ×2 · eBay','$68,098'],
+      ['SGTT220GRAY',215,'Jun 21','Walmart ×3 · eBay','$17,200'],
+      ['HKOS9BLKAM-0',48,'Aug 07','Walmart','$9,024'],
+      ['X406-128GB-GRAY-INT',65,'Jun 30','Walmart','$7,150']] },
 ];
 let cur = 'wfs';
-const money = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
+function chartHtml(v) {
+  const c = v.chart;
+  const vals = v.rows.map(r => typeof r[c.col] === 'number' ? r[c.col] : money(r[c.col]));
+  const max = c.max || Math.max(...vals);
+  const thresh = c.threshold ? `<div class="thresh" data-x="${Math.round(c.threshold / max * 100)}"><span class="threshlbl">lead time</span></div>` : '';
+  return `<div class="chartcard rise"><h4>${c.title}<span>${c.note}</span></h4><div class="chartzone">${thresh}
+    ${v.rows.map((r, i) => `
+      <div class="crow ${c.cls}" title="${r[0]} — ${c.fmt(r[c.col])}">
+        <span class="lb">${r[0]}</span>
+        <span class="track"><i data-w="${Math.round(vals[i] / max * 100)}"></i></span>
+        <span class="val">${c.fmt(r[c.col])}</span>
+      </div>`).join('')}
+  </div></div>`;
+}
 function render() {
-  document.getElementById('tiles').innerHTML = VIEWS.map(v =>
-    `<button class="tile ${v.k === cur ? 'on' : ''} ${v.neg ? 't-miss' : ''}" data-k="${v.k}">
-      <h5>${v.t}</h5><div class="big" data-big="${v.big}">${v.big}</div>
-      <div class="kick">${v.kick}</div>${spark(v.trend, 54, 20)}</button>`).join('');
+  document.getElementById('tiles').innerHTML = VIEWS.map(x => `
+    <button class="tile ${x.k === cur ? 'on' : ''}" data-view="${x.k}">
+      <h5>${x.t}</h5><div class="big" style="${x.neg && x.k !== cur ? 'color:var(--neg-text)' : ''}">${x.big}</div>
+      <div class="kick">${x.kick}</div>${spark(x.trend, 54, 20, x.k === cur ? '#A7E3CD' : x.neg ? '#C0392B' : '#047857')}</button>`).join('');
   const v = VIEWS.find(x => x.k === cur);
   document.getElementById('sum').textContent = v.sum;
-  const barCls = v.verdict === 'neg' ? 'neg' : v.verdict === 'dim' ? 'dim' : '';
+  document.getElementById('chart').innerHTML = chartHtml(v);
   document.getElementById('sheet').innerHTML =
     '<tr>' + v.cols.map((c, i) => `<th class="${i ? 'rr' : ''}">${c}</th>`).join('') + '</tr>'
     + v.rows.map(r => '<tr>' + r.map((c, i) => {
       const last = i === r.length - 1;
-      if (Array.isArray(c)) return `<td class="rowspark">${spark(c, 64, 16)}</td>`;
-      if (i === v.bar) {
-        const val = typeof c === 'number' ? c : money(c);
-        const pct = Math.min(100, Math.round((v.barInvert ? (v.barMax - val) : val) / v.barMax * 100));
-        return `<td class="barcell"><div class="bar ${barCls}"><i data-w="${pct}"></i><b>${c}</b></div></td>`;
-      }
+      if (Array.isArray(c)) return `<td>${spark(c, 64, 16, '#047857')}</td>`;
       if (last) return `<td class="rr"><span class="verdict ${v.verdict}">${c}</span></td>`;
       return `<td class="${i === 0 ? 'mono sku' : 'rr ' + (typeof c === 'number' ? 'mono' : '')}">${c}</td>`;
     }).join('') + '</tr>').join('');
   const box = document.getElementById('box');
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  requestAnimationFrame(() => requestAnimationFrame(() =>
-    document.querySelectorAll('.bar i').forEach(el => { el.style.width = el.dataset.w + '%'; })));
-  document.querySelectorAll('.tile').forEach(b => { b.onclick = () => { cur = b.dataset.k; render(); }; });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.querySelectorAll('.crow i').forEach(el => { el.style.width = el.dataset.w + '%'; });
+    document.querySelectorAll('.thresh').forEach(el => { el.style.left = el.dataset.x + '%'; });
+  }));
+  document.querySelectorAll('[data-view]').forEach(b => { b.onclick = () => { cur = b.dataset.view; render(); }; });
 }
 render();
 </script>
