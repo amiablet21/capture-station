@@ -280,7 +280,9 @@ function ensurePane() {
     } else if ((params.selectionText || '').trim()) {
       items.push({ role: 'copy' });
     }
-    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+    if (items.length) items.push({ type: 'separator' });
+    items.push({ label: 'Print…', click: () => wc.print() });
+    Menu.buildFromTemplate(items).popup({ window: win });
   });
   // Owner privacy filter (2026-08-07): Seller Center's money/performance
   // pages stay hidden from whoever works the pane. The menu links vanish via
@@ -360,6 +362,34 @@ function ensurePane() {
       event.preventDefault();
       wc.print();
     }
+  });
+  // popups (packing slips, labels, login flows) need their own print paths:
+  // there is no Chrome print preview in Electron, so a popup's in-page print
+  // button can come up silent — Ctrl+P and right-click Print… both reach the
+  // system dialog instead
+  wc.on('did-create-window', (child) => {
+    const cwc = child.webContents;
+    cwc.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && (input.control || input.meta) && String(input.key).toLowerCase() === 'p') {
+        event.preventDefault();
+        cwc.print();
+      }
+    });
+    cwc.on('context-menu', (_e, params) => {
+      const items = [];
+      if (params.isEditable) {
+        items.push(
+          { role: 'cut', enabled: params.editFlags.canCut },
+          { role: 'copy', enabled: params.editFlags.canCopy },
+          { role: 'paste', enabled: params.editFlags.canPaste },
+        );
+      } else if ((params.selectionText || '').trim()) {
+        items.push({ role: 'copy' });
+      }
+      if (items.length) items.push({ type: 'separator' });
+      items.push({ label: 'Print…', click: () => cwc.print() });
+      Menu.buildFromTemplate(items).popup({ window: child });
+    });
   });
   return paneView;
 }
