@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 const EVENTS = [
   'state:changed',
@@ -88,7 +88,23 @@ contextBridge.exposeInMainWorld('api', {
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
   receivingList: () => ipcRenderer.invoke('receiving:list'),
   chooseReceivingFolder: () => ipcRenderer.invoke('receiving:chooseFolder'),
-  browserLayout: (bounds) => ipcRenderer.invoke('browser:layout', bounds),
+  // the native pane is positioned in unzoomed window pixels, but the DOM
+  // rect is measured in zoomed CSS pixels — scale here so every caller stays
+  // oblivious to the UI zoom level
+  browserLayout: (bounds) => {
+    const z = webFrame.getZoomFactor() || 1;
+    const b = bounds && bounds.visible
+      ? { visible: true, x: bounds.x * z, y: bounds.y * z, width: bounds.width * z, height: bounds.height * z }
+      : bounds;
+    return ipcRenderer.invoke('browser:layout', b);
+  },
+  // whole-app zoom (Ctrl+scroll): clamped, returned so the caller can persist
+  uiZoom: (factor) => {
+    const z = Math.min(1.6, Math.max(0.6, Number(factor) || 1));
+    webFrame.setZoomFactor(z);
+    return z;
+  },
+  uiZoomGet: () => webFrame.getZoomFactor() || 1,
   browserOpen: (orderNumber, channel, kind) => ipcRenderer.invoke('browser:open', { orderNumber, channel, kind }),
   browserOpenUrl: (url) => ipcRenderer.invoke('browser:open', { url }),
   openExternalUrl: (url) => ipcRenderer.invoke('app:openExternal', { url }),

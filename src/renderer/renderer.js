@@ -1463,6 +1463,33 @@ function bExpandPane() {
 
 $('retBExpand').addEventListener('click', bExpandPane);
 
+/* ---------- whole-app zoom: Ctrl+scroll, persisted ---------- */
+// (the marketplace pane keeps its own separate Ctrl+wheel zoom — this one
+// scales the app's UI; the pane bounds re-sync because browserLayout scales
+// by the live zoom factor in preload)
+let uiZoomToast = 0;
+function uiApplyZoom(z) {
+  const applied = api.uiZoom(z);
+  try { localStorage.setItem('uiZoom', String(applied)); } catch { /* best effort */ }
+  if (bReady) syncBrowserBounds();
+  clearTimeout(uiZoomToast);
+  uiZoomToast = setTimeout(() => toast(`${Math.round(applied * 100)}%`, 900), 60);
+}
+window.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const curZ = api.uiZoomGet();
+  uiApplyZoom(curZ + (e.deltaY < 0 ? 0.1 : -0.1));
+}, { passive: false });
+// Ctrl+0 snaps back to 100%
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === '0') { e.preventDefault(); uiApplyZoom(1); }
+});
+try {
+  const savedZ = Number(localStorage.getItem('uiZoom'));
+  if (savedZ && Math.abs(savedZ - 1) > 0.01) api.uiZoom(savedZ);
+} catch { /* default zoom */ }
+
 // coalesce bounds updates (resize, divider drag, dialogs) into one per frame
 let bSyncQueued = false;
 
