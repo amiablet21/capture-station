@@ -1115,6 +1115,7 @@ function positionTabInd() {
 window.addEventListener('resize', positionTabInd);
 
 const PAGE_SECTIONS = { capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
   if (!el) return;
@@ -1140,24 +1141,32 @@ function showPage(page) {
   if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
   }
-  if (page === 'ebay') {
-    enterEbay();
-  } else if (page === 'temu') {
-    enterTemu();
-  } else if (page === 'stock') {
-    const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
-    $('stockList').style.width = savedW ? `${savedW}px` : '';
-    $('stockSearch').value = '';
-    loadStockViews();
-    loadStock().then(() => $('stockSearch').focus());
-  } else if (page === 'returns') {
-    const savedW = Number(localStorage.getItem('retSheetWidth')) || 0;
-    $('retMain').style.width = savedW ? `${savedW}px` : '';
-    enterReturns();
-  } else {
-    focusScan();
-  }
-  if (state) render(); // footer buttons depend on the active page
+  // the VISUAL switch is instant (pill, fade, hidden flags); each page's
+  // heavy entry work — table renders, data refreshes — waits until the user
+  // SETTLES here for a beat, so flying across tabs never stacks re-renders
+  // (owner hit the lag rapid-clicking, 2026-08-14)
+  clearTimeout(showPageSettle);
+  showPageSettle = setTimeout(() => {
+    if (activePage !== page) return; // flew past this tab
+    if (page === 'ebay') {
+      enterEbay();
+    } else if (page === 'temu') {
+      enterTemu();
+    } else if (page === 'stock') {
+      const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
+      $('stockList').style.width = savedW ? `${savedW}px` : '';
+      $('stockSearch').value = '';
+      loadStockViews();
+      loadStock().then(() => { if (activePage === 'stock') $('stockSearch').focus(); });
+    } else if (page === 'returns') {
+      const savedW = Number(localStorage.getItem('retSheetWidth')) || 0;
+      $('retMain').style.width = savedW ? `${savedW}px` : '';
+      enterReturns();
+    } else {
+      focusScan();
+    }
+    if (state) render(); // footer buttons depend on the active page
+  }, switching ? 120 : 0);
   if (bReady) applyBrowserPane(); // the pane only exists on the Capture page
   positionTabInd();
   if (switching) pageFadeIn(page);
