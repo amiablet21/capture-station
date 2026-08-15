@@ -50,13 +50,8 @@
   .panel h4 { margin: 0 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
   .panel h4 .lg { margin-left: auto; display: flex; gap: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
   .lg i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; margin-right: 4px; }
-  .chart { display: flex; align-items: flex-end; gap: 7px; height: 150px; padding-top: 14px; }
-  .bcol { flex: 1; display: flex; flex-direction: column-reverse; gap: 2px; position: relative; }
-  .bseg { border-radius: 2px; min-height: 2px; }
-  .bcol .tot { position: absolute; top: -15px; width: 100%; text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
-  .bcol.today .tot { color: var(--accent-deep); font-weight: 700; }
-  .xlabs { display: flex; gap: 7px; margin-top: 6px; }
-  .xlabs span { flex: 1; text-align: center; font-size: 9px; color: var(--faint); font-family: var(--mono); }
+  .chart svg { display: block; width: 100%; }
+  .chart svg text { font-family: var(--mono); }
 
   .att { display: flex; flex-direction: column; gap: 0; }
   .arow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 9px 2px; border-bottom: 1px solid var(--border-soft); cursor: pointer; border-radius: 6px; }
@@ -111,7 +106,6 @@
         <span class="lg"><span><i style="background:#2E86D9"></i>Walmart</span><span><i style="background:#047857"></i>eBay</span><span><i style="background:#C97B12"></i>Temu</span></span>
       </h4>
       <div class="chart" id="chart"></div>
-      <div class="xlabs" id="xlabs"></div>
     </div>
     <div class="panel">
       <h4>Needs attention</h4>
@@ -155,17 +149,39 @@ const DAYS = [
   ['Aug 10',[26,11,6]],['Aug 11',[31,9,5]],['Aug 12',[28,13,4]],['Aug 13',[33,10,6]],
   ['Aug 14',[30,12,5]],['Today',[31,11,5]],
 ];
-const COLORS = ['#2E86D9','#047857','#C97B12'];
-const maxTot = Math.max(...DAYS.map(d => d[1][0]+d[1][1]+d[1][2]));
-const H = 132;
-document.getElementById('chart').innerHTML = DAYS.map(([lab,segs],di) => {
-  const tot = segs[0]+segs[1]+segs[2];
-  return '<div class="bcol'+(di===DAYS.length-1?' today':'')+'" title="'+lab+': Walmart '+segs[0]+' · eBay '+segs[1]+' · Temu '+segs[2]+'">'
-    + '<span class="tot">'+tot+'</span>'
-    + segs.map((s,i)=>'<span class="bseg" style="height:'+Math.max(2,Math.round(s/maxTot*H))+'px;background:'+COLORS[i]+'"></span>').join('')
-    + '</div>';
-}).join('');
-document.getElementById('xlabs').innerHTML = DAYS.map(([lab],i)=>'<span>'+(i%2===1||lab==='Today'?lab.replace('Aug ',''):'')+'</span>').join('');
+const SERIES = [
+  { n: 'Walmart', c: '#2E86D9' },
+  { n: 'eBay', c: '#047857' },
+  { n: 'Temu', c: '#C97B12' },
+];
+// one line per marketplace, app-styled: hairline grid, mono axis, end labels
+(function () {
+  const W = 660, H = 168, padL = 26, padR = 52, padT = 10, padB = 18;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const max = Math.ceil(Math.max(...DAYS.flatMap(d => d[1])) / 10) * 10;
+  const X = i => padL + (i / (DAYS.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  let out = '';
+  [0, 0.5, 1].forEach(f => {
+    const v = Math.round(max * f), y = Y(v);
+    out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC" stroke-width="1"/>`
+      + `<text x="${padL - 6}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`;
+  });
+  DAYS.forEach((d, i) => {
+    if (i % 2 === 1 || d[0] === 'Today') {
+      out += `<text x="${X(i)}" y="${H - 4}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${d[0].replace('Aug ', '')}</text>`;
+    }
+  });
+  SERIES.forEach((s, si) => {
+    const pts = DAYS.map((d, i) => `${X(i)},${Y(d[1][si])}`).join(' ');
+    const last = DAYS[DAYS.length - 1][1][si];
+    out += `<polyline points="${pts}" fill="none" stroke="${s.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+      + DAYS.map((d, i) => `<circle cx="${X(i)}" cy="${Y(d[1][si])}" r="6" fill="transparent"><title>${d[0]}: ${s.n} ${d[1][si]}</title></circle>`).join('')
+      + `<circle cx="${X(DAYS.length - 1)}" cy="${Y(last)}" r="3.5" fill="${s.c}"/>`
+      + `<text x="${X(DAYS.length - 1) + 8}" y="${Y(last) + 3}" font-size="10" font-weight="700" fill="${s.c}">${last}</text>`;
+  });
+  document.getElementById('chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+})();
 </script>
 </body>
 </html>
