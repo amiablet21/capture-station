@@ -256,6 +256,14 @@ function render() {
     showPage('capture'); // showPage re-renders
     return;
   }
+  // the app opens on Overview (owner request 2026-08-17) wherever it exists
+  if (!bootPageDone) {
+    bootPageDone = true;
+    if (!state.captureOnly && pageEnabled.overview && activePage === 'capture') {
+      showPage('overview');
+      return;
+    }
+  }
   $('tabOverview').hidden = !pages.stock;
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
@@ -1096,6 +1104,7 @@ $('syncDialog').addEventListener('close', () => focusScan());
 /* ---------- page tabs: Capture / Stock ---------- */
 
 let activePage = 'capture';
+let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
 const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
@@ -6588,6 +6597,7 @@ function ovRenderAll() {
 }
 
 let ovPrevToday = null; // last rendered totals: the odometer rolls on increase
+let ovFeedMax = -1; // highest feed row id rendered; -1 = first paint cascades
 
 function ovOdometer(el, from, to) {
   // thousands separators render as static glyphs between the rolling digit
@@ -6639,14 +6649,42 @@ function ovRenderToday() {
   const chVal = (k) => money
     ? `$${Math.round((view.byChannelSales || {})[k] || 0).toLocaleString()}`
     : ((view.byChannel || {})[k] || 0).toLocaleString();
+  // live feed of the latest orders in the card's middle (owner sketch
+  // 2026-08-17): new arrivals slide in at the top with a soft emerald flash
+  const feed = ovData.orders.recent || [];
+  const fmtT = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const h = d.getHours();
+    return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`;
+  };
+  const firstFeed = ovFeedMax < 0;
+  const chName = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
+  // owner pick 2026-08-17: "full grid" — an Excel-style table with a shaded
+  // header row and cell borders both ways
+  const feedHtml = feed.map(r => `
+      <div class="ov-feedrow${(firstFeed || r.id > ovFeedMax) ? ' is-new' : ''}">
+        <span class="xpo mono">${esc(r.order)}</span>
+        <span class="xsku mono">${esc(r.sku || '—')}${r.more ? ` +${r.more}` : ''}</span>
+        <span class="xch xch-${r.channel}">${chName[r.channel] || esc(r.channel || '—')}</span>
+        <span class="xtm">${fmtT(r.at)}</span></div>`).join('');
   box.innerHTML = `
     <div><div class="k">${label}</div>
       <div class="big">${money ? '<span class="dsep">$</span>' : ''}<span class="ov-odo"></span></div>
       ${deltaHtml}</div>
+    <div class="ov-feed"><div class="fk">Latest orders</div>
+      ${feed.length ? `<div class="ov-xgrid">
+        <div class="ov-xhead"><span>PO#</span><span>SKU</span><span>Channel</span><span>Time</span></div>
+        ${feedHtml}</div>` : '<div class="ov-empty">Orders appear here as they are captured.</div>'}</div>
     <div class="ov-toast"><span id="ovToastChip"></span></div>
     <div class="ov-chcells">${chans.map(([k, n]) => `
       <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv" data-ovch="${k}">${chVal(k)}</div></div>`).join('')}
     </div>`;
+  if (firstFeed) {
+    // first paint cascades the rows in; afterwards only true arrivals animate
+    box.querySelectorAll('.ov-feedrow.is-new').forEach((el, i) => { el.style.animationDelay = `${i * 70}ms`; });
+  }
+  ovFeedMax = feed.reduce((m, r) => Math.max(m, r.id), ovFeedMax < 0 ? 0 : ovFeedMax);
   const bigTo = money ? Math.round(view.totalSales) : view.total;
   const key = `${ovRange}|${ovMetric}`;
   const prev = ovPrevToday;
@@ -6696,7 +6734,11 @@ function ovDrawChart() {
   const fmtAxis = (v) => money ? ovMoneyShort(v) : String(v);
   const fmtTip = (v) => money ? `$${Math.round(v).toLocaleString()}` : `${v.toLocaleString()} order${v === 1 ? '' : 's'}`;
   const labels = ovLabelsFor(ovRange, tips);
-  const W = 680, H = 190, padL = 36, padR = 48, padT = 14, padB = 24;
+  // native-resolution canvas: the viewBox tracks the box's real pixel size so
+  // strokes and text never fatten when the page is widened (owner, 2026-08-17)
+  const W = Math.max(560, Math.round(box.clientWidth) || 680);
+  const H = Math.max(190, Math.round(box.clientHeight) || 190);
+  const padL = 36, padR = 48, padT = 14, padB = 24;
   const iw = W - padL - padR, ih = H - padT - padB;
   const rawMax = Math.max(1, ...vals);
   const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
@@ -6834,11 +6876,18 @@ $('ovGrip').addEventListener('mousedown', (e) => {
   ovDrag = { startX: e.clientX, startW: $('ovWrap').offsetWidth, w: 0 };
   $('ovGrip').classList.add('is-active');
 });
+let ovSizeRaf = 0;
+function ovRedrawOnResize() {
+  cancelAnimationFrame(ovSizeRaf);
+  ovSizeRaf = requestAnimationFrame(() => { if (activePage === 'overview') ovDrawChart(); });
+}
+window.addEventListener('resize', () => { if (activePage === 'overview') ovRedrawOnResize(); });
 window.addEventListener('mousemove', (e) => {
   if (!ovDrag) return;
   const w = Math.max(760, ovDrag.startW + (e.clientX - ovDrag.startX) * 2);
   ovDrag.w = w;
   $('ovWrap').style.width = `${w}px`;
+  ovRedrawOnResize(); // the chart re-renders at its new native width
 });
 window.addEventListener('mouseup', () => {
   if (!ovDrag) return;
@@ -6849,6 +6898,7 @@ window.addEventListener('mouseup', () => {
 $('ovGrip').addEventListener('dblclick', () => {
   localStorage.removeItem('overviewPageWidth');
   $('ovWrap').style.width = '';
+  ovRedrawOnResize();
 });
 $('ovCards').addEventListener('click', (e) => {
   const c = e.target.closest('[data-ovcard]');

@@ -278,6 +278,23 @@ function getRow(id) {
   return parseRow(open().prepare('SELECT * FROM rows WHERE id = ?').get(id));
 }
 
+// the Overview card's live feed: the latest captures, newest first
+function overviewRecent(limit) {
+  return open().prepare('SELECT id, created_at, channel, order_number, items FROM rows ORDER BY id DESC LIMIT ?')
+    .all(limit || 8).map(r => {
+      let items = [];
+      try { items = JSON.parse(r.items || '[]'); } catch { /* pre-migration row */ }
+      return {
+        id: r.id,
+        at: r.created_at,
+        channel: String(r.channel || '').toLowerCase(),
+        order: r.order_number,
+        sku: items.length ? String(items[0].sku || '') : '',
+        more: Math.max(0, items.length - 1),
+      };
+    });
+}
+
 function todayRows() {
   return open().prepare('SELECT * FROM rows WHERE day = ? ORDER BY id DESC')
     .all(localDay()).map(parseRow);
@@ -572,5 +589,5 @@ module.exports = {
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
   lowStockCrossings,
-  overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear,
+  overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

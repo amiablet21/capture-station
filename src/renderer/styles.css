@@ -3693,6 +3693,28 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-odo .dstack i { font-style: normal; height: 1.1em; line-height: 1.1em; display: block; }
 .dsep { display: inline-block; height: 1.1em; line-height: 1.1em; } /* static $ and commas between rolling digits */
 .ov-chcell .cv.ov-hit { animation: ovHit 800ms var(--ease); }
+/* the latest-orders feed (owner pick 2026-08-17: "full grid"): an Excel-style
+   table — shaded header row, cell borders both ways — whose new arrivals
+   slide in from the top with a soft emerald flash */
+.ov-feed { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.ov-feed .fk { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 5px; }
+.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; }
+.ov-xhead { display: grid; grid-template-columns: 92px 1fr 58px 42px; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
+.ov-xhead span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 8px; border-right: 1px solid #E0DED8; }
+.ov-xhead span:last-child { border-right: none; text-align: right; }
+.ov-feedrow { display: grid; grid-template-columns: 92px 1fr 58px 42px; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
+.ov-feedrow:last-child { border-bottom: none; }
+.ov-feedrow span { padding: 5px 8px; border-right: 1px solid #EAE8E3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-feedrow span:last-child { border-right: none; }
+.ov-feedrow .xpo { font-size: 10.5px; font-weight: 600; }
+.ov-feedrow .xsku { font-size: 10.5px; color: var(--muted); }
+.ov-feedrow .xch { font-size: 10px; font-weight: 600; }
+.xch-walmart { color: #2E86D9; }
+.xch-ebay { color: #047857; }
+.xch-temu { color: #C97B12; }
+.ov-feedrow .xtm { font-family: var(--mono); font-size: 10px; color: var(--faint); text-align: right; }
+@keyframes ovFeedIn { 0% { opacity: 0; transform: translateY(-9px); } 40% { background: var(--accent-soft); } 100% { opacity: 1; transform: none; } }
+.ov-feedrow.is-new { animation: ovFeedIn 700ms var(--ease) both; }
 @keyframes ovHit { 0% { background: var(--accent-soft); color: var(--accent-soft-text); } 100% { background: transparent; } }
 .ov-toast { height: 18px; text-align: center; }
 .ov-toast span { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 10px; opacity: 0; }
@@ -3702,7 +3724,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-mtoggle { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; margin-left: 10px; }
 .ov-mbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 9px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
 .ov-mbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
-.ov-chartbox { min-height: 190px; }
+.ov-chartpanel { display: flex; flex-direction: column; } /* the chart fills whatever height the card column sets */
+.ov-chartbox { flex: 1; min-height: 190px; }
 .ov-chartbox svg { display: block; width: 100%; }
 .ov-chartbox text { font-family: var(--mono); }
 .ov-hovslice { cursor: crosshair; }

@@ -2727,6 +2727,7 @@ function registerIpc() {
       ranges: overviewHistory.days
         ? overviewRangeTotals(overviewHistory.days, live ? live.today : null)
         : null,
+      recent: db.overviewRecent(7),
       series: {
         Day: live ? live.series : db.overviewSeriesDay(),
         Month: hist ? hist.month : db.overviewSeriesMonth(),
@@ -3527,9 +3528,14 @@ function registerIpc() {
 /* ---------- window & menu ---------- */
 
 function createWindow() {
+  // the window reopens at the size it was closed at (owner request 2026-08-17);
+  // position is left to the OS so a moved monitor never strands it off-screen
+  const winStatePath = path.join(app.getPath('userData'), 'window-state.json');
+  let winState = null;
+  try { winState = JSON.parse(fs.readFileSync(winStatePath, 'utf8')); } catch { /* first run */ }
   win = new BrowserWindow({
-    width: 860,
-    height: 1000,
+    width: Math.max(430, Number(winState && winState.width) || 860),
+    height: Math.max(640, Number(winState && winState.height) || 1000),
     minWidth: 430,
     minHeight: 640,
     backgroundColor: '#f7f7f6',
@@ -3540,6 +3546,13 @@ function createWindow() {
       nodeIntegration: false,
       spellcheck: false,
     },
+  });
+  if (winState && winState.maximized) win.maximize();
+  win.on('close', () => {
+    try {
+      const b = win.getNormalBounds();
+      fs.writeFileSync(winStatePath, JSON.stringify({ width: b.width, height: b.height, maximized: win.isMaximized() }));
+    } catch { /* best effort */ }
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   // right-click copy/paste menu, standard across the whole app; in-app copies
