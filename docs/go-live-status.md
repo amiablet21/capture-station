@@ -117,6 +117,23 @@ Owner motion taste: subtle fades yes, chrome animation no. Insights final
 design locked (stat tiles + per-view graphs, variants/insights.html) - build
 only on his explicit go.
 
+## Phone app (2026-08-17, v1.20.17 → v1.20.24)
+
+src/renderer/mobile.html = a self-contained phone twin (Overview / Orders /
+Stock behind a bottom tab bar, owner-approved three-screen design) served by
+the main process at :8484 (fallback +5). Token-gated (userData/phone-token.txt,
+?k= on every request; /icon.png exempt). Endpoints: /data (overview payload,
+shared with the tab via overviewDataPayload), /orders (todayRows + open book),
+/stock (60s-cached listInventory projection), POST /stock/set (shared
+stockSetLevel — the SAME cache-bust/re-route path as the desktop grid).
+ACCESS IS TAILSCALE-ONLY by owner call: the WiFi firewall rule was deleted;
+only the 100.64/10 rule remains, so nothing off the owner's tailnet can
+connect. QR dialog on the Overview tab (Phone button) re-reads addresses per
+open; NordVPN's adapter must NEVER win the address pick (lanIPv4Candidates
+skips vpn/virtual names — it burned us once). Owner's phone = iPhone
+(apple-touch-icon served, standalone metas, pinch-zoom off). Boss access =
+Tailscale user invite or single-machine share, owner instructed.
+
 ## HUBX (dropship supplier) — separate project, owner-parked
 Customer API docs read in full (hubxteam.atlassian.net/wiki/spaces/HDP): OAuth
 client-credentials (NO KEYS YET — Customer Management Team issues), catalog w/
