@@ -2397,6 +2397,134 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
+
+  // Order series come straight from SQLite (cheap, always fresh); the three
+  // money cards ride the velocity engine — 28 days of processed lines + one
+  // inventory read — and cache for 10 minutes.
+  const OVERVIEW_TTL_MS = 10 * 60 * 1000;
+  let overviewCache = { at: 0, money: null, promise: null };
+
+  async function computeOverviewMoney(cfg) {
+    const client = new LinnworksClient(cfg.linnworks);
+    const to = new Date();
+    const from = new Date(to.getTime() - 28 * 86400000);
+    const sales = await querySales(
+      `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`,
+      `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`
+    );
+    if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
+    // per-SKU: 4-week qty, revenue, last sale, channels
+    const stats = {};
+    const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
+    for (const l of sales.lines) {
+      const k = String(l.sku).toUpperCase();
+      if (!k) continue;
+      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set() };
+      s.qty += l.qty;
+      s.revenue += l.revenue;
+      const ts = Date.parse(l.processedOn) || 0;
+      if (ts > s.last) s.last = ts;
+      if (l.source) s.channels.add(label(l.source));
+    }
+    const items = await client.listInventory();
+    const homeLoc = cfg.linnworks.locationId;
+    const pads = {};
+    for (const it of items) if (it.dsPad) pads[String(it.sku).toUpperCase()] = true;
+    const lead = Number((cfg.reorder || {}).leadTimeDays) || 7;
+    const missed = [];
+    const buy = [];
+    const wfs = [];
+    const now = Date.now();
+    const fmtDay = (ts) => {
+      const d = new Date(ts);
+      return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()}`;
+    };
+    for (const it of items) {
+      const k = String(it.sku).toUpperCase();
+      const s = stats[k];
+      if (!s || s.qty < 2) continue; // no meaningful pace, no card
+      const weekly = s.qty / 4;
+      const perDay = weekly / 7;
+      const avgPrice = s.qty ? s.revenue / s.qty : 0;
+      const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+      const avail = Math.max(0, Number(home.available) || 0);
+      const wfsLvl = (it.levels || []).find(l => /wfs/i.test(l.locationName || ''));
+      const wfsAvail = wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0;
+      const padded = !!pads[k];
+      // Missed: was selling, now nothing anywhere we ship from, not padded
+      if (!padded && avail <= 0 && wfsAvail <= 0 && weekly >= 1) {
+        const daysOut = Math.max(1, Math.round((now - s.last) / 86400000));
+        missed.push({
+          sku: it.sku, since: fmtDay(s.last), weekly: Math.round(weekly),
+          channels: [...s.channels].join(' + ') || '—',
+          value: Math.round(weekly * avgPrice * Math.min(4, daysOut / 7)),
+        });
+        continue;
+      }
+      // Buy soon: real shelf stock that runs out inside the lead window
+      if (!padded && avail > 0 && perDay > 0) {
+        const daysLeft = Math.floor(avail / perDay);
+        if (daysLeft <= lead) {
+          buy.push({
+            sku: it.sku, avail, daysLeft,
+            order: Math.max(1, Math.ceil(perDay * lead * 1.5 - avail)),
+          });
+        }
+      }
+      // Send to WFS: fast sellers whose 4-week pace outruns what WFS holds
+      if (weekly >= 8 && avail > 0) {
+        const send = Math.max(0, Math.round(weekly * 4 - wfsAvail));
+        if (send > 0) {
+          wfs.push({
+            sku: it.sku, weekly: Math.round(weekly),
+            coverDays: Math.floor(avail / perDay), send,
+          });
+        }
+      }
+    }
+    missed.sort((a, b) => b.value - a.value);
+    buy.sort((a, b) => a.daysLeft - b.daysLeft);
+    wfs.sort((a, b) => b.weekly - a.weekly);
+    return {
+      missed: missed.slice(0, 6),
+      missedTotal: missed.reduce((s, m) => s + m.value, 0),
+      buy: buy.slice(0, 5),
+      buyCount: buy.length,
+      wfs: wfs.slice(0, 6),
+      wfsUnits: wfs.slice(0, 6).reduce((s, w) => s + w.send, 0),
+      leadDays: lead,
+    };
+  }
+
+  ipcMain.handle('overview:data', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const orders = {
+      today: db.overviewToday(),
+      series: {
+        Day: db.overviewSeriesDay(),
+        Month: db.overviewSeriesMonth(),
+        Year: db.overviewSeriesYear(),
+      },
+    };
+    let money = overviewCache.money;
+    if (!money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+      if (!overviewCache.promise) {
+        overviewCache.promise = computeOverviewMoney(cfg)
+          .then(m => { overviewCache = { at: Date.now(), money: m, promise: null }; return m; })
+          .catch(e => { overviewCache.promise = null; throw e; });
+      }
+      // stale view answers instantly while a refresh runs; first call waits
+      if (!money) {
+        try { money = await overviewCache.promise; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message }; }
+      } else {
+        overviewCache.promise.catch(() => { /* stale money stands */ });
+      }
+    }
+    return { ok: true, orders, money };
+  });
+
   /* ---------- Temu lister: template intake + workbook export ---------- */
 
   const temuTemplatePath = () => path.join(app.getPath('userData'), 'temu-template.xlsx');

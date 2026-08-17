@@ -10,6 +10,7 @@
   <header class="topbar">
     <div class="brand"></div>
     <nav class="tabs" id="pageTabs" hidden>
+      <button id="tabOverview" class="tab" hidden>Overview</button>
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabReturns" class="tab" hidden>Returns</button>
@@ -171,6 +172,30 @@
       </div>
       <div id="retGrip" class="sheet-grip" title="Drag to widen or narrow the sheets · double-click to reset"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- Overview: the morning read - orders per marketplace, smooth sales curve
+       with Day/Month/Year filter, and three money cards expanding into a
+       shared SKU drawer. Approved design: variants/overview-v2.html -->
+  <section id="overviewPage" class="ov-page" hidden>
+    <div class="ov-wrap">
+      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span>
+        <span class="ov-ranges" id="ovRanges">
+          <button class="ov-rbtn is-on" data-r="Day">Day</button>
+          <button class="ov-rbtn" data-r="Month">Month</button>
+          <button class="ov-rbtn" data-r="Year">Year</button>
+        </span>
+      </div>
+      <div class="ov-grid">
+        <div class="ov-panel ov-today" id="ovToday"></div>
+        <div class="ov-panel">
+          <h4>Sales<span class="sub" id="ovChartSub"></span></h4>
+          <div class="ov-chartbox" id="ovChart"></div>
+        </div>
+      </div>
+      <div class="ov-cards" id="ovCards"></div>
+      <div class="ov-panel ov-drawer" id="ovDrawer" hidden></div>
     </div>
   </section>
 

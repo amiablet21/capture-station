@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld('api', {
   ebayQr: (sku) => ipcRenderer.invoke('ebay:qr', { sku }),
   ebayPhotosPick: () => ipcRenderer.invoke('ebay:photosPick'),
   ebayExport: (listing, photoPaths) => ipcRenderer.invoke('ebay:export', { listing, photoPaths }),
+  overviewData: () => ipcRenderer.invoke('overview:data'),
   temuState: () => ipcRenderer.invoke('temu:state'),
   temuTemplate: () => ipcRenderer.invoke('temu:template'),
   temuPackages: (model, pack) => ipcRenderer.invoke('temu:packages', { model, pack }),

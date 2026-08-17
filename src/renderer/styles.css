@@ -3648,6 +3648,65 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .lst-pill.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
 .lst-pill:disabled { opacity: 0.45; cursor: default; }
 
+/* ---------- Overview tab (approved design: variants/overview-v2.html) ---------- */
+.ov-page { flex: 1; overflow-y: auto; }
+.ov-wrap { max-width: 1160px; margin: 0 auto; padding: 14px 22px 26px; }
+.ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.ov-date { font-size: 11.5px; color: var(--faint); }
+.ov-ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+.ov-rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: var(--font); cursor: pointer; }
+.ov-rbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+.ov-grid { display: grid; grid-template-columns: 340px 1fr; gap: 10px; margin-bottom: 10px; }
+.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
+.ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+.ov-today { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.ov-today .big { font-family: var(--mono); font-size: 38px; font-weight: 700; line-height: 1.1; }
+.ov-today .delta { font-size: 10.5px; color: var(--accent-soft-text); }
+.ov-mkcol { display: flex; flex-direction: column; gap: 8px; }
+.ov-mkrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
+.ov-mkrow .dot { width: 8px; height: 8px; border-radius: 999px; }
+.ov-dot-walmart { background: #2E86D9; }
+.ov-dot-ebay { background: #047857; }
+.ov-dot-temu { background: #C97B12; }
+.ov-mkrow .n { font-size: 12px; font-weight: 600; }
+.ov-mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+.ov-share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
+.ov-share span { display: block; min-width: 2px; }
+.ov-chartbox { min-height: 190px; }
+.ov-chartbox svg { display: block; width: 100%; }
+.ov-chartbox text { font-family: var(--mono); }
+.ov-hovslice { cursor: crosshair; }
+.ov-tt { animation: ttPop .18s var(--ease); }
+@keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.ov-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.ov-mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 120ms var(--ease); }
+.ov-mcard:hover { background: var(--surface-2); }
+.ov-mcard .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.ov-mcard .chev { margin-left: auto; font-size: 10px; }
+.ov-mcard .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
+.ov-mcard .s { font-size: 10.5px; color: var(--muted); }
+.ov-big-r { color: var(--neg-text); } .ov-big-a { color: var(--badge-yellow-text); } .ov-big-g { color: #065F46; }
+.ov-drawer { margin-top: 10px; animation: ttPop .18s var(--ease); }
+.ov-drawer h4.r { color: var(--neg-text); } .ov-drawer h4.a { color: var(--badge-yellow-text); } .ov-drawer h4.g { color: #065F46; }
+.ov-drawer table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.ov-drawer th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); background: none; }
+.ov-drawer th.rr, .ov-drawer td.rr { text-align: right; }
+.ov-drawer td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
+.ov-drawer tr:last-child td { border-bottom: none; }
+.ov-drawer tr:hover td { background: var(--surface-2); }
+.ov-sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--badge-blue-text); cursor: pointer; }
+.ov-dim { color: var(--muted); }
+.ov-pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
+.ov-pill.r { background: var(--neg-bg); color: var(--neg-text); }
+.ov-pill.a { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.ov-pill.g { background: var(--accent-soft); color: var(--accent-soft-text); }
+.ov-more { margin-top: 8px; font-size: 11px; color: var(--muted); }
+.ov-more a { color: #065F46; font-weight: 600; text-decoration: none; cursor: pointer; }
+.ov-empty { padding: 14px 4px; font-size: 11.5px; color: var(--faint); }
+
 /* ---------- Temu lister (reuses the eBay three-panel skeleton) ---------- */
 /* centered columns clip their LEFT side unreachably when they overflow the
    window — "safe" keeps the start edge scrollable (owner hit it 2026-08-14) */

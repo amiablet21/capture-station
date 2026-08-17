@@ -152,6 +152,77 @@ function dedupeOrderRows() {
   return { removed, conflicts };
 }
 
+/* ---------- Overview tab: order aggregates (captured rows = orders) ---------- */
+
+// today's orders per channel + yesterday's total (the delta headline)
+function overviewToday() {
+  const today = localDay();
+  const yday = localDay(new Date(Date.now() - 86400000));
+  const by = open().prepare(
+    'SELECT channel, COUNT(*) AS n FROM rows WHERE day = ? GROUP BY channel'
+  ).all(today);
+  const yesterday = open().prepare('SELECT COUNT(*) AS n FROM rows WHERE day = ?').get(yday);
+  const byChannel = {};
+  let total = 0;
+  for (const r of by) { byChannel[String(r.channel).toLowerCase()] = Number(r.n); total += Number(r.n); }
+  return { total, byChannel, yesterday: Number((yesterday && yesterday.n) || 0) };
+}
+
+// Day: cumulative orders today per hour (8am -> now)
+function overviewSeriesDay() {
+  const today = localDay();
+  const rows = open().prepare('SELECT created_at FROM rows WHERE day = ?').all(today);
+  const nowH = new Date().getHours();
+  const endH = Math.max(9, Math.min(23, nowH)); // at least one step past 8am
+  const perHour = {};
+  for (const r of rows) {
+    const h = new Date(r.created_at).getHours();
+    perHour[h] = (perHour[h] || 0) + 1;
+  }
+  const vals = [];
+  const tips = [];
+  let run = 0;
+  for (let h = 0; h <= endH; h++) {
+    run += perHour[h] || 0;
+    if (h < 8) continue; // pre-8am orders roll into the first point
+    vals.push(run);
+    tips.push(h === nowH ? 'now' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`);
+  }
+  return { vals, tips };
+}
+
+// Month: orders per local day, last 30 days (oldest first)
+function overviewSeriesMonth() {
+  const days = [];
+  for (let i = 29; i >= 0; i--) days.push(localDay(new Date(Date.now() - i * 86400000)));
+  const got = new Map(open().prepare(
+    `SELECT day, COUNT(*) AS n FROM rows WHERE day >= ? GROUP BY day`
+  ).all(days[0]).map(r => [r.day, Number(r.n)]));
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return {
+    vals: days.map(d => got.get(d) || 0),
+    tips: days.map((d, i) => i === 29 ? 'Today' : `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}`),
+  };
+}
+
+// Year: orders per month, last 12 (oldest first)
+function overviewSeriesYear() {
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const got = new Map(open().prepare(
+    `SELECT substr(day, 1, 7) AS m, COUNT(*) AS n FROM rows WHERE day >= ? GROUP BY m`
+  ).all(months[0] + '-01').map(r => [r.m, Number(r.n)]));
+  return {
+    vals: months.map(m => got.get(m) || 0),
+    tips: months.map(m => `${MON[Number(m.slice(5)) - 1]} '${m.slice(2, 4)}`),
+  };
+}
+
 // one-click cleanup of rows whose orders left Linnworks' open book: only
 // the specific retriable failure is touched, other failures stay visible
 function clearFailedNotFound() {
@@ -501,4 +572,5 @@ module.exports = {
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
   lowStockCrossings,
+  overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear,
 };

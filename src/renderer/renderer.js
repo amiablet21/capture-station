@@ -251,11 +251,12 @@ function render() {
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
-  const pageEnabled = { capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
+  const pageEnabled = { overview: !!pages.stock, capture: true, stock: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
   }
+  $('tabOverview').hidden = !pages.stock;
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !pages.returns;
@@ -1097,7 +1098,7 @@ $('syncDialog').addEventListener('close', () => focusScan());
 let activePage = 'capture';
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1112,11 +1113,13 @@ function showPage(page) {
   activePage = page;
   if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
   updateScanPanel();
+  $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
+  $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
@@ -1131,7 +1134,9 @@ function showPage(page) {
   clearTimeout(showPageSettle);
   showPageSettle = setTimeout(() => {
     if (activePage !== page) return; // flew past this tab
-    if (page === 'ebay') {
+    if (page === 'overview') {
+      enterOverview();
+    } else if (page === 'ebay') {
       enterEbay();
     } else if (page === 'temu') {
       enterTemu();
@@ -6522,6 +6527,216 @@ $("ebRefresh").addEventListener("click", () => {
   loadChLinked();
   loadUnlisted(true);
   toast("Re-scanning listings…", 2000);
+});
+
+/* ==================== Overview tab ==================== */
+// The morning read (approved design variants/overview-v2.html): orders per
+// marketplace from SQLite, a smooth catmull-rom sales curve with Day/Month/
+// Year filter + hover tooltip, and three money cards sharing one SKU drawer.
+
+let ovData = null;
+let ovRange = 'Day';
+let ovHoverI = null;
+let ovOpen = 'missed'; // default drawer per the handoff
+let ovFetching = false;
+
+const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function enterOverview() {
+  const d = new Date();
+  $('ovDate').textContent = `${OV_WDAYS[d.getDay()]}, ${OV_MONTHS[d.getMonth()]} ${d.getDate()}`;
+  ovRenderAll();
+  ovFetch();
+}
+
+async function ovFetch() {
+  if (ovFetching) return;
+  ovFetching = true;
+  try {
+    const r = await api.overviewData().catch(() => null);
+    if (r && r.ok) {
+      ovData = r;
+      if (activePage === 'overview') ovRenderAll();
+    }
+  } finally {
+    ovFetching = false;
+  }
+}
+
+function ovRenderAll() {
+  ovRenderToday();
+  ovDrawChart();
+  ovRenderCards();
+  ovRenderDrawer();
+}
+
+function ovRenderToday() {
+  const box = $('ovToday');
+  const t = ovData && ovData.orders.today;
+  if (!t) { box.innerHTML = '<div class="ov-empty">Loading today…</div>'; return; }
+  const delta = t.total - t.yesterday;
+  const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+  box.innerHTML = `
+    <div><div class="k">Orders today</div><div class="big">${t.total}</div>
+      <div class="delta">${delta >= 0 ? '▲' : '▼'} <b class="mono">${delta >= 0 ? '+' : ''}${delta}</b> vs yesterday</div></div>
+    <div class="ov-mkcol">${chans.map(([k, n]) => `
+      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v">${t.byChannel[k] || 0}</span></div>`).join('')}
+    </div>
+    <div class="ov-share">${chans.map(([k]) => `<span class="ov-sh-${k}"></span>`).join('')}</div>`;
+  // CSP strips inline styles from generated HTML — flex weights + colors via CSSOM
+  const colors = { walmart: '#2E86D9', ebay: '#047857', temu: '#C97B12' };
+  chans.forEach(([k]) => {
+    const el = box.querySelector(`.ov-sh-${k}`);
+    if (el) { el.style.flexGrow = String(Math.max(t.byChannel[k] || 0, 0.01)); el.style.background = colors[k]; }
+  });
+}
+
+// catmull-rom -> cubic bezier: the "smooth, never jagged" requirement
+function ovSmoothPath(pts) {
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+const OV_SUBS = {
+  Day: 'today · orders as they come in · hover for detail',
+  Month: 'last 30 days · orders per day · hover for detail',
+  Year: 'last 12 months · orders per month · hover for detail',
+};
+
+function ovLabelsFor(range, tips) {
+  if (range === 'Day') return tips.map((tp, i) => (i % 2 === 0 || tp === 'now') ? tp.replace(' am', 'a').replace(' pm', 'p') : '');
+  if (range === 'Month') return tips.map((tp, i) => [0, 7, 14, 21, tips.length - 1].includes(i) ? tp : '');
+  return tips.map(tp => tp.split(" '")[0]);
+}
+
+function ovDrawChart() {
+  const box = $('ovChart');
+  const series = ovData && ovData.orders.series[ovRange];
+  $('ovChartSub').textContent = OV_SUBS[ovRange];
+  if (!series || series.vals.length < 2) { box.innerHTML = '<div class="ov-empty">Not enough orders captured yet — the curve grows as days pass.</div>'; return; }
+  const { vals, tips } = series;
+  const labels = ovLabelsFor(ovRange, tips);
+  const W = 680, H = 190, padL = 36, padR = 48, padT = 14, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const rawMax = Math.max(1, ...vals);
+  const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
+  const max = Math.ceil(rawMax / unit) * unit;
+  const X = i => padL + (i / (vals.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  const pts = vals.map((v, i) => [Math.round(X(i)), Math.round(Y(v))]);
+  const line = ovSmoothPath(pts);
+  const area = line + ` L ${pts[pts.length - 1][0]},${padT + ih} L ${pts[0][0]},${padT + ih} Z`;
+  let out = `<defs><linearGradient id="ovg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
+  [0, .5, 1].forEach(f => {
+    const v = Math.round(max * f), y = Y(v);
+    out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL - 7}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`;
+  });
+  labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H - 6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
+  out += `<path d="${area}" fill="url(#ovg)"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
+  const last = pts[pts.length - 1];
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857">${vals[vals.length - 1].toLocaleString()}</text>`;
+  if (ovHoverI != null && ovHoverI < vals.length) {
+    const hx = pts[ovHoverI][0], hy = pts[ovHoverI][1];
+    const txt = `${tips[ovHoverI]} · ${vals[ovHoverI].toLocaleString()} order${vals[ovHoverI] === 1 ? '' : 's'}`;
+    const tw = txt.length * 5.9 + 18;
+    const tx = Math.min(Math.max(hx, padL + tw / 2), W - padR + 40 - tw / 2);
+    const ty = Math.max(hy - 38, 2);
+    out += `<line x1="${hx}" y1="${padT}" x2="${hx}" y2="${padT + ih}" stroke="#D8D6D0" stroke-dasharray="3 3"/>`
+      + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
+      + `<g class="ov-tt"><rect x="${tx - tw / 2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty + 14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
+  }
+  const slice = iw / (vals.length - 1);
+  vals.forEach((v, i) => { out += `<rect class="ov-hovslice" data-i="${i}" x="${X(i) - slice / 2}" y="0" width="${slice}" height="${H}" fill="transparent"/>`; });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+  box.querySelectorAll('.ov-hovslice').forEach(r => r.addEventListener('mouseenter', () => { ovHoverI = Number(r.dataset.i); ovDrawChart(); }));
+  const svg = box.querySelector('svg');
+  if (svg) svg.addEventListener('mouseleave', () => { ovHoverI = null; ovDrawChart(); });
+}
+
+function ovRenderCards() {
+  const m = ovData && ovData.money;
+  const err = ovData && ovData.moneyError;
+  const cardDef = [
+    { key: 'missed', label: 'Missed sales', cls: 'ov-big-r', big: m ? `$${m.missedTotal.toLocaleString()}` : '…', s: m ? `${m.missed.length} SKU${m.missed.length === 1 ? '' : 's'} at zero that were selling` : (err || 'crunching the sales history…') },
+    { key: 'buy', label: 'Buy soon', cls: 'ov-big-a', big: m ? `${m.buyCount} SKUs` : '…', s: m ? `run out inside the ${m.leadDays}-day lead time` : '' },
+    { key: 'wfs', label: 'Send to WFS', cls: 'ov-big-g', big: m ? `${m.wfsUnits.toLocaleString()} units` : '…', s: m ? `${m.wfs.length} fast seller${m.wfs.length === 1 ? '' : 's'} outrunning the shelf` : '' },
+  ];
+  $('ovCards').innerHTML = cardDef.map(c => `
+    <div class="ov-mcard" data-ovcard="${c.key}">
+      <div class="k">${c.label}<span class="chev">${ovOpen === c.key ? '▴' : '▾'}</span></div>
+      <div class="big ${c.cls}">${c.big}</div><div class="s">${esc(c.s)}</div>
+    </div>`).join('');
+}
+
+function ovRenderDrawer() {
+  const box = $('ovDrawer');
+  const m = ovData && ovData.money;
+  if (!ovOpen || !m) { box.hidden = true; return; }
+  box.hidden = false;
+  // restart the entrance animation
+  box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
+  if (ovOpen === 'missed') {
+    box.innerHTML = `<h4 class="r">Missed sales · $${m.missedTotal.toLocaleString()}<span class="sub">click a SKU to open it in Stock</span></h4>
+      ${m.missed.length ? `<table><tr><th>SKU</th><th>Zero since</th><th>Was selling</th><th class="rr">Missed</th></tr>
+      ${m.missed.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${esc(r.since)}</td><td class="ov-dim">${r.weekly}/wk on ${esc(r.channels)}</td><td class="rr"><span class="ov-pill r">$${r.value.toLocaleString()}</span></td></tr>`).join('')}</table>`
+      : '<div class="ov-empty">Nothing was selling and hit zero — good.</div>'}`;
+  } else if (ovOpen === 'buy') {
+    box.innerHTML = `<h4 class="a">Buy soon · ${m.buyCount} SKUs<span class="sub">velocity × ${m.leadDays}-day lead × 1.5 buffer</span></h4>
+      ${m.buy.length ? `<table><tr><th>SKU</th><th>On shelf</th><th>Runs out</th><th class="rr">Order</th></tr>
+      ${m.buy.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${r.avail}</td><td class="${r.daysLeft <= 7 ? 'ov-dim' : 'ov-dim'}">in ${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'}</td><td class="rr"><span class="ov-pill a">${r.order}</span></td></tr>`).join('')}</table>`
+      : '<div class="ov-empty">Nothing runs out inside the lead window.</div>'}
+      ${m.buyCount > m.buy.length ? `<div class="ov-more">+ ${m.buyCount - m.buy.length} more under their minimum — <a data-ovlow>open Stock</a></div>` : ''}`;
+  } else {
+    box.innerHTML = `<h4 class="g">Send to WFS · ${m.wfsUnits.toLocaleString()} units<span class="sub">${m.wfs.length} fast sellers outrunning the shelf</span></h4>
+      ${m.wfs.length ? `<table><tr><th>SKU</th><th>Sold/wk</th><th>Shelf covers</th><th class="rr">Send</th></tr>
+      ${m.wfs.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${r.weekly}</td><td class="ov-dim">${r.coverDays} days</td><td class="rr"><span class="ov-pill g">+ ${r.send}</span></td></tr>`).join('')}</table>`
+      : '<div class="ov-empty">No fast sellers need a WFS top-up right now.</div>'}`;
+  }
+}
+
+// SKU click-through: Stock page filtered to that SKU (search prefilled after
+// the page's settle-enter clears it)
+function ovOpenStock(sku, lowView) {
+  stockUnlistedActive = false;
+  stockWfsActive = false;
+  stockLowActive = !!lowView;
+  stockDsActive = false;
+  stockActiveView = null;
+  showPage('stock');
+  setTimeout(() => {
+    if (activePage !== 'stock') return;
+    $('stockSearch').value = sku || '';
+    $('stockSearchClear').hidden = !sku;
+    renderStockChips();
+    renderStock();
+  }, 260);
+}
+
+$('tabOverview').addEventListener('click', () => showPage('overview'));
+$('ovRanges').addEventListener('click', (e) => {
+  const b = e.target.closest('.ov-rbtn');
+  if (!b) return;
+  ovRange = b.dataset.r;
+  ovHoverI = null;
+  document.querySelectorAll('.ov-rbtn').forEach(x => x.classList.toggle('is-on', x === b));
+  ovDrawChart();
+});
+$('ovCards').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-ovcard]');
+  if (!c) return;
+  ovOpen = (ovOpen === c.dataset.ovcard) ? null : c.dataset.ovcard;
+  ovRenderCards();
+  ovRenderDrawer();
+});
+$('ovDrawer').addEventListener('click', (e) => {
+  const s = e.target.closest('[data-ovsku]');
+  if (s) { ovOpenStock(s.dataset.ovsku); return; }
+  if (e.target.closest('[data-ovlow]')) ovOpenStock('', true);
 });
 
 /* ==================== Temu lister tab ==================== */
