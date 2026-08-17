@@ -3283,7 +3283,12 @@ $('rvSave').addEventListener('click', async () => {
 });
 
 $('rvCancel').addEventListener('click', () => $('retRecvDialog').close());
-$('retRecvDialog').addEventListener('close', () => { rv = null; });
+// the dialog's close event fires on a QUEUED task: when the popup is closed
+// and reopened back-to-back (the e2e suite does; a fast hand could too), the
+// stale event lands AFTER the reopen — nulling rv then wiped the fresh state
+// and made rvCommit bail through its silent !rv guard (the [false,"",""]
+// flake, 6 occurrences). Only wipe when the dialog is really closed.
+$('retRecvDialog').addEventListener('close', () => { if (!$('retRecvDialog').open) rv = null; });
 $('retAddBtn').addEventListener('click', () => retOpenRecv());
 
 // live inventory suggestions in the popup's two SKU fields

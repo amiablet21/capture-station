@@ -37,9 +37,13 @@ is now the FIRST tab and the app's boot page. State as of v1.20.12:
   overviewPageWidth); the WINDOW remembers size+maximized across launches
   (userData/window-state.json); app boots to Overview when Stock pages are
   enabled.
-- Known flaky e2e: "Receive closes the popup after a successful commit"
-  ([false,"",""]) — 5 flakes to date, gate catches it, retry passes. Root-cause
-  task chip spawned, owner hasn't clicked it yet.
+- Flaky e2e RESOLVED in v1.20.14: "Receive closes the popup after a successful
+  commit" ([false,"",""], 6 blocks) — the dialog close event fires on a queued
+  task, so a rapid close→reopen let the stale event null the fresh rv state and
+  rvCommit bailed through its silent !rv guard. The wipe now checks
+  `!dialog.open` first. Was a real fast-hands bug on Returns, not just a flake.
+  Also: Month = CURRENT calendar month to date everywhere (v1.20.13), delta vs
+  the same day-span of the prior month; Gross $ is the default metric.
 
 ## Go-live gate: CLEAR as of 2026-08-14 evening
 
