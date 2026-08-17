@@ -179,29 +179,32 @@
        with Day/Month/Year filter, and three money cards expanding into a
        shared SKU drawer. Approved design: variants/overview-v2.html -->
   <section id="overviewPage" class="ov-page" hidden>
-    <div class="ov-wrap">
-      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span>
-        <span class="ov-ranges" id="ovRanges">
-          <button class="ov-rbtn is-on" data-r="Day">Day</button>
-          <button class="ov-rbtn" data-r="Month">Month</button>
-          <button class="ov-rbtn" data-r="Year">Year</button>
-        </span>
-      </div>
+    <div class="ov-sheet-row">
+    <div class="ov-wrap" id="ovWrap">
+      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span></div>
       <div class="ov-grid">
         <div class="ov-panel ov-today" id="ovToday"></div>
         <div class="ov-panel">
+          <!-- ranges live in the chart header (owner mockup 2026-08-17); they
+               drive BOTH the curve and the totals card on the left -->
           <h4>Sales
             <span class="ov-mtoggle" id="ovMetric">
               <button class="ov-mbtn is-on" data-m="orders">Orders</button>
               <button class="ov-mbtn" data-m="sales">Gross $</button>
             </span>
-            <span class="sub" id="ovChartSub"></span>
+            <span class="ov-ranges" id="ovRanges">
+              <button class="ov-rbtn is-on" data-r="Day">Day</button>
+              <button class="ov-rbtn" data-r="Month">Month</button>
+              <button class="ov-rbtn" data-r="Year">Year</button>
+            </span>
           </h4>
           <div class="ov-chartbox" id="ovChart"></div>
         </div>
       </div>
       <div class="ov-cards" id="ovCards"></div>
       <div class="ov-panel ov-drawer" id="ovDrawer" hidden></div>
+    </div>
+    <div id="ovGrip" class="sheet-grip" title="Drag to widen or narrow the page · double-click to reset"></div>
     </div>
   </section>
 

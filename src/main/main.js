@@ -2431,7 +2431,8 @@ function registerIpc() {
   // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
   // day, persisted so boots answer instantly.
   const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
-  const OVERVIEW_HISTORY_V = 3; // v2: bucketed by RECEIVED date · v3: + gross sales per day
+  const OVERVIEW_HISTORY_V = 4; // v2: bucketed by RECEIVED date · v3: + gross sales per day · v4: + per-channel split
+  const ovChanOf = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
   let overviewHistory = { at: 0, days: null, promise: null };
   const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
   try {
@@ -2450,17 +2451,20 @@ function registerIpc() {
       const to = new Date();
       const from = new Date(to.getTime() - 366 * 86400000);
       const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
-      const days = {}; // ymd -> { n: orders received, s: gross sales $ }
-      const bump = (ts, charge) => {
+      const days = {}; // ymd -> { n: orders received, s: gross sales $, c: { channel: { n, s } } }
+      const bump = (ts, charge, src) => {
         if (Number.isNaN(ts)) return;
         const key = db.localDay(new Date(ts));
-        const d = days[key] = days[key] || { n: 0, s: 0 };
+        const d = days[key] = days[key] || { n: 0, s: 0, c: {} };
         d.n += 1;
         d.s += Number(charge) || 0;
+        const c = d.c[ovChanOf(src || '')] = d.c[ovChanOf(src || '')] || { n: 0, s: 0 };
+        c.n += 1;
+        c.s += Number(charge) || 0;
       };
-      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.totalCharge);
+      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.totalCharge, h.source);
       try {
-        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.totalCharge);
+        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.totalCharge, o.source);
       } catch { /* open book unavailable: processed-only still beats captures */ }
       overviewHistory = { at: Date.now(), days, promise: null };
       try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days, v: OVERVIEW_HISTORY_V })); } catch { /* best effort */ }
@@ -2498,6 +2502,54 @@ function registerIpc() {
       tips: months.map(m => `${OV_MON[Number(m.slice(5)) - 1]} '${m.slice(2, 4)}`),
     };
     return { month, year };
+  }
+
+  // the totals card follows the range filter (owner mockup 2026-08-17):
+  // Month/Year per-channel sums ride the same received-day history as the
+  // curves, with today's slice swapped for the fresher live fetch
+  function overviewRangeTotals(days, liveToday) {
+    const today = db.localDay();
+    const sum = (keys) => {
+      const a = { total: 0, totalSales: 0, byChannel: {}, byChannelSales: {} };
+      for (const k of keys) {
+        if (liveToday && k === today) {
+          a.total += liveToday.total;
+          a.totalSales += liveToday.totalSales;
+          for (const [c, n] of Object.entries(liveToday.byChannel || {})) a.byChannel[c] = (a.byChannel[c] || 0) + n;
+          for (const [c, s] of Object.entries(liveToday.byChannelSales || {})) a.byChannelSales[c] = (a.byChannelSales[c] || 0) + s;
+          continue;
+        }
+        const d = days[k];
+        if (!d) continue;
+        a.total += d.n;
+        a.totalSales += d.s;
+        for (const [c, v] of Object.entries(d.c || {})) {
+          a.byChannel[c] = (a.byChannel[c] || 0) + v.n;
+          a.byChannelSales[c] = (a.byChannelSales[c] || 0) + v.s;
+        }
+      }
+      a.totalSales = Math.round(a.totalSales);
+      for (const c of Object.keys(a.byChannelSales)) a.byChannelSales[c] = Math.round(a.byChannelSales[c]);
+      return a;
+    };
+    const dayKey = (off) => db.localDay(new Date(Date.now() - off * 86400000));
+    const last30 = [], prior30 = [];
+    for (let i = 0; i < 30; i++) last30.push(dayKey(i));
+    for (let i = 30; i < 60; i++) prior30.push(dayKey(i));
+    // Year matches the chart's window: the last 12 calendar months
+    const months = new Set();
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    const yearKeys = Object.keys(days).filter(k => months.has(k.slice(0, 7)));
+    if (!yearKeys.includes(today)) yearKeys.push(today);
+    const prior = sum(prior30);
+    return {
+      Month: { ...sum(last30), prevTotal: prior.total, prevTotalSales: prior.totalSales },
+      Year: sum(yearKeys),
+    };
   }
 
   // live "today" on the received-order basis: processed-today headers (small
@@ -2672,6 +2724,9 @@ function registerIpc() {
           yesterdaySales: ydayRec ? Math.round(ydayRec.s) : 0,
         }
         : sqlToday,
+      ranges: overviewHistory.days
+        ? overviewRangeTotals(overviewHistory.days, live ? live.today : null)
+        : null,
       series: {
         Day: live ? live.series : db.overviewSeriesDay(),
         Month: hist ? hist.month : db.overviewSeriesMonth(),

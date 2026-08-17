@@ -6590,19 +6590,24 @@ function ovRenderAll() {
 let ovPrevToday = null; // last rendered totals: the odometer rolls on increase
 
 function ovOdometer(el, from, to) {
-  const s = String(to);
-  const f = String(from).padStart(s.length, '0').slice(-s.length);
-  el.innerHTML = [...s].map(() =>
-    `<span class="dcol"><span class="dstack">${'0123456789'.split('').map(x => `<i>${x}</i>`).join('')}</span></span>`).join('');
+  // thousands separators render as static glyphs between the rolling digit
+  // columns, so "$5,710" reads like the mockup while still animating
+  const s = Math.max(0, Math.round(to)).toLocaleString('en-US');
+  const tDigits = s.replace(/\D/g, '');
+  const fDigits = Math.max(0, Math.round(from)).toLocaleString('en-US').replace(/\D/g, '')
+    .padStart(tDigits.length, '0').slice(-tDigits.length);
+  el.innerHTML = [...s].map(ch => /\d/.test(ch)
+    ? `<span class="dcol"><span class="dstack">${'0123456789'.split('').map(x => `<i>${x}</i>`).join('')}</span></span>`
+    : `<span class="dsep">${ch}</span>`).join('');
   const stacks = el.querySelectorAll('.dstack');
   stacks.forEach((st, i) => {
     st.style.transition = 'none';
-    st.style.transform = `translateY(-${Number(f[i]) * 1.1}em)`;
+    st.style.transform = `translateY(-${Number(fDigits[i]) * 1.1}em)`;
   });
   requestAnimationFrame(() => requestAnimationFrame(() => {
     stacks.forEach((st, i) => {
       st.style.transition = '';
-      st.style.transform = `translateY(-${Number(s[i]) * 1.1}em)`;
+      st.style.transform = `translateY(-${Number(tDigits[i]) * 1.1}em)`;
     });
   }));
 }
@@ -6612,33 +6617,43 @@ function ovRenderToday() {
   const t = ovData && ovData.orders.today;
   if (!t) { box.innerHTML = '<div class="ov-empty">Loading today…</div>'; return; }
   const money = ovMetric === 'sales' && t.totalSales !== undefined;
-  const prev = ovPrevToday;
-  const rose = prev && t.total > prev.total;
-  const delta = money ? (t.totalSales - (t.yesterdaySales || 0)) : (t.total - t.yesterday);
-  const deltaTxt = money
-    ? `${delta >= 0 ? '+' : '−'}${ovMoneyShort(Math.abs(delta))}`
-    : `${delta >= 0 ? '+' : ''}${delta}`;
+  // the card follows the range filter (owner mockup 2026-08-17): Day shows
+  // the live today numbers, Month/Year sum the received-day history
+  const view = ovRange === 'Day' ? t : ((ovData.orders.ranges || {})[ovRange] || null);
+  const label = `${money ? 'Gross' : 'Orders'} ${ovRange === 'Day' ? 'today' : ovRange === 'Month' ? '· 30 days' : '· 12 months'}`;
+  if (!view) {
+    box.innerHTML = `<div><div class="k">${label}</div><div class="big">…</div>
+      <div class="delta">crunching the order history…</div></div>`;
+    return;
+  }
+  const prevRef = ovRange === 'Day'
+    ? { t: t.yesterday, s: t.yesterdaySales || 0, vs: 'vs yesterday' }
+    : ovRange === 'Month' && view.prevTotal !== undefined
+      ? { t: view.prevTotal, s: view.prevTotalSales || 0, vs: 'vs prior 30 days' }
+      : null; // the year window has no prior year of history to compare
+  const delta = prevRef ? (money ? view.totalSales - prevRef.s : view.total - prevRef.t) : null;
+  const deltaHtml = prevRef
+    ? `<div class="delta ${delta < 0 ? 'neg' : ''}">${delta >= 0 ? '▲' : '▼'} <b class="mono">${delta < 0 ? '−' : '+'}${money ? '$' : ''}${Math.abs(delta).toLocaleString()}</b> ${prevRef.vs}</div>`
+    : '<div class="delta"></div>';
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
-  const chVal = (k) => money ? ovMoneyShort(Math.round((t.byChannelSales || {})[k] || 0)) : (t.byChannel[k] || 0);
+  const chVal = (k) => money
+    ? `$${Math.round((view.byChannelSales || {})[k] || 0).toLocaleString()}`
+    : ((view.byChannel || {})[k] || 0).toLocaleString();
   box.innerHTML = `
-    <div><div class="k">${money ? 'Gross sales today' : 'Orders today'}</div>
-      <div class="big">${money ? '<span>$</span>' : ''}<span class="ov-odo"></span></div>
-      <div class="delta ${delta < 0 ? 'neg' : ''}">${delta >= 0 ? '▲' : '▼'} <b class="mono">${deltaTxt}</b> vs yesterday</div></div>
-    <div class="ov-mkcol">${chans.map(([k, n]) => `
-      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v" data-ovch="${k}">${chVal(k)}</span></div>`).join('')}
-    </div>
-    <div class="ov-share">${chans.map(([k]) => `<span class="ov-sh-${k}"></span>`).join('')}</div>
-    <div class="ov-toast"><span id="ovToastChip"></span></div>`;
-  const bigTo = money ? Math.round(t.totalSales) : t.total;
-  const bigFrom = rose ? (money ? Math.round(prev.totalSales ?? bigTo) : prev.total) : bigTo;
-  ovOdometer(box.querySelector('.ov-odo'), bigFrom, bigTo);
-  // CSP strips inline styles from generated HTML — flex weights + colors via CSSOM
-  const colors = { walmart: '#2E86D9', ebay: '#047857', temu: '#C97B12' };
-  chans.forEach(([k]) => {
-    const share = money ? Math.round((t.byChannelSales || {})[k] || 0) : (t.byChannel[k] || 0);
-    const el = box.querySelector(`.ov-sh-${k}`);
-    if (el) { el.style.flexGrow = String(Math.max(share, 0.01)); el.style.background = colors[k]; }
-  });
+    <div><div class="k">${label}</div>
+      <div class="big">${money ? '<span class="dsep">$</span>' : ''}<span class="ov-odo"></span></div>
+      ${deltaHtml}</div>
+    <div class="ov-toast"><span id="ovToastChip"></span></div>
+    <div class="ov-chcells">${chans.map(([k, n]) => `
+      <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv" data-ovch="${k}">${chVal(k)}</div></div>`).join('')}
+    </div>`;
+  const bigTo = money ? Math.round(view.totalSales) : view.total;
+  const key = `${ovRange}|${ovMetric}`;
+  const prev = ovPrevToday;
+  const roll = prev && prev.key === key && bigTo > prev.big;
+  ovOdometer(box.querySelector('.ov-odo'), roll ? prev.big : bigTo, bigTo);
+  // the live-order flourish keys on TODAY's counts whatever window is shown
+  const rose = prev && prev.total != null && t.total > prev.total;
   if (rose) {
     const grew = chans.filter(([k]) => (t.byChannel[k] || 0) > ((prev.byChannel || {})[k] || 0));
     grew.forEach(([k]) => {
@@ -6652,7 +6667,7 @@ function ovRenderToday() {
       : `+${n} order${n === 1 ? '' : 's'}`;
     chip.classList.add('show');
   }
-  ovPrevToday = { total: t.total, totalSales: t.totalSales, byChannel: { ...t.byChannel } };
+  ovPrevToday = { key, big: bigTo, total: t.total, byChannel: { ...t.byChannel } };
 }
 
 // catmull-rom -> cubic bezier: the "smooth, never jagged" requirement
@@ -6665,12 +6680,6 @@ function ovSmoothPath(pts) {
   return d;
 }
 
-const OV_SUBS = {
-  Day: 'today · orders as they come in · hover for detail',
-  Month: 'last 30 days · processed orders per day · hover for detail',
-  Year: 'last 12 months · processed orders per month · hover for detail',
-};
-
 function ovLabelsFor(range, tips) {
   if (range === 'Day') return tips.map((tp, i) => (i % 2 === 0 || tp === 'now') ? tp.replace(' am', 'a').replace(' pm', 'p') : '');
   if (range === 'Month') return tips.map((tp, i) => [0, 7, 14, 21, tips.length - 1].includes(i) ? tp : '');
@@ -6681,7 +6690,6 @@ function ovDrawChart() {
   const box = $('ovChart');
   const series = ovData && ovData.orders.series[ovRange];
   const money = ovMetric === 'sales';
-  $('ovChartSub').textContent = OV_SUBS[ovRange].replace('orders', money ? 'gross sales' : 'orders');
   if (!series || series.vals.length < 2) { box.innerHTML = '<div class="ov-empty">Not enough orders captured yet — the curve grows as days pass.</div>'; return; }
   const tips = series.tips;
   const vals = money && Array.isArray(series.sales) ? series.sales : series.vals;
@@ -6802,16 +6810,45 @@ $('ovRanges').addEventListener('click', (e) => {
   ovHoverI = null;
   document.querySelectorAll('.ov-rbtn').forEach(x => x.classList.toggle('is-on', x === b));
   ovDrawChart();
+  ovRenderToday();
 });
 $('ovMetric').addEventListener('click', (e) => {
   const b = e.target.closest('.ov-mbtn');
   if (!b) return;
   ovMetric = b.dataset.m;
   ovHoverI = null;
-  ovPrevToday = null; // switching units must not fake an odometer roll
   document.querySelectorAll('.ov-mbtn').forEach(x => x.classList.toggle('is-on', x === b));
   ovDrawChart();
-  ovRenderToday();
+  ovRenderToday(); // switch renders fresh; the roll key blocks fake odometer spins
+});
+
+// page-width grip, same feel as the Stock sheet's: drag the right rail, the
+// centered layout grows both ways so the rail tracks the cursor at 2x
+let ovDrag = null;
+{
+  const savedW = Number(localStorage.getItem('overviewPageWidth')) || 0;
+  if (savedW) $('ovWrap').style.width = `${savedW}px`;
+}
+$('ovGrip').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  ovDrag = { startX: e.clientX, startW: $('ovWrap').offsetWidth, w: 0 };
+  $('ovGrip').classList.add('is-active');
+});
+window.addEventListener('mousemove', (e) => {
+  if (!ovDrag) return;
+  const w = Math.max(760, ovDrag.startW + (e.clientX - ovDrag.startX) * 2);
+  ovDrag.w = w;
+  $('ovWrap').style.width = `${w}px`;
+});
+window.addEventListener('mouseup', () => {
+  if (!ovDrag) return;
+  if (ovDrag.w) localStorage.setItem('overviewPageWidth', String(ovDrag.w));
+  ovDrag = null;
+  $('ovGrip').classList.remove('is-active');
+});
+$('ovGrip').addEventListener('dblclick', () => {
+  localStorage.removeItem('overviewPageWidth');
+  $('ovWrap').style.width = '';
 });
 $('ovCards').addEventListener('click', (e) => {
   const c = e.target.closest('[data-ovcard]');

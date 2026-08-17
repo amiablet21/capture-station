@@ -3655,33 +3655,35 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 /* ---------- Overview tab (approved design: variants/overview-v2.html) ---------- */
 .ov-page { flex: 1; overflow-y: auto; }
-.ov-wrap { max-width: 1160px; margin: 0 auto; padding: 14px 22px 26px; }
+/* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
+.ov-sheet-row { display: flex; justify-content: center; align-items: stretch; padding-right: 8px; }
+.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 14px 22px 26px; }
+.ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .ov-date { font-size: 11.5px; color: var(--faint); }
-.ov-ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
-.ov-rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: var(--font); cursor: pointer; }
-.ov-rbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+/* ranges sit in the chart header now, sized to match the metric toggle */
+.ov-ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 8px; padding: 2px; gap: 2px; }
+.ov-rbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 10px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.ov-rbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
 .ov-grid { display: grid; grid-template-columns: 340px 1fr; gap: 10px; margin-bottom: 10px; }
 .ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
 .ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
-.ov-today { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 12px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-today .big { font-family: var(--mono); font-size: 38px; font-weight: 700; line-height: 1.1; }
-.ov-today .delta { font-size: 10.5px; color: var(--accent-soft-text); }
+.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; margin: 4px 0 6px; }
+.ov-today .delta { font-size: 10.5px; color: var(--accent-soft-text); min-height: 14px; }
 .ov-today .delta.neg { color: var(--neg-text); }
-.ov-today .big { display: flex; align-items: baseline; }
-.ov-mkcol { display: flex; flex-direction: column; gap: 8px; }
-.ov-mkrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
-.ov-mkrow .dot { width: 8px; height: 8px; border-radius: 999px; }
-.ov-dot-walmart { background: #2E86D9; }
-.ov-dot-ebay { background: #047857; }
-.ov-dot-temu { background: #C97B12; }
-.ov-mkrow .n { font-size: 12px; font-weight: 600; }
-.ov-mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
-.ov-share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
-.ov-share span { display: block; min-width: 2px; }
+/* channel cells pinned to the card's bottom edge (owner mockup 2026-08-17) */
+.ov-chcells { margin: auto -16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
+.ov-chcell { padding: 9px 8px 12px; text-align: center; }
+.ov-chcell + .ov-chcell { border-left: 1px solid var(--border); }
+.ov-chcell .cn { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.cn-walmart { color: #2E86D9; }
+.cn-ebay { color: #047857; }
+.cn-temu { color: #C97B12; }
+.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; border-radius: 5px; }
 /* the orders-today number rolls like a mechanical counter when it rises
    (owner pick: "odometer roll") — the marketplace row flashes its +1 and a
    soft chip names the channel */
@@ -3689,8 +3691,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-odo .dcol { position: relative; height: 1.1em; overflow: hidden; display: inline-block; }
 .ov-odo .dstack { display: flex; flex-direction: column; transition: transform 500ms var(--ease); }
 .ov-odo .dstack i { font-style: normal; height: 1.1em; line-height: 1.1em; display: block; }
-.ov-mkrow .v { border-radius: 5px; padding: 0 5px; }
-.ov-mkrow .v.ov-hit { animation: ovHit 800ms var(--ease); }
+.dsep { display: inline-block; height: 1.1em; line-height: 1.1em; } /* static $ and commas between rolling digits */
+.ov-chcell .cv.ov-hit { animation: ovHit 800ms var(--ease); }
 @keyframes ovHit { 0% { background: var(--accent-soft); color: var(--accent-soft-text); } 100% { background: transparent; } }
 .ov-toast { height: 18px; text-align: center; }
 .ov-toast span { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 10px; opacity: 0; }
