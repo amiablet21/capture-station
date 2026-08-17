@@ -2799,6 +2799,15 @@ function registerIpc() {
     const tryListen = (port, left) => {
       const srv = require('http').createServer(async (req, res) => {
         const u = new URL(req.url, 'http://x');
+        // the home-screen icon is token-exempt: iOS fetches apple-touch-icon
+        // without query params, and an icon leaks nothing
+        if (u.pathname === '/icon.png') {
+          try {
+            res.writeHead(200, { 'Content-Type': 'image/png' });
+            res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'phone-icon.png')));
+          } catch { res.writeHead(404); res.end(); }
+          return;
+        }
         if (u.searchParams.get('k') !== token) { res.writeHead(403); res.end('Forbidden'); return; }
         if (u.pathname === '/data') {
           let payload;
