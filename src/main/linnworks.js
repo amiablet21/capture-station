@@ -697,7 +697,14 @@ class LinnworksClient {
         },
       });
       const po = (data && data.ProcessedOrders) || {};
-      for (const o of po.Data || []) out.push({ orderId: o.pkOrderID, processedOn: o.dProcessedOn || '' });
+      for (const o of po.Data || []) {
+        out.push({
+          orderId: o.pkOrderID,
+          processedOn: o.dProcessedOn || '',
+          // the day the ORDER ARRIVED — what "orders that day" actually means
+          receivedOn: o.dReceivedDate || o.dReceievedDate || '',
+        });
+      }
       if (!(po.Data || []).length || page >= (po.TotalPages || 1)) break;
     }
     return out;

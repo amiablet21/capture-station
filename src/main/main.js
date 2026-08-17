@@ -2431,13 +2431,18 @@ function registerIpc() {
   // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
   // day, persisted so boots answer instantly.
   const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
+  const OVERVIEW_HISTORY_V = 2; // v2: bucketed by RECEIVED date, not processed
   let overviewHistory = { at: 0, days: null, promise: null };
   const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
   try {
     const j = JSON.parse(fs.readFileSync(overviewHistoryPath(), 'utf8'));
-    if (j && j.days) overviewHistory = { at: Number(j.at) || 0, days: j.days, promise: null };
+    if (j && j.days && j.v === OVERVIEW_HISTORY_V) overviewHistory = { at: Number(j.at) || 0, days: j.days, promise: null };
   } catch { /* no saved history yet */ }
 
+  // "Orders on Aug 16" means orders that ARRIVED Aug 16 — bucketing by the
+  // processed date piled whole shipping batches onto one day (owner caught a
+  // phantom 44, 2026-08-17). Processed orders count by their received date;
+  // the open book adds the arrived-but-unshipped remainder for recent days.
   function refreshOverviewHistory(cfg) {
     if (overviewHistory.promise) return overviewHistory.promise;
     overviewHistory.promise = (async () => {
@@ -2447,13 +2452,21 @@ function registerIpc() {
       const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
       const days = {};
       for (const h of heads) {
-        const ts = Date.parse(h.processedOn);
+        const ts = Date.parse(h.receivedOn || h.processedOn);
         if (Number.isNaN(ts)) continue;
         const key = db.localDay(new Date(ts));
         days[key] = (days[key] || 0) + 1;
       }
+      try {
+        for (const o of await getOpenOrdersCached(cfg)) {
+          const ts = Date.parse(o.receivedDate);
+          if (Number.isNaN(ts)) continue;
+          const key = db.localDay(new Date(ts));
+          days[key] = (days[key] || 0) + 1;
+        }
+      } catch { /* open book unavailable: processed-only still beats captures */ }
       overviewHistory = { at: Date.now(), days, promise: null };
-      try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days })); } catch { /* best effort */ }
+      try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days, v: OVERVIEW_HISTORY_V })); } catch { /* best effort */ }
       return days;
     })().catch(e => { overviewHistory.promise = null; throw e; });
     return overviewHistory.promise;
