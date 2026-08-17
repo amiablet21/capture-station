@@ -115,6 +115,10 @@
   .tabs button.on { color: var(--accent); }
   .page { display: none; }
   .page.on { display: block; }
+  /* tab switches fade the incoming page in — the same 180ms opacity fade the
+     desktop tabs use (owner request 2026-08-17) */
+  .page.fadein { animation: pageFade 180ms cubic-bezier(.2, .7, .3, 1); }
+  @keyframes pageFade { from { opacity: 0; } }
 </style>
 </head>
 <body>
@@ -394,11 +398,18 @@
 
   /* ---------------- tabs + refresh ---------------- */
   function showTab(p) {
+    const switching = activeTab !== p;
     activeTab = p;
     $('pgOverview').classList.toggle('on', p === 'Overview');
     $('pgOrders').classList.toggle('on', p === 'Orders');
     $('pgStock').classList.toggle('on', p === 'Stock');
     [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.p === p));
+    if (switching) {
+      const el = $('pg' + p);
+      el.classList.remove('fadein');
+      void el.offsetWidth; // restart the animation
+      el.classList.add('fadein');
+    }
     if (p === 'Orders' && !ordersData) refreshOrders();
     if (p === 'Stock' && !stockData) refreshStock();
   }
