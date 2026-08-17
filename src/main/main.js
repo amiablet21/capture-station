@@ -2425,6 +2425,63 @@ function registerIpc() {
     return overviewCache.promise;
   }
 
+  // Month/Year curves come from Linnworks' PROCESSED ORDERS, not the app's
+  // own capture rows — captures only exist since the station went live, so
+  // building history from them painted phantom zero-days (owner caught it
+  // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
+  // day, persisted so boots answer instantly.
+  const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
+  let overviewHistory = { at: 0, days: null, promise: null };
+  const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
+  try {
+    const j = JSON.parse(fs.readFileSync(overviewHistoryPath(), 'utf8'));
+    if (j && j.days) overviewHistory = { at: Number(j.at) || 0, days: j.days, promise: null };
+  } catch { /* no saved history yet */ }
+
+  function refreshOverviewHistory(cfg) {
+    if (overviewHistory.promise) return overviewHistory.promise;
+    overviewHistory.promise = (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      const to = new Date();
+      const from = new Date(to.getTime() - 366 * 86400000);
+      const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
+      const days = {};
+      for (const h of heads) {
+        const ts = Date.parse(h.processedOn);
+        if (Number.isNaN(ts)) continue;
+        const key = db.localDay(new Date(ts));
+        days[key] = (days[key] || 0) + 1;
+      }
+      overviewHistory = { at: Date.now(), days, promise: null };
+      try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days })); } catch { /* best effort */ }
+      return days;
+    })().catch(e => { overviewHistory.promise = null; throw e; });
+    return overviewHistory.promise;
+  }
+
+  const OV_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function overviewSeriesFromHistory(days) {
+    const monthDays = [];
+    for (let i = 29; i >= 0; i--) monthDays.push(db.localDay(new Date(Date.now() - i * 86400000)));
+    const month = {
+      vals: monthDays.map(d => days[d] || 0),
+      tips: monthDays.map((d, i) => i === 29 ? 'Today' : `${OV_MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}`),
+    };
+    const perMonth = {};
+    for (const [d, n] of Object.entries(days)) perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + n;
+    const months = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    const year = {
+      vals: months.map(m => perMonth[m] || 0),
+      tips: months.map(m => `${OV_MON[Number(m.slice(5)) - 1]} '${m.slice(2, 4)}`),
+    };
+    return { month, year };
+  }
+
   async function computeOverviewMoney(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const to = new Date();
@@ -2520,13 +2577,21 @@ function registerIpc() {
   ipcMain.handle('overview:data', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    // processed-order history feeds Month/Year (accurate); captures feed the
+    // live Day curve and today's per-channel card. SQLite stands in for
+    // Month/Year only until the first history fetch lands.
+    const hist = overviewHistory.days ? overviewSeriesFromHistory(overviewHistory.days) : null;
+    if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
+      refreshOverviewHistory(cfg).catch(() => { /* stale or SQLite view stands */ });
+    }
     const orders = {
       today: db.overviewToday(),
       series: {
         Day: db.overviewSeriesDay(),
-        Month: db.overviewSeriesMonth(),
-        Year: db.overviewSeriesYear(),
+        Month: hist ? hist.month : db.overviewSeriesMonth(),
+        Year: hist ? hist.year : db.overviewSeriesYear(),
       },
+      historyPending: !hist,
     };
     let money = overviewCache.money;
     if (!money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
@@ -2547,6 +2612,9 @@ function registerIpc() {
     if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
       if (!overviewCache.money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
         refreshOverviewMoney(cfg).catch(() => { /* next open retries */ });
+      }
+      if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
+        refreshOverviewHistory(cfg).catch(() => { /* next open retries */ });
       }
     }
   }, 15000);

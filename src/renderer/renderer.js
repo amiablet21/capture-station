@@ -6604,8 +6604,8 @@ function ovSmoothPath(pts) {
 
 const OV_SUBS = {
   Day: 'today · orders as they come in · hover for detail',
-  Month: 'last 30 days · orders per day · hover for detail',
-  Year: 'last 12 months · orders per month · hover for detail',
+  Month: 'last 30 days · processed orders per day · hover for detail',
+  Year: 'last 12 months · processed orders per month · hover for detail',
 };
 
 function ovLabelsFor(range, tips) {
@@ -6650,12 +6650,22 @@ function ovDrawChart() {
       + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
       + `<g class="ov-tt"><rect x="${tx - tw / 2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty + 14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
   }
-  const slice = iw / (vals.length - 1);
-  vals.forEach((v, i) => { out += `<rect class="ov-hovslice" data-i="${i}" x="${X(i) - slice / 2}" y="0" width="${slice}" height="${H}" fill="transparent"/>`; });
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
-  box.querySelectorAll('.ov-hovslice').forEach(r => r.addEventListener('mouseenter', () => { ovHoverI = Number(r.dataset.i); ovDrawChart(); }));
+  // hover rides ONE mousemove on the svg (per-slice enter events proved
+  // unreliable through innerHTML re-renders): map the pointer back through
+  // the viewBox scaling, snap to the nearest point, redraw only on change
   const svg = box.querySelector('svg');
-  if (svg) svg.addEventListener('mouseleave', () => { ovHoverI = null; ovDrawChart(); });
+  if (svg) {
+    svg.style.cursor = 'crosshair';
+    svg.addEventListener('mousemove', (e) => {
+      const r = svg.getBoundingClientRect();
+      const scale = Math.min(r.width / W, r.height / H);
+      const vx = (e.clientX - r.left - (r.width - W * scale) / 2) / scale;
+      const i = Math.max(0, Math.min(vals.length - 1, Math.round((vx - padL) / iw * (vals.length - 1))));
+      if (i !== ovHoverI) { ovHoverI = i; ovDrawChart(); }
+    });
+    svg.addEventListener('mouseleave', () => { if (ovHoverI != null) { ovHoverI = null; ovDrawChart(); } });
+  }
 }
 
 function ovRenderCards() {

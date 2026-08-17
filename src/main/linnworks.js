@@ -685,6 +685,24 @@ class LinnworksClient {
     return lines;
   }
 
+  // Headers only — order id + processed date, no per-order detail fetch —
+  // cheap enough to page a whole year for the Overview's history curve.
+  async listProcessedHeaders(fromIso, toIso) {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const data = await this.call('ProcessedOrders/SearchProcessedOrders', {
+        request: {
+          SearchTerm: '', DateField: 'processed', FromDate: fromIso, ToDate: toIso,
+          PageNumber: page, ResultsPerPage: 200,
+        },
+      });
+      const po = (data && data.ProcessedOrders) || {};
+      for (const o of po.Data || []) out.push({ orderId: o.pkOrderID, processedOn: o.dProcessedOn || '' });
+      if (!(po.Data || []).length || page >= (po.TotalPages || 1)) break;
+    }
+    return out;
+  }
+
   // Set the minimum (reorder alert) level for one stock item at one location.
   // Verified: POST Stock/UpdateStockMinimumLevel { stockItemId, locationId,
   // minimumLevel } returns 204 No Content.
