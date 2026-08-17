@@ -3680,6 +3680,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
 .ov-share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
 .ov-share span { display: block; min-width: 2px; }
+.ov-mtoggle { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; margin-left: 10px; }
+.ov-mbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 9px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.ov-mbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
 .ov-chartbox { min-height: 190px; }
 .ov-chartbox svg { display: block; width: 100%; }
 .ov-chartbox text { font-family: var(--mono); }

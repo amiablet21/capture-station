@@ -238,6 +238,7 @@ class LinnworksClient {
           reference: o.GeneralInfo ? o.GeneralInfo.ReferenceNum : '',
           source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
+          totalCharge: Number(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge)) || 0,
           despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
           // ALL lines are returned, flagged: unlinked lines still reserve stock
           // (they carry a SKU and count in InOrders), so the Stock page's
@@ -703,6 +704,8 @@ class LinnworksClient {
           processedOn: o.dProcessedOn || '',
           // the day the ORDER ARRIVED — what "orders that day" actually means
           receivedOn: o.dReceivedDate || o.dReceievedDate || '',
+          source: o.Source || '',
+          totalCharge: Number(o.fTotalCharge ?? o.TotalCharge) || 0,
         });
       }
       if (!(po.Data || []).length || page >= (po.TotalPages || 1)) break;

@@ -190,7 +190,13 @@
       <div class="ov-grid">
         <div class="ov-panel ov-today" id="ovToday"></div>
         <div class="ov-panel">
-          <h4>Sales<span class="sub" id="ovChartSub"></span></h4>
+          <h4>Sales
+            <span class="ov-mtoggle" id="ovMetric">
+              <button class="ov-mbtn is-on" data-m="orders">Orders</button>
+              <button class="ov-mbtn" data-m="sales">Gross $</button>
+            </span>
+            <span class="sub" id="ovChartSub"></span>
+          </h4>
           <div class="ov-chartbox" id="ovChart"></div>
         </div>
       </div>

@@ -6536,9 +6536,12 @@ $("ebRefresh").addEventListener("click", () => {
 
 let ovData = null;
 let ovRange = 'Day';
+let ovMetric = 'orders'; // 'orders' | 'sales' (gross $, same received-day basis)
 let ovHoverI = null;
 let ovOpen = 'missed'; // default drawer per the handoff
 let ovFetching = false;
+
+const ovMoneyShort = (v) => v >= 100000 ? `$${Math.round(v / 1000)}k` : v >= 10000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v).toLocaleString()}`;
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -6617,9 +6620,13 @@ function ovLabelsFor(range, tips) {
 function ovDrawChart() {
   const box = $('ovChart');
   const series = ovData && ovData.orders.series[ovRange];
-  $('ovChartSub').textContent = OV_SUBS[ovRange];
+  const money = ovMetric === 'sales';
+  $('ovChartSub').textContent = OV_SUBS[ovRange].replace('orders', money ? 'gross sales' : 'orders');
   if (!series || series.vals.length < 2) { box.innerHTML = '<div class="ov-empty">Not enough orders captured yet — the curve grows as days pass.</div>'; return; }
-  const { vals, tips } = series;
+  const tips = series.tips;
+  const vals = money && Array.isArray(series.sales) ? series.sales : series.vals;
+  const fmtAxis = (v) => money ? ovMoneyShort(v) : String(v);
+  const fmtTip = (v) => money ? `$${Math.round(v).toLocaleString()}` : `${v.toLocaleString()} order${v === 1 ? '' : 's'}`;
   const labels = ovLabelsFor(ovRange, tips);
   const W = 680, H = 190, padL = 36, padR = 48, padT = 14, padB = 24;
   const iw = W - padL - padR, ih = H - padT - padB;
@@ -6634,15 +6641,15 @@ function ovDrawChart() {
   let out = `<defs><linearGradient id="ovg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
   [0, .5, 1].forEach(f => {
     const v = Math.round(max * f), y = Y(v);
-    out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL - 7}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`;
+    out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL - 7}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${fmtAxis(v)}</text>`;
   });
   labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H - 6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
   out += `<path d="${area}" fill="url(#ovg)"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
   const last = pts[pts.length - 1];
-  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857">${vals[vals.length - 1].toLocaleString()}</text>`;
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857">${money ? ovMoneyShort(vals[vals.length - 1]) : vals[vals.length - 1].toLocaleString()}</text>`;
   if (ovHoverI != null && ovHoverI < vals.length) {
     const hx = pts[ovHoverI][0], hy = pts[ovHoverI][1];
-    const txt = `${tips[ovHoverI]} · ${vals[ovHoverI].toLocaleString()} order${vals[ovHoverI] === 1 ? '' : 's'}`;
+    const txt = `${tips[ovHoverI]} · ${fmtTip(vals[ovHoverI])}`;
     const tw = txt.length * 5.9 + 18;
     const tx = Math.min(Math.max(hx, padL + tw / 2), W - padR + 40 - tw / 2);
     const ty = Math.max(hy - 38, 2);
@@ -6734,6 +6741,14 @@ $('ovRanges').addEventListener('click', (e) => {
   ovRange = b.dataset.r;
   ovHoverI = null;
   document.querySelectorAll('.ov-rbtn').forEach(x => x.classList.toggle('is-on', x === b));
+  ovDrawChart();
+});
+$('ovMetric').addEventListener('click', (e) => {
+  const b = e.target.closest('.ov-mbtn');
+  if (!b) return;
+  ovMetric = b.dataset.m;
+  ovHoverI = null;
+  document.querySelectorAll('.ov-mbtn').forEach(x => x.classList.toggle('is-on', x === b));
   ovDrawChart();
 });
 $('ovCards').addEventListener('click', (e) => {

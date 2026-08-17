@@ -2431,7 +2431,7 @@ function registerIpc() {
   // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
   // day, persisted so boots answer instantly.
   const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
-  const OVERVIEW_HISTORY_V = 2; // v2: bucketed by RECEIVED date, not processed
+  const OVERVIEW_HISTORY_V = 3; // v2: bucketed by RECEIVED date · v3: + gross sales per day
   let overviewHistory = { at: 0, days: null, promise: null };
   const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
   try {
@@ -2450,20 +2450,17 @@ function registerIpc() {
       const to = new Date();
       const from = new Date(to.getTime() - 366 * 86400000);
       const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
-      const days = {};
-      for (const h of heads) {
-        const ts = Date.parse(h.receivedOn || h.processedOn);
-        if (Number.isNaN(ts)) continue;
+      const days = {}; // ymd -> { n: orders received, s: gross sales $ }
+      const bump = (ts, charge) => {
+        if (Number.isNaN(ts)) return;
         const key = db.localDay(new Date(ts));
-        days[key] = (days[key] || 0) + 1;
-      }
+        const d = days[key] = days[key] || { n: 0, s: 0 };
+        d.n += 1;
+        d.s += Number(charge) || 0;
+      };
+      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.totalCharge);
       try {
-        for (const o of await getOpenOrdersCached(cfg)) {
-          const ts = Date.parse(o.receivedDate);
-          if (Number.isNaN(ts)) continue;
-          const key = db.localDay(new Date(ts));
-          days[key] = (days[key] || 0) + 1;
-        }
+        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.totalCharge);
       } catch { /* open book unavailable: processed-only still beats captures */ }
       overviewHistory = { at: Date.now(), days, promise: null };
       try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days, v: OVERVIEW_HISTORY_V })); } catch { /* best effort */ }
@@ -2474,14 +2471,21 @@ function registerIpc() {
 
   const OV_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function overviewSeriesFromHistory(days) {
+    const at = (k) => days[k] || { n: 0, s: 0 };
     const monthDays = [];
     for (let i = 29; i >= 0; i--) monthDays.push(db.localDay(new Date(Date.now() - i * 86400000)));
     const month = {
-      vals: monthDays.map(d => days[d] || 0),
+      vals: monthDays.map(d => at(d).n),
+      sales: monthDays.map(d => Math.round(at(d).s)),
       tips: monthDays.map((d, i) => i === 29 ? 'Today' : `${OV_MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}`),
     };
     const perMonth = {};
-    for (const [d, n] of Object.entries(days)) perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + n;
+    for (const [d, v] of Object.entries(days)) {
+      const m = d.slice(0, 7);
+      const pm = perMonth[m] = perMonth[m] || { n: 0, s: 0 };
+      pm.n += v.n;
+      pm.s += v.s;
+    }
     const months = [];
     const now = new Date();
     for (let i = 11; i >= 0; i--) {
@@ -2489,10 +2493,60 @@ function registerIpc() {
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
     const year = {
-      vals: months.map(m => perMonth[m] || 0),
+      vals: months.map(m => (perMonth[m] || { n: 0 }).n),
+      sales: months.map(m => Math.round((perMonth[m] || { s: 0 }).s)),
       tips: months.map(m => `${OV_MON[Number(m.slice(5)) - 1]} '${m.slice(2, 4)}`),
     };
     return { month, year };
+  }
+
+  // live "today" on the received-order basis: processed-today headers (small
+  // fetch) + the open book — feeds the Day curve and the orders-today card so
+  // every range speaks the same language. 60s cache; SQLite captures stand in
+  // when Linnworks is unreachable.
+  let overviewTodayCache = { at: 0, data: null };
+  async function overviewLiveToday(cfg) {
+    if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < 60 * 1000) return overviewTodayCache.data;
+    const client = new LinnworksClient(cfg.linnworks);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const today = db.localDay();
+    const chan = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
+    const seen = new Set();
+    const orders = [];
+    const heads = await client.listProcessedHeaders(dayStart.toISOString(), new Date().toISOString());
+    for (const h of heads) {
+      const ts = Date.parse(h.receivedOn || h.processedOn);
+      if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(h.orderId)) continue;
+      seen.add(h.orderId);
+      orders.push({ ts, source: h.source, charge: h.totalCharge });
+    }
+    for (const o of await getOpenOrdersCached(cfg)) {
+      const ts = Date.parse(o.receivedDate);
+      if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
+      seen.add(o.orderId);
+      orders.push({ ts, source: o.source, charge: o.totalCharge });
+    }
+    const byChannel = {};
+    for (const o of orders) byChannel[chan(o.source)] = (byChannel[chan(o.source)] || 0) + 1;
+    // cumulative curve 8am -> now (earlier arrivals roll into the first point)
+    const nowH = new Date().getHours();
+    const endH = Math.max(9, Math.min(23, nowH));
+    const vals = [];
+    const sales = [];
+    const tips = [];
+    for (let h = 8; h <= endH; h++) {
+      const upto = orders.filter(o => new Date(o.ts).getHours() <= h);
+      vals.push(upto.length);
+      sales.push(Math.round(upto.reduce((s, o) => s + o.charge, 0)));
+      tips.push(h === nowH ? 'now' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`);
+    }
+    const data = {
+      series: { vals, sales, tips },
+      today: { total: orders.length, byChannel },
+    };
+    overviewTodayCache = { at: Date.now(), data };
+    return data;
   }
 
   async function computeOverviewMoney(cfg) {
@@ -2590,17 +2644,24 @@ function registerIpc() {
   ipcMain.handle('overview:data', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    // processed-order history feeds Month/Year (accurate); captures feed the
-    // live Day curve and today's per-channel card. SQLite stands in for
-    // Month/Year only until the first history fetch lands.
+    // every range speaks the received-order language: Month/Year from the
+    // processed-header history, Day + the today card from a small live fetch.
+    // SQLite captures stand in wherever Linnworks is unreachable.
     const hist = overviewHistory.days ? overviewSeriesFromHistory(overviewHistory.days) : null;
     if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
       refreshOverviewHistory(cfg).catch(() => { /* stale or SQLite view stands */ });
     }
+    let live = null;
+    try { live = await overviewLiveToday(cfg); } catch { /* captures fallback */ }
+    const sqlToday = db.overviewToday();
+    const yday = db.localDay(new Date(Date.now() - 86400000));
+    const ydayN = overviewHistory.days && overviewHistory.days[yday] ? overviewHistory.days[yday].n : sqlToday.yesterday;
     const orders = {
-      today: db.overviewToday(),
+      today: live
+        ? { total: live.today.total, byChannel: live.today.byChannel, yesterday: ydayN }
+        : sqlToday,
       series: {
-        Day: db.overviewSeriesDay(),
+        Day: live ? live.series : db.overviewSeriesDay(),
         Month: hist ? hist.month : db.overviewSeriesMonth(),
         Year: hist ? hist.year : db.overviewSeriesYear(),
       },
