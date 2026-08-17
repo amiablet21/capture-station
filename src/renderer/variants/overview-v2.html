@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview tab v2 — smooth sales curve + D/M/Y filter + expandable money cards (approved design 2026-08-15)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-soft: #FBF3DB; --amber-text: #956400;
+    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 14px 22px 26px; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .head .d { font-size: 11.5px; color: var(--faint); }
+  .ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .rbtn.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 10px; margin-bottom: 10px; }
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
+  .panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+
+  .today { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .today .big { font-family: var(--mono); font-size: 38px; font-weight: 700; line-height: 1.1; }
+  .today .delta { font-size: 10.5px; color: var(--accent-deep); }
+  .mkrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
+  .mkrow .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .mkrow .n { font-size: 12px; font-weight: 600; }
+  .mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+  .share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
+  .share span { display: block; }
+
+  .chartbox { min-height: 190px; }
+  .chartbox svg { display: block; width: 100%; }
+  .chartbox text { font-family: var(--mono); }
+  .hovslice { cursor: crosshair; }
+  .tt { animation: ttPop .18s var(--ease); }
+  @keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .mcard { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 120ms var(--ease); }
+  .mcard:hover { background: var(--surface-2); }
+  .mcard .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .mcard .chev { margin-left: auto; font-size: 10px; }
+  .mcard .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
+  .mcard .s { font-size: 10.5px; color: var(--muted); }
+  .big.r { color: var(--neg-text); } .big.a { color: var(--amber-text); } .big.g { color: var(--accent-deep); }
+
+  .drawer { margin-top: 10px; animation: ttPop .18s var(--ease); }
+  .drawer h4.r { color: var(--neg-text); } .drawer h4.a { color: var(--amber-text); } .drawer h4.g { color: var(--accent-deep); }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-2); }
+  td.mono { font-size: 11px; }
+  .sku { font-weight: 600; color: #1F6C9F; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
+  .pill.r { background: var(--neg-soft); color: var(--neg-text); }
+  .pill.a { background: var(--amber-soft); color: var(--amber-text); }
+  .pill.g { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .more { margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .more a { color: var(--accent-deep); font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+<!-- OVERVIEW v2 (owner-approved via design review 2026-08-15):
+     - smooth (catmull-rom) single sales curve, NO bars, NO jagged polylines
+     - Day / Month / Year range filter (segmented, matches tab pill styling)
+     - hover: dashed guide + dot + dark tooltip "Jul 24 · 44 orders", 180ms ttPop
+     - money cards (Missed sales / Buy soon / Send to WFS) toggle a shared
+       full-width SKU drawer below the row; one open at a time; DEFAULT =
+       Missed sales open. Chart palette: Walmart #2E86D9 / eBay #047857 / Temu #C97B12. -->
+<div class="topbar"><div class="tabs">
+  <button class="tab on">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Returns</button><button class="tab">Listings</button>
+</div></div>
+<div class="wrap">
+  <div class="head"><h1>Overview</h1><span class="d">Friday, August 15</span>
+    <span class="ranges" id="ranges">
+      <button class="rbtn on" data-r="Day">Day</button>
+      <button class="rbtn" data-r="Month">Month</button>
+      <button class="rbtn" data-r="Year">Year</button>
+    </span>
+  </div>
+
+  <div class="grid">
+    <div class="panel today">
+      <div><div class="k">Orders today</div><div class="big">47</div><div class="delta">▲ <b class="mono">+9</b> vs yesterday</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="mkrow"><span class="dot" style="background:var(--wm)"></span><span class="n">Walmart</span><span class="v">31</span></div>
+        <div class="mkrow"><span class="dot" style="background:var(--eb)"></span><span class="n">eBay</span><span class="v">11</span></div>
+        <div class="mkrow"><span class="dot" style="background:var(--tm)"></span><span class="n">Temu</span><span class="v">5</span></div>
+      </div>
+      <div class="share"><span style="flex:31;background:var(--wm)"></span><span style="flex:11;background:var(--eb)"></span><span style="flex:5;background:var(--tm)"></span></div>
+    </div>
+    <div class="panel">
+      <h4>Sales<span class="sub" id="chartSub"></span></h4>
+      <div class="chartbox" id="chart"></div>
+    </div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div class="mcard" data-key="missed"><div class="k">Missed sales<span class="chev">▾</span></div><div class="big r">$10,010</div><div class="s">4 SKUs at zero that were selling</div></div>
+    <div class="mcard" data-key="buy"><div class="k">Buy soon<span class="chev">▾</span></div><div class="big a">9 SKUs</div><div class="s">run out inside the 10-day lead time</div></div>
+    <div class="mcard" data-key="wfs"><div class="k">Send to WFS<span class="chev">▾</span></div><div class="big g">520 units</div><div class="s">6 fast sellers · last shipment Aug 12</div></div>
+  </div>
+
+  <div class="panel drawer" id="drawerMissed" hidden>
+    <h4 class="r">Missed sales · $10,010<span class="sub">click a SKU to open it in Stock</span></h4>
+    <table>
+      <tr><th>SKU</th><th>Zero since</th><th>Was selling</th><th class="rr">Missed</th></tr>
+      <tr><td class="mono sku">X730-512GB-GRAY</td><td class="mono">Aug 06</td><td style="color:var(--muted)">9/wk on Walmart</td><td class="rr"><span class="pill r">$4,970</span></td></tr>
+      <tr><td class="mono sku">X620-128GB-SILVER</td><td class="mono">Aug 09</td><td style="color:var(--muted)">7/wk on Walmart + eBay</td><td class="rr"><span class="pill r">$3,190</span></td></tr>
+      <tr><td class="mono sku">X400-256GB-SILVER</td><td class="mono">Aug 02</td><td style="color:var(--muted)">4/wk on eBay</td><td class="rr"><span class="pill r">$1,610</span></td></tr>
+      <tr><td class="mono sku">BUDS-3-WHITE</td><td class="mono">Aug 07</td><td style="color:var(--muted)">2/wk on Temu</td><td class="rr"><span class="pill r">$240</span></td></tr>
+    </table>
+  </div>
+  <div class="panel drawer" id="drawerBuy" hidden>
+    <h4 class="a">Buy soon · 9 SKUs<span class="sub">velocity × 10-day lead × 1.5 buffer</span></h4>
+    <table>
+      <tr><th>SKU</th><th>On shelf</th><th>Runs out</th><th class="rr">Order</th></tr>
+      <tr><td class="mono sku">TABA9+64GB</td><td class="mono">27</td><td style="color:var(--neg-text)">in 6 days</td><td class="rr"><span class="pill a">90</span></td></tr>
+      <tr><td class="mono sku">X230-256GB-GRAY</td><td class="mono">24</td><td style="color:var(--neg-text)">in 7 days</td><td class="rr"><span class="pill a">60</span></td></tr>
+      <tr><td class="mono sku">SM-X133-64GB-GREY</td><td class="mono">49</td><td style="color:var(--amber-text)">in 9 days</td><td class="rr"><span class="pill a">120</span></td></tr>
+      <tr><td class="mono sku">X520-128GB-SILVER</td><td class="mono">26</td><td style="color:var(--amber-text)">in 9 days</td><td class="rr"><span class="pill a">76</span></td></tr>
+      <tr><td class="mono sku">BUDS-2-GRAPHITE</td><td class="mono">14</td><td style="color:var(--amber-text)">in 10 days</td><td class="rr"><span class="pill a">40</span></td></tr>
+    </table>
+    <div class="more">+ 4 more under their minimum — <a href="#">open Stock filtered to Buy soon</a></div>
+  </div>
+  <div class="panel drawer" id="drawerWfs" hidden>
+    <h4 class="g">Send to WFS · 520 units<span class="sub">6 fast sellers outrunning the shelf</span></h4>
+    <table>
+      <tr><th>SKU</th><th>Sold/wk</th><th>Shelf covers</th><th class="rr">Send</th></tr>
+      <tr><td class="mono sku">SM-X133-64GB-GREY</td><td class="mono">38</td><td style="color:var(--muted)">9 days</td><td class="rr"><span class="pill g">+ 120</span></td></tr>
+      <tr><td class="mono sku">TABA9+64GB</td><td class="mono">31</td><td style="color:var(--muted)">11 days</td><td class="rr"><span class="pill g">+ 124</span></td></tr>
+      <tr><td class="mono sku">X230-256GB-GRAY</td><td class="mono">24</td><td style="color:var(--muted)">12 days</td><td class="rr"><span class="pill g">+ 96</span></td></tr>
+      <tr><td class="mono sku">X520-128GB-SILVER</td><td class="mono">19</td><td style="color:var(--muted)">13 days</td><td class="rr"><span class="pill g">+ 76</span></td></tr>
+      <tr><td class="mono sku">S24-FE-128GB-BLACK</td><td class="mono">16</td><td style="color:var(--muted)">14 days</td><td class="rr"><span class="pill g">+ 64</span></td></tr>
+      <tr><td class="mono sku">BUDS-3-WHITE</td><td class="mono">10</td><td style="color:var(--muted)">15 days</td><td class="rr"><span class="pill g">+ 40</span></td></tr>
+    </table>
+  </div>
+</div>
+<script>
+// ---- data (replace with SQLite/Linnworks aggregates) ----
+const monthVals = [31,35,29,38,33,41,37,44,39,36,43,47,41,45,40,48,44,38,46,49,43,47,45,41,48,44,46,43,45,47];
+const monthTips = monthVals.map((_, i) => { if (i === 29) return 'Today'; const day = 17 + i; return day <= 31 ? 'Jul ' + day : 'Aug ' + (day - 31); });
+const monthLabels = monthVals.map((_, i) => i===0?'Jul 17':i===7?'Jul 24':i===14?'Jul 31':i===21?'Aug 7':i===29?'Today':'');
+const DATA = {
+  Day:   { vals: [2,5,9,14,20,26,31,36,41,45,47], labels: ['8a','','10a','','12p','','2p','','4p','','now'], tips: ['8 am','9 am','10 am','11 am','12 pm','1 pm','2 pm','3 pm','4 pm','5 pm','now'], sub: 'today · orders as they come in · hover for detail' },
+  Month: { vals: monthVals, labels: monthLabels, tips: monthTips, sub: 'last 30 days · orders per day · hover for detail' },
+  Year:  { vals: [520,610,580,700,760,820,905,880,940,1010,970,1180], labels: ['Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'], tips: ["Sep '25","Oct '25","Nov '25","Dec '25","Jan '26","Feb '26","Mar '26","Apr '26","May '26","Jun '26","Jul '26","Aug '26"], sub: 'last 12 months · orders per month · hover for detail' }
+};
+let range = 'Day', hoverI = null;
+
+// catmull-rom -> cubic bezier smoothing (the "no jagged lines" requirement)
+function smoothPath(pts) {
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    d += ` C ${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+function drawChart() {
+  const { vals, labels, tips, sub } = DATA[range];
+  document.getElementById('chartSub').textContent = sub;
+  const W = 680, H = 190, padL = 36, padR = 48, padT = 14, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const rawMax = Math.max(...vals);
+  const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
+  const max = Math.ceil(rawMax / unit) * unit;
+  const X = i => padL + (i / (vals.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  const pts = vals.map((v, i) => [Math.round(X(i)), Math.round(Y(v))]);
+  const line = smoothPath(pts);
+  const area = line + ` L ${pts[pts.length-1][0]},${padT+ih} L ${pts[0][0]},${padT+ih} Z`;
+  let out = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
+  [0,.5,1].forEach(f => { const v = Math.round(max*f), y = Y(v);
+    out += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL-7}" y="${y+3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`; });
+  labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H-6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
+  out += `<path d="${area}" fill="url(#g)"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
+  const last = pts[pts.length-1];
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0]+8}" y="${last[1]+3}" font-size="10" font-weight="700" fill="#047857">${vals[vals.length-1]}</text>`;
+  if (hoverI != null && hoverI < vals.length) {
+    const hx = pts[hoverI][0], hy = pts[hoverI][1];
+    const txt = `${tips[hoverI]} · ${vals[hoverI].toLocaleString()} orders`;
+    const tw = txt.length * 5.9 + 18;
+    const tx = Math.min(Math.max(hx, padL + tw/2), W - padR + 40 - tw/2);
+    const ty = Math.max(hy - 38, 2);
+    out += `<line x1="${hx}" y1="${padT}" x2="${hx}" y2="${padT+ih}" stroke="#D8D6D0" stroke-dasharray="3 3"/>`
+        + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
+        + `<g class="tt"><rect x="${tx-tw/2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty+14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
+  }
+  const slice = iw / (vals.length - 1);
+  vals.forEach((v, i) => { out += `<rect class="hovslice" data-i="${i}" x="${X(i)-slice/2}" y="0" width="${slice}" height="${H}" fill="transparent"/>`; });
+  const box = document.getElementById('chart');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+  box.querySelectorAll('.hovslice').forEach(r => r.addEventListener('mouseenter', () => { hoverI = +r.dataset.i; drawChart(); }));
+  box.querySelector('svg').addEventListener('mouseleave', () => { hoverI = null; drawChart(); });
+}
+document.getElementById('ranges').addEventListener('click', e => {
+  const b = e.target.closest('.rbtn'); if (!b) return;
+  range = b.dataset.r; hoverI = null;
+  document.querySelectorAll('.rbtn').forEach(x => x.classList.toggle('on', x === b));
+  drawChart();
+});
+
+// money cards -> shared drawer; one open at a time; default = missed
+const DRAWERS = { missed: 'drawerMissed', buy: 'drawerBuy', wfs: 'drawerWfs' };
+let open = 'missed';
+function syncDrawers() {
+  Object.entries(DRAWERS).forEach(([k, id]) => { document.getElementById(id).hidden = (open !== k); });
+  document.querySelectorAll('.mcard').forEach(c => { c.querySelector('.chev').textContent = (open === c.dataset.key) ? '▴' : '▾'; });
+}
+document.getElementById('cards').addEventListener('click', e => {
+  const c = e.target.closest('.mcard'); if (!c) return;
+  open = (open === c.dataset.key) ? null : c.dataset.key;
+  syncDrawers();
+});
+drawChart(); syncDrawers();
+</script>
+</body>
+</html>
