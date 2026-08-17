@@ -6751,7 +6751,10 @@ function ovDrawChart() {
   const H = Math.max(190, Math.round(box.clientHeight) || 190);
   const padL = money ? 52 : 36, padR = 48, padT = 14, padB = 24;
   const iw = W - padL - padR, ih = H - padT - padB;
-  const rawMax = Math.max(1, ...vals);
+  // the ceiling sits at DOUBLE the peak, rounded to a clean step (owner
+  // 2026-08-17: a $75k peak reads against a $150k axis) — the curve breathes
+  // in the lower half instead of hugging the top edge
+  const rawMax = Math.max(1, ...vals) * 2;
   const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
   const max = Math.ceil(rawMax / unit) * unit;
   const X = i => padL + (i / (vals.length - 1)) * iw;
