@@ -2771,18 +2771,26 @@ function registerIpc() {
   async function phoneOrdersPayload() {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    // sku -> image url from the (cached) inventory, so order rows show the
+    // product picture (owner request 2026-08-17); best-effort only
+    let imgBySku = {};
+    try {
+      const inv = await phoneStockPayload();
+      if (inv.ok) for (const it of inv.items) if (it.img) imgBySku[String(it.sku).toUpperCase()] = it.img;
+    } catch { /* rows still answer without pictures */ }
+    const pic = (sku) => imgBySku[String(sku || '').toUpperCase()] || '';
     const today = db.todayRows().map(r => ({
       order: r.order_number, channel: String(r.channel || '').toLowerCase(),
       status: r.status, at: r.created_at, tracking: r.tracking || '', carrier: r.carrier || '',
       notes: r.notes || '', fail: r.fail_reason || '',
-      items: (r.items || []).map(i => ({ sku: i.sku, qty: i.qty || 1 })),
+      items: (r.items || []).map(i => ({ sku: i.sku, qty: i.qty || 1, img: pic(i.sku) })),
     }));
     let open = [];
     try {
       open = (await getOpenOrdersCached(cfg)).map(o => ({
         order: o.reference || o.orderId, channel: ovChanOf(o.source || ''),
         at: o.receivedDate, charge: Number(o.totalCharge) || 0,
-        items: (o.items || []).filter(l => !l.isService).map(l => ({ sku: l.sku || l.channelSku || '', qty: l.quantity || 1 })),
+        items: (o.items || []).filter(l => !l.isService).map(l => ({ sku: l.sku || l.channelSku || '', qty: l.quantity || 1, img: pic(l.sku || l.channelSku) })),
       })).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
     } catch { /* open book optional; today's rows still answer */ }
     return { ok: true, today, open };
@@ -2811,6 +2819,7 @@ function registerIpc() {
         avail: Number(home.available) || 0,
         wfs: wfsLvl ? (Number(wfsLvl.stockLevel) || 0) : 0,
         ds: !!it.dsPad,
+        img: it.image || '', // Linnworks CDN url; the phone loads it directly
       };
     }).sort((a, b) => b.level - a.level);
     phoneStockCache = { at: Date.now(), items: out };

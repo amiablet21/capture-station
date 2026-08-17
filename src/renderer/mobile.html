@@ -67,6 +67,11 @@
   .olist { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .orow { padding: 9px 12px; border-bottom: 1px solid #F0EFEC; }
   .orow:last-child { border-bottom: none; }
+  .og { display: flex; align-items: center; gap: 9px; }
+  .oc { flex: 1; min-width: 0; }
+  .othumb { width: 30px; height: 30px; border-radius: 6px; object-fit: contain; border: 1px solid var(--line); background: #FAFAF8; flex: none; }
+  span.othumb { display: block; }
+  .odetail .othumb { width: 22px; height: 22px; vertical-align: middle; margin-right: 6px; }
   .orow .top { display: flex; align-items: center; gap: 7px; }
   .odot { width: 6px; height: 6px; border-radius: 999px; background: var(--faint); flex: none; }
   .odot.walmart { background: #2E86D9; } .odot.ebay { background: #047857; } .odot.temu { background: #C97B12; }
@@ -289,15 +294,25 @@
           : '<span class="ochip pending">' + esc(String(r.status || 'pending').toUpperCase()) + '</span>';
     box.innerHTML = list.slice(0, 80).map((r, i) => {
       const skuLine = (r.items || []).map(it => esc(it.sku) + (it.qty > 1 ? ' ×' + it.qty : '')).join(', ') || '—';
+      const firstImg = ((r.items || []).find(it => it.img) || {}).img || '';
+      const thumb = firstImg
+        ? '<img class="othumb" src="' + esc(firstImg) + '" loading="lazy" alt="" />'
+        : '<span class="othumb"></span>';
       const det = [];
-      for (const it of r.items || []) det.push('<div><span class="lbl">item</span><span class="val">' + esc(it.sku) + (it.qty > 1 ? ' ×' + it.qty : '') + '</span></div>');
+      for (const it of r.items || []) {
+        det.push('<div><span class="lbl">item</span><span class="val">'
+          + (it.img ? '<img class="othumb" src="' + esc(it.img) + '" loading="lazy" alt="" />' : '')
+          + esc(it.sku) + (it.qty > 1 ? ' ×' + it.qty : '') + '</span></div>');
+      }
       if (r.tracking) det.push('<div><span class="lbl">tracking</span><span class="val">' + esc(r.carrier ? r.carrier + ' · ' : '') + esc(r.tracking) + '</span></div>');
       if (r.notes) det.push('<div><span class="lbl">note</span><span class="val">' + esc(r.notes) + '</span></div>');
       if (r.fail) det.push('<div><span class="lbl">failed</span><span class="val">' + esc(r.fail) + '</span></div>');
       if (obView === 'open') det.push('<div><span class="lbl">total</span><span class="val">' + money$(r.charge || 0) + '</span></div>');
       return '<div class="orow" data-i="' + i + '">'
+        + '<div class="og">' + thumb + '<div class="oc">'
         + '<div class="top"><span class="odot ' + esc(r.channel) + '"></span><span class="opo">' + esc(r.order) + '</span>' + chip(r) + '</div>'
         + '<div class="sub"><span>' + skuLine + '</span><span class="t">' + df(r.at) + '</span></div>'
+        + '</div></div>'
         + '<div class="odetail">' + (det.join('') || '<div><span class="lbl">no detail</span></div>') + '</div>'
         + '</div>';
     }).join('') + (list.length > 80 ? '<div class="quiet">+ ' + (list.length - 80) + ' more</div>' : '');
