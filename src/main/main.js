@@ -2404,6 +2404,26 @@ function registerIpc() {
   // inventory read — and cache for 10 minutes.
   const OVERVIEW_TTL_MS = 10 * 60 * 1000;
   let overviewCache = { at: 0, money: null, promise: null };
+  // first computation walks 28 days of processed orders (minutes) — persist
+  // it so a fresh boot answers instantly with the last run while a refresh
+  // happens behind it, and warm it shortly after launch
+  const overviewCachePath = () => path.join(app.getPath('userData'), 'overview-cache.json');
+  try {
+    const j = JSON.parse(fs.readFileSync(overviewCachePath(), 'utf8'));
+    if (j && j.money) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
+  } catch { /* no saved overview yet */ }
+
+  function refreshOverviewMoney(cfg) {
+    if (overviewCache.promise) return overviewCache.promise;
+    overviewCache.promise = computeOverviewMoney(cfg)
+      .then(m => {
+        overviewCache = { at: Date.now(), money: m, promise: null };
+        try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m })); } catch { /* best effort */ }
+        return m;
+      })
+      .catch(e => { overviewCache.promise = null; throw e; });
+    return overviewCache.promise;
+  }
 
   async function computeOverviewMoney(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
@@ -2510,20 +2530,26 @@ function registerIpc() {
     };
     let money = overviewCache.money;
     if (!money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
-      if (!overviewCache.promise) {
-        overviewCache.promise = computeOverviewMoney(cfg)
-          .then(m => { overviewCache = { at: Date.now(), money: m, promise: null }; return m; })
-          .catch(e => { overviewCache.promise = null; throw e; });
-      }
+      const p = refreshOverviewMoney(cfg);
       // stale view answers instantly while a refresh runs; first call waits
       if (!money) {
-        try { money = await overviewCache.promise; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message }; }
+        try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message }; }
       } else {
-        overviewCache.promise.catch(() => { /* stale money stands */ });
+        p.catch(() => { /* stale money stands */ });
       }
     }
     return { ok: true, orders, money };
   });
+  // warm the money cards shortly after boot so the Overview never sits on
+  // its spinner for the first open of the day
+  setTimeout(() => {
+    const cfg = config.load();
+    if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
+      if (!overviewCache.money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+        refreshOverviewMoney(cfg).catch(() => { /* next open retries */ });
+      }
+    }
+  }, 15000);
 
   /* ---------- Temu lister: template intake + workbook export ---------- */
 

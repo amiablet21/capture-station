@@ -2063,15 +2063,20 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   gap: 10px;
 }
 
+/* centered like everything else on this page (tabs, gaps line, summary) —
+   left-anchored + margin-auto actions wrapped into a floaty second row at
+   moderate widths (owner: "the spacing is weird", 2026-08-17) */
 .stock-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap; /* narrow window: chips drop below the search field */
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap; /* narrow window: rows wrap centered, nothing floats */
   max-width: 100%;
 }
 
-.stock-toolbar .stock-search { flex: 0 1 280px; }
+.stock-toolbar .stock-search { flex: 0 1 240px; min-width: 150px; }
+.stock-toolbar .stock-actions { margin-left: 10px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -2109,7 +2114,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    Named chip-tray — .stock-tray is the per-row hover tray (visibility:hidden)
    and the name collision blanked this toolbar on 2026-08-17. */
 .chip-tray { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; }
-.chip-tray .view-chip { font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 8px; border: none; background: none; color: var(--muted); transition: color 160ms var(--ease); }
+.chip-tray .view-chip { font-size: 12px; font-weight: 500; padding: 4px 11px; border-radius: 8px; border: none; background: none; color: var(--muted); transition: color 160ms var(--ease); }
 .chip-tray .view-chip:hover { color: var(--text); }
 .chip-tray .view-chip.is-active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
 .chip-tray .view-chip.is-active[class*="tint-"]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 6px; background: currentColor; }
