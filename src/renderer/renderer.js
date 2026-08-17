@@ -2602,21 +2602,18 @@ function alignCaptureToolbar() {
   const w = $('rowsMain').offsetWidth;
   if (!w) return;
   $('findBar').style.width = `${w}px`;
-  if (!$('bDock').hidden) {
-    // browser pane open: the bar hugs the order-sheet column (same left
-    // edge as the sheet, past the divider), tracking pane resizes
-    $('findBar').style.marginLeft = `${Math.round($('rowsMain').getBoundingClientRect().left)}px`;
-    $('findBar').style.marginRight = '0';
-  } else {
-    $('findBar').style.marginLeft = ''; // collapsed: centered as before
-    $('findBar').style.marginRight = '';
-  }
+  // the find bar is docked INSIDE the sheet column now (owner 2026-08-17,
+  // matching the Stock band) — it rides the sheet wherever the pane puts it,
+  // so there is nothing left to align; stale margins from the old layout
+  // are cleared once in case a session upgraded in place
+  $('findBar').style.marginLeft = '';
+  $('findBar').style.marginRight = '';
 }
 
 let rowsDrag = null;
 {
   const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
-  if (savedW) $('rowsMain').style.width = `${savedW}px`;
+  if (savedW) $('capMain').style.width = `${savedW}px`;
   requestAnimationFrame(alignCaptureToolbar);
 }
 
@@ -2624,7 +2621,7 @@ window.addEventListener('resize', () => requestAnimationFrame(alignCaptureToolba
 
 $('rowsGrip').addEventListener('mousedown', (e) => {
   e.preventDefault();
-  rowsDrag = { startX: e.clientX, startW: $('rowsMain').offsetWidth, w: 0 };
+  rowsDrag = { startX: e.clientX, startW: $('capMain').offsetWidth, w: 0 };
   $('rowsGrip').classList.add('is-active');
 });
 
@@ -2632,8 +2629,7 @@ window.addEventListener('mousemove', (e) => {
   if (!rowsDrag) return;
   const w = Math.max(560, rowsDrag.startW + (e.clientX - rowsDrag.startX));
   rowsDrag.w = w;
-  $('rowsMain').style.width = `${w}px`;
-  alignCaptureToolbar();
+  $('capMain').style.width = `${w}px`; // band + sheet resize as one
 });
 
 window.addEventListener('mouseup', () => {
@@ -2645,8 +2641,7 @@ window.addEventListener('mouseup', () => {
 
 $('rowsGrip').addEventListener('dblclick', () => {
   localStorage.removeItem('captureSheetWidth');
-  $('rowsMain').style.width = '';
-  requestAnimationFrame(alignCaptureToolbar);
+  $('capMain').style.width = '';
 });
 
 $('rowsTable').addEventListener('mousedown', (e) => {

@@ -2,23 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Overview" />
+<meta name="apple-mobile-web-app-title" content="Capture" />
 <link rel="apple-touch-icon" href="/icon.png" />
-<title>Overview — Capture Station</title>
-<!-- the phone twin of the Overview tab, served by Capture Station over LAN.
-     Self-contained on purpose: one file, no assets, fetches /data on a timer. -->
+<title>Capture Station</title>
+<!-- the phone twin of Capture Station (owner-approved three-screen design,
+     2026-08-17): Overview / Orders / Stock behind a bottom tab bar, served
+     over the tailnet. Self-contained on purpose: one file, no assets. -->
 <style>
   :root {
     --bg: #F7F7F6; --surface: #FFFFFF; --border: #E4E2DC; --line: #EAE8E3;
     --text: #2F3437; --muted: #6E6B64; --faint: #A5A29C;
-    --accent: #047857; --accent-soft: #DEF0E7; --neg: #9F2F2D;
+    --accent: #047857; --accent-soft: #DEF0E7; --neg: #9F2F2D; --neg-bg: #FDEBEC;
+    --amber: #854F0B; --amber-bg: #FAEEDA;
     --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   }
   * { box-sizing: border-box; margin: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Geist', system-ui, -apple-system, sans-serif; padding: 14px 12px calc(20px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  body { background: var(--bg); color: var(--text); font-family: 'Geist', system-ui, -apple-system, sans-serif; max-width: 520px; margin: 0 auto; padding: 14px 12px calc(64px + env(safe-area-inset-bottom)); }
   .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
   .head h1 { font-size: 15px; font-weight: 600; }
   .head .date { font-size: 11px; color: var(--faint); }
@@ -31,6 +33,8 @@
   .seg { display: flex; background: #EFEEEA; border-radius: 9px; padding: 2px; gap: 2px; }
   .seg button { font-family: inherit; font-size: 11px; font-weight: 600; color: var(--muted); border: none; background: transparent; border-radius: 7px; padding: 5px 12px; }
   .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47,52,55,.08); }
+  .seg.wide { width: 100%; }
+  .seg.wide button { flex: 1; }
   .chans { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); margin: 10px -14px -13px; }
   .chans > div { padding: 8px 6px 11px; text-align: center; }
   .chans > div + div { border-left: 1px solid var(--border); }
@@ -39,43 +43,142 @@
   .cv { font-family: var(--mono); font-size: 14px; font-weight: 700; margin-top: 2px; }
   svg { display: block; width: 100%; }
   .grid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; margin-top: 6px; font-size: 10.5px; }
-  .row, .ghead { display: grid; grid-template-columns: 92px 1fr 46px; }
+  .grow, .ghead { display: grid; grid-template-columns: 92px 1fr 46px; }
   .ghead { background: #F4F3F0; border-bottom: 1px solid #E0DED8; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
-  .ghead span, .row span { padding: 5px 7px; border-right: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ghead span:last-child, .row span:last-child { border-right: none; text-align: right; }
-  .row { border-bottom: 1px solid var(--line); background: var(--surface); }
-  .row:last-child { border-bottom: none; }
-  .row .po { font-family: var(--mono); font-weight: 600; font-size: 10px; }
-  .row .sku { font-family: var(--mono); color: var(--muted); font-size: 10px; }
-  .row .tm { font-family: var(--mono); color: var(--faint); font-size: 9.5px; }
+  .ghead span, .grow span { padding: 5px 7px; border-right: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ghead span:last-child, .grow span:last-child { border-right: none; text-align: right; }
+  .grow { border-bottom: 1px solid var(--line); background: var(--surface); }
+  .grow:last-child { border-bottom: none; }
+  .grow .po { font-family: var(--mono); font-weight: 600; font-size: 10px; }
+  .grow .sku { font-family: var(--mono); color: var(--muted); font-size: 10px; }
+  .grow .tm { font-family: var(--mono); color: var(--faint); font-size: 9.5px; }
   .money { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .money .panel { margin: 0; padding: 10px 11px; }
   .money .mv { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 2px; }
-  .mv.r { color: var(--neg); } .mv.a { color: #854F0B; } .mv.g { color: #065F46; }
+  .mv.r { color: var(--neg); } .mv.a { color: var(--amber); } .mv.g { color: #065F46; }
   .err { text-align: center; color: var(--neg); font-size: 12px; padding: 30px 10px; }
+  .quiet { text-align: center; color: var(--faint); font-size: 11px; padding: 24px 10px; }
   .stale { text-align: center; color: var(--faint); font-size: 10px; margin-top: 4px; }
+  .olist { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .orow { padding: 9px 12px; border-bottom: 1px solid #F0EFEC; }
+  .orow:last-child { border-bottom: none; }
+  .orow .top { display: flex; align-items: center; gap: 7px; }
+  .odot { width: 6px; height: 6px; border-radius: 999px; background: var(--faint); flex: none; }
+  .odot.walmart { background: #2E86D9; } .odot.ebay { background: #047857; } .odot.temu { background: #C97B12; }
+  .opo { font-family: var(--mono); font-size: 11.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ochip { margin-left: auto; font-size: 8.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; flex: none; }
+  .ochip.done { background: var(--accent-soft); color: #065F46; }
+  .ochip.pending { background: var(--amber-bg); color: var(--amber); }
+  .ochip.failed { background: var(--neg-bg); color: var(--neg); }
+  .ochip.charge { background: #F4F3F0; color: var(--muted); font-family: var(--mono); }
+  .orow .sub { display: flex; gap: 8px; color: var(--muted); font-size: 10.5px; padding-left: 13px; margin-top: 2px; font-family: var(--mono); }
+  .orow .sub .t { margin-left: auto; color: var(--faint); font-size: 10px; flex: none; }
+  .orow .sub span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .odetail { margin: 8px 0 2px 13px; padding: 8px 10px; background: #FAFAF8; border: 1px solid var(--line); border-radius: 8px; font-size: 10.5px; display: none; }
+  .orow.open .odetail { display: block; }
+  .odetail div { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+  .odetail .lbl { color: var(--faint); flex: none; }
+  .odetail .val { font-family: var(--mono); text-align: right; word-break: break-all; }
+  .search { display: flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; margin-bottom: 8px; }
+  .search input { border: none; outline: none; background: none; font-family: inherit; font-size: 13px; width: 100%; color: var(--text); }
+  .chips { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
+  .chips button { font-family: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); background: none; border: 1px solid transparent; border-radius: 999px; padding: 3px 11px; }
+  .chips button.on { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .chips button.low { color: var(--neg); }
+  .chips button.low.on { background: var(--neg-bg); border-color: transparent; }
+  .slist { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .srow { padding: 8px 12px; border-bottom: 1px solid #F0EFEC; display: flex; align-items: center; gap: 10px; }
+  .srow:last-child { border-bottom: none; }
+  .srow.low { background: #FDF6F6; }
+  .srow .info { min-width: 0; }
+  .ssku { font-family: var(--mono); font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .smeta { color: var(--faint); font-size: 9.5px; margin-top: 1px; }
+  .smeta.warn { color: var(--neg); }
+  .snum { margin-left: auto; text-align: right; flex: none; }
+  .snum .n { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+  .snum .n.low { color: var(--neg); }
+  .snum .l { color: var(--faint); font-size: 8.5px; }
+  .sedit { display: none; padding: 8px 12px 10px; background: #FAFAF8; border-bottom: 1px solid #F0EFEC; }
+  .sedit.show { display: flex; gap: 8px; align-items: center; }
+  .sedit label { font-size: 10.5px; color: var(--muted); flex: none; }
+  .sedit input { width: 90px; font-family: var(--mono); font-size: 14px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; outline-color: var(--accent); }
+  .sedit button { font-family: inherit; font-size: 11px; font-weight: 600; border-radius: 8px; padding: 7px 13px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  .sedit button.save { background: #065F46; border-color: #065F46; color: #fff; }
+  .sedit .msg { font-size: 10px; color: var(--neg); }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid #D8D6D0; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  .tabs button { font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--faint); background: none; border: none; padding: 4px 0; }
+  .tabs button.on { color: var(--accent); }
+  .page { display: none; }
+  .page.on { display: block; }
 </style>
 </head>
 <body>
-  <div class="head"><h1>Overview</h1><span class="date" id="date"></span></div>
-  <div class="toggles">
-    <span class="seg" id="metricSeg"><button data-m="sales" class="on">Gross $</button><button data-m="orders">Orders</button></span>
-    <span class="seg" id="rangeSeg" style="margin-left:auto"><button data-r="Day" class="on">Day</button><button data-r="Month">Month</button><button data-r="Year">Year</button></span>
+  <div id="pgOverview" class="page on">
+    <div class="head"><h1>Overview</h1><span class="date" id="date"></span></div>
+    <div class="toggles">
+      <span class="seg" id="metricSeg"><button data-m="sales" class="on">Gross $</button><button data-m="orders">Orders</button></span>
+      <span class="seg" id="rangeSeg" style="margin-left:auto"><button data-r="Day" class="on">Day</button><button data-r="Month">Month</button><button data-r="Year">Year</button></span>
+    </div>
+    <div class="panel" id="card"><div class="quiet">Loading…</div></div>
+    <div class="panel"><span class="k" id="chartLabel">Sales</span><div id="chart"></div></div>
+    <div class="panel"><span class="k">Latest orders</span><div class="grid" id="feed"></div></div>
+    <div class="money" id="money"></div>
+    <div class="stale" id="stamp"></div>
   </div>
-  <div class="panel" id="card"><div class="err">Loading…</div></div>
-  <div class="panel"><span class="k" id="chartLabel">Sales</span><div id="chart"></div></div>
-  <div class="panel"><span class="k">Latest orders</span><div class="grid" id="feed"></div></div>
-  <div class="money" id="money"></div>
-  <div class="stale" id="stamp"></div>
+
+  <div id="pgOrders" class="page">
+    <div class="head"><h1>Orders</h1></div>
+    <div class="toggles"><span class="seg wide" id="obSeg">
+      <button data-b="today" class="on">Today</button><button data-b="open">Open book</button>
+    </span></div>
+    <div class="olist" id="olist"><div class="quiet">Loading…</div></div>
+    <div class="stale">tap an order for items, tracking and notes</div>
+  </div>
+
+  <div id="pgStock" class="page">
+    <div class="head"><h1>Stock</h1></div>
+    <div class="search"><input id="sq" type="search" placeholder="Search SKU or title" autocomplete="off" /></div>
+    <div class="chips" id="schips">
+      <button data-c="all" class="on">All</button>
+      <button data-c="wfs">WFS</button>
+      <button data-c="ds">DropShip</button>
+      <button data-c="low" class="low">Low</button>
+    </div>
+    <div class="slist" id="slist"><div class="quiet">Loading…</div></div>
+    <div class="stale">tap a row to correct the warehouse count</div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button data-p="Overview" class="on">Overview</button>
+    <button data-p="Orders">Orders</button>
+    <button data-p="Stock">Stock</button>
+  </nav>
+
 <script>
   let data = null, range = 'Day', metric = 'sales';
+  let ordersData = null, obView = 'today';
+  let stockData = null, sview = 'all', activeTab = 'Overview', editSku = null;
   const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const money$ = (v) => '$' + Math.round(v).toLocaleString('en-US');
   const short$ = (v) => v >= 100000 ? '$' + Math.round(v / 1000) + 'k' : v >= 10000 ? '$' + (v / 1000).toFixed(1) + 'k' : money$(v);
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const WDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const CHN = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
+  const tf = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const h = d.getHours();
+    return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + (h < 12 ? 'a' : 'p');
+  };
+  const df = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const today = new Date();
+    return d.toDateString() === today.toDateString() ? tf(iso) : MONTHS[d.getMonth()].slice(0, 3) + ' ' + d.getDate();
+  };
 
+  /* ---------------- Overview (unchanged from the first phone page) ---------------- */
   function renderCard() {
     const t = data && data.orders && data.orders.today;
     if (!t) { $('card').innerHTML = '<div class="err">No data yet — is Capture Station running?</div>'; return; }
@@ -97,7 +200,6 @@
       + '<div class="chans">' + ['walmart','ebay','temu'].map(k =>
           '<div><div class="cn ' + k + '">' + CHN[k] + '</div><div class="cv">' + cv(k) + '</div></div>').join('') + '</div>';
   }
-
   function smooth(pts) {
     let d = 'M ' + pts[0][0] + ',' + pts[0][1];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -108,7 +210,6 @@
     }
     return d;
   }
-
   function renderChart() {
     const s = data && data.orders && data.orders.series && data.orders.series[range];
     $('chartLabel').textContent = 'Sales · ' + (metric === 'sales' ? 'gross $' : 'orders') + ' · ' + range.toLowerCase();
@@ -141,21 +242,13 @@
     out += lab(0) + lab(tips.length - 1);
     $('chart').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + out + '</svg>';
   }
-
   function renderFeed() {
     const feed = (data && data.orders && data.orders.recent) || [];
     if (!feed.length) { $('feed').innerHTML = ''; return; }
-    const tf = (iso) => {
-      const d = new Date(iso);
-      if (isNaN(d)) return '';
-      const h = d.getHours();
-      return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + (h < 12 ? 'a' : 'p');
-    };
     $('feed').innerHTML = '<div class="ghead"><span>PO#</span><span>SKU</span><span>Time</span></div>'
-      + feed.slice(0, 7).map(r => '<div class="row"><span class="po">' + r.order + '</span><span class="sku">'
-        + (r.sku || '—') + (r.more ? ' +' + r.more : '') + '</span><span class="tm">' + tf(r.at) + '</span></div>').join('');
+      + feed.slice(0, 7).map(r => '<div class="grow"><span class="po">' + esc(r.order) + '</span><span class="sku">'
+        + esc(r.sku || '—') + (r.more ? ' +' + r.more : '') + '</span><span class="tm">' + tf(r.at) + '</span></div>').join('');
   }
-
   function renderMoney() {
     const m = data && data.money;
     if (!m) { $('money').innerHTML = ''; return; }
@@ -164,19 +257,172 @@
       + '<div class="panel"><div class="k">Buy soon</div><div class="mv a">' + m.buyCount + ' SKUs</div></div>'
       + '<div class="panel"><div class="k">To WFS</div><div class="mv g">' + m.wfsUnits.toLocaleString('en-US') + '</div></div>';
   }
+  function renderOverview() { renderCard(); renderChart(); renderFeed(); renderMoney(); }
 
-  function renderAll() { renderCard(); renderChart(); renderFeed(); renderMoney(); }
+  /* ---------------- Orders ---------------- */
+  function renderOrders() {
+    const box = $('olist');
+    if (!ordersData) { box.innerHTML = '<div class="quiet">Loading…</div>'; return; }
+    if (!ordersData.ok) { box.innerHTML = '<div class="err">' + esc(ordersData.error || 'Orders unavailable.') + '</div>'; return; }
+    const segBtns = $('obSeg').querySelectorAll('button');
+    segBtns[0].textContent = 'Today · ' + ordersData.today.length;
+    segBtns[1].textContent = 'Open book · ' + ordersData.open.length;
+    const list = obView === 'today' ? ordersData.today : ordersData.open;
+    if (!list.length) { box.innerHTML = '<div class="quiet">Nothing here yet.</div>'; return; }
+    const chip = (r) => obView === 'open'
+      ? '<span class="ochip charge">' + money$(r.charge || 0) + '</span>'
+      : r.status === 'synced' ? '<span class="ochip done">DONE</span>'
+        : r.status === 'failed' ? '<span class="ochip failed">FAILED</span>'
+          : '<span class="ochip pending">' + esc(String(r.status || 'pending').toUpperCase()) + '</span>';
+    box.innerHTML = list.slice(0, 80).map((r, i) => {
+      const skuLine = (r.items || []).map(it => esc(it.sku) + (it.qty > 1 ? ' ×' + it.qty : '')).join(', ') || '—';
+      const det = [];
+      for (const it of r.items || []) det.push('<div><span class="lbl">item</span><span class="val">' + esc(it.sku) + (it.qty > 1 ? ' ×' + it.qty : '') + '</span></div>');
+      if (r.tracking) det.push('<div><span class="lbl">tracking</span><span class="val">' + esc(r.carrier ? r.carrier + ' · ' : '') + esc(r.tracking) + '</span></div>');
+      if (r.notes) det.push('<div><span class="lbl">note</span><span class="val">' + esc(r.notes) + '</span></div>');
+      if (r.fail) det.push('<div><span class="lbl">failed</span><span class="val">' + esc(r.fail) + '</span></div>');
+      if (obView === 'open') det.push('<div><span class="lbl">total</span><span class="val">' + money$(r.charge || 0) + '</span></div>');
+      return '<div class="orow" data-i="' + i + '">'
+        + '<div class="top"><span class="odot ' + esc(r.channel) + '"></span><span class="opo">' + esc(r.order) + '</span>' + chip(r) + '</div>'
+        + '<div class="sub"><span>' + skuLine + '</span><span class="t">' + df(r.at) + '</span></div>'
+        + '<div class="odetail">' + (det.join('') || '<div><span class="lbl">no detail</span></div>') + '</div>'
+        + '</div>';
+    }).join('') + (list.length > 80 ? '<div class="quiet">+ ' + (list.length - 80) + ' more</div>' : '');
+  }
+  $('olist').addEventListener('click', (e) => {
+    const row = e.target.closest('.orow');
+    if (row) row.classList.toggle('open');
+  });
+  $('obSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    obView = b.dataset.b;
+    [...$('obSeg').children].forEach(x => x.classList.toggle('on', x === b));
+    renderOrders();
+  });
 
-  async function refresh() {
+  /* ---------------- Stock ---------------- */
+  function stockRows() {
+    if (!stockData || !stockData.ok) return [];
+    const q = $('sq').value.trim().toLowerCase();
+    return stockData.items.filter(it => {
+      if (sview === 'wfs' && !(it.wfs > 0)) return false;
+      if (sview === 'ds' && !it.ds) return false;
+      if (sview === 'low' && !(it.min > 0 && it.avail < it.min)) return false;
+      if (q && !(it.sku.toLowerCase().includes(q) || it.title.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+  function renderStock() {
+    const box = $('slist');
+    if (!stockData) { box.innerHTML = '<div class="quiet">Loading…</div>'; return; }
+    if (!stockData.ok) { box.innerHTML = '<div class="err">' + esc(stockData.error || 'Stock unavailable.') + '</div>'; return; }
+    const lowN = stockData.items.filter(it => it.min > 0 && it.avail < it.min).length;
+    const lowBtn = $('schips').querySelector('[data-c="low"]');
+    lowBtn.textContent = lowN ? 'Low · ' + lowN : 'Low';
+    const rows = stockRows();
+    if (!rows.length) { box.innerHTML = '<div class="quiet">No matches.</div>'; return; }
+    box.innerHTML = rows.slice(0, 120).map(it => {
+      const low = it.min > 0 && it.avail < it.min;
+      const meta = low ? 'min ' + it.min + ' · below minimum'
+        : (it.min ? 'min ' + it.min : 'no minimum') + (it.inOrders ? ' · ' + it.inOrders + ' in orders' : '');
+      const editing = editSku === it.sku;
+      return '<div class="srow' + (low ? ' low' : '') + '" data-sku="' + esc(it.sku) + '">'
+        + '<div class="info"><div class="ssku">' + esc(it.sku) + '</div><div class="smeta' + (low ? ' warn' : '') + '">' + meta + '</div></div>'
+        + '<div class="snum"><div class="n' + (low ? ' low' : '') + '">' + it.avail.toLocaleString('en-US') + '</div><div class="l">available</div></div>'
+        + '</div>'
+        + '<div class="sedit' + (editing ? ' show' : '') + '" data-editfor="' + esc(it.sku) + '">'
+        + '<label>In stock</label><input type="number" min="0" step="1" inputmode="numeric" value="' + it.level + '" />'
+        + '<button class="save">Save</button><button class="cancel">Cancel</button><span class="msg"></span>'
+        + '</div>';
+    }).join('') + (rows.length > 120 ? '<div class="quiet">+ ' + (rows.length - 120) + ' more — narrow the search</div>' : '');
+  }
+  $('sq').addEventListener('input', () => { editSku = null; renderStock(); });
+  $('schips').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    sview = b.dataset.c;
+    editSku = null;
+    [...$('schips').children].forEach(x => x.classList.toggle('on', x === b));
+    renderStock();
+  });
+  $('slist').addEventListener('click', async (e) => {
+    const ed = e.target.closest('.sedit');
+    if (ed) {
+      const sku = ed.dataset.editfor;
+      const input = ed.querySelector('input');
+      const msg = ed.querySelector('.msg');
+      if (e.target.closest('.cancel')) { editSku = null; renderStock(); return; }
+      if (e.target.closest('.save')) {
+        const n = Number(input.value);
+        if (!Number.isInteger(n) || n < 0) { msg.textContent = 'Whole number, 0 or more.'; return; }
+        msg.textContent = '';
+        e.target.textContent = 'Saving…';
+        try {
+          const r = await fetch('/stock/set' + location.search, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sku, level: n }),
+          });
+          const j = await r.json();
+          if (!j.ok) { e.target.textContent = 'Save'; msg.textContent = j.error || 'Could not save.'; return; }
+          const it = stockData.items.find(x => x.sku === sku);
+          if (it) {
+            it.level = Number(j.stockLevel ?? n);
+            it.inOrders = Number(j.inOrders ?? it.inOrders);
+            it.avail = Number(j.available ?? Math.max(0, it.level - it.inOrders));
+          }
+          editSku = null;
+          renderStock();
+        } catch { e.target.textContent = 'Save'; msg.textContent = 'Connection lost.'; }
+      }
+      return;
+    }
+    const row = e.target.closest('.srow');
+    if (!row) return;
+    editSku = editSku === row.dataset.sku ? null : row.dataset.sku;
+    renderStock();
+    const open = $('slist').querySelector('.sedit.show input');
+    if (open) { open.focus(); open.select(); }
+  });
+
+  /* ---------------- tabs + refresh ---------------- */
+  function showTab(p) {
+    activeTab = p;
+    $('pgOverview').classList.toggle('on', p === 'Overview');
+    $('pgOrders').classList.toggle('on', p === 'Orders');
+    $('pgStock').classList.toggle('on', p === 'Stock');
+    [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.p === p));
+    if (p === 'Orders' && !ordersData) refreshOrders();
+    if (p === 'Stock' && !stockData) refreshStock();
+  }
+  $('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) showTab(b.dataset.p);
+  });
+
+  async function refreshOverview() {
     try {
       const r = await fetch('/data' + location.search, { cache: 'no-store' });
       const j = await r.json();
-      if (j && j.ok) { data = j; renderAll(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString(); }
-      else if (!data) $('card').innerHTML = '<div class="err">' + ((j && j.error) || 'No data.') + '</div>';
+      if (j && j.ok) { data = j; renderOverview(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString(); }
+      else if (!data) $('card').innerHTML = '<div class="err">' + esc((j && j.error) || 'No data.') + '</div>';
     } catch {
-      if (!data) $('card').innerHTML = '<div class="err">Can’t reach Capture Station — same WiFi (or Tailscale), and the app running?</div>';
+      if (!data) $('card').innerHTML = '<div class="err">Can’t reach Capture Station — is Tailscale on, and the app running?</div>';
       else $('stamp').textContent = 'connection lost — retrying…';
     }
+  }
+  async function refreshOrders() {
+    try {
+      const r = await fetch('/orders' + location.search, { cache: 'no-store' });
+      ordersData = await r.json();
+    } catch { if (!ordersData) ordersData = { ok: false, error: 'Can’t reach Capture Station.' }; }
+    if (activeTab === 'Orders') renderOrders();
+  }
+  async function refreshStock() {
+    try {
+      const r = await fetch('/stock' + location.search, { cache: 'no-store' });
+      const j = await r.json();
+      if (!editSku || !j.ok) stockData = j; // never yank an edit out from under a thumb
+    } catch { if (!stockData) stockData = { ok: false, error: 'Can’t reach Capture Station.' }; }
+    if (activeTab === 'Stock' && !editSku) renderStock();
   }
 
   const d = new Date();
@@ -185,16 +431,20 @@
     const b = e.target.closest('button'); if (!b) return;
     metric = b.dataset.m;
     [...$('metricSeg').children].forEach(x => x.classList.toggle('on', x === b));
-    renderAll();
+    renderOverview();
   });
   $('rangeSeg').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     range = b.dataset.r;
     [...$('rangeSeg').children].forEach(x => x.classList.toggle('on', x === b));
-    renderAll();
+    renderOverview();
   });
-  refresh();
-  setInterval(refresh, 60000);
+  refreshOverview();
+  setInterval(() => {
+    if (activeTab === 'Overview') refreshOverview();
+    else if (activeTab === 'Orders') refreshOrders();
+    else refreshStock();
+  }, 60000);
 </script>
 </body>
 </html>

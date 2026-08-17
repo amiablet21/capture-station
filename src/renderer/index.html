@@ -42,20 +42,6 @@
     </div>
   </section>
 
-  <div id="findBar" class="find-bar" hidden>
-    <div class="search-field">
-      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
-      <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
-      <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
-    </div>
-    <span id="findCount" class="find-count"></span>
-    <div id="channelChips" class="channel-chips" hidden></div>
-    <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
-    <button id="shipImportBtn" class="btn btn-ghost" title="Upload Walmart's shipped-orders download (Manage Orders → Download) — tracking numbers fill onto matching rows automatically">Import shipped</button>
-    <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
-    <button id="bExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the list">Browser</button>
-  </div>
-
   <div class="rows-row" id="rowsRow">
   <!-- embedded marketplace browser: the native view covers #bView's rectangle -->
   <div id="bDock" class="bdock" hidden>
@@ -87,6 +73,22 @@
     </div>
   </div>
   <div id="bDivider" class="sheet-grip bdock-divider" hidden title="Drag to resize the browser pane"></div>
+  <!-- toolbar docked onto the sheet as a header band (owner 2026-08-17,
+       matching Stock): band + sheet resize and align as ONE column -->
+  <div id="capMain" class="cap-main">
+  <div id="findBar" class="cap-band" hidden>
+    <div class="search-field">
+      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+      <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
+      <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
+    </div>
+    <span id="findCount" class="find-count"></span>
+    <div id="channelChips" class="channel-chips" hidden></div>
+    <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
+    <button id="shipImportBtn" class="btn btn-ghost" title="Upload Walmart's shipped-orders download (Manage Orders → Download) — tracking numbers fill onto matching rows automatically">Import shipped</button>
+    <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
+    <button id="bExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the list">Browser</button>
+  </div>
   <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
       <thead>
@@ -107,6 +109,7 @@
       <div class="rows-empty-hint">Highlight the order number on the marketplace page and press Ctrl+C. It appears here automatically.</div>
     </div>
   </main>
+  </div>
   <div id="rowsGrip" class="sheet-grip" title="Drag to widen or narrow the list · double-click to reset"></div>
   </div>
 

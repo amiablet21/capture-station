@@ -238,7 +238,7 @@ body {
 
 /* with the marketplace pane docked, the sheet takes the remaining width */
 .rows-row.has-browser { justify-content: stretch; }
-.rows-row.has-browser .rows { flex: 1 1 auto; }
+.rows-row.has-browser .cap-main { flex: 1 1 auto; max-width: none; }
 
 /* embedded marketplace browser pane (native view covers #bView) */
 
@@ -323,14 +323,32 @@ body {
 
 .bdock-divider { margin-right: 6px; }
 
+/* the sheet column: header band on top, the scrolling sheet growing out of
+   its bottom edge (owner 2026-08-17, matching the Stock band) */
+.cap-main { display: flex; flex-direction: column; min-height: 0; width: 100%; max-width: calc(100% - 14px); }
+.cap-band {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+}
+.cap-band .search-field { flex: 0 1 260px; min-width: 170px; }
+.cap-band #ordersRefreshBtn { margin-left: auto; }
+.cap-band[hidden] + .rows { border-radius: var(--r-card); } /* band away: the sheet keeps its own corners */
+
 .rows {
+  flex: 1;
   width: 100%;
-  max-width: calc(100% - 14px);
   min-height: 0;
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-card);
+  border-radius: 0 0 var(--r-card) var(--r-card);
   display: flex;
   flex-direction: column;
 }
@@ -2409,16 +2427,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 /* Ctrl+F row finder: a slim bar that slides in above the list */
 
-.find-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  /* centered and width-synced to the capture sheet (see alignCaptureToolbar) */
-  margin: 14px auto 6px;
-  max-width: calc(100% - 48px);
-  width: 100%;
-}
+/* .find-bar retired 2026-08-17: the capture toolbar is the .cap-band now */
 
 .search-field {
   flex: 0 1 360px;
@@ -2471,7 +2480,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .search-clear:hover { background: var(--neg-bg); color: var(--neg-text); }
 
 .find-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.find-bar #ordersRefreshBtn { margin-left: auto; }
 
 /* tracking-wait cancel */
 

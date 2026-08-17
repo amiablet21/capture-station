@@ -2766,6 +2766,57 @@ function registerIpc() {
   // devices on the WiFi can't casually read sales numbers. With Tailscale on
   // the PC and the phone it works from anywhere while this machine is on.
   let phoneUrl = '';
+
+  // the phone app's Orders tab: today's captured rows + the open book
+  async function phoneOrdersPayload() {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const today = db.todayRows().map(r => ({
+      order: r.order_number, channel: String(r.channel || '').toLowerCase(),
+      status: r.status, at: r.created_at, tracking: r.tracking || '', carrier: r.carrier || '',
+      notes: r.notes || '', fail: r.fail_reason || '',
+      items: (r.items || []).map(i => ({ sku: i.sku, qty: i.qty || 1 })),
+    }));
+    let open = [];
+    try {
+      open = (await getOpenOrdersCached(cfg)).map(o => ({
+        order: o.reference || o.orderId, channel: ovChanOf(o.source || ''),
+        at: o.receivedDate, charge: Number(o.totalCharge) || 0,
+        items: (o.items || []).filter(l => !l.isService).map(l => ({ sku: l.sku || l.channelSku || '', qty: l.quantity || 1 })),
+      })).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+    } catch { /* open book optional; today's rows still answer */ }
+    return { ok: true, today, open };
+  }
+
+  // the phone app's Stock tab: one warehouse row per SKU, 60s cache so a
+  // scrolling phone doesn't hammer Linnworks
+  let phoneStockCache = { at: 0, items: null };
+  async function phoneStockPayload() {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (phoneStockCache.items && Date.now() - phoneStockCache.at < 60 * 1000) {
+      return { ok: true, items: phoneStockCache.items };
+    }
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const homeId = cfg.linnworks.locationId;
+    const out = items.map(it => {
+      const home = (it.levels || []).find(l => l.locationId === homeId) || {};
+      const wfsLvl = (it.levels || []).find(l => /wfs/i.test(l.locationName || ''));
+      return {
+        sku: it.sku, title: it.title || '',
+        level: Number(home.stockLevel) || 0,
+        inOrders: Number(home.inOrders) || 0,
+        min: Number(home.minimumLevel) || 0,
+        avail: Number(home.available) || 0,
+        wfs: wfsLvl ? (Number(wfsLvl.stockLevel) || 0) : 0,
+        ds: !!it.dsPad,
+      };
+    }).sort((a, b) => b.level - a.level);
+    phoneStockCache = { at: Date.now(), items: out };
+    return { ok: true, items: out };
+  }
+
   function phoneToken() {
     const p = path.join(app.getPath('userData'), 'phone-token.txt');
     try {
@@ -2809,11 +2860,34 @@ function registerIpc() {
           return;
         }
         if (u.searchParams.get('k') !== token) { res.writeHead(403); res.end('Forbidden'); return; }
-        if (u.pathname === '/data') {
-          let payload;
-          try { payload = await overviewDataPayload(); } catch (e) { payload = { ok: false, error: e.message }; }
+        const json = (payload) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(payload));
+        };
+        if (u.pathname === '/data') {
+          try { json(await overviewDataPayload()); } catch (e) { json({ ok: false, error: e.message }); }
+          return;
+        }
+        if (u.pathname === '/orders') {
+          try { json(await phoneOrdersPayload()); } catch (e) { json({ ok: false, error: e.message }); }
+          return;
+        }
+        if (u.pathname === '/stock') {
+          try { json(await phoneStockPayload()); } catch (e) { json({ ok: false, error: e.message }); }
+          return;
+        }
+        if (u.pathname === '/stock/set' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
+          req.on('end', async () => {
+            let out;
+            try {
+              const j = JSON.parse(body || '{}');
+              out = await stockSetLevel(j.sku, j.level);
+              phoneStockCache = { at: 0, items: null }; // the tab re-reads truth
+            } catch (e) { out = { ok: false, error: e.message }; }
+            json(out);
+          });
           return;
         }
         try {
@@ -3513,7 +3587,8 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('stock:set', async (_e, { sku, level }) => {
+  // shared by the desktop grid AND the phone dashboard's stock editor
+  async function stockSetLevel(sku, level) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const n = Number(level);
@@ -3537,7 +3612,8 @@ function registerIpc() {
     } catch (e) {
       return { ok: false, error: e.message };
     }
-  });
+  }
+  ipcMain.handle('stock:set', (_e, { sku, level }) => stockSetLevel(sku, level));
   // Minimum (reorder alert) level for one SKU at the primary warehouse.
   ipcMain.handle('stock:setMin', async (_e, { stockItemId, level }) => {
     const cfg = config.load();
