@@ -6557,15 +6557,28 @@ async function ovFetch() {
   if (ovFetching) return;
   ovFetching = true;
   try {
+    const prevSeries = ovData ? JSON.stringify(ovData.orders.series[ovRange]) : '';
     const r = await api.overviewData().catch(() => null);
     if (r && r.ok) {
       ovData = r;
-      if (activePage === 'overview') ovRenderAll();
+      if (activePage === 'overview') {
+        ovRenderToday();
+        ovRenderCards();
+        ovRenderDrawer();
+        // don't wipe an in-progress hover for an identical curve
+        if (JSON.stringify(ovData.orders.series[ovRange]) !== prevSeries) ovDrawChart();
+      }
     }
   } finally {
     ovFetching = false;
   }
 }
+
+// the number rolls while you watch: refresh every minute on the page, and
+// right after a capture lands (the new order is usually the one just scanned)
+setInterval(() => { if (activePage === 'overview') ovFetch(); }, 60000);
+api.on('order:detected', () => { if (activePage === 'overview') setTimeout(ovFetch, 800); });
+api.on('orders:imported', () => { if (activePage === 'overview') ovFetch(); });
 
 function ovRenderAll() {
   ovRenderToday();
@@ -6574,25 +6587,63 @@ function ovRenderAll() {
   ovRenderDrawer();
 }
 
+let ovPrevToday = null; // last rendered totals: the odometer rolls on increase
+
+function ovOdometer(el, from, to) {
+  const s = String(to);
+  const f = String(from).padStart(s.length, '0').slice(-s.length);
+  el.innerHTML = [...s].map(() =>
+    `<span class="dcol"><span class="dstack">${'0123456789'.split('').map(x => `<i>${x}</i>`).join('')}</span></span>`).join('');
+  const stacks = el.querySelectorAll('.dstack');
+  stacks.forEach((st, i) => {
+    st.style.transition = 'none';
+    st.style.transform = `translateY(-${Number(f[i]) * 1.1}em)`;
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    stacks.forEach((st, i) => {
+      st.style.transition = '';
+      st.style.transform = `translateY(-${Number(s[i]) * 1.1}em)`;
+    });
+  }));
+}
+
 function ovRenderToday() {
   const box = $('ovToday');
   const t = ovData && ovData.orders.today;
   if (!t) { box.innerHTML = '<div class="ov-empty">Loading today…</div>'; return; }
+  const prev = ovPrevToday;
+  const rose = prev && t.total > prev.total;
   const delta = t.total - t.yesterday;
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
   box.innerHTML = `
-    <div><div class="k">Orders today</div><div class="big">${t.total}</div>
+    <div><div class="k">Orders today</div><div class="big"><span class="ov-odo"></span></div>
       <div class="delta">${delta >= 0 ? '▲' : '▼'} <b class="mono">${delta >= 0 ? '+' : ''}${delta}</b> vs yesterday</div></div>
     <div class="ov-mkcol">${chans.map(([k, n]) => `
-      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v">${t.byChannel[k] || 0}</span></div>`).join('')}
+      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v" data-ovch="${k}">${t.byChannel[k] || 0}</span></div>`).join('')}
     </div>
-    <div class="ov-share">${chans.map(([k]) => `<span class="ov-sh-${k}"></span>`).join('')}</div>`;
+    <div class="ov-share">${chans.map(([k]) => `<span class="ov-sh-${k}"></span>`).join('')}</div>
+    <div class="ov-toast"><span id="ovToastChip"></span></div>`;
+  ovOdometer(box.querySelector('.ov-odo'), rose ? prev.total : t.total, t.total);
   // CSP strips inline styles from generated HTML — flex weights + colors via CSSOM
   const colors = { walmart: '#2E86D9', ebay: '#047857', temu: '#C97B12' };
   chans.forEach(([k]) => {
     const el = box.querySelector(`.ov-sh-${k}`);
     if (el) { el.style.flexGrow = String(Math.max(t.byChannel[k] || 0, 0.01)); el.style.background = colors[k]; }
   });
+  if (rose) {
+    const grew = chans.filter(([k]) => (t.byChannel[k] || 0) > ((prev.byChannel || {})[k] || 0));
+    grew.forEach(([k]) => {
+      const v = box.querySelector(`[data-ovch="${k}"]`);
+      if (v) v.classList.add('ov-hit');
+    });
+    const chip = box.querySelector('#ovToastChip');
+    const n = t.total - prev.total;
+    chip.textContent = grew.length === 1
+      ? `+${n} ${grew[0][1]} order${n === 1 ? '' : 's'}`
+      : `+${n} order${n === 1 ? '' : 's'}`;
+    chip.classList.add('show');
+  }
+  ovPrevToday = { total: t.total, byChannel: { ...t.byChannel } };
 }
 
 // catmull-rom -> cubic bezier: the "smooth, never jagged" requirement

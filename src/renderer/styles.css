@@ -3680,6 +3680,21 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
 .ov-share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
 .ov-share span { display: block; min-width: 2px; }
+/* the orders-today number rolls like a mechanical counter when it rises
+   (owner pick: "odometer roll") — the marketplace row flashes its +1 and a
+   soft chip names the channel */
+.ov-odo { display: inline-flex; overflow: hidden; }
+.ov-odo .dcol { position: relative; height: 1.1em; overflow: hidden; display: inline-block; }
+.ov-odo .dstack { display: flex; flex-direction: column; transition: transform 500ms var(--ease); }
+.ov-odo .dstack i { font-style: normal; height: 1.1em; line-height: 1.1em; display: block; }
+.ov-mkrow .v { border-radius: 5px; padding: 0 5px; }
+.ov-mkrow .v.ov-hit { animation: ovHit 800ms var(--ease); }
+@keyframes ovHit { 0% { background: var(--accent-soft); color: var(--accent-soft-text); } 100% { background: transparent; } }
+.ov-toast { height: 18px; text-align: center; }
+.ov-toast span { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 10px; opacity: 0; }
+.ov-toast span.show { animation: ovToast 1.8s var(--ease); }
+@keyframes ovToast { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+
 .ov-mtoggle { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; margin-left: 10px; }
 .ov-mbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 9px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
 .ov-mbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
