@@ -2476,12 +2476,17 @@ function registerIpc() {
   const OV_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function overviewSeriesFromHistory(days) {
     const at = (k) => days[k] || { n: 0, s: 0 };
+    // Month = the CURRENT calendar month to date (owner call 2026-08-17:
+    // "August 1 - August 17", not the trailing 30 days)
+    const nowD = new Date();
     const monthDays = [];
-    for (let i = 29; i >= 0; i--) monthDays.push(db.localDay(new Date(Date.now() - i * 86400000)));
+    for (let d = 1; d <= nowD.getDate(); d++) {
+      monthDays.push(`${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+    }
     const month = {
       vals: monthDays.map(d => at(d).n),
       sales: monthDays.map(d => Math.round(at(d).s)),
-      tips: monthDays.map((d, i) => i === 29 ? 'Today' : `${OV_MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}`),
+      tips: monthDays.map((d, i) => i === monthDays.length - 1 ? 'Today' : `${OV_MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}`),
     };
     const perMonth = {};
     for (const [d, v] of Object.entries(days)) {
@@ -2532,22 +2537,27 @@ function registerIpc() {
       for (const c of Object.keys(a.byChannelSales)) a.byChannelSales[c] = Math.round(a.byChannelSales[c]);
       return a;
     };
-    const dayKey = (off) => db.localDay(new Date(Date.now() - off * 86400000));
-    const last30 = [], prior30 = [];
-    for (let i = 0; i < 30; i++) last30.push(dayKey(i));
-    for (let i = 30; i < 60; i++) prior30.push(dayKey(i));
+    // Month = current calendar month to date; the comparison is the SAME
+    // day-span of the previous month (Aug 1-17 vs Jul 1-17), so the delta
+    // is fair mid-month (owner call 2026-08-17)
+    const now = new Date();
+    const ymd = (y, mIdx, d) => `${y}-${String(mIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const mtd = [], priorMtd = [];
+    for (let d = 1; d <= now.getDate(); d++) mtd.push(ymd(now.getFullYear(), now.getMonth(), d));
+    const pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const pmLast = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    for (let d = 1; d <= Math.min(now.getDate(), pmLast); d++) priorMtd.push(ymd(pm.getFullYear(), pm.getMonth(), d));
     // Year matches the chart's window: the last 12 calendar months
     const months = new Set();
-    const now = new Date();
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
     const yearKeys = Object.keys(days).filter(k => months.has(k.slice(0, 7)));
     if (!yearKeys.includes(today)) yearKeys.push(today);
-    const prior = sum(prior30);
+    const prior = sum(priorMtd);
     return {
-      Month: { ...sum(last30), prevTotal: prior.total, prevTotalSales: prior.totalSales },
+      Month: { ...sum(mtd), prevTotal: prior.total, prevTotalSales: prior.totalSales },
       Year: sum(yearKeys),
     };
   }

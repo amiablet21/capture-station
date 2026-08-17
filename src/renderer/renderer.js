@@ -6630,7 +6630,8 @@ function ovRenderToday() {
   // the card follows the range filter (owner mockup 2026-08-17): Day shows
   // the live today numbers, Month/Year sum the received-day history
   const view = ovRange === 'Day' ? t : ((ovData.orders.ranges || {})[ovRange] || null);
-  const label = `${money ? 'Gross' : 'Orders'} ${ovRange === 'Day' ? 'today' : ovRange === 'Month' ? '· 30 days' : '· 12 months'}`;
+  const nowD = new Date();
+  const label = `${money ? 'Gross' : 'Orders'} ${ovRange === 'Day' ? 'today' : ovRange === 'Month' ? `· ${OV_MONTHS[nowD.getMonth()]}` : '· 12 months'}`;
   if (!view) {
     box.innerHTML = `<div><div class="k">${label}</div><div class="big">…</div>
       <div class="delta">crunching the order history…</div></div>`;
@@ -6639,7 +6640,7 @@ function ovRenderToday() {
   const prevRef = ovRange === 'Day'
     ? { t: t.yesterday, s: t.yesterdaySales || 0, vs: 'vs yesterday' }
     : ovRange === 'Month' && view.prevTotal !== undefined
-      ? { t: view.prevTotal, s: view.prevTotalSales || 0, vs: 'vs prior 30 days' }
+      ? { t: view.prevTotal, s: view.prevTotalSales || 0, vs: `vs ${OV_MONTHS[(nowD.getMonth() + 11) % 12].slice(0, 3)} 1–${nowD.getDate()}` }
       : null; // the year window has no prior year of history to compare
   const delta = prevRef ? (money ? view.totalSales - prevRef.s : view.total - prevRef.t) : null;
   const deltaHtml = prevRef
