@@ -2727,7 +2727,7 @@ function registerIpc() {
       ranges: overviewHistory.days
         ? overviewRangeTotals(overviewHistory.days, live ? live.today : null)
         : null,
-      recent: db.overviewRecent(7),
+      recent: db.overviewRecent(12),
       series: {
         Day: live ? live.series : db.overviewSeriesDay(),
         Month: hist ? hist.month : db.overviewSeriesMonth(),

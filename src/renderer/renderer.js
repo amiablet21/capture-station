@@ -6664,8 +6664,8 @@ function ovRenderToday() {
   // header row and cell borders both ways
   const feedHtml = feed.map(r => `
       <div class="ov-feedrow${(firstFeed || r.id > ovFeedMax) ? ' is-new' : ''}">
-        <span class="xpo mono">${esc(r.order)}</span>
-        <span class="xsku mono">${esc(r.sku || '—')}${r.more ? ` +${r.more}` : ''}</span>
+        <span class="xpo mono" title="${esc(r.order)}">${esc(r.order)}</span>
+        <span class="xsku mono" title="${esc(r.sku || '')}">${esc(r.sku || '—')}${r.more ? ` +${r.more}` : ''}</span>
         <span class="xch xch-${r.channel}">${chName[r.channel] || esc(r.channel || '—')}</span>
         <span class="xtm">${fmtT(r.at)}</span></div>`).join('');
   box.innerHTML = `
@@ -6829,6 +6829,39 @@ function ovRenderDrawer() {
       : '<div class="ov-empty">No fast sellers need a WFS top-up right now.</div>'}`;
   }
 }
+
+// double-click the LATEST ORDERS label to watch a pretend order drop —
+// visual only (owner asked to see the animation, 2026-08-17); a re-render
+// four seconds later restores the truth
+let ovDemoTimer = 0;
+function ovPlayDemo() {
+  const box = $('ovToday');
+  const grid = box.querySelector('.ov-xgrid');
+  const t = ovData && ovData.orders.today;
+  if (!grid || !t) return;
+  const row = document.createElement('div');
+  row.className = 'ov-feedrow is-new';
+  const now = new Date();
+  const h = now.getHours();
+  row.innerHTML = `<span class="xpo mono">10${Math.floor(8800000000 + Math.random() * 99999999)}</span>`
+    + '<span class="xsku mono">SM-DEMO-128GB-GRAY</span><span class="xch xch-walmart">Walmart</span>'
+    + `<span class="xtm">${h % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')}${h < 12 ? 'a' : 'p'}</span>`;
+  grid.querySelector('.ov-xhead').after(row);
+  const money = ovMetric === 'sales' && t.totalSales !== undefined;
+  const view = ovRange === 'Day' ? t : ((ovData.orders.ranges || {})[ovRange] || t);
+  const big = money ? Math.round(view.totalSales) : view.total;
+  const odo = box.querySelector('.ov-odo');
+  if (odo) ovOdometer(odo, big, big + (money ? 249 : 1));
+  const cell = box.querySelector('[data-ovch="walmart"]');
+  if (cell) { cell.classList.remove('ov-hit'); void cell.offsetWidth; cell.classList.add('ov-hit'); }
+  const chip = box.querySelector('#ovToastChip');
+  if (chip) { chip.textContent = '+1 Walmart order'; chip.classList.remove('show'); void chip.offsetWidth; chip.classList.add('show'); }
+  clearTimeout(ovDemoTimer);
+  ovDemoTimer = setTimeout(() => { if (activePage === 'overview') ovRenderToday(); }, 4000);
+}
+$('ovToday').addEventListener('dblclick', (e) => {
+  if (e.target.closest('.fk')) ovPlayDemo();
+});
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after
 // the page's settle-enter clears it)
