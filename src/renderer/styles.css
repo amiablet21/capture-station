@@ -3669,13 +3669,15 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .ov-phone { margin-left: auto; }
-.phone-dlg { text-align: center; }
+/* own padding + scroll handling: bare dialog content rode the UA defaults and
+   grew BOTH scrollbars in short/zoomed windows (owner caught it 2026-08-17) */
+.phone-dlg { text-align: center; padding: 18px 22px; overflow-y: auto; overflow-x: hidden; max-height: 88vh; }
 .phone-dlg h3 { margin: 0 0 12px; font-size: 14px; }
 .phone-qrs { display: flex; gap: 18px; justify-content: center; align-items: flex-start; margin-bottom: 4px; }
 .phone-qrs > div { max-width: 230px; }
 .phone-qr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
 .phone-qr { display: block; margin: 0 auto 10px; border: 1px solid var(--border); border-radius: 10px; }
-.phone-url { font-size: 10.5px; color: var(--muted); word-break: break-all; margin-bottom: 10px; user-select: all; }
+.phone-url { font-size: 10.5px; color: var(--muted); word-break: break-all; overflow-wrap: anywhere; margin-bottom: 10px; user-select: all; }
 .phone-note { font-size: 11px; color: var(--faint); max-width: 300px; margin: 0 auto 14px; line-height: 1.5; }
 .ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .ov-date { font-size: 11.5px; color: var(--faint); }
