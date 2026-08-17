@@ -1,8 +1,45 @@
-# Go-live status and session brief — 2026-08-14
+# Go-live status and session brief — updated 2026-08-17 (v1.20.12)
 
 Written for cross-machine continuity: everything decided and verified on the main
-station today, so any session on any computer can `git pull` and know the state.
-Owner's instruction: going live with Linnworks stock sync SOON (possibly tonight).
+station, so any session on any computer can `git pull` and know the state.
+Owner's instruction: going live with Linnworks stock sync SOON (not yet announced).
+
+## 2026-08-17: OVERVIEW TAB shipped (v1.20.0 → v1.20.12, all installed)
+
+The Insights plan below is SUPERSEDED by a formal design handoff the owner
+supplied (committed: src/renderer/variants/overview-v2.html + README). Overview
+is now the FIRST tab and the app's boot page. State as of v1.20.12:
+
+- **Totals card (left)** follows BOTH the Orders/Gross $ toggle and the
+  Day/Month/Year filter; Gross $ is the default metric. Full-dollar figures
+  with commas roll through an odometer (owner pick); marketplace cells pinned
+  to the card bottom (Walmart blue #2E86D9 / eBay #047857 / Temu #C97B12);
+  negative deltas red. Month compares vs prior 30 days; Year has no prior-year
+  data so no delta line.
+- **Latest-orders feed** in the card: Excel-style full grid (owner pick from
+  four in-chat designs) — PO#/SKU/Channel/Time, 9 rows from SQLite capture
+  rows, dissolving into the card bottom via mask fade. New arrivals slide in
+  with an emerald flash + toast chip + odometer roll. Double-click the LATEST
+  ORDERS label = pretend-order demo (visual only, self-restores in 4s).
+- **Chart** renders at NATIVE resolution (viewBox = box pixel size; measure the
+  box EMPTIED first or it ratchets taller every redraw — hard-won 2026-08-17).
+  The CARD's content sets the row height; the chart matches. Hover = one svg
+  mousemove mapped through the viewBox scale. Money mode widens padL to 52.
+- **Data**: every range speaks RECEIVED-order language. Day + today card from
+  overviewLiveToday (processed-today headers + open book, 60s cache).
+  Month/Year from userData/overview-history.json — a year of Linnworks
+  processed headers bucketed by dReceivedDate, **cache v4 = per-channel
+  splits** ({ymd: {n,s,c:{chan:{n,s}}}}), 12h TTL, boot-warmed at 15s.
+  Money cards cache: userData/overview-cache.json (10min TTL, stale-while-
+  refresh). SQLite captures are the fallback everywhere.
+- **Page chrome**: Day/Month/Year pills live in the chart header; page-width
+  grip like Stock's (drag rail, dblclick reset, localStorage
+  overviewPageWidth); the WINDOW remembers size+maximized across launches
+  (userData/window-state.json); app boots to Overview when Stock pages are
+  enabled.
+- Known flaky e2e: "Receive closes the popup after a successful commit"
+  ([false,"",""]) — 5 flakes to date, gate catches it, retry passes. Root-cause
+  task chip spawned, owner hasn't clicked it yet.
 
 ## Go-live gate: CLEAR as of 2026-08-14 evening
 
@@ -92,16 +129,8 @@ eBay channel). Owner: "this project is separate, we can deal with later."
 ## Next agreed work (in order)
 1. Support the go-live (spot-checks, first-morning triage).
 2. First real Temu workbook upload tuning.
-3. INSIGHTS tab — **design APPROVED 2026-08-14, DO NOT BUILD until owner says
-   go** ("save it... but do not add it to the software just yet"). Approved
-   mockup: src/renderer/variants/insights.html — a fifth top tab; four view
-   chips (Send to WFS · Missed sales · Buy soon · Dead stock, counts inline)
-   switching ONE stock-style sheet; summary line under the toolbar; last column
-   is always the verdict (send qty / est. missed $ / buy qty / value idle);
-   plus the WFS-guard amber strip (item holds WFS stock while its Walmart link
-   still syncs). Data: 60-day processed lines + per-location levels + stored
-   channel prices. An earlier stacked-cards design was REJECTED ("design isn't
-   too great") — build the chip version only.
+3. ~~INSIGHTS tab~~ SUPERSEDED by the Overview tab (see 2026-08-17 section);
+   the old insights.html mockup remains in variants for reference only.
 4. HUBX integration when keys arrive.
 
 House rules unchanged: mockups in src/renderer/variants shown before UI builds;
