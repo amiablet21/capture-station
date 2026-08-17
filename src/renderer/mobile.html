@@ -351,15 +351,17 @@
     if (!rows.length) { box.innerHTML = '<div class="quiet">No matches.</div>'; return; }
     box.innerHTML = rows.slice(0, 120).map(it => {
       const low = it.min > 0 && it.avail < it.min;
-      const meta = low ? 'min ' + it.min + ' · below minimum'
-        : (it.min ? 'min ' + it.min : 'no minimum') + (it.inOrders ? ' · ' + it.inOrders + ' in orders' : '');
+      const meta = it.ds ? 'pad ' + it.pad + ' · dropship'
+        : low ? 'min ' + it.min + ' · below minimum'
+          : (it.min ? 'min ' + it.min : 'no minimum') + (it.inOrders ? ' · ' + it.inOrders + ' in orders' : '');
       const editing = editSku === it.sku;
       return '<div class="srow' + (low ? ' low' : '') + '" data-sku="' + esc(it.sku) + '">'
         + '<div class="info"><div class="ssku">' + esc(it.sku) + '</div><div class="smeta' + (low ? ' warn' : '') + '">' + meta + '</div></div>'
         + '<div class="snum"><div class="n' + (low ? ' low' : '') + '">' + it.avail.toLocaleString('en-US') + '</div><div class="l">available</div></div>'
         + '</div>'
-        + '<div class="sedit' + (editing ? ' show' : '') + '" data-editfor="' + esc(it.sku) + '">'
-        + '<label>In stock</label><input type="number" min="0" step="1" inputmode="numeric" value="' + it.level + '" />'
+        + '<div class="sedit' + (editing ? ' show' : '') + '" data-editfor="' + esc(it.sku) + '" data-ds="' + (it.ds ? 1 : 0) + '">'
+        + '<label>' + (it.ds ? 'Pad' : 'In stock') + '</label>'
+        + '<input type="number" min="0" step="1" inputmode="numeric" value="' + (it.ds ? it.pad : it.level) + '" />'
         + '<button class="save">Save</button><button class="cancel">Cancel</button><span class="msg"></span>'
         + '</div>';
     }).join('') + (rows.length > 120 ? '<div class="quiet">+ ' + (rows.length - 120) + ' more — narrow the search</div>' : '');
@@ -382,10 +384,11 @@
       if (e.target.closest('.save')) {
         const n = Number(input.value);
         if (!Number.isInteger(n) || n < 0) { msg.textContent = 'Whole number, 0 or more.'; return; }
+        const isDs = ed.dataset.ds === '1'; // dropship SKUs edit their PAD, not the shelf
         msg.textContent = '';
         e.target.textContent = 'Saving…';
         try {
-          const r = await fetch('/stock/set' + location.search, {
+          const r = await fetch((isDs ? '/pad/set' : '/stock/set') + location.search, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sku, level: n }),
           });
@@ -393,9 +396,13 @@
           if (!j.ok) { e.target.textContent = 'Save'; msg.textContent = j.error || 'Could not save.'; return; }
           const it = stockData.items.find(x => x.sku === sku);
           if (it) {
-            it.level = Number(j.stockLevel ?? n);
-            it.inOrders = Number(j.inOrders ?? it.inOrders);
-            it.avail = Number(j.available ?? Math.max(0, it.level - it.inOrders));
+            if (isDs) {
+              it.pad = n;
+            } else {
+              it.level = Number(j.stockLevel ?? n);
+              it.inOrders = Number(j.inOrders ?? it.inOrders);
+              it.avail = Number(j.available ?? Math.max(0, it.level - it.inOrders));
+            }
           }
           editSku = null;
           renderStock();

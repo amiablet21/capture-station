@@ -2819,6 +2819,7 @@ function registerIpc() {
         avail: Number(home.available) || 0,
         wfs: wfsLvl ? (Number(wfsLvl.stockLevel) || 0) : 0,
         ds: !!it.dsPad,
+        pad: it.dsPad ? Math.max(0, Number(it.dsPad.value) || 0) : 0,
         img: it.image || '', // Linnworks CDN url; the phone loads it directly
       };
     }).sort((a, b) => b.level - a.level);
@@ -2885,14 +2886,16 @@ function registerIpc() {
           try { json(await phoneStockPayload()); } catch (e) { json({ ok: false, error: e.message }); }
           return;
         }
-        if (u.pathname === '/stock/set' && req.method === 'POST') {
+        if ((u.pathname === '/stock/set' || u.pathname === '/pad/set') && req.method === 'POST') {
           let body = '';
           req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
           req.on('end', async () => {
             let out;
             try {
               const j = JSON.parse(body || '{}');
-              out = await stockSetLevel(j.sku, j.level);
+              out = u.pathname === '/pad/set'
+                ? await dropshipSetPad(j.sku, j.level)
+                : await stockSetLevel(j.sku, j.level);
               phoneStockCache = { at: 0, items: null }; // the tab re-reads truth
             } catch (e) { out = { ok: false, error: e.message }; }
             json(out);
@@ -3508,7 +3511,8 @@ function registerIpc() {
     return { ok: true, ignored: [...list].sort() };
   });
   // DropShip program + reorder points
-  ipcMain.handle('dropship:setPad', async (_e, { sku, qty }) => {
+  // shared by the desktop dropship view AND the phone stock editor
+  async function dropshipSetPad(sku, qty) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const key = String(sku || '').trim().toUpperCase();
@@ -3524,7 +3528,8 @@ function registerIpc() {
     config.save({ dropshipPads: { ...(cfg.dropshipPads || {}), [key]: n } });
     runPadMaintenance().catch(() => { /* next pass retries */ });
     return { ok: true };
-  });
+  }
+  ipcMain.handle('dropship:setPad', (_e, { sku, qty }) => dropshipSetPad(sku, qty));
   ipcMain.handle('dropship:remove', async (_e, { sku }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
