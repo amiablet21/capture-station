@@ -6896,10 +6896,11 @@ $('tabOverview').addEventListener('click', () => showPage('overview'));
 $('ovPhoneBtn').addEventListener('click', async () => {
   const r = await api.overviewPhone().catch(() => null);
   if (!r || !r.ok) { toast((r && r.error) || 'Phone dashboard unavailable'); return; }
-  $('phoneQr').src = r.qr;
-  $('phoneUrl').textContent = r.url;
-  $('phoneTsBox').hidden = !r.tsQr;
-  if (r.tsQr) { $('phoneTsQr').src = r.tsQr; $('phoneTsUrl').textContent = r.tsUrl; }
+  // Tailscale-only by owner call (2026-08-17: the WiFi QR was unnecessary);
+  // the LAN address stands in only if Tailscale is ever signed out
+  $('phoneQr').src = r.tsQr || r.qr;
+  $('phoneUrl').textContent = r.tsUrl || r.url;
+  $('phoneQrLbl').textContent = r.tsQr ? 'Anywhere · Tailscale' : 'Shop WiFi (Tailscale is signed out)';
   $('phoneDialog').showModal();
 });
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
