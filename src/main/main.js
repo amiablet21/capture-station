@@ -2830,13 +2830,30 @@ function registerIpc() {
   }
   let phonePortLive = 0;
   startPhoneServer();
+  // Tailscale is the ANYWHERE address (owner signed both devices in
+  // 2026-08-17): the CGNAT 100.64/10 range identifies its adapter — the same
+  // range lanIPv4Candidates deliberately skips for the WiFi QR
+  function tailscaleIPv4() {
+    const ifs = require('os').networkInterfaces();
+    for (const list of Object.values(ifs)) {
+      for (const i of list || []) {
+        if (i.family === 'IPv4' && !i.internal && /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(i.address)) return i.address;
+      }
+    }
+    return '';
+  }
   ipcMain.handle('overview:phone', async () => {
     if (!phoneUrl || !phonePortLive) return { ok: false, error: 'Phone dashboard not running.' };
     const token = phoneToken();
+    const QR = require('qrcode');
+    const opts = { margin: 1, width: 210, color: { dark: '#2f3437', light: '#ffffff' } };
     // addresses re-read on every open: WiFi/VPN state moves under the app
     const urls = lanIPv4Candidates().map(a => `http://${a}:${phonePortLive}/?k=${token}`);
-    const qr = await require('qrcode').toDataURL(urls[0], { margin: 1, width: 260, color: { dark: '#2f3437', light: '#ffffff' } });
-    return { ok: true, url: urls[0], alts: urls.slice(1), qr };
+    const qr = await QR.toDataURL(urls[0], opts);
+    const tsIp = tailscaleIPv4();
+    const tsUrl = tsIp ? `http://${tsIp}:${phonePortLive}/?k=${token}` : '';
+    const tsQr = tsUrl ? await QR.toDataURL(tsUrl, opts) : '';
+    return { ok: true, url: urls[0], alts: urls.slice(1), qr, tsUrl, tsQr };
   });
 
   // warm the money cards shortly after boot so the Overview never sits on

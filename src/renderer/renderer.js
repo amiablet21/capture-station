@@ -6898,6 +6898,8 @@ $('ovPhoneBtn').addEventListener('click', async () => {
   if (!r || !r.ok) { toast((r && r.error) || 'Phone dashboard unavailable'); return; }
   $('phoneQr').src = r.qr;
   $('phoneUrl').textContent = r.url;
+  $('phoneTsBox').hidden = !r.tsQr;
+  if (r.tsQr) { $('phoneTsQr').src = r.tsQr; $('phoneTsUrl').textContent = r.tsUrl; }
   $('phoneDialog').showModal();
 });
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
