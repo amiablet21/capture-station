@@ -2776,12 +2776,22 @@ function registerIpc() {
     try { fs.writeFileSync(p, t); } catch { /* best effort */ }
     return t;
   }
-  function lanIPv4() {
+  // the REAL LAN address, not whatever adapter enumerates first — the owner's
+  // NordVPN tunnel (10.5.0.2) beat the Fios ethernet (192.168.1.229) and the
+  // QR pointed phones at an unreachable address (2026-08-17). VPN/virtual
+  // adapters are skipped by name; 192.168.* wins, then other private ranges.
+  function lanIPv4Candidates() {
     const ifs = require('os').networkInterfaces();
-    for (const list of Object.values(ifs)) {
-      for (const i of list || []) if (i.family === 'IPv4' && !i.internal) return i.address;
+    const out = [];
+    for (const [name, list] of Object.entries(ifs)) {
+      if (/nord|vpn|tailscale|wsl|vethernet|virtual|hyper-v|docker|loopback|zerotier/i.test(name)) continue;
+      for (const i of list || []) {
+        if (i.family === 'IPv4' && !i.internal) out.push(i.address);
+      }
     }
-    return '127.0.0.1';
+    const rank = (a) => a.startsWith('192.168.') ? 0 : /^172\.(1[6-9]|2\d|3[01])\./.test(a) ? 1 : a.startsWith('10.') ? 2 : 3;
+    out.sort((a, b) => rank(a) - rank(b));
+    return out.length ? out : ['127.0.0.1'];
   }
   function startPhoneServer() {
     if (config.load().captureOnly) return;
@@ -2805,15 +2815,19 @@ function registerIpc() {
       srv.on('error', (e) => {
         if (e.code === 'EADDRINUSE' && left > 0) tryListen(port + 1, left - 1);
       });
-      srv.listen(port, '0.0.0.0', () => { phoneUrl = `http://${lanIPv4()}:${port}/?k=${token}`; });
+      srv.listen(port, '0.0.0.0', () => { phonePortLive = port; phoneUrl = 'up'; });
     };
     tryListen(8484, 5);
   }
+  let phonePortLive = 0;
   startPhoneServer();
   ipcMain.handle('overview:phone', async () => {
-    if (!phoneUrl) return { ok: false, error: 'Phone dashboard not running.' };
-    const qr = await require('qrcode').toDataURL(phoneUrl, { margin: 1, width: 260, color: { dark: '#2f3437', light: '#ffffff' } });
-    return { ok: true, url: phoneUrl, qr };
+    if (!phoneUrl || !phonePortLive) return { ok: false, error: 'Phone dashboard not running.' };
+    const token = phoneToken();
+    // addresses re-read on every open: WiFi/VPN state moves under the app
+    const urls = lanIPv4Candidates().map(a => `http://${a}:${phonePortLive}/?k=${token}`);
+    const qr = await require('qrcode').toDataURL(urls[0], { margin: 1, width: 260, color: { dark: '#2f3437', light: '#ffffff' } });
+    return { ok: true, url: urls[0], alts: urls.slice(1), qr };
   });
 
   // warm the money cards shortly after boot so the Overview never sits on
