@@ -1860,7 +1860,9 @@ function renderStockChips() {
     && (!state || state.captureOnly); // sync mode always shows the DropShip chip
   // the view chips share one main-menu style tray; Unlisted sits outside it
   // as the amber alert pill (it flags work, it isn't a view you live in)
-  box.innerHTML = '<div class="stock-tray">' + [
+  // NB: NOT "stock-tray" — that class is the per-row hover action tray and
+  // ships visibility:hidden (the collision blanked this whole toolbar once)
+  box.innerHTML = '<div class="chip-tray">' + [
     `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
     ...(views.length ? [
       `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
