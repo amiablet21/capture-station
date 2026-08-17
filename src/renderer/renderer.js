@@ -6545,7 +6545,7 @@ $("ebRefresh").addEventListener("click", () => {
 
 let ovData = null;
 let ovRange = 'Day';
-let ovMetric = 'orders'; // 'orders' | 'sales' (gross $, same received-day basis)
+let ovMetric = 'sales'; // 'orders' | 'sales' — Gross $ is the default (owner call 2026-08-17)
 let ovHoverI = null;
 let ovOpen = 'missed'; // default drawer per the handoff
 let ovFetching = false;
