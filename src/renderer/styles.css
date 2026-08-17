@@ -2066,17 +2066,25 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* centered like everything else on this page (tabs, gaps line, summary) —
    left-anchored + margin-auto actions wrapped into a floaty second row at
    moderate widths (owner: "the spacing is weird", 2026-08-17) */
-.stock-toolbar {
+/* the toolbar is a header band docked onto the sheet (owner pick 2026-08-17,
+   mockup B): one bordered strip the table grows straight out of */
+.stock-main { display: flex; flex-direction: column; min-height: 0; max-width: calc(100% - 14px); }
+.stock-band {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap; /* narrow window: rows wrap centered, nothing floats */
-  max-width: 100%;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--r-card) var(--r-card) 0 0;
 }
-
-.stock-toolbar .stock-search { flex: 0 1 240px; min-width: 150px; }
-.stock-toolbar .stock-actions { margin-left: 10px; }
+.stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
+.stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.stock-band .stock-hint { margin: 0; font-size: 11px; }
+.stock-band .stock-gaps { padding: 0; gap: 8px; }
+.stock-band .stock-actions { display: flex; gap: 6px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -2173,12 +2181,12 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 
 .stock-list {
+  flex: 1;
   min-height: 0;
-  max-width: calc(100% - 14px);
   overflow-y: auto;
   overflow-x: hidden; /* no bottom scrollbar; the sheet grip sets the width */
   border: 1px solid var(--border);
-  border-radius: var(--r-card);
+  border-radius: 0 0 var(--r-card) var(--r-card); /* the band owns the top corners */
   background: var(--surface);
 }
 

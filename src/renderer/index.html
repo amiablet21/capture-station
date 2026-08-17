@@ -110,34 +110,38 @@
   <div id="rowsGrip" class="sheet-grip" title="Drag to widen or narrow the list · double-click to reset"></div>
   </div>
 
-  <!-- Stock page: live warehouse inventory with inline level editing -->
+  <!-- Stock page: live warehouse inventory with inline level editing.
+       Toolbar docked to the sheet as a spreadsheet header band (owner pick
+       2026-08-17, mockup B): search + chips left, stats + gaps + actions
+       right, the table growing straight out of the band's bottom edge -->
   <section id="stockPage" class="stock-page" hidden>
-    <div class="stock-toolbar">
-      <!-- same pill as the capture page's find bar (owner pick 2026-08-15) -->
-      <div class="search-field stock-search">
-        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
-        <input id="stockSearch" class="search-input" type="text" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
-        <button id="stockSearchClear" class="search-clear" title="Clear" aria-label="Clear search" hidden>✕</button>
-      </div>
-      <div id="stockChips" class="stock-chips" hidden></div>
-      <div class="stock-actions">
-        <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
-                title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
-        <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
-        <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
-        <!-- temporarily hidden pending a toolbar redesign (owner request
-             2026-08-02); the dialogs and logic behind them are untouched -->
-        <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
-        <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
-        <button id="wfsBtn" class="btn btn-secondary" hidden>WFS Shipments</button>
-      </div>
-    </div>
-    <!-- quiet subline (owner pick 2026-08-08): per-channel listing gaps
-         live UNDER the toolbar, not as chips inside it -->
-    <div id="stockGapsLine" class="stock-gaps" hidden></div>
-    <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
     <div class="stock-sheet-row">
-      <div id="stockList" class="stock-list"></div>
+      <div id="stockMain" class="stock-main">
+        <div class="stock-band">
+          <div class="search-field stock-search">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+            <input id="stockSearch" class="search-input" type="text" placeholder="Search SKU, title or barcode" autocomplete="off" spellcheck="false" />
+            <button id="stockSearchClear" class="search-clear" title="Clear" aria-label="Clear search" hidden>✕</button>
+          </div>
+          <div id="stockChips" class="stock-chips" hidden></div>
+          <div class="stock-band-right">
+            <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
+            <div id="stockGapsLine" class="stock-gaps" hidden></div>
+            <div class="stock-actions">
+              <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
+                      title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
+              <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
+              <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
+              <!-- temporarily hidden pending a toolbar redesign (owner request
+                   2026-08-02); the dialogs and logic behind them are untouched -->
+              <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
+              <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
+              <button id="wfsBtn" class="btn btn-secondary" hidden>WFS Shipments</button>
+            </div>
+          </div>
+        </div>
+        <div id="stockList" class="stock-list"></div>
+      </div>
       <div id="sheetGrip" class="sheet-grip" title="Drag to widen or narrow the sheet · double-click to reset"></div>
     </div>
   </section>

@@ -1151,7 +1151,7 @@ function showPage(page) {
       enterTemu();
     } else if (page === 'stock') {
       const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
-      $('stockList').style.width = savedW ? `${savedW}px` : '';
+      $('stockMain').style.width = savedW ? `${savedW}px` : '';
       $('stockSearch').value = '';
       $('stockSearchClear').hidden = true;
       loadStockViews();
@@ -2510,7 +2510,7 @@ let sheetDrag = null;
 
 $('sheetGrip').addEventListener('mousedown', (e) => {
   e.preventDefault();
-  sheetDrag = { startX: e.clientX, startW: $('stockList').offsetWidth, w: 0 };
+  sheetDrag = { startX: e.clientX, startW: $('stockMain').offsetWidth, w: 0 };
   $('sheetGrip').classList.add('is-active');
 });
 
@@ -2518,7 +2518,7 @@ window.addEventListener('mousemove', (e) => {
   if (!sheetDrag) return;
   const w = Math.max(480, sheetDrag.startW + (e.clientX - sheetDrag.startX));
   sheetDrag.w = w;
-  $('stockList').style.width = `${w}px`;
+  $('stockMain').style.width = `${w}px`; // band + sheet resize as one
 });
 
 window.addEventListener('mouseup', () => {
@@ -2530,7 +2530,7 @@ window.addEventListener('mouseup', () => {
 
 $('sheetGrip').addEventListener('dblclick', () => {
   localStorage.removeItem('stockSheetWidth');
-  $('stockList').style.width = '';
+  $('stockMain').style.width = '';
 });
 
 // column resize: drag a header's right edge; double-click the edge to reset
@@ -6692,9 +6692,10 @@ function ovRenderToday() {
   }
   ovFeedMax = feed.reduce((m, r) => Math.max(m, r.id), ovFeedMax < 0 ? 0 : ovFeedMax);
   const bigTo = money ? Math.round(view.totalSales) : view.total;
-  const key = `${ovRange}|${ovMetric}`;
   const prev = ovPrevToday;
-  const roll = prev && prev.key === key && bigTo > prev.big;
+  // the odometer rolls on EVERY change of the big number — new orders and
+  // range/metric switches alike (owner request 2026-08-17)
+  const roll = prev && prev.big !== bigTo;
   ovOdometer(box.querySelector('.ov-odo'), roll ? prev.big : bigTo, bigTo);
   // the live-order flourish keys on TODAY's counts whatever window is shown
   const rose = prev && prev.total != null && t.total > prev.total;
@@ -6711,7 +6712,7 @@ function ovRenderToday() {
       : `+${n} order${n === 1 ? '' : 's'}`;
     chip.classList.add('show');
   }
-  ovPrevToday = { key, big: bigTo, total: t.total, byChannel: { ...t.byChannel } };
+  ovPrevToday = { big: bigTo, total: t.total, byChannel: { ...t.byChannel } };
 }
 
 // catmull-rom -> cubic bezier: the "smooth, never jagged" requirement
@@ -6904,7 +6905,7 @@ $('ovMetric').addEventListener('click', (e) => {
   ovHoverI = null;
   document.querySelectorAll('.ov-mbtn').forEach(x => x.classList.toggle('is-on', x === b));
   ovDrawChart();
-  ovRenderToday(); // switch renders fresh; the roll key blocks fake odometer spins
+  ovRenderToday(); // the odometer rolls across the unit switch too
 });
 
 // page-width grip, same feel as the Stock sheet's: drag the right rail, the
