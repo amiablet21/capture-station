@@ -2082,7 +2082,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.stock-band .stock-hint { margin: 0; font-size: 11px; }
+.stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
 .stock-band .stock-gaps { padding: 0; gap: 8px; }
 .stock-band .stock-actions { display: flex; gap: 6px; }
 
