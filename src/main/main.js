@@ -2710,7 +2710,8 @@ function registerIpc() {
     };
   }
 
-  ipcMain.handle('overview:data', async () => {
+  // shared by the in-app Overview tab AND the phone dashboard's /data endpoint
+  async function overviewDataPayload() {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     // every range speaks the received-order language: Month/Year from the
@@ -2756,7 +2757,65 @@ function registerIpc() {
       }
     }
     return { ok: true, orders, money };
+  }
+  ipcMain.handle('overview:data', () => overviewDataPayload());
+
+  /* ---------- phone dashboard: the Overview served over LAN ---------- */
+  // http://<lan-ip>:8484/?k=<token> — a phone-sized twin of the Overview tab
+  // (src/renderer/mobile.html). The token gates every request so other
+  // devices on the WiFi can't casually read sales numbers. With Tailscale on
+  // the PC and the phone it works from anywhere while this machine is on.
+  let phoneUrl = '';
+  function phoneToken() {
+    const p = path.join(app.getPath('userData'), 'phone-token.txt');
+    try {
+      const t = fs.readFileSync(p, 'utf8').trim();
+      if (t) return t;
+    } catch { /* first run */ }
+    const t = require('crypto').randomBytes(12).toString('hex');
+    try { fs.writeFileSync(p, t); } catch { /* best effort */ }
+    return t;
+  }
+  function lanIPv4() {
+    const ifs = require('os').networkInterfaces();
+    for (const list of Object.values(ifs)) {
+      for (const i of list || []) if (i.family === 'IPv4' && !i.internal) return i.address;
+    }
+    return '127.0.0.1';
+  }
+  function startPhoneServer() {
+    if (config.load().captureOnly) return;
+    const token = phoneToken();
+    const tryListen = (port, left) => {
+      const srv = require('http').createServer(async (req, res) => {
+        const u = new URL(req.url, 'http://x');
+        if (u.searchParams.get('k') !== token) { res.writeHead(403); res.end('Forbidden'); return; }
+        if (u.pathname === '/data') {
+          let payload;
+          try { payload = await overviewDataPayload(); } catch (e) { payload = { ok: false, error: e.message }; }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(payload));
+          return;
+        }
+        try {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'mobile.html'), 'utf8'));
+        } catch { res.writeHead(500); res.end('page missing'); }
+      });
+      srv.on('error', (e) => {
+        if (e.code === 'EADDRINUSE' && left > 0) tryListen(port + 1, left - 1);
+      });
+      srv.listen(port, '0.0.0.0', () => { phoneUrl = `http://${lanIPv4()}:${port}/?k=${token}`; });
+    };
+    tryListen(8484, 5);
+  }
+  startPhoneServer();
+  ipcMain.handle('overview:phone', async () => {
+    if (!phoneUrl) return { ok: false, error: 'Phone dashboard not running.' };
+    const qr = await require('qrcode').toDataURL(phoneUrl, { margin: 1, width: 260, color: { dark: '#2f3437', light: '#ffffff' } });
+    return { ok: true, url: phoneUrl, qr };
   });
+
   // warm the money cards shortly after boot so the Overview never sits on
   // its spinner for the first open of the day
   setTimeout(() => {

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<title>Overview — Capture Station</title>
+<!-- the phone twin of the Overview tab, served by Capture Station over LAN.
+     Self-contained on purpose: one file, no assets, fetches /data on a timer. -->
+<style>
+  :root {
+    --bg: #F7F7F6; --surface: #FFFFFF; --border: #E4E2DC; --line: #EAE8E3;
+    --text: #2F3437; --muted: #6E6B64; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #DEF0E7; --neg: #9F2F2D;
+    --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Geist', system-ui, -apple-system, sans-serif; padding: 14px 12px calc(20px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; }
+  .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .head h1 { font-size: 15px; font-weight: 600; }
+  .head .date { font-size: 11px; color: var(--faint); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px; margin-bottom: 10px; }
+  .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .big { font-family: var(--mono); font-size: 34px; font-weight: 700; line-height: 1.15; margin: 3px 0 4px; }
+  .delta { font-size: 11px; color: var(--accent); min-height: 15px; }
+  .delta.neg { color: var(--neg); }
+  .toggles { display: flex; gap: 8px; margin: 0 0 10px; }
+  .seg { display: flex; background: #EFEEEA; border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button { font-family: inherit; font-size: 11px; font-weight: 600; color: var(--muted); border: none; background: transparent; border-radius: 7px; padding: 5px 12px; }
+  .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47,52,55,.08); }
+  .chans { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); margin: 10px -14px -13px; }
+  .chans > div { padding: 8px 6px 11px; text-align: center; }
+  .chans > div + div { border-left: 1px solid var(--border); }
+  .cn { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .cn.walmart { color: #2E86D9; } .cn.ebay { color: #047857; } .cn.temu { color: #C97B12; }
+  .cv { font-family: var(--mono); font-size: 14px; font-weight: 700; margin-top: 2px; }
+  svg { display: block; width: 100%; }
+  .grid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; margin-top: 6px; font-size: 10.5px; }
+  .row, .ghead { display: grid; grid-template-columns: 92px 1fr 46px; }
+  .ghead { background: #F4F3F0; border-bottom: 1px solid #E0DED8; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
+  .ghead span, .row span { padding: 5px 7px; border-right: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ghead span:last-child, .row span:last-child { border-right: none; text-align: right; }
+  .row { border-bottom: 1px solid var(--line); background: var(--surface); }
+  .row:last-child { border-bottom: none; }
+  .row .po { font-family: var(--mono); font-weight: 600; font-size: 10px; }
+  .row .sku { font-family: var(--mono); color: var(--muted); font-size: 10px; }
+  .row .tm { font-family: var(--mono); color: var(--faint); font-size: 9.5px; }
+  .money { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .money .panel { margin: 0; padding: 10px 11px; }
+  .money .mv { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .mv.r { color: var(--neg); } .mv.a { color: #854F0B; } .mv.g { color: #065F46; }
+  .err { text-align: center; color: var(--neg); font-size: 12px; padding: 30px 10px; }
+  .stale { text-align: center; color: var(--faint); font-size: 10px; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="head"><h1>Overview</h1><span class="date" id="date"></span></div>
+  <div class="toggles">
+    <span class="seg" id="metricSeg"><button data-m="sales" class="on">Gross $</button><button data-m="orders">Orders</button></span>
+    <span class="seg" id="rangeSeg" style="margin-left:auto"><button data-r="Day" class="on">Day</button><button data-r="Month">Month</button><button data-r="Year">Year</button></span>
+  </div>
+  <div class="panel" id="card"><div class="err">Loading…</div></div>
+  <div class="panel"><span class="k" id="chartLabel">Sales</span><div id="chart"></div></div>
+  <div class="panel"><span class="k">Latest orders</span><div class="grid" id="feed"></div></div>
+  <div class="money" id="money"></div>
+  <div class="stale" id="stamp"></div>
+<script>
+  let data = null, range = 'Day', metric = 'sales';
+  const $ = (id) => document.getElementById(id);
+  const money$ = (v) => '$' + Math.round(v).toLocaleString('en-US');
+  const short$ = (v) => v >= 100000 ? '$' + Math.round(v / 1000) + 'k' : v >= 10000 ? '$' + (v / 1000).toFixed(1) + 'k' : money$(v);
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const WDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const CHN = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
+
+  function renderCard() {
+    const t = data && data.orders && data.orders.today;
+    if (!t) { $('card').innerHTML = '<div class="err">No data yet — is Capture Station running?</div>'; return; }
+    const isMoney = metric === 'sales' && t.totalSales !== undefined;
+    const now = new Date();
+    const view = range === 'Day' ? t : ((data.orders.ranges || {})[range] || null);
+    const label = (isMoney ? 'Gross ' : 'Orders ') + (range === 'Day' ? 'today' : range === 'Month' ? '· ' + MONTHS[now.getMonth()] : '· 12 months');
+    if (!view) { $('card').innerHTML = '<div class="k">' + label + '</div><div class="big">…</div>'; return; }
+    const prev = range === 'Day' ? { t: t.yesterday, s: t.yesterdaySales || 0, vs: 'vs yesterday' }
+      : range === 'Month' && view.prevTotal !== undefined ? { t: view.prevTotal, s: view.prevTotalSales || 0, vs: 'vs ' + MONTHS[(now.getMonth() + 11) % 12].slice(0, 3) + ' 1–' + now.getDate() }
+      : null;
+    const delta = prev ? (isMoney ? view.totalSales - prev.s : view.total - prev.t) : null;
+    const dHtml = prev
+      ? '<div class="delta ' + (delta < 0 ? 'neg' : '') + '">' + (delta >= 0 ? '▲ +' : '▼ −') + (isMoney ? '$' : '') + Math.abs(delta).toLocaleString('en-US') + ' ' + prev.vs + '</div>'
+      : '<div class="delta"></div>';
+    const cv = (k) => isMoney ? money$((view.byChannelSales || {})[k] || 0) : ((view.byChannel || {})[k] || 0).toLocaleString('en-US');
+    $('card').innerHTML = '<div class="k">' + label + '</div>'
+      + '<div class="big">' + (isMoney ? money$(view.totalSales) : view.total.toLocaleString('en-US')) + '</div>' + dHtml
+      + '<div class="chans">' + ['walmart','ebay','temu'].map(k =>
+          '<div><div class="cn ' + k + '">' + CHN[k] + '</div><div class="cv">' + cv(k) + '</div></div>').join('') + '</div>';
+  }
+
+  function smooth(pts) {
+    let d = 'M ' + pts[0][0] + ',' + pts[0][1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      d += ' C ' + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + ',' + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)
+        + ' ' + (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + ',' + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)
+        + ' ' + p2[0] + ',' + p2[1];
+    }
+    return d;
+  }
+
+  function renderChart() {
+    const s = data && data.orders && data.orders.series && data.orders.series[range];
+    $('chartLabel').textContent = 'Sales · ' + (metric === 'sales' ? 'gross $' : 'orders') + ' · ' + range.toLowerCase();
+    if (!s || s.vals.length < 2) { $('chart').innerHTML = ''; return; }
+    const vals = metric === 'sales' && Array.isArray(s.sales) ? s.sales : s.vals;
+    const W = 480, H = 150, padL = 40, padR = 40, padT = 12, padB = 18;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const rawMax = Math.max(1, ...vals) * 2;
+    const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
+    const max = Math.ceil(rawMax / unit) * unit;
+    const X = (i) => Math.round(padL + (i / (vals.length - 1)) * iw);
+    const Y = (v) => Math.round(padT + ih - (v / max) * ih);
+    const pts = vals.map((v, i) => [X(i), Y(v)]);
+    const line = smooth(pts);
+    const area = line + ' L ' + pts[pts.length - 1][0] + ',' + (padT + ih) + ' L ' + pts[0][0] + ',' + (padT + ih) + ' Z';
+    const fmt = (v) => metric === 'sales' ? short$(v) : String(v);
+    let out = '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>';
+    [0, .5, 1].forEach(f => {
+      const v = Math.round(max * f), y = Y(v);
+      out += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="#F0EFEC"/>'
+        + '<text x="' + (padL - 6) + '" y="' + (y + 3) + '" font-size="8.5" fill="#A5A29C" text-anchor="end">' + fmt(v) + '</text>';
+    });
+    out += '<path d="' + area + '" fill="url(#g)"/><path d="' + line + '" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round"/>';
+    const last = pts[pts.length - 1];
+    out += '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3" fill="#047857"/>'
+      + '<text x="' + (last[0] + 6) + '" y="' + (last[1] + 3) + '" font-size="9" font-weight="700" fill="#047857">'
+      + (metric === 'sales' ? short$(vals[vals.length - 1]) : vals[vals.length - 1].toLocaleString('en-US')) + '</text>';
+    const tips = s.tips;
+    const lab = (i) => '<text x="' + X(i) + '" y="' + (H - 4) + '" font-size="8" fill="#A5A29C" text-anchor="middle">' + tips[i] + '</text>';
+    out += lab(0) + lab(tips.length - 1);
+    $('chart').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + out + '</svg>';
+  }
+
+  function renderFeed() {
+    const feed = (data && data.orders && data.orders.recent) || [];
+    if (!feed.length) { $('feed').innerHTML = ''; return; }
+    const tf = (iso) => {
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      const h = d.getHours();
+      return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + (h < 12 ? 'a' : 'p');
+    };
+    $('feed').innerHTML = '<div class="ghead"><span>PO#</span><span>SKU</span><span>Time</span></div>'
+      + feed.slice(0, 7).map(r => '<div class="row"><span class="po">' + r.order + '</span><span class="sku">'
+        + (r.sku || '—') + (r.more ? ' +' + r.more : '') + '</span><span class="tm">' + tf(r.at) + '</span></div>').join('');
+  }
+
+  function renderMoney() {
+    const m = data && data.money;
+    if (!m) { $('money').innerHTML = ''; return; }
+    $('money').innerHTML =
+      '<div class="panel"><div class="k">Missed</div><div class="mv r">' + short$(m.missedTotal) + '</div></div>'
+      + '<div class="panel"><div class="k">Buy soon</div><div class="mv a">' + m.buyCount + ' SKUs</div></div>'
+      + '<div class="panel"><div class="k">To WFS</div><div class="mv g">' + m.wfsUnits.toLocaleString('en-US') + '</div></div>';
+  }
+
+  function renderAll() { renderCard(); renderChart(); renderFeed(); renderMoney(); }
+
+  async function refresh() {
+    try {
+      const r = await fetch('/data' + location.search, { cache: 'no-store' });
+      const j = await r.json();
+      if (j && j.ok) { data = j; renderAll(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString(); }
+      else if (!data) $('card').innerHTML = '<div class="err">' + ((j && j.error) || 'No data.') + '</div>';
+    } catch {
+      if (!data) $('card').innerHTML = '<div class="err">Can’t reach Capture Station — same WiFi (or Tailscale), and the app running?</div>';
+      else $('stamp').textContent = 'connection lost — retrying…';
+    }
+  }
+
+  const d = new Date();
+  $('date').textContent = WDAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate();
+  $('metricSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    metric = b.dataset.m;
+    [...$('metricSeg').children].forEach(x => x.classList.toggle('on', x === b));
+    renderAll();
+  });
+  $('rangeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    range = b.dataset.r;
+    [...$('rangeSeg').children].forEach(x => x.classList.toggle('on', x === b));
+    renderAll();
+  });
+  refresh();
+  setInterval(refresh, 60000);
+</script>
+</body>
+</html>

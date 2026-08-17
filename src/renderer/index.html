@@ -185,7 +185,9 @@
   <section id="overviewPage" class="ov-page" hidden>
     <div class="ov-sheet-row">
     <div class="ov-wrap" id="ovWrap">
-      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span></div>
+      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span>
+        <button id="ovPhoneBtn" class="btn btn-ghost ov-phone" title="Scan a QR code to open this dashboard on your phone">Phone</button>
+      </div>
       <div class="ov-grid">
         <div class="ov-panel ov-today" id="ovToday"></div>
         <div class="ov-panel ov-chartpanel">
@@ -637,6 +639,18 @@
   </dialog>
 
   <!-- Settings dialog -->
+  <!-- phone dashboard QR (owner request 2026-08-17): scan to open the
+       Overview twin served over LAN by the main process -->
+  <dialog id="phoneDialog" class="dlg phone-dlg">
+    <h3>Overview on your phone</h3>
+    <img id="phoneQr" class="phone-qr" alt="QR code for the phone dashboard" width="260" height="260" />
+    <div id="phoneUrl" class="mono phone-url"></div>
+    <p class="phone-note">Scan with your phone's camera on the same WiFi, then add it to your home screen.
+      With Tailscale on this PC and your phone it works from anywhere while this computer is on.
+      If Windows Firewall asks, allow access.</p>
+    <div class="dlg-actions"><button id="phoneClose" class="btn btn-secondary">Close</button></div>
+  </dialog>
+
   <dialog id="settingsDialog" class="dlg dlg-wide">
     <div class="dlg-body">
       <h2 class="dlg-title">Settings</h2>

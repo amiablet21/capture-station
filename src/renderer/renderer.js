@@ -6892,6 +6892,15 @@ function ovOpenStock(sku, lowView) {
 }
 
 $('tabOverview').addEventListener('click', () => showPage('overview'));
+// phone dashboard QR (owner request 2026-08-17)
+$('ovPhoneBtn').addEventListener('click', async () => {
+  const r = await api.overviewPhone().catch(() => null);
+  if (!r || !r.ok) { toast((r && r.error) || 'Phone dashboard unavailable'); return; }
+  $('phoneQr').src = r.qr;
+  $('phoneUrl').textContent = r.url;
+  $('phoneDialog').showModal();
+});
+$('phoneClose').addEventListener('click', () => $('phoneDialog').close());
 $('ovRanges').addEventListener('click', (e) => {
   const b = e.target.closest('.ov-rbtn');
   if (!b) return;
