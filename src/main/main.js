@@ -2528,7 +2528,14 @@ function registerIpc() {
       orders.push({ ts, source: o.source, charge: o.totalCharge });
     }
     const byChannel = {};
-    for (const o of orders) byChannel[chan(o.source)] = (byChannel[chan(o.source)] || 0) + 1;
+    const byChannelSales = {};
+    let totalSales = 0;
+    for (const o of orders) {
+      const c = chan(o.source);
+      byChannel[c] = (byChannel[c] || 0) + 1;
+      byChannelSales[c] = (byChannelSales[c] || 0) + (Number(o.charge) || 0);
+      totalSales += Number(o.charge) || 0;
+    }
     // cumulative curve 8am -> now (earlier arrivals roll into the first point)
     const nowH = new Date().getHours();
     const endH = Math.max(9, Math.min(23, nowH));
@@ -2543,7 +2550,7 @@ function registerIpc() {
     }
     const data = {
       series: { vals, sales, tips },
-      today: { total: orders.length, byChannel },
+      today: { total: orders.length, byChannel, totalSales: Math.round(totalSales), byChannelSales },
     };
     overviewTodayCache = { at: Date.now(), data };
     return data;
@@ -2655,10 +2662,15 @@ function registerIpc() {
     try { live = await overviewLiveToday(cfg); } catch { /* captures fallback */ }
     const sqlToday = db.overviewToday();
     const yday = db.localDay(new Date(Date.now() - 86400000));
-    const ydayN = overviewHistory.days && overviewHistory.days[yday] ? overviewHistory.days[yday].n : sqlToday.yesterday;
+    const ydayRec = (overviewHistory.days && overviewHistory.days[yday]) || null;
+    const ydayN = ydayRec ? ydayRec.n : sqlToday.yesterday;
     const orders = {
       today: live
-        ? { total: live.today.total, byChannel: live.today.byChannel, yesterday: ydayN }
+        ? {
+          total: live.today.total, byChannel: live.today.byChannel, yesterday: ydayN,
+          totalSales: live.today.totalSales, byChannelSales: live.today.byChannelSales,
+          yesterdaySales: ydayRec ? Math.round(ydayRec.s) : 0,
+        }
         : sqlToday,
       series: {
         Day: live ? live.series : db.overviewSeriesDay(),

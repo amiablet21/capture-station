@@ -6611,24 +6611,33 @@ function ovRenderToday() {
   const box = $('ovToday');
   const t = ovData && ovData.orders.today;
   if (!t) { box.innerHTML = '<div class="ov-empty">Loading today…</div>'; return; }
+  const money = ovMetric === 'sales' && t.totalSales !== undefined;
   const prev = ovPrevToday;
   const rose = prev && t.total > prev.total;
-  const delta = t.total - t.yesterday;
+  const delta = money ? (t.totalSales - (t.yesterdaySales || 0)) : (t.total - t.yesterday);
+  const deltaTxt = money
+    ? `${delta >= 0 ? '+' : '−'}${ovMoneyShort(Math.abs(delta))}`
+    : `${delta >= 0 ? '+' : ''}${delta}`;
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+  const chVal = (k) => money ? ovMoneyShort(Math.round((t.byChannelSales || {})[k] || 0)) : (t.byChannel[k] || 0);
   box.innerHTML = `
-    <div><div class="k">Orders today</div><div class="big"><span class="ov-odo"></span></div>
-      <div class="delta">${delta >= 0 ? '▲' : '▼'} <b class="mono">${delta >= 0 ? '+' : ''}${delta}</b> vs yesterday</div></div>
+    <div><div class="k">${money ? 'Gross sales today' : 'Orders today'}</div>
+      <div class="big">${money ? '<span>$</span>' : ''}<span class="ov-odo"></span></div>
+      <div class="delta ${delta < 0 ? 'neg' : ''}">${delta >= 0 ? '▲' : '▼'} <b class="mono">${deltaTxt}</b> vs yesterday</div></div>
     <div class="ov-mkcol">${chans.map(([k, n]) => `
-      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v" data-ovch="${k}">${t.byChannel[k] || 0}</span></div>`).join('')}
+      <div class="ov-mkrow"><span class="dot ov-dot-${k}"></span><span class="n">${n}</span><span class="v" data-ovch="${k}">${chVal(k)}</span></div>`).join('')}
     </div>
     <div class="ov-share">${chans.map(([k]) => `<span class="ov-sh-${k}"></span>`).join('')}</div>
     <div class="ov-toast"><span id="ovToastChip"></span></div>`;
-  ovOdometer(box.querySelector('.ov-odo'), rose ? prev.total : t.total, t.total);
+  const bigTo = money ? Math.round(t.totalSales) : t.total;
+  const bigFrom = rose ? (money ? Math.round(prev.totalSales ?? bigTo) : prev.total) : bigTo;
+  ovOdometer(box.querySelector('.ov-odo'), bigFrom, bigTo);
   // CSP strips inline styles from generated HTML — flex weights + colors via CSSOM
   const colors = { walmart: '#2E86D9', ebay: '#047857', temu: '#C97B12' };
   chans.forEach(([k]) => {
+    const share = money ? Math.round((t.byChannelSales || {})[k] || 0) : (t.byChannel[k] || 0);
     const el = box.querySelector(`.ov-sh-${k}`);
-    if (el) { el.style.flexGrow = String(Math.max(t.byChannel[k] || 0, 0.01)); el.style.background = colors[k]; }
+    if (el) { el.style.flexGrow = String(Math.max(share, 0.01)); el.style.background = colors[k]; }
   });
   if (rose) {
     const grew = chans.filter(([k]) => (t.byChannel[k] || 0) > ((prev.byChannel || {})[k] || 0));
@@ -6643,7 +6652,7 @@ function ovRenderToday() {
       : `+${n} order${n === 1 ? '' : 's'}`;
     chip.classList.add('show');
   }
-  ovPrevToday = { total: t.total, byChannel: { ...t.byChannel } };
+  ovPrevToday = { total: t.total, totalSales: t.totalSales, byChannel: { ...t.byChannel } };
 }
 
 // catmull-rom -> cubic bezier: the "smooth, never jagged" requirement
@@ -6799,8 +6808,10 @@ $('ovMetric').addEventListener('click', (e) => {
   if (!b) return;
   ovMetric = b.dataset.m;
   ovHoverI = null;
+  ovPrevToday = null; // switching units must not fake an odometer roll
   document.querySelectorAll('.ov-mbtn').forEach(x => x.classList.toggle('is-on', x === b));
   ovDrawChart();
+  ovRenderToday();
 });
 $('ovCards').addEventListener('click', (e) => {
   const c = e.target.closest('[data-ovcard]');
