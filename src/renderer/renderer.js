@@ -6735,10 +6735,14 @@ function ovDrawChart() {
   const fmtTip = (v) => money ? `$${Math.round(v).toLocaleString()}` : `${v.toLocaleString()} order${v === 1 ? '' : 's'}`;
   const labels = ovLabelsFor(ovRange, tips);
   // native-resolution canvas: the viewBox tracks the box's real pixel size so
-  // strokes and text never fatten when the page is widened (owner, 2026-08-17)
+  // strokes and text never fatten when the page is widened (owner, 2026-08-17).
+  // measure EMPTY: with the old svg still in the box, its height feeds back
+  // into clientHeight and the chart ratchets taller every redraw (owner
+  // screenshot 2026-08-17) — cleared, the grid row is sized by the card
+  box.innerHTML = '';
   const W = Math.max(560, Math.round(box.clientWidth) || 680);
   const H = Math.max(190, Math.round(box.clientHeight) || 190);
-  const padL = 36, padR = 48, padT = 14, padB = 24;
+  const padL = money ? 52 : 36, padR = 48, padT = 14, padB = 24;
   const iw = W - padL - padR, ih = H - padT - padB;
   const rawMax = Math.max(1, ...vals);
   const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;

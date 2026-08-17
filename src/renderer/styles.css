@@ -3699,10 +3699,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-feed { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ov-feed .fk { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 5px; }
 .ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; }
-.ov-xhead { display: grid; grid-template-columns: 92px 1fr 58px 42px; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
+.ov-xhead { display: grid; grid-template-columns: 92px 1fr 60px 52px; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
 .ov-xhead span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 8px; border-right: 1px solid #E0DED8; }
 .ov-xhead span:last-child { border-right: none; text-align: right; }
-.ov-feedrow { display: grid; grid-template-columns: 92px 1fr 58px 42px; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
+.ov-feedrow { display: grid; grid-template-columns: 92px 1fr 60px 52px; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
 .ov-feedrow:last-child { border-bottom: none; }
 .ov-feedrow span { padding: 5px 8px; border-right: 1px solid #EAE8E3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-feedrow span:last-child { border-right: none; }
