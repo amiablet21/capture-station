@@ -1120,7 +1120,14 @@ function pageFadeIn(page) {
 function showPage(page) {
   const switching = activePage !== page;
   activePage = page;
-  if (page !== 'capture') $('findBar').hidden = true; // render() re-shows on capture
+  if (page !== 'capture') {
+    $('findBar').hidden = true; // render() re-shows on capture
+  } else if (state) {
+    // show the band INSTANTLY with its last-rendered chips — waiting for the
+    // 120ms settle render made the filters pop in late (owner, 2026-08-17);
+    // the settle render then refreshes the counts in place
+    $('findBar').hidden = state.captureOnly && !state.rows.length;
+  }
   updateScanPanel();
   $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
