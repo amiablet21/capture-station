@@ -6554,6 +6554,7 @@ let ovData = null;
 let ovRange = 'Day';
 let ovMetric = 'sales'; // 'orders' | 'sales' — Gross $ is the default (owner call 2026-08-17)
 let ovHoverI = null;
+let ovChartAnim = false; // next chart draw plays the trace-in (owner pick: A)
 let ovOpen = 'missed'; // default drawer per the handoff
 let ovFetching = false;
 
@@ -6565,6 +6566,7 @@ const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 function enterOverview() {
   const d = new Date();
   $('ovDate').textContent = `${OV_WDAYS[d.getDay()]}, ${OV_MONTHS[d.getMonth()]} ${d.getDate()}`;
+  ovChartAnim = true; // the curve traces in on page entry, like on Refresh
   ovRenderAll();
   ovFetch();
 }
@@ -6770,9 +6772,17 @@ function ovDrawChart() {
     out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL - 7}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${fmtAxis(v)}</text>`;
   });
   labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H - 6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
-  out += `<path d="${area}" fill="url(#ovg)"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
+  // trace-in flourish (owner pick A, 2026-08-17): the line draws itself
+  // left to right, the fill fades in behind it, the endpoint dot pops.
+  // One-shot: the flag is consumed here so hover redraws stay static.
+  const anim = ovChartAnim;
+  ovChartAnim = false;
+  const lineA = anim ? ' pathLength="1" class="ov-anim-line"' : '';
+  const lateA = anim ? ' class="ov-anim-late"' : '';
+  const dotA = anim ? ' class="ov-anim-dot"' : '';
+  out += `<path d="${area}" fill="url(#ovg)"${lateA}/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"${lineA}/>`;
   const last = pts[pts.length - 1];
-  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857">${money ? ovMoneyShort(vals[vals.length - 1]) : vals[vals.length - 1].toLocaleString()}</text>`;
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"${dotA}/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857"${lateA}>${money ? ovMoneyShort(vals[vals.length - 1]) : vals[vals.length - 1].toLocaleString()}</text>`;
   if (ovHoverI != null && ovHoverI < vals.length) {
     const hx = pts[ovHoverI][0], hy = pts[ovHoverI][1];
     const txt = `${tips[ovHoverI]} · ${fmtTip(vals[ovHoverI])}`;
@@ -6906,7 +6916,9 @@ $('ovRefreshBtn').addEventListener('click', async () => {
   const t = ovData && ovData.orders.today;
   // odometer rolls up from zero; totals preserved so no fake +1 toast fires
   ovPrevToday = t ? { big: 0, total: t.total, byChannel: { ...t.byChannel } } : null;
+  ovChartAnim = true;
   await ovFetch();
+  if (ovChartAnim) ovDrawChart(); // unchanged series skipped the redraw — trace anyway
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
 // phone dashboard QR (owner request 2026-08-17)
