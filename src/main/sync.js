@@ -117,7 +117,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   // id must process ITS part, never a sibling that happened to match first
   const wantPart = String(row.lw_order_id || '');
   const isMine = (o) => !!o && (!wantPart || String(o.orderId) === wantPart);
-  let order = await client.findOpenOrder(row.order_number, locationId);
+  let order = await client.findOpenOrder(row.order_number, locationId, wantPart);
   if (!isMine(order)) order = null;
   let foundAt = { id: locationId, name: '' }; // '' = the primary warehouse
   if (!order) {
@@ -134,7 +134,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
       }
     }
     for (const t of targets) {
-      order = await client.findOpenOrder(row.order_number, t.id);
+      order = await client.findOpenOrder(row.order_number, t.id, wantPart);
       if (!isMine(order)) order = null;
       if (order) { foundAt = t; break; }
     }
@@ -222,7 +222,11 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     }
   }
 
-  let proc = await client.processOrder(row.order_number, processLocationId);
+  // split parts MUST process by their own Linnworks order id: processing by
+  // reference 400s ("An item with the same key has already been added") when
+  // two open orders share the reference (owner hit it 2026-08-17)
+  const procRef = wantPart ? String(order.numOrderId || order.orderId) : row.order_number;
+  let proc = await client.processOrder(procRef, processLocationId);
 
   // Parked orders refuse to process. Unpark, note it on the row so it can be
   // reviewed later (visible in the Notes column / History / CSV), and retry.
@@ -232,7 +236,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     if (!(row.notes || '').includes(marker)) {
       db.updateRow(row.id, { notes: row.notes ? `${row.notes} | ${marker}` : marker });
     }
-    proc = await client.processOrder(row.order_number, processLocationId);
+    proc = await client.processOrder(procRef, processLocationId);
     if (proc.processedState === 'PROCESSED') {
       db.markSynced(row.id);
       const subMsg = await applySubstitution(client, row, order, locationId, processLocationId, preLevels);
@@ -253,9 +257,17 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
     case 'SCAN_REQUIRED':
       db.markFailed(row.id, `Linnworks demands interactive scan: ${proc.message || 'SCAN_REQUIRED'}`);
       return { ok: false, message: `SCAN_REQUIRED: ${proc.message || 'check SKU serial settings in Linnworks'}` };
-    default:
-      db.markFailed(row.id, proc.message || proc.processedState);
-      return { ok: false, message: `${proc.processedState}: ${proc.message || 'unknown error'}` };
+    default: {
+      // a LOCKED order is transient (someone has it open on a Linnworks
+      // screen — often the other computer); failed rows re-sync every pass,
+      // so say so instead of reading like a permanent error
+      const raw = proc.message || proc.processedState;
+      const friendly = /locked/i.test(String(raw))
+        ? 'Order locked in Linnworks (open on another screen?) — retries next sync'
+        : raw;
+      db.markFailed(row.id, friendly);
+      return { ok: false, message: `${proc.processedState}: ${raw}` };
+    }
   }
 }
 

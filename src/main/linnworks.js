@@ -95,7 +95,7 @@ class LinnworksClient {
   // fulfilmentCenter is required in practice: without it Linnworks searches the
   // "Default" location only, so orders held in any other location come back empty.
   // Returns { orderId, numOrderId, reference, items:[{rowId, sku, title, quantity}], shippingInfo } or null.
-  async findOpenOrder(reference, fulfilmentCenter) {
+  async findOpenOrder(reference, fulfilmentCenter, wantOrderId) {
     const data = await this.call('Orders/GetOpenOrders', {
       entriesPerPage: 10,
       pageNumber: 1,
@@ -110,9 +110,14 @@ class LinnworksClient {
     });
     const hits = (data && data.Data) || [];
     // The filter should be exact, but double-check the reference matches.
-    const order = hits.find(o =>
-      o.GeneralInfo && String(o.GeneralInfo.ReferenceNum).trim() === String(reference).trim()
-    ) || hits[0] || null;
+    // SPLIT orders put TWO parts under one reference at the same location
+    // (owner hit it 2026-08-17): when the caller names its part, pick THAT
+    // one — returning whichever came first starved the sibling into a
+    // phantom "Not found in open orders".
+    const matches = hits.filter(o =>
+      o.GeneralInfo && String(o.GeneralInfo.ReferenceNum).trim() === String(reference).trim());
+    const order = (wantOrderId && matches.find(o => String(o.OrderId) === String(wantOrderId)))
+      || matches[0] || hits[0] || null;
     if (!order) return null;
     return {
       orderId: order.OrderId,
