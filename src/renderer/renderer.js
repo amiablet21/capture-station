@@ -6894,6 +6894,21 @@ function ovOpenStock(sku, lowView) {
 }
 
 $('tabOverview').addEventListener('click', () => showPage('overview'));
+// manual refresh with a flourish (owner request 2026-08-17): the icon spins
+// while fetching; when data lands the odometer rolls up from zero and the
+// feed rows cascade back in — the same motions live orders play
+$('ovRefreshBtn').addEventListener('click', async () => {
+  const b = $('ovRefreshBtn');
+  if (b.classList.contains('is-spinning')) return;
+  b.classList.add('is-spinning');
+  const started = Date.now();
+  ovFeedMax = -1; // feed cascades on the next render
+  const t = ovData && ovData.orders.today;
+  // odometer rolls up from zero; totals preserved so no fake +1 toast fires
+  ovPrevToday = t ? { big: 0, total: t.total, byChannel: { ...t.byChannel } } : null;
+  await ovFetch();
+  setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
+});
 // phone dashboard QR (owner request 2026-08-17)
 $('ovPhoneBtn').addEventListener('click', async () => {
   const r = await api.overviewPhone().catch(() => null);

@@ -3696,7 +3696,11 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 14px 22px 26px; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.ov-phone { margin-left: auto; }
+.ov-refresh { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.ov-refresh svg { width: 13px; height: 13px; }
+.ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
+@keyframes ovSpin { to { transform: rotate(360deg); } }
+.ov-phone { margin-left: 0; } /* the refresh button owns the auto gap */
 /* own padding + scroll handling: bare dialog content rode the UA defaults and
    grew BOTH scrollbars in short/zoomed windows (owner caught it 2026-08-17) */
 .phone-dlg { text-align: center; padding: 18px 22px; overflow-y: auto; overflow-x: hidden; max-height: 88vh; }
