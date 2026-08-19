@@ -2297,10 +2297,30 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 /* marketplace filter chips above the capture list */
 
+/* channel chips ride the same main-menu tray as the Stock view chips
+   (owner request 2026-08-17): gray tray, white active pill, quiet text */
 .channel-chips {
   display: flex;
-  gap: 8px;
-  margin-left: 8px;
+  gap: 2px;
+  background: #EFEEEA;
+  border-radius: 10px;
+  padding: 3px;
+}
+.channel-chips .chip-filter {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 11px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  transition: color 160ms var(--ease);
+}
+.channel-chips .chip-filter:hover { color: var(--text); }
+.channel-chips .chip-filter.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08);
 }
 
 .chip-filter {
