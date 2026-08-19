@@ -2799,10 +2799,10 @@ function registerIpc() {
   // the phone app's Stock tab: one warehouse row per SKU, 60s cache so a
   // scrolling phone doesn't hammer Linnworks
   let phoneStockCache = { at: 0, items: null };
-  async function phoneStockPayload() {
+  async function phoneStockPayload(fresh) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (phoneStockCache.items && Date.now() - phoneStockCache.at < 60 * 1000) {
+    if (!fresh && phoneStockCache.items && Date.now() - phoneStockCache.at < 60 * 1000) {
       return { ok: true, items: phoneStockCache.items };
     }
     const client = new LinnworksClient(cfg.linnworks);
@@ -2883,7 +2883,7 @@ function registerIpc() {
           return;
         }
         if (u.pathname === '/stock') {
-          try { json(await phoneStockPayload()); } catch (e) { json({ ok: false, error: e.message }); }
+          try { json(await phoneStockPayload(u.searchParams.get('fresh') === '1')); } catch (e) { json({ ok: false, error: e.message }); }
           return;
         }
         if ((u.pathname === '/stock/set' || u.pathname === '/pad/set') && req.method === 'POST') {
