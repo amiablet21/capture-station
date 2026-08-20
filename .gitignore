@@ -4,3 +4,6 @@ dist/
 Thumbs.db
 # HUBX API credentials - never committed (their integration guidelines)
 tools/hubx.env
+# Walmart Marketplace API credentials + the lister's local working data
+tools/walmart.env
+tools/walmart-lister-data.json
