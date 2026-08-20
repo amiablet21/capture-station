@@ -21,6 +21,49 @@ const path = require('path');
 const PORT = 8787;
 const TOKENS = new Set();
 
+/* ---------- real staging mode (--real): the local server turns into a thin
+   proxy to HUBX's API Integration Sandbox (the creds Matthew sent 2026-08-20).
+   The client secret lives in tools/hubx.env (gitignored) and NEVER reaches
+   the page, per their guidelines; a local guard keeps traffic inside their
+   60 requests / 60 seconds limit. Everything else (playground, CSV export)
+   stays local. ---------- */
+
+const REAL = process.argv.includes('--real');
+const ENV = {};
+try {
+  for (const line of fs.readFileSync(path.join(__dirname, 'hubx.env'), 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m) ENV[m[1]] = m[2].trim();
+  }
+} catch { /* no env file — replica mode still works */ }
+if (REAL && !(ENV.HUBX_CLIENT_ID && ENV.HUBX_CLIENT_SECRET && ENV.HUBX_AUTH_URL && ENV.HUBX_API_URL)) {
+  console.error('--real needs tools/hubx.env with HUBX_AUTH_URL, HUBX_API_URL, HUBX_CLIENT_ID, HUBX_CLIENT_SECRET');
+  process.exit(1);
+}
+
+const hits = [];
+function rateOk() { // 55 of their 60/min, so hand-testing beside the app never trips them
+  const now = Date.now();
+  while (hits.length && now - hits[0] > 60000) hits.shift();
+  if (hits.length >= 55) return false;
+  hits.push(now);
+  return true;
+}
+
+let realTok = { value: '', exp: 0 };
+async function realToken() {
+  if (realTok.value && Date.now() < realTok.exp - 60000) return realTok;
+  const r = await fetch(`${ENV.HUBX_AUTH_URL}/connect/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: ENV.HUBX_CLIENT_ID, client_secret: ENV.HUBX_CLIENT_SECRET }),
+  });
+  if (!r.ok) throw new Error(`staging auth ${r.status}`);
+  const j = await r.json();
+  realTok = { value: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+  return realTok;
+}
+
 /* ---------- seeded catalog: shaped like his dropship reality ---------- */
 
 let nextId = 1000;
@@ -136,6 +179,38 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && (u.pathname === '/' || u.pathname === '/index.html')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(fs.readFileSync(path.join(__dirname, 'hubx-playground.html')));
+    return;
+  }
+
+  // which world is the page talking to?
+  if (u.pathname === '/sandbox/mode') { json(res, 200, { mode: REAL ? 'staging' : 'replica' }); return; }
+
+  // real mode: token requests answer locally (the page never holds the real
+  // token or the secret); /api/* forwards to staging with the cached token
+  if (REAL && req.method === 'POST' && u.pathname === '/connect/token') {
+    try {
+      const t = await realToken();
+      json(res, 200, {
+        access_token: 'held-by-local-proxy', token_type: 'Bearer', scope: 'customerapi',
+        expires_in: Math.max(1, Math.round((t.exp - Date.now()) / 1000)),
+      });
+    } catch (e) { json(res, 502, { error: 'staging auth failed', detail: e.message }); }
+    return;
+  }
+  if (REAL && u.pathname.startsWith('/api/')) {
+    if (!rateOk()) { json(res, 429, { error: 'local rate guard: HUBX allows 60 requests per 60 seconds' }); return; }
+    try {
+      const t = await realToken();
+      const body = (req.method === 'GET' || req.method === 'HEAD') ? undefined : await readBody(req);
+      const r = await fetch(`${ENV.HUBX_API_URL}${u.pathname}${u.search}`, {
+        method: req.method,
+        headers: { Authorization: `Bearer ${t.value}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+        body: body || undefined,
+      });
+      const text = await r.text();
+      res.writeHead(r.status, { 'Content-Type': 'application/json' });
+      res.end(text || '{}');
+    } catch (e) { json(res, 502, { error: 'staging call failed', detail: e.message }); }
     return;
   }
 
@@ -302,6 +377,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`HUBX sandbox up: http://localhost:${PORT}`);
-  console.log('Auth: POST /connect/token (any client_id/client_secret works here)');
+  console.log(`HUBX sandbox up: http://localhost:${PORT}${REAL ? '  [REAL staging proxy]' : '  [local replica]'}`);
+  console.log(REAL
+    ? `Proxying to ${ENV.HUBX_API_URL} — secret stays in this process; ≤55 req/min guard on`
+    : 'Auth: POST /connect/token (any client_id/client_secret works here)');
 });

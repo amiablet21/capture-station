@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.log
 Thumbs.db
+# HUBX API credentials - never committed (their integration guidelines)
+tools/hubx.env
