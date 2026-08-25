@@ -3757,6 +3757,26 @@ function registerIpc() {
   // the pane header's globe: a native popup with the seller portals (native
   // so the marketplace page below can never draw over it); the current
   // site wears the checkmark
+  // the Returns tab's dropdown: Returns log | Shelf (owner 2026-08-25 —
+  // Shelf lives under Returns now; NATIVE menu because the marketplace pane
+  // is a native layer that would cover an HTML dropdown). Resolves with the
+  // picked page, or null when dismissed.
+  ipcMain.handle('nav:returnsMenu', (_e, payload) => new Promise((resolve) => {
+    if (!win || win.isDestroyed()) { resolve({ ok: false }); return; }
+    const cfg = config.load();
+    const current = payload && payload.current;
+    let picked = null;
+    const items = [
+      { label: 'Returns log', key: 'returns' },
+      ...((cfg.pages || {}).stock ? [{ label: 'Shelf — what’s selling', key: 'shelf' }] : []),
+    ];
+    Menu.buildFromTemplate(items.map(it => ({
+      label: it.label,
+      type: 'checkbox',
+      checked: current === it.key,
+      click: () => { picked = it.key; },
+    }))).popup({ window: win, callback: () => resolve({ ok: true, page: picked }) });
+  }));
   ipcMain.handle('browser:platformMenu', () => {
     if (!paneView || !win || win.isDestroyed()) return { ok: false };
     const HOMES = [

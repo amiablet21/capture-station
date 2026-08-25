@@ -45,6 +45,7 @@ if (!window.api) {
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
     shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
+    returnsMenu: async () => ({ ok: false }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -267,7 +268,6 @@ function render() {
   }
   $('tabOverview').hidden = !pages.stock;
   $('tabStock').hidden = !pages.stock;
-  $('tabShelf').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
@@ -1141,8 +1141,7 @@ function showPage(page) {
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
-  $('tabShelf').classList.toggle('is-active', page === 'shelf');
-  $('tabReturns').classList.toggle('is-active', page === 'returns');
+  $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
@@ -1184,8 +1183,15 @@ function showPage(page) {
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
-$('tabReturns').addEventListener('click', () => showPage('returns'));
-$('tabShelf').addEventListener('click', () => showPage('shelf'));
+// Returns is a dropdown (Returns log | Shelf): first click lands on the log
+// as always; the caret — or a click while already on either page — opens the
+// native menu (native because the pane layer covers HTML dropdowns)
+$('tabReturns').addEventListener('click', async (e) => {
+  const wantMenu = e.target.closest('.tab-caret') || activePage === 'returns' || activePage === 'shelf';
+  if (!wantMenu) { showPage('returns'); return; }
+  const res = await api.returnsMenu(activePage === 'shelf' ? 'shelf' : 'returns').catch(() => null);
+  if (res && res.ok && res.page) showPage(res.page);
+});
 
 /* ---------- Shelf: the warehouse sell-through radar ---------- */
 // One row per stocked SKU, sorted stalest-first; Idle is the single tinted

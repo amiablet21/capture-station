@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('api', {
   returnsMapSet: (baseSku, condition, targetSku) => ipcRenderer.invoke('returns:mapSet', { baseSku, condition, targetSku }),
   returnsMapDelete: (baseSku, condition) => ipcRenderer.invoke('returns:mapDelete', { baseSku, condition }),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
+  returnsMenu: (current) => ipcRenderer.invoke('nav:returnsMenu', { current }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
