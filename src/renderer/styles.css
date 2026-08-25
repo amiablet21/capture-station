@@ -321,7 +321,24 @@ body {
 .bload-err { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .bload-err b { font-size: 12.5px; font-weight: 600; color: var(--neg-text); max-width: 36ch; }
 
-.bdock-divider { margin-right: 6px; }
+/* the pane/sheet divider earns a real handle: wider hit area + a visible
+   nub, so "the middle is adjustable" reads without being told (2026-08-21) */
+.bdock-divider {
+  width: 10px;
+  margin-right: 6px;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bdock-divider::after {
+  content: '';
+  width: 4px;
+  height: 44px;
+  border-radius: 4px;
+  background: var(--faint);
+}
+.bdock-divider:hover::after, .bdock-divider.is-active::after { background: #fff; }
 
 /* the sheet column: header band on top, the scrolling sheet growing out of
    its bottom edge (owner 2026-08-17, matching the Stock band) */

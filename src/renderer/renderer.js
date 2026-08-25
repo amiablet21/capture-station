@@ -1460,7 +1460,10 @@ function applyBrowserPane() {
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
   $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
-    dock.style.width = `${bPane.width}px`;
+    // display-clamp only (the saved width survives): a pane remembered from a
+    // wide window must never crush the sheet — the band needs room for its
+    // buttons (the vanished Refresh, 2026-08-21) and the list for its columns
+    dock.style.width = `${Math.min(bPane.width, Math.max(320, window.innerWidth - 560))}px`;
     // (a negative-margin lift to the search bar was tried 2026-08-13 and
     // reverted same day: the native view overlapped the tab bar when the
     // toolbar wrapped — the pane stays below the toolbar)
@@ -1572,7 +1575,11 @@ document.addEventListener('close', (e) => {
 }, true);
 
 new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
-window.addEventListener('resize', () => syncBrowserBounds());
+window.addEventListener('resize', () => {
+  // shrinking the window re-clamps the pane so the sheet side never vanishes
+  if (!$('bDock').hidden) applyBrowserPane();
+  else syncBrowserBounds();
+});
 
 $('bExpand').addEventListener('click', bExpandPane);
 
@@ -1594,7 +1601,7 @@ $('bDivider').addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   if (!bDrag) return;
-  const max = Math.max(320, window.innerWidth - 380); // the sheet keeps room
+  const max = Math.max(320, window.innerWidth - 560); // the sheet keeps real room (was 380 — too little for the band's buttons)
   bPane.width = Math.min(max, Math.max(280, bDrag.startW + (e.clientX - bDrag.startX)));
   $('bDock').style.width = `${bPane.width}px`;
   syncBrowserBounds();
@@ -1606,6 +1613,13 @@ window.addEventListener('mouseup', () => {
   $('bDivider').classList.remove('is-active');
   api.setConfig({ browserPane: { width: bPane.width } });
   syncBrowserBounds(); // the native view returns at the new width
+});
+
+// double-click the divider: back to the default split, like the sheet grips
+$('bDivider').addEventListener('dblclick', () => {
+  bPane.width = 480;
+  api.setConfig({ browserPane: { width: 480 } });
+  applyBrowserPane();
 });
 
 // manual navs get the generic loading treatment
