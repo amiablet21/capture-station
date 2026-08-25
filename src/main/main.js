@@ -3765,7 +3765,12 @@ function registerIpc() {
     if (!win || win.isDestroyed()) { resolve({ ok: false }); return; }
     const cfg = config.load();
     const current = payload && payload.current;
-    let picked = null;
+    // the close callback fires BEFORE item click handlers — resolving there
+    // dropped every pick (v1.20.38 bug: menu opened, clicking did nothing).
+    // Clicks resolve directly; the callback only covers dismiss, after a
+    // beat so a click always wins the race.
+    let done = false;
+    const finish = (page) => { if (!done) { done = true; resolve({ ok: true, page }); } };
     const items = [
       { label: 'Returns log', key: 'returns' },
       ...((cfg.pages || {}).stock ? [{ label: 'Shelf — what’s selling', key: 'shelf' }] : []),
@@ -3774,8 +3779,8 @@ function registerIpc() {
       label: it.label,
       type: 'checkbox',
       checked: current === it.key,
-      click: () => { picked = it.key; },
-    }))).popup({ window: win, callback: () => resolve({ ok: true, page: picked }) });
+      click: () => finish(it.key),
+    }))).popup({ window: win, callback: () => setTimeout(() => finish(null), 120) });
   }));
   ipcMain.handle('browser:platformMenu', () => {
     if (!paneView || !win || win.isDestroyed()) return { ok: false };
