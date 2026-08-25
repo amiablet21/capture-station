@@ -15,6 +15,7 @@
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabReturns" class="tab" hidden>Returns</button>
       <button id="tabListings" class="tab" hidden>Listings</button>
+      <button id="tabShelf" class="tab" hidden>Shelf</button>
     </nav>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -131,6 +132,9 @@
             <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
             <div id="stockGapsLine" class="stock-gaps" hidden></div>
             <div class="stock-actions">
+              <!-- with a condition view active the Shelf carries the selling
+                   history — a pointer, not duplicated columns (owner 2026-08-25) -->
+              <button id="stockShelfLink" class="stock-shelf-link" hidden>selling history → Shelf ↗</button>
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
@@ -147,6 +151,25 @@
       </div>
       <div id="sheetGrip" class="sheet-grip" title="Drag to widen or narrow the sheet · double-click to reset"></div>
     </div>
+  </section>
+
+  <!-- Shelf page: the warehouse's sell-through radar - every stocked SKU
+       sorted stalest-first, last sale beside current price (mockups signed
+       off 2026-08-25: no week columns, Idle is the one tinted cell) -->
+  <section id="shelfPage" class="shelf-page" hidden>
+    <div class="shelf-toolbar">
+      <div class="search-field shelf-search">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+        <input id="shSearch" class="search-input" type="text" placeholder="Search SKU" autocomplete="off" spellcheck="false" />
+      </div>
+      <div id="shChips" class="stock-chips"></div>
+      <button id="shRefresh" class="btn btn-ghost" title="Re-pull 90 days of sales and fresh stock">Refresh</button>
+    </div>
+    <div class="shelf-card">
+      <table class="sh-table" id="shTable" hidden></table>
+      <div id="shEmpty" class="shelf-empty">Loading the shelf…</div>
+    </div>
+    <p class="shelf-sum" id="shSum"></p>
   </section>
 
   <!-- Returns page: spreadsheet worksheet - the entry row looks up the PO#,

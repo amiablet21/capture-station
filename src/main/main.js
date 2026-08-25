@@ -2007,6 +2007,79 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // Shelf tab: the sell-through radar (owner design sessions 2026-08-25 —
+  // "what's rotting on the shelf?"). One row per stocked SKU with its last
+  // sale and when the stock arrived. No new API surface: sales ride the
+  // salesCache window, stock rides listInventory, arrival dates come from
+  // the returns log (condition SKUs) and receiving sessions (everything else).
+  ipcMain.handle('shelf:get', async (_e, payload) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+      const now = Date.now();
+      const windowDays = 90;
+      const sales = await querySales(day(now - windowDays * 86400000), day(now), !!(payload && payload.force));
+      if (!sales.ok) return sales;
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      // newest sale per SKU inside the window (per-unit price, not line total)
+      const last = new Map();
+      for (const l of sales.lines) {
+        const k = String(l.sku || '').toUpperCase();
+        const ts = Date.parse(l.processedOn);
+        if (!k || Number.isNaN(ts)) continue;
+        if (!last.has(k) || ts > last.get(k).ts) {
+          last.set(k, { ts, price: l.qty ? Math.round((l.revenue / l.qty) * 100) / 100 : l.revenue });
+        }
+      }
+      // when stock last ARRIVED: latest return routed into the SKU, or the
+      // latest receiving session that carried it — whichever is newer
+      const arrived = new Map();
+      const bump = (sku, ts) => {
+        const k = String(sku || '').toUpperCase();
+        if (!k || Number.isNaN(ts)) return;
+        if (!arrived.has(k) || ts > arrived.get(k)) arrived.set(k, ts);
+      };
+      for (const r of db.listReturns(1000)) {
+        const ts = Date.parse(r.created_at);
+        for (const it of r.items || []) bump(it.targetSku || it.sku, ts);
+      }
+      for (const s of (listReceivingSessions(500).sessions || [])) {
+        const ts = Date.parse(s.finishedAt);
+        for (const l of s.lines || []) bump(l.sku, ts);
+      }
+      // condition classification: prefix first, the mapping table as backstop
+      const mapped = new Map(); // target SKU -> condition
+      for (const conds of Object.values(db.getConditionMap())) {
+        for (const [cond, target] of Object.entries(conds)) mapped.set(String(target).toUpperCase(), cond);
+      }
+      const condOf = (k) => k.startsWith('OPEN-BOX-') ? 'openbox'
+        : k.startsWith('USED-') ? 'used'
+          : k.startsWith('SCRAP-') ? 'scrap'
+            : mapped.get(k) || 'new';
+      const homeLoc = cfg.linnworks.locationId;
+      const rows = [];
+      for (const it of items) {
+        const k = String(it.sku || '').toUpperCase();
+        const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+        const units = Math.max(0, Number(home.stockLevel) || 0);
+        if (!units) continue; // the shelf shows what is ON it
+        const sale = last.get(k) || null;
+        rows.push({
+          sku: it.sku, title: it.title || '', units,
+          price: Number(it.retailPrice) || 0,
+          cond: condOf(k),
+          lastTs: sale ? sale.ts : 0,
+          lastPrice: sale ? sale.price : 0,
+          arrivedTs: arrived.get(k) || 0,
+        });
+      }
+      return { ok: true, rows, windowDays };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // Open orders containing one SKU, for the Stock page's "In orders" drill-down.
   ipcMain.handle('stock:openOrders', async (_e, { sku }) => {
     const cfg = config.load();
@@ -2699,13 +2772,16 @@ function registerIpc() {
     missed.sort((a, b) => b.value - a.value);
     buy.sort((a, b) => a.daysLeft - b.daysLeft);
     wfs.sort((a, b) => b.weekly - a.weekly);
+    // 25-row cap instead of the old 5-6 (owner 2026-08-25: "I would like to
+    // see more products instead of a selection of like 4") — the drawers
+    // scroll; the unit total counts EVERYTHING, listed or not
     return {
-      missed: missed.slice(0, 6),
+      missed: missed.slice(0, 25),
       missedTotal: missed.reduce((s, m) => s + m.value, 0),
-      buy: buy.slice(0, 5),
+      buy: buy.slice(0, 25),
       buyCount: buy.length,
-      wfs: wfs.slice(0, 6),
-      wfsUnits: wfs.slice(0, 6).reduce((s, w) => s + w.send, 0),
+      wfs: wfs.slice(0, 25),
+      wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
     };
   }

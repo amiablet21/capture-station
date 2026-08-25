@@ -44,6 +44,7 @@ if (!window.api) {
     returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
+    shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -266,6 +267,7 @@ function render() {
   }
   $('tabOverview').hidden = !pages.stock;
   $('tabStock').hidden = !pages.stock;
+  $('tabShelf').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !pages.returns;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
@@ -1132,12 +1134,14 @@ function showPage(page) {
   $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
+  $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
+  $('tabShelf').classList.toggle('is-active', page === 'shelf');
   $('tabReturns').classList.toggle('is-active', page === 'returns');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
@@ -1163,6 +1167,8 @@ function showPage(page) {
       $('stockSearchClear').hidden = true;
       loadStockViews();
       loadStock().then(() => { if (activePage === 'stock') $('stockSearch').focus(); });
+    } else if (page === 'shelf') {
+      enterShelf();
     } else if (page === 'returns') {
       const savedW = Number(localStorage.getItem('retSheetWidth')) || 0;
       $('retMain').style.width = savedW ? `${savedW}px` : '';
@@ -1179,6 +1185,100 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabReturns').addEventListener('click', () => showPage('returns'));
+$('tabShelf').addEventListener('click', () => showPage('shelf'));
+
+/* ---------- Shelf: the warehouse sell-through radar ---------- */
+// One row per stocked SKU, sorted stalest-first; Idle is the single tinted
+// column, Last sold keeps the exact date + what it fetched. Design locked
+// through mockups 2026-08-25 (no week columns — "simpler, then add on").
+let shData = null;
+let shView = 'cond'; // all | new | cond | openbox | used | scrap
+let shBusy = false;
+const SH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const SH_GROUPS = [
+  ['all', 'All stock', () => true],
+  ['new', 'New', (r) => r.cond === 'new'],
+  ['cond', 'Conditions', (r) => r.cond !== 'new'],
+  ['openbox', 'Open Box', (r) => r.cond === 'openbox'],
+  ['used', 'Used', (r) => r.cond === 'used'],
+  ['scrap', 'Scrap', (r) => r.cond === 'scrap'],
+];
+
+function enterShelf() {
+  if (shData) renderShelf(); // stale numbers instantly, fresh ones follow
+  loadShelf(false);
+}
+
+async function loadShelf(force) {
+  if (shBusy) return;
+  shBusy = true;
+  $('shRefresh').disabled = true;
+  if (!shData) { $('shEmpty').hidden = false; $('shEmpty').textContent = 'Crunching 90 days of sales…'; }
+  const res = await api.shelfGet(force).catch(e => ({ ok: false, error: e.message }));
+  shBusy = false;
+  $('shRefresh').disabled = false;
+  if (!res || !res.ok) {
+    if (!shData) $('shEmpty').textContent = (res && res.error) || 'Could not load the shelf.';
+    else toast((res && res.error) || 'Shelf refresh failed');
+    return;
+  }
+  shData = res;
+  if (activePage === 'shelf') renderShelf();
+}
+
+const shIdleDays = (r) => {
+  const t = r.lastTs || r.arrivedTs || 0;
+  return t ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : Infinity;
+};
+const shDay = (ts) => {
+  const d = new Date(ts);
+  const yr = d.getFullYear() !== new Date().getFullYear() ? ` '${String(d.getFullYear()).slice(2)}` : '';
+  return `${SH_MONTHS[d.getMonth()]} ${d.getDate()}${yr}`;
+};
+
+function renderShelf() {
+  if (!shData) return;
+  const rows = shData.rows;
+  $('shChips').innerHTML = '<div class="stock-tray">' + SH_GROUPS.map(([key, label, fn]) =>
+    `<button class="view-chip ${shView === key ? 'is-active' : ''}" data-shview="${key}">${label} · ${rows.filter(fn).length}</button>`).join('') + '</div>';
+  const q = $('shSearch').value.trim().toUpperCase();
+  const fn = (SH_GROUPS.find(g => g[0] === shView) || SH_GROUPS[0])[2];
+  const list = rows.filter(fn)
+    .filter(r => !q || String(r.sku).toUpperCase().includes(q) || String(r.title).toUpperCase().includes(q))
+    .sort((a, b) => shIdleDays(b) - shIdleDays(a) || String(a.sku).localeCompare(String(b.sku)));
+  $('shTable').hidden = !list.length;
+  $('shEmpty').hidden = !!list.length;
+  if (!list.length) $('shEmpty').textContent = 'Nothing on the shelf matches.';
+  $('shTable').innerHTML = '<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th><th class="r">Idle</th><th>Last sold</th><th>Listed on</th></tr>'
+    + list.map((r, i) => {
+      const idle = shIdleDays(r);
+      const idleTxt = idle === Infinity ? `>${shData.windowDays}d` : `${idle}d`;
+      const idleCls = idle === Infinity || idle >= 30 ? 'sh-bad' : idle >= 14 ? 'sh-warn' : '';
+      // a sale OLDER than the current stock's arrival is history, not traction
+      const ghost = r.lastTs && r.arrivedTs && r.lastTs < r.arrivedTs;
+      return `<tr><td class="gut">${i + 1}</td>`
+        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}</td>`
+        + `<td class="r mono">${r.units}</td>`
+        + `<td class="r mono">${r.price ? `$${Number(r.price).toFixed(2)}` : '—'}</td>`
+        + `<td class="r mono ${idleCls}">${idleTxt}</td>`
+        + `<td class="mono ${r.lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
+        + (r.lastTs ? `${shDay(r.lastTs)} · $${Number(r.lastPrice).toFixed(2)}${ghost ? ' *' : ''}` : 'never') + '</td>'
+        + `<td class="mono sh-dim">${r.arrivedTs ? shDay(r.arrivedTs) : '—'}</td></tr>`;
+    }).join('');
+  const units = list.reduce((s, r) => s + r.units, 0);
+  const value = list.reduce((s, r) => s + r.units * (r.price || 0), 0);
+  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices`;
+}
+
+$('shChips').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-shview]');
+  if (!c) return;
+  shView = c.dataset.shview;
+  renderShelf();
+});
+$('shSearch').addEventListener('input', renderShelf);
+$('shRefresh').addEventListener('click', () => loadShelf(true));
+$('stockShelfLink').addEventListener('click', () => { shView = 'cond'; showPage('shelf'); });
 
 // receiving lives on the Stock page now, as a dialog
 /* ---------- "shipped different item" substitution dialog ---------- */
@@ -1918,6 +2018,9 @@ function renderStockChips() {
     + (unlistedDetail && unlistedDetail.length
       ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`
       : '');
+  // the Shelf pointer only appears with a condition view on — selling
+  // history lives there, not as extra columns here (owner 2026-08-25)
+  $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW);
   renderStockGaps();
 }
 
