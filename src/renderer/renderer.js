@@ -1573,7 +1573,7 @@ function applyBrowserPane() {
     // (a negative-margin lift to the search bar was tried 2026-08-13 and
     // reverted same day: the native view overlapped the tab bar when the
     // toolbar wrapped — the pane stays below the toolbar)
-    if (activePage === 'capture') $('rowsMain').style.width = ''; // the sheet takes whatever remains
+    if (activePage === 'capture') { $('capMain').style.width = ''; $('rowsMain').style.width = ''; } // the sheet takes whatever remains
     else $('retMain').style.width = '';
     dock.style.marginTop = '';
   } else {
@@ -1586,7 +1586,11 @@ function applyBrowserPane() {
       const room = (el.parentElement ? el.parentElement.clientWidth : 0) - 20;
       el.style.width = saved && room > 0 && saved <= room ? `${saved}px` : '';
     };
-    fit($('rowsMain'), 'captureSheetWidth');
+    // capture's saved width belongs to capMain (band + sheet as ONE column
+    // since 2026-08-17); pinning the inner rowsMain froze the grip drag —
+    // the outer shell moved, the table did not (owner report 2026-08-25)
+    fit($('capMain'), 'captureSheetWidth');
+    $('rowsMain').style.width = ''; // clear the stale inner pin once
     fit($('retMain'), 'retSheetWidth');
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
   }
