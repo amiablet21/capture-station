@@ -253,7 +253,9 @@ function render() {
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
-  const pageEnabled = { overview: !!pages.stock, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
+  // Overview has its OWN flag (owner 2026-08-25: employees must not see the
+  // money dashboard) — it still needs stock access to have data to show
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -266,7 +268,7 @@ function render() {
       return;
     }
   }
-  $('tabOverview').hidden = !pages.stock;
+  $('tabOverview').hidden = !pages.stock || pages.overview === false;
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !pages.returns;
@@ -939,6 +941,7 @@ async function openSettings() {
   $('setCaptureOnly').checked = !!cfg.captureOnly;
   $('setCsvFolder').textContent = cfg.csvFolder || 'Documents\\Capture Station';
   const pg = cfg.pages || {};
+  $('setPageOverview').checked = pg.overview !== false;
   $('setPageStock').checked = pg.stock !== false;
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
@@ -1022,6 +1025,7 @@ $('settingsSave').addEventListener('click', async () => {
     ...pinPatch,
     captureOnly: $('setCaptureOnly').checked,
     pages: {
+      overview: $('setPageOverview').checked,
       stock: $('setPageStock').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
