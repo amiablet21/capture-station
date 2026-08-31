@@ -254,8 +254,11 @@ function render() {
   const pages = state.pages || { stock: true, history: true, returns: false };
   // the eBay lister rides the Returns flag: same installs, same people
   // Overview has its OWN flag (owner 2026-08-25: employees must not see the
-  // money dashboard) — it still needs stock access to have data to show
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: !!pages.returns, temu: !!pages.returns };
+  // money dashboard) — it still needs stock access to have data to show.
+  // Listings split from the returns flag the same day ("I just need them to
+  // process returns") so a returns-only station shows Returns alone.
+  const lst = !!pages.returns && pages.listings !== false;
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -271,7 +274,7 @@ function render() {
   $('tabOverview').hidden = !pages.stock || pages.overview === false;
   $('tabStock').hidden = !pages.stock;
   $('tabReturns').hidden = !pages.returns;
-  $('tabListings').hidden = !pages.returns;
+  $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
 
@@ -945,6 +948,7 @@ async function openSettings() {
   $('setPageStock').checked = pg.stock !== false;
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
+  $('setPageListings').checked = pg.listings !== false;
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
@@ -1029,6 +1033,7 @@ $('settingsSave').addEventListener('click', async () => {
       stock: $('setPageStock').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
+      listings: $('setPageListings').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
