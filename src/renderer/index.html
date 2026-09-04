@@ -1007,8 +1007,18 @@
             aria-label="Units received" title="How many units actually came back — fewer than ordered is fine" /></div>
         </div>
         <div class="rv-row">
+          <div class="rv-k">Price</div>
+          <div class="rv-v"><input id="rvPrice" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="0.00"
+            aria-label="Item price" title="What the customer paid for the item — fills itself from the matched order line" /></div>
+        </div>
+        <div class="rv-row">
           <div class="rv-k">By</div>
           <div class="rv-v"><input id="rvBy" class="rv-in rv-in-sm mono" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Dispute $</div>
+          <div class="rv-v"><input id="rvSettle" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="—"
+            aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></div>
         </div>
         <div class="rv-row">
           <div class="rv-k">Notes</div>

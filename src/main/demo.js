@@ -91,7 +91,7 @@ function seedDemo(win, db) {
     db.createReturn({
       orderNumber: '119120671019601', source: 'WALMART', customer: '',
       tracking: '', receivedBy: 'IM', note: '', unmatched: true,
-      items: [{ sku: 'S26-ULTRA-512GB-BLACK', condition: 'used', targetSku: 'USED-S26-ULTRA-512GB-BLACK', qty: 2, price: 1099.0, note: 'scuffed corner — case: 05589312' }],
+      items: [{ sku: 'S26-ULTRA-512GB-BLACK', condition: 'used', targetSku: 'USED-S26-ULTRA-512GB-BLACK', qty: 2, price: 1099.0, settle: 765.98, note: 'scuffed corner — case: 05589312' }],
     });
   } catch { /* re-seed on a reused temp profile: duplicates are fine to skip */ }
   const inject = async () => {

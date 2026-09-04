@@ -3007,15 +3007,25 @@ function enterReturns() {
   $('retHint').textContent = '';
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
-  ensureInventory(); // the popup's SKU combos need it
+  ensureInventory(); // the entry row's and popup's SKU combos need it
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
+    // the entry row's initials + date follow along when the page opens
+    if (retEntryTr) {
+      if (!wsEls.by.value) wsEls.by.value = retReceivedBy;
+      wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+    }
   });
 }
 
 function retCondLabel(key) {
   const c = RET_CONDS.find(x => x.key === key);
   return c ? c.label : key;
+}
+
+// "$1,234.50" / "1234.5" / "" -> a non-negative amount (0 = none)
+function retMoney(v) {
+  return Math.max(0, Number(String(v || '').replace(/[$,\s]/g, '')) || 0);
 }
 
 /* ---------- Receive-a-return popup (design-A sheet) ---------- */
@@ -3044,7 +3054,7 @@ function rvFeedback(msg, ok = false) {
 function retOpenRecv() {
   rv = rvBlank();
   rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick']) $(id).value = '';
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
@@ -3089,6 +3099,8 @@ function retOpenEdit({ r, i, ii }) {
   $('rvTrk').value = r.tracking || '';
   $('rvSku').value = i.sku || '';
   $('rvQty').value = String(Number(i.qty) || 1);
+  $('rvPrice').value = Number(i.price) ? Number(i.price).toFixed(2) : '';
+  $('rvSettle').value = Number(i.settle) ? Number(i.settle).toFixed(2) : '';
   $('rvBy').value = r.received_by || '';
   $('rvNote').value = ii >= 0 ? (i.note || '') : (r.note || '');
   $('rvPick').value = '';
@@ -3201,11 +3213,13 @@ function rvLoadItem(it) {
     rv.targets = it.targets || null;
     $('rvSku').value = it.sku;
     $('rvQty').value = String(it.quantity || 1);
+    $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
   } else {
     rv.itemIdx = -1;
     rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
     $('rvSku').value = '';
     $('rvQty').value = '1';
+    $('rvPrice').value = '';
   }
   rv.condition = 'new';
   rv.pick = '';
@@ -3259,6 +3273,29 @@ $('rvPills').addEventListener('click', (e) => {
   rvRenderCond();
 });
 
+// Creates the prefix-named condition SKU in Linnworks (title and price
+// copied from the base item), joins it into the local inventory caches so
+// every combo sees it, and persists the mapping. Shared by the popup's
+// Create button and the entry row's.
+async function createCondSku(baseSku, cond, suggested) {
+  const parent = recvLookupExact(baseSku);
+  const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
+  const res = await api.createSku({
+    sku: suggested,
+    title: `${(parent && parent.title) || baseSku} - ${condLabel}`,
+    retailPrice: Number(parent && parent.retailPrice) || 0,
+    qty: 0,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  if (recvItems) {
+    const item = { sku: res.sku, title: `${(parent && parent.title) || baseSku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
+    recvItems.push(item);
+    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
+  }
+  const map = await api.returnsMapSet(baseSku, cond, res.sku);
+  return { ok: true, targetSku: (map.ok && map.targetSku) || res.sku };
+}
+
 $('rvCreate').addEventListener('click', async () => {
   if (!rv || !rv.sku) return;
   const btn = $('rvCreate');
@@ -3266,29 +3303,15 @@ $('rvCreate').addEventListener('click', async () => {
   const cond = rv.condition;
   btn.disabled = true;
   btn.textContent = 'Creating…';
-  const parent = recvLookupExact(rv.sku);
-  const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
-  const res = await api.createSku({
-    sku: suggested,
-    title: `${(parent && parent.title) || rv.sku} - ${condLabel}`,
-    retailPrice: Number(parent && parent.retailPrice) || 0,
-    qty: 0,
-  });
+  const res = await createCondSku(rv.sku, cond, suggested);
   if (!res.ok) {
     toast(res.error || 'Could not create the SKU.');
     rvRenderCond();
     return;
   }
-  // the fresh SKU joins the local inventory caches so every combo sees it
-  if (recvItems) {
-    const item = { sku: res.sku, title: `${(parent && parent.title) || rv.sku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
-    recvItems.push(item);
-    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
-  }
-  const map = await api.returnsMapSet(rv.sku, cond, res.sku);
-  if (map.ok && rv) {
-    rv.targets = { ...(rv.targets || {}), [cond]: map.targetSku };
-    toast(`${rv.sku} ${cond} → ${map.targetSku}`);
+  if (rv) {
+    rv.targets = { ...(rv.targets || {}), [cond]: res.targetSku };
+    toast(`${rv.sku} ${cond} → ${res.targetSku}`);
   }
   rvRenderCond();
 });
@@ -3357,6 +3380,7 @@ async function rvCommit() {
       tracking: $('rvTrk').value.trim(), sku,
       condition: rv.condition, note: $('rvNote').value.trim(),
       units: $('rvQty').value.trim(), receivedBy: $('rvBy').value.trim(),
+      price: retMoney($('rvPrice').value), settle: retMoney($('rvSettle').value),
     }).catch(e => ({ ok: false, error: e.message }));
     rv.busy = false;
     $('rvSave').disabled = false;
@@ -3396,7 +3420,12 @@ async function rvCommit() {
     receivedBy: by,
     unmatched: !!rv.unmatched,
     note: sku ? '' : $('rvNote').value.trim(),
-    items: sku ? [{ sku, condition: rv.condition, targetSku: target, qty, price: rv.price, note: $('rvNote').value.trim() }] : [],
+    items: sku ? [{
+      sku, condition: rv.condition, targetSku: target, qty,
+      price: retMoney($('rvPrice').value) || rv.price,
+      settle: retMoney($('rvSettle').value),
+      note: $('rvNote').value.trim(),
+    }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
   rv.busy = false;
   $('rvSave').disabled = false;
@@ -3416,6 +3445,7 @@ $('rvSave').addEventListener('click', async () => {
   const next = rv.items.findIndex((_, i) => !rv.received[i]);
   if (next < 0) { $('retRecvDialog').close(); return; }
   $('rvNote').value = '';
+  $('rvSettle').value = '';
   rvLoadItemAt(next);
   $('rvQty').focus();
 });
@@ -3449,6 +3479,365 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
   $('rvPick').value = item.sku;
   rvRenderCond();
 });
+
+/* ---------- in-sheet entry row (RETURNS-2 sheet, 2026-09-04) ---------- */
+// The log's FIRST ROW is the receiving worksheet again — owner screenshot
+// of the warehouse RETURNS-2 Google Sheet: type the PO# in the first cell
+// and the matched order fills customer / tracking / SKU / price by itself;
+// the Condition dropdown auto-matches the target SKU through the mapping
+// engine, with the pick box as the manual override when no mapping exists.
+// The <tr> is a singleton moved (not rebuilt) across renders, so typed
+// values, combo listeners and focus survive every log refresh.
+
+let ws = null; // entry-row state; built lazily with the row
+let wsEls = null; // { po, cust, trk, date, sku, order, cond, target, fix, pick, create, qty, price, by, settle, note, save }
+let retEntryTr = null;
+let wsLastLookup = ''; // one auto-lookup per typed PO (mirrors the popup)
+let wsCreate = (payload) => api.returnsCreate(payload); // seam: e2e stubs the commit
+
+function wsBlank() {
+  return {
+    orderId: null, source: '', unmatched: true,
+    sku: '', title: '', price: 0, targets: null, condition: 'new',
+    pick: '', items: [], received: [], itemIdx: -1, busy: false,
+  };
+}
+
+function wsHint(msg, ok = true) {
+  const el = $('retHint');
+  el.textContent = msg;
+  el.className = `ret-hint${msg && !ok ? ' is-fail' : ''}`;
+}
+
+function retEntryRow() {
+  if (retEntryTr) return retEntryTr;
+  ws = wsBlank();
+  const tr = document.createElement('tr');
+  tr.className = 'ws-row';
+  tr.innerHTML = `
+    <td class="cell-gutter ws-gutter" title="New return — type the PO# to start">+</td>
+    <td class="ws-cell"><input id="wsPo" class="ws-in mono" type="text" placeholder="Type PO#…"
+      autocomplete="off" spellcheck="false" aria-label="Original order number" /></td>
+    <td class="ws-cell"><input id="wsCust" class="ws-in" type="text" autocomplete="off" aria-label="Customer name" /></td>
+    <td class="ws-cell"><input id="wsTrk" class="ws-in mono" type="text" autocomplete="off" spellcheck="false" aria-label="Return tracking number" /></td>
+    <td class="ws-cell ws-date mono" id="wsDate" title="Stamped automatically when you receive"></td>
+    <td class="ws-cell ws-skucell">
+      <div class="combo ws-combo">
+        <input id="wsSku" class="ws-in mono" type="text" placeholder="SKU…"
+          autocomplete="off" spellcheck="false" aria-label="Returned SKU" />
+        <div class="combo-list" hidden></div>
+      </div>
+      <div id="wsOrder" class="ws-order" hidden></div>
+    </td>
+    <td class="ws-cell ws-condcell">
+      <select id="wsCond" class="ws-cond" aria-label="Condition">
+        ${RET_CONDS.map(c => `<option value="${c.key}">${c.label}</option>`).join('')}
+      </select>
+      <div id="wsTarget" class="ws-target" hidden></div>
+      <div id="wsFix" class="ws-fix" hidden>
+        <div class="combo ws-pick-combo">
+          <input id="wsPick" class="ws-in ws-pick mono" type="text" placeholder="Pick the listing…"
+            autocomplete="off" spellcheck="false" aria-label="Target listing" />
+          <div class="combo-list" hidden></div>
+        </div>
+        <button id="wsCreate" class="pillbtn ws-create" type="button" hidden></button>
+      </div>
+    </td>
+    <td class="ws-cell ws-num"><input id="wsQty" class="ws-in mono" type="number" min="1" step="1" value="1"
+      aria-label="Units received" title="How many units actually came back — fewer than ordered is fine" /></td>
+    <td class="ws-cell ws-num"><input id="wsPrice" class="ws-in mono" type="text" inputmode="decimal" placeholder="0.00"
+      aria-label="Price" title="What the customer paid — fills itself from the matched order line" /></td>
+    <td class="ws-cell"><input id="wsBy" class="ws-in mono ws-by" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></td>
+    <td class="ws-cell ws-num"><input id="wsSettle" class="ws-in mono" type="text" inputmode="decimal"
+      aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></td>
+    <td class="ws-cell"><input id="wsNote" class="ws-in" type="text" placeholder="case: 12345…" aria-label="Notes or dispute" /></td>
+    <td class="cell-actions ws-savecell"><button id="wsSave" class="btn btn-primary ws-save" type="button"
+      title="Receive this return (Enter from any cell after the SKU)">Receive</button></td>`;
+  retEntryTr = tr;
+  const el = (id) => tr.querySelector(`#${id}`);
+  wsEls = {
+    po: el('wsPo'), cust: el('wsCust'), trk: el('wsTrk'), date: el('wsDate'),
+    sku: el('wsSku'), order: el('wsOrder'), cond: el('wsCond'), target: el('wsTarget'),
+    fix: el('wsFix'), pick: el('wsPick'), create: el('wsCreate'), qty: el('wsQty'),
+    price: el('wsPrice'), by: el('wsBy'), settle: el('wsSettle'), note: el('wsNote'), save: el('wsSave'),
+  };
+  wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+  wsEls.by.value = retReceivedBy;
+  wireEntryRow(tr);
+  return tr;
+}
+
+function wsReset() {
+  ws = wsBlank();
+  wsLastLookup = '';
+  for (const k of ['po', 'cust', 'trk', 'sku', 'pick', 'price', 'settle', 'note']) wsEls[k].value = '';
+  wsEls.qty.value = '1';
+  wsEls.cond.value = 'new';
+  wsEls.by.value = retReceivedBy; // initials persist across returns
+  wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+  wsRenderOrder();
+  wsRenderCond();
+}
+
+// Enter (or clicking off) the PO# looks the processed order up and fills
+// the rest of the row — same engine as the popup
+async function wsLookup() {
+  const po = wsEls.po.value.trim();
+  if (!po || !ws || ws.busy) return;
+  ws.busy = true;
+  wsHint('Looking the order up…');
+  const res = await api.returnsLookup(po);
+  ws.busy = false;
+  if (!res.ok) {
+    wsHint(`${res.error || 'Not found.'} — enter the details by hand.`, false);
+    ws.unmatched = true;
+    ws.orderId = null;
+    ws.source = '';
+    wsEls.cust.focus();
+    return;
+  }
+  wsHint(`Matched${res.order.customer ? ` · ${res.order.customer}` : ''} — pick the line that came back.`);
+  const o = res.order;
+  ws.unmatched = false;
+  ws.orderId = o.orderId;
+  ws.source = o.source;
+  wsEls.po.value = o.reference || po;
+  wsEls.cust.value = o.customer || '';
+  wsEls.trk.value = o.tracking || '';
+  ws.items = o.items || [];
+  ws.received = ws.items.map(() => false);
+  if (ws.items.length) wsLoadItemAt(0); else wsLoadItem(null);
+  wsEls.cond.focus();
+}
+
+function wsLoadItemAt(i) {
+  ws.itemIdx = i;
+  wsLoadItem(ws.items[i] || null);
+}
+
+function wsLoadItem(it) {
+  if (it) {
+    ws.sku = it.sku;
+    ws.title = it.title || '';
+    ws.price = it.price || 0;
+    ws.targets = it.targets || null;
+    wsEls.sku.value = it.sku;
+    wsEls.qty.value = String(it.quantity || 1);
+    wsEls.price.value = Number(it.price) ? Number(it.price).toFixed(2) : '';
+  } else {
+    ws.itemIdx = -1;
+    ws.sku = ''; ws.title = ''; ws.price = 0; ws.targets = null;
+    wsEls.sku.value = '';
+    wsEls.qty.value = '1';
+    wsEls.price.value = '';
+  }
+  ws.condition = 'new';
+  wsEls.cond.value = 'new';
+  ws.pick = '';
+  wsEls.pick.value = '';
+  wsRenderCond();
+  wsRenderOrder();
+}
+
+// what the person ordered, as clickable chips under the SKU cell — the
+// receiver picks the line that ACTUALLY came back; ✓ = already received
+function wsRenderOrder() {
+  const row = wsEls.order;
+  if (ws.unmatched || !ws.items.length) { row.hidden = true; row.innerHTML = ''; return; }
+  row.hidden = false;
+  row.innerHTML = ws.items.map((it, i) => `
+    <button type="button" class="rv-item ${i === ws.itemIdx ? 'on' : ''} ${ws.received[i] ? 'done' : ''}" data-i="${i}"
+      title="${ws.received[i] ? 'Already received — click to receive more of it' : 'Click to receive this line'}">
+      <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}${ws.received[i] ? ' ✓' : ''}
+    </button>`).join('');
+}
+
+// the auto-match line under the Condition dropdown: "→ TARGET-SKU"; a
+// missing mapping opens the manual pick + one-click create, like the popup
+function wsRenderCond() {
+  const t = wsEls.target;
+  const fix = wsEls.fix;
+  if (!ws.sku) { t.hidden = true; fix.hidden = true; return; }
+  const known = ws.condition === 'new' ? ws.sku : ((ws.targets || {})[ws.condition] || '');
+  const resolved = known || ws.pick;
+  if (resolved) {
+    fix.hidden = true;
+    // "new" landing back on itself needs no arrow — only redirects show
+    if (ws.condition === 'new' && resolved === ws.sku) { t.hidden = true; return; }
+    t.hidden = false;
+    t.className = 'ws-target';
+    t.innerHTML = `→ <span class="mono">${esc(resolved)}</span>${known ? '' : ' <span class="rv-onetime">(picked for this return)</span>'}${retUnlistedMark(resolved)}`;
+    return;
+  }
+  t.hidden = false;
+  t.className = 'ws-target is-missing';
+  t.innerHTML = `⚠ no ${esc(retCondLabel(ws.condition).toLowerCase())} listing yet — pick or create:`;
+  fix.hidden = false;
+  const suggested = `${RET_PREFIX[ws.condition] || ''}${ws.sku}`.toUpperCase();
+  const btn = wsEls.create;
+  const canCreate = RET_PREFIX[ws.condition] && recvLookup === 'ready' && !recvLookupExact(suggested);
+  btn.hidden = !canCreate;
+  btn.disabled = false;
+  btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
+  btn.dataset.sku = suggested;
+  btn.title = `Creates the Linnworks item with this exact name (title and price copied from ${ws.sku}), maps it, and routes this return into it.`;
+}
+
+async function wsCommit() {
+  if (!ws || ws.busy) return false;
+  const po = wsEls.po.value.trim();
+  if (!po) { wsHint('PO# is required.', false); wsEls.po.focus(); return false; }
+  const sku = wsEls.sku.value.trim().toUpperCase();
+  let target = '';
+  let qty = 1;
+  if (sku) {
+    const known = ws.condition === 'new' ? sku : ((ws.targets || {})[ws.condition] || '');
+    target = known || String(ws.pick || '').trim();
+    if (!target) {
+      wsHint(`No ${retCondLabel(ws.condition).toLowerCase()} listing for ${sku} — pick or create it first.`, false);
+      return false;
+    }
+    if (recvLookup === 'ready' && !recvLookupExact(target)) {
+      wsHint(`Unknown SKU: ${target}. Pick one from the inventory.`, false);
+      return false;
+    }
+    qty = Number(wsEls.qty.value);
+    if (!Number.isInteger(qty) || qty < 1) { wsHint('Units must be a whole number of 1 or more.', false); return false; }
+  }
+  const by = wsEls.by.value.trim();
+  if (by) retReceivedBy = by;
+  ws.busy = true;
+  wsEls.save.disabled = true;
+  wsHint('Receiving…');
+  const res = await wsCreate({
+    orderId: ws.orderId || undefined,
+    orderNumber: po,
+    source: ws.source,
+    customer: wsEls.cust.value.trim(),
+    tracking: wsEls.trk.value.trim(),
+    receivedBy: by,
+    unmatched: !!ws.unmatched,
+    note: sku ? '' : wsEls.note.value.trim(),
+    items: sku ? [{
+      sku, condition: ws.condition, targetSku: target, qty,
+      price: retMoney(wsEls.price.value) || ws.price,
+      settle: retMoney(wsEls.settle.value),
+      note: wsEls.note.value.trim(),
+    }] : [],
+  }).catch(e => ({ ok: false, error: e.message }));
+  ws.busy = false;
+  wsEls.save.disabled = false;
+  if (!res || !res.ok) { wsHint((res && res.error) || 'Could not receive.', false); return false; }
+  toast(sku ? `Received ${qty} × ${target}` : `Logged return ${po}`);
+  // multi-line order with lines still unreceived: the row STAYS on the PO
+  // and loads the next line; otherwise it clears for the next return
+  if (ws.itemIdx >= 0) ws.received[ws.itemIdx] = true;
+  const next = ws.items.findIndex((_, i) => !ws.received[i]);
+  if (next >= 0) {
+    wsHint(`Received — ${ws.items.length - ws.received.filter(Boolean).length} ordered line${ws.items.length - ws.received.filter(Boolean).length === 1 ? '' : 's'} left on this PO.`);
+    wsEls.note.value = '';
+    wsEls.settle.value = '';
+    wsLoadItemAt(next);
+    wsEls.qty.focus();
+  } else {
+    wsHint('');
+    wsReset();
+    wsEls.po.focus();
+  }
+  loadRetPast();
+  return true;
+}
+
+function wireEntryRow(tr) {
+  wsEls.po.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    wsLookup();
+  });
+  // clicking off the PO# looks the order up by itself — one attempt per value
+  wsEls.po.addEventListener('blur', () => {
+    const po = wsEls.po.value.trim();
+    if (!ws || ws.busy || !po || po === wsLastLookup || !ws.unmatched) return;
+    wsLastLookup = po;
+    wsLookup();
+  });
+  // editing the PO after a match voids the match — a stale orderId must
+  // never ride along with a hand-changed number
+  wsEls.po.addEventListener('input', () => {
+    if (!ws) return;
+    ws.orderId = null;
+    ws.source = '';
+    ws.unmatched = true;
+    ws.items = [];
+    ws.received = [];
+    ws.itemIdx = -1;
+    wsRenderOrder();
+  });
+  wsEls.order.addEventListener('click', (e) => {
+    const b = e.target.closest('.rv-item');
+    if (!b) return;
+    wsLoadItemAt(Number(b.dataset.i));
+    wsEls.qty.focus();
+  });
+  wsEls.sku.addEventListener('input', () => {
+    ws.sku = wsEls.sku.value.trim().toUpperCase();
+    ws.targets = null; // typed text is not a picked item; targets re-resolve on pick
+    ws.pick = '';
+    wsEls.pick.value = '';
+    ws.itemIdx = -1; // a hand-typed SKU is no longer "that order line"
+    wsRenderOrder();
+    wsRenderCond();
+  });
+  makeCombo(wsEls.sku, tr.querySelector('.ws-combo .combo-list'), async (item) => {
+    ws.sku = item.sku;
+    ws.title = item.title || '';
+    if (!ws.price) ws.price = Number(item.retailPrice) || 0;
+    if (!wsEls.price.value && ws.price) wsEls.price.value = ws.price.toFixed(2);
+    ws.pick = '';
+    wsEls.pick.value = '';
+    wsEls.sku.value = item.sku;
+    const res = await api.returnsTargets(item.sku);
+    if (res.ok && ws) ws.targets = res.targets;
+    wsRenderCond();
+  });
+  makeCombo(wsEls.pick, tr.querySelector('.ws-pick-combo .combo-list'), (item) => {
+    ws.pick = item.sku;
+    wsEls.pick.value = item.sku;
+    wsRenderCond();
+  });
+  wsEls.cond.addEventListener('change', () => {
+    ws.condition = wsEls.cond.value;
+    ws.pick = '';
+    wsEls.pick.value = '';
+    wsRenderCond();
+  });
+  wsEls.create.addEventListener('click', async () => {
+    if (!ws.sku) return;
+    const btn = wsEls.create;
+    const suggested = btn.dataset.sku;
+    const cond = ws.condition;
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+    const res = await createCondSku(ws.sku, cond, suggested);
+    if (!res.ok) {
+      toast(res.error || 'Could not create the SKU.');
+      wsRenderCond();
+      return;
+    }
+    ws.targets = { ...(ws.targets || {}), [cond]: res.targetSku };
+    toast(`${ws.sku} ${cond} → ${res.targetSku}`);
+    wsRenderCond();
+  });
+  // Enter anywhere after the SKU commits the row, spreadsheet-style
+  for (const k of ['qty', 'price', 'by', 'settle', 'note']) {
+    wsEls[k].addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      wsCommit();
+    });
+  }
+  wsEls.save.addEventListener('click', () => wsCommit());
+}
 
 // marketplace link for a returns row: the order's Source ("WALMART", "EBAY"…)
 // maps onto the same per-channel URL templates the Capture page's PO# links
@@ -3889,7 +4278,9 @@ function retLogRowHtml(r, i, ii, un, num) {
         ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
       </td>
       <td class="ret-cell-units mono">${Number(i.qty) || 1}</td>
+      <td class="ret-cell-price mono">${Number(i.price) ? `$${Number(i.price).toFixed(2)}` : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
+      <td class="ret-cell-settle mono" title="Dispute settlement amount">${Number(i.settle) ? `$${Number(i.settle).toFixed(2)}` : ''}</td>
       <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
@@ -3910,48 +4301,63 @@ function retUnlistedMark(sku) {
 function renderRetLog() {
   if (!retLogAll) return;
   const box = $('retPastBox');
-  if (!retLogAll.length) {
-    $('retLogCount').textContent = '';
-    box.innerHTML = '<div class="recv-past-empty">No returns yet. Type a PO# in the worksheet above to receive one.</div>';
-    return;
-  }
   const q = $('retLogSearch').value.trim().toLowerCase();
   const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
     [r.order_number, r.customer, r.tracking, r.source, r.received_by, r.note,
      i.sku, i.targetSku, i.note, retCondLabel(i.condition)]
       .some(v => String(v || '').toLowerCase().includes(q)));
-  $('retLogCount').textContent = ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`;
+  $('retLogCount').textContent = retLogAll.length
+    ? ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`
+    : '';
   // numbered pages once the log outgrows one comfortable screen (owner
   // request 2026-08-13); search always spans the WHOLE log, then pages
   const RET_PAGE = 50;
   const pages = Math.max(1, Math.ceil(rows.length / RET_PAGE));
   if (retLogPage >= pages) retLogPage = pages - 1;
   const pageRows = rows.slice(retLogPage * RET_PAGE, (retLogPage + 1) * RET_PAGE);
+  const compact = document.body.classList.contains('ret-compact');
+  const noneMsg = retLogAll.length
+    ? `Nothing matches “${esc(q)}”.`
+    : 'No returns yet — type a PO# in the green row above to receive the first one.';
+  // the entry row survives the innerHTML swap: remember where focus was,
+  // rebuild the sheet, move the SAME <tr> back in, put focus back
+  const af = document.activeElement;
+  const wsFocus = retEntryTr && retEntryTr.contains(af) ? af : null;
+  let wsSel = null;
+  try { if (wsFocus && wsFocus.selectionStart != null) wsSel = [wsFocus.selectionStart, wsFocus.selectionEnd]; } catch { /* number inputs refuse */ }
   box.innerHTML = `
     <div class="ret-sheet-scroll">
     <table class="recv-sheet-table ret-sheet ret-log-table">
       <thead>
         <tr>
           <th class="th-gutter">#</th>
-          <th class="th-po">PO#</th>
-          <th class="th-cust">Customer</th>
+          <th class="th-po">PO #</th>
+          <th class="th-cust">Customer Name</th>
           <th class="th-trk">Tracking #</th>
-          <th class="th-date">Received</th>
+          <th class="th-date">Date Received</th>
           <th class="th-rsku">Returned SKU</th>
           <th class="th-cond">Condition</th>
           <th class="th-units">Units</th>
-          <th class="th-by">By</th>
-          <th class="th-note">Notes / dispute</th>
+          <th class="th-price">Price</th>
+          <th class="th-by">Received By</th>
+          <th class="th-settle">Dispute Settlement</th>
+          <th class="th-note">Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
+      <tbody class="ret-entry-body"></tbody>
       <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
-        || `<tr><td colspan="${document.body.classList.contains('ret-compact') ? 6 : 11}" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+        || `<tr><td colspan="${compact ? 6 : 13}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
       `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
       <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
+  box.querySelector('.ret-entry-body').appendChild(retEntryRow());
+  if (wsFocus) {
+    wsFocus.focus();
+    if (wsSel) { try { wsFocus.setSelectionRange(wsSel[0], wsSel[1]); } catch { /* number inputs refuse */ } }
+  }
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
 }
 
@@ -4252,7 +4658,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'by', 9: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'settle', 11: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;

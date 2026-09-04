@@ -366,10 +366,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec('loadRetPast()');
     await sleep(250);
-    // history = the SAME sheet as the worksheet (11-column header incl.
-    // Units + actions), one row per ITEM LINE (the qty-2 return = 1 row,
-    // Units column carries the 2), condition dot, edit/delete per row,
-    // and no inputs until an edit begins
+    // history = the RETURNS-2 sheet (13-column header incl. Price, Dispute
+    // Settlement + actions), one row per ITEM LINE (the qty-2 return = 1
+    // row, Units column carries the 2), condition dot, edit/delete per
+    // row, and the excel-style entry row pinned on top
     const ledgerBits = await exec(`[
       !!document.querySelector('#retPastBox table.ret-log-table'),
       document.querySelectorAll('#retPastBox thead th').length,
@@ -377,15 +377,51 @@ module.exports = async function run({ app, win, db, clipboard }) {
       !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
       document.querySelectorAll('#retPastBox .ret-log-edit-btn').length,
       document.querySelectorAll('#retPastBox .ret-log-del-btn').length,
-      document.querySelectorAll('#retPastBox input, #retPastBox select').length,
+      document.querySelectorAll('#retPastBox tr.ret-past-tr input, #retPastBox tr.ret-past-tr select').length,
       (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
+      (document.querySelector('#retPastBox .ret-cell-price') || {}).textContent || '',
     ]`);
-    check('history renders the worksheet-identical sheet, one row per line',
-      ledgerBits[0] === true && ledgerBits[1] === 11
-        && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2',
+    check('history renders the RETURNS-2 sheet, one row per line',
+      ledgerBits[0] === true && ledgerBits[1] === 13
+        && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2'
+        && ledgerBits[8] === '$189.99',
       ledgerBits);
-    check('history rows carry edit + delete, no inputs until editing',
+    check('history rows carry edit + delete, no inputs on LOG rows',
       ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
+    // 24c-bis. the entry row: first row of the sheet, PO cell + condition
+    // dropdown + Receive button, and it SURVIVES a re-render (same node)
+    const entryBits = await exec(`[
+      !!document.querySelector('#retPastBox tr.ws-row'),
+      !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
+      document.querySelectorAll('#retPastBox tr.ws-row #wsCond option').length,
+      !!document.querySelector('#retPastBox tr.ws-row #wsSave'),
+      (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
+    ]`);
+    check('entry row: PO cell, 4-condition dropdown, Receive, survives re-render',
+      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 4
+        && entryBits[3] === true && entryBits[4] === 'KEEP-ME',
+      entryBits);
+    await exec(`$('wsPo').value = ''; ws.unmatched = true; 0;`);
+    // the entry row commits through the same returns:create engine
+    await exec(`
+      window.__wsOrig = wsCreate;
+      window.__wsGot = null;
+      wsCreate = async (p) => { window.__wsGot = p; return { ok: true, id: 999 }; };
+      $('wsPo').value = 'WMR-ENTRY-1'; wsLastLookup = 'WMR-ENTRY-1';
+      ws.unmatched = true; ws.sku = 'S25-128GB-NAVY';
+      $('wsSku').value = 'S25-128GB-NAVY';
+      ws.targets = { new: 'S25-128GB-NAVY', openbox: '', used: '', scrap: '' };
+      ws.condition = 'new'; $('wsCond').value = 'new';
+      $('wsQty').value = '1'; $('wsPrice').value = '150'; $('wsSettle').value = '45.50'; $('wsBy').value = 'IM';
+      wsCommit()`);
+    await sleep(250);
+    const wsGot = await exec(`window.__wsGot`);
+    check('entry row commits price + dispute settlement through returns:create',
+      wsGot && wsGot.orderNumber === 'WMR-ENTRY-1' && wsGot.items.length === 1
+        && wsGot.items[0].price === 150 && wsGot.items[0].settle === 45.5
+        && wsGot.items[0].targetSku === 'S25-128GB-NAVY',
+      wsGot);
+    await exec(`wsCreate = window.__wsOrig; wsReset(); 0;`);
     // popup edit (owner request 2026-08-07): the pencil opens the receive
     // popup prefilled from the row, with the Received-date row visible
     await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
@@ -745,7 +781,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
     check('returns log: shared width grip + column grips',
-      retGrips[0] === true && retGrips[1] === 9, retGrips);
+      retGrips[0] === true && retGrips[1] === 11, retGrips);
 
     // 37. shipped-orders file import: header detection ignores the "Update
     // Tracking Number" column, per-PO dedupe, bulk fill + conflict report

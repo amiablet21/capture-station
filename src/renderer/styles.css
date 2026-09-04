@@ -862,8 +862,8 @@ body {
 .ret-page.has-browser .sheet-grip:not(.bdock-divider) { display: none; } /* the pane divider resizes instead */
 
 /* compact columns while the pane shares the window: Customer, Tracking,
-   Received, By and Notes step aside (their values stay in cell tooltips)
-   and return the moment the pane collapses */
+   Date, Price, By, Dispute $ and Notes step aside (their values stay in
+   cell tooltips) and return the moment the pane collapses */
 body.ret-compact .ret-sheet th:nth-child(3),
 body.ret-compact .ret-sheet td:nth-child(3),
 body.ret-compact .ret-sheet th:nth-child(4),
@@ -873,7 +873,11 @@ body.ret-compact .ret-sheet td:nth-child(5),
 body.ret-compact .ret-sheet th:nth-child(9),
 body.ret-compact .ret-sheet td:nth-child(9),
 body.ret-compact .ret-sheet th:nth-child(10),
-body.ret-compact .ret-sheet td:nth-child(10) { display: none; }
+body.ret-compact .ret-sheet td:nth-child(10),
+body.ret-compact .ret-sheet th:nth-child(11),
+body.ret-compact .ret-sheet td:nth-child(11),
+body.ret-compact .ret-sheet th:nth-child(12),
+body.ret-compact .ret-sheet td:nth-child(12) { display: none; }
 body.ret-compact .ret-sheet { min-width: 0; }
 
 .ret-main {
@@ -972,13 +976,17 @@ body.ret-compact .ret-sheet { min-width: 0; }
 
 /* fixed layout: columns hold their widths, Customer + Notes flex with the
    window; below 1100px the sheet scrolls sideways instead of crushing */
-.ret-sheet { table-layout: fixed; width: 100%; min-width: 1100px; }
+.ret-sheet { table-layout: fixed; width: 100%; min-width: 1320px; }
 .ret-sheet th.th-po { width: 150px; }
 .ret-sheet th.th-trk { width: 130px; }
 .ret-sheet th.th-date { width: 104px; } /* MM-DD HH:MM */
 .ret-sheet th.th-rsku { width: 175px; }
 .ret-sheet th.th-cond { width: 170px; }
-.ret-sheet th.th-by { width: 60px; }
+.ret-sheet th.th-price { width: 78px; text-align: right; }
+.ret-sheet th.th-by { width: 100px; }
+.ret-sheet th.th-settle { width: 150px; text-align: right; }
+.ret-cell-price, .ret-cell-settle { text-align: right; font-size: 12px; }
+.ret-cell-settle { color: var(--pos-text); font-weight: 600; }
 
 .ret-sheet td { font-size: 12.5px; }
 .ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
@@ -1548,6 +1556,87 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ret-cell-units input::-webkit-inner-spin-button,
 .ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---- RETURNS-2 sheet look (owner screenshot 2026-09-04): the green
+   header band from the warehouse Google Sheet, same in both themes ---- */
+.recv-sheet-table.ret-log-table th {
+  background: #21a464;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
+  border-bottom: 1px solid #17854f;
+}
+.recv-sheet-table.ret-log-table th.th-gutter { background: #188a52; border-right: 1px solid rgba(255, 255, 255, 0.28); }
+.recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
+
+/* ---- the excel-style entry row: first row of the sheet, always live.
+   Type the PO#, the matched order fills the rest; the Condition dropdown
+   auto-matches the target SKU (pick box = manual override) ---- */
+.ret-log-table tr.ws-row td {
+  background: var(--surface);
+  border-bottom: 2px solid #21a464; /* the entry row reads as part of the header band */
+  overflow: visible;
+  white-space: normal;
+}
+.ret-log-table tr.ws-row td.ws-cell:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; }
+.ws-in {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 0;
+}
+.ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+.ws-in::placeholder { color: var(--faint); }
+.ws-date { color: var(--muted); font-size: 12px; }
+.ws-num .ws-in { text-align: right; appearance: textfield; }
+.ws-num input::-webkit-inner-spin-button,
+.ws-num input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ws-by { font-weight: 600; text-transform: uppercase; }
+.ws-skucell, .ws-condcell { overflow: visible !important; } /* dropdowns + chips escape the cell */
+.ws-cond {
+  width: 100%;
+  font-size: 12px;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.ws-target { margin-top: 4px; font-size: 11px; color: var(--pos-text); font-weight: 600; }
+.ws-target .mono { font-size: 11px; }
+.ws-target.is-missing { color: var(--badge-yellow-text); font-weight: 500; }
+/* pick + create stack vertically — side by side they overflowed the column */
+.ws-fix { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
+.ws-pick-combo { min-width: 0; position: relative; }
+.ws-in.ws-pick {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.ws-create {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.ws-order { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.ws-savecell { text-align: center; }
+.ws-save { padding: 3px 10px; font-size: 12px; }
+.ret-hint.is-fail { color: var(--neg-text); font-weight: 600; }
 
 /* inline product thumbnails once a SKU is picked (returns + receiving) */
 .sku-thumb {

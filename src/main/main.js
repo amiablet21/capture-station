@@ -623,7 +623,7 @@ function writeReturnsCsv() {
   try {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
-    const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched'];
+    const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched,dispute_settlement'];
     for (const r of db.listReturns(1000).slice().reverse()) {
       // a PO-only return has no item lines: one placeholder row keeps it in the CSV
       const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
@@ -633,6 +633,7 @@ function writeReturnsCsv() {
           it.sku, it.condition, it.targetSku, it.qty,
           it.price != null ? it.price : '', r.received_by || '',
           it.note || r.note || '', r.unmatched ? 'yes' : '',
+          it.settle ? it.settle : '',
         ].map(csvEscape).join(','));
       }
     }
@@ -2211,6 +2212,7 @@ function registerIpc() {
         targetSku: String(i.targetSku || '').trim(),
         qty: Number(i.qty),
         price: Math.max(0, Math.round((Number(i.price) || 0) * 100) / 100),
+        settle: Math.max(0, Math.round((Number(i.settle) || 0) * 100) / 100),
         note: String(i.note || '').trim().slice(0, 300),
       }))
       .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
@@ -3143,7 +3145,7 @@ function registerIpc() {
   // apply to the unit, splitting a qty>1 line when needed. Stock is
   // corrected only when the unit originally moved stock (targetSku set)
   // and its landing spot changes: -1 old target, +1 new target.
-  ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy }) => {
+  ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy, price, settle }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const rec = db.getReturn(Number(id));
@@ -3159,6 +3161,11 @@ function registerIpc() {
     const newCond = String(condition || '').trim() || 'new';
     const newNote = String(note || '').trim().slice(0, 300);
     const newQty = Math.max(1, parseInt(units, 10) || 1);
+    // price / dispute settlement: undefined = caller predates the fields,
+    // keep what the line has; anything else (including '') re-parses to $
+    const money = (v) => Math.max(0, Math.round((Number(v) || 0) * 100) / 100);
+    const newPrice = price === undefined ? null : money(price);
+    const newSettle = settle === undefined ? null : money(settle);
     let recordNote = rec.note;
     let stockNote = '';
     try {
@@ -3194,12 +3201,16 @@ function registerIpc() {
             await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
           }
         }
-        items[ii] = { ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: newQty };
+        items[ii] = {
+          ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: newQty,
+          ...(newPrice === null ? {} : { price: newPrice }),
+          ...(newSettle === null ? {} : { settle: newSettle }),
+        };
       } else {
         // PO-only pseudo row: record fields, plus an item line if a SKU was
         // typed (log-only, no stock move — the unit never bumped stock)
         recordNote = newNote;
-        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: 0, note: '' });
+        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
       }
       db.saveReturn(rec.id, {
         orderNumber: newPo, createdAt,
