@@ -185,15 +185,15 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
-      <!-- design C (2026-08-07): the log owns the page; receiving happens in
-           the popup opened from the bar button -->
+      <!-- RETURNS-2 sheet (2026-09-04): the log owns the page and its first
+           row is the live entry row — receiving happens right in the sheet;
+           the popup is edit-only (pencil on a log row) -->
       <div class="recv-past ret-log-page">
         <div class="ret-log-bar">
           <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
           <span id="retHint" class="ret-hint"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
-          <button id="retAddBtn" class="btn btn-primary">+ Receive a return</button>
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
@@ -941,23 +941,23 @@
     </div>
   </dialog>
 
-  <!-- Receive a return: the design-A "excel sheet" popup (2026-08-07) — a
-       label column and a value column with gridlines, one field per row -->
+  <!-- Edit a return: the design-A "excel sheet" popup (2026-08-07) — a
+       label column and a value column with gridlines, one field per row.
+       Edit-only since the entry row took over receiving (2026-09-04). -->
   <dialog id="retRecvDialog" class="dlg ret-recv-dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title" id="rvTitle">Receive a return</h2>
-      <p class="dlg-note">Type the PO# and press Enter — a matched order fills the rest.</p>
+      <h2 class="dlg-title" id="rvTitle">Edit return</h2>
+      <p class="dlg-note">Fields prefill from the log row — Save runs the stock corrections.</p>
       <div class="rv-sheet">
         <div class="rv-row">
           <div class="rv-k">PO#</div>
           <div class="rv-v">
             <input id="rvPo" class="rv-in mono" type="text" placeholder="Type / paste PO#…"
                    autocomplete="off" spellcheck="false" aria-label="Original order number" />
-            <span id="rvMatched" class="rv-matched" hidden></span>
           </div>
         </div>
-        <!-- everything the order contained: click a line to receive it; a ✓
-             marks lines already received — nothing forces receiving them all -->
+        <!-- everything the original order contained, read-only — the
+             highlighted chip is the line this return came from -->
         <div class="rv-row" id="rvOrderRow" hidden>
           <div class="rv-k">Ordered</div>
           <div class="rv-v rv-order-v"><div id="rvOrder" class="rv-order"></div></div>
@@ -1028,7 +1028,7 @@
       <p id="rvFeedback" class="dlg-note test-result" hidden></p>
       <div class="dlg-actions">
         <button id="rvCancel" class="btn btn-ghost" type="button">Cancel</button>
-        <button id="rvSave" class="btn btn-primary" type="button">Receive</button>
+        <button id="rvSave" class="btn btn-primary" type="button">Save changes</button>
       </div>
     </div>
   </dialog>

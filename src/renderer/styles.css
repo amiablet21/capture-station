@@ -1230,17 +1230,6 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .rv-in[type='number'] { appearance: textfield; }
 .rv-in::-webkit-outer-spin-button, .rv-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .rv-combo, .rv-pick-combo { position: relative; flex: 1 1 auto; min-width: 0; }
-.rv-matched {
-  flex: 0 0 auto;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--accent-soft-text);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 2px 9px;
-  margin-right: 4px;
-  white-space: nowrap;
-}
 .rv-cond-v { flex-direction: column; align-items: flex-start; gap: 6px; }
 .rv-pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .rv-pill {

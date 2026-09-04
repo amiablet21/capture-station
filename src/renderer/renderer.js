@@ -3028,19 +3028,18 @@ function retMoney(v) {
   return Math.max(0, Number(String(v || '').replace(/[$,\s]/g, '')) || 0);
 }
 
-/* ---------- Receive-a-return popup (design-A sheet) ---------- */
-// Replaces the staged worksheet: every Receive commits ONE item line through
-// the unchanged returns:create engine (a PO-only line logs without stock).
+/* ---------- Edit-return popup (design-A sheet) ---------- */
+// Edit-only since the entry row took over receiving (owner, 2026-09-04 —
+// "we don't want the receive button anymore"): the pencil on a log row
+// opens it prefilled, Save runs the qty-aware stock corrections.
 
 let rv = null; // open popup state; null = closed
-let rvCreate = (payload) => api.returnsCreate(payload); // seam: e2e stubs the commit
 
 function rvBlank() {
   return {
-    orderId: null, source: '', unmatched: true,
-    sku: '', title: '', price: 0, targets: null, condition: 'new',
-    pick: '', items: [], received: [], itemIdx: -1, busy: false,
-    edit: null, // { rid, ii } = editing a log line instead of receiving
+    sku: '', targets: null, condition: 'new',
+    pick: '', items: [], busy: false,
+    edit: null, // { rid, ii } = the log line being edited
   };
 }
 
@@ -3051,28 +3050,8 @@ function rvFeedback(msg, ok = false) {
   el.className = `dlg-note test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-function retOpenRecv() {
-  rv = rvBlank();
-  rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
-  $('rvQty').value = '1';
-  $('rvBy').value = retReceivedBy;
-  $('rvThumb').hidden = true;
-  $('rvMatched').hidden = true;
-  $('rvDayRow').hidden = true;
-  $('rvTitle').textContent = 'Receive a return';
-  $('rvSave').textContent = 'Receive';
-  rvFeedback('');
-  rvRenderCond();
-  rvRenderOrder();
-  ensureInventory();
-  rvBesidePane();
-  $('retRecvDialog').showModal();
-  $('rvPo').focus();
-}
-
 // with the marketplace pane open (and room for both), the popup docks to
-// the right so the pane STAYS VISIBLE while receiving
+// the right so the pane STAYS VISIBLE while editing
 function rvBesidePane() {
   const paneOpen = !$('bDock').hidden;
   const room = window.innerWidth - (paneOpen ? $('bDock').offsetWidth : 0);
@@ -3085,13 +3064,12 @@ function rvThumbUpdate() {
   if (src) $('rvThumb').src = src;
 }
 
-// the SAME popup edits a log line ("more coherent that way" — owner,
+// the popup edits a log line ("more coherent that way" — owner,
 // 2026-08-07, reversing the earlier edit-on-the-line preference): fields
 // prefill from the row, Save runs the qty-aware stock corrections
 function retOpenEdit({ r, i, ii }) {
   rv = rvBlank();
   rv.edit = { rid: r.id, ii };
-  rv.unmatched = !!r.unmatched;
   rv.sku = String(i.sku || '').toUpperCase();
   rv.condition = i.condition || 'new';
   $('rvPo').value = r.order_number || '';
@@ -3106,9 +3084,6 @@ function retOpenEdit({ r, i, ii }) {
   $('rvPick').value = '';
   $('rvDay').value = String(r.created_at).slice(0, 10);
   $('rvDayRow').hidden = false;
-  $('rvMatched').hidden = true;
-  $('rvTitle').textContent = 'Edit return';
-  $('rvSave').textContent = 'Save changes';
   rvFeedback('');
   rvRenderOrder();
   rvThumbUpdate();
@@ -3134,102 +3109,21 @@ function retOpenEdit({ r, i, ii }) {
   $('retRecvDialog').showModal();
 }
 
-// Enter on the PO#: processed-order lookup fills the sheet; a multi-item
-// order queues its remaining lines for "Receive & next"
-async function rvLookup() {
-  const po = $('rvPo').value.trim();
-  if (!po || !rv || rv.busy || rv.edit) return; // edit mode: the PO is just text
-  rv.busy = true;
-  rvFeedback('Looking the order up…', true);
-  const res = await api.returnsLookup(po);
-  rv.busy = false;
-  if (!res.ok) {
-    rvFeedback(`${res.error || 'Not found.'} — enter the details by hand.`);
-    rv.unmatched = true;
-    rv.orderId = null;
-    rv.source = '';
-    $('rvMatched').hidden = true;
-    $('rvCust').focus();
-    return;
-  }
-  rvFeedback('');
-  const o = res.order;
-  rv.unmatched = false;
-  rv.orderId = o.orderId;
-  rv.source = o.source;
-  $('rvPo').value = o.reference || po;
-  $('rvCust').value = o.customer || '';
-  $('rvTrk').value = o.tracking || '';
-  rv.items = o.items || [];
-  rv.received = rv.items.map(() => false);
-  if (rv.items.length) rvLoadItemAt(0); else rvLoadItem(null);
-  $('rvSku').focus();
-}
-
-// the Ordered row: every line the order contained, as clickable chips —
-// the receiver picks what ACTUALLY came back; ✓ = already received.
-// Nothing forces receiving every line, and Units can be fewer than ordered.
+// the Ordered row: every line the original order contained, read-only —
+// the highlighted chip is the line this return came from; the amber note
+// means the returned SKU matches NO ordered line
 function rvRenderOrder() {
   const row = $('rvOrderRow');
-  if (!rv || (rv.unmatched && !rv.edit) || !rv.items.length) { row.hidden = true; return; }
+  if (!rv || !rv.items.length) { row.hidden = true; return; }
   row.hidden = false;
-  if (rv.edit) {
-    // edit mode: read-only — the highlighted chip is the line this return
-    // came from; the amber note means the returned SKU matches NO ordered line
-    const cur = String(rv.sku || '').trim().toUpperCase();
-    const hit = rv.items.some(it => String(it.sku || '').toUpperCase() === cur);
-    $('rvOrder').innerHTML = rv.items.map(it => `
-      <span class="rv-item is-info ${String(it.sku || '').toUpperCase() === cur ? 'on' : ''}"
-        title="${esc(it.title || '')}${it.price ? ` — $${Number(it.price).toFixed(2)}` : ''}">
-        <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}
-      </span>`).join('')
-      + (cur && !hit ? '<span class="rv-order-note">returned SKU isn’t one of the ordered lines</span>' : '');
-    return;
-  }
-  $('rvOrder').innerHTML = rv.items.map((it, i) => `
-    <button type="button" class="rv-item ${i === rv.itemIdx ? 'on' : ''} ${rv.received[i] ? 'done' : ''}" data-i="${i}"
-      title="${rv.received[i] ? 'Already received — click to receive more of it' : 'Click to receive this line'}">
-      <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}${rv.received[i] ? ' ✓' : ''}
-    </button>`).join('');
-}
-
-$('rvOrder').addEventListener('click', (e) => {
-  const b = e.target.closest('.rv-item');
-  if (!b || !rv || rv.edit) return; // edit mode: the chips are informational
-  rvLoadItemAt(Number(b.dataset.i));
-  $('rvQty').focus();
-});
-
-function rvLoadItemAt(i) {
-  rv.itemIdx = i;
-  rvLoadItem(rv.items[i] || null);
-}
-
-function rvLoadItem(it) {
-  if (it) {
-    rv.sku = it.sku;
-    rv.title = it.title || '';
-    rv.price = it.price || 0;
-    rv.targets = it.targets || null;
-    $('rvSku').value = it.sku;
-    $('rvQty').value = String(it.quantity || 1);
-    $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
-  } else {
-    rv.itemIdx = -1;
-    rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
-    $('rvSku').value = '';
-    $('rvQty').value = '1';
-    $('rvPrice').value = '';
-  }
-  rv.condition = 'new';
-  rv.pick = '';
-  $('rvPick').value = '';
-  const cust = $('rvCust').value.trim();
-  $('rvMatched').textContent = `matched${cust ? ` · ${cust}` : ''}`;
-  $('rvMatched').hidden = rv.unmatched;
-  rvThumbUpdate();
-  rvRenderCond();
-  rvRenderOrder();
+  const cur = String(rv.sku || '').trim().toUpperCase();
+  const hit = rv.items.some(it => String(it.sku || '').toUpperCase() === cur);
+  $('rvOrder').innerHTML = rv.items.map(it => `
+    <span class="rv-item is-info ${String(it.sku || '').toUpperCase() === cur ? 'on' : ''}"
+      title="${esc(it.title || '')}${it.price ? ` — $${Number(it.price).toFixed(2)}` : ''}">
+      <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}
+    </span>`).join('')
+    + (cur && !hit ? '<span class="rv-order-note">returned SKU isn’t one of the ordered lines</span>' : '');
 }
 
 // pills + the live "stock lands on …" line; a missing target opens the
@@ -3316,35 +3210,10 @@ $('rvCreate').addEventListener('click', async () => {
   rvRenderCond();
 });
 
-$('rvPo').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  e.preventDefault();
-  rvLookup();
-});
-
-// clicking off the PO# looks the order up by itself — no Enter needed
-// (owner request 2026-08-11); one attempt per typed value
-let rvLastLookup = '';
-$('rvPo').addEventListener('blur', () => {
-  const po = $('rvPo').value.trim();
-  if (!rv || rv.edit || rv.busy || !po || po === rvLastLookup || !rv.unmatched) return;
-  rvLastLookup = po;
-  rvLookup();
-});
-
-// editing the PO after a match voids the match — a stale orderId must never
-// ride along with a hand-changed number
+// a hand-changed PO no longer matches the displayed order lines
 $('rvPo').addEventListener('input', () => {
   if (!rv) return;
-  // edit mode: a hand-changed PO no longer matches the displayed order lines
-  if (rv.edit) { rv.items = []; rvRenderOrder(); return; }
-  rv.orderId = null;
-  rv.source = '';
-  rv.unmatched = true;
   rv.items = [];
-  rv.received = [];
-  rv.itemIdx = -1;
-  $('rvMatched').hidden = true;
   rvRenderOrder();
 });
 
@@ -3354,100 +3223,41 @@ $('rvSku').addEventListener('input', () => {
   rv.targets = null; // typed text is not a picked item; targets re-resolve on pick
   rv.pick = '';
   $('rvPick').value = '';
-  // a hand-typed SKU is no longer "that order line": receiving it must not
-  // tick an ordered chip, and the ordered-qty hint no longer applies
-  rv.itemIdx = -1;
   rvRenderOrder();
   rvThumbUpdate();
   rvRenderCond();
 });
 
+// Save: the qty-aware corrections engine re-resolves the target server-side
 async function rvCommit() {
   if (!rv || rv.busy) return false;
   const po = $('rvPo').value.trim();
   if (!po) { rvFeedback('PO# is required.'); $('rvPo').focus(); return false; }
   const sku = $('rvSku').value.trim().toUpperCase();
-  if (rv.edit) {
-    // edit mode: the qty-aware corrections engine re-resolves the target
-    const eqty = Number($('rvQty').value);
-    if (sku && (!Number.isInteger(eqty) || eqty < 1)) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
-    rv.busy = true;
-    $('rvSave').disabled = true;
-    rvFeedback('Saving…', true);
-    const res = await api.returnsEditUnit({
-      id: rv.edit.rid, itemIndex: rv.edit.ii,
-      po, day: $('rvDay').value.trim(), customer: $('rvCust').value.trim(),
-      tracking: $('rvTrk').value.trim(), sku,
-      condition: rv.condition, note: $('rvNote').value.trim(),
-      units: $('rvQty').value.trim(), receivedBy: $('rvBy').value.trim(),
-      price: retMoney($('rvPrice').value), settle: retMoney($('rvSettle').value),
-    }).catch(e => ({ ok: false, error: e.message }));
-    rv.busy = false;
-    $('rvSave').disabled = false;
-    if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not save.'); return false; }
-    rvFeedback('');
-    toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
-    loadRetPast();
-    return true;
-  }
-  let target = '';
-  let qty = 1;
-  if (sku) {
-    const known = rv.condition === 'new' ? sku : ((rv.targets || {})[rv.condition] || '');
-    target = known || String(rv.pick || '').trim();
-    if (!target) {
-      rvFeedback(`No ${retCondLabel(rv.condition).toLowerCase()} listing for ${sku} — pick or create it first.`);
-      return false;
-    }
-    if (recvLookup === 'ready' && !recvLookupExact(target)) {
-      rvFeedback(`Unknown SKU: ${target}. Pick one from the inventory.`);
-      return false;
-    }
-    qty = Number($('rvQty').value);
-    if (!Number.isInteger(qty) || qty < 1) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
-  }
-  const by = $('rvBy').value.trim();
-  if (by) retReceivedBy = by;
+  const eqty = Number($('rvQty').value);
+  if (sku && (!Number.isInteger(eqty) || eqty < 1)) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
   rv.busy = true;
   $('rvSave').disabled = true;
-  rvFeedback('Receiving…', true);
-  const res = await rvCreate({
-    orderId: rv.orderId || undefined,
-    orderNumber: po,
-    source: rv.source,
-    customer: $('rvCust').value.trim(),
-    tracking: $('rvTrk').value.trim(),
-    receivedBy: by,
-    unmatched: !!rv.unmatched,
-    note: sku ? '' : $('rvNote').value.trim(),
-    items: sku ? [{
-      sku, condition: rv.condition, targetSku: target, qty,
-      price: retMoney($('rvPrice').value) || rv.price,
-      settle: retMoney($('rvSettle').value),
-      note: $('rvNote').value.trim(),
-    }] : [],
+  rvFeedback('Saving…', true);
+  const res = await api.returnsEditUnit({
+    id: rv.edit.rid, itemIndex: rv.edit.ii,
+    po, day: $('rvDay').value.trim(), customer: $('rvCust').value.trim(),
+    tracking: $('rvTrk').value.trim(), sku,
+    condition: rv.condition, note: $('rvNote').value.trim(),
+    units: $('rvQty').value.trim(), receivedBy: $('rvBy').value.trim(),
+    price: retMoney($('rvPrice').value), settle: retMoney($('rvSettle').value),
   }).catch(e => ({ ok: false, error: e.message }));
   rv.busy = false;
   $('rvSave').disabled = false;
-  if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not receive.'); return false; }
+  if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not save.'); return false; }
   rvFeedback('');
-  toast(sku ? `Received ${qty} × ${target}` : `Logged return ${po}`);
+  toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
   loadRetPast();
   return true;
 }
 
-// Receive commits the line. With other order lines still unreceived the
-// popup STAYS OPEN on the next one ("Receive & next" retired 2026-08-07,
-// owner request — one button does the sensible thing); otherwise it closes.
 $('rvSave').addEventListener('click', async () => {
-  if (!(await rvCommit())) return;
-  if (rv.itemIdx >= 0) rv.received[rv.itemIdx] = true;
-  const next = rv.items.findIndex((_, i) => !rv.received[i]);
-  if (next < 0) { $('retRecvDialog').close(); return; }
-  $('rvNote').value = '';
-  $('rvSettle').value = '';
-  rvLoadItemAt(next);
-  $('rvQty').focus();
+  if (await rvCommit()) $('retRecvDialog').close();
 });
 
 $('rvCancel').addEventListener('click', () => $('retRecvDialog').close());
@@ -3457,14 +3267,11 @@ $('rvCancel').addEventListener('click', () => $('retRecvDialog').close());
 // and made rvCommit bail through its silent !rv guard (the [false,"",""]
 // flake, 6 occurrences). Only wipe when the dialog is really closed.
 $('retRecvDialog').addEventListener('close', () => { if (!$('retRecvDialog').open) rv = null; });
-$('retAddBtn').addEventListener('click', () => retOpenRecv());
 
 // live inventory suggestions in the popup's two SKU fields
 makeCombo($('rvSku'), document.querySelector('.rv-combo .combo-list'), async (item) => {
   if (!rv) return;
   rv.sku = item.sku;
-  rv.title = item.title || '';
-  if (!rv.price) rv.price = Number(item.retailPrice) || 0;
   rv.pick = '';
   $('rvPick').value = '';
   $('rvSku').value = item.sku;
