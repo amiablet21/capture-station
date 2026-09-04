@@ -262,6 +262,33 @@ module.exports = async function run({ app, win, db, clipboard }) {
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
 
+    // 23e. Walmart settlement extraction (Dispute Settlement autofill):
+    // an explicit totalRefundAmount wins, the refund subtree is the
+    // fallback, and the expected-charge total only counts once the line
+    // status says the refund actually happened (open disputes stay blank)
+    const { extractSettlement } = require('./walmart.js');
+    const sl = extractSettlement([{ returnOrderLines: [
+      { item: { sku: 'A' }, totalRefundAmount: { currencyAmount: -126.99, currencyUnit: 'USD' }, status: 'REFUNDED' },
+      { item: { sku: 'B' }, refund: { refundLines: [{ refundCharges: [{ refundAmount: { currencyAmount: -45.5 } }] }] } },
+      { item: { sku: 'C' }, charges: [{ chargeAmount: { currencyAmount: 99.99 } }], status: 'INITIATED' },
+      { item: { sku: 'D' }, charges: [{ chargeAmount: { currencyAmount: 80 } }, { charge: { chargeAmount: { currencyAmount: 5.5 } } }], status: 'REFUNDED' },
+    ] }]);
+    check('walmart settlement: explicit refunds + status-gated charge fallback',
+      sl.length === 3
+        && sl[0].sku === 'A' && sl[0].amount === 126.99
+        && sl[1].sku === 'B' && sl[1].amount === 45.5
+        && sl[2].sku === 'D' && sl[2].amount === 85.5,
+      sl);
+    // no Walmart keys on this profile: the sync is a soft no, not an error
+    // (checked in sync mode — capture-only has its own refusal test below)
+    const cfgMod = require('./config');
+    const prevCap = cfgMod.load().captureOnly;
+    cfgMod.save({ captureOnly: false });
+    res = await exec('api.returnsSettleSync()');
+    cfgMod.save({ captureOnly: prevCap });
+    check('settleSync without Walmart keys reports notConfigured',
+      res && res.ok === false && res.notConfigured === true, res);
+
     // 24. entry row (RETURNS-2 sheet, 2026-09-04): a failed PO lookup falls
     // into the hand-entry path — the hint says so, the row stays unmatched
     await exec(`loadRetPast()`);
@@ -458,6 +485,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('returns:mappings refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.returnsMapSet('A', 'openbox', 'B')`);
     check('returns:mapSet refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec('api.returnsSettleSync()');
+    check('returns:settleSync refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.returnsMapDelete('A', 'openbox')`);
     check('returns:mapDelete refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 

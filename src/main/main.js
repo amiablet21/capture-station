@@ -8,6 +8,7 @@ const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
+const { WalmartClient } = require('./walmart');
 
 let win = null;
 let clipboardTimer = null;
@@ -2264,6 +2265,74 @@ function registerIpc() {
     }
   });
   ipcMain.handle('returns:list', () => db.listReturns());
+
+  // Settings' Walmart "Test connection": an auth round-trip proves the keys
+  ipcMain.handle('walmart:test', async (_e, { clientId, clientSecret }) => {
+    try {
+      await new WalmartClient({ clientId, clientSecret }).auth();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Dispute Settlement autofill (owner request 2026-09-04, mirroring the
+  // RETURNS-2 Google Sheet's Walmart-API column): walk recent Walmart
+  // returns still missing a settlement, ask Walmart what it refunded on
+  // each, and stamp the amount onto the matching line. Budgeted per pass so
+  // the page stays snappy; the next Refresh continues where it left off.
+  ipcMain.handle('returns:settleSync', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const { clientId, clientSecret } = cfg.walmart || {};
+    if (!clientId || !clientSecret) {
+      return { ok: false, notConfigured: true, error: 'Walmart API credentials are not configured (Settings).' };
+    }
+    const client = new WalmartClient(cfg.walmart);
+    const isWalmart = (r) => /walmart/i.test(r.source || '') || /^\d{15}$/.test(String(r.order_number || '').trim());
+    let filled = 0;
+    let checked = 0;
+    let lastError = '';
+    for (const r of db.listReturns(400)) {
+      if (checked >= 25) break;
+      if (!r.items.length || !isWalmart(r)) continue;
+      if (!r.items.some(i => !(Number(i.settle) > 0))) continue; // all lines settled
+      checked++;
+      let lines;
+      try {
+        lines = await client.settlementForPo(r.order_number);
+      } catch (e) {
+        lastError = e.message;
+        // a failing token or a 401 will fail every row the same way — stop
+        if (!e.status || e.status === 401 || e.status === 403) break;
+        continue;
+      }
+      if (!lines.length) continue;
+      const items = r.items.slice();
+      let changed = false;
+      for (let ii = 0; ii < items.length; ii++) {
+        const it = items[ii];
+        if (Number(it.settle) > 0) continue;
+        // match the refund line by SKU; a single-line return takes a
+        // single refund line even when the SKU strings differ
+        const bySku = lines.find(l => l.sku && it.sku && l.sku.toLowerCase() === String(it.sku).toLowerCase());
+        const line = bySku || (items.length === 1 && lines.length === 1 ? lines[0] : null);
+        if (!line) continue;
+        items[ii] = { ...it, settle: line.amount };
+        changed = true;
+      }
+      if (!changed) continue;
+      db.saveReturn(r.id, {
+        orderNumber: r.order_number, createdAt: r.created_at,
+        customer: r.customer, tracking: r.tracking,
+        note: r.note, items, unmatched: r.unmatched,
+        receivedBy: r.received_by,
+      });
+      filled++;
+    }
+    if (filled) writeReturnsCsv();
+    return { ok: true, filled, checked, error: lastError };
+  });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
   // rendered here (qrcode lib) and handed over as a data URL; po locks the

@@ -956,6 +956,10 @@ async function openSettings() {
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
+  $('setWmId').value = (cfg.walmart || {}).clientId || '';
+  $('setWmSecret').value = (cfg.walmart || {}).clientSecret || '';
+  $('testWmResult').textContent = '';
+  $('testWmResult').className = 'test-result';
   const sel = $('setLocation');
   sel.innerHTML = cfg.linnworks.locationId
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
@@ -1009,6 +1013,18 @@ $('testConnBtn').addEventListener('click', async () => {
   }
 });
 
+$('testWmBtn').addEventListener('click', async () => {
+  const out = $('testWmResult');
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.testWalmart({
+    clientId: $('setWmId').value.trim(),
+    clientSecret: $('setWmSecret').value.trim(),
+  });
+  out.textContent = res.ok ? 'Connected to Walmart Marketplace' : res.error;
+  out.classList.add(res.ok ? 'is-ok' : 'is-fail');
+});
+
 $('chooseCsvBtn').addEventListener('click', async () => {
   const res = await api.chooseCsvFolder();
   if (res.folder) $('setCsvFolder').textContent = res.folder;
@@ -1043,6 +1059,10 @@ $('settingsSave').addEventListener('click', async () => {
       token: $('setToken').value.trim(),
       locationId: sel.value,
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
+    },
+    walmart: {
+      clientId: $('setWmId').value.trim(),
+      clientSecret: $('setWmSecret').value.trim(),
     },
     dryRun: $('setDryRun').checked,
     shipCutoff: /^\d{1,2}:\d{2}$/.test($('setShipCutoff').value.trim()) ? $('setShipCutoff').value.trim() : '16:00',
@@ -3008,6 +3028,7 @@ function enterReturns() {
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
   ensureInventory(); // the entry row's and popup's SKU combos need it
+  retSettleSync(); // Walmart fills the Dispute Settlement column
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
     // the entry row's initials + date follow along when the page opens
@@ -3016,6 +3037,35 @@ function enterReturns() {
       wsEls.date.textContent = new Date().toISOString().slice(0, 10);
     }
   });
+}
+
+// Dispute Settlement autofill (owner 2026-09-04, like the RETURNS-2 sheet's
+// Walmart-API column): main asks Walmart what it refunded on each recent
+// return still missing a settlement and stamps the amounts into the log.
+// Quiet by nature — no keys configured just means the column stays manual;
+// only a MANUAL Refresh surfaces that (and any sync error) in the hint.
+let retSettleLast = 0;
+let retSettleBusy = false;
+
+async function retSettleSync(manual) {
+  if (retSettleBusy || (state && state.captureOnly)) return;
+  if (!manual && Date.now() - retSettleLast < 10 * 60000) return;
+  retSettleBusy = true;
+  retSettleLast = Date.now();
+  const res = await api.returnsSettleSync().catch(() => null);
+  retSettleBusy = false;
+  if (!res) return;
+  if (!res.ok) {
+    if (manual && res.notConfigured) wsHint('Add the Walmart API keys in Settings to auto-fill Dispute Settlement.', false);
+    else if (manual && res.error) wsHint(res.error, false);
+    return;
+  }
+  if (res.filled) {
+    toast(`Dispute settlement filled on ${res.filled} return${res.filled === 1 ? '' : 's'} from Walmart`);
+    loadRetPast();
+  } else if (manual && res.error) {
+    wsHint(res.error, false);
+  }
 }
 
 function retCondLabel(key) {
@@ -6885,6 +6935,7 @@ $("rnSave").addEventListener("click", async () => {
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
   loadUnlisted(true); // fresh scan: cards update the moment it lands
+  retSettleSync(true); // manual pass: also re-ask Walmart for settlements
   toast("Refreshing the log and listing scan…", 2000);
 });
 $("ebRefresh").addEventListener("click", () => {
