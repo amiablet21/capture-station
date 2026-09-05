@@ -3297,15 +3297,15 @@ function wsBlank() {
   };
 }
 
-// the guidance strip under the entry row (V1): quiet how-to by default,
-// swapped for lookup status / errors while something is happening
-const WS_HINT_DEFAULT = 'A matched PO fills <b>Customer · Tracking · SKU · Price · Dispute $</b> by itself — <span class="ws-kbd">Enter</span> receives when you’re done';
-
+// the strip under the entry row shows ONLY while something needs saying —
+// lookup status, a blocked receive — and disappears again (the always-on
+// how-to line was noise: owner, 2026-09-05)
 function wsHint(msg, ok = true) {
   const el = $('wsHintCell');
   if (!el) return;
-  el.innerHTML = msg ? esc(msg) : WS_HINT_DEFAULT;
+  el.textContent = msg;
   el.className = `ws-hintcell${msg && !ok ? ' is-fail' : ''}`;
+  el.closest('tr').hidden = !msg;
 }
 
 function retEntryRow() {
@@ -3366,14 +3366,16 @@ function retEntryRow() {
   return tr;
 }
 
-// the guidance strip is its own singleton row, right under the entry row
+// the status strip is its own singleton row, right under the entry row,
+// hidden until wsHint has something to show
 let retEntryHintTr = null;
 
 function retEntryHintRow() {
   if (retEntryHintTr) return retEntryHintTr;
   const tr = document.createElement('tr');
   tr.className = 'ws-hint-tr';
-  tr.innerHTML = `<td id="wsHintCell" class="ws-hintcell" colspan="13">${WS_HINT_DEFAULT}</td>`;
+  tr.hidden = true;
+  tr.innerHTML = '<td id="wsHintCell" class="ws-hintcell" colspan="13"></td>';
   retEntryHintTr = tr;
   return tr;
 }
