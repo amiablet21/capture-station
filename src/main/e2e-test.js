@@ -290,22 +290,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
     })()`);
     await exec(`ws.sku = 'S25-128GB-NAVY'; $('wsSku').value = 'S25-128GB-NAVY';
       ws.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      ws.condition = 'new'; $('wsCond').value = 'new';
-      wsRenderCond();`);
+      wsSetCond('new');`);
     const conds = await exec(`[
-      document.querySelectorAll('#wsCond option').length,
-      $('wsCond').value,
+      document.querySelectorAll('#wsCondMenu .ws-cond-mi').length,
+      $('wsCond').dataset.cond,
       $('wsTarget').hidden,
       $('wsFix').hidden,
     ]`);
     check('entry row: 4 conditions, New selected, no redirect line',
       conds[0] === 4 && conds[1] === 'new' && conds[2] === true && conds[3] === true,
       conds);
-    await exec(`ws.condition = 'openbox'; $('wsCond').value = 'openbox'; wsRenderCond()`);
+    await exec(`wsSetCond('openbox')`);
     let tgt = await exec(`[$('wsTarget').hidden, $('wsTarget').textContent, $('wsFix').hidden]`);
     check('a mapped condition auto-matches its listing, no fix row',
       tgt[0] === false && /S25-128GB-NAVY-OPENBOX/.test(tgt[1]) && tgt[2] === true, tgt);
-    await exec(`ws.condition = 'used'; $('wsCond').value = 'used'; wsRenderCond()`);
+    await exec(`wsSetCond('used')`);
     tgt = await exec(`[
       $('wsTarget').className,
       $('wsFix').hidden,
@@ -388,7 +387,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     const entryBits = await exec(`[
       !!document.querySelector('#retPastBox tr.ws-row'),
       !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
-      document.querySelectorAll('#retPastBox tr.ws-row #wsCond option').length,
+      document.querySelectorAll('#retPastBox tr.ws-row #wsCondMenu .ws-cond-mi').length,
       !!document.querySelector('#retPastBox tr.ws-row #wsSave'),
       (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
     ]`);
@@ -409,7 +408,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       ws.unmatched = true; ws.sku = 'S25-128GB-NAVY';
       $('wsSku').value = 'S25-128GB-NAVY';
       ws.targets = { new: 'S25-128GB-NAVY', openbox: '', used: '', scrap: '' };
-      ws.condition = 'new'; $('wsCond').value = 'new';
+      wsSetCond('new');
       $('wsQty').value = '1'; $('wsPrice').value = '150'; $('wsSettle').value = '45.50'; $('wsBy').value = 'IM';
       $('wsSave').click(); 0;`);
     // commit -> clear is async: poll instead of a fixed sleep (the popup's
@@ -1206,7 +1205,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
         ];
         ws.received = [false, false];
         wsLoadItemAt(0);
-        ws.condition = 'openbox'; $('wsCond').value = 'openbox';
+        wsSetCond('openbox');
         $('wsBy').value = 'IM'; $('wsNote').value = 'box opened once, resealed';
         wsRenderCond();`);
       await sleep(400);
@@ -1215,7 +1214,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       fs.writeFileSync(retShot, img.toPNG());
       console.log(`SHOT ${retShot}`);
       // the unmapped state: Used has no listing -> pick box + create button
-      await exec(`ws.condition = 'used'; $('wsCond').value = 'used'; ws.pick = ''; $('wsPick').value = ''; wsRenderCond();`);
+      await exec(`wsSetCond('used')`);
       await sleep(250);
       img = await win.webContents.capturePage();
       const retFixShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-entry-fix.png');

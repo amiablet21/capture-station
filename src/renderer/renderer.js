@@ -3335,9 +3335,19 @@ function retEntryRow() {
       <div id="wsOrder" class="ws-order" hidden></div>
     </td>
     <td class="ws-cell ws-condcell">
-      <select id="wsCond" class="ws-cond" aria-label="Condition">
-        ${RET_CONDS.map(c => `<option value="${c.key}">${c.label}</option>`).join('')}
-      </select>
+      <!-- custom condition dropdown, design A from variants/ret-dropdown.html
+           (owner 2026-09-05): the closed state is the condition's pastel
+           pill, the menu previews where each condition's stock would land -->
+      <div class="ws-condwrap">
+        <button type="button" id="wsCond" class="ws-condbtn" aria-haspopup="listbox" aria-expanded="false" aria-label="Condition"></button>
+        <div id="wsCondMenu" class="ws-cond-menu is-fixed" role="listbox" hidden>
+          ${RET_CONDS.map(c => `
+          <button type="button" class="ws-cond-mi" role="option" data-cond="${c.key}">
+            <span class="ret-dd-dot is-${c.key}"></span>${c.label}
+            <span class="ws-mi-tgt mono" data-tgt="${c.key}"></span>
+          </button>`).join('')}
+        </div>
+      </div>
       <div id="wsTarget" class="ws-target" hidden></div>
       <div id="wsFix" class="ws-fix" hidden>
         <div class="combo ws-pick-combo">
@@ -3362,14 +3372,65 @@ function retEntryRow() {
   const el = (id) => tr.querySelector(`#${id}`);
   wsEls = {
     po: el('wsPo'), cust: el('wsCust'), trk: el('wsTrk'), date: el('wsDate'),
-    sku: el('wsSku'), order: el('wsOrder'), cond: el('wsCond'), target: el('wsTarget'),
+    sku: el('wsSku'), order: el('wsOrder'), cond: el('wsCond'), condMenu: el('wsCondMenu'), target: el('wsTarget'),
     fix: el('wsFix'), pick: el('wsPick'), create: el('wsCreate'), qty: el('wsQty'),
     price: el('wsPrice'), by: el('wsBy'), settle: el('wsSettle'), note: el('wsNote'), save: el('wsSave'),
   };
   wsEls.date.textContent = retDateUS(new Date().toISOString());
   wsEls.by.value = retReceivedBy;
+  wsCondBtnRender();
   wireEntryRow(tr);
   return tr;
+}
+
+/* ---- the condition dropdown (custom: the native select couldn't carry
+   the dots, colors or target previews) ---- */
+
+// closed state: the current condition's pastel pill + a caret
+function wsCondBtnRender() {
+  const c = RET_CONDS.find(x => x.key === ws.condition) || RET_CONDS[0];
+  wsEls.cond.dataset.cond = c.key;
+  wsEls.cond.className = `ws-condbtn is-${c.key}`;
+  wsEls.cond.innerHTML = `<span class="ret-dd-dot is-${c.key}"></span>${c.label}<span class="ws-cond-caret">▾</span>`;
+}
+
+// one place changes the condition — the menu, tests, and the row loaders
+function wsSetCond(cond) {
+  ws.condition = cond;
+  ws.pick = '';
+  wsEls.pick.value = '';
+  wsCondBtnRender();
+  wsRenderCond();
+}
+
+// where each condition's stock would land, refreshed on every open:
+// "same SKU" for New, the mapped listing, or an amber "pick / create…"
+function wsCondMenuOpen() {
+  const menu = wsEls.condMenu;
+  for (const mi of menu.querySelectorAll('.ws-cond-mi')) {
+    const key = mi.dataset.cond;
+    mi.classList.toggle('is-sel', key === ws.condition);
+    const tgt = mi.querySelector('[data-tgt]');
+    if (!ws.sku) { tgt.textContent = ''; tgt.className = 'ws-mi-tgt mono'; continue; }
+    const known = key === 'new' ? ws.sku : ((ws.targets || {})[key] || '');
+    tgt.textContent = key === 'new' ? '→ same SKU' : (known ? `→ ${shorten(known, 20)}` : 'pick / create…');
+    tgt.className = `ws-mi-tgt mono${known ? '' : ' is-missing'}`;
+    if (known && key !== 'new') tgt.title = `Stock lands on ${known}`;
+  }
+  // the sheet's scroll container clips absolute children — anchor to the
+  // viewport, same trick as the SKU combos
+  const r = wsEls.cond.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 268))}px`;
+  menu.style.minWidth = `${Math.max(220, Math.round(r.width))}px`;
+  const below = r.bottom + 4;
+  menu.style.top = `${below + 170 > window.innerHeight ? Math.max(8, r.top - 174) : below}px`;
+  menu.hidden = false;
+  wsEls.cond.setAttribute('aria-expanded', 'true');
+}
+
+function wsCondMenuClose() {
+  wsEls.condMenu.hidden = true;
+  wsEls.cond.setAttribute('aria-expanded', 'false');
 }
 
 // the status strip is its own singleton row, right under the entry row,
@@ -3391,7 +3452,7 @@ function wsReset() {
   wsLastLookup = '';
   for (const k of ['po', 'cust', 'trk', 'sku', 'pick', 'price', 'settle', 'note']) wsEls[k].value = '';
   wsEls.qty.value = '1';
-  wsEls.cond.value = 'new';
+  wsCondBtnRender(); // ws is blank again, the pill shows New
   wsEls.by.value = retReceivedBy; // initials persist across returns
   wsEls.date.textContent = retDateUS(new Date().toISOString());
   wsRenderOrder();
@@ -3455,11 +3516,7 @@ function wsLoadItem(it) {
     wsEls.price.value = '';
     wsEls.settle.value = '';
   }
-  ws.condition = 'new';
-  wsEls.cond.value = 'new';
-  ws.pick = '';
-  wsEls.pick.value = '';
-  wsRenderCond();
+  wsSetCond('new');
   wsRenderOrder();
 }
 
@@ -3628,11 +3685,34 @@ function wireEntryRow(tr) {
     wsEls.pick.value = item.sku;
     wsRenderCond();
   });
-  wsEls.cond.addEventListener('change', () => {
-    ws.condition = wsEls.cond.value;
-    ws.pick = '';
-    wsEls.pick.value = '';
-    wsRenderCond();
+  wsEls.cond.addEventListener('click', () => {
+    if (wsEls.condMenu.hidden) wsCondMenuOpen(); else wsCondMenuClose();
+  });
+  wsEls.cond.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (wsEls.condMenu.hidden) { wsCondMenuOpen(); wsEls.condMenu.querySelector('.ws-cond-mi.is-sel, .ws-cond-mi').focus(); }
+    }
+    if (e.key === 'Escape') wsCondMenuClose();
+  });
+  wsEls.condMenu.addEventListener('click', (e) => {
+    const mi = e.target.closest('.ws-cond-mi');
+    if (!mi) return;
+    wsSetCond(mi.dataset.cond);
+    wsCondMenuClose();
+    wsEls.cond.focus();
+  });
+  wsEls.condMenu.addEventListener('keydown', (e) => {
+    const items = [...wsEls.condMenu.querySelectorAll('.ws-cond-mi')];
+    const idx = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(idx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+    }
+    if (e.key === 'Escape') { wsCondMenuClose(); wsEls.cond.focus(); }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!wsEls.condMenu.hidden && !e.target.closest('.ws-condwrap')) wsCondMenuClose();
   });
   wsEls.create.addEventListener('click', () => {
     if (!ws.sku) return;
