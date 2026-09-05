@@ -30,15 +30,19 @@ if (process.env.CAPTURE_E2E === '1') {
   app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 }
 
-if (!IS_TEST_RUN) {
-  const gotLock = app.requestSingleInstanceLock();
-  if (!gotLock) {
-    app.quit();
-  } else {
-    app.on('second-instance', () => {
-      if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
-    });
-  }
+// A second copy must NEVER touch the database. quit() only QUEUES shutdown:
+// ready still fired, and the synchronous health-check dialog then blocked the
+// event loop — so the "closing" copy sat fully alive, dialog up, importers
+// running against the live db beside the first instance (the 2026-09-05
+// corruption, and the duplicate-order minting before it). exit() ends the
+// process before any of that starts, and the whenReady guard backstops it.
+const SECOND_INSTANCE = !IS_TEST_RUN && !app.requestSingleInstanceLock();
+if (SECOND_INSTANCE) {
+  app.exit(0);
+} else if (!IS_TEST_RUN) {
+  app.on('second-instance', () => {
+    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  });
 }
 
 /* ---------- state ---------- */
@@ -3982,6 +3986,7 @@ function checkDbHealth() {
 }
 
 app.whenReady().then(() => {
+  if (SECOND_INSTANCE) return; // exit(0) already fired; never open the db
   if (IS_TEST_RUN) {
     // isolated throwaway data dir for automated tests
     app.setPath('userData', path.join(app.getPath('temp'), `capture-station-e2e-${Date.now()}`));
