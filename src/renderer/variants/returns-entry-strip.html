@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns entry — the detail strip</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { max-width: 1560px; }
+  h2 { font-size: 14px; margin: 22px 0 4px; }
+  .note { font-size: 12px; color: var(--muted); margin: 0 0 10px; max-width: 920px; }
+
+  .sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  th { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #fff; text-align: left; padding: 8px 10px; background: #1F9D5B; border-right: 1px solid rgba(255,255,255,.22); white-space: nowrap; }
+  th:first-child { background: #17854C; }
+  th.num { text-align: right; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  .m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .g { width: 34px; text-align: center; font-family: var(--mono); font-size: 10.5px; }
+
+  .entry td { background: #F2FAF5; padding-top: 9px; padding-bottom: 9px; }
+  .entry .g { color: var(--accent); font-weight: 700; font-size: 15px; }
+  .in { width: 100%; border: none; background: transparent; font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .in::placeholder { color: var(--faint); }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 3px 11px; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .pill.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); } .pill.ob .dot { background: #1F6C9F; }
+  .pill.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .pill.used .dot { background: #B8860B; }
+  .caret { font-size: 9px; opacity: .6; }
+  .gobtn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: var(--accent); color: #fff; border-radius: 999px; font-size: 13px; }
+
+  /* THE detail strip: everything contextual lives on this ONE line */
+  .strip td { background: #F2FAF5; border-bottom: 2px solid #1F9D5B; font-size: 11.5px; color: var(--muted); padding: 6px 12px 8px; white-space: normal; }
+  .strip .lab { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin-right: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 2px 9px; margin-right: 4px; }
+  .chip.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .sep { margin: 0 10px; color: var(--border); }
+  .lands { color: var(--accent-soft-text); font-weight: 600; }
+  .lands .m2 { font-family: var(--mono); font-size: 11px; }
+  .warnb { font-size: 10px; font-weight: 700; color: var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+  .amber { color: var(--badge-yellow-text); font-weight: 600; }
+  .pickin { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; background: var(--surface); color: var(--faint); margin: 0 6px; }
+  .mkbtn { font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: var(--surface); color: var(--text); }
+  .mkbtn .m2 { font-family: var(--mono); font-size: 10.5px; }
+
+  /* simplified dropdown: dots + names only */
+  .menu { position: absolute; margin-top: 4px; width: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); overflow: hidden; box-shadow: 0 8px 24px rgba(47,52,55,.12); z-index: 5; }
+  .mi { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12.5px; background: var(--surface); border-bottom: 1px solid var(--border-soft); }
+  .mi:last-child { border-bottom: none; }
+  .mi .dot { width: 9px; height: 9px; border-radius: 999px; }
+  .mi.sel { background: var(--accent-soft); font-weight: 600; }
+  .condcell { position: relative; overflow: visible !important; }
+</style>
+</head>
+<body>
+
+<h1 style="font-size:16px;margin:6px 0 2px">Entry row decluttered — one row, one strip</h1>
+<p class="note">The entry row stays ONE line tall, always: inputs only. Everything contextual — the ordered lines,
+where stock lands, the missing-listing fix — moves onto a single strip right under it, which only appears once a PO
+matches. The dropdown slims to dots + names; the strip already says where stock lands.</p>
+
+<h2>State 1 — PO matched, Open box picked (auto-matched)</h2>
+<div class="sheet">
+<table>
+  <colgroup><col style="width:34px"><col style="width:150px"><col style="width:150px"><col style="width:125px"><col style="width:96px"><col style="width:190px"><col style="width:150px"><col style="width:52px"><col style="width:80px"><col style="width:56px"><col style="width:96px"><col><col style="width:56px"></colgroup>
+  <thead><tr><th class="g">#</th><th>PO #</th><th>Customer Name</th><th>Tracking #</th><th>Date</th><th>Returned SKU</th><th>Condition</th><th class="num">Units</th><th class="num">Price</th><th>By</th><th class="num">Dispute $</th><th>Notes</th><th></th></tr></thead>
+  <tbody>
+    <tr class="entry">
+      <td class="g">+</td>
+      <td class="m">119120772326237</td>
+      <td style="font-family:var(--font)">Samantha Getter</td>
+      <td class="m">528849912350</td>
+      <td class="m mut">09/05/2026</td>
+      <td class="m">S25-FE-128GB-JETBLACK</td>
+      <td><span class="pill ob"><span class="dot"></span>Open box <span class="caret">▾</span></span></td>
+      <td class="m num">1</td>
+      <td class="m num">449.00</td>
+      <td class="m" style="font-weight:600">IM</td>
+      <td class="m num">449.00</td>
+      <td><input class="in" placeholder="case: 12345…" style="font-family:var(--font)" /></td>
+      <td style="text-align:center"><span class="gobtn">✓</span></td>
+    </tr>
+    <tr class="strip"><td colspan="13">
+      <span class="lab">Ordered</span>
+      <span class="chip on">S25-FE-128GB-JETBLACK ×1</span>
+      <span class="sep">│</span>
+      <span class="lands">lands on <span class="m2">OPEN-BOX-S25-FE-128GB</span></span><span class="warnb">NOT LISTED</span>
+    </td></tr>
+    <tr>
+      <td class="g mut">1</td><td class="m">119120671019601…</td><td class="mut">—</td><td class="m mut">—</td><td class="m mut">09/04/2026</td>
+      <td class="m">S26-ULTRA-512GB-BLACK</td>
+      <td><span class="pill used" style="cursor:default"><span class="dot"></span>Used</span></td>
+      <td class="m num">2</td><td class="m num mut">1,099.00</td><td class="m">IM</td><td class="m num" style="color:var(--pos-text);font-weight:700">765.98</td>
+      <td class="mut">scuffed corner…</td><td></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>State 2 — Used has no listing: the strip carries the fix</h2>
+<div class="sheet" style="overflow:visible">
+<table>
+  <colgroup><col style="width:34px"><col style="width:150px"><col style="width:150px"><col style="width:125px"><col style="width:96px"><col style="width:190px"><col style="width:150px"><col style="width:52px"><col style="width:80px"><col style="width:56px"><col style="width:96px"><col><col style="width:56px"></colgroup>
+  <thead><tr><th class="g">#</th><th>PO #</th><th>Customer Name</th><th>Tracking #</th><th>Date</th><th>Returned SKU</th><th>Condition</th><th class="num">Units</th><th class="num">Price</th><th>By</th><th class="num">Dispute $</th><th>Notes</th><th></th></tr></thead>
+  <tbody>
+    <tr class="entry">
+      <td class="g">+</td>
+      <td class="m">119120772326237</td>
+      <td style="font-family:var(--font)">Samantha Getter</td>
+      <td class="m">528849912350</td>
+      <td class="m mut">09/05/2026</td>
+      <td class="m">S25-FE-128GB-JETBLACK</td>
+      <td class="condcell"><span class="pill used"><span class="dot"></span>Used <span class="caret">▾</span></span>
+        <div class="menu">
+          <div class="mi"><span class="dot" style="background:#2E7D32"></span>New</div>
+          <div class="mi"><span class="dot" style="background:#1F6C9F"></span>Open box</div>
+          <div class="mi sel"><span class="dot" style="background:#B8860B"></span>Used</div>
+          <div class="mi"><span class="dot" style="background:#9F2F2D"></span>Scrap</div>
+        </div>
+      </td>
+      <td class="m num">1</td>
+      <td class="m num">449.00</td>
+      <td class="m" style="font-weight:600">IM</td>
+      <td class="m num">449.00</td>
+      <td></td>
+      <td style="text-align:center"><span class="gobtn">✓</span></td>
+    </tr>
+    <tr class="strip"><td colspan="13">
+      <span class="lab">Ordered</span>
+      <span class="chip on">S25-FE-128GB-JETBLACK ×1</span>
+      <span class="sep">│</span>
+      <span class="amber">⚠ no used listing yet</span> —
+      <input class="pickin" value="" placeholder="pick an existing listing…" readonly />
+      or <span class="mkbtn">Create <span class="m2">USED-S25-FE-128GB-JETBLACK</span></span>
+    </td></tr>
+    <tr>
+      <td class="g mut">1</td><td class="m">119120671019601…</td><td class="mut">—</td><td class="m mut">—</td><td class="m mut">09/04/2026</td>
+      <td class="m">S26-ULTRA-512GB-BLACK</td>
+      <td><span class="pill used" style="cursor:default"><span class="dot"></span>Used</span></td>
+      <td class="m num">2</td><td class="m num mut">1,099.00</td><td class="m">IM</td><td class="m num" style="color:var(--pos-text);font-weight:700">765.98</td>
+      <td class="mut">scuffed corner…</td><td></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Also part of this: quieter log rows</h2>
+<p class="note">The "→ landing SKU" second line leaves the log rows too — the landing SKU moves into the row's hover
+tooltip (and the edit popup still shows it). Every log row becomes one line tall, so twice as many returns fit on
+screen. The amber "not listed" stays visible as the bar chip.</p>
+
+</body>
+</html>
