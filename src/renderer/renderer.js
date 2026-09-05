@@ -3004,7 +3004,6 @@ const RET_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 let retReceivedBy = ''; // last-used initials, config-backed default
 
 function enterReturns() {
-  $('retHint').textContent = '';
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
   ensureInventory(); // the entry row's and popup's SKU combos need it
@@ -3298,10 +3297,15 @@ function wsBlank() {
   };
 }
 
+// the guidance strip under the entry row (V1): quiet how-to by default,
+// swapped for lookup status / errors while something is happening
+const WS_HINT_DEFAULT = 'A matched PO fills <b>Customer · Tracking · SKU · Price · Dispute $</b> by itself — <span class="ws-kbd">Enter</span> receives when you’re done';
+
 function wsHint(msg, ok = true) {
-  const el = $('retHint');
-  el.textContent = msg;
-  el.className = `ret-hint${msg && !ok ? ' is-fail' : ''}`;
+  const el = $('wsHintCell');
+  if (!el) return;
+  el.innerHTML = msg ? esc(msg) : WS_HINT_DEFAULT;
+  el.className = `ws-hintcell${msg && !ok ? ' is-fail' : ''}`;
 }
 
 function retEntryRow() {
@@ -3347,7 +3351,7 @@ function retEntryRow() {
       aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></td>
     <td class="ws-cell"><input id="wsNote" class="ws-in" type="text" placeholder="case: 12345…" aria-label="Notes or dispute" /></td>
     <td class="cell-actions ws-savecell"><button id="wsSave" class="btn btn-primary ws-save" type="button"
-      title="Receive this return (Enter from any cell after the SKU)">Receive</button></td>`;
+      aria-label="Receive this return" title="Receive this return (Enter from any cell after the SKU)">✓</button></td>`;
   retEntryTr = tr;
   const el = (id) => tr.querySelector(`#${id}`);
   wsEls = {
@@ -3359,6 +3363,18 @@ function retEntryRow() {
   wsEls.date.textContent = new Date().toISOString().slice(0, 10);
   wsEls.by.value = retReceivedBy;
   wireEntryRow(tr);
+  return tr;
+}
+
+// the guidance strip is its own singleton row, right under the entry row
+let retEntryHintTr = null;
+
+function retEntryHintRow() {
+  if (retEntryHintTr) return retEntryHintTr;
+  const tr = document.createElement('tr');
+  tr.className = 'ws-hint-tr';
+  tr.innerHTML = `<td id="wsHintCell" class="ws-hintcell" colspan="13">${WS_HINT_DEFAULT}</td>`;
+  retEntryHintTr = tr;
   return tr;
 }
 
@@ -3997,16 +4013,51 @@ function showUnlistedFor(sku) {
 
 // the to-do card: every created-but-unlisted condition SKU with how many
 // units sit unsellable — copy grabs the exact string for Seller Center
+// V1 (variants/returns-sheet-v2.html): the two cards wait behind chips on
+// the log bar so the sheet starts at the top of the page; a chip click
+// expands its card. Counts always render into the chips, the card bodies
+// render regardless (the disputes resolve button must stay clickable for
+// automation), only visibility is gated.
+let retCardOpen = {
+  todo: localStorage.getItem('retCardTodo') === '1',
+  disp: localStorage.getItem('retCardDisp') === '1',
+};
+let retTodoCount = 0;
+let retDispCount = 0;
+
+function renderRetChips() {
+  const box = $('retChips');
+  if (!box) return;
+  box.innerHTML = [
+    retTodoCount ? `<button type="button" class="ret-chip is-warn ${retCardOpen.todo ? 'is-on' : ''}" data-chip="todo"
+      title="${retCardOpen.todo ? 'Hide' : 'Show'} the SKUs still needing marketplace listings">⚠ ${retTodoCount} need${retTodoCount === 1 ? 's' : ''} listings</button>` : '',
+    retDispCount ? `<button type="button" class="ret-chip is-disp ${retCardOpen.disp ? 'is-on' : ''}" data-chip="disp"
+      title="${retCardOpen.disp ? 'Hide' : 'Show'} the open disputes">${retDispCount} dispute${retDispCount === 1 ? '' : 's'} open</button>` : '',
+  ].join('');
+}
+
+$('retChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-chip]');
+  if (!chip) return;
+  const k = chip.dataset.chip;
+  retCardOpen[k] = !retCardOpen[k];
+  localStorage.setItem(k === 'todo' ? 'retCardTodo' : 'retCardDisp', retCardOpen[k] ? '1' : '0');
+  if (k === 'todo') renderRetTodo(); else renderRetDisputes();
+  renderRetChips();
+});
+
 function renderRetTodo() {
   const box = $('retTodo');
   if (!box) return;
-  if (!unlistedSkus || unlistedSkus.size === 0) { box.hidden = true; return; }
+  retTodoCount = unlistedSkus ? unlistedSkus.size : 0;
+  renderRetChips();
+  if (!retTodoCount) { box.hidden = true; return; }
   const rows = [...unlistedSkus].map(sku => {
     const it = recvBySku && recvBySku.get(sku.toLowerCase());
     const lvl = it && (it.levels || []).find(l => l.locationId === recvLocationId);
     return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
   }).sort((a, b) => (b.units || 0) - (a.units || 0));
-  box.hidden = false;
+  box.hidden = !retCardOpen.todo;
   // plain always-visible card (owner reverted the task-row redesign
   // 2026-08-13); kept: SKU click -> eBay lister, >4 rows defaults collapsed
   const stored = localStorage.getItem('retTodoCol');
@@ -4056,8 +4107,22 @@ $('retTodo').addEventListener('click', async (e) => {
 // gridlines, same order) — flat and searchable; the pencil opens the
 // receive popup in edit mode (popup editing at the owner's request
 // 2026-08-07, replacing the earlier inline row)
+// "1,099.00" — right-aligned money without the $ (the column header says it)
+function retMoneyText(v) {
+  return Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+}
+
+// a "case: 12345" note renders as a small blue chip + the rest of the text
+function retNoteHtml(note) {
+  const m = String(note || '').match(DISPUTE_RE);
+  if (!m) return esc(note || '');
+  const rest = String(note).replace(m[0], '').replace(/^[\s—·,:-]+|[\s—·,:-]+$/g, '');
+  return `<span class="ret-note-case mono">case ${esc(m[1])}</span>${esc(rest)}`;
+}
+
 function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
+  const note = i.note || r.note || '';
   return `
     <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
@@ -4065,16 +4130,17 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))} ${fmtTime(r.created_at)}</td>
-      <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-cond">
-        ${i.sku ? `<span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}
         ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
       </td>
+      <td class="ret-cell-cond">
+        ${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      </td>
       <td class="ret-cell-units mono">${Number(i.qty) || 1}</td>
-      <td class="ret-cell-price mono">${Number(i.price) ? `$${Number(i.price).toFixed(2)}` : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-price mono">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-settle mono" title="Dispute settlement amount">${Number(i.settle) ? `$${Number(i.settle).toFixed(2)}` : ''}</td>
-      <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      <td class="ret-cell-settle mono" title="Dispute settlement amount">${Number(i.settle) ? retMoneyText(i.settle) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-note ret-ro-note" title="${esc(note)}">${retNoteHtml(note)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
         <button class="btn-icon ret-log-edit-btn" title="Edit this return">${ICONS.pencil}</button>
@@ -4146,7 +4212,9 @@ function renderRetLog() {
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
       `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
       <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
-  box.querySelector('.ret-entry-body').appendChild(retEntryRow());
+  const eb = box.querySelector('.ret-entry-body');
+  eb.appendChild(retEntryRow());
+  eb.appendChild(retEntryHintRow());
   if (wsFocus) {
     wsFocus.focus();
     if (wsSel) { try { wsFocus.setSelectionRange(wsSel[0], wsSel[1]); } catch { /* number inputs refuse */ } }
@@ -4170,8 +4238,10 @@ function renderRetDisputes() {
     const note = String((i && i.note) || r.note || '');
     return DISPUTE_RE.test(note) && !DISPUTE_DONE_RE.test(note);
   });
+  retDispCount = open.length;
+  renderRetChips();
   if (!open.length) { box.hidden = true; return; }
-  box.hidden = false;
+  box.hidden = !retCardOpen.disp;
   const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
   // same default rule as the listings card: >4 disputes starts collapsed
   const stored = localStorage.getItem('retDispCol');

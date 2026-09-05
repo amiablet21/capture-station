@@ -191,7 +191,9 @@
       <div class="recv-past ret-log-page">
         <div class="ret-log-bar">
           <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
-          <span id="retHint" class="ret-hint"></span>
+          <!-- V1 (variants/returns-sheet-v2.html): the two cards live behind
+               these chips — click to expand them above the sheet -->
+          <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>

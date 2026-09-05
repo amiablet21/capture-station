@@ -270,7 +270,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(300); // lookup refuses offline -> unmatched hand-entry state
     const wsBits = await exec(`[
       !!document.querySelector('#retPastBox tr.ws-row'),
-      $('retHint').textContent,
+      $('wsHintCell').textContent,
       ws.unmatched,
     ]`);
     check('entry-row lookup failure falls into the hand-entry path',
@@ -333,7 +333,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     // receive is blocked while the target is unresolved
     await exec(`wsCommit()`);
     await sleep(120);
-    const blocked = await exec(`$('retHint').textContent`);
+    const blocked = await exec(`$('wsHintCell').textContent`);
     check('receive blocked until the missing listing is picked or created',
       /pick or create/i.test(blocked), blocked);
     await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}; wsReset(); 0;`);
@@ -379,7 +379,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('history renders the RETURNS-2 sheet, one row per line',
       ledgerBits[0] === true && ledgerBits[1] === 13
         && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2'
-        && ledgerBits[8] === '$189.99',
+        && ledgerBits[8] === '189.99',
       ledgerBits);
     check('history rows carry edit + delete, no inputs on LOG rows',
       ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
@@ -464,16 +464,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
     });
     await exec('loadRetPast()');
     await sleep(250);
+    // V1: the card waits behind the bar chip — hidden until the chip is
+    // clicked, but its rows render regardless (the resolve button works)
     const disp = await exec(`[
-      !$('retDisputes').hidden,
+      $('retDisputes').hidden,
+      (document.querySelector('#retChips [data-chip="disp"]') || {}).textContent || '',
       document.querySelectorAll('#retDisputes .ret-todo-row').length,
       ($('retDisputes').textContent || '').includes('88421'),
       ($('retDisputes').textContent || '').includes('999'),
       !!document.querySelector('#retDisputes [data-dispdone]'),
     ]`);
-    check('disputes card lists open cases only, with a resolve button',
-      disp[0] === true && disp[1] === 1 && disp[2] === true && disp[3] === false && disp[4] === true,
+    check('disputes wait behind the bar chip, open cases only, with resolve',
+      disp[0] === true && /1 dispute open/.test(disp[1]) && disp[2] === 1
+        && disp[3] === true && disp[4] === false && disp[5] === true,
       disp);
+    await exec(`document.querySelector('#retChips [data-chip="disp"]').click()`);
+    const dispOpen = await exec(`!$('retDisputes').hidden`);
+    check('the dispute chip expands the card', dispOpen === true, dispOpen);
+    await exec(`document.querySelector('#retChips [data-chip="disp"]').click(); 0;`);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);

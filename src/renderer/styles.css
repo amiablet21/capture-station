@@ -891,7 +891,6 @@ body.ret-compact .ret-sheet { min-width: 0; }
 
 .ret-bar { display: flex; align-items: center; gap: 10px; }
 .ret-ref { width: 300px; }
-.ret-hint { font-size: 12px; color: var(--muted); }
 
 .ret-card {
   background: var(--surface);
@@ -1546,28 +1545,91 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-cell-units input::-webkit-inner-spin-button,
 .ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-/* ---- RETURNS-2 sheet look (owner screenshot 2026-09-04): the green
-   header band from the warehouse Google Sheet, same in both themes ---- */
+/* ---- RETURNS-2 sheet, V1 polish (approved variants/returns-sheet-v2.html,
+   2026-09-05): softer green band, zebra rows, neutral gutter, condition as
+   a pastel pill, money without $ signs ---- */
 .recv-sheet-table.ret-log-table th {
-  background: #21a464;
+  background: #1f9d5b;
   color: #fff;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  border-right: 1px solid rgba(255, 255, 255, 0.28);
-  border-bottom: 1px solid #17854f;
+  letter-spacing: 0.05em;
+  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom: 1px solid #17854c;
 }
-.recv-sheet-table.ret-log-table th.th-gutter { background: #188a52; border-right: 1px solid rgba(255, 255, 255, 0.28); }
+.recv-sheet-table.ret-log-table th.th-gutter { background: #17854c; border-right: 1px solid rgba(255, 255, 255, 0.22); }
 .recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
+
+/* zebra on the LOG rows only (the entry tbody stays tinted) */
+.ret-log-table tbody:not(.ret-entry-body) tr:nth-child(even) td:not(.cell-gutter) { background: var(--surface-2); }
+
+/* the gutter goes quiet: plain numbers, red only for unmatched returns */
+.ret-log-table td.cell-gutter.st-captured { background: transparent; color: var(--muted); font-weight: 500; }
+.ret-log-table td.cell-gutter.st-failed { background: transparent; color: var(--neg-text); font-weight: 700; }
+
+/* condition as a pastel pill (the dot keeps its per-condition color) */
+.ret-log-table .ret-cond-ro { border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: 11.5px; }
+.ret-log-table .ret-cond-ro.is-new { background: var(--pos-bg); color: var(--pos-text); }
+.ret-log-table .ret-cond-ro.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ret-log-table .ret-cond-ro.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
+
+/* money columns: price muted, settlement bold green (set further up) */
+.ret-cell-price { color: var(--muted); }
+
+/* "case: 12345" in a note renders as a small blue chip */
+.ret-note-case {
+  font-size: 10.5px;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-right: 6px;
+}
+
+/* the bar chips holding the two collapsed cards */
+.ret-chips { display: inline-flex; gap: 6px; }
+.ret-chip {
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.ret-chip.is-warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.ret-chip.is-disp { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ret-chip.is-on { border-color: currentColor; }
 
 /* ---- the excel-style entry row: first row of the sheet, always live.
    Type the PO#, the matched order fills the rest; the Condition dropdown
    auto-matches the target SKU (pick box = manual override) ---- */
 .ret-log-table tr.ws-row td {
-  background: var(--surface);
-  border-bottom: 2px solid #21a464; /* the entry row reads as part of the header band */
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+  border-bottom: 1px solid var(--border-soft);
   overflow: visible;
   white-space: normal;
+}
+/* the guidance strip under the entry row closes the tinted band */
+.ws-hint-tr td.ws-hintcell {
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+  border-bottom: 2px solid #1f9d5b;
+  font-size: 10.5px;
+  color: var(--faint);
+  padding: 4px 10px 6px;
+  white-space: normal;
+}
+.ws-hintcell b { color: var(--accent-soft-text); font-weight: 600; }
+.ws-hintcell.is-fail { color: var(--neg-text); font-weight: 600; }
+.ws-kbd {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: var(--surface);
+  color: var(--muted);
 }
 .ret-log-table tr.ws-row td.ws-cell:focus-within {
   outline: 2px solid var(--accent);
@@ -1624,8 +1686,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-order { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .ws-savecell { text-align: center; }
-.ws-save { padding: 3px 10px; font-size: 12px; }
-.ret-hint.is-fail { color: var(--neg-text); font-weight: 600; }
+.ws-save { width: 26px; height: 26px; padding: 0; font-size: 13px; line-height: 1; border-radius: 999px; }
 
 /* inline product thumbnails once a SKU is picked (returns + receiving) */
 .sku-thumb {
