@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns sheet v2 — flow + two looks</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { max-width: 1560px; }
+  h2 { font-size: 15px; margin: 26px 0 4px; }
+  h2 .rec { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; vertical-align: 2px; margin-left: 8px; }
+  .note { font-size: 12px; color: var(--muted); margin: 0 0 12px; max-width: 900px; }
+
+  /* ---------- the flow strip ---------- */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 10px 0 6px; }
+  .step { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 12px 12px; position: relative; }
+  .step + .step { margin-left: 26px; }
+  .step + .step::before { content: '→'; position: absolute; left: -20px; top: 50%; transform: translateY(-50%); color: var(--faint); font-size: 15px; }
+  .step .n { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-right: 6px; }
+  .step b { font-size: 12px; }
+  .step p { font-size: 11px; color: var(--muted); margin: 6px 0 0; line-height: 1.45; }
+  .step .m2 { font-family: var(--mono); font-size: 10px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; }
+  .step .alt { margin-top: 6px; font-size: 10.5px; color: var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: 5px; padding: 4px 7px; line-height: 1.4; }
+
+  /* ---------- shared sheet chrome ---------- */
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .bar h3 { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 0; }
+  .chip { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+  .chip.warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .chip.disp { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .bar .right { margin-left: auto; display: flex; gap: 8px; }
+  .search { width: 240px; font-size: 11.5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+  .ghostbtn { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 11px; background: var(--surface); }
+
+  .sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td:last-child { border-right: none; }
+  .m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .mut { color: var(--muted); }
+  .num { text-align: right; }
+  .g { width: 34px; text-align: center; font-family: var(--mono); font-size: 10.5px; }
+  .cond { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 10px; }
+  .cond .dot { width: 7px; height: 7px; border-radius: 999px; }
+  .cond.new { background: var(--pos-bg); color: var(--pos-text); } .cond.new .dot { background: #2E7D32; }
+  .cond.ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); } .cond.ob .dot { background: #1F6C9F; }
+  .cond.used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .cond.used .dot { background: #B8860B; }
+  .tgt { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+  .tgt b { color: var(--accent-soft-text); font-weight: 600; }
+  .settle { font-weight: 700; color: var(--pos-text); }
+  .case { font-size: 10.5px; font-family: var(--mono); background: var(--badge-blue-bg); color: var(--badge-blue-text); border-radius: 4px; padding: 1px 6px; margin-right: 5px; }
+  .rowact { color: var(--faint); font-size: 12px; text-align: center; }
+
+  /* ---------- V1: polished RETURNS-2 (green band kept, calmer) ---------- */
+  .v1 th { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #fff; text-align: left; padding: 8px 10px; background: #1F9D5B; border-right: 1px solid rgba(255,255,255,.22); white-space: nowrap; }
+  .v1 th.num { text-align: right; }
+  .v1 th:first-child { background: #17854C; }
+  .v1 tbody.log tr:nth-child(even) td { background: var(--surface-2); }
+  .v1 .entry td { background: #F2FAF5; border-bottom: 2px solid #1F9D5B; padding-top: 9px; padding-bottom: 9px; }
+  .v1 .entry .g { color: var(--accent); font-weight: 700; font-size: 15px; }
+  .in { width: 100%; border: none; background: transparent; font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .in::placeholder { color: var(--faint); }
+  .in.f { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .sel { width: 100%; font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+  .gobtn { background: var(--accent); color: #fff; border-radius: 999px; padding: 4px 0; width: 100%; text-align: center; font-size: 12px; font-weight: 600; }
+  .hintline { font-size: 10.5px; color: var(--faint); padding: 5px 10px 7px; border-bottom: 1px solid var(--border-soft); background: #F2FAF5; }
+  .hintline b { color: var(--accent-soft-text); font-weight: 600; }
+  .kbd { font-family: var(--mono); font-size: 9.5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface); color: var(--muted); }
+
+  /* ---------- V2: app-native quiet header ---------- */
+  .v2 th { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 7px 10px; background: var(--surface-2); border-bottom: 2px solid var(--accent); border-right: 1px solid var(--border-soft); white-space: nowrap; }
+  .v2 th.num { text-align: right; }
+  .v2 .entry td { background: var(--accent-soft); border-bottom: 1px solid var(--border); padding-top: 9px; padding-bottom: 9px; }
+  .v2 .entry .g { color: var(--accent); font-weight: 700; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<h1 style="font-size:17px;margin:6px 0 2px">Returns sheet v2 — the flow, then two looks</h1>
+<p class="note">Top: how a return moves through the entry row. Below: two polish directions for the same sheet — V1 keeps the RETURNS-2 green band but calms it and tidies the columns; V2 trades the band for the app's own quiet header so Returns matches Stock/History.</p>
+
+<!-- ============ THE FLOW ============ -->
+<h2>The receiving flow</h2>
+<div class="flow">
+  <div class="step"><span class="n">1</span><b>Type the PO#</b>
+    <p>First cell of the green row. <span class="kbd">Enter</span> or clicking away starts the lookup.</p></div>
+  <div class="step"><span class="n">2</span><b>Linnworks fills the row</b>
+    <p>Customer, Tracking #, SKU, Price — and <b>Dispute $ mirrors the price</b>. Ordered lines show as chips; click the one that came back.</p>
+    <p class="alt">No order found → hint says "enter by hand", row stays typeable.</p></div>
+  <div class="step"><span class="n">3</span><b>Pick the condition</b>
+    <p>New / Open box / Used / Scrap. The mapping engine auto-matches the landing SKU: <span class="m2">→ OPEN-BOX-TABA9+64GB</span></p>
+    <p class="alt">No listing yet → pick an existing one, or <b>Create</b> opens the New SKU sheet prefilled; creating it maps + routes this return.</p></div>
+  <div class="step"><span class="n">4</span><b>Adjust anything</b>
+    <p>Units, Price, Dispute $ (clear it when there's no dispute), initials, notes — <span class="m2">case: 12345</span> in Notes opens a dispute card.</p></div>
+  <div class="step"><span class="n">5</span><b>Receive</b>
+    <p><span class="kbd">Enter</span> from any later cell, or the ✓ button. Stock +qty lands on the condition SKU in Linnworks, the row drops into the log, and a multi-item PO stays loaded on its next line.</p></div>
+</div>
+
+<!-- ============ V1 ============ -->
+<h2>V1 — polished RETURNS-2 <span class="rec">recommended</span></h2>
+<p class="note">Keeps your sheet's identity. Changes: the two big cards collapse into chips on the bar (click to expand) so the sheet starts at the top; softer green with zebra rows; condition as a pastel pill with the landing SKU underneath; money right-aligned, settlement bold only when it exists; a one-line hint strip under the entry row replaces the tall in-cell stacking.</p>
+
+<div class="bar">
+  <h3>Returns log — 3 entries</h3>
+  <span class="chip warn">⚠ 2 need listings</span>
+  <span class="chip disp">1 dispute open</span>
+  <span class="right">
+    <input class="search" value="" placeholder="Search PO, SKU, customer, condition…" readonly />
+    <span class="ghostbtn">Refresh</span><span class="ghostbtn">Browser</span>
+  </span>
+</div>
+<div class="sheet v1">
+<table>
+  <colgroup><col class="g" style="width:34px"><col style="width:150px"><col style="width:150px"><col style="width:125px"><col style="width:96px"><col style="width:190px"><col style="width:170px"><col style="width:52px"><col style="width:80px"><col style="width:56px"><col style="width:96px"><col><col style="width:76px"></colgroup>
+  <thead><tr>
+    <th class="g">#</th><th>PO #</th><th>Customer Name</th><th>Tracking #</th><th>Date</th><th>Returned SKU</th><th>Condition</th><th class="num">Units</th><th class="num">Price</th><th>By</th><th class="num">Dispute $</th><th>Notes</th><th></th>
+  </tr></thead>
+  <tbody>
+    <tr class="entry">
+      <td class="g">+</td>
+      <td><input class="in f" value="1191207723262|" /></td>
+      <td><input class="in" placeholder="" style="font-family:var(--font)" /></td>
+      <td><input class="in" /></td>
+      <td class="m mut">09-05</td>
+      <td><input class="in" placeholder="SKU…" /></td>
+      <td><select class="sel"><option>New</option><option>Open box</option><option>Used</option><option>Scrap</option></select></td>
+      <td class="num"><input class="in num" value="1" /></td>
+      <td class="num"><input class="in num" placeholder="0.00" /></td>
+      <td><input class="in" value="IM" style="font-weight:600" /></td>
+      <td class="num"><input class="in num" /></td>
+      <td><input class="in" placeholder="case: 12345…" style="font-family:var(--font)" /></td>
+      <td><span class="gobtn">✓</span></td>
+    </tr>
+  </tbody>
+  <tbody><tr><td colspan="13" class="hintline" style="border-right:none">Looking the order up… &nbsp;·&nbsp; a matched PO fills <b>Customer · Tracking · SKU · Price · Dispute $</b> by itself — <span class="kbd">Enter</span> receives when you're done</td></tr></tbody>
+  <tbody class="log">
+    <tr>
+      <td class="g mut">1</td><td class="m">119120671019601…</td><td class="mut">—</td><td class="m mut">—</td><td class="m mut">09-04</td>
+      <td class="m">S26-ULTRA-512GB-BLACK<span class="tgt">→ <b>USED-S26-ULTRA-512GB…</b></span></td>
+      <td><span class="cond used"><span class="dot"></span>Used</span></td>
+      <td class="m num">2</td><td class="m num mut">1,099.00</td><td class="m">IM</td><td class="m num settle">765.98</td>
+      <td><span class="case">case 05589312</span><span class="mut">scuffed corner</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+    <tr>
+      <td class="g mut">2</td><td class="m">119119354597966…</td><td>Terrence Howell</td><td class="m mut">—</td><td class="m mut">09-04</td>
+      <td class="m">S25-FE-128GB-JETBLACK<span class="tgt">→ <b>OPEN-BOX-S25-FE-128GB</b></span></td>
+      <td><span class="cond ob"><span class="dot"></span>Open box</span></td>
+      <td class="m num">1</td><td class="m num mut">449.00</td><td class="m">IM</td><td class="m num settle">449.00</td>
+      <td><span class="mut">no issues</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+    <tr>
+      <td class="g mut">3</td><td class="m">119120771799124…</td><td>Marybeth Morris</td><td class="m">1Z4324190390…</td><td class="m mut">09-04</td>
+      <td class="m">S25-256GB-SILVERSHADOW</td>
+      <td><span class="cond new"><span class="dot"></span>New</span></td>
+      <td class="m num">1</td><td class="m num mut">529.99</td><td class="m">IM</td><td class="m num mut">—</td>
+      <td><span class="mut">brand new</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ V2 ============ -->
+<h2>V2 — quiet, app-native</h2>
+<p class="note">Same columns and flow, but the header matches the rest of the app (Stock/History): muted caps with a single green rule, the entry row tinted in the app's soft green instead of sitting under a colored band. Less "Google Sheets", more "one app".</p>
+
+<div class="bar">
+  <h3>Returns log — 3 entries</h3>
+  <span class="chip warn">⚠ 2 need listings</span>
+  <span class="chip disp">1 dispute open</span>
+  <span class="right">
+    <input class="search" value="" placeholder="Search PO, SKU, customer, condition…" readonly />
+    <span class="ghostbtn">Refresh</span><span class="ghostbtn">Browser</span>
+  </span>
+</div>
+<div class="sheet v2">
+<table>
+  <colgroup><col class="g" style="width:34px"><col style="width:150px"><col style="width:150px"><col style="width:125px"><col style="width:96px"><col style="width:190px"><col style="width:170px"><col style="width:52px"><col style="width:80px"><col style="width:56px"><col style="width:96px"><col><col style="width:76px"></colgroup>
+  <thead><tr>
+    <th class="g">#</th><th>PO #</th><th>Customer Name</th><th>Tracking #</th><th>Date</th><th>Returned SKU</th><th>Condition</th><th class="num">Units</th><th class="num">Price</th><th>By</th><th class="num">Dispute $</th><th>Notes</th><th></th>
+  </tr></thead>
+  <tbody>
+    <tr class="entry">
+      <td class="g">+</td>
+      <td><input class="in f" value="1191207723262|" /></td>
+      <td><input class="in" style="font-family:var(--font)" /></td>
+      <td><input class="in" /></td>
+      <td class="m mut">09-05</td>
+      <td><input class="in" placeholder="SKU…" /></td>
+      <td><select class="sel"><option>Open box</option></select></td>
+      <td class="num"><input class="in num" value="1" /></td>
+      <td class="num"><input class="in num" value="449.00" /></td>
+      <td><input class="in" value="IM" style="font-weight:600" /></td>
+      <td class="num"><input class="in num" value="449.00" /></td>
+      <td><input class="in" style="font-family:var(--font)" /></td>
+      <td><span class="gobtn">✓</span></td>
+    </tr>
+  </tbody>
+  <tbody class="log">
+    <tr>
+      <td class="g mut">1</td><td class="m">119120671019601…</td><td class="mut">—</td><td class="m mut">—</td><td class="m mut">09-04</td>
+      <td class="m">S26-ULTRA-512GB-BLACK<span class="tgt">→ <b>USED-S26-ULTRA-512GB…</b></span></td>
+      <td><span class="cond used"><span class="dot"></span>Used</span></td>
+      <td class="m num">2</td><td class="m num mut">1,099.00</td><td class="m">IM</td><td class="m num settle">765.98</td>
+      <td><span class="case">case 05589312</span><span class="mut">scuffed corner</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+    <tr>
+      <td class="g mut">2</td><td class="m">119119354597966…</td><td>Terrence Howell</td><td class="m mut">—</td><td class="m mut">09-04</td>
+      <td class="m">S25-FE-128GB-JETBLACK<span class="tgt">→ <b>OPEN-BOX-S25-FE-128GB</b></span></td>
+      <td><span class="cond ob"><span class="dot"></span>Open box</span></td>
+      <td class="m num">1</td><td class="m num mut">449.00</td><td class="m">IM</td><td class="m num settle">449.00</td>
+      <td><span class="mut">no issues</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+    <tr>
+      <td class="g mut">3</td><td class="m">119120771799124…</td><td>Marybeth Morris</td><td class="m">1Z4324190390…</td><td class="m mut">09-04</td>
+      <td class="m">S25-256GB-SILVERSHADOW</td>
+      <td><span class="cond new"><span class="dot"></span>New</span></td>
+      <td class="m num">1</td><td class="m num mut">529.99</td><td class="m">IM</td><td class="m num mut">—</td>
+      <td><span class="mut">brand new</span></td><td class="rowact">📷 ✎ 🗑</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+</body>
+</html>
