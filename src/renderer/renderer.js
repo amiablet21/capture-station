@@ -1169,8 +1169,7 @@ function showPage(page) {
     } else if (page === 'temu') {
       enterTemu();
     } else if (page === 'stock') {
-      const savedW = Number(localStorage.getItem('stockSheetWidth')) || 0;
-      $('stockMain').style.width = savedW ? `${savedW}px` : '';
+      applySheetWidth($('stockMain'), 'stockSheetWidth');
       $('stockSearch').value = '';
       $('stockSearchClear').hidden = true;
       loadStockViews();
@@ -1178,8 +1177,7 @@ function showPage(page) {
     } else if (page === 'shelf') {
       enterShelf();
     } else if (page === 'returns') {
-      const savedW = Number(localStorage.getItem('retSheetWidth')) || 0;
-      $('retMain').style.width = savedW ? `${savedW}px` : '';
+      applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
     } else {
       focusScan();
@@ -1587,20 +1585,14 @@ function applyBrowserPane() {
     dock.style.marginTop = '';
   } else {
     dock.style.marginTop = '';
-    // a saved width wider than the window leaves the sheet overflowing with
-    // a stray horizontal scrollbar after the pane closes: clamp to the room
-    // actually available, and fall back to "fill" when it does not fit
-    const fit = (el, key) => {
-      const saved = Number(localStorage.getItem(key)) || 0;
-      const room = (el.parentElement ? el.parentElement.clientWidth : 0) - 20;
-      el.style.width = saved && room > 0 && saved <= room ? `${saved}px` : '';
-    };
+    // widths are a share of the row (v1.20.43), so re-applying after the
+    // pane closes always fits — the old pixel clamp is gone.
     // capture's saved width belongs to capMain (band + sheet as ONE column
     // since 2026-08-17); pinning the inner rowsMain froze the grip drag —
     // the outer shell moved, the table did not (owner report 2026-08-25)
-    fit($('capMain'), 'captureSheetWidth');
+    applySheetWidth($('capMain'), 'captureSheetWidth');
     $('rowsMain').style.width = ''; // clear the stale inner pin once
-    fit($('retMain'), 'retSheetWidth');
+    applySheetWidth($('retMain'), 'retSheetWidth');
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
   }
   if (activePage === 'returns') renderRetLog(); // colspan follows the column count
@@ -2648,6 +2640,35 @@ $('stockSearchClear').addEventListener('click', () => {
   renderStock();
   $('stockSearch').focus();
 });
+// whole-sheet widths are saved as a SHARE of the surrounding row, not pixels
+// (v1.20.43): a pixel width dragged on one monitor pinned the sheet wrong on
+// every other screen — a share sizes itself to whatever computer the app is
+// on, so the grip only ever needs adjusting once. Legacy pixel values (> 1)
+// convert in place on first read.
+function sheetFrac(el, key) {
+  const raw = Number(localStorage.getItem(key)) || 0;
+  if (!raw) return 0;
+  if (raw <= 1) return raw;
+  const room = el.parentElement ? el.parentElement.clientWidth : 0;
+  if (!room) return 0; // page not laid out yet — fill for now, convert next read
+  const frac = Math.min(1, raw / room);
+  localStorage.setItem(key, String(frac));
+  return frac;
+}
+
+function applySheetWidth(el, key) {
+  const frac = sheetFrac(el, key);
+  el.style.width = frac ? `${(frac * 100).toFixed(2)}%` : '';
+}
+
+function saveSheetFrac(el, key, w) {
+  const room = el.parentElement ? el.parentElement.clientWidth : 0;
+  if (!room) { localStorage.setItem(key, String(w)); return; } // px, converts on next read
+  const frac = Math.min(1, w / room);
+  localStorage.setItem(key, String(frac));
+  el.style.width = `${(frac * 100).toFixed(2)}%`; // % from here on: tracks window resizes
+}
+
 // whole-sheet resize: drag the handle on the right edge of the table
 let sheetDrag = null;
 
@@ -2666,7 +2687,7 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mouseup', () => {
   if (!sheetDrag) return;
-  if (sheetDrag.w) localStorage.setItem('stockSheetWidth', String(sheetDrag.w));
+  if (sheetDrag.w) saveSheetFrac($('stockMain'), 'stockSheetWidth', sheetDrag.w);
   sheetDrag = null;
   $('sheetGrip').classList.remove('is-active');
 });
@@ -2755,8 +2776,7 @@ function alignCaptureToolbar() {
 
 let rowsDrag = null;
 {
-  const savedW = Number(localStorage.getItem('captureSheetWidth')) || 0;
-  if (savedW) $('capMain').style.width = `${savedW}px`;
+  applySheetWidth($('capMain'), 'captureSheetWidth');
   requestAnimationFrame(alignCaptureToolbar);
 }
 
@@ -2777,7 +2797,7 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mouseup', () => {
   if (!rowsDrag) return;
-  if (rowsDrag.w) localStorage.setItem('captureSheetWidth', String(rowsDrag.w));
+  if (rowsDrag.w) saveSheetFrac($('capMain'), 'captureSheetWidth', rowsDrag.w);
   rowsDrag = null;
   $('rowsGrip').classList.remove('is-active');
 });
@@ -4237,7 +4257,7 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mouseup', () => {
   if (!retSheetDrag) return;
-  if (retSheetDrag.w) localStorage.setItem('retSheetWidth', String(retSheetDrag.w));
+  if (retSheetDrag.w) saveSheetFrac($('retMain'), 'retSheetWidth', retSheetDrag.w);
   retSheetDrag = null;
   $('retGrip').classList.remove('is-active');
 });
