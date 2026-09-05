@@ -3012,7 +3012,7 @@ function enterReturns() {
     // the entry row's initials + date follow along when the page opens
     if (retEntryTr) {
       if (!wsEls.by.value) wsEls.by.value = retReceivedBy;
-      wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+      wsEls.date.textContent = retDateUS(new Date().toISOString());
     }
   });
 }
@@ -3020,6 +3020,12 @@ function enterReturns() {
 function retCondLabel(key) {
   const c = RET_CONDS.find(x => x.key === key);
   return c ? c.label : key;
+}
+
+// "2026-09-05…" -> "09/05/2026" (owner's sheet format, 2026-09-05)
+function retDateUS(iso) {
+  const p = String(iso || '').slice(0, 10).split('-');
+  return p.length === 3 ? `${p[1]}/${p[2]}/${p[0]}` : '';
 }
 
 // "$1,234.50" / "1234.5" / "" -> a non-negative amount (0 = none)
@@ -3360,7 +3366,7 @@ function retEntryRow() {
     fix: el('wsFix'), pick: el('wsPick'), create: el('wsCreate'), qty: el('wsQty'),
     price: el('wsPrice'), by: el('wsBy'), settle: el('wsSettle'), note: el('wsNote'), save: el('wsSave'),
   };
-  wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+  wsEls.date.textContent = retDateUS(new Date().toISOString());
   wsEls.by.value = retReceivedBy;
   wireEntryRow(tr);
   return tr;
@@ -3387,7 +3393,7 @@ function wsReset() {
   wsEls.qty.value = '1';
   wsEls.cond.value = 'new';
   wsEls.by.value = retReceivedBy; // initials persist across returns
-  wsEls.date.textContent = new Date().toISOString().slice(0, 10);
+  wsEls.date.textContent = retDateUS(new Date().toISOString());
   wsRenderOrder();
   wsRenderCond();
 }
@@ -4131,7 +4137,7 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="mono ret-cell-po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))} ${fmtTime(r.created_at)}</td>
+      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${retDateUS(day)}</td>
       <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}
         ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
       </td>

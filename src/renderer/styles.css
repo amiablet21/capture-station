@@ -978,7 +978,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-sheet { table-layout: fixed; width: 100%; min-width: 1320px; }
 .ret-sheet th.th-po { width: 150px; }
 .ret-sheet th.th-trk { width: 130px; }
-.ret-sheet th.th-date { width: 104px; } /* MM-DD HH:MM */
+.ret-sheet th.th-date { width: 104px; } /* MM/DD/YYYY (time lives in the tooltip) */
 .ret-sheet th.th-rsku { width: 175px; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-price { width: 78px; text-align: right; }
