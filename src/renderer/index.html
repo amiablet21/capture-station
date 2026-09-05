@@ -185,9 +185,10 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
-      <!-- RETURNS-2 sheet (2026-09-04): the log owns the page and its first
-           row is the live entry row — receiving happens right in the sheet;
-           the popup is edit-only (pencil on a log row) -->
+      <!-- RETURNS-2 sheet (2026-09-04): the log owns the page; its first
+           row is the launcher — a PO# typed there opens the receive popup
+           (2026-09-05, "popup instead of on the line"); the pencil on a
+           log row opens the same popup in edit mode -->
       <div class="recv-past ret-log-page">
         <div class="ret-log-bar">
           <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
@@ -943,13 +944,14 @@
     </div>
   </dialog>
 
-  <!-- Edit a return: the design-A "excel sheet" popup (2026-08-07) — a
-       label column and a value column with gridlines, one field per row.
-       Edit-only since the entry row took over receiving (2026-09-04). -->
+  <!-- Receive/Edit a return: the design-A "excel sheet" popup (2026-08-07)
+       — a label column and a value column with gridlines, one field per
+       row. Receiving came back to the popup 2026-09-05 (owner: the
+       in-sheet entry crowded the row); the sheet's PO cell opens it. -->
   <dialog id="retRecvDialog" class="dlg ret-recv-dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title" id="rvTitle">Edit return</h2>
-      <p class="dlg-note">Fields prefill from the log row — Save runs the stock corrections.</p>
+      <h2 class="dlg-title" id="rvTitle">Receive a return</h2>
+      <p class="dlg-note" id="rvDlgNote">Type the PO# and press Enter — a matched order fills the rest.</p>
       <div class="rv-sheet">
         <div class="rv-row">
           <div class="rv-k">PO#</div>
@@ -958,8 +960,9 @@
                    autocomplete="off" spellcheck="false" aria-label="Original order number" />
           </div>
         </div>
-        <!-- everything the original order contained, read-only — the
-             highlighted chip is the line this return came from -->
+        <!-- everything the order contained: receiving = click a line to
+             receive it (✓ marks lines already received); editing = read-only,
+             the highlighted chip is the line this return came from -->
         <div class="rv-row" id="rvOrderRow" hidden>
           <div class="rv-k">Ordered</div>
           <div class="rv-v rv-order-v"><div id="rvOrder" class="rv-order"></div></div>
@@ -1030,7 +1033,7 @@
       <p id="rvFeedback" class="dlg-note test-result" hidden></p>
       <div class="dlg-actions">
         <button id="rvCancel" class="btn btn-ghost" type="button">Cancel</button>
-        <button id="rvSave" class="btn btn-primary" type="button">Save changes</button>
+        <button id="rvSave" class="btn btn-primary" type="button">Receive</button>
       </div>
     </div>
   </dialog>

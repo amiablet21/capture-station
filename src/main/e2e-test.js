@@ -262,24 +262,31 @@ module.exports = async function run({ app, win, db, clipboard }) {
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
 
-    // 24. entry row (RETURNS-2 sheet, 2026-09-04): a failed PO lookup falls
-    // into the hand-entry path — the hint says so, the row stays unmatched
+    // 24. popup receiving is back (owner 2026-09-05, "popup instead of on
+    // the line"): a PO# typed in the sheet's first cell opens the receive
+    // popup carrying that PO with the lookup already running; a failed
+    // lookup falls into the hand-entry path
     await exec(`loadRetPast()`);
     await sleep(250);
-    await exec(`$('wsPo').value = 'WMR-REMOVAL-7788'; wsLastLookup = 'WMR-REMOVAL-7788'; wsLookup()`);
-    await sleep(300); // lookup refuses offline -> unmatched hand-entry state
-    const wsBits = await exec(`[
-      !!document.querySelector('#retPastBox tr.ws-row'),
-      $('wsHintCell').textContent,
-      ws.unmatched,
+    await exec(`$('wsPo').value = 'WMR-REMOVAL-7788';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(400); // lookup refuses offline -> unmatched hand-entry state
+    const rvBits = await exec(`[
+      !!document.querySelector('#retRecvDialog[open]'),
+      $('rvTitle').textContent,
+      $('rvPo').value,
+      $('wsPo').value,
+      $('rvFeedback').textContent,
+      rv.unmatched,
     ]`);
-    check('entry-row lookup failure falls into the hand-entry path',
-      wsBits[0] === true && /by hand/i.test(wsBits[1]) && wsBits[2] === true,
-      wsBits);
+    check('PO cell opens the receive popup; failed lookup = hand-entry path',
+      rvBits[0] === true && /Receive a return/.test(rvBits[1]) && rvBits[2] === 'WMR-REMOVAL-7788'
+        && rvBits[3] === '' && /by hand/i.test(rvBits[4]) && rvBits[5] === true,
+      rvBits);
 
-    // 24b. condition dropdown + the live auto-match line: New lands back on
-    // the SKU itself (no redirect line), a mapped condition shows its
-    // listing, an unmapped one opens the fix (pick combo + create button)
+    // 24b. condition pills + the live target line: New restocks the SKU
+    // itself, a mapped condition shows its listing, an unmapped one opens
+    // the fix row (pick combo + prefix-named create button)
     const prevLookup = await exec(`(() => {
       const prev = recvLookup;
       recvItems = [{ sku: 'S25-128GB-NAVY', title: 'Galaxy S25', barcode: '' }];
@@ -288,38 +295,38 @@ module.exports = async function run({ app, win, db, clipboard }) {
       recvLookup = 'ready';
       return prev;
     })()`);
-    await exec(`ws.sku = 'S25-128GB-NAVY'; $('wsSku').value = 'S25-128GB-NAVY';
-      ws.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      wsSetCond('new');`);
-    const conds = await exec(`[
-      document.querySelectorAll('#wsCondMenu .ws-cond-mi').length,
-      $('wsCond').dataset.cond,
-      $('wsTarget').hidden,
-      $('wsFix').hidden,
+    await exec(`rv.sku = 'S25-128GB-NAVY'; $('rvSku').value = 'S25-128GB-NAVY';
+      rv.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
+      rvRenderCond();`);
+    const pills = await exec(`[
+      document.querySelectorAll('#rvPills .rv-pill').length,
+      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
+      $('rvTarget').textContent,
+      $('rvFix').hidden,
     ]`);
-    check('entry row: 4 conditions, New selected, no redirect line',
-      conds[0] === 4 && conds[1] === 'new' && conds[2] === true && conds[3] === true,
-      conds);
-    await exec(`wsSetCond('openbox')`);
-    let tgt = await exec(`[$('wsTarget').hidden, $('wsTarget').textContent, $('wsFix').hidden]`);
-    check('a mapped condition auto-matches its listing, no fix row',
-      tgt[0] === false && /S25-128GB-NAVY-OPENBOX/.test(tgt[1]) && tgt[2] === true, tgt);
-    await exec(`wsSetCond('used')`);
+    check('popup: 4 condition pills, New selected, target = the SKU itself',
+      pills[0] === 4 && pills[1] === 'new' && /S25-128GB-NAVY/.test(pills[2]) && pills[3] === true,
+      pills);
+    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="openbox"]').click()`);
+    let tgt = await exec(`[$('rvTarget').textContent, $('rvFix').hidden]`);
+    check('a mapped condition resolves to its listing, no fix row',
+      /S25-128GB-NAVY-OPENBOX/.test(tgt[0]) && tgt[1] === true, tgt);
+    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
     tgt = await exec(`[
-      $('wsTarget').className,
-      $('wsFix').hidden,
-      $('wsCreate').hidden,
-      $('wsCreate').textContent,
-      !!document.querySelector('.ws-pick-combo .combo-list'),
+      $('rvTarget').className,
+      $('rvFix').hidden,
+      $('rvCreate').hidden,
+      $('rvCreate').textContent,
+      !!document.querySelector('.rv-pick-combo .combo-list'),
     ]`);
-    check('an unmapped condition opens the fix with the prefix create button',
+    check('an unmapped condition opens the fix row with the prefix create button',
       /is-missing/.test(tgt[0]) && tgt[1] === false && tgt[2] === false
         && /USED-S25-128GB-NAVY/.test(tgt[3]) && tgt[4] === true,
       tgt);
-    // 24b-bis. Create opens the full New SKU sheet right there, prefilled
-    // with the suggested name + the base item's title (everything editable);
-    // closing it without creating changes nothing
-    await exec(`$('wsCreate').click()`);
+    // 24b-bis. Create opens the full New SKU sheet on top of the popup,
+    // prefilled with the suggested name + the base item's title (everything
+    // editable); closing it without creating changes nothing
+    await exec(`$('rvCreate').click()`);
     await sleep(200);
     const mk = await exec(`[
       !!document.querySelector('#skuDialog[open]'),
@@ -330,23 +337,22 @@ module.exports = async function run({ app, win, db, clipboard }) {
       mk[0] === true && mk[1] === 'USED-S25-128GB-NAVY' && /Galaxy S25 - Used/.test(mk[2]), mk);
     await exec(`$('skuDialog').close()`);
     // receive is blocked while the target is unresolved
-    await exec(`wsCommit()`);
+    await exec(`rvCommit()`);
     await sleep(120);
-    const blocked = await exec(`$('wsHintCell').textContent`);
+    const blocked = await exec(`$('rvFeedback').textContent`);
     check('receive blocked until the missing listing is picked or created',
       /pick or create/i.test(blocked), blocked);
-    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}; wsReset(); 0;`);
 
-    // 24b-ter. Dispute Settlement autofills from the matched Linnworks
-    // order line — same amount the customer paid, editable before commit
-    await exec(`ws.unmatched = false;
-      ws.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 259.5, quantity: 1, targets: null }];
-      ws.received = [false];
-      wsLoadItemAt(0)`);
-    const auto = await exec(`[$('wsPrice').value, $('wsSettle').value]`);
+    // 24b-ter. price AND dispute settlement autofill from the matched line
+    await exec(`rv.unmatched = false;
+      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 259.5, quantity: 1, targets: null }];
+      rv.received = [false];
+      rvLoadItemAt(0)`);
+    const auto = await exec(`[$('rvPrice').value, $('rvSettle').value]`);
     check('dispute settlement autofills from the order line price',
       auto[0] === '259.50' && auto[1] === '259.50', auto);
-    await exec(`wsReset()`);
+    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)};
+      $('retRecvDialog').close(); 0;`);
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
@@ -382,52 +388,48 @@ module.exports = async function run({ app, win, db, clipboard }) {
       ledgerBits);
     check('history rows carry edit + delete, no inputs on LOG rows',
       ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
-    // 24c-bis. the entry row: first row of the sheet, PO cell + condition
-    // dropdown + Receive button, and it SURVIVES a re-render (same node)
+    // 24c-bis. the entry cell: a singleton row that SURVIVES a re-render
     const entryBits = await exec(`[
       !!document.querySelector('#retPastBox tr.ws-row'),
       !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
-      document.querySelectorAll('#retPastBox tr.ws-row #wsCondMenu .ws-cond-mi').length,
-      !!document.querySelector('#retPastBox tr.ws-row #wsSave'),
       (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
     ]`);
-    check('entry row: PO cell, 4-condition dropdown, Receive, survives re-render',
-      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 4
-        && entryBits[3] === true && entryBits[4] === 'KEEP-ME',
+    check('entry cell: PO launcher present, survives re-render',
+      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME',
       entryBits);
-    await exec(`$('wsPo').value = ''; ws.unmatched = true; 0;`);
-    // the entry row commits through the same returns:create engine, then
-    // CLEARS ITSELF for the next return — with no async errors on the way
+    await exec(`$('wsPo').value = ''; 0;`);
+    // 24c. Receive commits price + dispute settlement through the
+    // returns:create engine and CLOSES the popup — no async errors
     await exec(`
       window.__err = ''; window.addEventListener('error', (e) => { window.__err += String(e.error && e.error.stack || e.message) + ' | '; });
       window.addEventListener('unhandledrejection', (e) => { window.__err += 'REJ:' + String(e.reason && e.reason.stack || e.reason) + ' | '; });
-      window.__wsOrig = wsCreate;
-      window.__wsGot = null;
-      wsCreate = async (p) => { window.__wsGot = p; return { ok: true, id: 999 }; };
-      $('wsPo').value = 'WMR-ENTRY-1'; wsLastLookup = 'WMR-ENTRY-1';
-      ws.unmatched = true; ws.sku = 'S25-128GB-NAVY';
-      $('wsSku').value = 'S25-128GB-NAVY';
-      ws.targets = { new: 'S25-128GB-NAVY', openbox: '', used: '', scrap: '' };
-      wsSetCond('new');
-      $('wsQty').value = '1'; $('wsPrice').value = '150'; $('wsSettle').value = '45.50'; $('wsBy').value = 'IM';
-      $('wsSave').click(); 0;`);
-    // commit -> clear is async: poll instead of a fixed sleep (the popup's
-    // close check flaked at fixed sleeps under load, 2026-08-14)
+      window.__rvOrig = rvCreate;
+      window.__rvGot = null;
+      rvCreate = async (p) => { window.__rvGot = p; return { ok: true, id: 999 }; };
+      retOpenRecv();
+      rv.unmatched = false; rv.orderId = 'oid-9'; rv.source = 'WALMART';
+      $('rvPo').value = '119999000000001'; rvLastLookup = '119999000000001';
+      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
+      rv.received = [false];
+      rvLoadItemAt(0);
+      $('rvPrice').value = '150'; $('rvSettle').value = '45.50'; $('rvBy').value = 'IM';
+      $('rvSave').click(); 0;`);
+    // commit -> close is async: poll instead of a fixed sleep (flaked at
+    // fixed sleeps under load, 2026-08-14)
     for (let w = 0; w < 40; w++) {
       await sleep(200);
-      if (await exec(`$('wsPo').value === ''`)) break;
+      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
     }
-    const wsGot = await exec(`window.__wsGot`);
-    check('entry row commits price + dispute settlement through returns:create',
-      wsGot && wsGot.orderNumber === 'WMR-ENTRY-1' && wsGot.items.length === 1
-        && wsGot.items[0].price === 150 && wsGot.items[0].settle === 45.5
-        && wsGot.items[0].targetSku === 'S25-128GB-NAVY',
-      wsGot);
-    const wsAfter = await exec(`[$('wsPo').value, $('wsSku').value, $('wsSettle').value, $('wsBy').value, String(window.__err || '')]`);
-    check('the row clears after a commit (initials stay), no async errors',
-      wsAfter[0] === '' && wsAfter[1] === '' && wsAfter[2] === '' && wsAfter[3] === 'IM' && wsAfter[4] === '',
-      wsAfter);
-    await exec(`wsCreate = window.__wsOrig; 0;`);
+    const rvGot = await exec(`window.__rvGot`);
+    check('Receive commits price + dispute settlement through returns:create',
+      rvGot && rvGot.orderNumber === '119999000000001' && rvGot.items.length === 1
+        && rvGot.items[0].price === 150 && rvGot.items[0].settle === 45.5
+        && rvGot.items[0].targetSku === 'S25-128GB-NAVY',
+      rvGot);
+    const rvClosed = await exec(`[!document.querySelector('#retRecvDialog[open]'), String(window.__err || '')]`);
+    check('Receive closes the popup after the commit, no async errors',
+      rvClosed[0] === true && rvClosed[1] === '', rvClosed);
+    await exec(`rvCreate = window.__rvOrig; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
     // popup edit (owner request 2026-08-07): the pencil opens the receive
     // popup prefilled from the row, with the Received-date row visible
     await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
@@ -1191,36 +1193,36 @@ module.exports = async function run({ app, win, db, clipboard }) {
         recvLookup = 'ready';
       `);
       const s25Targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      // the entry row mid-receive: matched order, condition auto-matched
+      // the receive popup mid-flow: matched order, condition auto-matched
       await exec(`retReceivedBy = 'IM'; loadRetPast()`);
       await sleep(300);
-      await exec(`
-        ws.unmatched = false; ws.orderId = 'oid-1'; ws.source = 'WALMART';
-        $('wsPo').value = '119121310078834'; wsLastLookup = '119121310078834';
-        $('wsCust').value = 'J. Alvarez';
-        $('wsTrk').value = '1ZF98W401234567890';
-        ws.items = [
+      await exec(`retOpenRecv();
+        rv.unmatched = false; rv.orderId = 'oid-1'; rv.source = 'WALMART';
+        $('rvPo').value = '119121310078834'; rvLastLookup = '119121310078834';
+        $('rvCust').value = 'J. Alvarez';
+        $('rvTrk').value = '1ZF98W401234567890';
+        rv.items = [
           { sku: 'S25-128GB-NAVY', title: 'Samsung Galaxy S25 128GB Navy', price: 529.99, quantity: 2, targets: ${JSON.stringify(s25Targets)} },
           { sku: 'A16-64GB-BLK', title: 'Samsung Galaxy A16 64GB Black', price: 139.99, quantity: 1, targets: null },
         ];
-        ws.received = [false, false];
-        wsLoadItemAt(0);
-        wsSetCond('openbox');
-        $('wsBy').value = 'IM'; $('wsNote').value = 'box opened once, resealed';
-        wsRenderCond();`);
+        rv.received = [false, false];
+        rvLoadItemAt(0);
+        rv.condition = 'openbox';
+        $('rvBy').value = 'IM'; $('rvNote').value = 'box opened once, resealed';
+        rvRenderCond();`);
       await sleep(400);
       img = await win.webContents.capturePage();
-      const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-entry.png');
+      const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-popup.png');
       fs.writeFileSync(retShot, img.toPNG());
       console.log(`SHOT ${retShot}`);
       // the unmapped state: Used has no listing -> pick box + create button
-      await exec(`wsSetCond('used')`);
+      await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
       await sleep(250);
       img = await win.webContents.capturePage();
-      const retFixShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-entry-fix.png');
+      const retFixShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-popup-fix.png');
       fs.writeFileSync(retFixShot, img.toPNG());
       console.log(`SHOT ${retFixShot}`);
-      await exec(`wsReset()`);
+      await exec(`$('retRecvDialog').close()`);
       // condition-mapping editor, seeded with mixed auto/manual rows
       await exec(`$('mapDialog').showModal(); $('mapSearch').value = ''; mapRows = ${JSON.stringify([
         { baseSku: 'A16-64GB-BLK', conds: { used: { sku: 'A16-64GB-BLK-USED', source: 'manual' } } },

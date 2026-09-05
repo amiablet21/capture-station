@@ -1601,34 +1601,21 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-chip.is-disp { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ret-chip.is-on { border-color: currentColor; }
 
-/* ---- the excel-style entry row: first row of the sheet, always live.
-   Type the PO#, the matched order fills the rest; the Condition dropdown
-   auto-matches the target SKU (pick box = manual override) ---- */
-/* the tinted band closes with a green rule whether or not the status
-   strip is showing (the tbody carries it, not the last row) */
+/* ---- the entry cell: the sheet's first row launches the receive popup
+   (owner 2026-09-05, "popup instead of on the line") — a tinted band with
+   the + gutter and the PO cell, closed by the green rule ---- */
 .ret-log-table tbody.ret-entry-body { border-bottom: 2px solid #1f9d5b; }
 .ret-log-table tr.ws-row td {
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
   border-bottom: 1px solid var(--border-soft);
-  overflow: visible;
-  white-space: normal;
 }
-/* the status strip under the entry row: only visible while wsHint has
-   something to say (lookup status, a blocked receive) */
-.ws-hint-tr td.ws-hintcell {
-  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 10px 6px;
-  white-space: normal;
-}
-.ws-hintcell.is-fail { color: var(--neg-text); font-weight: 600; }
 .ret-log-table tr.ws-row td.ws-cell:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 2px;
 }
-.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; }
+.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; cursor: pointer; }
+.ws-gutter:hover { background: var(--accent-soft); }
 .ws-in {
   width: 100%;
   border: none;
@@ -1642,85 +1629,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
 .ws-date { color: var(--muted); font-size: 12px; }
-.ws-num .ws-in { text-align: right; appearance: textfield; }
-.ws-num input::-webkit-inner-spin-button,
-.ws-num input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.ws-by { font-weight: 600; text-transform: uppercase; }
-.ws-skucell, .ws-condcell { overflow: visible !important; } /* dropdowns + chips escape the cell */
-/* condition dropdown (design A, variants/ret-dropdown.html): the closed
-   state is the condition's pastel pill; the menu previews landings */
-.ws-condwrap { position: relative; }
-.ws-condbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  font-weight: 600;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 3px 10px 3px 11px;
-  cursor: pointer;
-  color: var(--text);
-  background: var(--surface-2);
-}
-.ws-condbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.ws-condbtn.is-new { background: var(--pos-bg); color: var(--pos-text); }
-.ws-condbtn.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.ws-condbtn.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.ws-condbtn.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
-.ws-cond-caret { font-size: 9px; opacity: 0.65; margin-left: 1px; }
-.ws-cond-menu {
-  position: fixed;
-  z-index: 60;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-ctl);
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(47, 52, 55, 0.12);
-}
-.ws-cond-mi {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  font-size: 12.5px;
-  padding: 8px 12px;
-  border: none;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-.ws-cond-mi:last-child { border-bottom: none; }
-.ws-cond-mi:hover, .ws-cond-mi:focus-visible { background: var(--surface-2); outline: none; }
-.ws-cond-mi.is-sel { background: var(--accent-soft); font-weight: 600; }
-.ws-cond-mi .ret-dd-dot { width: 9px; height: 9px; flex: 0 0 auto; }
-.ws-mi-tgt { margin-left: auto; font-size: 10.5px; color: var(--faint); padding-left: 14px; }
-.ws-mi-tgt.is-missing { color: var(--badge-yellow-text); }
-.ws-target { margin-top: 4px; font-size: 11px; color: var(--pos-text); font-weight: 600; }
-.ws-target .mono { font-size: 11px; }
-.ws-target.is-missing { color: var(--badge-yellow-text); font-weight: 500; }
-/* pick + create stack vertically — side by side they overflowed the column */
-.ws-fix { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
-.ws-pick-combo { min-width: 0; position: relative; }
-.ws-in.ws-pick {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-}
-.ws-create {
-  align-self: flex-start;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-.ws-order { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-.ws-savecell { text-align: center; }
-.ws-save { width: 26px; height: 26px; padding: 0; font-size: 13px; line-height: 1; border-radius: 999px; }
 
 /* inline product thumbnails once a SKU is picked (returns + receiving) */
 .sku-thumb {
