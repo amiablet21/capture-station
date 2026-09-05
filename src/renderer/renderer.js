@@ -956,10 +956,6 @@ async function openSettings() {
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
-  $('setWmId').value = (cfg.walmart || {}).clientId || '';
-  $('setWmSecret').value = (cfg.walmart || {}).clientSecret || '';
-  $('testWmResult').textContent = '';
-  $('testWmResult').className = 'test-result';
   const sel = $('setLocation');
   sel.innerHTML = cfg.linnworks.locationId
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
@@ -1013,18 +1009,6 @@ $('testConnBtn').addEventListener('click', async () => {
   }
 });
 
-$('testWmBtn').addEventListener('click', async () => {
-  const out = $('testWmResult');
-  out.className = 'test-result';
-  out.textContent = 'Connecting…';
-  const res = await api.testWalmart({
-    clientId: $('setWmId').value.trim(),
-    clientSecret: $('setWmSecret').value.trim(),
-  });
-  out.textContent = res.ok ? 'Connected to Walmart Marketplace' : res.error;
-  out.classList.add(res.ok ? 'is-ok' : 'is-fail');
-});
-
 $('chooseCsvBtn').addEventListener('click', async () => {
   const res = await api.chooseCsvFolder();
   if (res.folder) $('setCsvFolder').textContent = res.folder;
@@ -1059,10 +1043,6 @@ $('settingsSave').addEventListener('click', async () => {
       token: $('setToken').value.trim(),
       locationId: sel.value,
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
-    },
-    walmart: {
-      clientId: $('setWmId').value.trim(),
-      clientSecret: $('setWmSecret').value.trim(),
     },
     dryRun: $('setDryRun').checked,
     shipCutoff: /^\d{1,2}:\d{2}$/.test($('setShipCutoff').value.trim()) ? $('setShipCutoff').value.trim() : '16:00',
@@ -3028,7 +3008,6 @@ function enterReturns() {
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
   ensureInventory(); // the entry row's and popup's SKU combos need it
-  retSettleSync(); // Walmart fills the Dispute Settlement column
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
     // the entry row's initials + date follow along when the page opens
@@ -3037,35 +3016,6 @@ function enterReturns() {
       wsEls.date.textContent = new Date().toISOString().slice(0, 10);
     }
   });
-}
-
-// Dispute Settlement autofill (owner 2026-09-04, like the RETURNS-2 sheet's
-// Walmart-API column): main asks Walmart what it refunded on each recent
-// return still missing a settlement and stamps the amounts into the log.
-// Quiet by nature — no keys configured just means the column stays manual;
-// only a MANUAL Refresh surfaces that (and any sync error) in the hint.
-let retSettleLast = 0;
-let retSettleBusy = false;
-
-async function retSettleSync(manual) {
-  if (retSettleBusy || (state && state.captureOnly)) return;
-  if (!manual && Date.now() - retSettleLast < 10 * 60000) return;
-  retSettleBusy = true;
-  retSettleLast = Date.now();
-  const res = await api.returnsSettleSync().catch(() => null);
-  retSettleBusy = false;
-  if (!res) return;
-  if (!res.ok) {
-    if (manual && res.notConfigured) wsHint('Add the Walmart API keys in Settings to auto-fill Dispute Settlement.', false);
-    else if (manual && res.error) wsHint(res.error, false);
-    return;
-  }
-  if (res.filled) {
-    toast(`Dispute settlement filled on ${res.filled} return${res.filled === 1 ? '' : 's'} from Walmart`);
-    loadRetPast();
-  } else if (manual && res.error) {
-    wsHint(res.error, false);
-  }
 }
 
 function retCondLabel(key) {
@@ -3205,7 +3155,7 @@ function rvRenderCond() {
   btn.disabled = false;
   btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
-  btn.title = `Creates the Linnworks item with this exact name (title and price copied from ${rv.sku}), maps it, and routes this return into it. Create the marketplace listings later with the same SKU and they link automatically.`;
+  btn.title = 'Opens the New SKU sheet prefilled with this name and the base item’s title and price — adjust anything, hit Create, and this return routes into it. Create the marketplace listings later with the same SKU and they link automatically.';
 }
 
 $('rvPills').addEventListener('click', (e) => {
@@ -3217,47 +3167,35 @@ $('rvPills').addEventListener('click', (e) => {
   rvRenderCond();
 });
 
-// Creates the prefix-named condition SKU in Linnworks (title and price
-// copied from the base item), joins it into the local inventory caches so
-// every combo sees it, and persists the mapping. Shared by the popup's
-// Create button and the entry row's.
-async function createCondSku(baseSku, cond, suggested) {
+// "Make the condition SKU then and there" (owner 2026-09-05): the Create
+// button opens the full New SKU sheet prefilled with the suggested
+// prefix-name, title and the base item's price — everything editable —
+// and on Create the fresh SKU is mapped to the condition and this return
+// routes straight into it. Shared by the entry row and the edit popup.
+function openCondSkuCreate(baseSku, cond, suggested, onMapped) {
   const parent = recvLookupExact(baseSku);
-  const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
-  const res = await api.createSku({
+  openNewSkuDialog({
     sku: suggested,
-    title: `${(parent && parent.title) || baseSku} - ${condLabel}`,
+    title: skuTitleSuggestion(suggested),
     retailPrice: Number(parent && parent.retailPrice) || 0,
-    qty: 0,
+  }, async (newSku) => {
+    const map = await api.returnsMapSet(baseSku, cond, newSku);
+    const target = (map.ok && map.targetSku) || newSku;
+    toast(`${baseSku} ${cond} → ${target}`);
+    onMapped(target);
   });
-  if (!res.ok) return { ok: false, error: res.error };
-  if (recvItems) {
-    const item = { sku: res.sku, title: `${(parent && parent.title) || baseSku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
-    recvItems.push(item);
-    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
-  }
-  const map = await api.returnsMapSet(baseSku, cond, res.sku);
-  return { ok: true, targetSku: (map.ok && map.targetSku) || res.sku };
 }
 
-$('rvCreate').addEventListener('click', async () => {
+$('rvCreate').addEventListener('click', () => {
   if (!rv || !rv.sku) return;
-  const btn = $('rvCreate');
-  const suggested = btn.dataset.sku;
+  const baseSku = rv.sku;
   const cond = rv.condition;
-  btn.disabled = true;
-  btn.textContent = 'Creating…';
-  const res = await createCondSku(rv.sku, cond, suggested);
-  if (!res.ok) {
-    toast(res.error || 'Could not create the SKU.');
+  openCondSkuCreate(baseSku, cond, $('rvCreate').dataset.sku, (target) => {
+    // the popup may have moved on (or closed) while the sheet was open
+    if (!rv || rv.sku !== baseSku || rv.condition !== cond) return;
+    rv.targets = { ...(rv.targets || {}), [cond]: target };
     rvRenderCond();
-    return;
-  }
-  if (rv) {
-    rv.targets = { ...(rv.targets || {}), [cond]: res.targetSku };
-    toast(`${rv.sku} ${cond} → ${res.targetSku}`);
-  }
-  rvRenderCond();
+  });
 });
 
 // a hand-changed PO no longer matches the displayed order lines
@@ -3481,12 +3419,17 @@ function wsLoadItem(it) {
     wsEls.sku.value = it.sku;
     wsEls.qty.value = String(it.quantity || 1);
     wsEls.price.value = Number(it.price) ? Number(it.price).toFixed(2) : '';
+    // Dispute Settlement autofills from the SAME Linnworks order line the
+    // price came from (owner 2026-09-05): what the customer paid is the
+    // amount at stake. Editable — clear it when there is no dispute.
+    wsEls.settle.value = wsEls.price.value;
   } else {
     ws.itemIdx = -1;
     ws.sku = ''; ws.title = ''; ws.price = 0; ws.targets = null;
     wsEls.sku.value = '';
     wsEls.qty.value = '1';
     wsEls.price.value = '';
+    wsEls.settle.value = '';
   }
   ws.condition = 'new';
   wsEls.cond.value = 'new';
@@ -3537,7 +3480,7 @@ function wsRenderCond() {
   btn.disabled = false;
   btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
-  btn.title = `Creates the Linnworks item with this exact name (title and price copied from ${ws.sku}), maps it, and routes this return into it.`;
+  btn.title = 'Opens the New SKU sheet prefilled with this name and the base item’s title and price — adjust anything, hit Create, and this return routes into it.';
 }
 
 async function wsCommit() {
@@ -3593,8 +3536,7 @@ async function wsCommit() {
   if (next >= 0) {
     wsHint(`Received — ${ws.items.length - ws.received.filter(Boolean).length} ordered line${ws.items.length - ws.received.filter(Boolean).length === 1 ? '' : 's'} left on this PO.`);
     wsEls.note.value = '';
-    wsEls.settle.value = '';
-    wsLoadItemAt(next);
+    wsLoadItemAt(next); // refills price + settle from the next line
     wsEls.qty.focus();
   } else {
     wsHint('');
@@ -3668,22 +3610,16 @@ function wireEntryRow(tr) {
     wsEls.pick.value = '';
     wsRenderCond();
   });
-  wsEls.create.addEventListener('click', async () => {
+  wsEls.create.addEventListener('click', () => {
     if (!ws.sku) return;
-    const btn = wsEls.create;
-    const suggested = btn.dataset.sku;
+    const baseSku = ws.sku;
     const cond = ws.condition;
-    btn.disabled = true;
-    btn.textContent = 'Creating…';
-    const res = await createCondSku(ws.sku, cond, suggested);
-    if (!res.ok) {
-      toast(res.error || 'Could not create the SKU.');
+    openCondSkuCreate(baseSku, cond, wsEls.create.dataset.sku, (target) => {
+      // the row may have moved on while the New SKU sheet was open
+      if (ws.sku !== baseSku || ws.condition !== cond) return;
+      ws.targets = { ...(ws.targets || {}), [cond]: target };
       wsRenderCond();
-      return;
-    }
-    ws.targets = { ...(ws.targets || {}), [cond]: res.targetSku };
-    toast(`${ws.sku} ${cond} → ${res.targetSku}`);
-    wsRenderCond();
+    });
   });
   // Enter anywhere after the SKU commits the row, spreadsheet-style
   for (const k of ['qty', 'price', 'by', 'settle', 'note']) {
@@ -6935,7 +6871,6 @@ $("rnSave").addEventListener("click", async () => {
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
   loadUnlisted(true); // fresh scan: cards update the moment it lands
-  retSettleSync(true); // manual pass: also re-ask Walmart for settlements
   toast("Refreshing the log and listing scan…", 2000);
 });
 $("ebRefresh").addEventListener("click", () => {

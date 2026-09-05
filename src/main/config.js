@@ -1,21 +1,19 @@
 'use strict';
 // Config stored in userData/config.json. Credentials never hardcoded.
-// Linnworks and Walmart API credentials are encrypted at rest with the OS
-// user's key (Electron safeStorage / Windows DPAPI): config.json holds
-// `linnworksEnc` / `walmartEnc` and is useless if copied to another
-// machine or user account.
+// Linnworks API credentials are encrypted at rest with the OS user's key
+// (Electron safeStorage / Windows DPAPI): config.json holds `linnworksEnc`
+// and is useless if copied to another machine or user account.
 const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const SECRET_FIELDS = ['applicationId', 'applicationSecret', 'token'];
-const WALMART_SECRET_FIELDS = ['clientId', 'clientSecret'];
 
-function encryptCreds(creds, fields) {
+function encryptCreds(linnworks) {
   try {
     if (!safeStorage.isEncryptionAvailable()) return null;
     const secrets = {};
-    for (const f of fields) secrets[f] = (creds || {})[f] || '';
+    for (const f of SECRET_FIELDS) secrets[f] = linnworks[f] || '';
     return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
   } catch {
     return null;
@@ -55,9 +53,6 @@ const DEFAULTS = {
     locationId: '',
     locationName: '',
   },
-  // Walmart Marketplace API (Developer Portal keys): feeds the Returns
-  // page's Dispute Settlement column from the refund Walmart reports.
-  walmart: { clientId: '', clientSecret: '' },
   dryRun: true,
   // Route open orders the primary location can't cover to a fallback
   // (dropship) location; move them back when the primary is replenished.
@@ -192,11 +187,6 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
-  if (stored.walmartEnc) {
-    const secrets = decryptCreds(stored.walmartEnc);
-    if (secrets) stored.walmart = { ...(stored.walmart || {}), ...secrets };
-    delete stored.walmartEnc;
-  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -239,15 +229,10 @@ function save(patch) {
   const cfg = deepMerge(load(), patch || {});
   cached = cfg;
   const persisted = structuredClone(cfg);
-  const enc = encryptCreds(cfg.linnworks, SECRET_FIELDS);
+  const enc = encryptCreds(cfg.linnworks);
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
-  }
-  const wmEnc = encryptCreds(cfg.walmart, WALMART_SECRET_FIELDS);
-  if (wmEnc) {
-    persisted.walmartEnc = wmEnc;
-    for (const f of WALMART_SECRET_FIELDS) persisted.walmart[f] = '';
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');
