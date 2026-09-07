@@ -1,0 +1,71 @@
+# Builds the Mac app (DMG + ZIP, Apple Silicon + Intel) on GitHub's macOS
+# runners — no Mac needed locally.
+#
+# Runs when:
+#   - a version tag is pushed (v1.28.0 ...) -> builds AND attaches the
+#     installers to a GitHub Release for that tag
+#   - the "Run workflow" button is pressed on the Actions tab -> builds and
+#     leaves the installers as a downloadable artifact
+#
+# Code signing (optional, needs an Apple Developer account): add these
+# repository secrets and the same build signs + notarizes automatically:
+#   MAC_CSC_LINK            base64 of the Developer ID Application .p12
+#   MAC_CSC_KEY_PASSWORD    the .p12 password
+#   APPLE_ID                Apple ID email
+#   APPLE_APP_SPECIFIC_PASSWORD  app-specific password from appleid.apple.com
+#   APPLE_TEAM_ID           10-char team id
+# Without them the app builds unsigned: it runs fine, but macOS Gatekeeper
+# makes the first open awkward (System Settings -> Privacy & Security ->
+# Open Anyway, or: xattr -cr "/Applications/Capture Station.app").
+
+name: Build Mac app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach installers to the tag's GitHub Release
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build DMG + ZIP (arm64 + x64)
+        run: npx electron-builder --mac --publish never
+        env:
+          # empty when the secrets aren't configured -> electron-builder
+          # skips signing/notarization instead of failing
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Keep the installers as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-station-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+      - name: Attach installers to the release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+          generate_release_notes: true
