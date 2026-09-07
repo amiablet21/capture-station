@@ -313,14 +313,23 @@ module.exports = async function run({ app, win, db, clipboard }) {
       /S25-128GB-NAVY-OPENBOX/.test(tgt[0]) && tgt[1] === true, tgt);
     await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
     tgt = await exec(`[
-      $('rvTarget').className,
+      !!document.querySelector('#rvWarnBtn'),
       $('rvFix').hidden,
+      $('rvTarget').textContent,
+    ]`);
+    check('an unmapped condition shows the ⚠ beside the pills (popover closed)',
+      tgt[0] === true && tgt[1] === true && tgt[2] === '', tgt);
+    // pressing the ⚠ opens the "no SKU for this yet — create it?" popover
+    await exec(`document.querySelector('#rvWarnBtn').click()`);
+    tgt = await exec(`[
+      $('rvFix').hidden,
+      $('rvFixMsg').textContent,
       $('rvCreate').hidden,
       $('rvCreate').textContent,
       !!document.querySelector('.rv-pick-combo .combo-list'),
     ]`);
-    check('an unmapped condition opens the fix row with the prefix create button',
-      /is-missing/.test(tgt[0]) && tgt[1] === false && tgt[2] === false
+    check('the ⚠ popover asks to create the missing SKU, with a manual pick',
+      tgt[0] === false && /no used SKU for S25-128GB-NAVY/i.test(tgt[1]) && tgt[2] === false
         && /USED-S25-128GB-NAVY/.test(tgt[3]) && tgt[4] === true,
       tgt);
     // 24b-bis. Create opens the full New SKU sheet on top of the popup,
@@ -375,7 +384,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelectorAll('#retPastBox thead th').length,
       document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
       !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
-      document.querySelectorAll('#retPastBox .ret-log-edit-btn').length,
+      document.querySelectorAll('#retPastBox tr.ret-past-tr td[data-edit]').length,
       document.querySelectorAll('#retPastBox .ret-log-del-btn').length,
       document.querySelectorAll('#retPastBox tr.ret-past-tr input, #retPastBox tr.ret-past-tr select').length,
       (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
@@ -386,8 +395,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
         && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2'
         && ledgerBits[8] === '189.99',
       ledgerBits);
-    check('history rows carry edit + delete, no inputs on LOG rows',
-      ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
+    check('every column is in-place editable, delete stays, no idle inputs',
+      ledgerBits[4] === 11 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
     // 24c-bis. the entry cell: a singleton row that SURVIVES a re-render
     const entryBits = await exec(`[
       !!document.querySelector('#retPastBox tr.ws-row'),
@@ -430,26 +439,60 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('Receive closes the popup after the commit, no async errors',
       rvClosed[0] === true && rvClosed[1] === '', rvClosed);
     await exec(`rvCreate = window.__rvOrig; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
-    // popup edit (owner request 2026-08-07): the pencil opens the receive
-    // popup prefilled from the row, with the Received-date row visible
-    await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
-    await sleep(200);
-    const editBits = await exec(`[
-      !!document.querySelector('#retRecvDialog[open]'),
-      $('rvTitle').textContent,
-      $('rvPo').value,
-      $('rvSku').value,
-      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
-      $('rvQty').value,
-      $('rvSave').textContent,
-      $('rvDayRow').hidden,
+    // 24e. in-place editing (owner 2026-09-07, the pencil popup retired):
+    // clicking a cell swaps in an editor prefilled with the cell's value,
+    // Escape cancels it back to display
+    await exec(`document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="units"]').click()`);
+    await sleep(150);
+    let inline = await exec(`[
+      !!document.querySelector('#retPastBox td[data-edit="units"] .ret-ein'),
+      (document.querySelector('#retPastBox td[data-edit="units"] .ret-ein') || {}).value || '',
     ]`);
-    check('pencil opens the edit popup prefilled from the row',
-      editBits[0] === true && /Edit return/.test(editBits[1]) && editBits[2] === 'WMR-REMOVAL-7788'
-        && editBits[3] === 'S25-128GB-NAVY' && editBits[4] === 'openbox' && editBits[5] === '2'
-        && /Save changes/.test(editBits[6]) && editBits[7] === false,
-      editBits);
-    await exec(`$('retRecvDialog').close()`);
+    check('clicking a log cell opens the in-place editor prefilled',
+      inline[0] === true && inline[1] === '2', inline);
+    await exec(`document.querySelector('#retPastBox td[data-edit="units"] .ret-ein')
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await sleep(150);
+    inline = await exec(`[
+      !!document.querySelector('#retPastBox .ret-ein'),
+      (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
+    ]`);
+    check('Escape cancels the editor back to the display value',
+      inline[0] === false && inline[1] === '2', inline);
+    // Enter saves through the SAME qty-aware corrections engine the popup
+    // used — the payload carries the whole row with the edit swapped in
+    await exec(`
+      window.__reOrig = retEditApi;
+      window.__reGot = null;
+      retEditApi = async (p) => { window.__reGot = p; return { ok: true, stockNote: '' }; };
+      document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="units"]').click(); 0;`);
+    await sleep(150);
+    await exec(`(() => {
+      const ein = document.querySelector('#retPastBox td[data-edit="units"] .ret-ein');
+      ein.value = '3';
+      ein.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    })()`);
+    await sleep(250);
+    const reGot = await exec(`window.__reGot`);
+    check('an inline edit saves the full row through returns:editUnit',
+      reGot && reGot.po === 'WMR-REMOVAL-7788' && reGot.units === '3'
+        && reGot.sku === 'S25-128GB-NAVY' && reGot.condition === 'openbox'
+        && reGot.price === 189.99 && reGot.receivedBy === 'IM',
+      reGot);
+    await exec(`retEditApi = window.__reOrig; 0;`);
+    // the condition cell edits through a compact 4-pill menu
+    await exec(`loadRetPast()`);
+    await sleep(250);
+    await exec(`document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="condition"]').click()`);
+    await sleep(150);
+    const condMenu = await exec(`[
+      document.querySelectorAll('#retPastBox .ret-emenu .ret-emi').length,
+      (document.querySelector('#retPastBox .ret-emi.is-sel') || { dataset: {} }).dataset.cond || '',
+    ]`);
+    check('the condition cell edits through the 4-pill menu, current one marked',
+      condMenu[0] === 4 && condMenu[1] === 'openbox', condMenu);
+    await exec(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
+    await sleep(150);
 
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card

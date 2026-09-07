@@ -944,10 +944,10 @@
     </div>
   </dialog>
 
-  <!-- Receive/Edit a return: the design-A "excel sheet" popup (2026-08-07)
-       — a label column and a value column with gridlines, one field per
-       row. Receiving came back to the popup 2026-09-05 (owner: the
-       in-sheet entry crowded the row); the sheet's PO cell opens it. -->
+  <!-- Receive a return: the design-A "excel sheet" popup (2026-08-07) — a
+       label column and a value column with gridlines, one field per row.
+       Receive-only again since the log edits in place (2026-09-07); the
+       sheet's PO cell opens it. -->
   <dialog id="retRecvDialog" class="dlg ret-recv-dlg">
     <div class="dlg-body">
       <h2 class="dlg-title" id="rvTitle">Receive a return</h2>
@@ -960,9 +960,8 @@
                    autocomplete="off" spellcheck="false" aria-label="Original order number" />
           </div>
         </div>
-        <!-- everything the order contained: receiving = click a line to
-             receive it (✓ marks lines already received); editing = read-only,
-             the highlighted chip is the line this return came from -->
+        <!-- everything the order contained: click a line to receive it; a ✓
+             marks lines already received — nothing forces receiving them all -->
         <div class="rv-row" id="rvOrderRow" hidden>
           <div class="rv-k">Ordered</div>
           <div class="rv-v rv-order-v"><div id="rvOrder" class="rv-order"></div></div>
@@ -974,11 +973,6 @@
         <div class="rv-row">
           <div class="rv-k">Tracking #</div>
           <div class="rv-v"><input id="rvTrk" class="rv-in mono" type="text" placeholder="—" aria-label="Return tracking number" /></div>
-        </div>
-        <!-- edit mode only: the received date is correctable, like the old inline edit -->
-        <div class="rv-row" id="rvDayRow" hidden>
-          <div class="rv-k">Received</div>
-          <div class="rv-v"><input id="rvDay" class="rv-in rv-in-sm mono" type="text" placeholder="YYYY-MM-DD" aria-label="Received date" /></div>
         </div>
         <div class="rv-row">
           <div class="rv-k">Returned SKU</div>
@@ -994,15 +988,20 @@
         <div class="rv-row rv-tall">
           <div class="rv-k">Condition</div>
           <div class="rv-v rv-cond-v">
+            <!-- an unmapped condition shows a small ⚠ beside the pills;
+                 pressing it opens this popover: "no SKU for this yet —
+                 create it?" with Create + a manual pick (owner 2026-09-07) -->
             <div class="rv-pills" id="rvPills" role="radiogroup" aria-label="Condition"></div>
             <div id="rvTarget" class="rv-target"></div>
             <div id="rvFix" class="rv-fix" hidden>
+              <div id="rvFixMsg" class="rv-fix-msg"></div>
+              <button id="rvCreate" class="pillbtn rv-create" type="button" hidden></button>
+              <div class="rv-fix-or">or pick an existing listing:</div>
               <div class="combo rv-pick-combo">
                 <input id="rvPick" class="rv-in mono" type="text" placeholder="Pick the listing…"
                        autocomplete="off" spellcheck="false" aria-label="Target listing" />
                 <div class="combo-list" hidden></div>
               </div>
-              <button id="rvCreate" class="pillbtn rv-create" type="button" hidden></button>
             </div>
           </div>
         </div>

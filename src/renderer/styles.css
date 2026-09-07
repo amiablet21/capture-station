@@ -1491,9 +1491,41 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chs-sku-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
-.rv-fix { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; }
-.rv-fix .rv-pick-combo { flex: 1 1 200px; min-width: 200px; max-width: none; }
+/* the ⚠ beside the pills: only shows when the picked condition has no SKU */
+.rv-warn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--badge-yellow-text);
+  border-radius: 999px;
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rv-warn:hover { background: var(--badge-yellow-text); color: var(--surface); }
+
+/* the ⚠'s popover: "no SKU for this yet — create it?" */
+.rv-fix {
+  position: fixed;
+  z-index: 70;
+  width: 340px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: 0 12px 32px rgba(47, 52, 55, 0.18);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rv-fix-msg { font-size: 12.5px; }
+.rv-fix-msg .mono { font-size: 11.5px; }
+.rv-fix-or { font-size: 10.5px; color: var(--faint); }
+.rv-fix .rv-pick-combo { width: 100%; }
 .rv-fix .rv-in { border-color: var(--border); background: var(--surface); }
+.rv-create { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-create { color: var(--accent-soft-text); background: var(--accent-soft); border-color: transparent; flex: 0 0 auto; }
 .rv-create .mono { font-size: 11px; }
 
@@ -1629,6 +1661,42 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
 .ws-date { color: var(--muted); font-size: 12px; }
+
+/* ---- in-place log editing (owner 2026-09-07): click a cell, type, Enter.
+   The editor is borderless in the cell, ringed like the entry cell ---- */
+.ret-ecell { cursor: text; }
+.ret-ecell:hover { box-shadow: inset 0 0 0 1px var(--border); }
+td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface) !important; }
+.ret-ein {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 0;
+}
+.ret-ein.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+.ret-cell-units .ret-ein, .ret-cell-price .ret-ein, .ret-cell-settle .ret-ein { text-align: right; }
+/* the condition cell edits through a compact 4-pill menu, right in the cell */
+.ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
+.ret-emenu { display: flex; flex-direction: column; gap: 2px; }
+.ret-emi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.ret-emi:hover { background: var(--surface-2); }
+.ret-emi.is-sel { background: var(--accent-soft); font-weight: 600; }
 
 /* inline product thumbnails once a SKU is picked (returns + receiving) */
 .sku-thumb {
