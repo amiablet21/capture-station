@@ -1,0 +1,49 @@
+# Builds the Windows installer (NSIS .exe) on GitHub's Windows runners —
+# the same artifact `npm run dist` produces locally.
+#
+# Runs when:
+#   - a version tag is pushed (v1.28.0 ...) -> builds AND attaches the
+#     installer to the GitHub Release for that tag (alongside the Mac
+#     builds from build-mac.yml)
+#   - the "Run workflow" button is pressed on the Actions tab -> builds and
+#     leaves the installer as a downloadable artifact
+
+name: Build Windows app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach the installer to the tag's GitHub Release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the NSIS installer
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Keep the installer as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-station-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Attach the installer to the release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
