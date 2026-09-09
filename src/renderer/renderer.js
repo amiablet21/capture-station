@@ -7014,6 +7014,209 @@ $("rnSave").addEventListener("click", async () => {
   loadStock();
 });
 
+/* ---------- returns-history import (owner 2026-09-09) ---------- */
+// pick the sheet -> parse preview -> Linnworks lookups (progress bar) ->
+// one Import press writes the entries. Seams so e2e can stub the ipc.
+let retImp = null; // { entries, stats } while the dialog is open
+let retImpPick = () => api.returnsImportPick();
+let retImpResolve = (entries) => api.returnsImportResolve(entries);
+let retImpCommit = (entries) => api.returnsImportCommit(entries);
+
+function retImpStatHtml(parse, resolve) {
+  const li = (txt) => `<div class="retimp-line">${txt}</div>`;
+  let h = li(`<b>${parse.rows}</b> rows → <b>${parse.entries}</b> entries · <b>${parse.units}</b> units`);
+  if (parse.skippedDup) h += li(`${parse.skippedDup} already in the log — skipped`);
+  if (parse.noPo) h += li(`${parse.noPo} without a PO# — imported as unmatched`);
+  if (resolve) {
+    h += li(`<b>${resolve.found}</b> of ${resolve.orders} orders matched in Linnworks`);
+    if (resolve.trackingFilled) h += li(`tracking filled from the order on <b>${resolve.trackingFilled}</b>`);
+    h += li(`SKUs: <b>${resolve.skuFromOrder}</b> from the order · <b>${resolve.skuKnown}</b> already Linnworks names`
+      + (resolve.skuUnknown ? ` · <b>${resolve.skuUnknown}</b> unknown (imported as written, flagged)` : ''));
+  }
+  return h;
+}
+
+$('retImportBtn').addEventListener('click', async () => {
+  const picked = await retImpPick().catch(e => ({ ok: false, error: e.message }));
+  if (!picked || picked.canceled) return;
+  if (!picked.ok) { toast(picked.error || 'Could not read that file.'); return; }
+  retImp = { entries: picked.entries, parse: picked.stats, resolve: null };
+  $('retImpStats').innerHTML = retImpStatHtml(picked.stats, null);
+  $('retImpNote').textContent = 'Everything imports as Open box, dated today, no stock changes.';
+  $('retImpGo').disabled = true;
+  const bar = $('retImpBar');
+  bar.hidden = false;
+  bar.querySelector('.retimp-fill').style.width = '0%';
+  bar.querySelector('.retimp-bar-txt').textContent = 'Looking the orders up in Linnworks…';
+  $('retImpDialog').showModal();
+  const res = await retImpResolve(picked.entries).catch(e => ({ ok: false, error: e.message }));
+  if (!retImp) return; // dialog was cancelled mid-lookup
+  bar.hidden = true;
+  if (!res || !res.ok) {
+    // no Linnworks: the sheet's own data still imports, just unenriched
+    $('retImpNote').textContent = `${res && res.error ? res.error + ' — ' : ''}orders not looked up; the sheet imports as-is.`;
+  } else {
+    retImp.entries = res.entries;
+    retImp.resolve = res.stats;
+    $('retImpStats').innerHTML = retImpStatHtml(retImp.parse, res.stats);
+  }
+  $('retImpGo').disabled = !retImp.entries.length;
+});
+
+api.on('returns:importProgress', ({ done, total }) => {
+  const bar = $('retImpBar');
+  if (bar.hidden || !total) return;
+  bar.querySelector('.retimp-fill').style.width = `${Math.round((done / total) * 100)}%`;
+  bar.querySelector('.retimp-bar-txt').textContent = `Looking the orders up in Linnworks… ${done} / ${total}`;
+});
+
+$('retImpGo').addEventListener('click', async () => {
+  if (!retImp || !retImp.entries.length) return;
+  $('retImpGo').disabled = true;
+  $('retImpGo').textContent = 'Importing…';
+  const res = await retImpCommit(retImp.entries).catch(e => ({ ok: false, error: e.message }));
+  $('retImpGo').textContent = 'Import';
+  if (!res || !res.ok) {
+    $('retImpGo').disabled = false;
+    toast((res && res.error) || 'Import failed.');
+    return;
+  }
+  $('retImpDialog').close();
+  toast(`Imported ${res.made} entries (${res.units} units)`, 4000);
+  loadRetPast();
+  loadUnlisted(true);
+  retFixOpenIfNeeded(); // walk the condition SKUs with no listing yet
+});
+
+$('retImpCancel').addEventListener('click', () => $('retImpDialog').close());
+$('retImpDialog').addEventListener('close', () => { retImp = null; });
+
+/* ---------- missing-listings slider (owner 2026-09-09) ---------- */
+// After an import, log units graded openbox/used/scrap may have no
+// listing to land on. One popup walks them a SKU at a time: Create the
+// suggested listing, pick an existing one, or Skip — ‹ › to move around.
+// Each fix relinks every log entry of that SKU through returns:listingGaps.
+let retFix = null; // { gaps, idx, tally } while the slider runs
+let retFixPending = null; // gap parked while the New SKU sheet is open
+let retFixGapsApi = () => api.returnsListingGaps(); // seam: e2e stubs it
+
+async function retFixOpenIfNeeded() {
+  const res = await retFixGapsApi().catch(() => null);
+  if (!res || !res.ok) return;
+  if (res.relinked) loadRetPast(); // mappings caught up with old entries
+  if (!res.gaps.length) return;
+  retFix = { gaps: res.gaps, idx: 0, tally: { created: 0, picked: 0, skipped: 0 } };
+  ensureInventory(); // the pick combo and create suggestions want it
+  retFixShow();
+}
+
+const retFixCur = () => (retFix ? retFix.gaps[retFix.idx] : null);
+const retFixLeft = () => (retFix ? retFix.gaps.filter(g => !g.state) : []);
+
+function retFixShow() {
+  if (!retFix) return;
+  const total = retFix.gaps.length;
+  const handled = total - retFixLeft().length;
+  const done = !retFixLeft().length;
+  $('retFixBody').hidden = done;
+  $('retFixDone').hidden = !done;
+  $('retFixCreate').hidden = done;
+  $('retFixSkip').hidden = done;
+  $('retFixClose').hidden = !done;
+  $('retFixPrev').disabled = done;
+  $('retFixNext').disabled = done;
+  $('retFixFill').style.width = `${Math.round((handled / total) * 100)}%`;
+  $('retFixIcon').textContent = done ? '✓' : '!';
+  $('retFixIcon').classList.toggle('is-done', done);
+  if (done) {
+    const t = retFix.tally;
+    $('retFixN').textContent = `${total} / ${total}`;
+    $('retFixDoneH').textContent = `All ${total} handled`;
+    $('retFixTally').innerHTML = [
+      t.created ? `<span class="retfix-chip is-created">${t.created} created</span>` : '',
+      t.picked ? `<span class="retfix-chip is-picked">${t.picked} picked</span>` : '',
+      t.skipped ? `<span class="retfix-chip is-skipped">${t.skipped} skipped</span>` : '',
+    ].join('');
+  } else {
+    const g = retFixCur();
+    $('retFixN').textContent = `${retFix.idx + 1} / ${total}`;
+    $('retFixSku').textContent = g.sku;
+    $('retFixCond').innerHTML = `<span class="ret-cond-ro is-${esc(g.condition)}"><span class="ret-dd-dot is-${esc(g.condition)}"></span>${esc(retCondLabel(g.condition))}</span>`;
+    $('retFixCtx').textContent = [`${g.units} unit${g.units === 1 ? '' : 's'}`,
+      g.entries > 1 ? `${g.entries} entries` : '', g.customer].filter(Boolean).join(' · ');
+    const suggested = retSuggestCondSku(g.sku, g.condition);
+    const canCreate = !!RET_PREFIX[g.condition] && !(recvLookup === 'ready' && recvLookupExact(suggested));
+    $('retFixCreate').hidden = !canCreate;
+    $('retFixCreate').innerHTML = `＋ Create <span class="mono">${esc(suggested)}</span>`;
+    $('retFixCreate').dataset.sku = suggested;
+    $('retFixPick').value = '';
+  }
+  if (!$('retFixDialog').open) $('retFixDialog').showModal();
+}
+
+// move to the nearest unhandled gap, searching forward (dir 1) or back
+function retFixStep(dir) {
+  if (!retFix) return;
+  const n = retFix.gaps.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (retFix.idx + dir * k + n * k) % n;
+    if (!retFix.gaps[i].state) { retFix.idx = i; break; }
+  }
+  retFixShow();
+}
+
+function retFixSettle(state) {
+  const g = retFixCur();
+  if (!g || g.state) return;
+  g.state = state;
+  retFix.tally[state === 'created' ? 'created' : state === 'picked' ? 'picked' : 'skipped']++;
+  retFixStep(1);
+}
+
+$('retFixPrev').addEventListener('click', () => retFixStep(-1));
+$('retFixNext').addEventListener('click', () => retFixStep(1));
+$('retFixSkip').addEventListener('click', () => retFixSettle('skipped'));
+
+$('retFixCreate').addEventListener('click', () => {
+  const g = retFixCur();
+  if (!g) return;
+  retFixPending = g;
+  $('retFixDialog').close(); // the New SKU sheet takes the stage
+  openCondSkuCreate(g.sku, g.condition, $('retFixCreate').dataset.sku, async () => {
+    retFixPending = null;
+    if (!retFix) return;
+    await retFixGapsApi().catch(() => {}); // relink this SKU's log entries
+    loadRetPast();
+    retFixSettle('created');
+  });
+});
+
+// the New SKU sheet closed without creating: bring the slider back where
+// it was (the created path clears retFixPending before this timer looks)
+$('skuDialog').addEventListener('close', () => {
+  if (!retFix || !retFixPending) return;
+  setTimeout(() => {
+    if (retFix && retFixPending) { retFixPending = null; retFixShow(); }
+  }, 250);
+});
+
+makeCombo($('retFixPick'), document.querySelector('.retfix-combo .combo-list'), async (item) => {
+  const g = retFixCur();
+  if (!g) return;
+  const map = await api.returnsMapSet(g.sku, g.condition, item.sku);
+  if (!map.ok) { toast(map.error || 'Could not save the mapping.'); return; }
+  toast(`${g.sku} ${g.condition} → ${map.targetSku}`);
+  await retFixGapsApi().catch(() => {}); // relink this SKU's log entries
+  loadRetPast();
+  retFixSettle('picked');
+});
+
+$('retFixClose').addEventListener('click', () => $('retFixDialog').close());
+$('retFixDialog').addEventListener('close', () => {
+  // parked for the New SKU sheet = still running, everything else ends it
+  if (!retFixPending) retFix = null;
+});
+
 /* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();

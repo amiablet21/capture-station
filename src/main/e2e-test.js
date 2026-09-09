@@ -564,6 +564,105 @@ module.exports = async function run({ app, win, db, clipboard }) {
       condFix);
     await exec(`$('retCondDialog').close(); recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
 
+    // 24g. returns-history import: units count from the ROWS (owner
+    // 2026-09-09: an order of 12 with 12 rows is 12 units, never 144)
+    {
+      const ri = require('./returns-import');
+      const rows = [
+        ['PO #', 'Customer Name', 'Tracking #', 'Date Received', 'Returned SKU', 'Price', 'Received By', 'Dispute Settlement Amount'],
+        ['119000000000001', 'Ann A', '5.28846386026E11', '', 'SM-X133-64GB-GREY', '$127.49', '', 'case open'],
+        ['119000000000001', 'Ann A', '', '', 'SM-X133-64GB-GREY', '127.49', '', ''],
+        ['119000000000002', 'Bob B', '532312595932.0', '', 'TABA9+64GB', '183.99', '', '45.50'],
+        ['', 'Cara C', '', '', 'X1', '10', '', ''],
+      ];
+      const recs = ri.parseReturnsRows(rows);
+      check('import parse: unit rows read, refs normalized, comments become notes',
+        recs.length === 4 && recs[0].tracking === '528846386026' && recs[2].tracking === '532312595932'
+          && recs[0].note === 'case open' && recs[0].settle === 0 && recs[2].settle === 45.5
+          && recs[0].price === 127.49, recs);
+      const ents = ri.collapseReturns(recs);
+      const a = ents.find(e => e.po === '119000000000001');
+      check('import collapse: duplicate PO+SKU rows become one entry with units',
+        ents.length === 3 && a && a.units === 2 && a.tracking === '528846386026'
+          && a.note === 'case open' && ents.find(e => !e.po).customer === 'Cara C', ents);
+    }
+    // the dialog flow, ipc stubbed through the seams
+    await exec(`
+      window.__impOrig = [retImpPick, retImpResolve, retImpCommit];
+      window.__impCommitGot = null;
+      retImpPick = async () => ({ ok: true, entries: [
+        { po: '119000000000001', customer: 'Ann A', tracking: '', sku: 'SM-X133-64GB-GREY', units: 2, price: 127.49, settle: 0, note: 'case open' },
+      ], stats: { rows: 2, entries: 1, units: 2, skippedDup: 0, noPo: 0 } });
+      retImpResolve = async (entries) => ({ ok: true,
+        entries: entries.map(e => ({ ...e, matched: true, source: 'WALMART', sku: 'S25-128GB-NAVY' })),
+        stats: { orders: 1, found: 1, skuFromOrder: 1, skuKnown: 0, skuUnknown: 0, trackingFilled: 1 } });
+      retImpCommit = async (entries) => { window.__impCommitGot = entries; return { ok: true, made: 1, units: 2 }; };
+      $('retImportBtn').click(); 0;`);
+    await sleep(400);
+    const impBits = await exec(`[
+      !!document.querySelector('#retImpDialog[open]'),
+      $('retImpStats').textContent,
+      $('retImpGo').disabled,
+    ]`);
+    check('import dialog: parse stats shown, Import armed once resolved',
+      impBits[0] === true && impBits[1].includes('entries') && impBits[1].includes('orders matched')
+        && impBits[2] === false, impBits);
+    await exec(`$('retImpGo').click(); 0;`);
+    await sleep(400);
+    const impDone = await exec(`[
+      window.__impCommitGot && window.__impCommitGot[0].sku,
+      !document.querySelector('#retImpDialog[open]'),
+    ]`);
+    check('Import commits the RESOLVED entries and closes',
+      impDone[0] === 'S25-128GB-NAVY' && impDone[1] === true, impDone);
+    await exec(`retImpPick = window.__impOrig[0]; retImpResolve = window.__impOrig[1]; retImpCommit = window.__impOrig[2]; 0;`);
+
+    // 24h. the missing-listings slider: one gap at a time, affix-stripped
+    // create suggestions, Skip advances, the tally closes it out
+    await exec(`
+      window.__fixOrig = retFixGapsApi;
+      recvItems = [{ sku: 'BASE-Y7', title: 'Y7 base', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      retFixGapsApi = async () => ({ ok: true, relinked: 0, gaps: [
+        { sku: 'OPEN-BOX-BASE-X9', condition: 'openbox', units: 2, entries: 2, customer: 'Ann A' },
+        { sku: 'BASE-Y7', condition: 'used', units: 1, entries: 1, customer: 'Bob B' },
+      ] });
+      retFixOpenIfNeeded(); 0;`);
+    await sleep(300);
+    const fix1 = await exec(`[
+      !!document.querySelector('#retFixDialog[open]'),
+      $('retFixN').textContent,
+      $('retFixSku').textContent,
+      $('retFixCreate').textContent.trim(),
+      $('retFixCtx').textContent,
+    ]`);
+    check('slider opens on gap 1 with an affix-stripped create suggestion',
+      fix1[0] === true && fix1[1] === '1 / 2' && fix1[2] === 'OPEN-BOX-BASE-X9'
+        && /Create OPEN-BOX-BASE-X9$/.test(fix1[3]) && /2 units/.test(fix1[4]), fix1);
+    await exec(`$('retFixSkip').click(); 0;`);
+    await sleep(150);
+    const fix2 = await exec(`[$('retFixN').textContent, $('retFixSku').textContent, $('retFixCreate').textContent.trim()]`);
+    check('Skip advances to gap 2 (USED- prefix suggestion)',
+      fix2[0] === '2 / 2' && fix2[1] === 'BASE-Y7' && /Create USED-BASE-Y7$/.test(fix2[2]), fix2);
+    await exec(`$('retFixSkip').click(); 0;`);
+    await sleep(150);
+    const fixDone = await exec(`[
+      $('retFixDone').hidden,
+      $('retFixDoneH').textContent,
+      $('retFixTally').textContent,
+      $('retFixClose').hidden,
+    ]`);
+    check('all handled: the tally view with Done',
+      fixDone[0] === false && fixDone[1] === 'All 2 handled'
+        && /2 skipped/.test(fixDone[2]) && fixDone[3] === false, fixDone);
+    await exec(`$('retFixClose').click();
+      retFixGapsApi = window.__fixOrig;
+      recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
+    const fixClosed = await exec(`[!document.querySelector('#retFixDialog[open]')]`);
+    check('Done closes the slider', fixClosed[0] === true, fixClosed);
+
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card
     db.createReturn({

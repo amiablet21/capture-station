@@ -610,6 +610,7 @@ class LinnworksClient {
       const order = (full || [])[0];
       out.items = ((order && order.Items) || []).filter(it => !it.IsService).map(it => ({
         sku: it.SKU || it.ItemNumber || '',
+        channelSku: it.ItemNumber || '', // the marketplace listing SKU (Walmart's)
         title: it.Title || '',
         quantity: it.Quantity || 1,
         // sold price per unit for the returns sheet: PricePerUnit when the

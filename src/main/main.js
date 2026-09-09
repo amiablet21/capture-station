@@ -8,6 +8,7 @@ const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
+const returnsImport = require('./returns-import');
 
 let win = null;
 let clipboardTimer = null;
@@ -2206,6 +2207,164 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  /* ---- returns-history import (owner 2026-09-09): the RETURNS-2 sheet
+     becomes log entries — units counted from rows, all condition openbox,
+     dated today, NO stock movements (that history is long settled) ---- */
+
+  // pick + parse + collapse + dedup; no network, so it works offline too
+  ipcMain.handle('returns:importPick', async () => {
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import the returns history sheet',
+      filters: [{ name: 'Returns sheet', extensions: ['xlsx', 'csv'] }],
+      properties: ['openFile'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const { records, entries } = returnsImport.parseReturnsFile(pick.filePaths[0]);
+      // a PO already in the log was imported (or received) before — skip
+      // it so re-running the import can never double the history
+      const have = new Set(db.listReturns(100000).map(r => String(r.order_number || '').trim()).filter(Boolean));
+      const fresh = entries.filter(e => !e.po || !have.has(e.po));
+      return {
+        ok: true,
+        entries: fresh,
+        stats: {
+          rows: records.length,
+          entries: fresh.length,
+          units: fresh.reduce((a, e) => a + e.units, 0),
+          skippedDup: entries.length - fresh.length,
+          noPo: fresh.filter(e => !e.po).length,
+        },
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // look every PO up in Linnworks: the order line pairs the sheet's
+  // Walmart SKU with the real inventory SKU, and the order's tracking
+  // fills rows the sheet left blank. NEVER the quantity — units stay
+  // exactly what the sheet's rows counted.
+  ipcMain.handle('returns:importResolve', async (_e, { entries }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = Array.isArray(entries) ? entries : [];
+    const client = new LinnworksClient(cfg.linnworks);
+    let invSet = new Set();
+    try { invSet = new Set((await getInventorySkus(cfg)).map(s => String(s).toUpperCase())); }
+    catch { /* the inventory pass is best-effort */ }
+    const orders = new Map(); // po -> order | null, one lookup per PO
+    const pos = [...new Set(list.filter(e => e.po).map(e => e.po))];
+    for (let i = 0; i < pos.length; i++) {
+      try { orders.set(pos[i], await client.findProcessedOrder(pos[i])); }
+      catch { orders.set(pos[i], null); }
+      win.webContents.send('returns:importProgress', { done: i + 1, total: pos.length });
+    }
+    const stats = { orders: pos.length, found: 0, skuFromOrder: 0, skuKnown: 0, skuUnknown: 0, trackingFilled: 0 };
+    for (const po of pos) if (orders.get(po)) stats.found++;
+    for (const e of list) {
+      const o = e.po ? orders.get(e.po) : null;
+      e.matched = !!o;
+      e.source = o ? o.source : '';
+      const want = String(e.sku || '').toUpperCase();
+      let line = null;
+      if (o) {
+        if (o.customer && !e.customer) e.customer = o.customer;
+        if (o.tracking && !e.tracking) { e.tracking = o.tracking; stats.trackingFilled++; }
+        const items = o.items || [];
+        line = items.find(it => String(it.sku || '').toUpperCase() === want
+          || String(it.channelSku || '').toUpperCase() === want)
+          // a one-line order IS the returned item, however the SKU was typed
+          || (new Set(items.map(it => String(it.sku || '').toUpperCase())).size === 1 ? items[0] : null);
+      }
+      if (line) {
+        e.sku = line.sku;
+        if (!e.price) e.price = line.price || 0;
+        stats.skuFromOrder++;
+      } else if (invSet.has(want)) {
+        stats.skuKnown++; // the sheet already used the Linnworks name
+      } else {
+        e.skuUnknown = true;
+        stats.skuUnknown++;
+      }
+    }
+    return { ok: true, entries: list, stats };
+  });
+
+  // write the log entries: condition openbox across the board (owner),
+  // received today by the configured initials, and targetSku EMPTY so
+  // nothing touches Linnworks stock — old returns were settled long ago
+  ipcMain.handle('returns:importCommit', async (_e, { entries }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = Array.isArray(entries) ? entries : [];
+    const by = String(cfg.returnsReceivedBy || '').trim();
+    let made = 0;
+    let units = 0;
+    for (const e of list) {
+      const sku = String(e.sku || '').trim();
+      const qty = Math.max(1, parseInt(e.units, 10) || 1);
+      if (!e.po && !sku && !String(e.customer || '').trim()) continue;
+      db.createReturn({
+        orderNumber: String(e.po || ''),
+        source: String(e.source || ''),
+        customer: String(e.customer || ''),
+        tracking: String(e.tracking || ''),
+        receivedBy: by,
+        unmatched: !e.matched,
+        note: sku ? '' : String(e.note || ''),
+        items: sku ? [{
+          sku: sku.toUpperCase(),
+          condition: 'openbox',
+          targetSku: '', // log-only: imported history moves no stock
+          qty,
+          price: Math.max(0, Number(e.price) || 0),
+          settle: Math.max(0, Number(e.settle) || 0),
+          note: String(e.note || ''),
+        }] : [],
+      });
+      made++;
+      units += sku ? qty : 0;
+    }
+    return { ok: true, made, units };
+  });
+
+  // log units with a condition but NO landing listing (imported history,
+  // mostly): anything the resolver can NOW place gets relinked in the log
+  // — no stock, those units never moved any — and what's left comes back
+  // as the gaps for the missing-listings slider to create or pick
+  ipcMain.handle('returns:listingGaps', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    let skus = [];
+    try { skus = await getInventorySkus(cfg); } catch { /* resolver still works from saved mappings */ }
+    const gaps = new Map();
+    let relinked = 0;
+    for (const rec of db.listReturns(100000)) {
+      let changed = false;
+      const items = (rec.items || []).map(it => {
+        if (!it.sku || it.targetSku || !it.condition || it.condition === 'new') return it;
+        const target = (db.resolveConditionTargets(it.sku, skus) || {})[it.condition] || '';
+        if (target) { changed = true; relinked++; return { ...it, targetSku: target }; }
+        const key = `${String(it.sku).toUpperCase()}|${it.condition}`;
+        const g = gaps.get(key) || { sku: String(it.sku).toUpperCase(), condition: it.condition, units: 0, entries: 0, customer: '' };
+        g.units += Number(it.qty) || 1;
+        g.entries += 1;
+        if (!g.customer && rec.customer) g.customer = rec.customer;
+        gaps.set(key, g);
+        return it;
+      });
+      if (changed) {
+        db.saveReturn(rec.id, {
+          orderNumber: rec.order_number, createdAt: rec.created_at,
+          customer: rec.customer, tracking: rec.tracking, note: rec.note,
+          items, unmatched: rec.unmatched, receivedBy: rec.received_by,
+        });
+      }
+    }
+    return { ok: true, gaps: [...gaps.values()], relinked };
+  });
+
   ipcMain.handle('returns:create', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

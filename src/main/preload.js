@@ -29,6 +29,7 @@ const EVENTS = [
   'ui:open-settings',
   'ui:open-debug',
   'ui:open-history',
+  'returns:importProgress',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -83,6 +84,10 @@ contextBridge.exposeInMainWorld('api', {
   returnsMappings: () => ipcRenderer.invoke('returns:mappings'),
   returnsMapSet: (baseSku, condition, targetSku) => ipcRenderer.invoke('returns:mapSet', { baseSku, condition, targetSku }),
   returnsMapDelete: (baseSku, condition) => ipcRenderer.invoke('returns:mapDelete', { baseSku, condition }),
+  returnsImportPick: () => ipcRenderer.invoke('returns:importPick'),
+  returnsImportResolve: (entries) => ipcRenderer.invoke('returns:importResolve', { entries }),
+  returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
+  returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
   returnsMenu: (current) => ipcRenderer.invoke('nav:returnsMenu', { current }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),

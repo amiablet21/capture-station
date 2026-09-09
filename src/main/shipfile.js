@@ -152,19 +152,21 @@ function recordsFromRows(rows) {
   return null; // no header row found in any candidate sheet
 }
 
-function extractShipped(filePath) {
-  if (/\.csv$/i.test(filePath)) {
-    const recs = recordsFromRows(parseCsv(fs.readFileSync(filePath, 'utf8')));
-    if (!recs) throw new Error('No PO# / Tracking Number columns found in that file.');
-    return recs;
-  }
+// Generic reader: every sheet of an .xlsx (or the one "sheet" of a .csv)
+// as arrays of cell strings — the returns-history import parses these
+function fileSheets(filePath) {
+  if (/\.csv$/i.test(filePath)) return [parseCsv(fs.readFileSync(filePath, 'utf8'))];
   const zip = readZip(fs.readFileSync(filePath));
   const shared = parseSharedStrings((zip.read('xl/sharedStrings.xml') || '').toString());
-  const sheetNames = [...zip.entries.keys()]
+  return [...zip.entries.keys()]
     .filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
-    .sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
-  for (const name of sheetNames) {
-    const recs = recordsFromRows(parseSheet(zip.read(name).toString(), shared));
+    .sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]))
+    .map(name => parseSheet(zip.read(name).toString(), shared));
+}
+
+function extractShipped(filePath) {
+  for (const rows of fileSheets(filePath)) {
+    const recs = recordsFromRows(rows);
     if (recs) return recs; // the first sheet with a PO#+Tracking header wins
   }
   throw new Error('No PO# / Tracking Number columns found in that file.');
@@ -203,4 +205,4 @@ function applyShipped(db, records) {
   return summary;
 }
 
-module.exports = { extractShipped, applyShipped, recordsFromRows, parseCsv };
+module.exports = { extractShipped, applyShipped, recordsFromRows, parseCsv, fileSheets };
