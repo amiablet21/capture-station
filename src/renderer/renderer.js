@@ -5200,6 +5200,9 @@ async function openWfs() {
   $('wfsResult').className = 'test-result';
   await renderWfsPast();
   $('wfsDialog').showModal();
+  // the corner ✕ is the first focusable — typing starts in the SKU cell
+  const first = $('wfsLines').querySelector('input');
+  if (first) first.focus();
 }
 
 async function renderWfsPast() {

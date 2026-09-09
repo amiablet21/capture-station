@@ -2783,13 +2783,31 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 
 /* WFS shipments */
 
+/* title row with the ✕ in the corner (owner 2026-09-09, "where is the x
+   button") — replacing the scroll-to-find Close at the very bottom */
+.wfs-head { display: flex; align-items: center; justify-content: space-between; }
+.wfs-head .dlg-title { margin-bottom: 0; }
+.dlg-x {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dlg-x:hover { background: var(--surface-2); color: var(--text); }
+.dlg-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .wfs-line { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
 .wfs-line .wfs-sku { flex: 2; }
 .wfs-line .wfs-gtin { flex: 2; }
 .wfs-line .wfs-qty { width: 80px; }
 
 .wfs-past {
-  height: 30vh;
+  max-height: 30vh; /* empty stays one line, never a tall blank box */
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--r-card);

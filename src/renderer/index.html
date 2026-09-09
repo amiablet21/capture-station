@@ -822,8 +822,10 @@
   <!-- WFS shipments: internal log of inventory sent to Walmart fulfilment -->
   <dialog id="wfsDialog" class="dlg dlg-wide">
     <div class="dlg-body">
-      <h2 class="dlg-title">WFS Shipments</h2>
-      <p class="dlg-note">Log a shipment to Walmart Fulfillment Services. Saving deducts the quantities from Digital World Shop; the WFS location updates by itself once Walmart receives the shipment.</p>
+      <div class="wfs-head">
+        <h2 class="dlg-title">WFS Shipments</h2>
+        <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
       <h3 class="dlg-section">New shipment</h3>
       <div id="wfsLines"></div>
       <div class="settings-row">
@@ -839,9 +841,6 @@
       </div>
       <h3 class="dlg-section">Past shipments</h3>
       <div id="wfsPast" class="wfs-past"></div>
-      <div class="dlg-actions">
-        <button id="wfsClose" class="btn btn-primary">Close</button>
-      </div>
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>
