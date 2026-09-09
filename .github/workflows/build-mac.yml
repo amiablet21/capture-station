@@ -24,6 +24,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Also publish a GitHub Release under this tag (e.g. v1.27.4); empty = artifact only'
+        required: false
+        default: ''
 
 permissions:
   contents: write # attach installers to the tag's GitHub Release
@@ -61,10 +66,11 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
-      - name: Attach installers to the release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Attach installers to the release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag }}
           files: |
             dist/*.dmg
             dist/*.zip
