@@ -140,10 +140,13 @@
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
               <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
-                   2026-08-02); the dialogs and logic behind them are untouched -->
+                   2026-08-02); the dialogs and logic behind them are untouched.
+                   WFS Shipments came back 2026-09-09 (owner asked for exactly
+                   what it does: deduct the warehouse, keep a personal record,
+                   never touch the Walmart-fed WFS location) -->
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
-              <button id="wfsBtn" class="btn btn-secondary" hidden>WFS Shipments</button>
+              <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
             </div>
           </div>
         </div>
@@ -817,27 +820,33 @@
   </dialog>
 
   <!-- WFS shipments: internal log of inventory sent to Walmart fulfilment -->
-  <dialog id="wfsDialog" class="dlg dlg-wide">
-    <div class="dlg-body">
-      <h2 class="dlg-title">WFS Shipments</h2>
-      <p class="dlg-note">Log a shipment to Walmart Fulfillment Services. Saving deducts the quantities from Digital World Shop; the WFS location updates by itself once Walmart receives the shipment.</p>
-      <h3 class="dlg-section">New shipment</h3>
-      <div id="wfsLines"></div>
-      <div class="settings-row">
-        <button id="wfsAddLine" class="btn btn-ghost">+ Add line</button>
+  <!-- owner pick 2026-09-09: design C with A's elements — the green-sheet
+       lines and footer total on the left, past shipments always beside -->
+  <dialog id="wfsDialog" class="dlg dlg-wfs">
+    <div class="wfs-cols">
+      <div class="wfs-left">
+        <h2 class="dlg-title">WFS Shipments</h2>
+        <div class="wfs-sheet">
+          <div class="wfs-sheet-h"><span>SKU</span><span>GTIN / Walmart ID</span><span class="wfs-h-qty">Qty</span><span></span></div>
+          <div id="wfsLines"></div>
+          <button id="wfsAddLine" class="wfs-add" type="button">＋ Add line</button>
+        </div>
+        <div class="wfs-noterow">
+          <span class="wfs-notelbl">Note</span>
+          <input id="wfsNote" type="text" class="input" autocomplete="off" placeholder="WFS shipment ID, carrier, anything" />
+        </div>
+        <p id="wfsResult" class="dlg-note test-result wfs-result"></p>
+        <div class="wfs-foot">
+          <span class="wfs-tot" id="wfsTot"></span>
+          <button id="wfsSave" class="btn btn-primary">Save shipment</button>
+        </div>
       </div>
-      <label class="field">
-        <span class="field-label">Note (WFS shipment ID, carrier, anything)</span>
-        <input id="wfsNote" type="text" class="input" autocomplete="off" />
-      </label>
-      <div class="settings-row">
-        <button id="wfsSave" class="btn btn-primary">Save shipment &amp; deduct stock</button>
-        <span id="wfsResult" class="test-result"></span>
-      </div>
-      <h3 class="dlg-section">Past shipments</h3>
-      <div id="wfsPast" class="wfs-past"></div>
-      <div class="dlg-actions">
-        <button id="wfsClose" class="btn btn-primary">Close</button>
+      <div class="wfs-right">
+        <div class="wfs-right-head">
+          <span class="wfs-past-h">Past shipments</span>
+          <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div id="wfsPast" class="wfs-past"></div>
       </div>
     </div>
   </dialog>

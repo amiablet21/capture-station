@@ -946,8 +946,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       && wfsView.wfsCount === '9' && wfsView.homeCount === '4' && wfsView.homeEditable === true
       && /At WFS/.test(wfsView.headers) && /At warehouse/.test(wfsView.headers)
       && /WFS FULFILLED/.test(wfsView.summary), wfsView);
-    check('stock toolbar buttons (New SKU / Receiving / WFS Shipments) hidden',
-      wfsView.hiddenBtns.every(Boolean), wfsView);
+    // WFS Shipments came back 2026-09-09 (owner asked for exactly what it
+    // does); New SKU and Receiving stay tucked away
+    check('stock toolbar: New SKU / Receiving hidden, WFS Shipments visible',
+      wfsView.hiddenBtns[0] === true && wfsView.hiddenBtns[1] === true
+        && wfsView.hiddenBtns[2] === false, wfsView);
 
     // 34. stock minimums: pure crossing engine, capture-only refusal, Low view
     const lows = db.lowStockCrossings([
