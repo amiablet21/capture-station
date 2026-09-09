@@ -46,7 +46,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Build the DMG (universal: Apple Silicon + Intel in one)
+      - name: Build the universal DMG (Apple Silicon + Intel in one)
         # unset the signing env entirely when the secrets are blank —
         # electron-builder treats an EMPTY CSC_LINK as a certificate path
         # and dies with "not a file" (seen 2026-09-09, run 1)
