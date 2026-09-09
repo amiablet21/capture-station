@@ -4333,6 +4333,9 @@ function openRetCondFix(entry, cond) {
   const btn = $('retCondCreate');
   const canCreate = !!RET_PREFIX[cond] && !(recvLookup === 'ready' && recvLookupExact(suggested));
   btn.hidden = !canCreate;
+  // without a create option the search stands alone, divider and all
+  $('retCondCreateWrap').hidden = !canCreate;
+  $('retCondOr').hidden = !canCreate;
   btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
   $('retCondPick').value = '';
