@@ -185,15 +185,18 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
-      <!-- design C (2026-08-07): the log owns the page; receiving happens in
-           the popup opened from the bar button -->
+      <!-- RETURNS-2 sheet (2026-09-04): the log owns the page; its first
+           row is the launcher — a PO# typed there opens the receive popup
+           (2026-09-05, "popup instead of on the line"); the pencil on a
+           log row opens the same popup in edit mode -->
       <div class="recv-past ret-log-page">
         <div class="ret-log-bar">
           <span class="recv-past-head">Returns log<span id="retLogCount" class="ret-log-count"></span></span>
-          <span id="retHint" class="ret-hint"></span>
+          <!-- V1 (variants/returns-sheet-v2.html): the two cards live behind
+               these chips — click to expand them above the sheet -->
+          <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
-          <button id="retAddBtn" class="btn btn-primary">+ Receive a return</button>
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
@@ -942,18 +945,19 @@
   </dialog>
 
   <!-- Receive a return: the design-A "excel sheet" popup (2026-08-07) — a
-       label column and a value column with gridlines, one field per row -->
+       label column and a value column with gridlines, one field per row.
+       Receive-only again since the log edits in place (2026-09-07); the
+       sheet's PO cell opens it. -->
   <dialog id="retRecvDialog" class="dlg ret-recv-dlg">
     <div class="dlg-body">
       <h2 class="dlg-title" id="rvTitle">Receive a return</h2>
-      <p class="dlg-note">Type the PO# and press Enter — a matched order fills the rest.</p>
+      <p class="dlg-note" id="rvDlgNote">Type the PO# and press Enter — a matched order fills the rest.</p>
       <div class="rv-sheet">
         <div class="rv-row">
           <div class="rv-k">PO#</div>
           <div class="rv-v">
             <input id="rvPo" class="rv-in mono" type="text" placeholder="Type / paste PO#…"
                    autocomplete="off" spellcheck="false" aria-label="Original order number" />
-            <span id="rvMatched" class="rv-matched" hidden></span>
           </div>
         </div>
         <!-- everything the order contained: click a line to receive it; a ✓
@@ -970,11 +974,6 @@
           <div class="rv-k">Tracking #</div>
           <div class="rv-v"><input id="rvTrk" class="rv-in mono" type="text" placeholder="—" aria-label="Return tracking number" /></div>
         </div>
-        <!-- edit mode only: the received date is correctable, like the old inline edit -->
-        <div class="rv-row" id="rvDayRow" hidden>
-          <div class="rv-k">Received</div>
-          <div class="rv-v"><input id="rvDay" class="rv-in rv-in-sm mono" type="text" placeholder="YYYY-MM-DD" aria-label="Received date" /></div>
-        </div>
         <div class="rv-row">
           <div class="rv-k">Returned SKU</div>
           <div class="rv-v">
@@ -989,15 +988,20 @@
         <div class="rv-row rv-tall">
           <div class="rv-k">Condition</div>
           <div class="rv-v rv-cond-v">
+            <!-- an unmapped condition shows a small ⚠ beside the pills;
+                 pressing it opens this popover: "no SKU for this yet —
+                 create it?" with Create + a manual pick (owner 2026-09-07) -->
             <div class="rv-pills" id="rvPills" role="radiogroup" aria-label="Condition"></div>
             <div id="rvTarget" class="rv-target"></div>
             <div id="rvFix" class="rv-fix" hidden>
+              <div id="rvFixMsg" class="rv-fix-msg"></div>
+              <button id="rvCreate" class="pillbtn rv-create" type="button" hidden></button>
+              <div class="rv-fix-or">or pick an existing listing:</div>
               <div class="combo rv-pick-combo">
                 <input id="rvPick" class="rv-in mono" type="text" placeholder="Pick the listing…"
                        autocomplete="off" spellcheck="false" aria-label="Target listing" />
                 <div class="combo-list" hidden></div>
               </div>
-              <button id="rvCreate" class="pillbtn rv-create" type="button" hidden></button>
             </div>
           </div>
         </div>
@@ -1007,8 +1011,18 @@
             aria-label="Units received" title="How many units actually came back — fewer than ordered is fine" /></div>
         </div>
         <div class="rv-row">
+          <div class="rv-k">Price</div>
+          <div class="rv-v"><input id="rvPrice" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="0.00"
+            aria-label="Item price" title="What the customer paid for the item — fills itself from the matched order line" /></div>
+        </div>
+        <div class="rv-row">
           <div class="rv-k">By</div>
           <div class="rv-v"><input id="rvBy" class="rv-in rv-in-sm mono" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></div>
+        </div>
+        <div class="rv-row">
+          <div class="rv-k">Dispute $</div>
+          <div class="rv-v"><input id="rvSettle" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="—"
+            aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></div>
         </div>
         <div class="rv-row">
           <div class="rv-k">Notes</div>

@@ -3024,12 +3024,13 @@ const RET_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 let retReceivedBy = ''; // last-used initials, config-backed default
 
 function enterReturns() {
-  $('retHint').textContent = '';
   loadRetPast();
   loadUnlisted(); // "not listed" markers on condition targets
-  ensureInventory(); // the popup's SKU combos need it
+  ensureInventory(); // the entry row's and popup's SKU combos need it
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
+    // the entry cell's date stamp follows along when the page opens
+    if (retEntryTr) wsEls.date.textContent = retDateUS(new Date().toISOString());
   });
 }
 
@@ -3038,9 +3039,22 @@ function retCondLabel(key) {
   return c ? c.label : key;
 }
 
-/* ---------- Receive-a-return popup (design-A sheet) ---------- */
-// Replaces the staged worksheet: every Receive commits ONE item line through
-// the unchanged returns:create engine (a PO-only line logs without stock).
+// "2026-09-05…" -> "09/05/2026" (owner's sheet format, 2026-09-05)
+function retDateUS(iso) {
+  const p = String(iso || '').slice(0, 10).split('-');
+  return p.length === 3 ? `${p[1]}/${p[2]}/${p[0]}` : '';
+}
+
+// "$1,234.50" / "1234.5" / "" -> a non-negative amount (0 = none)
+function retMoney(v) {
+  return Math.max(0, Number(String(v || '').replace(/[$,\s]/g, '')) || 0);
+}
+
+/* ---------- Receive/Edit-return popup (design-A sheet) ---------- */
+// Back to popup receiving (owner 2026-09-05, "make it a popup instead of
+// on the line" — the in-sheet entry crowded the row): typing a PO# in the
+// log's first cell opens THIS popup prefilled; the pencil on a log row
+// opens the same popup in edit mode.
 
 let rv = null; // open popup state; null = closed
 let rvCreate = (payload) => api.returnsCreate(payload); // seam: e2e stubs the commit
@@ -3050,7 +3064,6 @@ function rvBlank() {
     orderId: null, source: '', unmatched: true,
     sku: '', title: '', price: 0, targets: null, condition: 'new',
     pick: '', items: [], received: [], itemIdx: -1, busy: false,
-    edit: null, // { rid, ii } = editing a log line instead of receiving
   };
 }
 
@@ -3061,24 +3074,28 @@ function rvFeedback(msg, ok = false) {
   el.className = `dlg-note test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-function retOpenRecv() {
+// receive mode, opened from the sheet's PO cell (or its + gutter): the
+// typed PO rides along and the lookup starts by itself
+function retOpenRecv(po = '') {
   rv = rvBlank();
   rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick']) $(id).value = '';
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
-  $('rvMatched').hidden = true;
-  $('rvDayRow').hidden = true;
-  $('rvTitle').textContent = 'Receive a return';
-  $('rvSave').textContent = 'Receive';
   rvFeedback('');
   rvRenderCond();
   rvRenderOrder();
   ensureInventory();
   rvBesidePane();
   $('retRecvDialog').showModal();
-  $('rvPo').focus();
+  $('rvPo').value = String(po || '').trim();
+  if ($('rvPo').value) {
+    rvLastLookup = $('rvPo').value;
+    rvLookup();
+  } else {
+    $('rvPo').focus();
+  }
 }
 
 // with the marketplace pane open (and room for both), the popup docks to
@@ -3095,58 +3112,11 @@ function rvThumbUpdate() {
   if (src) $('rvThumb').src = src;
 }
 
-// the SAME popup edits a log line ("more coherent that way" — owner,
-// 2026-08-07, reversing the earlier edit-on-the-line preference): fields
-// prefill from the row, Save runs the qty-aware stock corrections
-function retOpenEdit({ r, i, ii }) {
-  rv = rvBlank();
-  rv.edit = { rid: r.id, ii };
-  rv.unmatched = !!r.unmatched;
-  rv.sku = String(i.sku || '').toUpperCase();
-  rv.condition = i.condition || 'new';
-  $('rvPo').value = r.order_number || '';
-  $('rvCust').value = r.customer || '';
-  $('rvTrk').value = r.tracking || '';
-  $('rvSku').value = i.sku || '';
-  $('rvQty').value = String(Number(i.qty) || 1);
-  $('rvBy').value = r.received_by || '';
-  $('rvNote').value = ii >= 0 ? (i.note || '') : (r.note || '');
-  $('rvPick').value = '';
-  $('rvDay').value = String(r.created_at).slice(0, 10);
-  $('rvDayRow').hidden = false;
-  $('rvMatched').hidden = true;
-  $('rvTitle').textContent = 'Edit return';
-  $('rvSave').textContent = 'Save changes';
-  rvFeedback('');
-  rvRenderOrder();
-  rvThumbUpdate();
-  rvRenderCond();
-  // target previews for the pills; the save path re-resolves server-side
-  if (rv.sku) {
-    api.returnsTargets(rv.sku).then(tr => {
-      if (tr.ok && rv && rv.edit) { rv.targets = tr.targets; rvRenderCond(); }
-    });
-  }
-  // the original order, looked up fresh by PO#: the sheet shows what was
-  // ordered next to what came back — even for returns logged as unmatched,
-  // since the order may have processed after the return was received
-  if (r.order_number) {
-    api.returnsLookup(r.order_number).then(res => {
-      if (!res || !res.ok || !rv || !rv.edit || rv.edit.rid !== r.id) return;
-      rv.items = (res.order && res.order.items) || [];
-      rvRenderOrder();
-    }).catch(() => {});
-  }
-  ensureInventory();
-  rvBesidePane();
-  $('retRecvDialog').showModal();
-}
-
-// Enter on the PO#: processed-order lookup fills the sheet; a multi-item
-// order queues its remaining lines for "Receive & next"
+// Enter on the PO# (or a prefill from the sheet cell): processed-order
+// lookup fills the popup; a multi-item order queues its remaining lines
 async function rvLookup() {
   const po = $('rvPo').value.trim();
-  if (!po || !rv || rv.busy || rv.edit) return; // edit mode: the PO is just text
+  if (!po || !rv || rv.busy) return;
   rv.busy = true;
   rvFeedback('Looking the order up…', true);
   const res = await api.returnsLookup(po);
@@ -3156,7 +3126,6 @@ async function rvLookup() {
     rv.unmatched = true;
     rv.orderId = null;
     rv.source = '';
-    $('rvMatched').hidden = true;
     $('rvCust').focus();
     return;
   }
@@ -3179,21 +3148,8 @@ async function rvLookup() {
 // Nothing forces receiving every line, and Units can be fewer than ordered.
 function rvRenderOrder() {
   const row = $('rvOrderRow');
-  if (!rv || (rv.unmatched && !rv.edit) || !rv.items.length) { row.hidden = true; return; }
+  if (!rv || rv.unmatched || !rv.items.length) { row.hidden = true; return; }
   row.hidden = false;
-  if (rv.edit) {
-    // edit mode: read-only — the highlighted chip is the line this return
-    // came from; the amber note means the returned SKU matches NO ordered line
-    const cur = String(rv.sku || '').trim().toUpperCase();
-    const hit = rv.items.some(it => String(it.sku || '').toUpperCase() === cur);
-    $('rvOrder').innerHTML = rv.items.map(it => `
-      <span class="rv-item is-info ${String(it.sku || '').toUpperCase() === cur ? 'on' : ''}"
-        title="${esc(it.title || '')}${it.price ? ` — $${Number(it.price).toFixed(2)}` : ''}">
-        <span class="mono">${esc(it.sku)}</span> ×${it.quantity || 1}
-      </span>`).join('')
-      + (cur && !hit ? '<span class="rv-order-note">returned SKU isn’t one of the ordered lines</span>' : '');
-    return;
-  }
   $('rvOrder').innerHTML = rv.items.map((it, i) => `
     <button type="button" class="rv-item ${i === rv.itemIdx ? 'on' : ''} ${rv.received[i] ? 'done' : ''}" data-i="${i}"
       title="${rv.received[i] ? 'Already received — click to receive more of it' : 'Click to receive this line'}">
@@ -3203,7 +3159,7 @@ function rvRenderOrder() {
 
 $('rvOrder').addEventListener('click', (e) => {
   const b = e.target.closest('.rv-item');
-  if (!b || !rv || rv.edit) return; // edit mode: the chips are informational
+  if (!b || !rv) return;
   rvLoadItemAt(Number(b.dataset.i));
   $('rvQty').focus();
 });
@@ -3221,45 +3177,60 @@ function rvLoadItem(it) {
     rv.targets = it.targets || null;
     $('rvSku').value = it.sku;
     $('rvQty').value = String(it.quantity || 1);
+    $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
+    // Dispute Settlement autofills from the SAME order line the price came
+    // from — what the customer paid is the amount at stake; clear it when
+    // there is no dispute
+    $('rvSettle').value = $('rvPrice').value;
   } else {
     rv.itemIdx = -1;
     rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
     $('rvSku').value = '';
     $('rvQty').value = '1';
+    $('rvPrice').value = '';
+    $('rvSettle').value = '';
   }
   rv.condition = 'new';
   rv.pick = '';
   $('rvPick').value = '';
-  const cust = $('rvCust').value.trim();
-  $('rvMatched').textContent = `matched${cust ? ` · ${cust}` : ''}`;
-  $('rvMatched').hidden = rv.unmatched;
   rvThumbUpdate();
   rvRenderCond();
   rvRenderOrder();
 }
 
-// pills + the live "stock lands on …" line; a missing target opens the
-// inline fix: pick an existing listing, or create the prefix-named SKU
+// pills + the live "stock lands on …" line. A missing target shows a
+// small ⚠ RIGHT NEXT TO the pills (owner 2026-09-07) — pressing it opens
+// the "no SKU for this yet — create it?" popover with Create + a manual
+// pick, instead of the old always-visible fix row.
 function rvRenderCond() {
   if (!rv) return;
+  const t = $('rvTarget');
+  const known = rv.sku ? (rv.condition === 'new' ? rv.sku : ((rv.targets || {})[rv.condition] || '')) : '';
+  const resolved = known || rv.pick;
+  const missing = !!rv.sku && !resolved;
   $('rvPills').innerHTML = RET_CONDS.map(c => `
     <button type="button" class="rv-pill is-${c.key} ${rv.condition === c.key ? 'on' : ''}" data-cond="${c.key}"
       role="radio" aria-checked="${rv.condition === c.key}">
-      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
-  const t = $('rvTarget');
-  const fix = $('rvFix');
-  if (!rv.sku) { t.textContent = ''; t.className = 'rv-target'; fix.hidden = true; return; }
-  const known = rv.condition === 'new' ? rv.sku : ((rv.targets || {})[rv.condition] || '');
-  const resolved = known || rv.pick;
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('')
+    + (missing ? `<button type="button" id="rvWarnBtn" class="rv-warn" aria-label="No ${esc(retCondLabel(rv.condition).toLowerCase())} SKU yet"
+        title="No ${esc(retCondLabel(rv.condition).toLowerCase())} SKU for ${esc(rv.sku)} yet — click to create it">⚠</button>` : '');
+  rvFixClose(); // any re-render invalidates an open popover
+  if (!rv.sku) { t.textContent = ''; t.className = 'rv-target'; return; }
   if (resolved) {
     t.className = 'rv-target';
     t.innerHTML = `stock lands on <span class="mono">${esc(resolved)}</span>${known ? '' : ' <span class="rv-onetime">(picked for this return)</span>'}${retUnlistedMark(resolved)}`;
-    fix.hidden = true;
     return;
   }
-  t.className = 'rv-target is-missing';
-  t.innerHTML = `⚠ no ${esc(retCondLabel(rv.condition).toLowerCase())} listing for <span class="mono">${esc(rv.sku)}</span> yet — pick one or create it:`;
-  fix.hidden = false;
+  t.textContent = '';
+  t.className = 'rv-target';
+}
+
+// the ⚠ popover: message + Create + a manual pick, anchored to the button
+function rvFixOpen() {
+  const warn = $('rvWarnBtn');
+  if (!warn || !rv || !rv.sku) return;
+  const fix = $('rvFix');
+  $('rvFixMsg').innerHTML = `There’s no <b>${esc(retCondLabel(rv.condition).toLowerCase())}</b> SKU for <span class="mono">${esc(rv.sku)}</span> yet — create it?`;
   const suggested = `${RET_PREFIX[rv.condition] || ''}${rv.sku}`.toUpperCase();
   const btn = $('rvCreate');
   const canCreate = RET_PREFIX[rv.condition] && recvLookup === 'ready' && !recvLookupExact(suggested);
@@ -3267,10 +3238,24 @@ function rvRenderCond() {
   btn.disabled = false;
   btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
-  btn.title = `Creates the Linnworks item with this exact name (title and price copied from ${rv.sku}), maps it, and routes this return into it. Create the marketplace listings later with the same SKU and they link automatically.`;
+  btn.title = 'Opens the New SKU sheet prefilled with this name and the base item’s title and price — adjust anything, hit Create, and this return routes into it.';
+  $('rvPick').value = '';
+  // the popup sheet clips absolute children: anchor to the viewport
+  const r = warn.getBoundingClientRect();
+  fix.style.left = `${Math.max(8, Math.min(r.left - 40, window.innerWidth - 348))}px`;
+  fix.style.top = `${r.bottom + 6}px`;
+  fix.hidden = false;
+}
+
+function rvFixClose() {
+  $('rvFix').hidden = true;
 }
 
 $('rvPills').addEventListener('click', (e) => {
+  if (e.target.closest('#rvWarnBtn')) {
+    if ($('rvFix').hidden) rvFixOpen(); else rvFixClose();
+    return;
+  }
   const p = e.target.closest('.rv-pill');
   if (!p || !rv) return;
   rv.condition = p.dataset.cond;
@@ -3279,38 +3264,40 @@ $('rvPills').addEventListener('click', (e) => {
   rvRenderCond();
 });
 
-$('rvCreate').addEventListener('click', async () => {
-  if (!rv || !rv.sku) return;
-  const btn = $('rvCreate');
-  const suggested = btn.dataset.sku;
-  const cond = rv.condition;
-  btn.disabled = true;
-  btn.textContent = 'Creating…';
-  const parent = recvLookupExact(rv.sku);
-  const condLabel = { openbox: 'Open Box', used: 'Used', scrap: 'Scrap' }[cond] || '';
-  const res = await api.createSku({
+// clicking anywhere off the popover closes it
+document.addEventListener('mousedown', (e) => {
+  if (!$('rvFix').hidden && !e.target.closest('#rvFix') && !e.target.closest('#rvWarnBtn')) rvFixClose();
+});
+
+// "Make the condition SKU then and there" (owner 2026-09-05): the Create
+// button opens the full New SKU sheet prefilled with the suggested
+// prefix-name, title and the base item's price — everything editable —
+// and on Create the fresh SKU is mapped to the condition and this return
+// routes straight into it. Shared by the entry row and the edit popup.
+function openCondSkuCreate(baseSku, cond, suggested, onMapped) {
+  const parent = recvLookupExact(baseSku);
+  openNewSkuDialog({
     sku: suggested,
-    title: `${(parent && parent.title) || rv.sku} - ${condLabel}`,
+    title: skuTitleSuggestion(suggested),
     retailPrice: Number(parent && parent.retailPrice) || 0,
-    qty: 0,
+  }, async (newSku) => {
+    const map = await api.returnsMapSet(baseSku, cond, newSku);
+    const target = (map.ok && map.targetSku) || newSku;
+    toast(`${baseSku} ${cond} → ${target}`);
+    onMapped(target);
   });
-  if (!res.ok) {
-    toast(res.error || 'Could not create the SKU.');
+}
+
+$('rvCreate').addEventListener('click', () => {
+  if (!rv || !rv.sku) return;
+  const baseSku = rv.sku;
+  const cond = rv.condition;
+  openCondSkuCreate(baseSku, cond, $('rvCreate').dataset.sku, (target) => {
+    // the popup may have moved on (or closed) while the sheet was open
+    if (!rv || rv.sku !== baseSku || rv.condition !== cond) return;
+    rv.targets = { ...(rv.targets || {}), [cond]: target };
     rvRenderCond();
-    return;
-  }
-  // the fresh SKU joins the local inventory caches so every combo sees it
-  if (recvItems) {
-    const item = { sku: res.sku, title: `${(parent && parent.title) || rv.sku} - ${condLabel}`, stockItemId: res.stockItemId, levels: [], retailPrice: Number(parent && parent.retailPrice) || 0 };
-    recvItems.push(item);
-    if (recvBySku) recvBySku.set(res.sku.toLowerCase(), item);
-  }
-  const map = await api.returnsMapSet(rv.sku, cond, res.sku);
-  if (map.ok && rv) {
-    rv.targets = { ...(rv.targets || {}), [cond]: map.targetSku };
-    toast(`${rv.sku} ${cond} → ${map.targetSku}`);
-  }
-  rvRenderCond();
+  });
 });
 
 $('rvPo').addEventListener('keydown', (e) => {
@@ -3324,7 +3311,7 @@ $('rvPo').addEventListener('keydown', (e) => {
 let rvLastLookup = '';
 $('rvPo').addEventListener('blur', () => {
   const po = $('rvPo').value.trim();
-  if (!rv || rv.edit || rv.busy || !po || po === rvLastLookup || !rv.unmatched) return;
+  if (!rv || rv.busy || !po || po === rvLastLookup || !rv.unmatched) return;
   rvLastLookup = po;
   rvLookup();
 });
@@ -3333,15 +3320,12 @@ $('rvPo').addEventListener('blur', () => {
 // ride along with a hand-changed number
 $('rvPo').addEventListener('input', () => {
   if (!rv) return;
-  // edit mode: a hand-changed PO no longer matches the displayed order lines
-  if (rv.edit) { rv.items = []; rvRenderOrder(); return; }
   rv.orderId = null;
   rv.source = '';
   rv.unmatched = true;
   rv.items = [];
   rv.received = [];
   rv.itemIdx = -1;
-  $('rvMatched').hidden = true;
   rvRenderOrder();
 });
 
@@ -3364,28 +3348,6 @@ async function rvCommit() {
   const po = $('rvPo').value.trim();
   if (!po) { rvFeedback('PO# is required.'); $('rvPo').focus(); return false; }
   const sku = $('rvSku').value.trim().toUpperCase();
-  if (rv.edit) {
-    // edit mode: the qty-aware corrections engine re-resolves the target
-    const eqty = Number($('rvQty').value);
-    if (sku && (!Number.isInteger(eqty) || eqty < 1)) { rvFeedback('Units must be a whole number of 1 or more.'); return false; }
-    rv.busy = true;
-    $('rvSave').disabled = true;
-    rvFeedback('Saving…', true);
-    const res = await api.returnsEditUnit({
-      id: rv.edit.rid, itemIndex: rv.edit.ii,
-      po, day: $('rvDay').value.trim(), customer: $('rvCust').value.trim(),
-      tracking: $('rvTrk').value.trim(), sku,
-      condition: rv.condition, note: $('rvNote').value.trim(),
-      units: $('rvQty').value.trim(), receivedBy: $('rvBy').value.trim(),
-    }).catch(e => ({ ok: false, error: e.message }));
-    rv.busy = false;
-    $('rvSave').disabled = false;
-    if (!res || !res.ok) { rvFeedback((res && res.error) || 'Could not save.'); return false; }
-    rvFeedback('');
-    toast(res.stockNote ? `Return updated — ${res.stockNote}` : 'Return updated');
-    loadRetPast();
-    return true;
-  }
   let target = '';
   let qty = 1;
   if (sku) {
@@ -3416,7 +3378,12 @@ async function rvCommit() {
     receivedBy: by,
     unmatched: !!rv.unmatched,
     note: sku ? '' : $('rvNote').value.trim(),
-    items: sku ? [{ sku, condition: rv.condition, targetSku: target, qty, price: rv.price, note: $('rvNote').value.trim() }] : [],
+    items: sku ? [{
+      sku, condition: rv.condition, targetSku: target, qty,
+      price: retMoney($('rvPrice').value) || rv.price,
+      settle: retMoney($('rvSettle').value),
+      note: $('rvNote').value.trim(),
+    }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
   rv.busy = false;
   $('rvSave').disabled = false;
@@ -3428,15 +3395,14 @@ async function rvCommit() {
 }
 
 // Receive commits the line. With other order lines still unreceived the
-// popup STAYS OPEN on the next one ("Receive & next" retired 2026-08-07,
-// owner request — one button does the sensible thing); otherwise it closes.
+// popup STAYS OPEN on the next one; otherwise it closes.
 $('rvSave').addEventListener('click', async () => {
   if (!(await rvCommit())) return;
   if (rv.itemIdx >= 0) rv.received[rv.itemIdx] = true;
   const next = rv.items.findIndex((_, i) => !rv.received[i]);
   if (next < 0) { $('retRecvDialog').close(); return; }
   $('rvNote').value = '';
-  rvLoadItemAt(next);
+  rvLoadItemAt(next); // refills price + settle from the next line
   $('rvQty').focus();
 });
 
@@ -3447,14 +3413,11 @@ $('rvCancel').addEventListener('click', () => $('retRecvDialog').close());
 // and made rvCommit bail through its silent !rv guard (the [false,"",""]
 // flake, 6 occurrences). Only wipe when the dialog is really closed.
 $('retRecvDialog').addEventListener('close', () => { if (!$('retRecvDialog').open) rv = null; });
-$('retAddBtn').addEventListener('click', () => retOpenRecv());
 
 // live inventory suggestions in the popup's two SKU fields
 makeCombo($('rvSku'), document.querySelector('.rv-combo .combo-list'), async (item) => {
   if (!rv) return;
   rv.sku = item.sku;
-  rv.title = item.title || '';
-  if (!rv.price) rv.price = Number(item.retailPrice) || 0;
   rv.pick = '';
   $('rvPick').value = '';
   $('rvSku').value = item.sku;
@@ -3469,6 +3432,52 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
   $('rvPick').value = item.sku;
   rvRenderCond();
 });
+
+/* ---------- in-sheet entry cell (popup receiving, 2026-09-05) ---------- */
+// The log's first row is just the launcher now (owner: "make it a popup
+// instead of on the line" — the full in-sheet entry crowded the row):
+// type a PO# in the first cell and Enter opens the receive popup with it,
+// the + gutter opens it empty. The <tr> is a singleton moved (not rebuilt)
+// across renders so a half-typed PO survives every log refresh.
+
+let retEntryTr = null;
+let wsEls = null; // { po, date }
+
+function retEntryRow() {
+  if (retEntryTr) return retEntryTr;
+  const tr = document.createElement('tr');
+  tr.className = 'ws-row';
+  tr.innerHTML = `
+    <td class="cell-gutter ws-gutter" id="wsPlus" title="Receive a return" role="button">+</td>
+    <td class="ws-cell"><input id="wsPo" class="ws-in mono" type="text" placeholder="Type PO# + Enter…"
+      autocomplete="off" spellcheck="false" aria-label="Receive a return by PO number"
+      title="Type or paste the PO# and press Enter — the receive sheet opens with the order looked up" /></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell ws-date mono" id="wsDate"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="ws-cell"></td>
+    <td class="cell-actions"></td>`;
+  retEntryTr = tr;
+  wsEls = { po: tr.querySelector('#wsPo'), date: tr.querySelector('#wsDate') };
+  wsEls.date.textContent = retDateUS(new Date().toISOString());
+  wsEls.po.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const po = wsEls.po.value.trim();
+    if (!po) return;
+    wsEls.po.value = ''; // the popup owns the PO from here
+    retOpenRecv(po);
+  });
+  tr.querySelector('#wsPlus').addEventListener('click', () => retOpenRecv(wsEls.po.value.trim()));
+  return tr;
+}
+
 
 // marketplace link for a returns row: the order's Source ("WALMART", "EBAY"…)
 // maps onto the same per-channel URL templates the Capture page's PO# links
@@ -3835,16 +3844,51 @@ function showUnlistedFor(sku) {
 
 // the to-do card: every created-but-unlisted condition SKU with how many
 // units sit unsellable — copy grabs the exact string for Seller Center
+// V1 (variants/returns-sheet-v2.html): the two cards wait behind chips on
+// the log bar so the sheet starts at the top of the page; a chip click
+// expands its card. Counts always render into the chips, the card bodies
+// render regardless (the disputes resolve button must stay clickable for
+// automation), only visibility is gated.
+let retCardOpen = {
+  todo: localStorage.getItem('retCardTodo') === '1',
+  disp: localStorage.getItem('retCardDisp') === '1',
+};
+let retTodoCount = 0;
+let retDispCount = 0;
+
+function renderRetChips() {
+  const box = $('retChips');
+  if (!box) return;
+  box.innerHTML = [
+    retTodoCount ? `<button type="button" class="ret-chip is-warn ${retCardOpen.todo ? 'is-on' : ''}" data-chip="todo"
+      title="${retCardOpen.todo ? 'Hide' : 'Show'} the SKUs still needing marketplace listings">⚠ ${retTodoCount} need${retTodoCount === 1 ? 's' : ''} listings</button>` : '',
+    retDispCount ? `<button type="button" class="ret-chip is-disp ${retCardOpen.disp ? 'is-on' : ''}" data-chip="disp"
+      title="${retCardOpen.disp ? 'Hide' : 'Show'} the open disputes">${retDispCount} dispute${retDispCount === 1 ? '' : 's'} open</button>` : '',
+  ].join('');
+}
+
+$('retChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-chip]');
+  if (!chip) return;
+  const k = chip.dataset.chip;
+  retCardOpen[k] = !retCardOpen[k];
+  localStorage.setItem(k === 'todo' ? 'retCardTodo' : 'retCardDisp', retCardOpen[k] ? '1' : '0');
+  if (k === 'todo') renderRetTodo(); else renderRetDisputes();
+  renderRetChips();
+});
+
 function renderRetTodo() {
   const box = $('retTodo');
   if (!box) return;
-  if (!unlistedSkus || unlistedSkus.size === 0) { box.hidden = true; return; }
+  retTodoCount = unlistedSkus ? unlistedSkus.size : 0;
+  renderRetChips();
+  if (!retTodoCount) { box.hidden = true; return; }
   const rows = [...unlistedSkus].map(sku => {
     const it = recvBySku && recvBySku.get(sku.toLowerCase());
     const lvl = it && (it.levels || []).find(l => l.locationId === recvLocationId);
     return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
   }).sort((a, b) => (b.units || 0) - (a.units || 0));
-  box.hidden = false;
+  box.hidden = !retCardOpen.todo;
   // plain always-visible card (owner reverted the task-row redesign
   // 2026-08-13); kept: SKU click -> eBay lister, >4 rows defaults collapsed
   const stored = localStorage.getItem('retTodoCol');
@@ -3894,26 +3938,44 @@ $('retTodo').addEventListener('click', async (e) => {
 // gridlines, same order) — flat and searchable; the pencil opens the
 // receive popup in edit mode (popup editing at the owner's request
 // 2026-08-07, replacing the earlier inline row)
+// "1,099.00" — right-aligned money without the $ (the column header says it)
+function retMoneyText(v) {
+  return Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+}
+
+// a "case: 12345" note renders as a small blue chip + the rest of the text
+function retNoteHtml(note) {
+  const m = String(note || '').match(DISPUTE_RE);
+  if (!m) return esc(note || '');
+  const rest = String(note).replace(m[0], '').replace(/^[\s—·,:-]+|[\s—·,:-]+$/g, '');
+  return `<span class="ret-note-case mono">case ${esc(m[1])}</span>${esc(rest)}`;
+}
+
+// every column edits IN PLACE (owner 2026-09-07, retiring the edit popup):
+// data-edit names the field a click turns into an editor
 function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
+  const note = i.note || r.note || '';
   return `
     <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
-      <td class="mono ret-cell-po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
-      <td class="ret-cell-cust" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-trk" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
-      <td class="mono ret-cell-date" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${esc(day.slice(5))} ${fmtTime(r.created_at)}</td>
-      <td class="ret-cell-sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-cond">
-        ${i.sku ? `<span class="ret-cond-ro"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      <td class="mono ret-cell-po ret-ecell" data-edit="po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
+      <td class="ret-cell-cust ret-ecell" data-edit="customer" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-trk ret-ecell" data-edit="tracking" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
+      <td class="mono ret-cell-date ret-ecell" data-edit="day" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${retDateUS(day)}</td>
+      <td class="ret-cell-sku ret-ecell" data-edit="sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}
         ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
       </td>
-      <td class="ret-cell-units mono">${Number(i.qty) || 1}</td>
-      <td class="ret-cell-by ret-ro-by" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-note ret-ro-note" title="${esc(i.note || r.note || '')}">${esc(i.note || r.note || '')}</td>
+      <td class="ret-cell-cond ret-ecell" data-edit="condition">
+        ${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      </td>
+      <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
+      <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}</td>
+      <td class="ret-cell-settle mono ret-ecell" data-edit="settle" title="Dispute settlement amount">${Number(i.settle) ? retMoneyText(i.settle) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
-        <button class="btn-icon ret-log-edit-btn" title="Edit this return">${ICONS.pencil}</button>
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
       </span></td>
     </tr>`;
@@ -3930,48 +3992,63 @@ function retUnlistedMark(sku) {
 function renderRetLog() {
   if (!retLogAll) return;
   const box = $('retPastBox');
-  if (!retLogAll.length) {
-    $('retLogCount').textContent = '';
-    box.innerHTML = '<div class="recv-past-empty">No returns yet. Type a PO# in the worksheet above to receive one.</div>';
-    return;
-  }
   const q = $('retLogSearch').value.trim().toLowerCase();
   const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
     [r.order_number, r.customer, r.tracking, r.source, r.received_by, r.note,
      i.sku, i.targetSku, i.note, retCondLabel(i.condition)]
       .some(v => String(v || '').toLowerCase().includes(q)));
-  $('retLogCount').textContent = ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`;
+  $('retLogCount').textContent = retLogAll.length
+    ? ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`
+    : '';
   // numbered pages once the log outgrows one comfortable screen (owner
   // request 2026-08-13); search always spans the WHOLE log, then pages
   const RET_PAGE = 50;
   const pages = Math.max(1, Math.ceil(rows.length / RET_PAGE));
   if (retLogPage >= pages) retLogPage = pages - 1;
   const pageRows = rows.slice(retLogPage * RET_PAGE, (retLogPage + 1) * RET_PAGE);
+  const compact = document.body.classList.contains('ret-compact');
+  const noneMsg = retLogAll.length
+    ? `Nothing matches “${esc(q)}”.`
+    : 'No returns yet — type a PO# in the green row above to receive the first one.';
+  // the entry row survives the innerHTML swap: remember where focus was,
+  // rebuild the sheet, move the SAME <tr> back in, put focus back
+  const af = document.activeElement;
+  const wsFocus = retEntryTr && retEntryTr.contains(af) ? af : null;
+  let wsSel = null;
+  try { if (wsFocus && wsFocus.selectionStart != null) wsSel = [wsFocus.selectionStart, wsFocus.selectionEnd]; } catch { /* number inputs refuse */ }
   box.innerHTML = `
     <div class="ret-sheet-scroll">
     <table class="recv-sheet-table ret-sheet ret-log-table">
       <thead>
         <tr>
           <th class="th-gutter">#</th>
-          <th class="th-po">PO#</th>
-          <th class="th-cust">Customer</th>
+          <th class="th-po">PO #</th>
+          <th class="th-cust">Customer Name</th>
           <th class="th-trk">Tracking #</th>
-          <th class="th-date">Received</th>
+          <th class="th-date">Date Received</th>
           <th class="th-rsku">Returned SKU</th>
           <th class="th-cond">Condition</th>
           <th class="th-units">Units</th>
-          <th class="th-by">By</th>
-          <th class="th-note">Notes / dispute</th>
+          <th class="th-price">Price</th>
+          <th class="th-by">Received By</th>
+          <th class="th-settle">Dispute Settlement</th>
+          <th class="th-note">Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
+      <tbody class="ret-entry-body"></tbody>
       <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
-        || `<tr><td colspan="${document.body.classList.contains('ret-compact') ? 6 : 11}" class="ret-log-none">Nothing matches “${esc(q)}”.</td></tr>`}</tbody>
+        || `<tr><td colspan="${compact ? 6 : 13}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
       `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
       <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
+  box.querySelector('.ret-entry-body').appendChild(retEntryRow());
+  if (wsFocus) {
+    wsFocus.focus();
+    if (wsSel) { try { wsFocus.setSelectionRange(wsSel[0], wsSel[1]); } catch { /* number inputs refuse */ } }
+  }
   applyRetCols(box.querySelector('table.ret-log-table')); // widths follow the worksheet
 }
 
@@ -3991,8 +4068,10 @@ function renderRetDisputes() {
     const note = String((i && i.note) || r.note || '');
     return DISPUTE_RE.test(note) && !DISPUTE_DONE_RE.test(note);
   });
+  retDispCount = open.length;
+  renderRetChips();
   if (!open.length) { box.hidden = true; return; }
-  box.hidden = false;
+  box.hidden = !retCardOpen.disp;
   const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
   // same default rule as the listings card: >4 disputes starts collapsed
   const stored = localStorage.getItem('retDispCol');
@@ -4077,11 +4156,6 @@ $('retPastBox').addEventListener('click', (e) => {
   if (cam) { openClaimsPop(cam.dataset.campo); return; }
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
-  if (e.target.closest('.ret-log-edit-btn')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
-    if (entry) retOpenEdit(entry);
-    return;
-  }
   if (e.target.closest('.ret-log-del-btn')) {
     const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
     if (!entry) return;
@@ -4093,8 +4167,130 @@ $('retPastBox').addEventListener('click', (e) => {
     $('retDelStock').checked = !!retDelCtx.target;
     $('retDelTarget').textContent = retDelCtx.target ? `−${qty} ${retDelCtx.target}` : '';
     $('retDelDialog').showModal();
+    return;
+  }
+  // click a cell -> edit it in place (owner 2026-09-07, the popup pencil
+  // retired: "each column would be editable")
+  const td = e.target.closest('td[data-edit]');
+  if (td && !e.target.closest('button') && !td.querySelector('.ret-ein, .ret-emenu')) {
+    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    if (entry) retBeginEdit(td, entry);
   }
 });
+
+/* ---------- in-place log editing ---------- */
+// One editor at a time. Enter/blur saves through the SAME qty-aware
+// corrections engine the popup used (returns:editUnit re-resolves the
+// condition target and fixes stock); Esc cancels. The row re-renders from
+// the server's truth after every save.
+
+let retEditApi = (p) => api.returnsEditUnit(p); // seam: e2e stubs the save
+
+// the full field set editUnit wants, taken from the row, with the edited
+// value swapped in by the caller
+function retEditPayload({ r, i, ii }) {
+  return {
+    id: r.id, itemIndex: ii,
+    po: r.order_number || '', day: String(r.created_at).slice(0, 10),
+    customer: r.customer || '', tracking: r.tracking || '',
+    sku: i.sku || '', condition: i.condition || 'new',
+    note: ii >= 0 ? (i.note || '') : (r.note || ''),
+    units: String(Number(i.qty) || 1), receivedBy: r.received_by || '',
+    price: Number(i.price) || 0, settle: Number(i.settle) || 0,
+  };
+}
+
+async function retSaveEdit(entry, field, value) {
+  const payload = retEditPayload(entry);
+  if (field === 'day') {
+    // the cell shows MM/DD/YYYY; editUnit wants YYYY-MM-DD
+    const m = String(value).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) { toast('Date must look like 09/05/2026.'); renderRetLog(); return; }
+    payload.day = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  } else if (field === 'price' || field === 'settle') {
+    payload[field] = retMoney(value);
+  } else if (field === 'units') {
+    payload.units = String(value).trim();
+  } else if (field === 'sku') {
+    payload.sku = String(value).trim().toUpperCase();
+  } else {
+    payload[field] = String(value).trim();
+  }
+  const res = await retEditApi(payload).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) {
+    toast((res && res.error) || 'Could not save.');
+    renderRetLog(); // the cell falls back to what the log really holds
+    return;
+  }
+  toast(res.stockNote ? `Saved — ${res.stockNote}` : 'Saved', 2500);
+  loadRetPast();
+}
+
+// the current cell text an editor starts from
+function retEditValue({ r, i, ii }, field) {
+  switch (field) {
+    case 'po': return r.order_number || '';
+    case 'customer': return r.customer || '';
+    case 'tracking': return r.tracking || '';
+    case 'day': return retDateUS(r.created_at);
+    case 'sku': return i.sku || '';
+    case 'units': return String(Number(i.qty) || 1);
+    case 'price': return Number(i.price) ? Number(i.price).toFixed(2) : '';
+    case 'receivedBy': return r.received_by || '';
+    case 'settle': return Number(i.settle) ? Number(i.settle).toFixed(2) : '';
+    case 'note': return ii >= 0 ? (i.note || '') : (r.note || '');
+    default: return '';
+  }
+}
+
+function retBeginEdit(td, entry, field = td.dataset.edit) {
+  // only one editor open: any other cell mid-edit falls back to display
+  const other = $('retPastBox').querySelector('.ret-ein, .ret-emenu');
+  if (other) renderRetLog();
+  if (field === 'condition') { retBeginCondEdit(td, entry); return; }
+  const startVal = retEditValue(entry, field);
+  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy', 'settle'].includes(field);
+  td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
+  const input = td.querySelector('input');
+  input.value = startVal;
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const val = input.value;
+    if (save && val.trim() !== startVal.trim()) retSaveEdit(entry, field, val);
+    else renderRetLog();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+// the condition cell edits through a small menu of the four pills
+function retBeginCondEdit(td, entry) {
+  if (!entry.i.sku) return; // a PO-only row has no line to grade
+  td.innerHTML = `<div class="ret-emenu">${RET_CONDS.map(c => `
+    <button type="button" class="ret-emi ${entry.i.condition === c.key ? 'is-sel' : ''}" data-cond="${c.key}">
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('')}</div>`;
+  const menu = td.querySelector('.ret-emenu');
+  const away = (e) => {
+    if (e.target.closest('.ret-emenu')) return;
+    document.removeEventListener('mousedown', away, true);
+    renderRetLog();
+  };
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cond]');
+    if (!b) return;
+    document.removeEventListener('mousedown', away, true);
+    if (b.dataset.cond === entry.i.condition) { renderRetLog(); return; }
+    retSaveEdit(entry, 'condition', b.dataset.cond);
+  });
+  setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+}
 
 $('retDelCancel').addEventListener('click', () => $('retDelDialog').close());
 $('retDelConfirm').addEventListener('click', async () => {
@@ -4272,7 +4468,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'by', 9: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'settle', 11: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;

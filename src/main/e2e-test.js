@@ -262,20 +262,26 @@ module.exports = async function run({ app, win, db, clipboard }) {
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
 
-    // 24. receive popup (design C, 2026-08-07): a failed PO lookup falls
-    // into the hand-entry path instead of staging a worksheet row
-    await exec(`retOpenRecv(); $('rvPo').value = 'WMR-REMOVAL-7788'; rvLookup()`);
-    await sleep(300); // lookup refuses offline -> unmatched hand-entry state
+    // 24. popup receiving is back (owner 2026-09-05, "popup instead of on
+    // the line"): a PO# typed in the sheet's first cell opens the receive
+    // popup carrying that PO with the lookup already running; a failed
+    // lookup falls into the hand-entry path
+    await exec(`loadRetPast()`);
+    await sleep(250);
+    await exec(`$('wsPo').value = 'WMR-REMOVAL-7788';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(400); // lookup refuses offline -> unmatched hand-entry state
     const rvBits = await exec(`[
       !!document.querySelector('#retRecvDialog[open]'),
-      $('rvFeedback').hidden,
+      $('rvTitle').textContent,
+      $('rvPo').value,
+      $('wsPo').value,
       $('rvFeedback').textContent,
       rv.unmatched,
-      $('rvMatched').hidden,
     ]`);
-    check('popup lookup failure falls into the hand-entry path',
-      rvBits[0] === true && rvBits[1] === false && /by hand/i.test(rvBits[2])
-        && rvBits[3] === true && rvBits[4] === true,
+    check('PO cell opens the receive popup; failed lookup = hand-entry path',
+      rvBits[0] === true && /Receive a return/.test(rvBits[1]) && rvBits[2] === 'WMR-REMOVAL-7788'
+        && rvBits[3] === '' && /by hand/i.test(rvBits[4]) && rvBits[5] === true,
       rvBits);
 
     // 24b. condition pills + the live target line: New restocks the SKU
@@ -307,52 +313,55 @@ module.exports = async function run({ app, win, db, clipboard }) {
       /S25-128GB-NAVY-OPENBOX/.test(tgt[0]) && tgt[1] === true, tgt);
     await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
     tgt = await exec(`[
-      $('rvTarget').className,
+      !!document.querySelector('#rvWarnBtn'),
       $('rvFix').hidden,
+      $('rvTarget').textContent,
+    ]`);
+    check('an unmapped condition shows the ⚠ beside the pills (popover closed)',
+      tgt[0] === true && tgt[1] === true && tgt[2] === '', tgt);
+    // pressing the ⚠ opens the "no SKU for this yet — create it?" popover
+    await exec(`document.querySelector('#rvWarnBtn').click()`);
+    tgt = await exec(`[
+      $('rvFix').hidden,
+      $('rvFixMsg').textContent,
       $('rvCreate').hidden,
       $('rvCreate').textContent,
       !!document.querySelector('.rv-pick-combo .combo-list'),
     ]`);
-    check('an unmapped condition opens the fix row with the prefix create button',
-      /is-missing/.test(tgt[0]) && tgt[1] === false && tgt[2] === false
+    check('the ⚠ popover asks to create the missing SKU, with a manual pick',
+      tgt[0] === false && /no used SKU for S25-128GB-NAVY/i.test(tgt[1]) && tgt[2] === false
         && /USED-S25-128GB-NAVY/.test(tgt[3]) && tgt[4] === true,
       tgt);
+    // 24b-bis. Create opens the full New SKU sheet on top of the popup,
+    // prefilled with the suggested name + the base item's title (everything
+    // editable); closing it without creating changes nothing
+    await exec(`$('rvCreate').click()`);
+    await sleep(200);
+    const mk = await exec(`[
+      !!document.querySelector('#skuDialog[open]'),
+      $('skuSku').value,
+      $('skuTitle').value,
+    ]`);
+    check('Create opens the New SKU sheet prefilled from the base item',
+      mk[0] === true && mk[1] === 'USED-S25-128GB-NAVY' && /Galaxy S25 - Used/.test(mk[2]), mk);
+    await exec(`$('skuDialog').close()`);
     // receive is blocked while the target is unresolved
-    await exec(`$('rvPo').value = 'WMR-REMOVAL-7788'; rvCommit()`);
+    await exec(`rvCommit()`);
     await sleep(120);
     const blocked = await exec(`$('rvFeedback').textContent`);
     check('receive blocked until the missing listing is picked or created',
       /pick or create/i.test(blocked), blocked);
-    await exec(`$('retRecvDialog').close()`);
-    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}`);
 
-    // 24c. Receive must CLOSE the popup after a successful single-line commit
-    await exec(`window.__err = ''; window.addEventListener('error', (e) => { window.__err += String(e.error && e.error.stack || e.message) + ' | '; });
-      window.addEventListener('unhandledrejection', (e) => { window.__err += 'REJ:' + String(e.reason && e.reason.stack || e.reason) + ' | '; });
-      retOpenRecv();
-      rv.unmatched = false; rv.orderId = 'oid-9'; rv.source = 'WALMART';
-      $('rvPo').value = '119999000000001';
-      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
+    // 24b-ter. price AND dispute settlement autofill from the matched line
+    await exec(`rv.unmatched = false;
+      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 259.5, quantity: 1, targets: null }];
       rv.received = [false];
-      rvLoadItemAt(0);
-      window.__origCreate = rvCreate;
-      rvCreate = async () => ({ ok: true });
-      0;`);
-    await exec(`$('rvSave').click()`);
-    // commit -> close is async and occasionally slow under load: poll up to
-    // 8s instead of a fixed sleep (flaked at 300ms, 700ms, and at 3s while
-    // an installer build ran beside the suite 2026-08-14)
-    for (let w = 0; w < 40; w++) {
-      await sleep(200);
-      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
-    }
-    const rvClosed = await exec(`[
-      !document.querySelector('#retRecvDialog[open]'),
-      ($('rvFeedback').hidden ? '' : $('rvFeedback').textContent),
-      String(window.__err || ''),
-    ]`);
-    check('Receive closes the popup after a successful commit', rvClosed[0] === true, rvClosed);
-    await exec(`rvCreate = window.__origCreate; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
+      rvLoadItemAt(0)`);
+    const auto = await exec(`[$('rvPrice').value, $('rvSettle').value]`);
+    check('dispute settlement autofills from the order line price',
+      auto[0] === '259.50' && auto[1] === '259.50', auto);
+    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)};
+      $('retRecvDialog').close(); 0;`);
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
@@ -366,46 +375,124 @@ module.exports = async function run({ app, win, db, clipboard }) {
       res);
     await exec('loadRetPast()');
     await sleep(250);
-    // history = the SAME sheet as the worksheet (11-column header incl.
-    // Units + actions), one row per ITEM LINE (the qty-2 return = 1 row,
-    // Units column carries the 2), condition dot, edit/delete per row,
-    // and no inputs until an edit begins
+    // history = the RETURNS-2 sheet (13-column header incl. Price, Dispute
+    // Settlement + actions), one row per ITEM LINE (the qty-2 return = 1
+    // row, Units column carries the 2), condition dot, edit/delete per
+    // row, and the excel-style entry row pinned on top
     const ledgerBits = await exec(`[
       !!document.querySelector('#retPastBox table.ret-log-table'),
       document.querySelectorAll('#retPastBox thead th').length,
       document.querySelectorAll('#retPastBox tbody tr.ret-past-tr').length,
       !!document.querySelector('#retPastBox .ret-cond-ro .ret-dd-dot.is-openbox'),
-      document.querySelectorAll('#retPastBox .ret-log-edit-btn').length,
+      document.querySelectorAll('#retPastBox tr.ret-past-tr td[data-edit]').length,
       document.querySelectorAll('#retPastBox .ret-log-del-btn').length,
-      document.querySelectorAll('#retPastBox input, #retPastBox select').length,
+      document.querySelectorAll('#retPastBox tr.ret-past-tr input, #retPastBox tr.ret-past-tr select').length,
+      (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
+      (document.querySelector('#retPastBox .ret-cell-price') || {}).textContent || '',
+    ]`);
+    check('history renders the RETURNS-2 sheet, one row per line',
+      ledgerBits[0] === true && ledgerBits[1] === 13
+        && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2'
+        && ledgerBits[8] === '189.99',
+      ledgerBits);
+    check('every column is in-place editable, delete stays, no idle inputs',
+      ledgerBits[4] === 11 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
+    // 24c-bis. the entry cell: a singleton row that SURVIVES a re-render
+    const entryBits = await exec(`[
+      !!document.querySelector('#retPastBox tr.ws-row'),
+      !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
+      (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
+    ]`);
+    check('entry cell: PO launcher present, survives re-render',
+      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME',
+      entryBits);
+    await exec(`$('wsPo').value = ''; 0;`);
+    // 24c. Receive commits price + dispute settlement through the
+    // returns:create engine and CLOSES the popup — no async errors
+    await exec(`
+      window.__err = ''; window.addEventListener('error', (e) => { window.__err += String(e.error && e.error.stack || e.message) + ' | '; });
+      window.addEventListener('unhandledrejection', (e) => { window.__err += 'REJ:' + String(e.reason && e.reason.stack || e.reason) + ' | '; });
+      window.__rvOrig = rvCreate;
+      window.__rvGot = null;
+      rvCreate = async (p) => { window.__rvGot = p; return { ok: true, id: 999 }; };
+      retOpenRecv();
+      rv.unmatched = false; rv.orderId = 'oid-9'; rv.source = 'WALMART';
+      $('rvPo').value = '119999000000001'; rvLastLookup = '119999000000001';
+      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
+      rv.received = [false];
+      rvLoadItemAt(0);
+      $('rvPrice').value = '150'; $('rvSettle').value = '45.50'; $('rvBy').value = 'IM';
+      $('rvSave').click(); 0;`);
+    // commit -> close is async: poll instead of a fixed sleep (flaked at
+    // fixed sleeps under load, 2026-08-14)
+    for (let w = 0; w < 40; w++) {
+      await sleep(200);
+      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
+    }
+    const rvGot = await exec(`window.__rvGot`);
+    check('Receive commits price + dispute settlement through returns:create',
+      rvGot && rvGot.orderNumber === '119999000000001' && rvGot.items.length === 1
+        && rvGot.items[0].price === 150 && rvGot.items[0].settle === 45.5
+        && rvGot.items[0].targetSku === 'S25-128GB-NAVY',
+      rvGot);
+    const rvClosed = await exec(`[!document.querySelector('#retRecvDialog[open]'), String(window.__err || '')]`);
+    check('Receive closes the popup after the commit, no async errors',
+      rvClosed[0] === true && rvClosed[1] === '', rvClosed);
+    await exec(`rvCreate = window.__rvOrig; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
+    // 24e. in-place editing (owner 2026-09-07, the pencil popup retired):
+    // clicking a cell swaps in an editor prefilled with the cell's value,
+    // Escape cancels it back to display
+    await exec(`document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="units"]').click()`);
+    await sleep(150);
+    let inline = await exec(`[
+      !!document.querySelector('#retPastBox td[data-edit="units"] .ret-ein'),
+      (document.querySelector('#retPastBox td[data-edit="units"] .ret-ein') || {}).value || '',
+    ]`);
+    check('clicking a log cell opens the in-place editor prefilled',
+      inline[0] === true && inline[1] === '2', inline);
+    await exec(`document.querySelector('#retPastBox td[data-edit="units"] .ret-ein')
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await sleep(150);
+    inline = await exec(`[
+      !!document.querySelector('#retPastBox .ret-ein'),
       (document.querySelector('#retPastBox .ret-cell-units') || {}).textContent || '',
     ]`);
-    check('history renders the worksheet-identical sheet, one row per line',
-      ledgerBits[0] === true && ledgerBits[1] === 11
-        && ledgerBits[2] === 1 && ledgerBits[3] === true && ledgerBits[7] === '2',
-      ledgerBits);
-    check('history rows carry edit + delete, no inputs until editing',
-      ledgerBits[4] === 1 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
-    // popup edit (owner request 2026-08-07): the pencil opens the receive
-    // popup prefilled from the row, with the Received-date row visible
-    await exec(`document.querySelector('#retPastBox .ret-log-edit-btn').click()`);
-    await sleep(200);
-    const editBits = await exec(`[
-      !!document.querySelector('#retRecvDialog[open]'),
-      $('rvTitle').textContent,
-      $('rvPo').value,
-      $('rvSku').value,
-      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
-      $('rvQty').value,
-      $('rvSave').textContent,
-      $('rvDayRow').hidden,
+    check('Escape cancels the editor back to the display value',
+      inline[0] === false && inline[1] === '2', inline);
+    // Enter saves through the SAME qty-aware corrections engine the popup
+    // used — the payload carries the whole row with the edit swapped in
+    await exec(`
+      window.__reOrig = retEditApi;
+      window.__reGot = null;
+      retEditApi = async (p) => { window.__reGot = p; return { ok: true, stockNote: '' }; };
+      document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="units"]').click(); 0;`);
+    await sleep(150);
+    await exec(`(() => {
+      const ein = document.querySelector('#retPastBox td[data-edit="units"] .ret-ein');
+      ein.value = '3';
+      ein.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    })()`);
+    await sleep(250);
+    const reGot = await exec(`window.__reGot`);
+    check('an inline edit saves the full row through returns:editUnit',
+      reGot && reGot.po === 'WMR-REMOVAL-7788' && reGot.units === '3'
+        && reGot.sku === 'S25-128GB-NAVY' && reGot.condition === 'openbox'
+        && reGot.price === 189.99 && reGot.receivedBy === 'IM',
+      reGot);
+    await exec(`retEditApi = window.__reOrig; 0;`);
+    // the condition cell edits through a compact 4-pill menu
+    await exec(`loadRetPast()`);
+    await sleep(250);
+    await exec(`document.querySelector('#retPastBox tr.ret-past-tr td[data-edit="condition"]').click()`);
+    await sleep(150);
+    const condMenu = await exec(`[
+      document.querySelectorAll('#retPastBox .ret-emenu .ret-emi').length,
+      (document.querySelector('#retPastBox .ret-emi.is-sel') || { dataset: {} }).dataset.cond || '',
     ]`);
-    check('pencil opens the edit popup prefilled from the row',
-      editBits[0] === true && /Edit return/.test(editBits[1]) && editBits[2] === 'WMR-REMOVAL-7788'
-        && editBits[3] === 'S25-128GB-NAVY' && editBits[4] === 'openbox' && editBits[5] === '2'
-        && /Save changes/.test(editBits[6]) && editBits[7] === false,
-      editBits);
-    await exec(`$('retRecvDialog').close()`);
+    check('the condition cell edits through the 4-pill menu, current one marked',
+      condMenu[0] === 4 && condMenu[1] === 'openbox', condMenu);
+    await exec(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
+    await sleep(150);
 
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card
@@ -421,16 +508,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
     });
     await exec('loadRetPast()');
     await sleep(250);
+    // V1: the card waits behind the bar chip — hidden until the chip is
+    // clicked, but its rows render regardless (the resolve button works)
     const disp = await exec(`[
-      !$('retDisputes').hidden,
+      $('retDisputes').hidden,
+      (document.querySelector('#retChips [data-chip="disp"]') || {}).textContent || '',
       document.querySelectorAll('#retDisputes .ret-todo-row').length,
       ($('retDisputes').textContent || '').includes('88421'),
       ($('retDisputes').textContent || '').includes('999'),
       !!document.querySelector('#retDisputes [data-dispdone]'),
     ]`);
-    check('disputes card lists open cases only, with a resolve button',
-      disp[0] === true && disp[1] === 1 && disp[2] === true && disp[3] === false && disp[4] === true,
+    check('disputes wait behind the bar chip, open cases only, with resolve',
+      disp[0] === true && /1 dispute open/.test(disp[1]) && disp[2] === 1
+        && disp[3] === true && disp[4] === false && disp[5] === true,
       disp);
+    await exec(`document.querySelector('#retChips [data-chip="disp"]').click()`);
+    const dispOpen = await exec(`!$('retDisputes').hidden`);
+    check('the dispute chip expands the card', dispOpen === true, dispOpen);
+    await exec(`document.querySelector('#retChips [data-chip="disp"]').click(); 0;`);
 
     // 25. new returns handlers refuse in capture-only mode
     res = await exec(`api.returnsTargets('S25-128GB-NAVY')`);
@@ -745,7 +840,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       document.querySelectorAll('#retPastBox thead .col-grip').length,
     ]`);
     check('returns log: shared width grip + column grips',
-      retGrips[0] === true && retGrips[1] === 9, retGrips);
+      retGrips[0] === true && retGrips[1] === 11, retGrips);
 
     // 37. shipped-orders file import: header detection ignores the "Update
     // Tracking Number" column, per-PO dedupe, bulk fill + conflict report
@@ -1141,9 +1236,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
         recvLookup = 'ready';
       `);
       const s25Targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      await exec(`retReceivedBy = 'IM'; retOpenRecv();
+      // the receive popup mid-flow: matched order, condition auto-matched
+      await exec(`retReceivedBy = 'IM'; loadRetPast()`);
+      await sleep(300);
+      await exec(`retOpenRecv();
         rv.unmatched = false; rv.orderId = 'oid-1'; rv.source = 'WALMART';
-        $('rvPo').value = '119121310078834';
+        $('rvPo').value = '119121310078834'; rvLastLookup = '119121310078834';
         $('rvCust').value = 'J. Alvarez';
         $('rvTrk').value = '1ZF98W401234567890';
         rv.items = [
@@ -1153,7 +1251,6 @@ module.exports = async function run({ app, win, db, clipboard }) {
         rv.received = [false, false];
         rvLoadItemAt(0);
         rv.condition = 'openbox';
-        $('rvMatched').hidden = false; $('rvMatched').textContent = 'matched · J. Alvarez';
         $('rvBy').value = 'IM'; $('rvNote').value = 'box opened once, resealed';
         rvRenderCond();`);
       await sleep(400);
@@ -1161,7 +1258,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const retShot = process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-returns-popup.png');
       fs.writeFileSync(retShot, img.toPNG());
       console.log(`SHOT ${retShot}`);
-      // the unmapped state: Used has no listing -> fix row with create button
+      // the unmapped state: Used has no listing -> pick box + create button
       await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
       await sleep(250);
       img = await win.webContents.capturePage();
