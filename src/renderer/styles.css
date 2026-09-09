@@ -1559,6 +1559,14 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 .retcond-combo .input { width: 100%; }
 
+/* returns-history import dialog: parse counts + a lookup progress bar */
+.retimp-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.retimp-line { font-size: 12.5px; color: var(--muted); }
+.retimp-line b { color: var(--text); font-weight: 600; }
+.retimp-bar { position: relative; height: 22px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; margin-bottom: 10px; }
+.retimp-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--accent-soft); transition: width 300ms var(--ease); }
+.retimp-bar-txt { position: relative; display: block; text-align: center; font-size: 11px; line-height: 20px; color: var(--accent-soft-text); font-weight: 600; }
+
 /* the results render in-flow (not floating) so the dialog grows with them
    instead of clipping into scrollbars */
 .retcond-combo .combo-list {

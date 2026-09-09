@@ -197,6 +197,7 @@
           <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
+          <button id="retImportBtn" class="btn btn-ghost" title="Upload the returns history sheet (.xlsx or .csv) — one row per received unit; duplicate PO rows collapse into unit counts">Import</button>
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
@@ -845,6 +846,20 @@
   <!-- inline condition edit hit a condition with no listing (2026-09-09):
        create the suggested SKU right here, or search the inventory and
        pick the right one — either way the pending edit then saves itself -->
+  <!-- returns-history import (owner 2026-09-09): the RETURNS-2 sheet in,
+       preview the counts, look the orders up, then write log entries -->
+  <dialog id="retImpDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Import the returns history</h2>
+      <div id="retImpStats" class="retimp-stats"></div>
+      <div id="retImpBar" class="retimp-bar" hidden><div class="retimp-fill"></div><span class="retimp-bar-txt"></span></div>
+      <p class="dlg-note" id="retImpNote"></p>
+      <div class="dlg-actions">
+        <button id="retImpCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="retImpGo" class="btn btn-primary" type="button" disabled>Import</button>
+      </div>
+    </div>
+  </dialog>
   <dialog id="retCondDialog" class="dlg dlg-retcond">
     <div class="dlg-body">
       <div class="retcond-head">

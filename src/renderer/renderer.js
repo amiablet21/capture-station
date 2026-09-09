@@ -7014,6 +7014,82 @@ $("rnSave").addEventListener("click", async () => {
   loadStock();
 });
 
+/* ---------- returns-history import (owner 2026-09-09) ---------- */
+// pick the sheet -> parse preview -> Linnworks lookups (progress bar) ->
+// one Import press writes the entries. Seams so e2e can stub the ipc.
+let retImp = null; // { entries, stats } while the dialog is open
+let retImpPick = () => api.returnsImportPick();
+let retImpResolve = (entries) => api.returnsImportResolve(entries);
+let retImpCommit = (entries) => api.returnsImportCommit(entries);
+
+function retImpStatHtml(parse, resolve) {
+  const li = (txt) => `<div class="retimp-line">${txt}</div>`;
+  let h = li(`<b>${parse.rows}</b> rows → <b>${parse.entries}</b> entries · <b>${parse.units}</b> units`);
+  if (parse.skippedDup) h += li(`${parse.skippedDup} already in the log — skipped`);
+  if (parse.noPo) h += li(`${parse.noPo} without a PO# — imported as unmatched`);
+  if (resolve) {
+    h += li(`<b>${resolve.found}</b> of ${resolve.orders} orders matched in Linnworks`);
+    if (resolve.trackingFilled) h += li(`tracking filled from the order on <b>${resolve.trackingFilled}</b>`);
+    h += li(`SKUs: <b>${resolve.skuFromOrder}</b> from the order · <b>${resolve.skuKnown}</b> already Linnworks names`
+      + (resolve.skuUnknown ? ` · <b>${resolve.skuUnknown}</b> unknown (imported as written, flagged)` : ''));
+  }
+  return h;
+}
+
+$('retImportBtn').addEventListener('click', async () => {
+  const picked = await retImpPick().catch(e => ({ ok: false, error: e.message }));
+  if (!picked || picked.canceled) return;
+  if (!picked.ok) { toast(picked.error || 'Could not read that file.'); return; }
+  retImp = { entries: picked.entries, parse: picked.stats, resolve: null };
+  $('retImpStats').innerHTML = retImpStatHtml(picked.stats, null);
+  $('retImpNote').textContent = 'Everything imports as Open box, dated today, no stock changes.';
+  $('retImpGo').disabled = true;
+  const bar = $('retImpBar');
+  bar.hidden = false;
+  bar.querySelector('.retimp-fill').style.width = '0%';
+  bar.querySelector('.retimp-bar-txt').textContent = 'Looking the orders up in Linnworks…';
+  $('retImpDialog').showModal();
+  const res = await retImpResolve(picked.entries).catch(e => ({ ok: false, error: e.message }));
+  if (!retImp) return; // dialog was cancelled mid-lookup
+  bar.hidden = true;
+  if (!res || !res.ok) {
+    // no Linnworks: the sheet's own data still imports, just unenriched
+    $('retImpNote').textContent = `${res && res.error ? res.error + ' — ' : ''}orders not looked up; the sheet imports as-is.`;
+  } else {
+    retImp.entries = res.entries;
+    retImp.resolve = res.stats;
+    $('retImpStats').innerHTML = retImpStatHtml(retImp.parse, res.stats);
+  }
+  $('retImpGo').disabled = !retImp.entries.length;
+});
+
+api.on('returns:importProgress', ({ done, total }) => {
+  const bar = $('retImpBar');
+  if (bar.hidden || !total) return;
+  bar.querySelector('.retimp-fill').style.width = `${Math.round((done / total) * 100)}%`;
+  bar.querySelector('.retimp-bar-txt').textContent = `Looking the orders up in Linnworks… ${done} / ${total}`;
+});
+
+$('retImpGo').addEventListener('click', async () => {
+  if (!retImp || !retImp.entries.length) return;
+  $('retImpGo').disabled = true;
+  $('retImpGo').textContent = 'Importing…';
+  const res = await retImpCommit(retImp.entries).catch(e => ({ ok: false, error: e.message }));
+  $('retImpGo').textContent = 'Import';
+  if (!res || !res.ok) {
+    $('retImpGo').disabled = false;
+    toast((res && res.error) || 'Import failed.');
+    return;
+  }
+  $('retImpDialog').close();
+  toast(`Imported ${res.made} entries (${res.units} units)`, 4000);
+  loadRetPast();
+  loadUnlisted(true);
+});
+
+$('retImpCancel').addEventListener('click', () => $('retImpDialog').close());
+$('retImpDialog').addEventListener('close', () => { retImp = null; });
+
 /* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
