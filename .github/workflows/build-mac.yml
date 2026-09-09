@@ -47,10 +47,16 @@ jobs:
       - run: npm ci
 
       - name: Build DMG + ZIP (arm64 + x64)
-        run: npx electron-builder --mac --publish never
+        # unset the signing env entirely when the secrets are blank —
+        # electron-builder treats an EMPTY CSC_LINK as a certificate path
+        # and dies with "not a file" (seen 2026-09-09, run 1)
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac --publish never
         env:
-          # empty when the secrets aren't configured -> electron-builder
-          # skips signing/notarization instead of failing
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
