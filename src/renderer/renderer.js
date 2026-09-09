@@ -6179,6 +6179,9 @@ function ebParseSku(sku) {
     model: m ? base.slice(0, Math.max(0, base.indexOf(m[1]) - 1)) : (parts[0] || ""),
     storage: m ? m[1] : "",
     color: last && !/GB|TB/i.test(last) ? last[0] + last.slice(1).toLowerCase() : "",
+    // the SKU never spells the brand out — the model token implies it
+    // (same heuristic the Temu tab uses)
+    brand: /IPAD|IPHONE|APPLE/i.test(s) ? "Apple" : "Samsung",
   };
 }
 
@@ -6341,14 +6344,16 @@ async function ebSelect(sku, scratch) {
     ebApplyCard(newCard, p);
   } else {
     ebCur.src = "manual";
-    ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
+    ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
     ebCur.specs = ebManualSpecs(p);
     ebCur.err = (res && res.error) || "no listing found";
     // public catalog rescue: the item's UPC resolves to a real marketing
-    // title even when we have no live listing of the model anywhere
+    // title even when we have no live listing of the model anywhere.
+    // The brand rides the query — "A15 128GB Black" alone matched iPhone 13
+    // listings (the A15 Bionic chip), minting Apple titles on Samsung drafts
     const inv = recvBySku && recvBySku.get(String(sku).toLowerCase());
     const upc = (inv && inv.barcode) || "";
-    api.titleLookup(upc, `${p.model} ${p.storage} ${p.color}`.trim()).then(lk => {
+    api.titleLookup(upc, `${p.brand} ${p.model} ${p.storage} ${p.color}`.trim()).then(lk => {
       if (!lk || !lk.ok || !lk.title || !ebCur || ebCur.sku !== sku || ebCur.src !== "manual") return;
       ebCur.title = ebTitleFor(lk.title, ebCur.cond);
       ebCur.err = "";
@@ -6378,7 +6383,7 @@ const EB_SPEC_TEMPLATE = ['Brand', 'Model', 'MPN', 'Storage Capacity', 'Color', 
 function ebManualSpecs(p) {
   const s = {};
   for (const k of EB_SPEC_TEMPLATE) s[k] = '';
-  s.Brand = 'Samsung';
+  s.Brand = p.brand;
   s.Model = p.model;
   s['Storage Capacity'] = p.storage;
   s.Color = p.color;
@@ -6611,7 +6616,7 @@ $("ebSku").addEventListener("change", (e) => {
   ebCur.specs = ebManualSpecs(p);
   ebCur.src = "manual";
   ebCur.err = "from-scratch listing";
-  ebCur.title = ebTitleFor(`${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
+  ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
   renderEbayForm();
 });
 $("ebTitle").addEventListener("input", (e) => { if (ebCur) { ebCur.title = e.target.value; $("ebTitleN").textContent = e.target.value.length; $("ebPrev").innerHTML = ebDescription(); } });
