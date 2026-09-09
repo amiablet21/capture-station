@@ -36,15 +36,7 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
+            "universal"
           ]
         }
       ],
@@ -55,7 +47,7 @@
       "darkModeSupport": true
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName} ${version}.${ext}"
     }
   },
   "dependencies": {
