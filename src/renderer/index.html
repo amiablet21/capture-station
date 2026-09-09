@@ -849,16 +849,8 @@
     <div class="dlg-body">
       <div class="retcond-head">
         <span class="retcond-icon" aria-hidden="true">!</span>
-        <div class="retcond-head-txt">
-          <h2 class="dlg-title">No listing for this condition</h2>
-          <p class="dlg-note" id="retCondMsg"></p>
-        </div>
+        <h2 class="dlg-title">No listing for this condition</h2>
       </div>
-      <div id="retCondCreateWrap">
-        <button id="retCondCreate" class="btn btn-primary retcond-create" type="button"></button>
-        <p class="retcond-hint">Opens the New SKU sheet prefilled — once created, this return moves onto it.</p>
-      </div>
-      <div class="retcond-or" id="retCondOr"><span>or pick an existing listing</span></div>
       <div class="combo retcond-combo">
         <input id="retCondPick" class="input mono" type="text" placeholder="Search the inventory by SKU or title…"
                autocomplete="off" spellcheck="false" aria-label="Pick the target listing" />
@@ -866,6 +858,7 @@
       </div>
       <p class="retcond-hint">The pick is remembered for every future return of this SKU.</p>
       <div class="dlg-actions">
+        <button id="retCondCreate" class="btn btn-ghost retcond-create" type="button"></button>
         <button id="retCondCancel" class="btn btn-ghost" type="button">Cancel</button>
       </div>
     </div>

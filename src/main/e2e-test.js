@@ -517,15 +517,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(150);
     const condFix = await exec(`[
       !!document.querySelector('#retCondDialog[open]'),
-      $('retCondMsg').textContent,
       $('retCondCreate').hidden,
       $('retCondCreate').textContent,
       !!document.querySelector('.retcond-combo .combo-list'),
     ]`);
-    check('missing-listing dialog: message, affix-stripped create name, pick search',
-      condFix[0] === true && /no used listing for OPEN-BOX-X1/i.test(condFix[1])
-        && condFix[2] === false && /Create USED-X1$/.test((condFix[3] || '').trim())
-        && condFix[4] === true,
+    check('missing-listing dialog: affix-stripped footer create, pick search',
+      condFix[0] === true
+        && condFix[1] === false && /Create USED-X1$/.test((condFix[2] || '').trim())
+        && condFix[3] === true,
       condFix);
     await exec(`$('retCondDialog').close(); recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
 

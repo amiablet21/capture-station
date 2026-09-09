@@ -4328,15 +4328,11 @@ let retCondCtx = null; // { entry, cond } while the dialog is open
 
 function openRetCondFix(entry, cond) {
   retCondCtx = { entry, cond };
-  $('retCondMsg').innerHTML = `There’s no <b>${esc(retCondLabel(cond).toLowerCase())}</b> listing for <span class="mono">${esc(entry.i.sku)}</span> yet.`;
   const suggested = retSuggestCondSku(entry.i.sku, cond);
   const btn = $('retCondCreate');
   const canCreate = !!RET_PREFIX[cond] && !(recvLookup === 'ready' && recvLookupExact(suggested));
   btn.hidden = !canCreate;
-  // without a create option the search stands alone, divider and all
-  $('retCondCreateWrap').hidden = !canCreate;
-  $('retCondOr').hidden = !canCreate;
-  btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
+  btn.innerHTML = `＋ Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
   $('retCondPick').value = '';
   ensureInventory(); // the pick combo searches the live list
