@@ -860,6 +860,46 @@
       </div>
     </div>
   </dialog>
+  <!-- missing-listings slider (owner 2026-09-09): after an import, walk
+       the condition SKUs that have no listing yet, one at a time -->
+  <dialog id="retFixDialog" class="dlg dlg-retcond">
+    <div class="dlg-body">
+      <div class="retcond-head">
+        <span class="retcond-icon" id="retFixIcon" aria-hidden="true">!</span>
+        <h2 class="dlg-title">Missing listings from the import</h2>
+        <span class="retfix-count">
+          <button id="retFixPrev" class="retfix-nav" type="button" aria-label="Previous">‹</button>
+          <b id="retFixN" class="mono"></b>
+          <button id="retFixNext" class="retfix-nav" type="button" aria-label="Next">›</button>
+        </span>
+      </div>
+      <div class="retfix-prog"><i id="retFixFill"></i></div>
+      <div id="retFixBody">
+        <div class="retfix-item">
+          <span class="mono" id="retFixSku"></span>
+          <span id="retFixCond"></span>
+          <small id="retFixCtx"></small>
+        </div>
+        <div class="combo retcond-combo retfix-combo">
+          <input id="retFixPick" class="input mono" type="text" placeholder="…or search the inventory and pick the listing it maps to"
+                 autocomplete="off" spellcheck="false" aria-label="Pick the target listing" />
+          <div class="combo-list" hidden></div>
+        </div>
+        <p class="retcond-hint">Creating or picking saves the mapping — every log entry of this SKU is fixed in one go, and future returns remember it.</p>
+      </div>
+      <div id="retFixDone" class="retfix-done" hidden>
+        <div class="retfix-done-big">✓</div>
+        <h3 id="retFixDoneH"></h3>
+        <p class="dlg-note">Skipped ones can still be fixed any time from the row's condition menu.</p>
+        <div class="retfix-tally" id="retFixTally"></div>
+      </div>
+      <div class="dlg-actions">
+        <button id="retFixCreate" class="btn btn-ghost retcond-create" type="button"></button>
+        <button id="retFixSkip" class="btn btn-ghost" type="button">Skip</button>
+        <button id="retFixClose" class="btn btn-primary" type="button" hidden>Done</button>
+      </div>
+    </div>
+  </dialog>
   <dialog id="retCondDialog" class="dlg dlg-retcond">
     <div class="dlg-body">
       <div class="retcond-head">

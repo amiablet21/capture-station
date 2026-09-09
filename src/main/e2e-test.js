@@ -617,6 +617,52 @@ module.exports = async function run({ app, win, db, clipboard }) {
       impDone[0] === 'S25-128GB-NAVY' && impDone[1] === true, impDone);
     await exec(`retImpPick = window.__impOrig[0]; retImpResolve = window.__impOrig[1]; retImpCommit = window.__impOrig[2]; 0;`);
 
+    // 24h. the missing-listings slider: one gap at a time, affix-stripped
+    // create suggestions, Skip advances, the tally closes it out
+    await exec(`
+      window.__fixOrig = retFixGapsApi;
+      recvItems = [{ sku: 'BASE-Y7', title: 'Y7 base', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      retFixGapsApi = async () => ({ ok: true, relinked: 0, gaps: [
+        { sku: 'OPEN-BOX-BASE-X9', condition: 'openbox', units: 2, entries: 2, customer: 'Ann A' },
+        { sku: 'BASE-Y7', condition: 'used', units: 1, entries: 1, customer: 'Bob B' },
+      ] });
+      retFixOpenIfNeeded(); 0;`);
+    await sleep(300);
+    const fix1 = await exec(`[
+      !!document.querySelector('#retFixDialog[open]'),
+      $('retFixN').textContent,
+      $('retFixSku').textContent,
+      $('retFixCreate').textContent.trim(),
+      $('retFixCtx').textContent,
+    ]`);
+    check('slider opens on gap 1 with an affix-stripped create suggestion',
+      fix1[0] === true && fix1[1] === '1 / 2' && fix1[2] === 'OPEN-BOX-BASE-X9'
+        && /Create OPEN-BOX-BASE-X9$/.test(fix1[3]) && /2 units/.test(fix1[4]), fix1);
+    await exec(`$('retFixSkip').click(); 0;`);
+    await sleep(150);
+    const fix2 = await exec(`[$('retFixN').textContent, $('retFixSku').textContent, $('retFixCreate').textContent.trim()]`);
+    check('Skip advances to gap 2 (USED- prefix suggestion)',
+      fix2[0] === '2 / 2' && fix2[1] === 'BASE-Y7' && /Create USED-BASE-Y7$/.test(fix2[2]), fix2);
+    await exec(`$('retFixSkip').click(); 0;`);
+    await sleep(150);
+    const fixDone = await exec(`[
+      $('retFixDone').hidden,
+      $('retFixDoneH').textContent,
+      $('retFixTally').textContent,
+      $('retFixClose').hidden,
+    ]`);
+    check('all handled: the tally view with Done',
+      fixDone[0] === false && fixDone[1] === 'All 2 handled'
+        && /2 skipped/.test(fixDone[2]) && fixDone[3] === false, fixDone);
+    await exec(`$('retFixClose').click();
+      retFixGapsApi = window.__fixOrig;
+      recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
+    const fixClosed = await exec(`[!document.querySelector('#retFixDialog[open]')]`);
+    check('Done closes the slider', fixClosed[0] === true, fixClosed);
+
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card
     db.createReturn({

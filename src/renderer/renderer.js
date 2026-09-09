@@ -7085,10 +7085,137 @@ $('retImpGo').addEventListener('click', async () => {
   toast(`Imported ${res.made} entries (${res.units} units)`, 4000);
   loadRetPast();
   loadUnlisted(true);
+  retFixOpenIfNeeded(); // walk the condition SKUs with no listing yet
 });
 
 $('retImpCancel').addEventListener('click', () => $('retImpDialog').close());
 $('retImpDialog').addEventListener('close', () => { retImp = null; });
+
+/* ---------- missing-listings slider (owner 2026-09-09) ---------- */
+// After an import, log units graded openbox/used/scrap may have no
+// listing to land on. One popup walks them a SKU at a time: Create the
+// suggested listing, pick an existing one, or Skip — ‹ › to move around.
+// Each fix relinks every log entry of that SKU through returns:listingGaps.
+let retFix = null; // { gaps, idx, tally } while the slider runs
+let retFixPending = null; // gap parked while the New SKU sheet is open
+let retFixGapsApi = () => api.returnsListingGaps(); // seam: e2e stubs it
+
+async function retFixOpenIfNeeded() {
+  const res = await retFixGapsApi().catch(() => null);
+  if (!res || !res.ok) return;
+  if (res.relinked) loadRetPast(); // mappings caught up with old entries
+  if (!res.gaps.length) return;
+  retFix = { gaps: res.gaps, idx: 0, tally: { created: 0, picked: 0, skipped: 0 } };
+  ensureInventory(); // the pick combo and create suggestions want it
+  retFixShow();
+}
+
+const retFixCur = () => (retFix ? retFix.gaps[retFix.idx] : null);
+const retFixLeft = () => (retFix ? retFix.gaps.filter(g => !g.state) : []);
+
+function retFixShow() {
+  if (!retFix) return;
+  const total = retFix.gaps.length;
+  const handled = total - retFixLeft().length;
+  const done = !retFixLeft().length;
+  $('retFixBody').hidden = done;
+  $('retFixDone').hidden = !done;
+  $('retFixCreate').hidden = done;
+  $('retFixSkip').hidden = done;
+  $('retFixClose').hidden = !done;
+  $('retFixPrev').disabled = done;
+  $('retFixNext').disabled = done;
+  $('retFixFill').style.width = `${Math.round((handled / total) * 100)}%`;
+  $('retFixIcon').textContent = done ? '✓' : '!';
+  $('retFixIcon').classList.toggle('is-done', done);
+  if (done) {
+    const t = retFix.tally;
+    $('retFixN').textContent = `${total} / ${total}`;
+    $('retFixDoneH').textContent = `All ${total} handled`;
+    $('retFixTally').innerHTML = [
+      t.created ? `<span class="retfix-chip is-created">${t.created} created</span>` : '',
+      t.picked ? `<span class="retfix-chip is-picked">${t.picked} picked</span>` : '',
+      t.skipped ? `<span class="retfix-chip is-skipped">${t.skipped} skipped</span>` : '',
+    ].join('');
+  } else {
+    const g = retFixCur();
+    $('retFixN').textContent = `${retFix.idx + 1} / ${total}`;
+    $('retFixSku').textContent = g.sku;
+    $('retFixCond').innerHTML = `<span class="ret-cond-ro is-${esc(g.condition)}"><span class="ret-dd-dot is-${esc(g.condition)}"></span>${esc(retCondLabel(g.condition))}</span>`;
+    $('retFixCtx').textContent = [`${g.units} unit${g.units === 1 ? '' : 's'}`,
+      g.entries > 1 ? `${g.entries} entries` : '', g.customer].filter(Boolean).join(' · ');
+    const suggested = retSuggestCondSku(g.sku, g.condition);
+    const canCreate = !!RET_PREFIX[g.condition] && !(recvLookup === 'ready' && recvLookupExact(suggested));
+    $('retFixCreate').hidden = !canCreate;
+    $('retFixCreate').innerHTML = `＋ Create <span class="mono">${esc(suggested)}</span>`;
+    $('retFixCreate').dataset.sku = suggested;
+    $('retFixPick').value = '';
+  }
+  if (!$('retFixDialog').open) $('retFixDialog').showModal();
+}
+
+// move to the nearest unhandled gap, searching forward (dir 1) or back
+function retFixStep(dir) {
+  if (!retFix) return;
+  const n = retFix.gaps.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (retFix.idx + dir * k + n * k) % n;
+    if (!retFix.gaps[i].state) { retFix.idx = i; break; }
+  }
+  retFixShow();
+}
+
+function retFixSettle(state) {
+  const g = retFixCur();
+  if (!g || g.state) return;
+  g.state = state;
+  retFix.tally[state === 'created' ? 'created' : state === 'picked' ? 'picked' : 'skipped']++;
+  retFixStep(1);
+}
+
+$('retFixPrev').addEventListener('click', () => retFixStep(-1));
+$('retFixNext').addEventListener('click', () => retFixStep(1));
+$('retFixSkip').addEventListener('click', () => retFixSettle('skipped'));
+
+$('retFixCreate').addEventListener('click', () => {
+  const g = retFixCur();
+  if (!g) return;
+  retFixPending = g;
+  $('retFixDialog').close(); // the New SKU sheet takes the stage
+  openCondSkuCreate(g.sku, g.condition, $('retFixCreate').dataset.sku, async () => {
+    retFixPending = null;
+    if (!retFix) return;
+    await retFixGapsApi().catch(() => {}); // relink this SKU's log entries
+    loadRetPast();
+    retFixSettle('created');
+  });
+});
+
+// the New SKU sheet closed without creating: bring the slider back where
+// it was (the created path clears retFixPending before this timer looks)
+$('skuDialog').addEventListener('close', () => {
+  if (!retFix || !retFixPending) return;
+  setTimeout(() => {
+    if (retFix && retFixPending) { retFixPending = null; retFixShow(); }
+  }, 250);
+});
+
+makeCombo($('retFixPick'), document.querySelector('.retfix-combo .combo-list'), async (item) => {
+  const g = retFixCur();
+  if (!g) return;
+  const map = await api.returnsMapSet(g.sku, g.condition, item.sku);
+  if (!map.ok) { toast(map.error || 'Could not save the mapping.'); return; }
+  toast(`${g.sku} ${g.condition} → ${map.targetSku}`);
+  await retFixGapsApi().catch(() => {}); // relink this SKU's log entries
+  loadRetPast();
+  retFixSettle('picked');
+});
+
+$('retFixClose').addEventListener('click', () => $('retFixDialog').close());
+$('retFixDialog').addEventListener('close', () => {
+  // parked for the New SKU sheet = still running, everything else ends it
+  if (!retFixPending) retFix = null;
+});
 
 /* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
 $("retRefreshBtn").addEventListener("click", () => {

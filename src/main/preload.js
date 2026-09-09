@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld('api', {
   returnsImportPick: () => ipcRenderer.invoke('returns:importPick'),
   returnsImportResolve: (entries) => ipcRenderer.invoke('returns:importResolve', { entries }),
   returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
+  returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
   returnsMenu: (current) => ipcRenderer.invoke('nav:returnsMenu', { current }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),

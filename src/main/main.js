@@ -2329,6 +2329,42 @@ function registerIpc() {
     return { ok: true, made, units };
   });
 
+  // log units with a condition but NO landing listing (imported history,
+  // mostly): anything the resolver can NOW place gets relinked in the log
+  // — no stock, those units never moved any — and what's left comes back
+  // as the gaps for the missing-listings slider to create or pick
+  ipcMain.handle('returns:listingGaps', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    let skus = [];
+    try { skus = await getInventorySkus(cfg); } catch { /* resolver still works from saved mappings */ }
+    const gaps = new Map();
+    let relinked = 0;
+    for (const rec of db.listReturns(100000)) {
+      let changed = false;
+      const items = (rec.items || []).map(it => {
+        if (!it.sku || it.targetSku || !it.condition || it.condition === 'new') return it;
+        const target = (db.resolveConditionTargets(it.sku, skus) || {})[it.condition] || '';
+        if (target) { changed = true; relinked++; return { ...it, targetSku: target }; }
+        const key = `${String(it.sku).toUpperCase()}|${it.condition}`;
+        const g = gaps.get(key) || { sku: String(it.sku).toUpperCase(), condition: it.condition, units: 0, entries: 0, customer: '' };
+        g.units += Number(it.qty) || 1;
+        g.entries += 1;
+        if (!g.customer && rec.customer) g.customer = rec.customer;
+        gaps.set(key, g);
+        return it;
+      });
+      if (changed) {
+        db.saveReturn(rec.id, {
+          orderNumber: rec.order_number, createdAt: rec.created_at,
+          customer: rec.customer, tracking: rec.tracking, note: rec.note,
+          items, unmatched: rec.unmatched, receivedBy: rec.received_by,
+        });
+      }
+    }
+    return { ok: true, gaps: [...gaps.values()], relinked };
+  });
+
   ipcMain.handle('returns:create', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

@@ -1559,6 +1559,40 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 
 .retcond-combo .input { width: 100%; }
 
+/* the missing-listings slider: one gap at a time, ‹ › to move */
+.retfix-count { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.retfix-count b { font-size: 12px; white-space: nowrap; }
+.retfix-nav {
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.retfix-nav:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.retfix-nav:disabled { opacity: 0.4; cursor: default; }
+.retfix-prog { height: 4px; border-radius: 999px; background: var(--surface-2); margin: 2px 0 16px; overflow: hidden; }
+.retfix-prog i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 999px; transition: width 200ms var(--ease); }
+.retfix-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-card); margin-bottom: 12px;
+}
+.retfix-item .mono { font-weight: 600; font-size: 13px; flex: none; white-space: nowrap; }
+.retfix-item .ret-cond-ro { flex: none; white-space: nowrap; }
+.retfix-item small { margin-left: auto; color: var(--muted); font-size: 11.5px; text-align: right; }
+.retcond-icon.is-done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
+.retfix-done { text-align: center; padding: 16px 8px 6px; }
+.retfix-done-big {
+  width: 44px; height: 44px; margin: 0 auto 10px; display: grid; place-items: center;
+  border-radius: 999px; background: var(--accent-soft); color: var(--accent-soft-text);
+  font-size: 20px; font-weight: 700;
+}
+.retfix-done h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.retfix-tally { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+.retfix-chip { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 10px; }
+.retfix-chip.is-created { background: var(--accent-soft); color: var(--accent-soft-text); }
+.retfix-chip.is-picked { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.retfix-chip.is-skipped { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+
 /* returns-history import dialog: parse counts + a lookup progress bar */
 .retimp-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .retimp-line { font-size: 12.5px; color: var(--muted); }
