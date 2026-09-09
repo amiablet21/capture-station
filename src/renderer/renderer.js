@@ -3092,9 +3092,10 @@ function rvFeedback(msg, ok = false) {
   el.className = `dlg-note test-result${msg ? (ok ? ' is-ok' : ' is-fail') : ''}`;
 }
 
-// receive mode, opened from the sheet's PO cell (or its + gutter): the
-// typed PO rides along and the lookup starts by itself
-function retOpenRecv(po = '') {
+// receive mode, opened from the sheet's entry row (or its + gutter):
+// whatever was typed there rides along; a PO still runs the lookup, and
+// the order only fills the fields the receiver left blank
+function retOpenRecv(po = '', seed = null) {
   rv = rvBlank();
   rvLastLookup = '';
   for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
@@ -3102,8 +3103,18 @@ function retOpenRecv(po = '') {
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
   rvFeedback('');
+  const s = seed || {};
+  if (s.cust) $('rvCust').value = s.cust;
+  if (s.trk) $('rvTrk').value = s.trk;
+  if (s.sku) { $('rvSku').value = s.sku.toUpperCase(); rv.sku = s.sku.toUpperCase(); }
+  if (s.units) $('rvQty').value = s.units;
+  if (s.price) $('rvPrice').value = s.price;
+  if (s.by) $('rvBy').value = s.by;
+  if (s.settle) $('rvSettle').value = s.settle;
+  if (s.note) $('rvNote').value = s.note;
   rvRenderCond();
   rvRenderOrder();
+  rvThumbUpdate();
   ensureInventory();
   rvBesidePane();
   $('retRecvDialog').showModal();
@@ -3111,6 +3122,10 @@ function retOpenRecv(po = '') {
   if ($('rvPo').value) {
     rvLastLookup = $('rvPo').value;
     rvLookup();
+  } else if ($('rvSku').value) {
+    $('rvSave').focus(); // everything typed already — Enter receives it
+  } else if ($('rvCust').value || $('rvTrk').value || $('rvNote').value) {
+    $('rvSku').focus(); // details came along; the SKU is the likely next key
   } else {
     $('rvPo').focus();
   }
@@ -3153,11 +3168,19 @@ async function rvLookup() {
   rv.orderId = o.orderId;
   rv.source = o.source;
   $('rvPo').value = o.reference || po;
-  $('rvCust').value = o.customer || '';
-  $('rvTrk').value = o.tracking || '';
+  // hand-typed details (seeded from the sheet's entry row) outrank the
+  // order's — the lookup only fills what the receiver left blank
+  if (!$('rvCust').value.trim()) $('rvCust').value = o.customer || '';
+  if (!$('rvTrk').value.trim()) $('rvTrk').value = o.tracking || '';
   rv.items = o.items || [];
   rv.received = rv.items.map(() => false);
-  if (rv.items.length) rvLoadItemAt(0); else rvLoadItem(null);
+  const typedSku = $('rvSku').value.trim().toUpperCase();
+  const typedAt = typedSku ? rv.items.findIndex(it => String(it.sku || '').toUpperCase() === typedSku) : -1;
+  if (typedAt >= 0) rvLoadItemAt(typedAt);
+  else if (typedSku) { /* keep the hand-typed line as-is */ }
+  else if (rv.items.length) rvLoadItemAt(0);
+  else rvLoadItem(null);
+  rvRenderOrder();
   $('rvSku').focus();
 }
 
@@ -3364,8 +3387,14 @@ $('rvSku').addEventListener('input', () => {
 async function rvCommit() {
   if (!rv || rv.busy) return false;
   const po = $('rvPo').value.trim();
-  if (!po) { rvFeedback('PO# is required.'); $('rvPo').focus(); return false; }
   const sku = $('rvSku').value.trim().toUpperCase();
+  // no PO required (owner 2026-09-09): a return can be logged from any
+  // detail — but an entry with nothing identifying it is a misclick
+  if (!po && !sku && !$('rvCust').value.trim() && !$('rvTrk').value.trim() && !$('rvNote').value.trim()) {
+    rvFeedback('Nothing to log — enter a PO#, SKU, customer, tracking # or note.');
+    $('rvPo').focus();
+    return false;
+  }
   let target = '';
   let qty = 1;
   if (sku) {
@@ -3452,14 +3481,34 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
 });
 
 /* ---------- in-sheet entry cell (popup receiving, 2026-09-05) ---------- */
-// The log's first row is just the launcher now (owner: "make it a popup
-// instead of on the line" — the full in-sheet entry crowded the row):
-// type a PO# in the first cell and Enter opens the receive popup with it,
-// the + gutter opens it empty. The <tr> is a singleton moved (not rebuilt)
-// across renders so a half-typed PO survives every log refresh.
+// The log's first row is the launcher: EVERY column takes typing (owner
+// 2026-09-09, "allow me to type in any column without first needing the
+// PO#") — Enter in any cell (or the + gutter) opens the receive popup
+// with everything typed riding along; a PO# still runs the order lookup.
+// The <tr> is a singleton moved (not rebuilt) across renders so
+// half-typed values survive every log refresh.
 
 let retEntryTr = null;
-let wsEls = null; // { po, date }
+let wsEls = null; // { po, cust, trk, date, sku, units, price, by, settle, note }
+
+const WS_FIELDS = [
+  ['po', 'Type PO# + Enter…', 'mono', 'PO number'],
+  ['cust', '', '', 'Customer name'],
+  ['trk', '', 'mono', 'Tracking number'],
+  ['sku', '', 'mono', 'Returned SKU'],
+  ['units', '', 'mono ws-num', 'Units'],
+  ['price', '', 'mono ws-num', 'Price'],
+  ['by', '', '', 'Received by'],
+  ['settle', '', 'mono ws-num', 'Dispute settlement'],
+  ['note', '', '', 'Notes'],
+];
+
+function wsInput(key) {
+  const [, ph, cls, label] = WS_FIELDS.find(f => f[0] === key);
+  // #wsPo keeps its historic id (tests and muscle memory point at it)
+  return `<input id="${key === 'po' ? 'wsPo' : `ws_${key}`}" class="ws-in ${cls}" type="text" placeholder="${ph}"
+    autocomplete="off" spellcheck="false" aria-label="${label}" />`;
+}
 
 function retEntryRow() {
   if (retEntryTr) return retEntryTr;
@@ -3467,32 +3516,42 @@ function retEntryRow() {
   tr.className = 'ws-row';
   tr.innerHTML = `
     <td class="cell-gutter ws-gutter" id="wsPlus" title="Receive a return" role="button">+</td>
-    <td class="ws-cell"><input id="wsPo" class="ws-in mono" type="text" placeholder="Type PO# + Enter…"
-      autocomplete="off" spellcheck="false" aria-label="Receive a return by PO number"
-      title="Type or paste the PO# and press Enter — the receive sheet opens with the order looked up" /></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
+    <td class="ws-cell">${wsInput('po')}</td>
+    <td class="ws-cell">${wsInput('cust')}</td>
+    <td class="ws-cell">${wsInput('trk')}</td>
     <td class="ws-cell ws-date mono" id="wsDate"></td>
+    <td class="ws-cell">${wsInput('sku')}</td>
     <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
-    <td class="ws-cell"></td>
+    <td class="ws-cell">${wsInput('units')}</td>
+    <td class="ws-cell">${wsInput('price')}</td>
+    <td class="ws-cell">${wsInput('by')}</td>
+    <td class="ws-cell">${wsInput('settle')}</td>
+    <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
-  wsEls = { po: tr.querySelector('#wsPo'), date: tr.querySelector('#wsDate') };
+  wsEls = { date: tr.querySelector('#wsDate') };
+  for (const [key] of WS_FIELDS) wsEls[key] = tr.querySelector(key === 'po' ? '#wsPo' : `#ws_${key}`);
   wsEls.date.textContent = retDateUS(new Date().toISOString());
-  wsEls.po.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const po = wsEls.po.value.trim();
-    if (!po) return;
-    wsEls.po.value = ''; // the popup owns the PO from here
-    retOpenRecv(po);
-  });
-  tr.querySelector('#wsPlus').addEventListener('click', () => retOpenRecv(wsEls.po.value.trim()));
+  const launch = () => {
+    const seed = {};
+    let any = false;
+    for (const [key] of WS_FIELDS) {
+      seed[key] = wsEls[key].value.trim();
+      if (seed[key]) any = true;
+    }
+    if (!any) return false;
+    for (const [key] of WS_FIELDS) wsEls[key].value = ''; // the popup owns them now
+    retOpenRecv(seed.po, seed);
+    return true;
+  };
+  for (const [key] of WS_FIELDS) {
+    wsEls[key].addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      launch();
+    });
+  }
+  tr.querySelector('#wsPlus').addEventListener('click', () => { if (!launch()) retOpenRecv(); });
   return tr;
 }
 

@@ -1676,9 +1676,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-chip.is-disp { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ret-chip.is-on { border-color: currentColor; }
 
-/* ---- the entry cell: the sheet's first row launches the receive popup
-   (owner 2026-09-05, "popup instead of on the line") — a tinted band with
-   the + gutter and the PO cell, closed by the green rule ---- */
+/* ---- the entry row: the sheet's first row launches the receive popup
+   (owner 2026-09-05, "popup instead of on the line"; 2026-09-09, every
+   column takes typing) — a tinted band of bare inputs, closed by the
+   green rule ---- */
 .ret-log-table tbody.ret-entry-body { border-bottom: 2px solid #1f9d5b; }
 .ret-log-table tr.ws-row td {
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
@@ -1703,6 +1704,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
+.ws-in.ws-num { text-align: right; } /* units / price / settle line up with their columns */
 .ws-date { color: var(--muted); font-size: 12px; }
 
 /* ---- in-place log editing (owner 2026-09-07): click a cell, type, Enter.
@@ -2352,7 +2354,16 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .chip-tray .view-chip { font-size: 12px; font-weight: 500; padding: 4px 11px; border-radius: 8px; border: none; background: none; color: var(--muted); transition: color 160ms var(--ease); }
 .chip-tray .view-chip:hover { color: var(--text); }
 .chip-tray .view-chip.is-active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
-.chip-tray .view-chip.is-active[class*="tint-"]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 6px; background: currentColor; }
+/* the dot used to appear only on the ACTIVE chip, and its 13px popped in and
+   shoved every chip after it sideways (owner 2026-09-09, "it shifts the whole
+   tab") — now every tinted chip carries its dot at all times, faded at rest,
+   so chip widths never change on click */
+.chip-tray .view-chip[class*="tint-"]::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 6px; background: currentColor; opacity: 0.35; transition: opacity 160ms var(--ease); }
+.chip-tray .view-chip.is-active[class*="tint-"]::before { opacity: 1; }
+.chip-tray .view-chip.tint-blue::before { background: var(--badge-blue-text); }
+.chip-tray .view-chip.tint-yellow::before { background: var(--badge-yellow-text); }
+.chip-tray .view-chip.tint-red::before { background: var(--badge-red-text); }
+.chip-tray .view-chip.tint-green::before { background: var(--badge-green-text); }
 .chip-tray .view-chip.is-active.tint-blue { color: var(--badge-blue-text); }
 .chip-tray .view-chip.is-active.tint-yellow { color: var(--badge-yellow-text); }
 .chip-tray .view-chip.is-active.tint-red { color: var(--badge-red-text); }
@@ -4077,6 +4088,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .tab.is-active .tab-caret { color: var(--muted); }
 .stock-shelf-link { font-family: inherit; font-size: 11.5px; font-weight: 500; border: none; background: none; color: var(--accent-soft-text); cursor: pointer; padding: 6px 4px; }
 .stock-shelf-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* hidden = invisible, NOT gone: if the link left the layout, the flexible
+   search box grew back and the whole chip tray jumped sideways on every
+   condition click (owner 2026-09-09, "it shifts the whole tab") */
+.stock-shelf-link[hidden] { display: inline-block !important; visibility: hidden; }
 
 /* Overview drawers hold 25 rows now — they scroll instead of stretching */
 .ov-drawer { max-height: 380px; overflow-y: auto; }
