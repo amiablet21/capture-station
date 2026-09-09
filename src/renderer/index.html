@@ -140,10 +140,13 @@
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
               <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
-                   2026-08-02); the dialogs and logic behind them are untouched -->
+                   2026-08-02); the dialogs and logic behind them are untouched.
+                   WFS Shipments came back 2026-09-09 (owner asked for exactly
+                   what it does: deduct the warehouse, keep a personal record,
+                   never touch the Walmart-fed WFS location) -->
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
-              <button id="wfsBtn" class="btn btn-secondary" hidden>WFS Shipments</button>
+              <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
             </div>
           </div>
         </div>
