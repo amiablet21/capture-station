@@ -842,6 +842,28 @@
   </dialog>
   <datalist id="skuOptions"></datalist>
   <!-- Delete-return confirmation: the log's only popup -->
+  <!-- inline condition edit hit a condition with no listing (2026-09-09):
+       create the suggested SKU right here, or search the inventory and
+       pick the right one — either way the pending edit then saves itself -->
+  <dialog id="retCondDialog" class="dlg dlg-retcond">
+    <div class="dlg-body">
+      <div class="retcond-head">
+        <span class="retcond-icon" aria-hidden="true">!</span>
+        <h2 class="dlg-title">No listing for this condition</h2>
+      </div>
+      <div class="combo retcond-combo">
+        <input id="retCondPick" class="input mono" type="text" placeholder="Search the inventory by SKU or title…"
+               autocomplete="off" spellcheck="false" aria-label="Pick the target listing" />
+        <div class="combo-list" hidden></div>
+      </div>
+      <p class="retcond-hint">The pick is remembered for every future return of this SKU.</p>
+      <div class="dlg-actions">
+        <button id="retCondCreate" class="btn btn-ghost retcond-create" type="button"></button>
+        <button id="retCondCancel" class="btn btn-ghost" type="button">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="retDelDialog" class="dlg">
     <div class="dlg-body">
       <h2 class="dlg-title">Delete return</h2>

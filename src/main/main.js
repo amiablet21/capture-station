@@ -2220,9 +2220,14 @@ function registerIpc() {
         note: String(i.note || '').trim().slice(0, 300),
       }))
       .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
-    // the PO# is the only mandatory field: a bare reference is a valid log
-    // entry; lines carry stock moves only when both SKU and target are known
-    if (!String(payload.orderNumber || '').trim()) return { ok: false, error: 'A PO# is required.' };
+    // no single field is mandatory (owner 2026-09-09: log entries can start
+    // from ANY column, PO# included but not required) — only a fully empty
+    // entry is refused; lines carry stock moves only when SKU and target
+    // are both known
+    const hasDetail = String(payload.orderNumber || '').trim() || items.length
+      || String(payload.customer || '').trim() || String(payload.tracking || '').trim()
+      || String(payload.note || '').trim();
+    if (!hasDetail) return { ok: false, error: 'Nothing to log.' };
     const stockItems = items.filter(i => i.targetSku);
     try {
       const client = new LinnworksClient(cfg.linnworks);
@@ -3154,8 +3159,7 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const rec = db.getReturn(Number(id));
     if (!rec) return { ok: false, error: 'Return not found.' };
-    const newPo = String(po || '').trim();
-    if (!newPo) return { ok: false, error: 'PO# is required.' };
+    const newPo = String(po || '').trim(); // may be empty: PO-less entries are legal
     const newDay = String(day || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(newDay)) return { ok: false, error: 'Date must look like 2026-08-05.' };
     const createdAt = `${newDay}T${String(rec.created_at).split('T')[1] || '12:00:00.000Z'}`;
@@ -3185,7 +3189,7 @@ function registerIpc() {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
             if (!newTarget && it.targetSku) {
-              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — set it from the worksheet's condition menu first.` };
+              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
             }
           }
         }

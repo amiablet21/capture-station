@@ -261,6 +261,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
     db.deleteConditionMapping('S25-128GB-NAVY', 'openbox');
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
+    // a base that IS a condition listing (2026-09-09): its own condition
+    // lands on itself, other grades derive from the CORE sku — never
+    // OPEN-BOX-OPEN-BOX-…
+    const invOb = ['OPEN-BOX-X133-64GB-GRAY', 'X133-64GB-GRAY', 'USED-X133-64GB-GRAY'];
+    targets = db.resolveConditionTargets('OPEN-BOX-X133-64GB-GRAY', invOb);
+    check('a condition SKU maps its own grade to itself, others from the core',
+      targets.openbox === 'OPEN-BOX-X133-64GB-GRAY' && targets.used === 'USED-X133-64GB-GRAY'
+        && targets.scrap === '',
+      targets);
+    targets = db.resolveConditionTargets('S25-128GB-NAVY-USED', ['S25-128GB-NAVY-USED', 'S25-128GB-NAVY-OPENBOX']);
+    check('suffix-named condition SKUs resolve the same way',
+      targets.used === 'S25-128GB-NAVY-USED' && targets.openbox === 'S25-128GB-NAVY-OPENBOX',
+      targets);
 
     // 24. popup receiving is back (owner 2026-09-05, "popup instead of on
     // the line"): a PO# typed in the sheet's first cell opens the receive
@@ -397,16 +410,52 @@ module.exports = async function run({ app, win, db, clipboard }) {
       ledgerBits);
     check('every column is in-place editable, delete stays, no idle inputs',
       ledgerBits[4] === 11 && ledgerBits[5] === 1 && ledgerBits[6] === 0, ledgerBits);
-    // 24c-bis. the entry cell: a singleton row that SURVIVES a re-render
+    // 24c-bis. the entry row: a singleton that SURVIVES a re-render, with
+    // an input in EVERY column (owner 2026-09-09, "type in any column")
     const entryBits = await exec(`[
       !!document.querySelector('#retPastBox tr.ws-row'),
       !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
       (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
+      document.querySelectorAll('#retPastBox tr.ws-row .ws-in').length,
     ]`);
-    check('entry cell: PO launcher present, survives re-render',
-      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME',
+    check('entry row: PO launcher present, survives re-render, 9 typable columns',
+      entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME'
+        && entryBits[3] === 9,
       entryBits);
     await exec(`$('wsPo').value = ''; 0;`);
+    // 24c-ter. Enter in ANY entry column opens the popup with the typed
+    // values riding along (no PO needed), the row cleared behind it
+    await exec(`
+      window.__rvOrig2 = rvCreate;
+      window.__rvGot2 = null;
+      rvCreate = async (p) => { window.__rvGot2 = p; return { ok: true, id: 998 }; };
+      $('ws_cust').value = 'Walk-in Willie';
+      $('ws_note').value = 'no label on the box';
+      $('ws_cust').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      0;`);
+    await sleep(250);
+    const seeded = await exec(`[
+      !!document.querySelector('#retRecvDialog[open]'),
+      $('rvCust').value, $('rvNote').value, $('rvPo').value,
+      $('ws_cust').value + $('ws_note').value + $('wsPo').value,
+    ]`);
+    check('entry row seeds the popup from any column, no PO required',
+      seeded[0] === true && seeded[1] === 'Walk-in Willie'
+        && seeded[2] === 'no label on the box' && seeded[3] === '' && seeded[4] === '',
+      seeded);
+    await exec(`$('rvSave').click(); 0;`);
+    for (let w = 0; w < 40; w++) {
+      await sleep(200);
+      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
+    }
+    const noPo = await exec(`window.__rvGot2`);
+    check('a PO-less receive commits as an unmatched entry',
+      noPo && noPo.orderNumber === '' && noPo.unmatched === true
+        && noPo.customer === 'Walk-in Willie',
+      noPo);
+    await exec(`rvCreate = window.__rvOrig2; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
+    // (returns:create's relaxed PO rule can't be hit here — the e2e
+    // profile runs capture-only, which gates the handler before it)
     // 24c. Receive commits price + dispute settlement through the
     // returns:create engine and CLOSES the popup — no async errors
     await exec(`
@@ -493,6 +542,27 @@ module.exports = async function run({ app, win, db, clipboard }) {
       condMenu[0] === 4 && condMenu[1] === 'openbox', condMenu);
     await exec(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
     await sleep(150);
+    // 24f. a condition with no listing opens the create-or-pick dialog —
+    // and the suggested name strips the affix the SKU already carries
+    await exec(`
+      recvItems = [{ sku: 'OPEN-BOX-X1', title: 'X1 open box', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      openRetCondFix({ i: { sku: 'OPEN-BOX-X1', condition: 'new' }, r: {}, ii: 0 }, 'used'); 0;`);
+    await sleep(150);
+    const condFix = await exec(`[
+      !!document.querySelector('#retCondDialog[open]'),
+      $('retCondCreate').hidden,
+      $('retCondCreate').textContent,
+      !!document.querySelector('.retcond-combo .combo-list'),
+    ]`);
+    check('missing-listing dialog: affix-stripped footer create, pick search',
+      condFix[0] === true
+        && condFix[1] === false && /Create USED-X1$/.test((condFix[2] || '').trim())
+        && condFix[3] === true,
+      condFix);
+    await exec(`$('retCondDialog').close(); recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
 
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card

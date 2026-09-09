@@ -482,14 +482,37 @@ const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' }
 // suffix names keep auto-deriving so existing listings never unmap
 const CONDITION_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 
+// The condition a SKU's own NAME carries (OPEN-BOX-X = openbox), plus the
+// core sku with that affix stripped. null = a plain sold SKU.
+function conditionOfSku(sku) {
+  const s = String(sku || '');
+  const up = s.toUpperCase();
+  for (const [cond, pre] of Object.entries(CONDITION_PREFIX)) {
+    if (up.startsWith(pre) && up.length > pre.length) return { cond, core: s.slice(pre.length) };
+  }
+  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
+    if (up.endsWith(suf) && up.length > suf.length) return { cond, core: s.slice(0, s.length - suf.length) };
+  }
+  return null;
+}
+
 function resolveConditionTargets(baseSku, inventorySkus) {
   const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
   const saved = getConditionMap()[baseSku] || {};
+  // a base that IS already a condition listing: its own condition lands
+  // back on itself, and the other grades derive from the CORE sku —
+  // deriving OPEN-BOX-OPEN-BOX-X133… made no sense (owner 2026-09-09,
+  // an open-box listing's return graded open box refused to save)
+  const own = conditionOfSku(baseSku);
+  const core = own ? own.core : baseSku;
+  const savedCore = own ? (getConditionMap()[core] || {}) : {};
   const targets = { new: baseSku };
   for (const cond of Object.keys(CONDITION_SUFFIX)) {
     targets[cond] = saved[cond]
-      || bySkuUpper.get(`${CONDITION_PREFIX[cond]}${baseSku}`.toUpperCase())
-      || bySkuUpper.get(`${baseSku}${CONDITION_SUFFIX[cond]}`.toUpperCase())
+      || (own && cond === own.cond ? baseSku : '')
+      || savedCore[cond]
+      || bySkuUpper.get(`${CONDITION_PREFIX[cond]}${core}`.toUpperCase())
+      || bySkuUpper.get(`${core}${CONDITION_SUFFIX[cond]}`.toUpperCase())
       || '';
   }
   return targets;
