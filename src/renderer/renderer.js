@@ -5177,15 +5177,27 @@ $('imgDialog').addEventListener('close', () => {
 function wfsLineHtml() {
   return `
     <div class="wfs-line">
-      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="SKU" autocomplete="off" spellcheck="false" />
-      <input type="text" class="input mono wfs-gtin" placeholder="GTIN / Walmart ID" autocomplete="off" spellcheck="false" />
-      <input type="number" class="input wfs-qty" min="1" step="1" placeholder="Qty" />
-      <button class="btn-icon is-danger wfs-remove" title="Remove line">✕</button>
+      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" />
+      <input type="text" class="input mono wfs-gtin" autocomplete="off" spellcheck="false" />
+      <input type="number" class="input mono wfs-qty" min="1" step="1" />
+      <button class="wfs-remove" title="Remove line" type="button">✕</button>
     </div>`;
 }
 
 function wfsAddLine() {
   $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
+}
+
+// the footer total says exactly what Save will deduct, live
+function wfsTotals() {
+  const lines = [...$('wfsLines').querySelectorAll('.wfs-line')].map(l => ({
+    sku: l.querySelector('.wfs-sku').value.trim(),
+    qty: Number(l.querySelector('.wfs-qty').value) || 0,
+  })).filter(l => l.sku);
+  const units = lines.reduce((a, l) => a + Math.max(0, l.qty), 0);
+  $('wfsTot').innerHTML = lines.length
+    ? `<b>${lines.length}</b> SKU${lines.length === 1 ? '' : 's'} · <b>${units}</b> unit${units === 1 ? '' : 's'} leave the warehouse`
+    : 'Nothing to send yet — type a SKU above';
 }
 
 async function openWfs() {
@@ -5197,10 +5209,10 @@ async function openWfs() {
   wfsAddLine();
   $('wfsNote').value = '';
   $('wfsResult').textContent = '';
-  $('wfsResult').className = 'test-result';
+  $('wfsResult').className = 'dlg-note test-result wfs-result';
+  wfsTotals();
   await renderWfsPast();
   $('wfsDialog').showModal();
-  // the corner ✕ is the first focusable — typing starts in the SKU cell
   const first = $('wfsLines').querySelector('input');
   if (first) first.focus();
 }
@@ -5210,44 +5222,51 @@ async function renderWfsPast() {
   $('wfsPast').innerHTML = shipments.length === 0
     ? '<p class="dlg-note">No shipments logged yet.</p>'
     : shipments.map(s => `
-      <div class="wfs-shipment">
-        <div class="wfs-shipment-head">
-          <span class="mono">${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}</span>
-          ${s.note ? `<span class="wfs-note">${esc(s.note)}</span>` : ''}
-          <span class="wfs-units">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+      <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
+        <div class="wfs-card-h">
+          <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
+        ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
         ${s.items.map(i => `
-          <div class="wfs-item">
-            <span class="mono">${esc(i.sku)}</span>
-            <span class="mono wfs-gtin-txt">${esc(i.gtin || '—')}</span>
-            <span class="wfs-qty-txt">×${i.qty}</span>
+          <div class="wfs-card-item">
+            <span class="mono" title="${esc(i.gtin || '')}">${esc(i.sku)}</span>
+            <span class="n">×${i.qty}</span>
           </div>`).join('')}
       </div>`).join('');
 }
 
 $('wfsBtn').addEventListener('click', openWfs);
-$('wfsAddLine').addEventListener('click', wfsAddLine);
+$('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
 
 $('wfsLines').addEventListener('click', (e) => {
   const rm = e.target.closest('.wfs-remove');
-  if (rm) rm.closest('.wfs-line').remove();
+  if (!rm) return;
+  rm.closest('.wfs-line').remove();
+  if (!$('wfsLines').querySelector('.wfs-line')) wfsAddLine(); // the sheet always has an entry row
+  wfsTotals();
 });
 
-// picking a known SKU pre-fills the GTIN from the item's barcode
+// picking a known SKU pre-fills the GTIN from the item's barcode; filling
+// the last row grows a fresh one under it (spreadsheet feel)
 $('wfsLines').addEventListener('input', (e) => {
   const skuInput = e.target.closest('.wfs-sku');
-  if (!skuInput || !stockCache) return;
-  const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
-  if (item) {
-    const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
-    if (!gtin.value.trim()) gtin.value = item.barcode || '';
+  if (skuInput && stockCache) {
+    const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
+    if (item) {
+      const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
+      if (!gtin.value.trim()) gtin.value = item.barcode || '';
+    }
   }
+  const lines = [...$('wfsLines').querySelectorAll('.wfs-line')];
+  if (lines.every(l => l.querySelector('.wfs-sku').value.trim())) wfsAddLine();
+  wfsTotals();
 });
 
 $('wfsSave').addEventListener('click', async () => {
   const out = $('wfsResult');
-  out.className = 'test-result';
+  out.className = 'dlg-note test-result wfs-result';
   const items = [...$('wfsLines').querySelectorAll('.wfs-line')].map(line => ({
     sku: line.querySelector('.wfs-sku').value.trim(),
     gtin: line.querySelector('.wfs-gtin').value.trim(),
@@ -5279,6 +5298,7 @@ $('wfsSave').addEventListener('click', async () => {
   out.classList.add('is-ok');
   $('wfsLines').innerHTML = '';
   wfsAddLine();
+  wfsTotals();
   $('wfsNote').value = '';
   await renderWfsPast();
   loadStock(); // show the reduced warehouse counts

@@ -820,27 +820,34 @@
   </dialog>
 
   <!-- WFS shipments: internal log of inventory sent to Walmart fulfilment -->
-  <dialog id="wfsDialog" class="dlg dlg-wide">
-    <div class="dlg-body">
-      <div class="wfs-head">
+  <!-- owner pick 2026-09-09: design C with A's elements — the green-sheet
+       lines and footer total on the left, past shipments always beside -->
+  <dialog id="wfsDialog" class="dlg dlg-wfs">
+    <div class="wfs-cols">
+      <div class="wfs-left">
         <h2 class="dlg-title">WFS Shipments</h2>
-        <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+        <div class="wfs-sheet">
+          <div class="wfs-sheet-h"><span>SKU</span><span>GTIN / Walmart ID</span><span class="wfs-h-qty">Qty</span><span></span></div>
+          <div id="wfsLines"></div>
+          <button id="wfsAddLine" class="wfs-add" type="button">＋ Add line</button>
+        </div>
+        <div class="wfs-noterow">
+          <span class="wfs-notelbl">Note</span>
+          <input id="wfsNote" type="text" class="input" autocomplete="off" placeholder="WFS shipment ID, carrier, anything" />
+        </div>
+        <p id="wfsResult" class="dlg-note test-result wfs-result"></p>
+        <div class="wfs-foot">
+          <span class="wfs-tot" id="wfsTot"></span>
+          <button id="wfsSave" class="btn btn-primary">Save shipment</button>
+        </div>
       </div>
-      <h3 class="dlg-section">New shipment</h3>
-      <div id="wfsLines"></div>
-      <div class="settings-row">
-        <button id="wfsAddLine" class="btn btn-ghost">+ Add line</button>
+      <div class="wfs-right">
+        <div class="wfs-right-head">
+          <span class="wfs-past-h">Past shipments</span>
+          <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div id="wfsPast" class="wfs-past"></div>
       </div>
-      <label class="field">
-        <span class="field-label">Note (WFS shipment ID, carrier, anything)</span>
-        <input id="wfsNote" type="text" class="input" autocomplete="off" />
-      </label>
-      <div class="settings-row">
-        <button id="wfsSave" class="btn btn-primary">Save shipment &amp; deduct stock</button>
-        <span id="wfsResult" class="test-result"></span>
-      </div>
-      <h3 class="dlg-section">Past shipments</h3>
-      <div id="wfsPast" class="wfs-past"></div>
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>

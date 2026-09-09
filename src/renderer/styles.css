@@ -2781,12 +2781,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 
 .tracking-cancel:hover { color: var(--neg-text); border-color: var(--neg-text); background: var(--neg-bg); }
 
-/* WFS shipments */
+/* WFS shipments — owner pick 2026-09-09: split view (design C) wearing
+   the Returns log's green sheet (design A). Form + footer total on the
+   left, past shipments always visible in the gray column on the right. */
 
-/* title row with the ✕ in the corner (owner 2026-09-09, "where is the x
-   button") — replacing the scroll-to-find Close at the very bottom */
-.wfs-head { display: flex; align-items: center; justify-content: space-between; }
-.wfs-head .dlg-title { margin-bottom: 0; }
 .dlg-x {
   width: 28px;
   height: 28px;
@@ -2798,43 +2796,99 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   line-height: 1;
   cursor: pointer;
 }
-.dlg-x:hover { background: var(--surface-2); color: var(--text); }
+.dlg-x:hover { background: var(--surface); color: var(--text); }
 .dlg-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.wfs-line { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
-.wfs-line .wfs-sku { flex: 2; }
-.wfs-line .wfs-gtin { flex: 2; }
-.wfs-line .wfs-qty { width: 80px; }
+.dlg-wfs { width: min(860px, 94vw); }
+.wfs-cols { display: grid; grid-template-columns: 1fr 280px; max-height: 84vh; }
+.wfs-left { padding: 20px; display: flex; flex-direction: column; min-width: 0; }
 
-.wfs-past {
-  max-height: 30vh; /* empty stays one line, never a tall blank box */
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.wfs-shipment { border-bottom: 1px solid var(--border-soft); padding-bottom: 8px; }
-.wfs-shipment:last-child { border-bottom: none; }
-
-.wfs-shipment-head {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  font-size: 12.5px;
+/* the shipment lines as a green-headed sheet */
+.wfs-sheet { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.wfs-sheet-h {
+  display: grid;
+  grid-template-columns: 1fr 170px 64px 32px;
+  background: #1f9d5b;
+  color: #fff;
+  font-size: 10.5px;
   font-weight: 600;
-  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
+.wfs-sheet-h span { padding: 7px 10px; }
+.wfs-h-qty { text-align: right; }
+.wfs-line { display: grid; grid-template-columns: 1fr 170px 64px 32px; align-items: stretch; border-top: 1px solid var(--border-soft); }
+.wfs-line:first-child { border-top: none; }
+.wfs-line .input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  width: 100%;
+  min-width: 0;
+}
+.wfs-line:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+.wfs-line .wfs-qty { text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.wfs-line .wfs-qty::-webkit-outer-spin-button, .wfs-line .wfs-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.wfs-remove { border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; }
+.wfs-remove:hover { color: var(--neg-text); }
+.wfs-add {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  color: var(--accent-soft-text);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.wfs-add:hover { background: var(--accent-soft); }
 
-.wfs-note { color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wfs-units { margin-left: auto; color: var(--accent-soft-text); }
+.wfs-noterow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.wfs-notelbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+.wfs-noterow .input { flex: 1; }
+.wfs-result { margin: 8px 2px 0; min-height: 0; }
+.wfs-result:empty { display: none; }
 
-.wfs-item { display: flex; gap: 12px; font-size: 12px; padding: 1px 0 1px 12px; }
-.wfs-gtin-txt { color: var(--muted); }
-.wfs-qty-txt { margin-left: auto; font-weight: 600; }
+/* the footer bar carries the live total: what Save will deduct */
+.wfs-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: auto -20px -20px; /* pinned to the column's bottom edge */
+  padding: 16px 20px 12px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 0 var(--r-modal);
+}
+.wfs-noterow { margin-bottom: 16px; }
+.wfs-tot { margin-right: auto; font-size: 12px; color: var(--muted); }
+.wfs-tot b { color: var(--text); font-family: var(--mono); }
+
+/* past shipments: white cards on the gray side column */
+.wfs-right {
+  border-left: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 14px 16px;
+  overflow-y: auto;
+  border-radius: 0 var(--r-modal) var(--r-modal) 0;
+}
+.wfs-right-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.wfs-past-h { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+.wfs-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; }
+.wfs-card-h { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.wfs-card-h b { font-weight: 600; }
+.wfs-card-u { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; }
+.wfs-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 3px; }
+.wfs-card-item .mono { font-size: 11.5px; }
+.wfs-card-item .n { margin-left: auto; font-family: var(--mono); font-weight: 600; }
 
 .stock-loading {
   display: flex;
