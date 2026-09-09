@@ -3050,6 +3050,24 @@ function retMoney(v) {
   return Math.max(0, Number(String(v || '').replace(/[$,\s]/g, '')) || 0);
 }
 
+// the sku minus any condition affix it already carries — suggested names
+// must never stack (OPEN-BOX-OPEN-BOX-…, owner 2026-09-09)
+function retCondCore(sku) {
+  const up = String(sku || '').toUpperCase();
+  for (const pre of Object.values(RET_PREFIX)) {
+    if (up.startsWith(pre) && up.length > pre.length) return up.slice(pre.length);
+  }
+  for (const suf of ['-OPENBOX', '-USED', '-SCRAP']) {
+    if (up.endsWith(suf) && up.length > suf.length) return up.slice(0, up.length - suf.length);
+  }
+  return up;
+}
+
+// the name a missing condition SKU would be created under
+function retSuggestCondSku(sku, cond) {
+  return `${RET_PREFIX[cond] || ''}${retCondCore(sku)}`.toUpperCase();
+}
+
 /* ---------- Receive/Edit-return popup (design-A sheet) ---------- */
 // Back to popup receiving (owner 2026-09-05, "make it a popup instead of
 // on the line" — the in-sheet entry crowded the row): typing a PO# in the
@@ -3231,7 +3249,7 @@ function rvFixOpen() {
   if (!warn || !rv || !rv.sku) return;
   const fix = $('rvFix');
   $('rvFixMsg').innerHTML = `There’s no <b>${esc(retCondLabel(rv.condition).toLowerCase())}</b> SKU for <span class="mono">${esc(rv.sku)}</span> yet — create it?`;
-  const suggested = `${RET_PREFIX[rv.condition] || ''}${rv.sku}`.toUpperCase();
+  const suggested = retSuggestCondSku(rv.sku, rv.condition);
   const btn = $('rvCreate');
   const canCreate = RET_PREFIX[rv.condition] && recvLookup === 'ready' && !recvLookupExact(suggested);
   btn.hidden = !canCreate;
@@ -4287,10 +4305,64 @@ function retBeginCondEdit(td, entry) {
     if (!b) return;
     document.removeEventListener('mousedown', away, true);
     if (b.dataset.cond === entry.i.condition) { renderRetLog(); return; }
-    retSaveEdit(entry, 'condition', b.dataset.cond);
+    retCondEdit(entry, b.dataset.cond);
   });
   setTimeout(() => document.addEventListener('mousedown', away, true), 0);
 }
+
+// a graded condition first checks a landing exists; a missing one opens
+// the create-or-pick dialog instead of bouncing off the server error
+// (owner 2026-09-09: "if there isn't one, allow me to create it on this page")
+async function retCondEdit(entry, cond) {
+  if (cond === 'new') { retSaveEdit(entry, 'condition', cond); return; }
+  const tr = await api.returnsTargets(entry.i.sku).catch(() => null);
+  // lookup unavailable: let the save try anyway, the server re-resolves
+  if (!tr || !tr.ok) { retSaveEdit(entry, 'condition', cond); return; }
+  if ((tr.targets || {})[cond]) { retSaveEdit(entry, 'condition', cond); return; }
+  renderRetLog(); // the cell falls back to display while the dialog takes over
+  openRetCondFix(entry, cond);
+}
+
+/* ---------- "no listing for this condition" dialog (log edits) ---------- */
+let retCondCtx = null; // { entry, cond } while the dialog is open
+
+function openRetCondFix(entry, cond) {
+  retCondCtx = { entry, cond };
+  $('retCondMsg').innerHTML = `There’s no <b>${esc(retCondLabel(cond).toLowerCase())}</b> listing for <span class="mono">${esc(entry.i.sku)}</span> yet.`;
+  const suggested = retSuggestCondSku(entry.i.sku, cond);
+  const btn = $('retCondCreate');
+  const canCreate = !!RET_PREFIX[cond] && !(recvLookup === 'ready' && recvLookupExact(suggested));
+  btn.hidden = !canCreate;
+  btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
+  btn.dataset.sku = suggested;
+  $('retCondPick').value = '';
+  ensureInventory(); // the pick combo searches the live list
+  $('retCondDialog').showModal();
+}
+
+$('retCondCreate').addEventListener('click', () => {
+  if (!retCondCtx) return;
+  const { entry, cond } = retCondCtx;
+  $('retCondDialog').close();
+  // the New SKU sheet opens prefilled; creating maps the condition and
+  // the pending edit saves itself on top
+  openCondSkuCreate(entry.i.sku, cond, $('retCondCreate').dataset.sku, () => {
+    retSaveEdit(entry, 'condition', cond);
+  });
+});
+
+makeCombo($('retCondPick'), document.querySelector('.retcond-combo .combo-list'), async (item) => {
+  if (!retCondCtx) return;
+  const { entry, cond } = retCondCtx;
+  $('retCondDialog').close();
+  const map = await api.returnsMapSet(entry.i.sku, cond, item.sku);
+  if (!map.ok) { toast(map.error || 'Could not save the mapping.'); return; }
+  toast(`${entry.i.sku} ${cond} → ${map.targetSku}`);
+  retSaveEdit(entry, 'condition', cond);
+});
+
+$('retCondCancel').addEventListener('click', () => $('retCondDialog').close());
+$('retCondDialog').addEventListener('close', () => { retCondCtx = null; });
 
 $('retDelCancel').addEventListener('click', () => $('retDelDialog').close());
 $('retDelConfirm').addEventListener('click', async () => {

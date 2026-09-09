@@ -261,6 +261,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
     db.deleteConditionMapping('S25-128GB-NAVY', 'openbox');
     targets = db.resolveConditionTargets('S25-128GB-NAVY', inv);
     check('deleting a manual pick falls back to auto', targets.openbox === 'S25-128GB-NAVY-OPENBOX', targets);
+    // a base that IS a condition listing (2026-09-09): its own condition
+    // lands on itself, other grades derive from the CORE sku — never
+    // OPEN-BOX-OPEN-BOX-…
+    const invOb = ['OPEN-BOX-X133-64GB-GRAY', 'X133-64GB-GRAY', 'USED-X133-64GB-GRAY'];
+    targets = db.resolveConditionTargets('OPEN-BOX-X133-64GB-GRAY', invOb);
+    check('a condition SKU maps its own grade to itself, others from the core',
+      targets.openbox === 'OPEN-BOX-X133-64GB-GRAY' && targets.used === 'USED-X133-64GB-GRAY'
+        && targets.scrap === '',
+      targets);
+    targets = db.resolveConditionTargets('S25-128GB-NAVY-USED', ['S25-128GB-NAVY-USED', 'S25-128GB-NAVY-OPENBOX']);
+    check('suffix-named condition SKUs resolve the same way',
+      targets.used === 'S25-128GB-NAVY-USED' && targets.openbox === 'S25-128GB-NAVY-OPENBOX',
+      targets);
 
     // 24. popup receiving is back (owner 2026-09-05, "popup instead of on
     // the line"): a PO# typed in the sheet's first cell opens the receive
@@ -493,6 +506,28 @@ module.exports = async function run({ app, win, db, clipboard }) {
       condMenu[0] === 4 && condMenu[1] === 'openbox', condMenu);
     await exec(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
     await sleep(150);
+    // 24f. a condition with no listing opens the create-or-pick dialog —
+    // and the suggested name strips the affix the SKU already carries
+    await exec(`
+      recvItems = [{ sku: 'OPEN-BOX-X1', title: 'X1 open box', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
+      openRetCondFix({ i: { sku: 'OPEN-BOX-X1', condition: 'new' }, r: {}, ii: 0 }, 'used'); 0;`);
+    await sleep(150);
+    const condFix = await exec(`[
+      !!document.querySelector('#retCondDialog[open]'),
+      $('retCondMsg').textContent,
+      $('retCondCreate').hidden,
+      $('retCondCreate').textContent,
+      !!document.querySelector('.retcond-combo .combo-list'),
+    ]`);
+    check('missing-listing dialog: message, affix-stripped create name, pick search',
+      condFix[0] === true && /no used listing for OPEN-BOX-X1/i.test(condFix[1])
+        && condFix[2] === false && /Create USED-X1$/.test((condFix[3] || '').trim())
+        && condFix[4] === true,
+      condFix);
+    await exec(`$('retCondDialog').close(); recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null; 0;`);
 
     // 24d. disputes card: a "case:" note makes a pending dispute; resolved
     // notes leave the card

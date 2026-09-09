@@ -3185,7 +3185,7 @@ function registerIpc() {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
             if (!newTarget && it.targetSku) {
-              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — set it from the worksheet's condition menu first.` };
+              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
             }
           }
         }
