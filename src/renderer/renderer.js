@@ -3480,16 +3480,19 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
   rvRenderCond();
 });
 
-/* ---------- in-sheet entry cell (popup receiving, 2026-09-05) ---------- */
-// The log's first row is the launcher: EVERY column takes typing (owner
-// 2026-09-09, "allow me to type in any column without first needing the
-// PO#") — Enter in any cell (or the + gutter) opens the receive popup
-// with everything typed riding along; a PO# still runs the order lookup.
-// The <tr> is a singleton moved (not rebuilt) across renders so
-// half-typed values survive every log refresh.
+/* ---------- in-sheet receiving, NO POPUP (owner 2026-09-10) ---------- */
+// The whole receive happens in the sheet's first row: type the PO# and
+// Enter — the matched order fills the blank cells IN PLACE; the condition
+// is a pill in the row (click for the 4-pill menu, ⚠ beside it when the
+// graded listing is missing → an anchored popover creates or picks one);
+// Enter again (or the + gutter) saves the return and clears the row.
+// Esc clears a half-typed row. The <tr> is a singleton moved (not
+// rebuilt) across renders so half-typed values survive every refresh.
 
 let retEntryTr = null;
 let wsEls = null; // { po, cust, trk, date, sku, units, price, by, settle, note }
+let ws = null;    // inline receive state (mirrors the old popup's rv)
+let wsLookupApi = (po) => api.returnsLookup(po); // seam: e2e stubs the lookup
 
 const WS_FIELDS = [
   ['po', 'Type PO# + Enter…', 'mono', 'PO number'],
@@ -3503,6 +3506,10 @@ const WS_FIELDS = [
   ['note', '', '', 'Notes'],
 ];
 
+function wsBlank() {
+  return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
+}
+
 function wsInput(key) {
   const [, ph, cls, label] = WS_FIELDS.find(f => f[0] === key);
   // #wsPo keeps its historic id (tests and muscle memory point at it)
@@ -3512,16 +3519,17 @@ function wsInput(key) {
 
 function retEntryRow() {
   if (retEntryTr) return retEntryTr;
+  ws = wsBlank();
   const tr = document.createElement('tr');
   tr.className = 'ws-row';
   tr.innerHTML = `
-    <td class="cell-gutter ws-gutter" id="wsPlus" title="Receive a return" role="button">+</td>
+    <td class="cell-gutter ws-gutter" id="wsPlus" title="Save this return" role="button">+</td>
     <td class="ws-cell">${wsInput('po')}</td>
     <td class="ws-cell">${wsInput('cust')}</td>
     <td class="ws-cell">${wsInput('trk')}</td>
     <td class="ws-cell ws-date mono" id="wsDate"></td>
     <td class="ws-cell">${wsInput('sku')}</td>
-    <td class="ws-cell"></td>
+    <td class="ws-cell ws-cond-cell" id="wsCondCell"></td>
     <td class="ws-cell">${wsInput('units')}</td>
     <td class="ws-cell">${wsInput('price')}</td>
     <td class="ws-cell">${wsInput('by')}</td>
@@ -3529,30 +3537,294 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
-  wsEls = { date: tr.querySelector('#wsDate') };
+  wsEls = { date: tr.querySelector('#wsDate'), condCell: tr.querySelector('#wsCondCell') };
   for (const [key] of WS_FIELDS) wsEls[key] = tr.querySelector(key === 'po' ? '#wsPo' : `#ws_${key}`);
   wsEls.date.textContent = retDateUS(new Date().toISOString());
-  const launch = () => {
-    const seed = {};
-    let any = false;
-    for (const [key] of WS_FIELDS) {
-      seed[key] = wsEls[key].value.trim();
-      if (seed[key]) any = true;
-    }
-    if (!any) return false;
-    for (const [key] of WS_FIELDS) wsEls[key].value = ''; // the popup owns them now
-    retOpenRecv(seed.po, seed);
-    return true;
-  };
+  wsRenderCond();
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      launch();
+      const po = wsEls.po.value.trim();
+      // the PO cell's first Enter looks the order up; everything after saves
+      if (key === 'po' && po && ws.looked !== po) wsLookup(po);
+      else wsSave();
     });
   }
-  tr.querySelector('#wsPlus').addEventListener('click', () => { if (!launch()) retOpenRecv(); });
+  // editing the PO after a match voids the match (a stale orderId must
+  // never ride along); a re-typed SKU is no longer "that order line"
+  wsEls.po.addEventListener('input', () => {
+    ws.orderId = null; ws.source = ''; ws.unmatched = true;
+    ws.items = []; ws.looked = '';
+  });
+  wsEls.sku.addEventListener('input', () => {
+    ws.targets = null; ws.pick = '';
+    wsRenderCond();
+  });
+  wsEls.sku.addEventListener('change', () => wsResolveTargets());
+  tr.addEventListener('click', (e) => {
+    if (e.target.closest('#wsCond')) { wsCondMenu(); return; }
+    if (e.target.closest('#wsWarn')) { wsFixOpen(); return; }
+    if (e.target.closest('#wsPlus')) wsSave();
+  });
   return tr;
+}
+
+// the condition cell: the pill (click = 4-pill menu) and the ⚠ that shows
+// when the graded listing is missing
+function wsRenderCond() {
+  if (!wsEls) return;
+  const sku = wsEls.sku.value.trim();
+  const c = ws.condition;
+  const resolved = c === 'new' ? sku : (((ws.targets || {})[c]) || ws.pick);
+  const missing = !!sku && c !== 'new' && !resolved;
+  wsEls.condCell.innerHTML = `
+    <button id="wsCond" type="button" class="ret-cond-ro is-${esc(c)}" title="Condition it came back in — click to change">
+      <span class="ret-dd-dot is-${esc(c)}"></span>${esc(retCondLabel(c))}</button>
+    ${missing ? `<button id="wsWarn" type="button" class="rv-warn"
+      title="No ${esc(retCondLabel(c).toLowerCase())} listing for ${esc(sku)} yet — click to create or pick one">⚠</button>` : ''}`;
+}
+
+// non-new grades need a landing listing: resolve quietly whenever the SKU
+// or condition settles, so the ⚠ only shows for real gaps
+async function wsResolveTargets() {
+  const sku = wsEls.sku.value.trim().toUpperCase();
+  if (!sku || ws.condition === 'new' || (ws.targets || {})[ws.condition]) { wsRenderCond(); return; }
+  const tr = await api.returnsTargets(sku).catch(() => null);
+  if (tr && tr.ok) ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
+  wsRenderCond();
+}
+
+function wsCondMenu() {
+  const old = document.querySelector('.ws-emenu');
+  if (old) { old.remove(); return; }
+  const anchor = wsEls.condCell.querySelector('#wsCond');
+  const menu = document.createElement('div');
+  menu.className = 'ws-emenu ret-emenu';
+  menu.innerHTML = RET_CONDS.map(c => `
+    <button type="button" class="ret-emi ${ws.condition === c.key ? 'is-sel' : ''}" data-cond="${c.key}">
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 150))}px`;
+  menu.style.top = `${r.bottom + 4}px`;
+  document.body.appendChild(menu);
+  const away = (e) => {
+    if (e.target.closest('.ws-emenu')) return;
+    document.removeEventListener('mousedown', away, true);
+    menu.remove();
+  };
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cond]');
+    if (!b) return;
+    document.removeEventListener('mousedown', away, true);
+    menu.remove();
+    ws.condition = b.dataset.cond;
+    wsRenderCond();
+    wsResolveTargets();
+  });
+  setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+}
+
+// ⚠ popover (anchored, not a dialog): create the suggested listing or
+// pick an existing one — same engine as everywhere else
+function wsFixOpen() {
+  const warn = wsEls.condCell.querySelector('#wsWarn');
+  const sku = wsEls.sku.value.trim().toUpperCase();
+  if (!warn || !sku) return;
+  const fix = $('wsFix');
+  if (!fix.hidden) { wsFixClose(); return; }
+  $('wsFixMsg').innerHTML = `There’s no <b>${esc(retCondLabel(ws.condition).toLowerCase())}</b> listing for <span class="mono">${esc(sku)}</span> yet — create it?`;
+  const suggested = retSuggestCondSku(sku, ws.condition);
+  const btn = $('wsFixCreate');
+  const canCreate = RET_PREFIX[ws.condition] && !(recvLookup === 'ready' && recvLookupExact(suggested));
+  btn.hidden = !canCreate;
+  btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
+  btn.dataset.sku = suggested;
+  $('wsFixPick').value = '';
+  ensureInventory();
+  const r = warn.getBoundingClientRect();
+  fix.style.left = `${Math.max(8, Math.min(r.left - 40, window.innerWidth - 348))}px`;
+  fix.style.top = `${r.bottom + 6}px`;
+  fix.hidden = false;
+}
+
+function wsFixClose() { $('wsFix').hidden = true; }
+
+document.addEventListener('mousedown', (e) => {
+  if ($('wsFix').hidden) return;
+  if (e.target.closest('#wsFix') || e.target.closest('#wsWarn')) return;
+  wsFixClose();
+}, true);
+
+$('wsFixCreate').addEventListener('click', () => {
+  const sku = wsEls.sku.value.trim().toUpperCase();
+  const cond = ws.condition;
+  wsFixClose();
+  openCondSkuCreate(sku, cond, $('wsFixCreate').dataset.sku, (target) => {
+    ws.targets = { ...(ws.targets || {}), [cond]: target };
+    wsRenderCond();
+  });
+});
+
+makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (item) => {
+  const sku = wsEls.sku.value.trim().toUpperCase();
+  const cond = ws.condition;
+  const map = await api.returnsMapSet(sku, cond, item.sku);
+  if (!map.ok) { toast(map.error || 'Could not save the mapping.'); return; }
+  toast(`${sku} ${cond} → ${map.targetSku}`);
+  ws.targets = { ...(ws.targets || {}), [cond]: map.targetSku };
+  wsFixClose();
+  wsRenderCond();
+});
+
+// PO# + Enter: the matched order fills only the cells still blank —
+// hand-typed values always win
+async function wsLookup(po) {
+  if (ws.busy) return;
+  ws.busy = true;
+  const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
+  ws.busy = false;
+  ws.looked = po;
+  if (!res || !res.ok) {
+    ws.unmatched = true; ws.orderId = null; ws.source = '';
+    toast(`${(res && res.error) || 'Not found.'} — enter the details by hand.`);
+    wsEls.cust.focus();
+    return;
+  }
+  const o = res.order;
+  ws.unmatched = false;
+  ws.orderId = o.orderId;
+  ws.source = o.source;
+  wsEls.po.value = o.reference || po;
+  ws.looked = wsEls.po.value.trim();
+  if (!wsEls.cust.value.trim()) wsEls.cust.value = o.customer || '';
+  if (!wsEls.trk.value.trim()) wsEls.trk.value = o.tracking || '';
+  ws.items = o.items || [];
+  const typed = wsEls.sku.value.trim().toUpperCase();
+  let line = typed
+    ? ws.items.find(it => String(it.sku || '').toUpperCase() === typed
+      || String(it.channelSku || '').toUpperCase() === typed) || null
+    : null;
+  const distinct = [...new Set(ws.items.map(it => String(it.sku || '').toUpperCase()))];
+  if (!line && !typed && distinct.length === 1) line = ws.items[0];
+  if (line) wsUseLine(line);
+  else if (!typed && ws.items.length > 1) wsLineMenu(); // which line came back?
+  wsEls.sku.focus();
+}
+
+function wsUseLine(line) {
+  wsEls.sku.value = line.sku || '';
+  ws.targets = line.targets || null;
+  ws.pick = '';
+  if (!wsEls.units.value.trim()) wsEls.units.value = String(line.quantity || 1);
+  if (!wsEls.price.value.trim() && Number(line.price)) wsEls.price.value = Number(line.price).toFixed(2);
+  // Dispute Settlement mirrors the price line — what the customer paid is
+  // the amount at stake (cleared by hand when there is no dispute)
+  if (!wsEls.settle.value.trim()) wsEls.settle.value = wsEls.price.value;
+  wsRenderCond();
+}
+
+// a multi-line order: an anchored menu under the SKU cell picks the line
+function wsLineMenu() {
+  const old = document.querySelector('.ws-emenu');
+  if (old) old.remove();
+  const menu = document.createElement('div');
+  menu.className = 'ws-emenu ret-emenu';
+  const seen = new Set();
+  menu.innerHTML = ws.items.filter(it => {
+    const k = String(it.sku || '').toUpperCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map((it, i) => `
+    <button type="button" class="ret-emi" data-line="${ws.items.indexOf(it)}">
+      <span class="mono">${esc(it.sku)}</span>&nbsp;×${it.quantity || 1}</button>`).join('');
+  const r = wsEls.sku.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 260))}px`;
+  menu.style.top = `${r.bottom + 4}px`;
+  document.body.appendChild(menu);
+  const away = (e) => {
+    if (e.target.closest('.ws-emenu')) return;
+    document.removeEventListener('mousedown', away, true);
+    menu.remove();
+  };
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-line]');
+    if (!b) return;
+    document.removeEventListener('mousedown', away, true);
+    menu.remove();
+    wsUseLine(ws.items[Number(b.dataset.line)]);
+  });
+  setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+}
+
+function wsReset() {
+  for (const [key] of WS_FIELDS) wsEls[key].value = '';
+  ws = wsBlank();
+  wsFixClose();
+  const menu = document.querySelector('.ws-emenu');
+  if (menu) menu.remove();
+  wsRenderCond();
+}
+
+// Enter (or +) saves the row straight through returns:create — the same
+// engine the popup used, popup not included
+async function wsSave() {
+  if (!ws || ws.busy) return;
+  const v = {};
+  for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
+  const sku = v.sku.toUpperCase();
+  if (!v.po && !sku && !v.cust && !v.trk && !v.note) return; // a blank row is a stray Enter
+  let target = '';
+  let qty = 1;
+  if (sku) {
+    target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
+    if (!target) {
+      // one quiet resolve attempt before complaining (hand-typed SKUs)
+      const tr = await api.returnsTargets(sku).catch(() => null);
+      if (tr && tr.ok) {
+        ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
+        target = (ws.targets[ws.condition]) || '';
+      }
+    }
+    if (!target) {
+      wsRenderCond();
+      toast(`No ${retCondLabel(ws.condition).toLowerCase()} listing for ${sku} — press the ⚠ to create or pick one.`);
+      return;
+    }
+    if (recvLookup === 'ready' && !recvLookupExact(target)) {
+      toast(`Unknown SKU: ${target}. Pick one from the inventory.`);
+      return;
+    }
+    qty = v.units ? Number(v.units) : 1;
+    if (!Number.isInteger(qty) || qty < 1) { toast('Units must be a whole number of 1 or more.'); return; }
+  }
+  const by = v.by || retReceivedBy;
+  if (by) retReceivedBy = by;
+  ws.busy = true;
+  const res = await rvCreate({
+    orderId: ws.orderId || undefined,
+    orderNumber: v.po,
+    source: ws.source,
+    customer: v.cust,
+    tracking: v.trk,
+    receivedBy: by,
+    unmatched: !!ws.unmatched,
+    note: sku ? '' : v.note,
+    items: sku ? [{
+      sku, condition: ws.condition, targetSku: target, qty,
+      price: retMoney(v.price),
+      settle: retMoney(v.settle),
+      note: v.note,
+    }] : [],
+  }).catch(e => ({ ok: false, error: e.message }));
+  ws.busy = false;
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not save the return.'); return; }
+  toast(sku ? `Received ${sku} ×${qty}` : `Logged ${v.po}`, 2500);
+  wsReset();
+  loadRetPast();
+  wsEls.po.focus();
 }
 
 

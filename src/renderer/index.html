@@ -851,6 +851,18 @@
     </div>
   </dialog>
   <datalist id="skuOptions"></datalist>
+  <!-- the entry row's ⚠ popover (no-popup receiving, owner 2026-09-10):
+       anchored beside the condition pill, never a modal -->
+  <div id="wsFix" class="rv-fix" hidden>
+    <div id="wsFixMsg" class="rv-fix-msg"></div>
+    <button id="wsFixCreate" class="pillbtn rv-create" type="button" hidden></button>
+    <div class="rv-fix-or">or pick an existing listing:</div>
+    <div class="combo ws-pick-combo">
+      <input id="wsFixPick" class="rv-in mono" type="text" placeholder="Pick the listing…"
+             autocomplete="off" spellcheck="false" aria-label="Target listing" />
+      <div class="combo-list" hidden></div>
+    </div>
+  </div>
   <!-- Delete-return confirmation: the log's only popup -->
   <!-- inline condition edit hit a condition with no listing (2026-09-09):
        create the suggested SKU right here, or search the inventory and
