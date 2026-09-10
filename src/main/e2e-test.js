@@ -275,10 +275,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       targets.used === 'S25-128GB-NAVY-USED' && targets.openbox === 'S25-128GB-NAVY-OPENBOX',
       targets);
 
-    // 24. popup receiving is back (owner 2026-09-05, "popup instead of on
-    // the line"): a PO# typed in the sheet's first cell opens the receive
-    // popup carrying that PO with the lookup already running; a failed
-    // lookup falls into the hand-entry path
+    // 24. NO-POPUP receiving (owner 2026-09-10): the PO cell looks the
+    // order up INLINE; a failed lookup keeps the row for hand entry —
+    // no dialog opens at any point
     await exec(`loadRetPast()`);
     await sleep(250);
     await exec(`$('wsPo').value = 'WMR-REMOVAL-7788';
@@ -286,20 +285,17 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(400); // lookup refuses offline -> unmatched hand-entry state
     const rvBits = await exec(`[
       !!document.querySelector('#retRecvDialog[open]'),
-      $('rvTitle').textContent,
-      $('rvPo').value,
       $('wsPo').value,
-      $('rvFeedback').textContent,
-      rv.unmatched,
+      ws.unmatched,
+      ws.looked,
     ]`);
-    check('PO cell opens the receive popup; failed lookup = hand-entry path',
-      rvBits[0] === true && /Receive a return/.test(rvBits[1]) && rvBits[2] === 'WMR-REMOVAL-7788'
-        && rvBits[3] === '' && /by hand/i.test(rvBits[4]) && rvBits[5] === true,
+    check('PO Enter looks up inline; failed lookup keeps the row, NO popup',
+      rvBits[0] === false && rvBits[1] === 'WMR-REMOVAL-7788'
+        && rvBits[2] === true && rvBits[3] === 'WMR-REMOVAL-7788',
       rvBits);
-
-    // 24b. condition pills + the live target line: New restocks the SKU
-    // itself, a mapped condition shows its listing, an unmapped one opens
-    // the fix row (pick combo + prefix-named create button)
+    // 24b. the row's condition pill and ⚠: a mapped grade wears its pill
+    // quietly, an unmapped one grows the ⚠ whose anchored popover offers
+    // Create (affix-aware) and a manual pick
     const prevLookup = await exec(`(() => {
       const prev = recvLookup;
       recvItems = [{ sku: 'S25-128GB-NAVY', title: 'Galaxy S25', barcode: '' }];
@@ -308,48 +304,36 @@ module.exports = async function run({ app, win, db, clipboard }) {
       recvLookup = 'ready';
       return prev;
     })()`);
-    await exec(`rv.sku = 'S25-128GB-NAVY'; $('rvSku').value = 'S25-128GB-NAVY';
-      rv.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
-      rvRenderCond();`);
-    const pills = await exec(`[
-      document.querySelectorAll('#rvPills .rv-pill').length,
-      (document.querySelector('#rvPills .rv-pill.on') || { dataset: {} }).dataset.cond || '',
-      $('rvTarget').textContent,
-      $('rvFix').hidden,
+    await exec(`$('ws_sku').value = 'S25-128GB-NAVY';
+      ws.targets = { new: 'S25-128GB-NAVY', openbox: 'S25-128GB-NAVY-OPENBOX', used: '', scrap: '' };
+      ws.condition = 'openbox'; wsRenderCond(); 0;`);
+    let tgt = await exec(`[
+      !!document.querySelector('#wsWarn'),
+      (document.querySelector('#wsCond') || {}).textContent || '',
     ]`);
-    check('popup: 4 condition pills, New selected, target = the SKU itself',
-      pills[0] === 4 && pills[1] === 'new' && /S25-128GB-NAVY/.test(pills[2]) && pills[3] === true,
-      pills);
-    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="openbox"]').click()`);
-    let tgt = await exec(`[$('rvTarget').textContent, $('rvFix').hidden]`);
-    check('a mapped condition resolves to its listing, no fix row',
-      /S25-128GB-NAVY-OPENBOX/.test(tgt[0]) && tgt[1] === true, tgt);
-    await exec(`document.querySelector('#rvPills .rv-pill[data-cond="used"]').click()`);
+    check('a mapped grade shows its pill in the row, no ⚠',
+      tgt[0] === false && /Open box/.test(tgt[1]), tgt);
+    await exec(`ws.condition = 'used'; wsRenderCond(); 0;`);
+    tgt = await exec(`[!!document.querySelector('#wsWarn'), $('wsFix').hidden]`);
+    check('an unmapped grade grows the ⚠ in the row (popover closed)',
+      tgt[0] === true && tgt[1] === true, tgt);
+    await exec(`document.querySelector('#wsWarn').click(); 0;`);
+    await sleep(150);
     tgt = await exec(`[
-      !!document.querySelector('#rvWarnBtn'),
-      $('rvFix').hidden,
-      $('rvTarget').textContent,
+      $('wsFix').hidden,
+      $('wsFixMsg').textContent,
+      $('wsFixCreate').hidden,
+      $('wsFixCreate').textContent,
+      !!document.querySelector('.ws-pick-combo .combo-list'),
     ]`);
-    check('an unmapped condition shows the ⚠ beside the pills (popover closed)',
-      tgt[0] === true && tgt[1] === true && tgt[2] === '', tgt);
-    // pressing the ⚠ opens the "no SKU for this yet — create it?" popover
-    await exec(`document.querySelector('#rvWarnBtn').click()`);
-    tgt = await exec(`[
-      $('rvFix').hidden,
-      $('rvFixMsg').textContent,
-      $('rvCreate').hidden,
-      $('rvCreate').textContent,
-      !!document.querySelector('.rv-pick-combo .combo-list'),
-    ]`);
-    check('the ⚠ popover asks to create the missing SKU, with a manual pick',
-      tgt[0] === false && /no used SKU for S25-128GB-NAVY/i.test(tgt[1]) && tgt[2] === false
+    check('the ⚠ popover asks to create the missing listing, with a manual pick',
+      tgt[0] === false && /no used listing for S25-128GB-NAVY/i.test(tgt[1]) && tgt[2] === false
         && /USED-S25-128GB-NAVY/.test(tgt[3]) && tgt[4] === true,
       tgt);
-    // 24b-bis. Create opens the full New SKU sheet on top of the popup,
-    // prefilled with the suggested name + the base item's title (everything
-    // editable); closing it without creating changes nothing
-    await exec(`$('rvCreate').click()`);
-    await sleep(200);
+    // 24b-bis. Create opens the full New SKU sheet prefilled; closing it
+    // without creating changes nothing
+    await exec(`$('wsFixCreate').click(); 0;`);
+    await sleep(250);
     const mk = await exec(`[
       !!document.querySelector('#skuDialog[open]'),
       $('skuSku').value,
@@ -358,23 +342,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('Create opens the New SKU sheet prefilled from the base item',
       mk[0] === true && mk[1] === 'USED-S25-128GB-NAVY' && /Galaxy S25 - Used/.test(mk[2]), mk);
     await exec(`$('skuDialog').close()`);
-    // receive is blocked while the target is unresolved
-    await exec(`rvCommit()`);
-    await sleep(120);
-    const blocked = await exec(`$('rvFeedback').textContent`);
-    check('receive blocked until the missing listing is picked or created',
-      /pick or create/i.test(blocked), blocked);
-
-    // 24b-ter. price AND dispute settlement autofill from the matched line
-    await exec(`rv.unmatched = false;
-      rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 259.5, quantity: 1, targets: null }];
-      rv.received = [false];
-      rvLoadItemAt(0)`);
-    const auto = await exec(`[$('rvPrice').value, $('rvSettle').value]`);
-    check('dispute settlement autofills from the order line price',
-      auto[0] === '259.50' && auto[1] === '259.50', auto);
-    await exec(`recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)};
-      $('retRecvDialog').close(); 0;`);
+    // saving is refused while the grade has no landing listing
+    await exec(`window.__rvOrigB = rvCreate; window.__rvGotB = 'untouched';
+      rvCreate = async (p) => { window.__rvGotB = p; return { ok: true, id: 1 }; };
+      wsSave(); 0;`);
+    await sleep(400);
+    const blocked = await exec(`window.__rvGotB === 'untouched'`);
+    check('save refused while the missing listing is unpicked — nothing written',
+      blocked === true, blocked);
+    await exec(`rvCreate = window.__rvOrigB; wsReset();
+      recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = ${JSON.stringify(prevLookup)}; 0;`);
     db.createReturn({
       orderNumber: 'WMR-REMOVAL-7788', source: '', customer: 'Walmart removals', note: '', unmatched: true,
       tracking: '1ZRETURN000111', receivedBy: 'IM',
@@ -417,43 +394,100 @@ module.exports = async function run({ app, win, db, clipboard }) {
       !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
       (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
       document.querySelectorAll('#retPastBox tr.ws-row .ws-in').length,
+      $('ws_date').value,
     ]`);
-    check('entry row: PO launcher present, survives re-render, 9 typable columns',
+    check('entry row: PO cell present, survives re-render, 10 typable columns, date prefills today',
       entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME'
-        && entryBits[3] === 9,
+        && entryBits[3] === 10 && /^\d{2}\/\d{2}\/\d{4}$/.test(entryBits[4]),
       entryBits);
     await exec(`$('wsPo').value = ''; 0;`);
-    // 24c-ter. Enter in ANY entry column opens the popup with the typed
-    // values riding along (no PO needed), the row cleared behind it
+    // 24c-ter. NO-POPUP receiving (owner 2026-09-10): Enter in the row
+    // saves in place — no dialog opens at any point
     await exec(`
       window.__rvOrig2 = rvCreate;
       window.__rvGot2 = null;
       rvCreate = async (p) => { window.__rvGot2 = p; return { ok: true, id: 998 }; };
+      recvItems = [{ sku: 'S25-128GB-NAVY', title: 'Navy', barcode: '' }];
+      recvBySku = new Map(recvItems.map(i => [i.sku.toLowerCase(), i]));
+      recvByBarcode = new Map();
+      recvLookup = 'ready';
       $('ws_cust').value = 'Walk-in Willie';
+      $('ws_sku').value = 's25-128gb-navy';
+      $('ws_units').value = '2';
+      $('ws_date').value = '08/15/2026'; // a typed (backdated) Date Received
       $('ws_note').value = 'no label on the box';
       $('ws_cust').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       0;`);
-    await sleep(250);
-    const seeded = await exec(`[
-      !!document.querySelector('#retRecvDialog[open]'),
-      $('rvCust').value, $('rvNote').value, $('rvPo').value,
-      $('ws_cust').value + $('ws_note').value + $('wsPo').value,
-    ]`);
-    check('entry row seeds the popup from any column, no PO required',
-      seeded[0] === true && seeded[1] === 'Walk-in Willie'
-        && seeded[2] === 'no label on the box' && seeded[3] === '' && seeded[4] === '',
-      seeded);
-    await exec(`$('rvSave').click(); 0;`);
+    let inlineGot = null;
     for (let w = 0; w < 40; w++) {
-      await sleep(200);
-      if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
+      await sleep(150);
+      inlineGot = await exec(`window.__rvGot2`);
+      if (inlineGot) break;
     }
-    const noPo = await exec(`window.__rvGot2`);
-    check('a PO-less receive commits as an unmatched entry',
-      noPo && noPo.orderNumber === '' && noPo.unmatched === true
-        && noPo.customer === 'Walk-in Willie',
-      noPo);
-    await exec(`rvCreate = window.__rvOrig2; if (document.querySelector('#retRecvDialog[open]')) $('retRecvDialog').close(); 0;`);
+    const inlineBits = await exec(`[
+      !!document.querySelector('#retRecvDialog[open]'),
+      $('ws_cust').value + $('ws_sku').value + $('ws_note').value + $('wsPo').value,
+    ]`);
+    check('Enter receives in place: PO-less unmatched entry, row cleared, NO popup',
+      inlineGot && inlineGot.orderNumber === '' && inlineGot.unmatched === true
+        && inlineGot.customer === 'Walk-in Willie'
+        && inlineGot.receivedDay === '2026-08-15'
+        && inlineGot.items.length === 1 && inlineGot.items[0].sku === 'S25-128GB-NAVY'
+        && inlineGot.items[0].qty === 2 && inlineGot.items[0].condition === 'new'
+        && inlineGot.items[0].targetSku === 'S25-128GB-NAVY'
+        && inlineGot.items[0].note === 'no label on the box'
+        && inlineBits[0] === false && inlineBits[1] === '',
+      { inlineGot, inlineBits });
+    // PO# + Enter looks the order up INLINE: blanks fill in the row itself
+    await exec(`
+      window.__rvGot2 = null;
+      window.__wlOrig = wsLookupApi;
+      wsLookupApi = async () => ({ ok: true, order: {
+        orderId: 'oid-77', source: 'WALMART', reference: '119888000000001',
+        customer: 'Cara Cross', tracking: 'TRK-9', items: [
+          { sku: 'S25-128GB-NAVY', channelSku: 'WM-NAVY', title: '', quantity: 1, price: 149.99,
+            targets: { openbox: '', used: '', scrap: '' } },
+        ] } });
+      $('ws_cust').value = 'WRONG NAME'; // the lookup OVERWRITES typed cells
+      $('wsPo').value = '119888000000001';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      0;`);
+    await sleep(400);
+    const looked = await exec(`[
+      $('ws_cust').value, $('ws_trk').value, $('ws_sku').value,
+      $('ws_price').value, $('ws_settle').value,
+      !!document.querySelector('#retRecvDialog[open]'),
+    ]`);
+    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price, settle',
+      looked[0] === 'Cara Cross' && looked[1] === 'TRK-9' && looked[2] === 'S25-128GB-NAVY'
+        && looked[3] === '149.99' && looked[4] === '149.99' && looked[5] === false,
+      looked);
+    // the second Enter saves the matched receive
+    await exec(`$('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    for (let w = 0; w < 40; w++) {
+      await sleep(150);
+      inlineGot = await exec(`window.__rvGot2`);
+      if (inlineGot) break;
+    }
+    check('the second Enter saves the matched receive with the orderId',
+      inlineGot && inlineGot.orderId === 'oid-77' && inlineGot.unmatched === false
+        && inlineGot.items[0].price === 149.99 && inlineGot.items[0].settle === 149.99,
+      inlineGot);
+    // the condition pill opens its 4-pill menu right in the row
+    await exec(`$('ws_sku').value = 'S25-128GB-NAVY'; wsRenderCond(); document.querySelector('#wsCond').click(); 0;`);
+    await sleep(150);
+    const wsMenu = await exec(`[
+      document.querySelectorAll('.ws-emenu .ret-emi').length,
+      !!document.querySelector('#retRecvDialog[open]'),
+    ]`);
+    check('the row condition pill opens the 4-pill menu, still no popup',
+      wsMenu[0] === 4 && wsMenu[1] === false, wsMenu);
+    await exec(`
+      const m = document.querySelector('.ws-emenu'); if (m) m.remove();
+      wsReset();
+      rvCreate = window.__rvOrig2; wsLookupApi = window.__wlOrig;
+      recvItems = null; recvBySku = null; recvByBarcode = null; recvLookup = null;
+      0;`);
     // (returns:create's relaxed PO rule can't be hit here — the e2e
     // profile runs capture-only, which gates the handler before it)
     // 24c. Receive commits price + dispute settlement through the

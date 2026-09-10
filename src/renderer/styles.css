@@ -1747,6 +1747,24 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
 .ws-in.ws-num { text-align: right; } /* units / price / settle line up with their columns */
+
+/* no-popup receiving (owner 2026-09-10): the condition pill lives in the
+   row, its menu and the ⚠ popover anchor to the viewport — never modal */
+.ws-cond-cell { white-space: nowrap; }
+.ws-cond-cell .ret-cond-ro { border: none; font-family: var(--font); cursor: pointer; }
+.ws-cond-cell .rv-warn { margin-left: 6px; vertical-align: middle; }
+.ws-emenu {
+  position: fixed;
+  z-index: 70;
+  min-width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16);
+  padding: 4px;
+}
+#wsFix { z-index: 70; }
+#wsFix .combo-list { left: 0; width: 310px; }
 .ws-date { color: var(--muted); font-size: 12px; }
 
 /* ---- in-place log editing (owner 2026-09-07): click a cell, type, Enter.

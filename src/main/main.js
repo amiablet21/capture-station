@@ -2387,6 +2387,16 @@ function registerIpc() {
       || String(payload.customer || '').trim() || String(payload.tracking || '').trim()
       || String(payload.note || '').trim();
     if (!hasDetail) return { ok: false, error: 'Nothing to log.' };
+    // a typed Date Received (owner 2026-09-10: every entry cell takes
+    // typing) backdates the entry; empty or today = the real timestamp
+    const day = String(payload.receivedDay || '').trim();
+    let createdAt = '';
+    if (day) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Date must look like 2026-09-10.' };
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (day !== today) createdAt = `${day}T12:00:00.000Z`;
+    }
     const stockItems = items.filter(i => i.targetSku);
     try {
       const client = new LinnworksClient(cfg.linnworks);
@@ -2413,6 +2423,7 @@ function registerIpc() {
         unmatched: !!payload.unmatched, // arrived without a Linnworks order
         tracking: String(payload.tracking || '').trim().slice(0, 100),
         receivedBy,
+        createdAt, // backdated when a past Date Received was typed
       });
       // the worksheet's "Received by" remembers the last-used initials
       if (receivedBy) config.save({ returnsReceivedBy: receivedBy });

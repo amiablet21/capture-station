@@ -421,10 +421,10 @@ function listWfsShipments(limit = 200) {
 // Graded customer returns. items: [{ sku, condition, targetSku, qty, price, note }]
 // unmatched = physically arrived without a Linnworks order behind it
 // (pre-Linnworks sale, WFS removal shipment, missing PO#).
-function createReturn({ orderNumber, source, customer, note, items, unmatched, tracking, receivedBy }) {
+function createReturn({ orderNumber, source, customer, note, items, unmatched, tracking, receivedBy, createdAt }) {
   const res = open().prepare(
     'INSERT INTO returns (created_at, order_number, source, customer, note, items, unmatched, tracking, received_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(new Date().toISOString(), orderNumber, source || '', customer || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, tracking || '', receivedBy || '');
+  ).run(createdAt || new Date().toISOString(), orderNumber, source || '', customer || '', note || '', JSON.stringify(items || []), unmatched ? 1 : 0, tracking || '', receivedBy || '');
   return Number(res.lastInsertRowid);
 }
 
