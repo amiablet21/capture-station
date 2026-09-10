@@ -3029,8 +3029,8 @@ function enterReturns() {
   ensureInventory(); // the entry row's and popup's SKU combos need it
   api.getConfig().then(cfg => {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
-    // the entry cell's date stamp follows along when the page opens
-    if (retEntryTr) wsEls.date.textContent = retDateUS(new Date().toISOString());
+    // the date cell follows today only while the receiver hasn't typed one
+    if (retEntryTr && wsDateAuto) wsDateFill();
   });
 }
 
@@ -3498,6 +3498,7 @@ const WS_FIELDS = [
   ['po', 'Type PO# + Enter…', 'mono', 'PO number'],
   ['cust', '', '', 'Customer name'],
   ['trk', '', 'mono', 'Tracking number'],
+  ['date', '', 'mono ws-date', 'Date received'],
   ['sku', '', 'mono', 'Returned SKU'],
   ['units', '', 'mono ws-num', 'Units'],
   ['price', '', 'mono ws-num', 'Price'],
@@ -3505,6 +3506,14 @@ const WS_FIELDS = [
   ['settle', '', 'mono ws-num', 'Dispute settlement'],
   ['note', '', '', 'Notes'],
 ];
+
+// the date cell prefills with today but takes typing like every other
+// cell (owner 2026-09-10); auto-updates across midnight only while unedited
+let wsDateAuto = true;
+function wsDateFill() {
+  wsEls.date.value = retDateUS(new Date().toISOString());
+  wsDateAuto = true;
+}
 
 function wsBlank() {
   return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
@@ -3527,7 +3536,7 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('po')}</td>
     <td class="ws-cell">${wsInput('cust')}</td>
     <td class="ws-cell">${wsInput('trk')}</td>
-    <td class="ws-cell ws-date mono" id="wsDate"></td>
+    <td class="ws-cell">${wsInput('date')}</td>
     <td class="ws-cell">${wsInput('sku')}</td>
     <td class="ws-cell ws-cond-cell" id="wsCondCell"></td>
     <td class="ws-cell">${wsInput('units')}</td>
@@ -3537,9 +3546,10 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
-  wsEls = { date: tr.querySelector('#wsDate'), condCell: tr.querySelector('#wsCondCell') };
+  wsEls = { condCell: tr.querySelector('#wsCondCell') };
   for (const [key] of WS_FIELDS) wsEls[key] = tr.querySelector(key === 'po' ? '#wsPo' : `#ws_${key}`);
-  wsEls.date.textContent = retDateUS(new Date().toISOString());
+  wsDateFill();
+  wsEls.date.addEventListener('input', () => { wsDateAuto = false; });
   wsRenderCond();
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
@@ -3678,8 +3688,9 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
   wsRenderCond();
 });
 
-// PO# + Enter: the matched order fills only the cells still blank —
-// hand-typed values always win
+// PO# + Enter: the matched order LOADS OVER the row (owner 2026-09-10,
+// "as soon as you enter a PO# it will load and overwrite everything") —
+// the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
   ws.busy = true;
@@ -3698,8 +3709,8 @@ async function wsLookup(po) {
   ws.source = o.source;
   wsEls.po.value = o.reference || po;
   ws.looked = wsEls.po.value.trim();
-  if (!wsEls.cust.value.trim()) wsEls.cust.value = o.customer || '';
-  if (!wsEls.trk.value.trim()) wsEls.trk.value = o.tracking || '';
+  wsEls.cust.value = o.customer || '';
+  wsEls.trk.value = o.tracking || '';
   ws.items = o.items || [];
   const typed = wsEls.sku.value.trim().toUpperCase();
   let line = typed
@@ -3717,11 +3728,11 @@ function wsUseLine(line) {
   wsEls.sku.value = line.sku || '';
   ws.targets = line.targets || null;
   ws.pick = '';
-  if (!wsEls.units.value.trim()) wsEls.units.value = String(line.quantity || 1);
-  if (!wsEls.price.value.trim() && Number(line.price)) wsEls.price.value = Number(line.price).toFixed(2);
+  wsEls.units.value = String(line.quantity || 1);
+  wsEls.price.value = Number(line.price) ? Number(line.price).toFixed(2) : '';
   // Dispute Settlement mirrors the price line — what the customer paid is
   // the amount at stake (cleared by hand when there is no dispute)
-  if (!wsEls.settle.value.trim()) wsEls.settle.value = wsEls.price.value;
+  wsEls.settle.value = wsEls.price.value;
   wsRenderCond();
 }
 
@@ -3761,6 +3772,7 @@ function wsLineMenu() {
 
 function wsReset() {
   for (const [key] of WS_FIELDS) wsEls[key].value = '';
+  wsDateFill();
   ws = wsBlank();
   wsFixClose();
   const menu = document.querySelector('.ws-emenu');
@@ -3776,6 +3788,12 @@ async function wsSave() {
   for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
   const sku = v.sku.toUpperCase();
   if (!v.po && !sku && !v.cust && !v.trk && !v.note) return; // a blank row is a stray Enter
+  let receivedDay = '';
+  if (v.date) {
+    const m = v.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) { toast('Date must look like 09/10/2026.'); wsEls.date.focus(); return; }
+    receivedDay = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
   let target = '';
   let qty = 1;
   if (sku) {
@@ -3810,6 +3828,7 @@ async function wsSave() {
     customer: v.cust,
     tracking: v.trk,
     receivedBy: by,
+    receivedDay, // the typed Date Received cell (empty = today)
     unmatched: !!ws.unmatched,
     note: sku ? '' : v.note,
     items: sku ? [{

@@ -394,10 +394,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       !!document.querySelector('#retPastBox tr.ws-row #wsPo'),
       (function () { const a = document.querySelector('#wsPo'); a.value = 'KEEP-ME'; renderRetLog(); return document.querySelector('#wsPo').value; })(),
       document.querySelectorAll('#retPastBox tr.ws-row .ws-in').length,
+      $('ws_date').value,
     ]`);
-    check('entry row: PO launcher present, survives re-render, 9 typable columns',
+    check('entry row: PO cell present, survives re-render, 10 typable columns, date prefills today',
       entryBits[0] === true && entryBits[1] === true && entryBits[2] === 'KEEP-ME'
-        && entryBits[3] === 9,
+        && entryBits[3] === 10 && /^\d{2}\/\d{2}\/\d{4}$/.test(entryBits[4]),
       entryBits);
     await exec(`$('wsPo').value = ''; 0;`);
     // 24c-ter. NO-POPUP receiving (owner 2026-09-10): Enter in the row
@@ -413,6 +414,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       $('ws_cust').value = 'Walk-in Willie';
       $('ws_sku').value = 's25-128gb-navy';
       $('ws_units').value = '2';
+      $('ws_date').value = '08/15/2026'; // a typed (backdated) Date Received
       $('ws_note').value = 'no label on the box';
       $('ws_cust').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       0;`);
@@ -429,6 +431,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('Enter receives in place: PO-less unmatched entry, row cleared, NO popup',
       inlineGot && inlineGot.orderNumber === '' && inlineGot.unmatched === true
         && inlineGot.customer === 'Walk-in Willie'
+        && inlineGot.receivedDay === '2026-08-15'
         && inlineGot.items.length === 1 && inlineGot.items[0].sku === 'S25-128GB-NAVY'
         && inlineGot.items[0].qty === 2 && inlineGot.items[0].condition === 'new'
         && inlineGot.items[0].targetSku === 'S25-128GB-NAVY'
@@ -445,6 +448,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
           { sku: 'S25-128GB-NAVY', channelSku: 'WM-NAVY', title: '', quantity: 1, price: 149.99,
             targets: { openbox: '', used: '', scrap: '' } },
         ] } });
+      $('ws_cust').value = 'WRONG NAME'; // the lookup OVERWRITES typed cells
       $('wsPo').value = '119888000000001';
       $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       0;`);
@@ -454,7 +458,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       $('ws_price').value, $('ws_settle').value,
       !!document.querySelector('#retRecvDialog[open]'),
     ]`);
-    check('PO Enter fills the row from the order — customer, tracking, SKU, price, settle',
+    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price, settle',
       looked[0] === 'Cara Cross' && looked[1] === 'TRK-9' && looked[2] === 'S25-128GB-NAVY'
         && looked[3] === '149.99' && looked[4] === '149.99' && looked[5] === false,
       looked);
