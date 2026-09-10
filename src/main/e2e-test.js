@@ -482,9 +482,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
     ]`);
     check('the row condition pill opens the 5-pill menu (Different return included), still no popup',
       wsMenu[0] === 5 && wsMenu[1] === false, wsMenu);
-    // 24c-quater. Different return (owner 2026-09-10): the SKU cell holds
-    // what ACTUALLY came back — junk text saves log-only with a
-    // "supposed to be" note, a real listing restocks itself
+    // 24c-quater. Different return (owner 2026-09-10): the ORDERED SKU
+    // stays in the cell and a "→ what came back" line grows under it —
+    // junk text saves log-only, a real listing restocks itself
     await exec(`
       window.__rvGot2 = null;
       recvItems = [{ sku: 'S25-128GB-NAVY', title: 'Navy', barcode: '' }];
@@ -492,38 +492,48 @@ module.exports = async function run({ app, win, db, clipboard }) {
       recvByBarcode = new Map();
       recvLookup = 'ready';
       $('wsPo').value = 'PO-DIFF-1'; ws.looked = 'PO-DIFF-1';
-      ws.origSku = 'S25-128GB-NAVY';
       ws.condition = 'different';
-      $('ws_sku').value = 'GARBAGE';
+      $('ws_sku').value = 'S25-128GB-NAVY';
+      wsRenderCond();
+      $('ws_recv').value = 'GARBAGE';
       wsRenderCond();
       0;`);
-    const dWarn = await exec(`[!!document.querySelector('#wsWarn'), !!document.querySelector('#wsCond')]`);
-    check('different return: unknown text grows the ⚠ (create/pick on offer)',
-      dWarn[0] === true && dWarn[1] === true, dWarn);
+    const dWarn = await exec(`[
+      !!document.querySelector('#ws_recv'),
+      $('ws_sku').value,
+      !!document.querySelector('#wsWarn'),
+    ]`);
+    check('different return: the → line appears, ordered SKU untouched, junk grows the ⚠',
+      dWarn[0] === true && dWarn[1] === 'S25-128GB-NAVY' && dWarn[2] === true, dWarn);
     await exec(`wsSave(); 0;`);
     for (let w = 0; w < 40; w++) {
       await sleep(150);
       inlineGot = await exec(`window.__rvGot2`);
       if (inlineGot) break;
     }
-    check('different return of junk saves log-only with the supposed-to-be note',
+    check('junk on the → line saves log-only: ordered SKU kept, received recorded, no stock',
       inlineGot && inlineGot.items[0].condition === 'different'
-        && inlineGot.items[0].sku === 'GARBAGE' && inlineGot.items[0].targetSku === ''
-        && /supposed to be S25-128GB-NAVY/.test(inlineGot.items[0].note),
+        && inlineGot.items[0].sku === 'S25-128GB-NAVY'
+        && inlineGot.items[0].received === 'GARBAGE'
+        && inlineGot.items[0].targetSku === '',
       inlineGot);
     await exec(`
       window.__rvGot2 = null;
       $('wsPo').value = 'PO-DIFF-2'; ws.looked = 'PO-DIFF-2';
       ws.condition = 'different';
-      $('ws_sku').value = 'S25-128GB-NAVY';
+      $('ws_sku').value = 'S26-ULTRA';
+      wsRenderCond();
+      $('ws_recv').value = 'S25-128GB-NAVY';
       wsRenderCond(); wsSave(); 0;`);
     for (let w = 0; w < 40; w++) {
       await sleep(150);
       inlineGot = await exec(`window.__rvGot2`);
       if (inlineGot) break;
     }
-    check('different return of a REAL listing restocks that listing',
+    check('a REAL listing on the → line restocks that listing',
       inlineGot && inlineGot.items[0].condition === 'different'
+        && inlineGot.items[0].sku === 'S26-ULTRA'
+        && inlineGot.items[0].received === 'S25-128GB-NAVY'
         && inlineGot.items[0].targetSku === 'S25-128GB-NAVY',
       inlineGot);
     await exec(`

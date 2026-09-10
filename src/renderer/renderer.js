@@ -3520,7 +3520,29 @@ function wsDateFill() {
 }
 
 function wsBlank() {
-  return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '', origSku: '' };
+  return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
+}
+
+// Different return keeps the ORDERED SKU in the cell and grows a second
+// "→ what came back" line under it (owner 2026-09-10: same look as the
+// log's arrow line) — this manages that extra input's life cycle
+function wsRecvEl() { return retEntryTr ? retEntryTr.querySelector('#ws_recv') : null; }
+function wsRecvVal() { const r = wsRecvEl(); return r ? r.value.trim() : ''; }
+
+function wsSyncRecv() {
+  let r = wsRecvEl();
+  if (ws.condition !== 'different') { if (r) r.remove(); return; }
+  if (r) return;
+  wsEls.sku.insertAdjacentHTML('afterend', `<input id="ws_recv" class="ws-in mono ws-recv" type="text"
+    placeholder="→ what came back…" autocomplete="off" spellcheck="false" aria-label="What actually came back" />`);
+  r = wsRecvEl();
+  r.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    wsSave();
+  });
+  r.addEventListener('input', () => wsRenderCond());
 }
 
 function wsInput(key) {
@@ -3589,16 +3611,18 @@ function retEntryRow() {
 // when the graded listing is missing
 function wsRenderCond() {
   if (!wsEls) return;
+  wsSyncRecv();
   const sku = wsEls.sku.value.trim();
+  const recv = wsRecvVal();
   const c = ws.condition;
   const resolved = c === 'new' ? sku : (((ws.targets || {})[c]) || ws.pick);
-  // Different return: the ⚠ means "that text isn't a listing" (saving is
+  // Different return: the ⚠ means "the → line isn't a listing" (saving is
   // still allowed — it logs with no stock move); other grades block on it
   const missing = c === 'different'
-    ? (!!sku && recvLookup === 'ready' && !recvLookupExact(sku))
+    ? (!!recv && recvLookup === 'ready' && !recvLookupExact(recv))
     : (!!sku && c !== 'new' && !resolved);
   const warnTitle = c === 'different'
-    ? `${sku} isn't an inventory listing — it saves as log-only; click to create it or pick what came back`
+    ? `${recv} isn't an inventory listing — it saves as log-only; click to create it or pick what came back`
     : `No ${retCondLabel(c).toLowerCase()} listing for ${sku} yet — click to create or pick one`;
   wsEls.condCell.innerHTML = `
     <button id="wsCond" type="button" class="ret-cond-ro is-${esc(c)}" title="Condition it came back in — click to change">
@@ -3643,9 +3667,9 @@ function wsCondMenu() {
     wsRenderCond();
     wsResolveTargets();
     if (ws.condition === 'different') {
-      // the SKU cell now means "what ACTUALLY came back" — typing replaces
-      wsEls.sku.focus();
-      wsEls.sku.select();
+      // the ordered SKU stays put; typing goes into the new → line
+      const r = wsRecvEl();
+      if (r) r.focus();
     }
   });
   setTimeout(() => document.addEventListener('mousedown', away, true), 0);
@@ -3655,11 +3679,11 @@ function wsCondMenu() {
 // pick an existing one — same engine as everywhere else
 function wsFixOpen() {
   const warn = wsEls.condCell.querySelector('#wsWarn');
-  const sku = wsEls.sku.value.trim().toUpperCase();
+  const diff = ws.condition === 'different';
+  const sku = diff ? wsRecvVal().toUpperCase() : wsEls.sku.value.trim().toUpperCase();
   if (!warn || !sku) return;
   const fix = $('wsFix');
   if (!fix.hidden) { wsFixClose(); return; }
-  const diff = ws.condition === 'different';
   $('wsFixMsg').innerHTML = diff
     ? `<span class="mono">${esc(sku)}</span> isn’t an inventory listing — it saves as a log-only line. Create it, or pick what actually came back:`
     : `There’s no <b>${esc(retCondLabel(ws.condition).toLowerCase())}</b> listing for <span class="mono">${esc(sku)}</span> yet — create it?`;
@@ -3690,9 +3714,10 @@ $('wsFixCreate').addEventListener('click', () => {
   const cond = ws.condition;
   wsFixClose();
   if (cond === 'different') {
-    // a brand-new item IS what came back: create it and it becomes the SKU
+    // a brand-new item IS what came back: create it, it fills the → line
     openNewSkuDialog({ sku: $('wsFixCreate').dataset.sku, title: skuTitleSuggestion($('wsFixCreate').dataset.sku) }, (newSku) => {
-      wsEls.sku.value = newSku;
+      const r = wsRecvEl();
+      if (r) r.value = newSku;
       toast(`${newSku} created`);
       wsRenderCond();
     });
@@ -3708,8 +3733,9 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
   const sku = wsEls.sku.value.trim().toUpperCase();
   const cond = ws.condition;
   if (cond === 'different') {
-    // picking IS the answer: that listing is what actually came back
-    wsEls.sku.value = item.sku;
+    // picking IS the answer: that listing fills the → line
+    const r = wsRecvEl();
+    if (r) r.value = item.sku;
     wsFixClose();
     wsRenderCond();
     return;
@@ -3760,7 +3786,6 @@ async function wsLookup(po) {
 
 function wsUseLine(line) {
   wsEls.sku.value = line.sku || '';
-  ws.origSku = line.sku || ''; // what was ORDERED, for Different-return notes
   ws.targets = line.targets || null;
   ws.pick = '';
   wsEls.units.value = String(line.quantity || 1);
@@ -3831,16 +3856,19 @@ async function wsSave() {
   }
   let target = '';
   let qty = 1;
-  let noteOut = v.note;
-  if (sku) {
+  let received = '';
+  if (sku || (ws.condition === 'different' && wsRecvVal())) {
     if (ws.condition === 'different') {
-      // whatever ACTUALLY came back: a real listing restocks itself, plain
-      // text (e.g. GARBAGE) logs with no stock move — never blocked
-      target = recvLookup === 'ready' && recvLookupExact(sku) ? sku : '';
-      if (ws.origSku && ws.origSku.toUpperCase() !== sku
-        && !noteOut.toUpperCase().includes(ws.origSku.toUpperCase())) {
-        noteOut = [`supposed to be ${ws.origSku}`, noteOut].filter(Boolean).join(' — ');
+      // the → line holds what ACTUALLY came back: a real listing restocks
+      // itself, plain text (e.g. GARBAGE) logs with no stock move
+      received = wsRecvVal().toUpperCase();
+      if (!received) {
+        const r = wsRecvEl();
+        if (r) r.focus();
+        toast('Type what actually came back on the → line under the SKU.');
+        return;
       }
+      target = recvLookup === 'ready' && recvLookupExact(received) ? received : '';
     } else {
       target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
       if (!target) {
@@ -3876,17 +3904,20 @@ async function wsSave() {
     receivedBy: by,
     receivedDay, // the typed Date Received cell (empty = today)
     unmatched: !!ws.unmatched,
-    note: sku ? '' : noteOut,
-    items: sku ? [{
-      sku, condition: ws.condition, targetSku: target, qty,
+    note: (sku || received) ? '' : v.note,
+    items: (sku || received) ? [{
+      // no ordered SKU on record: what came back IS the line
+      sku: sku || received,
+      received: sku ? received : '',
+      condition: ws.condition, targetSku: target, qty,
       price: retMoney(v.price),
       settle: retMoney(v.settle),
-      note: noteOut,
+      note: v.note,
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
   ws.busy = false;
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save the return.'); return; }
-  toast(sku ? `Received ${sku} ×${qty}` : `Logged ${v.po}`, 2500);
+  toast((sku || received) ? `Received ${sku || received} ×${qty}` : `Logged ${v.po}`, 2500);
   wsReset();
   loadRetPast();
   wsEls.po.focus();
@@ -4378,7 +4409,9 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="mono ret-cell-trk ret-ecell" data-edit="tracking" title="${esc(r.tracking || '')}">${r.tracking ? esc(shorten(r.tracking, 16)) : '<span class="cell-missing">—</span>'}</td>
       <td class="mono ret-cell-date ret-ecell" data-edit="day" title="Received ${esc(day)} ${fmtTime(r.created_at)}${r.received_by ? ` by ${esc(r.received_by)}` : ''}">${retDateUS(day)}</td>
       <td class="ret-cell-sku ret-ecell" data-edit="sku">${i.sku ? `<span class="mono">${esc(i.sku)}</span>` : '<span class="cell-missing">—</span>'}
-        ${i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : '')}
+        ${i.condition === 'different' && (i.received || i.targetSku)
+    ? `<div class="ret-cell-target" title="${i.targetSku ? `What came back — stock landed on ${esc(i.targetSku)}` : 'What came back — not a listing, no stock moved'}">→ ${esc(i.received || i.targetSku)}${i.targetSku ? retUnlistedMark(i.targetSku) : ''}</div>`
+    : (i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : ''))}
       </td>
       <td class="ret-cell-cond ret-ecell" data-edit="condition">
         ${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}

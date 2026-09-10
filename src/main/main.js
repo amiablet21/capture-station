@@ -2373,6 +2373,7 @@ function registerIpc() {
       .map(i => ({
         sku: String(i.sku || '').trim(),
         condition: String(i.condition || '').trim(),
+        received: String(i.received || '').trim().slice(0, 120), // Different return: what actually came back
         targetSku: String(i.targetSku || '').trim(),
         qty: Number(i.qty),
         price: Math.max(0, Math.round((Number(i.price) || 0) * 100) / 100),
@@ -3357,10 +3358,13 @@ function registerIpc() {
         if (newSku !== it.sku || newCond !== it.condition) {
           if (newCond === 'new') newTarget = newSku;
           else if (newCond === 'different') {
-            // what ACTUALLY came back: a real listing restocks itself,
-            // anything else logs with no stock (never an error)
+            // the line's "received" (what actually came back) decides:
+            // a real listing restocks itself, anything else logs with no
+            // stock (never an error). Editing the SKU cell edits the
+            // ORDERED item; the received text rides along unchanged.
+            const came = String(it.received || newSku);
             const skus = await getInventorySkus(cfg).catch(() => []);
-            newTarget = skus.some(s => String(s).toUpperCase() === newSku.toUpperCase()) ? newSku : '';
+            newTarget = skus.some(s => String(s).toUpperCase() === came.toUpperCase()) ? came : '';
           } else {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';

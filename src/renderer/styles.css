@@ -1753,6 +1753,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* no-popup receiving (owner 2026-09-10): the condition pill lives in the
    row, its menu and the ⚠ popover anchor to the viewport — never modal */
 .ws-cond-cell { white-space: nowrap; }
+/* Different return's second line: "→ what came back", same voice as the
+   log's arrow line under the SKU */
+.ws-in.ws-recv { display: block; width: 100%; margin-top: 2px; font-size: 10.5px; color: var(--accent-soft-text); }
+.ws-in.ws-recv::placeholder { color: var(--faint); font-family: var(--mono); }
 .ws-cond-cell .ret-cond-ro { border: none; font-family: var(--font); cursor: pointer; }
 .ws-cond-cell .rv-warn { margin-left: 6px; vertical-align: middle; }
 .ws-emenu {
