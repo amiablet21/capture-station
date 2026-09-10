@@ -2343,7 +2343,8 @@ function registerIpc() {
     for (const rec of db.listReturns(100000)) {
       let changed = false;
       const items = (rec.items || []).map(it => {
-        if (!it.sku || it.targetSku || !it.condition || it.condition === 'new') return it;
+        // 'different' returns of unlisted junk are legitimately target-less
+        if (!it.sku || it.targetSku || !it.condition || it.condition === 'new' || it.condition === 'different') return it;
         const target = (db.resolveConditionTargets(it.sku, skus) || {})[it.condition] || '';
         if (target) { changed = true; relinked++; return { ...it, targetSku: target }; }
         const key = `${String(it.sku).toUpperCase()}|${it.condition}`;
@@ -2372,6 +2373,7 @@ function registerIpc() {
       .map(i => ({
         sku: String(i.sku || '').trim(),
         condition: String(i.condition || '').trim(),
+        received: String(i.received || '').trim().slice(0, 120), // Different return: what actually came back
         targetSku: String(i.targetSku || '').trim(),
         qty: Number(i.qty),
         price: Math.max(0, Math.round((Number(i.price) || 0) * 100) / 100),
@@ -3355,7 +3357,15 @@ function registerIpc() {
         let newTarget = it.targetSku || '';
         if (newSku !== it.sku || newCond !== it.condition) {
           if (newCond === 'new') newTarget = newSku;
-          else {
+          else if (newCond === 'different') {
+            // the line's "received" (what actually came back) decides:
+            // a real listing restocks itself, anything else logs with no
+            // stock (never an error). Editing the SKU cell edits the
+            // ORDERED item; the received text rides along unchanged.
+            const came = String(it.received || newSku);
+            const skus = await getInventorySkus(cfg).catch(() => []);
+            newTarget = skus.some(s => String(s).toUpperCase() === came.toUpperCase()) ? came : '';
+          } else {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
             if (!newTarget && it.targetSku) {
@@ -3363,13 +3373,17 @@ function registerIpc() {
             }
           }
         }
-        // stock corrections: target moved (swap old qty out, new qty in) or
-        // quantity changed on the same target (delta the difference)
+        // stock corrections: target moved (swap old qty out, new qty in),
+        // target GONE (a Different return of unlisted junk: old stock out),
+        // or quantity changed on the same target (delta the difference)
         if (it.targetSku) {
           const deltas = [];
           if (newTarget && newTarget !== it.targetSku) {
             deltas.push({ sku: it.targetSku, delta: -oldQty }, { sku: newTarget, delta: newQty });
             stockNote = `stock corrected: -${oldQty} ${it.targetSku}, +${newQty} ${newTarget}`;
+          } else if (!newTarget && (newSku !== it.sku || newCond !== it.condition)) {
+            deltas.push({ sku: it.targetSku, delta: -oldQty });
+            stockNote = `stock corrected: -${oldQty} ${it.targetSku} (nothing restocked)`;
           } else if (newQty !== oldQty) {
             deltas.push({ sku: it.targetSku, delta: newQty - oldQty });
             stockNote = `stock corrected: ${newQty > oldQty ? '+' : ''}${newQty - oldQty} ${it.targetSku}`;

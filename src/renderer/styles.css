@@ -1028,6 +1028,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-dd-dot.is-openbox { background: var(--badge-blue-text); }
 .ret-dd-dot.is-used { background: var(--badge-yellow-text); }
 .ret-dd-dot.is-scrap { background: var(--badge-red-text); }
+.ret-dd-dot.is-different { background: var(--muted); }
 
 .ret-dd-menu {
   position: fixed;
@@ -1690,6 +1691,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-log-table .ret-cond-ro.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ret-log-table .ret-cond-ro.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 .ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.ret-log-table .ret-cond-ro.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 
 /* money columns: price muted, settlement bold green (set further up) */
 .ret-cell-price { color: var(--muted); }
@@ -1751,6 +1753,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 /* no-popup receiving (owner 2026-09-10): the condition pill lives in the
    row, its menu and the ⚠ popover anchor to the viewport — never modal */
 .ws-cond-cell { white-space: nowrap; }
+/* Different return's second line: "→ what came back", same voice as the
+   log's arrow line under the SKU */
+.ws-in.ws-recv { display: block; width: 100%; margin-top: 2px; font-size: 10.5px; color: var(--accent-soft-text); }
+.ws-in.ws-recv::placeholder { color: var(--faint); font-family: var(--mono); }
 .ws-cond-cell .ret-cond-ro { border: none; font-family: var(--font); cursor: pointer; }
 .ws-cond-cell .rv-warn { margin-left: 6px; vertical-align: middle; }
 .ws-emenu {
@@ -1959,6 +1965,7 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ret-cbadge.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ret-cbadge.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 .ret-cbadge.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.ret-cbadge.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 
 /* ---------- DropShip program + reorder points ---------- */
 
