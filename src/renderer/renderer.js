@@ -3018,6 +3018,10 @@ const RET_CONDS = [
   { key: 'openbox', label: 'Open box' },
   { key: 'used', label: 'Used' },
   { key: 'scrap', label: 'Scrap' },
+  // the customer sent back something else entirely (owner 2026-09-10):
+  // the SKU cell holds what ACTUALLY came back — an existing listing
+  // (stock moves onto it), a brand-new item, or plain text (log-only)
+  { key: 'different', label: 'Different return' },
 ];
 const RET_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
 
@@ -3516,7 +3520,7 @@ function wsDateFill() {
 }
 
 function wsBlank() {
-  return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
+  return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '', origSku: '' };
 }
 
 function wsInput(key) {
@@ -3588,19 +3592,25 @@ function wsRenderCond() {
   const sku = wsEls.sku.value.trim();
   const c = ws.condition;
   const resolved = c === 'new' ? sku : (((ws.targets || {})[c]) || ws.pick);
-  const missing = !!sku && c !== 'new' && !resolved;
+  // Different return: the ⚠ means "that text isn't a listing" (saving is
+  // still allowed — it logs with no stock move); other grades block on it
+  const missing = c === 'different'
+    ? (!!sku && recvLookup === 'ready' && !recvLookupExact(sku))
+    : (!!sku && c !== 'new' && !resolved);
+  const warnTitle = c === 'different'
+    ? `${sku} isn't an inventory listing — it saves as log-only; click to create it or pick what came back`
+    : `No ${retCondLabel(c).toLowerCase()} listing for ${sku} yet — click to create or pick one`;
   wsEls.condCell.innerHTML = `
     <button id="wsCond" type="button" class="ret-cond-ro is-${esc(c)}" title="Condition it came back in — click to change">
       <span class="ret-dd-dot is-${esc(c)}"></span>${esc(retCondLabel(c))}</button>
-    ${missing ? `<button id="wsWarn" type="button" class="rv-warn"
-      title="No ${esc(retCondLabel(c).toLowerCase())} listing for ${esc(sku)} yet — click to create or pick one">⚠</button>` : ''}`;
+    ${missing ? `<button id="wsWarn" type="button" class="rv-warn" title="${esc(warnTitle)}">⚠</button>` : ''}`;
 }
 
 // non-new grades need a landing listing: resolve quietly whenever the SKU
 // or condition settles, so the ⚠ only shows for real gaps
 async function wsResolveTargets() {
   const sku = wsEls.sku.value.trim().toUpperCase();
-  if (!sku || ws.condition === 'new' || (ws.targets || {})[ws.condition]) { wsRenderCond(); return; }
+  if (!sku || ws.condition === 'new' || ws.condition === 'different' || (ws.targets || {})[ws.condition]) { wsRenderCond(); return; }
   const tr = await api.returnsTargets(sku).catch(() => null);
   if (tr && tr.ok) ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
   wsRenderCond();
@@ -3632,6 +3642,11 @@ function wsCondMenu() {
     ws.condition = b.dataset.cond;
     wsRenderCond();
     wsResolveTargets();
+    if (ws.condition === 'different') {
+      // the SKU cell now means "what ACTUALLY came back" — typing replaces
+      wsEls.sku.focus();
+      wsEls.sku.select();
+    }
   });
   setTimeout(() => document.addEventListener('mousedown', away, true), 0);
 }
@@ -3644,10 +3659,13 @@ function wsFixOpen() {
   if (!warn || !sku) return;
   const fix = $('wsFix');
   if (!fix.hidden) { wsFixClose(); return; }
-  $('wsFixMsg').innerHTML = `There’s no <b>${esc(retCondLabel(ws.condition).toLowerCase())}</b> listing for <span class="mono">${esc(sku)}</span> yet — create it?`;
-  const suggested = retSuggestCondSku(sku, ws.condition);
+  const diff = ws.condition === 'different';
+  $('wsFixMsg').innerHTML = diff
+    ? `<span class="mono">${esc(sku)}</span> isn’t an inventory listing — it saves as a log-only line. Create it, or pick what actually came back:`
+    : `There’s no <b>${esc(retCondLabel(ws.condition).toLowerCase())}</b> listing for <span class="mono">${esc(sku)}</span> yet — create it?`;
+  const suggested = diff ? sku : retSuggestCondSku(sku, ws.condition);
   const btn = $('wsFixCreate');
-  const canCreate = RET_PREFIX[ws.condition] && !(recvLookup === 'ready' && recvLookupExact(suggested));
+  const canCreate = (diff || RET_PREFIX[ws.condition]) && !(recvLookup === 'ready' && recvLookupExact(suggested));
   btn.hidden = !canCreate;
   btn.innerHTML = `Create <span class="mono">${esc(suggested)}</span>`;
   btn.dataset.sku = suggested;
@@ -3671,6 +3689,15 @@ $('wsFixCreate').addEventListener('click', () => {
   const sku = wsEls.sku.value.trim().toUpperCase();
   const cond = ws.condition;
   wsFixClose();
+  if (cond === 'different') {
+    // a brand-new item IS what came back: create it and it becomes the SKU
+    openNewSkuDialog({ sku: $('wsFixCreate').dataset.sku, title: skuTitleSuggestion($('wsFixCreate').dataset.sku) }, (newSku) => {
+      wsEls.sku.value = newSku;
+      toast(`${newSku} created`);
+      wsRenderCond();
+    });
+    return;
+  }
   openCondSkuCreate(sku, cond, $('wsFixCreate').dataset.sku, (target) => {
     ws.targets = { ...(ws.targets || {}), [cond]: target };
     wsRenderCond();
@@ -3680,6 +3707,13 @@ $('wsFixCreate').addEventListener('click', () => {
 makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (item) => {
   const sku = wsEls.sku.value.trim().toUpperCase();
   const cond = ws.condition;
+  if (cond === 'different') {
+    // picking IS the answer: that listing is what actually came back
+    wsEls.sku.value = item.sku;
+    wsFixClose();
+    wsRenderCond();
+    return;
+  }
   const map = await api.returnsMapSet(sku, cond, item.sku);
   if (!map.ok) { toast(map.error || 'Could not save the mapping.'); return; }
   toast(`${sku} ${cond} → ${map.targetSku}`);
@@ -3726,6 +3760,7 @@ async function wsLookup(po) {
 
 function wsUseLine(line) {
   wsEls.sku.value = line.sku || '';
+  ws.origSku = line.sku || ''; // what was ORDERED, for Different-return notes
   ws.targets = line.targets || null;
   ws.pick = '';
   wsEls.units.value = String(line.quantity || 1);
@@ -3796,24 +3831,35 @@ async function wsSave() {
   }
   let target = '';
   let qty = 1;
+  let noteOut = v.note;
   if (sku) {
-    target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
-    if (!target) {
-      // one quiet resolve attempt before complaining (hand-typed SKUs)
-      const tr = await api.returnsTargets(sku).catch(() => null);
-      if (tr && tr.ok) {
-        ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
-        target = (ws.targets[ws.condition]) || '';
+    if (ws.condition === 'different') {
+      // whatever ACTUALLY came back: a real listing restocks itself, plain
+      // text (e.g. GARBAGE) logs with no stock move — never blocked
+      target = recvLookup === 'ready' && recvLookupExact(sku) ? sku : '';
+      if (ws.origSku && ws.origSku.toUpperCase() !== sku
+        && !noteOut.toUpperCase().includes(ws.origSku.toUpperCase())) {
+        noteOut = [`supposed to be ${ws.origSku}`, noteOut].filter(Boolean).join(' — ');
       }
-    }
-    if (!target) {
-      wsRenderCond();
-      toast(`No ${retCondLabel(ws.condition).toLowerCase()} listing for ${sku} — press the ⚠ to create or pick one.`);
-      return;
-    }
-    if (recvLookup === 'ready' && !recvLookupExact(target)) {
-      toast(`Unknown SKU: ${target}. Pick one from the inventory.`);
-      return;
+    } else {
+      target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
+      if (!target) {
+        // one quiet resolve attempt before complaining (hand-typed SKUs)
+        const tr = await api.returnsTargets(sku).catch(() => null);
+        if (tr && tr.ok) {
+          ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
+          target = (ws.targets[ws.condition]) || '';
+        }
+      }
+      if (!target) {
+        wsRenderCond();
+        toast(`No ${retCondLabel(ws.condition).toLowerCase()} listing for ${sku} — press the ⚠ to create or pick one.`);
+        return;
+      }
+      if (recvLookup === 'ready' && !recvLookupExact(target)) {
+        toast(`Unknown SKU: ${target}. Pick one from the inventory.`);
+        return;
+      }
     }
     qty = v.units ? Number(v.units) : 1;
     if (!Number.isInteger(qty) || qty < 1) { toast('Units must be a whole number of 1 or more.'); return; }
@@ -3830,12 +3876,12 @@ async function wsSave() {
     receivedBy: by,
     receivedDay, // the typed Date Received cell (empty = today)
     unmatched: !!ws.unmatched,
-    note: sku ? '' : v.note,
+    note: sku ? '' : noteOut,
     items: sku ? [{
       sku, condition: ws.condition, targetSku: target, qty,
       price: retMoney(v.price),
       settle: retMoney(v.settle),
-      note: v.note,
+      note: noteOut,
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
   ws.busy = false;
@@ -4665,6 +4711,9 @@ function retBeginCondEdit(td, entry) {
 // (owner 2026-09-09: "if there isn't one, allow me to create it on this page")
 async function retCondEdit(entry, cond) {
   if (cond === 'new') { retSaveEdit(entry, 'condition', cond); return; }
+  // Different return: the server decides log-only vs restock from whether
+  // the SKU is a real listing — no mapping to check here
+  if (cond === 'different') { retSaveEdit(entry, 'condition', cond); return; }
   const tr = await api.returnsTargets(entry.i.sku).catch(() => null);
   // lookup unavailable: let the save try anyway, the server re-resolves
   if (!tr || !tr.ok) { retSaveEdit(entry, 'condition', cond); return; }
