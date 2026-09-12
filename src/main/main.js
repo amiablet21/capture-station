@@ -3637,24 +3637,18 @@ function registerIpc() {
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
-        // — Linnworks item retail prices are deliberately left empty here)
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
+        // (the per-SKU channel-price lookup left with the Value idle column,
+        // owner 2026-09-12 — one fewer throttled API call per unlisted SKU)
         detail.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId, // the add-image button needs it
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
-    detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+    detail.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
     unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
@@ -3699,23 +3693,17 @@ function registerIpc() {
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
         kept.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId,
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
     if (changed) {
-      kept.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+      kept.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
       unlistedCache = { ...unlistedCache, skus: kept.map(d => d.sku), detail: kept, covered: [...covered] };
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
       if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');

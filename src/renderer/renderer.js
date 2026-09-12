@@ -2005,7 +2005,7 @@ function renderStockChips() {
     // only exists while there is something to fix — in-stock SKUs no
     // marketplace can currently sell
     + (unlistedDetail && unlActiveDetail().length
-      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlActiveDetail().length}</button>`
+      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked">Unlisted · ${unlActiveDetail().length}</button>`
       : '');
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
@@ -2346,15 +2346,16 @@ function renderUnlistedView() {
   const matches = (unlistedDetail || []).filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
-  // rows whose every channel is bypassed step aside (restorable below)
-  const rows = matches.filter(d => chans.some(ch => !chanSkipKind(d.sku, ch)));
+  // rows whose every channel is bypassed step aside (restorable below);
+  // most units on the shelf first (the Value idle column left with the
+  // dollar framing, owner 2026-09-12)
+  const rows = matches.filter(d => chans.some(ch => !chanSkipKind(d.sku, ch)))
+    .sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
   const parked = matches.filter(d => chans.every(ch => chanSkipKind(d.sku, ch)));
-  const idle = rows.reduce((s, d) => s + d.avail * d.retail, 0);
   $('stockSummary').textContent =
-    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing · ${fmtMoney(idle)} sitting idle`;
+    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing`;
   // per-row chips: gold ✗ = missing (click: "I can't sell it there"),
-  // greyed — = bypassed for this SKU (click restores), rule = the whole
-  // condition is bypassed (click opens the rules)
+  // greyed — = bypassed for this SKU (click restores)
   const missChips = (d) => chans.map(ch => {
     const kind = chanSkipKind(d.sku, ch);
     const name = channelLabel(ch);
@@ -2370,7 +2371,6 @@ function renderUnlistedView() {
         <th>SKU</th>
         <th class="num th-level">Avail</th>
         <th>Missing on</th>
-        <th class="num">Value idle</th>
         <th class="th-actions"></th>
       </tr></thead>
       <tbody>${rows.map((d, idx) => `
@@ -2380,7 +2380,6 @@ function renderUnlistedView() {
           <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
           <td class="num">${d.avail}</td>
           <td>${missChips(d)}</td>
-          <td class="num mono" title="available × channel listing price (highest stored)">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
           <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
             <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
         </tr>`).join('')}</tbody>
@@ -2390,10 +2389,6 @@ function renderUnlistedView() {
       unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
 }
 
-
-function fmtMoney(n) {
-  return '$' + Math.round(Number(n) || 0).toLocaleString();
-}
 
 /* ---------- DropShip program view (pads · pace · BUY signals) ---------- */
 
@@ -3977,7 +3972,7 @@ let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-onl
 // condition SKUs holding returned stock with NO marketplace listing linked
 // yet — surfaced as "not listed" markers so the employee knows what to make
 let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
-let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle value
+let unlistedDetail = null; // [{sku,title,image,avail}] most units first
 let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
