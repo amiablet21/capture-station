@@ -17,6 +17,12 @@
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
       <button id="tabListings" class="tab" hidden>Listings</button>
     </nav>
+    <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
+         under the tab; a <dialog> so the marketplace pane yields while open -->
+    <dialog id="returnsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="returns">Returns log</button>
+      <button class="tab-menu-item" data-page="shelf">Shelf</button>
+    </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
@@ -130,7 +136,6 @@
           <div id="stockChips" class="stock-chips" hidden></div>
           <div class="stock-band-right">
             <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
-            <div id="stockGapsLine" class="stock-gaps" hidden></div>
             <div class="stock-actions">
               <!-- with a condition view active the Shelf carries the selling
                    history — a pointer, not duplicated columns (owner 2026-08-25) -->
@@ -160,12 +165,15 @@
        sorted stalest-first, last sale beside current price (mockups signed
        off 2026-08-25: no week columns, Idle is the one tinted cell) -->
   <section id="shelfPage" class="shelf-page" hidden>
+    <div class="shelf-tiles" id="shTiles"></div>
     <div class="shelf-toolbar">
       <div class="search-field shelf-search">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
         <input id="shSearch" class="search-input" type="text" placeholder="Search SKU" autocomplete="off" spellcheck="false" />
       </div>
       <div id="shChips" class="stock-chips"></div>
+      <span class="sh-range-lbl">Sold in</span>
+      <div id="shRangeChips" class="stock-chips"></div>
       <button id="shRefresh" class="btn btn-ghost" title="Re-pull 90 days of sales and fresh stock">Refresh</button>
     </div>
     <div class="shelf-card">
@@ -850,7 +858,6 @@
       </div>
     </div>
   </dialog>
-  <datalist id="skuOptions"></datalist>
   <!-- the entry row's ⚠ popover (no-popup receiving, owner 2026-09-10):
        anchored beside the condition pill, never a modal -->
   <div id="wsFix" class="rv-fix" hidden>
