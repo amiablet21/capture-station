@@ -17,6 +17,12 @@
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
       <button id="tabListings" class="tab" hidden>Listings</button>
     </nav>
+    <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
+         under the tab; a <dialog> so the marketplace pane yields while open -->
+    <dialog id="returnsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="returns">Returns log</button>
+      <button class="tab-menu-item" data-page="shelf">Shelf — what’s selling</button>
+    </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>

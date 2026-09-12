@@ -3960,31 +3960,9 @@ function registerIpc() {
   // the pane header's globe: a native popup with the seller portals (native
   // so the marketplace page below can never draw over it); the current
   // site wears the checkmark
-  // the Returns tab's dropdown: Returns log | Shelf (owner 2026-08-25 —
-  // Shelf lives under Returns now; NATIVE menu because the marketplace pane
-  // is a native layer that would cover an HTML dropdown). Resolves with the
-  // picked page, or null when dismissed.
-  ipcMain.handle('nav:returnsMenu', (_e, payload) => new Promise((resolve) => {
-    if (!win || win.isDestroyed()) { resolve({ ok: false }); return; }
-    const cfg = config.load();
-    const current = payload && payload.current;
-    // the close callback fires BEFORE item click handlers — resolving there
-    // dropped every pick (v1.20.38 bug: menu opened, clicking did nothing).
-    // Clicks resolve directly; the callback only covers dismiss, after a
-    // beat so a click always wins the race.
-    let done = false;
-    const finish = (page) => { if (!done) { done = true; resolve({ ok: true, page }); } };
-    const items = [
-      { label: 'Returns log', key: 'returns' },
-      ...((cfg.pages || {}).stock ? [{ label: 'Shelf — what’s selling', key: 'shelf' }] : []),
-    ];
-    Menu.buildFromTemplate(items.map(it => ({
-      label: it.label,
-      type: 'checkbox',
-      checked: current === it.key,
-      click: () => finish(it.key),
-    }))).popup({ window: win, callback: () => setTimeout(() => finish(null), 120) });
-  }));
+  // (the Returns tab's Returns log | Shelf dropdown is an in-app <dialog>
+  // in the renderer now — owner 2026-09-12, "make it a dropdown"; the
+  // marketplace pane yields to open dialogs so it can't draw over it)
   ipcMain.handle('browser:platformMenu', () => {
     if (!paneView || !win || win.isDestroyed()) return { ok: false };
     const HOMES = [

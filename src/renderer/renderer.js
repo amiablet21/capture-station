@@ -45,7 +45,6 @@ if (!window.api) {
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
     shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
-    returnsMenu: async () => ({ ok: false }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1192,12 +1191,30 @@ $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
-// native menu (native because the pane layer covers HTML dropdowns)
-$('tabReturns').addEventListener('click', async (e) => {
+// in-app menu (a <dialog>, so the native marketplace pane yields while it is
+// open exactly like every other dialog — replaced the native popup, owner
+// 2026-09-12 "make it a dropdown")
+$('tabReturns').addEventListener('click', (e) => {
   const wantMenu = e.target.closest('.tab-caret') || activePage === 'returns' || activePage === 'shelf';
   if (!wantMenu) { showPage('returns'); return; }
-  const res = await api.returnsMenu(activePage === 'shelf' ? 'shelf' : 'returns').catch(() => null);
-  if (res && res.ok && res.page) showPage(res.page);
+  const dlg = $('returnsMenuDlg');
+  const shelfOn = !!(state && state.pages && state.pages.stock);
+  for (const b of dlg.querySelectorAll('.tab-menu-item')) {
+    b.hidden = b.dataset.page === 'shelf' && !shelfOn;
+    b.classList.toggle('is-current', activePage === b.dataset.page);
+  }
+  dlg.showModal();
+  // anchor under the tab, clamped so a narrow window never clips the menu
+  const r = $('tabReturns').getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+// a click on an item picks it; a click on the backdrop (the dialog itself)
+// dismisses; Esc closes natively
+$('returnsMenuDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('returnsMenuDlg').close();
+  if (item) showPage(item.dataset.page);
 });
 
 /* ---------- Shelf: the warehouse sell-through radar ---------- */

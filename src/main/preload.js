@@ -89,7 +89,6 @@ contextBridge.exposeInMainWorld('api', {
   returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
   returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
-  returnsMenu: (current) => ipcRenderer.invoke('nav:returnsMenu', { current }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
