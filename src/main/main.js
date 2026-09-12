@@ -4079,7 +4079,11 @@ function createWindow() {
 }
 
 function buildMenu() {
+  const mac = process.platform === 'darwin';
   const template = [
+    // macOS titles the FIRST menu with the app's name and expects the
+    // standard app menu there; without it File got swallowed into it
+    ...(mac ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
       submenu: [
@@ -4106,10 +4110,15 @@ function buildMenu() {
         { role: 'quit' },
       ],
     },
+    // Cmd+C/V/X/A/Z on macOS only work when the application menu carries
+    // the edit roles — without an Edit menu copy/paste did nothing on Mac
+    // (owner report 2026-09-12); Windows fires them natively either way
+    { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
-        { label: 'History', accelerator: 'CmdOrCtrl+H', click: () => win && win.webContents.send('ui:open-history') },
+        // Cmd+H is the system-wide Hide on macOS (the app menu owns it now)
+        { label: 'History', accelerator: mac ? 'Cmd+Shift+H' : 'Ctrl+H', click: () => win && win.webContents.send('ui:open-history') },
         { label: 'Ignored Clipboard Log', click: () => win && win.webContents.send('ui:open-debug') },
         { type: 'separator' },
         // dev-only tools stay out of installed builds (warehouse machines)

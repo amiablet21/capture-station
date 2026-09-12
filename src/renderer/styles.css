@@ -2856,6 +2856,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   min-width: 0;
 }
 .wfs-line:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+/* the SKU cell wraps its input so a combo suggestion list can hang off it
+   (the list itself goes position:fixed — the sheet clips absolute children) */
+.wfs-combo { position: relative; display: flex; min-width: 0; }
+.wfs-combo .wfs-sku { flex: 1 1 auto; }
 .wfs-line .wfs-qty { text-align: right; -moz-appearance: textfield; appearance: textfield; }
 .wfs-line .wfs-qty::-webkit-outer-spin-button, .wfs-line .wfs-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .wfs-remove { border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; }

@@ -5567,15 +5567,48 @@ $('imgDialog').addEventListener('close', () => {
 function wfsLineHtml() {
   return `
     <div class="wfs-line">
-      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" />
+      <div class="wfs-combo">
+        <input type="text" class="input mono wfs-sku" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" />
+        <div class="combo-list" hidden></div>
+      </div>
       <input type="text" class="input mono wfs-gtin" autocomplete="off" spellcheck="false" />
       <input type="number" class="input mono wfs-qty" min="1" step="1" />
       <button class="wfs-remove" title="Remove line" type="button">✕</button>
     </div>`;
 }
 
+// case-insensitive inventory lookup: the shared combo list first, the stock
+// sheet's cache as backstop (same items, whichever loaded first)
+function wfsFindSku(q) {
+  const k = String(q || '').trim().toLowerCase();
+  if (!k) return null;
+  if (recvBySku && recvBySku.has(k)) return recvBySku.get(k);
+  return stockCache ? stockCache.items.find(i => i.sku.toLowerCase() === k) || null : null;
+}
+
 function wfsAddLine() {
   $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
+  // each line gets the app's searchable combobox (SKU / title / barcode,
+  // same as the receiving worksheet) — the bare <datalist> matched SKU text
+  // only and wore the OS's own styling (owner 2026-09-12, "not good")
+  const line = $('wfsLines').lastElementChild;
+  const input = line.querySelector('.wfs-sku');
+  makeCombo(input, line.querySelector('.combo-list'), (item) => {
+    input.value = item.sku;
+    const gtin = line.querySelector('.wfs-gtin');
+    if (!gtin.value.trim()) gtin.value = item.barcode || '';
+    wfsGrow();
+    wfsTotals();
+    line.querySelector('.wfs-qty').focus();
+  });
+}
+
+// a fresh entry row appears only when the LAST row holds a real SKU (picked
+// or typed in full) — growing whenever every row had any text duplicated
+// the row at the first letter typed (owner report 2026-09-12)
+function wfsGrow() {
+  const last = $('wfsLines').lastElementChild;
+  if (last && wfsFindSku(last.querySelector('.wfs-sku').value)) wfsAddLine();
 }
 
 // the footer total says exactly what Save will deduct, live
@@ -5591,10 +5624,9 @@ function wfsTotals() {
 }
 
 async function openWfs() {
-  // SKU suggestions + GTIN autofill come from the loaded stock sheet
-  if (stockCache) {
-    $('skuOptions').innerHTML = stockCache.items.map(i => `<option value="${esc(i.sku)}"></option>`).join('');
-  }
+  // SKU suggestions ride the shared inventory list (combo shows "Loading…"
+  // until it lands); GTIN autofill comes from the same items
+  ensureInventory();
   $('wfsLines').innerHTML = '';
   wfsAddLine();
   $('wfsNote').value = '';
@@ -5638,19 +5670,18 @@ $('wfsLines').addEventListener('click', (e) => {
   wfsTotals();
 });
 
-// picking a known SKU pre-fills the GTIN from the item's barcode; filling
-// the last row grows a fresh one under it (spreadsheet feel)
+// typing a full known SKU (without picking from the list) still pre-fills
+// the GTIN and grows the sheet, exactly like a pick
 $('wfsLines').addEventListener('input', (e) => {
   const skuInput = e.target.closest('.wfs-sku');
-  if (skuInput && stockCache) {
-    const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
+  if (skuInput) {
+    const item = wfsFindSku(skuInput.value);
     if (item) {
       const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
       if (!gtin.value.trim()) gtin.value = item.barcode || '';
+      wfsGrow();
     }
   }
-  const lines = [...$('wfsLines').querySelectorAll('.wfs-line')];
-  if (lines.every(l => l.querySelector('.wfs-sku').value.trim())) wfsAddLine();
   wfsTotals();
 });
 
@@ -5667,8 +5698,14 @@ $('wfsSave').addEventListener('click', async () => {
     out.classList.add('is-fail');
     return;
   }
-  if (stockCache) {
-    const unknown = items.filter(i => !stockCache.items.some(s => s.sku === i.sku));
+  if (stockCache || recvBySku) {
+    // canonicalize casing so a hand-typed sku deducts the real item
+    const unknown = [];
+    for (const i of items) {
+      const known = wfsFindSku(i.sku);
+      if (known) i.sku = known.sku;
+      else unknown.push(i);
+    }
     if (unknown.length) {
       out.textContent = `Unknown SKU: ${unknown.map(u => u.sku).join(', ')}`;
       out.classList.add('is-fail');
@@ -5801,8 +5838,9 @@ function makeCombo(input, listEl, onPick, opts) {
   // while a list is open made the whole page shift (owner report 2026-08-06)
   const positionList = () => {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
-    // returns log AND the receive popup's sheet anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet')) return;
+    // returns log, the receive popup's sheet AND the WFS shipment sheet
+    // anchor to the viewport
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
