@@ -1218,22 +1218,18 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
   if (item) showPage(item.dataset.page);
 });
 
-/* ---------- Shelf: the warehouse sell-through radar ---------- */
-// One row per stocked SKU, sorted stalest-first; Idle is the single tinted
-// column. The 2026-08-25 "simpler, then add on" design got its add-on
-// 2026-09-12 (built from the approved demo): a Sold-in period picker,
-// per-SKU sold / avg price / weekly rate / sell-through, a 13-week trend,
-// summary tiles, and sold-out condition SKUs staying on the page.
+/* ---------- Shelf: the returns sell-through radar ---------- */
+// One row per condition SKU (returns only — the owner cut All stock/New
+// 2026-09-12 along with the trend, sell-thru and money tiles), sorted
+// stalest-first; Idle is the single tinted column. Sold / Avg sold at /
+// Rate follow the Sold-in period picker, sold-out returns stay visible.
 let shData = null;
-let shView = 'cond'; // all | new | cond | openbox | used | scrap | soldout
+let shView = ''; // '' = every condition | openbox | used | scrap | soldout
 let shRange = 30; // the Sold-in period, days
 let shSort = { key: 'idle', dir: -1 }; // idle | sold | avg | rate; -1 = biggest first
 let shBusy = false;
 const SH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SH_GROUPS = [
-  ['all', 'All stock', () => true],
-  ['new', 'New', (r) => r.cond === 'new'],
-  ['cond', 'Conditions', (r) => r.cond !== 'new'],
   ['openbox', 'Open Box', (r) => r.cond === 'openbox'],
   ['used', 'Used', (r) => r.cond === 'used'],
   ['scrap', 'Scrap', (r) => r.cond === 'scrap'],
@@ -1292,58 +1288,29 @@ function shStats(r) {
     avg: sold ? revenue / sold : 0,
     rate: sold / (shRange / 7),
     lastPrice: last ? (last[1] ? Math.round((last[2] / last[1]) * 100) / 100 : last[2]) : 0,
-    thru: (sold + r.units) ? sold / (sold + r.units) : 0,
   };
 }
 
-// 13 one-week buckets, oldest→newest; weeks inside the period draw solid
-function shSpark(r) {
-  const wk = new Array(13).fill(0);
-  for (const [ts, qty] of r.sales || []) {
-    const w = Math.floor((Date.now() - ts) / (7 * 86400000));
-    if (w >= 0 && w < 13) wk[w] += qty;
-  }
-  const max = Math.max(1, ...wk);
-  const inWks = Math.ceil(shRange / 7);
-  let bars = '';
-  for (let wAgo = 12; wAgo >= 0; wAgo--) {
-    const n = wk[wAgo];
-    bars += `<i class="${wAgo < inWks ? 'in' : ''}" style="height:${n ? Math.max(15, (n / max) * 100) : 8}%" title="wk of ${shDay(Date.now() - (wAgo * 7 + 6) * 86400000)}: ${n} sold"></i>`;
-  }
-  return `<div class="sh-spark" role="img" aria-label="units sold per week, last 13 weeks">${bars}</div>`;
-}
-
-// the four tiles read the current condition slice (search left out, like
-// the toolbar counts) so "how are the returns doing?" is one glance
+// one tile: how many returns sold in the period and the weekly pace
+// (the sales-$ / avg-price / dead-stock tiles were cut, owner 2026-09-12)
 function renderShTiles(rows, fn) {
-  const slice = rows.filter(fn);
   let sold = 0;
-  let revenue = 0;
-  const dead = [];
-  for (const r of slice) {
-    const st = shStats(r);
-    sold += st.sold;
-    revenue += st.revenue;
-    if (r.units > 0 && shIdleDays(r) >= 30) dead.push(r);
-  }
-  const deadVal = dead.reduce((s, r) => s + r.units * (r.price || 0), 0);
+  for (const r of rows.filter(fn)) sold += shStats(r).sold;
   const label = (SH_RANGES.find(x => x[1] === shRange) || SH_RANGES[1])[0].toLowerCase();
-  const money = (n) => `$${Math.round(n).toLocaleString()}`;
   $('shTiles').innerHTML = `
-    <div class="sh-tile"><div class="sh-tile-l">Sold · ${label}</div><div class="sh-tile-b mono">${sold}</div><div class="sh-tile-f">${(sold / (shRange / 7)).toFixed(1)} per week</div></div>
-    <div class="sh-tile"><div class="sh-tile-l">Sales · ${label}</div><div class="sh-tile-b mono">${money(revenue)}</div><div class="sh-tile-f">what the sold units fetched</div></div>
-    <div class="sh-tile"><div class="sh-tile-l">Avg sale price</div><div class="sh-tile-b mono">${sold ? `$${(revenue / sold).toFixed(2)}` : '—'}</div><div class="sh-tile-f">across ${sold} sold unit${sold === 1 ? '' : 's'}</div></div>
-    <div class="sh-tile ${dead.length ? 'is-alarm' : ''}"><div class="sh-tile-l">Dead stock · 30d+ idle</div><div class="sh-tile-b mono">${money(deadVal)}</div><div class="sh-tile-f">${dead.length} SKU${dead.length === 1 ? '' : 's'} need a price cut or a pull</div></div>`;
+    <div class="sh-tile"><div class="sh-tile-l">Sold · ${label}</div><div class="sh-tile-b mono">${sold}</div><div class="sh-tile-f">${(sold / (shRange / 7)).toFixed(1)} per week</div></div>`;
 }
 
 function renderShelf() {
   if (!shData) return;
   const rows = shData.rows;
+  // chips toggle: the active one clicks off back to every condition
   $('shChips').innerHTML = '<div class="stock-tray">' + SH_GROUPS.map(([key, label, fn]) =>
     `<button class="view-chip ${shView === key ? 'is-active' : ''}" data-shview="${key}">${label} · ${rows.filter(fn).length}</button>`).join('') + '</div>';
   $('shRangeChips').innerHTML = '<div class="stock-tray">' + SH_RANGES.map(([label, d]) =>
     `<button class="view-chip ${shRange === d ? 'is-active' : ''}" data-shrange="${d}">${label}</button>`).join('') + '</div>';
-  const fn = (SH_GROUPS.find(g => g[0] === shView) || SH_GROUPS[0])[2];
+  const group = SH_GROUPS.find(g => g[0] === shView);
+  const fn = group ? group[2] : () => true;
   renderShTiles(rows, fn);
   const q = $('shSearch').value.trim().toUpperCase();
   const stats = new Map();
@@ -1365,8 +1332,6 @@ function renderShelf() {
     + `<th class="r sh-sort" data-shsort="sold" title="Units sold inside the period — click to sort">Sold${arr('sold')}</th>`
     + `<th class="r sh-sort" data-shsort="avg" title="Average realized price inside the period — click to sort">Avg sold at${arr('avg')}</th>`
     + `<th class="r sh-sort" data-shsort="rate" title="Units per week inside the period — click to sort">Rate${arr('rate')}</th>`
-    + `<th class="r" title="sold ÷ (sold + still on the shelf)">Sell-thru</th>`
-    + `<th title="Units sold per week, last 13 weeks; solid bars are inside the period">Trend</th>`
     + `<th class="r sh-sort" data-shsort="idle" title="Days since the last sale (or since arrival) — click to sort">Idle${arr('idle')}</th>`
     + `<th>Last sold</th></tr>`
     + list.map((r, i) => {
@@ -1385,8 +1350,6 @@ function renderShelf() {
         + `<td class="r mono">${st.sold || '<span class="sh-dim">0</span>'}</td>`
         + `<td class="r mono">${st.sold ? `$${st.avg.toFixed(2)}` : '<span class="sh-dim">—</span>'}</td>`
         + `<td class="r mono">${st.sold ? `${st.rate.toFixed(1)}<span class="sh-dim">/wk</span>` : '<span class="sh-dim">—</span>'}</td>`
-        + `<td class="r mono">${(st.sold + r.units) ? `${Math.round(st.thru * 100)}%` : '<span class="sh-dim">—</span>'}</td>`
-        + `<td>${shSpark(r)}</td>`
         + (soldOut ? '<td class="r mono sh-good" title="Sold through — nothing left to move">✓</td>' : `<td class="r mono ${idleCls}">${idleTxt}</td>`)
         + `<td class="mono ${lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
         + (lastTs ? `${shDay(lastTs)} · $${Number(st.lastPrice).toFixed(2)}${ghost ? ' *' : ''}`
@@ -1401,7 +1364,7 @@ function renderShelf() {
 $('shChips').addEventListener('click', (e) => {
   const c = e.target.closest('[data-shview]');
   if (!c) return;
-  shView = c.dataset.shview;
+  shView = shView === c.dataset.shview ? '' : c.dataset.shview; // toggle off = all
   renderShelf();
 });
 $('shRangeChips').addEventListener('click', (e) => {
@@ -1420,7 +1383,7 @@ $('shTable').addEventListener('click', (e) => {
 });
 $('shSearch').addEventListener('input', renderShelf);
 $('shRefresh').addEventListener('click', () => loadShelf(true));
-$('stockShelfLink').addEventListener('click', () => { shView = 'cond'; showPage('shelf'); });
+$('stockShelfLink').addEventListener('click', () => { shView = ''; showPage('shelf'); });
 
 // receiving lives on the Stock page now, as a dialog
 /* ---------- "shipped different item" substitution dialog ---------- */

@@ -2075,10 +2075,11 @@ function registerIpc() {
         const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
         const units = Math.max(0, Number(home.stockLevel) || 0);
         const cond = condOf(k);
+        if (cond === 'new') continue; // returns only (owner 2026-09-12 trim)
         const skuSales = perSku.get(k) || [];
         // the shelf shows what is ON it — plus condition SKUs that SOLD OUT
         // inside the window (the win would otherwise vanish from the page)
-        if (!units && !(cond !== 'new' && skuSales.length)) continue;
+        if (!units && !skuSales.length) continue;
         rows.push({
           sku: it.sku, title: it.title || '', units,
           price: Number(it.retailPrice) || 0,
