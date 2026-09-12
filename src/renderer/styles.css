@@ -1422,34 +1422,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chmap-nfin { border-radius: 999px; }
 
-/* the quiet listing-gaps subline under the stock toolbar */
-.stock-gaps {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 26px 0;
-}
-.stock-gaps-lbl {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--faint);
-}
-.stock-gaps a {
-  color: var(--badge-yellow-text);
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 1px dotted var(--badge-yellow-text);
-}
-.stock-gaps a.on {
-  background: var(--badge-yellow-bg);
-  border-radius: 4px;
-  padding: 1px 7px;
-  border-bottom: none;
-}
 
 /* stock row actions: a floating tray on the right of the SKU cell, shown
    on hover (design B, 2026-08-08) — chart · DS enroll · delete */
@@ -1849,12 +1821,6 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 /* bypassed channel ("can't sell it there"): quiet, still clickable to undo */
 .unl-chn.is-skip { color: var(--faint); border-color: var(--border); }
 .unl-chn.is-skip:hover { background: var(--surface-2); color: var(--muted); }
-/* the condition × channel rules grid */
-.chanrules-t { border-collapse: collapse; margin: 10px 0 4px; }
-.chanrules-t th, .chanrules-t td { padding: 6px 14px; font-size: 12.5px; text-align: center; border-bottom: 1px solid var(--border-soft); }
-.chanrules-t td:first-child { text-align: left; font-weight: 600; }
-.chanrules-t th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-.chanrules-t input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
@@ -2393,7 +2359,6 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
-.stock-band .stock-gaps { padding: 0; gap: 8px; }
 .stock-band .stock-actions { display: flex; gap: 6px; }
 
 /* condition view chips (All / Open Box / …), config-driven */

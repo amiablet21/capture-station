@@ -45,7 +45,6 @@ if (!window.api) {
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
     channelSkip: async () => ({ ok: false, error: 'Preview mode' }),
-    condChannelSkip: async () => ({ ok: false, error: 'Preview mode' }),
     shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1875,7 +1874,6 @@ let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed
 let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
 let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
-let stockMissingCh = ''; // 'walmart'|'ebay'|'temu' = in-stock items with no link on that channel
 let chLinked = null; // { walmart: Set(stockItemId), ebay: Set, temu: Set } | null
 let chLinkedLoading = false;
 
@@ -1894,49 +1892,9 @@ async function loadChLinked() {
   }
 }
 
-// the quiet subline under the toolbar: "MISSING LISTINGS  Walmart 2 · …"
-// (owner picked this over chips, 2026-08-08); a link toggles the filter
-function renderStockGaps() {
-  const line = $('stockGapsLine');
-  if (!line) return;
-  if (!chLinked || activePage !== 'stock') { line.hidden = true; return; }
-  const parts = ['walmart', 'ebay', 'temu'].flatMap(label => {
-    if (!chLinked[label]) return [];
-    const n = stockMissingList(label).length;
-    return n ? [
-      `<a data-gap="${label}" class="${stockMissingCh === label ? 'on' : ''}" title="Show in-stock items with no ${esc(channelLabel(label))} listing linked">${esc(channelLabel(label))} ${n}</a>`,
-    ] : [];
-  });
-  line.hidden = parts.length === 0;
-  line.innerHTML = `<span class="stock-gaps-lbl">Missing listings</span>${parts.join('')}`;
-}
-
-$('stockGapsLine').addEventListener('click', (e) => {
-  const a = e.target.closest('[data-gap]');
-  if (!a) return;
-  const label = a.dataset.gap;
-  stockMissingCh = stockMissingCh === label ? '' : label;
-  stockWfsActive = false;
-  stockLowActive = false;
-  stockDsActive = false;
-  stockUnlistedActive = false;
-  stockActiveView = null;
-  renderStockChips();
-  renderStock();
-});
-
-// in-stock items (primary) missing a link on the given channel
-function stockMissingList(label) {
-  if (!chLinked || !chLinked[label] || !stockCache) return [];
-  const set = chLinked[label];
-  return stockCache.items.filter(it => {
-    if (!it.stockItemId) return false;
-    if (chanSkipKind(it.sku, label)) return false; // bypassed: can't sell there
-    const l = it.levels.find(x => x.locationId === stockCache.locationId);
-    if (!l || (Number(l.stockLevel) <= 0 && Number(l.available) <= 0)) return false;
-    return !set.has(it.stockItemId);
-  });
-}
+// (the "MISSING LISTINGS  Walmart 2 · …" subline and its per-channel gap
+// filter were removed at the owner's request 2026-09-12 — the Unlisted
+// view with its per-row channel chips is the one listings nag now)
 let dsPads = null; // { SKU: padQty } from config
 let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
 let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
@@ -2029,7 +1987,7 @@ function renderStockChips() {
   // NB: NOT "stock-tray" — that class is the per-row hover action tray and
   // ships visibility:hidden (the collision blanked this whole toolbar once)
   box.innerHTML = '<div class="chip-tray">' + [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...(views.length ? [
       `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
     ] : []),
@@ -2052,7 +2010,6 @@ function renderStockChips() {
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
   $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW);
-  renderStockGaps();
 }
 
 $('stockChips').addEventListener('click', (e) => {
@@ -2060,13 +2017,7 @@ $('stockChips').addEventListener('click', (e) => {
   if (!chip) return;
   stockDsActive = false;
   stockUnlistedActive = false;
-  stockMissingCh = '';
-  if (chip.dataset.view.startsWith('miss:')) {
-    stockMissingCh = chip.dataset.view.slice(5);
-    stockWfsActive = false;
-    stockLowActive = false;
-    stockActiveView = null;
-  } else if (chip.dataset.view === 'unl') {
+  if (chip.dataset.view === 'unl') {
     stockUnlistedActive = true;
     stockWfsActive = false;
     stockLowActive = false;
@@ -2252,8 +2203,6 @@ function renderStock() {
       home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
     }))
     .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
-    .filter(it => !stockMissingCh || (it.stockItemId && chLinked && chLinked[stockMissingCh]
-      && !chLinked[stockMissingCh].has(it.stockItemId) && (it.l.stockLevel > 0 || it.l.available > 0)))
     .filter(it => !stockLowActive || stockIsLow(it))
     .filter(it => !stockActiveView || (stockActiveView.plain
       ? !(stockViews || []).some(v => stockViewMatch(it, v.pattern))
@@ -2275,9 +2224,7 @@ function renderStock() {
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
     ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
-    : stockMissingCh
-      ? `${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} with no ${channelLabel(stockMissingCh)} listing linked — map them in Mappings`
-      : stockLowActive
+    : stockLowActive
         ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
         : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
@@ -2411,7 +2358,6 @@ function renderUnlistedView() {
   const missChips = (d) => chans.map(ch => {
     const kind = chanSkipKind(d.sku, ch);
     const name = channelLabel(ch);
-    if (kind === 'rule') return `<button class="unl-chn is-skip" data-chrules="1" title="All ${CHAN_CONDS.find(c => c[0] === skuCondKey(d.sku))[1]} SKUs are skipped on ${name} by rule — click to change the rules">${name} —</button>`;
     if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
     return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
   }).join('');
@@ -2439,34 +2385,11 @@ function renderUnlistedView() {
             <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
         </tr>`).join('')}</tbody>
     </table>`}
-    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).
-      <button class="unign-chip" id="chanRulesBtn" title="Skip whole conditions per channel — e.g. never expect Scrap on Walmart">Channel rules…</button>${
-      parked.length ? `<br>Skipped on every channel: ${parked.map(d => `<button class="unign-chip mono" data-unskip="${esc(d.sku)}" title="Expect listings for ${esc(d.sku)} again${chans.every(ch => chanSkipKind(d.sku, ch) === 'rule') ? ' — skipped by the condition rules, change those instead' : ''}">${esc(d.sku)} ↩</button>`).join(' ')}` : ''}${
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).${
+      parked.length ? `<br>Skipped on every channel: ${parked.map(d => `<button class="unign-chip mono" data-unskip="${esc(d.sku)}" title="Expect listings for ${esc(d.sku)} again">${esc(d.sku)} ↩</button>`).join(' ')}` : ''}${
       unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
 }
 
-/* the condition × channel rules grid (Channel rules… in the Unlisted view) */
-function renderChanRules() {
-  const chans = unlChanKeys();
-  $('chanRulesGrid').innerHTML = `<tr><th></th>${chans.map(ch => `<th>${channelLabel(ch)}</th>`).join('')}</tr>`
-    + CHAN_CONDS.map(([key, label]) => `<tr><td>${label}</td>${chans.map(ch => `
-        <td><input type="checkbox" data-rulecond="${key}" data-rulech="${ch}" ${(condSkips[key] || []).includes(ch) ? '' : 'checked'}
-             title="${channelLabel(ch)} ${(condSkips[key] || []).includes(ch) ? `skips ${label}` : `expects ${label}`}"></td>`).join('')}</tr>`).join('');
-}
-
-$('chanRulesGrid').addEventListener('change', (e) => {
-  const box = e.target.closest('[data-rulecond]');
-  if (!box) return;
-  requireOwner(async () => {
-    // checked = expected there, unchecked = skip that whole condition
-    const res = await api.condChannelSkip(box.dataset.rulecond, box.dataset.rulech, box.checked);
-    if (!res.ok) { toast(res.error || 'Could not update.'); box.checked = !box.checked; return; }
-    condSkips = res.condSkips || {};
-    renderChanRules();
-    if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); renderStockGaps(); }
-  });
-});
-$('chanRulesClose').addEventListener('click', () => $('chanRulesDialog').close());
 
 function fmtMoney(n) {
   return '$' + Math.round(Number(n) || 0).toLocaleString();
@@ -2891,8 +2814,6 @@ $('stockList').addEventListener('dblclick', (e) => {
 $('stockList').addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
-  const rules = e.target.closest('#chanRulesBtn, [data-chrules]');
-  if (rules) { renderChanRules(); $('chanRulesDialog').showModal(); return; }
   const skip = e.target.closest('[data-skipsku]');
   if (skip) {
     requireOwner(async () => {
@@ -2902,7 +2823,7 @@ $('stockList').addEventListener('click', async (e) => {
       toast(skip.dataset.skiprm
         ? `${skip.dataset.skipsku} counts as missing on ${channelLabel(skip.dataset.skipch)} again`
         : `${skip.dataset.skipsku} skipped on ${channelLabel(skip.dataset.skipch)}`);
-      renderStockChips(); renderStock(); renderStockGaps();
+      renderStockChips(); renderStock();
     });
     return;
   }
@@ -2916,7 +2837,7 @@ $('stockList').addEventListener('click', async (e) => {
         if (res.ok) chanSkips = res.chanSkips || {};
       }
       toast(`${sku} back on the listings list`);
-      renderStockChips(); renderStock(); renderStockGaps();
+      renderStockChips(); renderStock();
     });
     return;
   }
@@ -4060,23 +3981,14 @@ let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle va
 let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
-// channel bypass ("I can't sell this there" — owner 2026-09-12): per-SKU
-// one-offs and per-condition rules; a skipped channel stops counting as
-// missing in the Unlisted view AND the Missing-listings gap counts
+// channel bypass ("I can't sell this there" — owner 2026-09-12): click a
+// channel chip on an Unlisted row to grey it out; the SKU stops counting
+// as missing there (per-SKU only — the owner passed on condition rules)
 let chanSkips = {}; // { 'SKU': ['walmart', …] }
-let condSkips = {}; // { new|openbox|used|scrap: ['temu', …] }
 
-const CHAN_CONDS = [['new', 'New'], ['openbox', 'Open Box'], ['used', 'Used'], ['scrap', 'Scrap']];
-function skuCondKey(sku) {
-  const k = String(sku || '').toUpperCase();
-  return k.startsWith('OPEN-BOX-') ? 'openbox' : k.startsWith('USED-') ? 'used' : k.startsWith('SCRAP-') ? 'scrap' : 'new';
-}
-// why a channel is skipped for a SKU: '' = expected, 'rule' = condition
-// rule, 'sku' = one-off toggle on that row
+// is this channel bypassed for this SKU? ('' = expected, 'sku' = skipped)
 function chanSkipKind(sku, ch) {
-  if ((condSkips[skuCondKey(sku)] || []).includes(ch)) return 'rule';
-  if ((chanSkips[String(sku).toUpperCase()] || []).includes(ch)) return 'sku';
-  return '';
+  return (chanSkips[String(sku).toUpperCase()] || []).includes(ch) ? 'sku' : '';
 }
 // the channels the Unlisted view judges against, normalized to the three
 // marketplace keys (raw sources arrive as 'EBAY', 'TEMU US', 'WALMART'…)
@@ -4113,7 +4025,6 @@ async function loadUnlisted(force) {
       unlistedChannels = res.channels || [];
       unlistedIgnored = res.ignored || [];
       chanSkips = res.chanSkips || {};
-      condSkips = res.condSkips || {};
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
       if (activePage === 'ebay') renderEbayQueue();

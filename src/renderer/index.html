@@ -136,7 +136,6 @@
           <div id="stockChips" class="stock-chips" hidden></div>
           <div class="stock-band-right">
             <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
-            <div id="stockGapsLine" class="stock-gaps" hidden></div>
             <div class="stock-actions">
               <!-- with a condition view active the Shelf carries the selling
                    history — a pointer, not duplicated columns (owner 2026-08-25) -->
@@ -1267,17 +1266,6 @@
       <div class="dlg-actions">
         <button id="salesClose" class="btn btn-primary">Close</button>
       </div>
-    </div>
-  </dialog>
-
-  <!-- Channel expectations: skip whole conditions per channel so they never
-       count as missing/unlisted (checked = expect listings there) -->
-  <dialog id="chanRulesDialog" class="dlg">
-    <div class="dlg-body">
-      <h2 class="dlg-title">Channel rules</h2>
-      <p class="dlg-note">Untick where you don't sell — e.g. no Scrap on Walmart. Those SKUs stop counting as unlisted or missing there. One-off exceptions stay on the rows themselves.</p>
-      <table class="chanrules-t" id="chanRulesGrid"></table>
-      <div class="dlg-actions"><button id="chanRulesClose" class="btn">Done</button></div>
     </div>
   </dialog>
 

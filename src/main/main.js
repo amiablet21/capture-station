@@ -3732,7 +3732,7 @@ function registerIpc() {
 
   // the channel-bypass maps ride every unlisted response so the renderer
   // can grey out "can't sell there" channels without an extra round trip
-  const skipCfg = (cfg) => ({ chanSkips: cfg.channelSkips || {}, condSkips: cfg.condChannelSkips || {} });
+  const skipCfg = (cfg) => ({ chanSkips: cfg.channelSkips || {} });
   ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3806,18 +3806,6 @@ function registerIpc() {
     map[key] = [...set].sort();
     config.save({ channelSkips: map });
     return { ok: true, chanSkips: map };
-  });
-  ipcMain.handle('stock:condChannelSkip', (_e, { cond, channel, remove }) => {
-    const c = String(cond || '').trim().toLowerCase();
-    const ch = String(channel || '').trim().toLowerCase();
-    if (!['new', 'openbox', 'used', 'scrap'].includes(c) || !ch) return { ok: false, error: 'Bad condition or channel.' };
-    const cfg = config.load();
-    const map = { ...(cfg.condChannelSkips || {}) };
-    const set = new Set(map[c] || []);
-    if (remove) set.delete(ch); else set.add(ch);
-    map[c] = [...set].sort();
-    config.save({ condChannelSkips: map });
-    return { ok: true, condSkips: map };
   });
   // DropShip program + reorder points
   // shared by the desktop dropship view AND the phone stock editor
