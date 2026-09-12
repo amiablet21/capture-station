@@ -2014,10 +2014,14 @@ function registerIpc() {
     }
   });
   // Shelf tab: the sell-through radar (owner design sessions 2026-08-25 —
-  // "what's rotting on the shelf?"). One row per stocked SKU with its last
-  // sale and when the stock arrived. No new API surface: sales ride the
-  // salesCache window, stock rides listInventory, arrival dates come from
-  // the returns log (condition SKUs) and receiving sessions (everything else).
+  // "what's rotting on the shelf?"; sales-rate upgrade signed off from the
+  // demo, owner 2026-09-12). One row per stocked SKU — plus SOLD-OUT
+  // condition SKUs, so a return that sold through still shows its numbers —
+  // with every sale in the 90-day window riding along ([ts, qty, revenue]
+  // triplets) so the renderer can aggregate any period without a refetch.
+  // No new API surface: sales ride the salesCache window, stock rides
+  // listInventory, arrival dates come from the returns log (condition SKUs)
+  // and receiving sessions (everything else).
   ipcMain.handle('shelf:get', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -2029,16 +2033,16 @@ function registerIpc() {
       if (!sales.ok) return sales;
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
-      // newest sale per SKU inside the window (per-unit price, not line total)
-      const last = new Map();
+      // every sale per SKU inside the window, newest first
+      const perSku = new Map();
       for (const l of sales.lines) {
         const k = String(l.sku || '').toUpperCase();
         const ts = Date.parse(l.processedOn);
         if (!k || Number.isNaN(ts)) continue;
-        if (!last.has(k) || ts > last.get(k).ts) {
-          last.set(k, { ts, price: l.qty ? Math.round((l.revenue / l.qty) * 100) / 100 : l.revenue });
-        }
+        if (!perSku.has(k)) perSku.set(k, []);
+        perSku.get(k).push([ts, Number(l.qty) || 0, Math.round((Number(l.revenue) || 0) * 100) / 100]);
       }
+      for (const list of perSku.values()) list.sort((a, b) => b[0] - a[0]);
       // when stock last ARRIVED: latest return routed into the SKU, or the
       // latest receiving session that carried it — whichever is newer
       const arrived = new Map();
@@ -2070,14 +2074,16 @@ function registerIpc() {
         const k = String(it.sku || '').toUpperCase();
         const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
         const units = Math.max(0, Number(home.stockLevel) || 0);
-        if (!units) continue; // the shelf shows what is ON it
-        const sale = last.get(k) || null;
+        const cond = condOf(k);
+        const skuSales = perSku.get(k) || [];
+        // the shelf shows what is ON it — plus condition SKUs that SOLD OUT
+        // inside the window (the win would otherwise vanish from the page)
+        if (!units && !(cond !== 'new' && skuSales.length)) continue;
         rows.push({
           sku: it.sku, title: it.title || '', units,
           price: Number(it.retailPrice) || 0,
-          cond: condOf(k),
-          lastTs: sale ? sale.ts : 0,
-          lastPrice: sale ? sale.price : 0,
+          cond,
+          sales: skuSales,
           arrivedTs: arrived.get(k) || 0,
         });
       }

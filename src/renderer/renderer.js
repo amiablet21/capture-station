@@ -1220,10 +1220,14 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
 
 /* ---------- Shelf: the warehouse sell-through radar ---------- */
 // One row per stocked SKU, sorted stalest-first; Idle is the single tinted
-// column, Last sold keeps the exact date + what it fetched. Design locked
-// through mockups 2026-08-25 (no week columns — "simpler, then add on").
+// column. The 2026-08-25 "simpler, then add on" design got its add-on
+// 2026-09-12 (built from the approved demo): a Sold-in period picker,
+// per-SKU sold / avg price / weekly rate / sell-through, a 13-week trend,
+// summary tiles, and sold-out condition SKUs staying on the page.
 let shData = null;
-let shView = 'cond'; // all | new | cond | openbox | used | scrap
+let shView = 'cond'; // all | new | cond | openbox | used | scrap | soldout
+let shRange = 30; // the Sold-in period, days
+let shSort = { key: 'idle', dir: -1 }; // idle | sold | avg | rate; -1 = biggest first
 let shBusy = false;
 const SH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SH_GROUPS = [
@@ -1233,7 +1237,9 @@ const SH_GROUPS = [
   ['openbox', 'Open Box', (r) => r.cond === 'openbox'],
   ['used', 'Used', (r) => r.cond === 'used'],
   ['scrap', 'Scrap', (r) => r.cond === 'scrap'],
+  ['soldout', 'Sold out', (r) => !r.units],
 ];
+const SH_RANGES = [['This week', 7], ['30 days', 30], ['60 days', 60], ['90 days', 90]];
 
 function enterShelf() {
   if (shData) renderShelf(); // stale numbers instantly, fresh ones follow
@@ -1257,8 +1263,10 @@ async function loadShelf(force) {
   if (activePage === 'shelf') renderShelf();
 }
 
+// r.sales is [[ts, qty, revenue], …] newest first, the full 90-day window
+const shLastTs = (r) => (r.sales && r.sales.length ? r.sales[0][0] : 0);
 const shIdleDays = (r) => {
-  const t = r.lastTs || r.arrivedTs || 0;
+  const t = shLastTs(r) || r.arrivedTs || 0;
   return t ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : Infinity;
 };
 const shDay = (ts) => {
@@ -1267,44 +1275,147 @@ const shDay = (ts) => {
   return `${SH_MONTHS[d.getMonth()]} ${d.getDate()}${yr}`;
 };
 
+// aggregates inside the Sold-in period (newest-first lets the loop stop early)
+function shStats(r) {
+  const cut = Date.now() - shRange * 86400000;
+  let sold = 0;
+  let revenue = 0;
+  for (const [ts, qty, rev] of r.sales || []) {
+    if (ts < cut) break;
+    sold += qty;
+    revenue += rev;
+  }
+  const last = r.sales && r.sales[0];
+  return {
+    sold,
+    revenue,
+    avg: sold ? revenue / sold : 0,
+    rate: sold / (shRange / 7),
+    lastPrice: last ? (last[1] ? Math.round((last[2] / last[1]) * 100) / 100 : last[2]) : 0,
+    thru: (sold + r.units) ? sold / (sold + r.units) : 0,
+  };
+}
+
+// 13 one-week buckets, oldest→newest; weeks inside the period draw solid
+function shSpark(r) {
+  const wk = new Array(13).fill(0);
+  for (const [ts, qty] of r.sales || []) {
+    const w = Math.floor((Date.now() - ts) / (7 * 86400000));
+    if (w >= 0 && w < 13) wk[w] += qty;
+  }
+  const max = Math.max(1, ...wk);
+  const inWks = Math.ceil(shRange / 7);
+  let bars = '';
+  for (let wAgo = 12; wAgo >= 0; wAgo--) {
+    const n = wk[wAgo];
+    bars += `<i class="${wAgo < inWks ? 'in' : ''}" style="height:${n ? Math.max(15, (n / max) * 100) : 8}%" title="wk of ${shDay(Date.now() - (wAgo * 7 + 6) * 86400000)}: ${n} sold"></i>`;
+  }
+  return `<div class="sh-spark" role="img" aria-label="units sold per week, last 13 weeks">${bars}</div>`;
+}
+
+// the four tiles read the current condition slice (search left out, like
+// the toolbar counts) so "how are the returns doing?" is one glance
+function renderShTiles(rows, fn) {
+  const slice = rows.filter(fn);
+  let sold = 0;
+  let revenue = 0;
+  const dead = [];
+  for (const r of slice) {
+    const st = shStats(r);
+    sold += st.sold;
+    revenue += st.revenue;
+    if (r.units > 0 && shIdleDays(r) >= 30) dead.push(r);
+  }
+  const deadVal = dead.reduce((s, r) => s + r.units * (r.price || 0), 0);
+  const label = (SH_RANGES.find(x => x[1] === shRange) || SH_RANGES[1])[0].toLowerCase();
+  const money = (n) => `$${Math.round(n).toLocaleString()}`;
+  $('shTiles').innerHTML = `
+    <div class="sh-tile"><div class="sh-tile-l">Sold · ${label}</div><div class="sh-tile-b mono">${sold}</div><div class="sh-tile-f">${(sold / (shRange / 7)).toFixed(1)} per week</div></div>
+    <div class="sh-tile"><div class="sh-tile-l">Sales · ${label}</div><div class="sh-tile-b mono">${money(revenue)}</div><div class="sh-tile-f">what the sold units fetched</div></div>
+    <div class="sh-tile"><div class="sh-tile-l">Avg sale price</div><div class="sh-tile-b mono">${sold ? `$${(revenue / sold).toFixed(2)}` : '—'}</div><div class="sh-tile-f">across ${sold} sold unit${sold === 1 ? '' : 's'}</div></div>
+    <div class="sh-tile ${dead.length ? 'is-alarm' : ''}"><div class="sh-tile-l">Dead stock · 30d+ idle</div><div class="sh-tile-b mono">${money(deadVal)}</div><div class="sh-tile-f">${dead.length} SKU${dead.length === 1 ? '' : 's'} need a price cut or a pull</div></div>`;
+}
+
 function renderShelf() {
   if (!shData) return;
   const rows = shData.rows;
   $('shChips').innerHTML = '<div class="stock-tray">' + SH_GROUPS.map(([key, label, fn]) =>
     `<button class="view-chip ${shView === key ? 'is-active' : ''}" data-shview="${key}">${label} · ${rows.filter(fn).length}</button>`).join('') + '</div>';
-  const q = $('shSearch').value.trim().toUpperCase();
+  $('shRangeChips').innerHTML = '<div class="stock-tray">' + SH_RANGES.map(([label, d]) =>
+    `<button class="view-chip ${shRange === d ? 'is-active' : ''}" data-shrange="${d}">${label}</button>`).join('') + '</div>';
   const fn = (SH_GROUPS.find(g => g[0] === shView) || SH_GROUPS[0])[2];
+  renderShTiles(rows, fn);
+  const q = $('shSearch').value.trim().toUpperCase();
+  const stats = new Map();
+  for (const r of rows) stats.set(r, shStats(r));
+  const keyOf = {
+    idle: (r) => shIdleDays(r),
+    sold: (r) => stats.get(r).sold,
+    avg: (r) => stats.get(r).avg,
+    rate: (r) => stats.get(r).rate,
+  }[shSort.key] || shIdleDays;
   const list = rows.filter(fn)
     .filter(r => !q || String(r.sku).toUpperCase().includes(q) || String(r.title).toUpperCase().includes(q))
-    .sort((a, b) => shIdleDays(b) - shIdleDays(a) || String(a.sku).localeCompare(String(b.sku)));
+    .sort((a, b) => (keyOf(b) - keyOf(a)) * -shSort.dir || String(a.sku).localeCompare(String(b.sku)));
   $('shTable').hidden = !list.length;
   $('shEmpty').hidden = !!list.length;
   if (!list.length) $('shEmpty').textContent = 'Nothing on the shelf matches.';
-  $('shTable').innerHTML = '<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th><th class="r">Idle</th><th>Last sold</th><th>Listed on</th></tr>'
+  const arr = (k) => shSort.key === k ? (shSort.dir < 0 ? ' ▼' : ' ▲') : '';
+  $('shTable').innerHTML = `<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th>`
+    + `<th class="r sh-sort" data-shsort="sold" title="Units sold inside the period — click to sort">Sold${arr('sold')}</th>`
+    + `<th class="r sh-sort" data-shsort="avg" title="Average realized price inside the period — click to sort">Avg sold at${arr('avg')}</th>`
+    + `<th class="r sh-sort" data-shsort="rate" title="Units per week inside the period — click to sort">Rate${arr('rate')}</th>`
+    + `<th class="r" title="sold ÷ (sold + still on the shelf)">Sell-thru</th>`
+    + `<th title="Units sold per week, last 13 weeks; solid bars are inside the period">Trend</th>`
+    + `<th class="r sh-sort" data-shsort="idle" title="Days since the last sale (or since arrival) — click to sort">Idle${arr('idle')}</th>`
+    + `<th>Last sold</th></tr>`
     + list.map((r, i) => {
+      const st = stats.get(r);
+      const soldOut = !r.units;
       const idle = shIdleDays(r);
       const idleTxt = idle === Infinity ? `>${shData.windowDays}d` : `${idle}d`;
       const idleCls = idle === Infinity || idle >= 30 ? 'sh-bad' : idle >= 14 ? 'sh-warn' : '';
+      const lastTs = shLastTs(r);
       // a sale OLDER than the current stock's arrival is history, not traction
-      const ghost = r.lastTs && r.arrivedTs && r.lastTs < r.arrivedTs;
+      const ghost = lastTs && r.arrivedTs && lastTs < r.arrivedTs;
       return `<tr><td class="gut">${i + 1}</td>`
-        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}</td>`
+        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}${soldOut ? ' <span class="sh-out">Sold out</span>' : ''}</td>`
         + `<td class="r mono">${r.units}</td>`
         + `<td class="r mono">${r.price ? `$${Number(r.price).toFixed(2)}` : '—'}</td>`
-        + `<td class="r mono ${idleCls}">${idleTxt}</td>`
-        + `<td class="mono ${r.lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
-        + (r.lastTs ? `${shDay(r.lastTs)} · $${Number(r.lastPrice).toFixed(2)}${ghost ? ' *' : ''}` : 'never') + '</td>'
-        + `<td class="mono sh-dim">${r.arrivedTs ? shDay(r.arrivedTs) : '—'}</td></tr>`;
+        + `<td class="r mono">${st.sold || '<span class="sh-dim">0</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `$${st.avg.toFixed(2)}` : '<span class="sh-dim">—</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `${st.rate.toFixed(1)}<span class="sh-dim">/wk</span>` : '<span class="sh-dim">—</span>'}</td>`
+        + `<td class="r mono">${(st.sold + r.units) ? `${Math.round(st.thru * 100)}%` : '<span class="sh-dim">—</span>'}</td>`
+        + `<td>${shSpark(r)}</td>`
+        + (soldOut ? '<td class="r mono sh-good" title="Sold through — nothing left to move">✓</td>' : `<td class="r mono ${idleCls}">${idleTxt}</td>`)
+        + `<td class="mono ${lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
+        + (lastTs ? `${shDay(lastTs)} · $${Number(st.lastPrice).toFixed(2)}${ghost ? ' *' : ''}`
+          : (r.arrivedTs ? `never · listed ${shDay(r.arrivedTs)}` : 'never')) + '</td></tr>';
     }).join('');
   const units = list.reduce((s, r) => s + r.units, 0);
   const value = list.reduce((s, r) => s + r.units * (r.price || 0), 0);
-  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices`;
+  const soldHere = list.reduce((s, r) => s + stats.get(r).sold, 0);
+  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices · ${soldHere} sold in the last ${shRange} days`;
 }
 
 $('shChips').addEventListener('click', (e) => {
   const c = e.target.closest('[data-shview]');
   if (!c) return;
   shView = c.dataset.shview;
+  renderShelf();
+});
+$('shRangeChips').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-shrange]');
+  if (!c) return;
+  shRange = Number(c.dataset.shrange);
+  renderShelf();
+});
+$('shTable').addEventListener('click', (e) => {
+  const th = e.target.closest('th.sh-sort');
+  if (!th) return;
+  const k = th.dataset.shsort;
+  if (shSort.key === k) shSort.dir = -shSort.dir;
+  else shSort = { key: k, dir: -1 };
   renderShelf();
 });
 $('shSearch').addEventListener('input', renderShelf);
