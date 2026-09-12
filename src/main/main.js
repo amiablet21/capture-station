@@ -3730,6 +3730,9 @@ function registerIpc() {
     } catch { /* no saved scan yet */ }
   }
 
+  // the channel-bypass maps ride every unlisted response so the renderer
+  // can grey out "can't sell there" channels without an extra round trip
+  const skipCfg = (cfg) => ({ chanSkips: cfg.channelSkips || {}, condSkips: cfg.condChannelSkips || {} });
   ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3744,25 +3747,25 @@ function registerIpc() {
       if (force) {
         if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
           const c = await runUnlistedDelta(cfg);
-          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
         }
         const prev = unlistedCache;
         unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
         const scan = runUnlistedScan(cfg);
         if (prev.detail) {
           scan.catch(() => { if (!unlistedCache.detail) unlistedCache = prev; });
-          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], stale: true };
+          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale: true };
         }
         const c = await scan;
-        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
       }
       if (unlistedCache.detail) {
         const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
         if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
-        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], stale };
+        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale };
       }
       const c = await runUnlistedScan(cfg);
-      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3788,6 +3791,33 @@ function registerIpc() {
     config.save({ unlistedIgnore: [...list].sort() });
     unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
     return { ok: true, ignored: [...list].sort() };
+  });
+  // channel bypass (owner 2026-09-12: "grey out channels they wouldn't be
+  // able to sell to"): per-SKU one-offs and per-condition rules. Purely a
+  // reporting filter — nothing is touched in Linnworks.
+  ipcMain.handle('stock:channelSkip', (_e, { sku, channel, remove }) => {
+    const key = String(sku || '').trim().toUpperCase();
+    const ch = String(channel || '').trim().toLowerCase();
+    if (!key || !ch) return { ok: false, error: 'Missing SKU or channel.' };
+    const cfg = config.load();
+    const map = { ...(cfg.channelSkips || {}) };
+    const set = new Set(map[key] || []);
+    if (remove) set.delete(ch); else set.add(ch);
+    map[key] = [...set].sort();
+    config.save({ channelSkips: map });
+    return { ok: true, chanSkips: map };
+  });
+  ipcMain.handle('stock:condChannelSkip', (_e, { cond, channel, remove }) => {
+    const c = String(cond || '').trim().toLowerCase();
+    const ch = String(channel || '').trim().toLowerCase();
+    if (!['new', 'openbox', 'used', 'scrap'].includes(c) || !ch) return { ok: false, error: 'Bad condition or channel.' };
+    const cfg = config.load();
+    const map = { ...(cfg.condChannelSkips || {}) };
+    const set = new Set(map[c] || []);
+    if (remove) set.delete(ch); else set.add(ch);
+    map[c] = [...set].sort();
+    config.save({ condChannelSkips: map });
+    return { ok: true, condSkips: map };
   });
   // DropShip program + reorder points
   // shared by the desktop dropship view AND the phone stock editor

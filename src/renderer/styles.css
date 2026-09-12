@@ -1832,6 +1832,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   color: var(--surface);
 }
 .unl-chn {
+  font-family: var(--font);
+  background: none;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 600;
   color: var(--badge-yellow-text);
@@ -1841,6 +1844,17 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   margin-right: 4px;
   white-space: nowrap;
 }
+.unl-chn:hover { background: var(--badge-yellow-bg); }
+.unl-chn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* bypassed channel ("can't sell it there"): quiet, still clickable to undo */
+.unl-chn.is-skip { color: var(--faint); border-color: var(--border); }
+.unl-chn.is-skip:hover { background: var(--surface-2); color: var(--muted); }
+/* the condition × channel rules grid */
+.chanrules-t { border-collapse: collapse; margin: 10px 0 4px; }
+.chanrules-t th, .chanrules-t td { padding: 6px 14px; font-size: 12.5px; text-align: center; border-bottom: 1px solid var(--border-soft); }
+.chanrules-t td:first-child { text-align: left; font-weight: 600; }
+.chanrules-t th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.chanrules-t input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {

@@ -89,6 +89,8 @@ contextBridge.exposeInMainWorld('api', {
   returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
   returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
+  channelSkip: (sku, channel, remove) => ipcRenderer.invoke('stock:channelSkip', { sku, channel, remove }),
+  condChannelSkip: (cond, channel, remove) => ipcRenderer.invoke('stock:condChannelSkip', { cond, channel, remove }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
