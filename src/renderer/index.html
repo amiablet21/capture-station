@@ -143,7 +143,6 @@
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
-              <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
                    2026-08-02); the dialogs and logic behind them are untouched.
                    WFS Shipments came back 2026-09-09 (owner asked for exactly
@@ -152,6 +151,11 @@
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
               <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
+              <!-- refresh rides at the end as a plain icon, out of the row of
+                   words (owner 2026-09-14: "make it an icon, not squished") -->
+              <button id="stockRefresh" class="btn btn-ghost stock-refresh-ico" title="Reload from Linnworks" aria-label="Refresh">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+              </button>
             </div>
           </div>
         </div>

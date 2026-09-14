@@ -3736,6 +3736,7 @@ function retEntryRow() {
   wsEls.po.addEventListener('input', () => {
     ws.orderId = null; ws.source = ''; ws.unmatched = true;
     ws.items = []; ws.looked = '';
+    wsSetPhase('idle'); // the edited PO is a new draft, not the loaded order
   });
   wsEls.sku.addEventListener('input', () => {
     ws.targets = null; ws.pick = '';
@@ -3891,21 +3892,46 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
   wsRenderCond();
 });
 
+// the entry row's phase, worn where the eye already is (approved demo
+// pending-entry.html, owner 2026-09-14): while the lookup runs the +
+// becomes a loading circle (just the circle — no gray wash); a loaded,
+// not-yet-saved row tints green and the gutter turns into a ✓, so the
+// draft never reads as an already-saved row
+function wsSetPhase(p) {
+  if (!retEntryTr) return;
+  retEntryTr.classList.toggle('is-ready', p === 'ready');
+  const plus = retEntryTr.querySelector('#wsPlus');
+  if (!plus) return;
+  if (p === 'pending') {
+    plus.innerHTML = '<span class="ws-spin" aria-label="Looking the order up"></span>';
+    plus.title = 'Looking the order up…';
+  } else if (p === 'ready') {
+    plus.textContent = '✓';
+    plus.title = 'Order loaded — Enter (or click here) saves this return';
+  } else {
+    plus.textContent = '+';
+    plus.title = 'Save this return';
+  }
+}
+
 // PO# + Enter: the matched order LOADS OVER the row (owner 2026-09-10,
 // "as soon as you enter a PO# it will load and overwrite everything") —
 // the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
   ws.busy = true;
+  wsSetPhase('pending');
   const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
   ws.busy = false;
   ws.looked = po;
   if (!res || !res.ok) {
+    wsSetPhase('idle');
     ws.unmatched = true; ws.orderId = null; ws.source = '';
     toast(`${(res && res.error) || 'Not found.'} — enter the details by hand.`);
     wsEls.cust.focus();
     return;
   }
+  wsSetPhase('ready');
   const o = res.order;
   ws.unmatched = false;
   ws.orderId = o.orderId;
@@ -3974,6 +4000,7 @@ function wsReset() {
   for (const [key] of WS_FIELDS) wsEls[key].value = '';
   wsDateFill();
   ws = wsBlank();
+  wsSetPhase('idle');
   wsFixClose();
   const menu = document.querySelector('.ws-emenu');
   if (menu) menu.remove();

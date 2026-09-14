@@ -438,7 +438,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast, tr.ret-past-tr.is-fresh td, .ret-sync-dot.is-bad { animation: none; }
+  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast, tr.ret-past-tr.is-fresh td, .ret-sync-dot.is-bad, .ws-spin { animation: none; }
   * { transition: none !important; }
 }
 
@@ -1710,6 +1710,31 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-gutter { color: var(--muted); font-weight: 600; font-size: 15px; text-align: center; cursor: pointer; }
 .ws-gutter:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* entry-row phases (approved demo pending-entry.html, 2026-09-14):
+   pending = just the loading circle where the + was; ready = the loaded,
+   not-yet-saved draft tints green and the gutter becomes a save ✓ */
+.ws-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: ws-rot 0.7s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes ws-rot { to { transform: rotate(360deg); } }
+.ret-log-table tr.ws-row.is-ready td {
+  background: #f0f8f4;
+  box-shadow: inset 0 -2px 0 rgba(4, 120, 87, 0.35);
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter {
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter:hover { background: var(--accent-soft-text); }
 .ws-in {
   width: 100%;
   border: none;
@@ -2396,10 +2421,13 @@ tr.unl-dim:hover td { opacity: 1; }
   border-bottom: none;
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
-.stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
+.stock-band .stock-search { flex: 0 1 220px; min-width: 130px; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
-.stock-band .stock-actions { display: flex; gap: 6px; }
+.stock-band .stock-actions { display: flex; align-items: center; gap: 6px; }
+/* refresh as a bare icon at the end of the band (owner 2026-09-14) */
+.stock-refresh-ico { display: inline-flex; align-items: center; padding: 5px 7px; }
+.stock-refresh-ico svg { width: 14px; height: 14px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
