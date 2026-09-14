@@ -65,6 +65,7 @@ function appendEvent(ev) {
   try {
     fs.mkdirSync(folder, { recursive: true });
     fs.appendFileSync(fileFor(station), JSON.stringify(ev) + '\n', 'utf8');
+    scheduleMirror();
   } catch (e) {
     console.error('[retsync] write failed:', e.message);
   }
@@ -249,12 +250,62 @@ function rescan(writeCsv) {
   lastFoldSig = foldSig(winners);
   const { newest } = missedCount(winners);
   markSeen(newest);
+  writeMirror(winners);
   if (changes.length && onChange) onChange({ changes });
+}
+
+// The spreadsheet MIRROR (owner 2026-09-14: "can the drive just be like a
+// spreadsheet?"): one merged returns-log.csv beside the sync files — the
+// whole company log, every station, double-clickable in Drive / Excel /
+// Google Sheets. Strictly derived and never read back: an edit made in
+// the spreadsheet is overwritten on the next change; real edits go
+// through the app, where stock moves and validation live.
+const csvEsc = (v) => {
+  const s = String(v ?? '');
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+let mirrorTimer = null;
+
+function writeMirror(winners) {
+  if (!enabled()) return;
+  try {
+    const lines = ['date,station,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,last_edit_station,note,unmatched'];
+    const puts = [...winners.entries()].filter(([, ev]) => ev.op === 'put');
+    puts.sort((a, b) => String(a[1].rec?.created_at || '').localeCompare(String(b[1].rec?.created_at || '')));
+    for (const [gid, ev] of puts) {
+      const s = ev.rec || {};
+      const its = (Array.isArray(s.items) && s.items.length) ? s.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
+      for (const it of its) {
+        lines.push([
+          s.created_at || '', ownerOf(gid), s.order_number || '', s.source || '', s.customer || '', s.tracking || '',
+          it.sku || '', it.condition || '', it.targetSku || '', it.qty ?? '',
+          it.price != null ? it.price : '', s.received_by || '',
+          ev.actor !== ownerOf(gid) ? ev.actor : '',
+          it.note || s.note || '', s.unmatched ? 'yes' : '',
+        ].map(csvEsc).join(','));
+      }
+    }
+    const text = lines.join('\r\n');
+    const fp = path.join(folder, 'returns-log.csv');
+    // skip the write when nothing changed — every station regenerates this
+    // file, and identical rewrites would only feed the sync service churn
+    try { if (fs.readFileSync(fp, 'utf8') === text) return; } catch { /* first write */ }
+    fs.writeFileSync(fp, text, 'utf8');
+  } catch { /* the mirror is a convenience — the jsonl files are the truth */ }
+}
+
+// emits + folder ticks both land here; the debounce batches a burst of
+// changes into one spreadsheet write
+function scheduleMirror() {
+  if (!enabled()) return;
+  clearTimeout(mirrorTimer);
+  mirrorTimer = setTimeout(() => writeMirror(fold()), 2000);
 }
 
 function stopWatch() {
   if (watcher) { try { watcher.close(); } catch { /* already gone */ } watcher = null; }
   clearTimeout(debounce);
+  clearTimeout(mirrorTimer);
 }
 
 function startWatch(writeCsv) {
@@ -287,6 +338,7 @@ function configure({ sync, database, userData, changed, writeCsv }) {
   lastFoldSig = foldSig(winners);
   const { missed, newest } = missedCount(winners);
   markSeen(newest);
+  writeMirror(winners);
   startWatch(writeCsv);
   return { enabled: true, missed };
 }
