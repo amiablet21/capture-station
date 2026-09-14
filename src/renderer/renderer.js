@@ -2078,8 +2078,8 @@ function renderStockChips() {
   ].join('') + '</div>'
     // only exists while there is something to fix — in-stock SKUs no
     // marketplace can currently sell
-    + (unlistedDetail && unlActiveDetail().length
-      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked">Unlisted · ${unlActiveDetail().length}</button>`
+    + ((unlistedDetail || chLinked) && unlActiveDetail().length
+      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs missing a marketplace listing on at least one channel — New included">Unlisted · ${unlActiveDetail().length}</button>`
       : '');
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
@@ -2185,10 +2185,15 @@ try {
   }
 } catch { /* fresh start */ }
 
+// while the search box has text, columns hold the width they had when
+// typing began — auto table layout re-measured every keystroke and the
+// whole sheet shifted under the cursor (owner 2026-09-14)
+let stockFreezeWidths = null;
+
 function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
-  const w = stockColWidths[key];
+  const w = stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
   const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
   return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}"${style} title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
 }
@@ -2410,34 +2415,32 @@ function renderStock() {
   }
 }
 
-/* ---------- Unlisted view (in-stock SKUs no marketplace can sell) ---------- */
+/* ---------- Unlisted view (in-stock SKUs missing a channel listing) ---------- */
 
 function renderUnlistedView() {
   const aa = $('minApplyAll');
   if (aa) aa.hidden = true;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const chans = unlChanKeys();
-  const matches = (unlistedDetail || []).filter(d => !q
+  const matches = unlMissingRows().filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
-  // rows whose every channel is bypassed step aside (restorable below);
-  // most units on the shelf first (the Value idle column left with the
-  // dollar framing, owner 2026-09-12)
-  const rows = matches.filter(d => chans.some(ch => !chanSkipKind(d.sku, ch)))
-    .sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
-  const parked = matches.filter(d => chans.every(ch => chanSkipKind(d.sku, ch)));
+  // rows whose every missing channel is bypassed step aside (restorable
+  // below); most gaps first, then most units (owner 2026-09-14)
+  const rows = matches.filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)))
+    .sort((a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
+  const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
-    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing`;
-  // per-row chips: gold ✗ = missing (click: "I can't sell it there"),
-  // greyed — = bypassed for this SKU (click restores)
-  const missChips = (d) => chans.map(ch => {
+    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
+  // per-row chips, ONLY the channels this SKU is missing: gold ✗ = missing
+  // (click: "I can't sell it there"), greyed — = bypassed (click restores)
+  const missChips = (d) => d.missing.map(ch => {
     const kind = chanSkipKind(d.sku, ch);
     const name = channelLabel(ch);
     if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
     return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
   }).join('');
   $('stockList').innerHTML = (rows.length === 0 && parked.length === 0)
-    ? '<p class="dlg-note">Nothing here — every in-stock SKU has a marketplace listing. 🎉</p>'
+    ? '<p class="dlg-note">Nothing here — every in-stock SKU is listed on every channel it\'s expected on. 🎉</p>'
     : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped.</p>' : `<table class="stock-table">
       <thead><tr>
         <th class="th-gutter">#</th>
@@ -2679,6 +2682,15 @@ $('stockRefresh').addEventListener('click', () => {
 });
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
+  if (!$('stockSearch').value) {
+    stockFreezeWidths = null; // box emptied: columns breathe again
+  } else if (!stockFreezeWidths) {
+    // first keystroke: capture the columns as they stand
+    stockFreezeWidths = {};
+    for (const th of document.querySelectorAll('#stockList th[data-sort]')) {
+      stockFreezeWidths[th.dataset.sort] = th.offsetWidth;
+    }
+  }
   renderStock();
 });
 // the same ✕ the capture find bar has: clears and refilters in place
@@ -4069,10 +4081,34 @@ function unlChanKeys() {
   }
   return keys.length ? keys.sort() : ['ebay', 'temu', 'walmart'];
 }
-// rows still worth nagging about: at least one expected channel is missing
-function unlActiveDetail() {
+// Every in-stock SKU missing a listing on AT LEAST ONE channel — New
+// included (owner 2026-09-14: "it should show every listing, new or open
+// box or used"). Computed from the loaded stock sheet + the truthful link
+// sets, zero extra API calls; each row carries its own missing-channel
+// list so partially-listed items show only the gaps. Until the link sets
+// land, the zero-listing scan stands in (those rows miss everywhere).
+function unlMissingRows() {
   const chans = unlChanKeys();
-  return (unlistedDetail || []).filter(d => chans.some(ch => !chanSkipKind(d.sku, ch)));
+  if (stockCache && chLinked && chans.some(ch => chLinked[ch])) {
+    const ignored = new Set(unlistedIgnored.map(s => String(s).toUpperCase()));
+    const out = [];
+    for (const it of stockCache.items) {
+      if (!it.stockItemId || ignored.has(String(it.sku).toUpperCase())) continue;
+      const l = it.levels.find(x => x.locationId === stockCache.locationId);
+      const avail = l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : 0;
+      if (avail <= 0) continue;
+      const missing = chans.filter(ch => chLinked[ch] && !chLinked[ch].has(it.stockItemId));
+      if (!missing.length) continue;
+      out.push({ sku: it.sku, title: it.title || '', image: it.image || '', stockItemId: it.stockItemId, avail, missing });
+    }
+    return out;
+  }
+  return (unlistedDetail || []).map(d => ({ ...d, missing: chans.slice() }));
+}
+
+// rows still worth nagging about: at least one missing channel not bypassed
+function unlActiveDetail() {
+  return unlMissingRows().filter(r => r.missing.some(ch => !chanSkipKind(r.sku, ch)));
 }
 
 // a background rescan finished in main: swap the fresh sets in wherever shown
