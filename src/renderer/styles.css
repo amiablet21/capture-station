@@ -983,9 +983,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-price { width: 78px; text-align: right; }
 .ret-sheet th.th-by { width: 100px; }
-.ret-sheet th.th-settle { width: 150px; text-align: right; }
-.ret-cell-price, .ret-cell-settle { text-align: right; font-size: 12px; }
-.ret-cell-settle { color: var(--pos-text); font-weight: 600; }
+.ret-cell-price { text-align: right; font-size: 12px; }
 
 .ret-sheet td { font-size: 12.5px; }
 .ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
@@ -1651,7 +1649,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
 
 /* zebra on the LOG rows only (the entry tbody stays tinted) */
-.ret-log-table tbody:not(.ret-entry-body) tr:nth-child(even) td:not(.cell-gutter) { background: var(--surface-2); }
 
 /* the gutter goes quiet: plain numbers, red only for unmatched returns */
 .ret-log-table td.cell-gutter.st-captured { background: transparent; color: var(--muted); font-weight: 500; }
@@ -1665,7 +1662,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
 .ret-log-table .ret-cond-ro.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 
-/* money columns: price muted, settlement bold green (set further up) */
 .ret-cell-price { color: var(--muted); }
 
 /* "case: 12345" in a note renders as a small blue chip */
@@ -1720,7 +1716,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
-.ws-in.ws-num { text-align: right; } /* units / price / settle line up with their columns */
+.ws-in.ws-num { text-align: right; } /* units / price line up with their columns */
 
 /* no-popup receiving (owner 2026-09-10): the condition pill lives in the
    row, its menu and the ⚠ popover anchor to the viewport — never modal */
@@ -1761,7 +1757,7 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   padding: 0;
 }
 .ret-ein.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
-.ret-cell-units .ret-ein, .ret-cell-price .ret-ein, .ret-cell-settle .ret-ein { text-align: right; }
+.ret-cell-units .ret-ein, .ret-cell-price .ret-ein { text-align: right; }
 /* the condition cell edits through a compact 4-pill menu, right in the cell */
 .ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }

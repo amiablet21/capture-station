@@ -3189,7 +3189,7 @@ function rvFeedback(msg, ok = false) {
 function retOpenRecv(po = '', seed = null) {
   rv = rvBlank();
   rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
@@ -3201,7 +3201,6 @@ function retOpenRecv(po = '', seed = null) {
   if (s.units) $('rvQty').value = s.units;
   if (s.price) $('rvPrice').value = s.price;
   if (s.by) $('rvBy').value = s.by;
-  if (s.settle) $('rvSettle').value = s.settle;
   if (s.note) $('rvNote').value = s.note;
   rvRenderCond();
   rvRenderOrder();
@@ -3310,17 +3309,12 @@ function rvLoadItem(it) {
     $('rvSku').value = it.sku;
     $('rvQty').value = String(it.quantity || 1);
     $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
-    // Dispute Settlement autofills from the SAME order line the price came
-    // from — what the customer paid is the amount at stake; clear it when
-    // there is no dispute
-    $('rvSettle').value = $('rvPrice').value;
   } else {
     rv.itemIdx = -1;
     rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
     $('rvSku').value = '';
     $('rvQty').value = '1';
     $('rvPrice').value = '';
-    $('rvSettle').value = '';
   }
   rv.condition = 'new';
   rv.pick = '';
@@ -3519,7 +3513,6 @@ async function rvCommit() {
     items: sku ? [{
       sku, condition: rv.condition, targetSku: target, qty,
       price: retMoney($('rvPrice').value) || rv.price,
-      settle: retMoney($('rvSettle').value),
       note: $('rvNote').value.trim(),
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -3540,7 +3533,7 @@ $('rvSave').addEventListener('click', async () => {
   const next = rv.items.findIndex((_, i) => !rv.received[i]);
   if (next < 0) { $('retRecvDialog').close(); return; }
   $('rvNote').value = '';
-  rvLoadItemAt(next); // refills price + settle from the next line
+  rvLoadItemAt(next); // refills price from the next line
   $('rvQty').focus();
 });
 
@@ -3581,7 +3574,7 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
 // rebuilt) across renders so half-typed values survive every refresh.
 
 let retEntryTr = null;
-let wsEls = null; // { po, cust, trk, date, sku, units, price, by, settle, note }
+let wsEls = null; // { po, cust, trk, date, sku, units, price, by, note }
 let ws = null;    // inline receive state (mirrors the old popup's rv)
 let wsLookupApi = (po) => api.returnsLookup(po); // seam: e2e stubs the lookup
 
@@ -3594,7 +3587,6 @@ const WS_FIELDS = [
   ['units', '', 'mono ws-num', 'Units'],
   ['price', '', 'mono ws-num', 'Price'],
   ['by', '', '', 'Received by'],
-  ['settle', '', 'mono ws-num', 'Dispute settlement'],
   ['note', '', '', 'Notes'],
 ];
 
@@ -3655,7 +3647,6 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('units')}</td>
     <td class="ws-cell">${wsInput('price')}</td>
     <td class="ws-cell">${wsInput('by')}</td>
-    <td class="ws-cell">${wsInput('settle')}</td>
     <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
@@ -3877,9 +3868,6 @@ function wsUseLine(line) {
   ws.pick = '';
   wsEls.units.value = String(line.quantity || 1);
   wsEls.price.value = Number(line.price) ? Number(line.price).toFixed(2) : '';
-  // Dispute Settlement mirrors the price line — what the customer paid is
-  // the amount at stake (cleared by hand when there is no dispute)
-  wsEls.settle.value = wsEls.price.value;
   wsRenderCond();
 }
 
@@ -3998,7 +3986,6 @@ async function wsSave() {
       received: sku ? received : '',
       condition: ws.condition, targetSku: target, qty,
       price: retMoney(v.price),
-      settle: retMoney(v.settle),
       note: v.note,
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -4555,7 +4542,6 @@ function retLogRowHtml(r, i, ii, un, num) {
       <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
       <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-settle mono ret-ecell" data-edit="settle" title="Dispute settlement amount">${Number(i.settle) ? retMoneyText(i.settle) : '<span class="cell-missing">—</span>'}</td>
       <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
@@ -4614,14 +4600,13 @@ function renderRetLog() {
           <th class="th-units">Units</th>
           <th class="th-price">Price</th>
           <th class="th-by">Received By</th>
-          <th class="th-settle">Dispute Settlement</th>
           <th class="th-note">Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
       <tbody class="ret-entry-body"></tbody>
       <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
-        || `<tr><td colspan="${compact ? 6 : 13}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
+        || `<tr><td colspan="${compact ? 6 : 12}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
@@ -4790,7 +4775,7 @@ async function retSaveEdit(entry, field, value) {
     const m = String(value).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) { toast('Date must look like 09/05/2026.'); renderRetLog(); return; }
     payload.day = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-  } else if (field === 'price' || field === 'settle') {
+  } else if (field === 'price') {
     payload[field] = retMoney(value);
   } else if (field === 'units') {
     payload.units = String(value).trim();
@@ -4820,7 +4805,6 @@ function retEditValue({ r, i, ii }, field) {
     case 'units': return String(Number(i.qty) || 1);
     case 'price': return Number(i.price) ? Number(i.price).toFixed(2) : '';
     case 'receivedBy': return r.received_by || '';
-    case 'settle': return Number(i.settle) ? Number(i.settle).toFixed(2) : '';
     case 'note': return ii >= 0 ? (i.note || '') : (r.note || '');
     default: return '';
   }
@@ -4832,7 +4816,7 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   if (other) renderRetLog();
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
-  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy', 'settle'].includes(field);
+  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy'].includes(field);
   td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
   const input = td.querySelector('input');
   input.value = startVal;
@@ -5107,7 +5091,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'settle', 11: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;

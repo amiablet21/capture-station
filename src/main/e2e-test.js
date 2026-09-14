@@ -455,12 +455,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(400);
     const looked = await exec(`[
       $('ws_cust').value, $('ws_trk').value, $('ws_sku').value,
-      $('ws_price').value, $('ws_settle').value,
+      $('ws_price').value,
       !!document.querySelector('#retRecvDialog[open]'),
     ]`);
-    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price, settle',
+    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price',
       looked[0] === 'Cara Cross' && looked[1] === 'TRK-9' && looked[2] === 'S25-128GB-NAVY'
-        && looked[3] === '149.99' && looked[4] === '149.99' && looked[5] === false,
+        && looked[3] === '149.99' && looked[4] === false,
       looked);
     // the second Enter saves the matched receive
     await exec(`$('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
@@ -558,7 +558,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
       rv.received = [false];
       rvLoadItemAt(0);
-      $('rvPrice').value = '150'; $('rvSettle').value = '45.50'; $('rvBy').value = 'IM';
+      $('rvPrice').value = '150'; $('rvBy').value = 'IM';
       $('rvSave').click(); 0;`);
     // commit -> close is async: poll instead of a fixed sleep (flaked at
     // fixed sleeps under load, 2026-08-14)
@@ -567,9 +567,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
     }
     const rvGot = await exec(`window.__rvGot`);
-    check('Receive commits price + dispute settlement through returns:create',
+    check('Receive commits the price through returns:create',
       rvGot && rvGot.orderNumber === '119999000000001' && rvGot.items.length === 1
-        && rvGot.items[0].price === 150 && rvGot.items[0].settle === 45.5
+        && rvGot.items[0].price === 150
         && rvGot.items[0].targetSku === 'S25-128GB-NAVY',
       rvGot);
     const rvClosed = await exec(`[!document.querySelector('#retRecvDialog[open]'), String(window.__err || '')]`);
