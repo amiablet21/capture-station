@@ -674,36 +674,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
         ents.length === 3 && a && a.units === 2 && a.tracking === '528846386026'
           && a.note === 'case open' && ents.find(e => !e.po).customer === 'Cara C', ents);
     }
-    // the dialog flow, ipc stubbed through the seams
-    await exec(`
-      window.__impOrig = [retImpPick, retImpResolve, retImpCommit];
-      window.__impCommitGot = null;
-      retImpPick = async () => ({ ok: true, entries: [
-        { po: '119000000000001', customer: 'Ann A', tracking: '', sku: 'SM-X133-64GB-GREY', units: 2, price: 127.49, settle: 0, note: 'case open' },
-      ], stats: { rows: 2, entries: 1, units: 2, skippedDup: 0, noPo: 0 } });
-      retImpResolve = async (entries) => ({ ok: true,
-        entries: entries.map(e => ({ ...e, matched: true, source: 'WALMART', sku: 'S25-128GB-NAVY' })),
-        stats: { orders: 1, found: 1, skuFromOrder: 1, skuKnown: 0, skuUnknown: 0, trackingFilled: 1 } });
-      retImpCommit = async (entries) => { window.__impCommitGot = entries; return { ok: true, made: 1, units: 2 }; };
-      $('retImportBtn').click(); 0;`);
-    await sleep(400);
-    const impBits = await exec(`[
-      !!document.querySelector('#retImpDialog[open]'),
-      $('retImpStats').textContent,
-      $('retImpGo').disabled,
-    ]`);
-    check('import dialog: parse stats shown, Import armed once resolved',
-      impBits[0] === true && impBits[1].includes('entries') && impBits[1].includes('orders matched')
-        && impBits[2] === false, impBits);
-    await exec(`$('retImpGo').click(); 0;`);
-    await sleep(400);
-    const impDone = await exec(`[
-      window.__impCommitGot && window.__impCommitGot[0].sku,
-      !document.querySelector('#retImpDialog[open]'),
-    ]`);
-    check('Import commits the RESOLVED entries and closes',
-      impDone[0] === 'S25-128GB-NAVY' && impDone[1] === true, impDone);
-    await exec(`retImpPick = window.__impOrig[0]; retImpResolve = window.__impOrig[1]; retImpCommit = window.__impOrig[2]; 0;`);
+    // the Import button is retired (owner 2026-09-14) — the parse/collapse
+    // engine above keeps its checks; the dialog has no UI entry point now
+    check('Import button retired from the returns bar',
+      (await exec(`!$('retImportBtn')`)) === true);
 
     // 24h. the missing-listings slider: one gap at a time, affix-stripped
     // create suggestions, Skip advances, the tally closes it out

@@ -2449,17 +2449,22 @@ function renderUnlistedView() {
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
   // rows whose every missing channel is bypassed step aside (restorable
-  // below); most gaps first, then most units (owner 2026-09-14)
+  // below); most gaps first, then most units — or most units first when the
+  // Avail header is toggled (owner 2026-09-14: "filter by most units")
   const rows = matches.filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)))
-    .sort((a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
+    .sort(unlSortUnits
+      ? (a, b) => b.avail - a.avail || b.missing.length - a.missing.length || a.sku.localeCompare(b.sku)
+      : (a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
   const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
     `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
-  // per-row chips, ONLY the channels this SKU is missing: gold ✗ = missing
-  // (click: "I can't sell it there"), greyed — = bypassed (click restores)
-  const missChips = (d) => d.missing.map(ch => {
-    const kind = chanSkipKind(d.sku, ch);
+  // per-row chips, EVERY channel: filled ✓ = already listed there (owner
+  // 2026-09-14: show it, don't remove it), gold ✗ = missing (click: "I
+  // can't sell it there"), greyed — = bypassed (click restores)
+  const chnChips = (d) => unlChanKeys().map(ch => {
     const name = channelLabel(ch);
+    if (!d.missing.includes(ch)) return `<span class="unl-chn is-listed" title="Already listed on ${name} — click the SKU to see the linked channel listings">${name} ✓</span>`;
+    const kind = chanSkipKind(d.sku, ch);
     if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
     return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
   }).join('');
@@ -2470,17 +2475,17 @@ function renderUnlistedView() {
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
         <th>SKU</th>
-        <th class="num th-level">Avail</th>
-        <th>Missing on</th>
+        <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
+        <th>Channels</th>
         <th class="th-actions"></th>
       </tr></thead>
       <tbody>${rows.map((d, idx) => `
         <tr>
           <td class="cell-gutter">${idx + 1}</td>
           <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-          <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
+          <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
           <td class="num">${d.avail}</td>
-          <td>${missChips(d)}</td>
+          <td>${chnChips(d)}</td>
           <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
             <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
         </tr>`).join('')}</tbody>
@@ -2919,6 +2924,13 @@ $('stockList').addEventListener('dblclick', (e) => {
 $('stockList').addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
+  const us = e.target.closest('th[data-unlsort]');
+  if (us) {
+    unlSortUnits = !unlSortUnits;
+    localStorage.setItem('unlSortUnits', unlSortUnits ? '1' : '0');
+    renderStock();
+    return;
+  }
   const skip = e.target.closest('[data-skipsku]');
   if (skip) {
     requireOwner(async () => {
@@ -4077,6 +4089,8 @@ let unlistedLoading = false;
 // channel chip on an Unlisted row to grey it out; the SKU stops counting
 // as missing there (per-SKU only — the owner passed on condition rules)
 let chanSkips = {}; // { 'SKU': ['walmart', …] }
+// Avail header toggle: most units first instead of most gaps first
+let unlSortUnits = localStorage.getItem('unlSortUnits') === '1';
 
 // is this channel bypassed for this SKU? ('' = expected, 'sku' = skipped)
 function chanSkipKind(sku, ch) {
@@ -4605,7 +4619,7 @@ function renderRetLog() {
   const compact = document.body.classList.contains('ret-compact');
   const noneMsg = retLogAll.length
     ? `Nothing matches “${esc(q)}”.`
-    : 'No returns yet — type a PO# in the green row above to receive the first one.';
+    : 'No returns yet — type a PO# in the entry row above to receive the first one.';
   // the entry row survives the innerHTML swap: remember where focus was,
   // rebuild the sheet, move the SAME <tr> back in, put focus back
   const af = document.activeElement;
@@ -7666,7 +7680,10 @@ function retImpStatHtml(parse, resolve) {
   return h;
 }
 
-$('retImportBtn').addEventListener('click', async () => {
+// the Import button is retired (owner 2026-09-14, history already in) —
+// the whole flow stays wired so it can come back with one button
+const retImportBtn = $('retImportBtn');
+if (retImportBtn) retImportBtn.addEventListener('click', async () => {
   const picked = await retImpPick().catch(e => ({ ok: false, error: e.message }));
   if (!picked || picked.canceled) return;
   if (!picked.ok) { toast(picked.error || 'Could not read that file.'); return; }

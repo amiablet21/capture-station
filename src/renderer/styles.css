@@ -1647,34 +1647,22 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-cell-units input::-webkit-inner-spin-button,
 .ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-/* ---- RETURNS-2 sheet, V1 polish (approved variants/returns-sheet-v2.html,
-   2026-09-05): softer green band, zebra rows, neutral gutter, condition as
-   a pastel pill, money without $ signs ---- */
-.recv-sheet-table.ret-log-table th {
-  background: #1f9d5b;
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border-right: 1px solid rgba(255, 255, 255, 0.22);
-  border-bottom: 1px solid #17854c;
-}
-.recv-sheet-table.ret-log-table th.th-gutter { background: #17854c; border-right: 1px solid rgba(255, 255, 255, 0.22); }
-.recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
-
-/* zebra on the LOG rows only (the entry tbody stays tinted) */
+/* ---- RETURNS sheet, sync-demo look (approved returns-sync mockup,
+   2026-09-14 "I like the design you had created"): the green skin is gone —
+   headers wear the app's own light sheet style (surface-2, uppercase faint
+   letters, hairlines), conditions are a colored dot + colored text ---- */
 
 /* the gutter goes quiet: plain numbers, red only for unmatched returns */
 .ret-log-table td.cell-gutter.st-captured { background: transparent; color: var(--muted); font-weight: 500; }
 .ret-log-table td.cell-gutter.st-failed { background: transparent; color: var(--neg-text); font-weight: 700; }
 
-/* condition as a pastel pill (the dot keeps its per-condition color) */
-.ret-log-table .ret-cond-ro { border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: 11.5px; }
-.ret-log-table .ret-cond-ro.is-new { background: var(--pos-bg); color: var(--pos-text); }
-.ret-log-table .ret-cond-ro.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.ret-log-table .ret-cond-ro.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
-.ret-log-table .ret-cond-ro.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+/* condition: per-condition dot + colored text, no pill */
+.ret-log-table .ret-cond-ro { font-weight: 600; font-size: 12px; }
+.ret-log-table .ret-cond-ro.is-new { color: var(--pos-text); }
+.ret-log-table .ret-cond-ro.is-openbox { color: var(--badge-blue-text); }
+.ret-log-table .ret-cond-ro.is-used { color: var(--badge-yellow-text); }
+.ret-log-table .ret-cond-ro.is-scrap { color: var(--neg-text); }
+.ret-log-table .ret-cond-ro.is-different { color: var(--muted); }
 
 .ret-cell-price { color: var(--muted); }
 
@@ -1706,18 +1694,22 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    (owner 2026-09-05, "popup instead of on the line"; 2026-09-09, every
    column takes typing) — a tinted band of bare inputs, closed by the
    green rule ---- */
-.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid #1f9d5b; }
+.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid var(--border); }
 .ret-log-table tr.ws-row td {
-  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+  background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
 }
+/* the empty entry row reads as an invitation, not data (demo look) */
+.ret-log-table tr.ws-row .ws-in::placeholder { font-style: italic; }
+.ret-log-table tr.ws-row td.ws-gutter { background: var(--surface-2); }
+.ret-log-table tr.ws-row td.ws-gutter:hover { background: var(--accent-soft); }
 .ret-log-table tr.ws-row td.ws-cell:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 2px;
 }
-.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; cursor: pointer; }
-.ws-gutter:hover { background: var(--accent-soft); }
+.ws-gutter { color: var(--muted); font-weight: 600; font-size: 15px; text-align: center; cursor: pointer; }
+.ws-gutter:hover { background: var(--accent-soft); color: var(--accent); }
 .ws-in {
   width: 100%;
   border: none;
@@ -1831,6 +1823,17 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 /* bypassed channel ("can't sell it there"): quiet, still clickable to undo */
 .unl-chn.is-skip { color: var(--faint); border-color: var(--border); }
 .unl-chn.is-skip:hover { background: var(--surface-2); color: var(--muted); }
+/* already listed there: filled and settled, nothing to click */
+.unl-chn.is-listed {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  border: 1px solid transparent;
+  cursor: default;
+  display: inline-block;
+}
+/* the Avail header doubles as the units-first sort toggle */
+th.unl-sort-th { cursor: pointer; user-select: none; }
+th.unl-sort-th:hover { color: var(--accent); }
 
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
