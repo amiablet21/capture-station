@@ -2422,6 +2422,10 @@ tr.unl-dim:hover td { opacity: 1; }
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
 .stock-band .stock-search { flex: 0 1 220px; min-width: 130px; }
+/* fixed two-line band (owner 2026-09-14, "still looks weird": the auto-wrap
+   dropped the actions into a floating row) — search + actions always share
+   the top line, the condition chips always get their own line under it */
+.stock-band .stock-chips { order: 10; flex-basis: 100%; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
 .stock-band .stock-actions { display: flex; align-items: center; gap: 6px; }
