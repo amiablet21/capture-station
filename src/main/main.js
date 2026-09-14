@@ -2199,7 +2199,7 @@ function registerIpc() {
     const ext = (String(url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i) || [, 'jpg'])[1].toLowerCase();
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
       title: `Save image of ${sku}`,
-      defaultPath: path.join(app.getPath('pictures'), `${sku}.${ext}`),
+      defaultPath: path.join(app.getPath('downloads'), `${sku}.${ext}`),
       filters: [{ name: 'Image', extensions: [ext] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };
