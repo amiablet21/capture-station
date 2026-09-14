@@ -208,6 +208,8 @@
           <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
+          <!-- shared-folder sync: connection dot + one chip per station seen -->
+          <span id="retSyncLine" class="ret-sync-line" hidden></span>
           <button id="retImportBtn" class="btn btn-ghost" title="Upload the returns history sheet (.xlsx or .csv) — one row per received unit; duplicate PO rows collapse into unit counts">Import</button>
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
@@ -734,6 +736,19 @@
         <span class="field-label">Low-stock webhook URL (optional, one alert per SKU crossing below its minimum)</span>
         <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
+
+      <h3 class="dlg-section">Returns sync</h3>
+      <div class="settings-row">
+        <span class="field-label">Shared returns folder</span>
+        <span id="setRetSyncFolder" class="test-result mono"></span>
+        <button id="chooseRetSyncBtn" class="btn btn-ghost">Change folder</button>
+        <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
+      </div>
+      <label class="field">
+        <span class="field-label">This station's name (stamped on every return it logs)</span>
+        <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share and they all see one returns log — open the app anywhere, see everyone's returns, edit any of them. Each station writes only its own file, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds.</p>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">

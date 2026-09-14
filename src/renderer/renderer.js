@@ -86,6 +86,7 @@ if (!window.api) {
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
+    returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
     copyText: async () => ({ ok: true }),
     on: () => {},
   };
@@ -951,6 +952,9 @@ async function openSettings() {
   $('setPageListings').checked = pg.listings !== false;
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
+  const rsy = cfg.returnsSync || {};
+  $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
+  $('setRetSyncStation').value = rsy.station || '';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -1019,6 +1023,25 @@ $('chooseRecvBtn').addEventListener('click', async () => {
   if (res.folder) $('setRecvFolder').textContent = res.folder;
 });
 
+$('chooseRetSyncBtn').addEventListener('click', async () => {
+  // the station name must exist BEFORE the folder starts syncing — it names
+  // this desktop's file. Save it from the field on the way in.
+  const st = $('setRetSyncStation').value.trim().toUpperCase();
+  if (!st) { toast('Give this station a name first — it labels every return it logs.'); $('setRetSyncStation').focus(); return; }
+  await api.setConfig({ returnsSync: { station: st } });
+  const res = await api.returnsSyncChooseFolder();
+  if (res.folder) $('setRetSyncFolder').textContent = res.folder;
+  if (res.ok) { retSyncToasted = false; loadRetPast(); }
+});
+
+$('clearRetSyncBtn').addEventListener('click', async () => {
+  await api.setConfig({ returnsSync: { folder: '' } });
+  $('setRetSyncFolder').textContent = 'off — returns stay on this desktop';
+  retSyncInfo = null;
+  renderRetSyncLine();
+  loadRetPast();
+});
+
 $('settingsSave').addEventListener('click', async () => {
   const sel = $('setLocation');
   const pinVal = $('setPin').value.trim();
@@ -1036,6 +1059,7 @@ $('settingsSave').addEventListener('click', async () => {
       listings: $('setPageListings').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
+    returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -4525,7 +4549,7 @@ function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
   const note = i.note || r.note || '';
   return `
-    <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
+    <tr class="ret-past-tr${retFreshGids.has(String(r.id)) ? ' is-fresh' : ''}" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
       <td class="mono ret-cell-po ret-ecell" data-edit="po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="ret-cell-cust ret-ecell" data-edit="customer" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
@@ -4541,7 +4565,10 @@ function retLogRowHtml(r, i, ii, un, num) {
       </td>
       <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
       <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}</td>
+      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}${
+        r._st ? (r._actor && r._actor !== r._st
+          ? `<span class="ret-by-sub is-edit" title="Last edited at ${esc(r._actor)}">✎ ${esc(r._actor)}</span>`
+          : `<span class="ret-by-sub" title="Graded at ${esc(r._st)}">${esc(retSyncInfo && r._st === retSyncInfo.station ? 'this station' : r._st)}</span>`) : ''}</td>
       <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
@@ -4656,7 +4683,7 @@ function renderRetDisputes() {
         <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
         <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
         <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
-        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}:${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
+        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}|${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
       </div>`;
     }).join('')}
     <div class="ret-todo-note">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>`;
@@ -4674,8 +4701,10 @@ $('retDisputes').addEventListener('click', async (e) => {
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
   const done = e.target.closest('[data-dispdone]');
   if (!done) return;
-  const [rid, ii] = done.dataset.dispdone.split(':').map(Number);
-  const entry = (retLogAll || []).find(x => x.r.id === rid && x.ii === ii);
+  const cut = done.dataset.dispdone.lastIndexOf('|');
+  const rid = done.dataset.dispdone.slice(0, cut);
+  const ii = Number(done.dataset.dispdone.slice(cut + 1));
+  const entry = (retLogAll || []).find(x => String(x.r.id) === rid && x.ii === ii);
   if (!entry) return;
   const { r, i } = entry;
   const res = await api.returnsEditUnit({
@@ -4691,8 +4720,49 @@ $('retDisputes').addEventListener('click', async (e) => {
   loadRetPast();
 });
 
+/* shared returns folder (Google Drive / OneDrive / network share): every
+   desktop pointed at the same folder shows ONE returns log. The sheet keeps
+   its columns — sync shows as the station chips in the log bar, a station
+   subline under Received By, and a green wash on rows arriving from other
+   desktops (design signed off from the mockup, owner 2026-09-14). */
+let retSyncInfo = null;   // { enabled, station, stations, folderOk, missed }
+let retSyncToasted = false;
+const retFreshGids = new Set(); // rows to wash on the next render
+
+function renderRetSyncLine() {
+  const el = $('retSyncLine');
+  if (!el) return;
+  if (!retSyncInfo || !retSyncInfo.enabled) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}" title="${retSyncInfo.folderOk
+    ? 'Shared returns folder connected — every desktop sees this log'
+    : 'Shared returns folder unreachable — check the path in Settings'}"></span>`
+    + (retSyncInfo.stations || []).map(st => `<span class="ret-st-chip ${st.name === retSyncInfo.station ? 'is-you' : ''}">${esc(st.name)}${st.name === retSyncInfo.station ? ' · you' : ''}</span>`).join('');
+}
+
+// a peer's file synced in: refresh, wash the moved rows, say who did what
+api.on('returns:syncChanged', (d) => {
+  const changes = (d && d.changes) || [];
+  if (!changes.length) return;
+  for (const c of changes) retFreshGids.add(String(c.gid));
+  if (activePage !== 'returns') return; // the next page open reloads anyway
+  loadRetPast();
+  const news = changes.filter(c => c.op === 'put' && c.kind === 'new').length;
+  const edits = changes.length - news;
+  const who = [...new Set(changes.map(c => c.actor))].join(', ');
+  toast(`${who}: ${[news ? `${news} new return${news === 1 ? '' : 's'}` : '', edits ? `${edits} change${edits === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}`, 3500);
+});
+
 async function loadRetPast() {
-  const returns = await api.returnsList();
+  // shared-folder sync on: { rows, sync }; off: the legacy bare array
+  const res = await api.returnsList();
+  const returns = Array.isArray(res) ? res : (res && res.rows) || [];
+  retSyncInfo = Array.isArray(res) ? null : (res && res.sync) || null;
+  renderRetSyncLine();
+  if (retSyncInfo && retSyncInfo.missed > 0 && !retSyncToasted) {
+    retSyncToasted = true;
+    toast(`Caught up from the shared folder — ${retSyncInfo.missed} change${retSyncInfo.missed === 1 ? '' : 's'} from other stations while this one was closed`, 5000);
+  }
   retLogAll = [];
   for (const r of returns) {
     // a PO-only return has no item lines but still shows as one row (ii -1)
@@ -4706,6 +4776,7 @@ async function loadRetPast() {
   }
   renderRetLog();
   renderRetDisputes();
+  retFreshGids.clear(); // washed once; later re-renders stay calm
 }
 
 let retLogPage = 0;
@@ -4725,7 +4796,7 @@ $('retPastBox').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
   if (e.target.closest('.ret-log-del-btn')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (!entry) return;
     const qty = Number(entry.i.qty) || 1;
     retDelCtx = { rid: entry.r.id, ii: entry.ii, target: entry.i.targetSku || '' };
@@ -4741,7 +4812,7 @@ $('retPastBox').addEventListener('click', (e) => {
   // retired: "each column would be editable")
   const td = e.target.closest('td[data-edit]');
   if (td && !e.target.closest('button') && !td.querySelector('.ret-ein, .ret-emenu')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (entry) retBeginEdit(td, entry);
   }
 });

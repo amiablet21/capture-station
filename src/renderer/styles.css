@@ -438,7 +438,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast { animation: none; }
+  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast, tr.ret-past-tr.is-fresh td, .ret-sync-dot.is-bad { animation: none; }
   * { transition: none !important; }
 }
 
@@ -1181,6 +1181,20 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-log-bar { display: flex; align-items: center; gap: 12px; }
 .ret-log-count { color: var(--muted); font-weight: 400; }
 .ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
+
+/* shared returns folder: the log bar's sync dot + station chips, the
+   Received-By station subline, and the arrival wash (owner 2026-09-14) */
+.ret-sync-line { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ret-sync-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--badge-green-text); flex: 0 0 auto; }
+.ret-sync-dot.is-bad { background: var(--neg-text); animation: retsyncpulse 1s ease infinite; }
+@keyframes retsyncpulse { 50% { opacity: 0.3; } }
+.ret-st-chip { font: 600 10.5px var(--mono); border-radius: 999px; padding: 1px 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.ret-st-chip.is-you { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+.ret-cell-by .ret-by-sub { display: block; font: 500 10px var(--mono); color: var(--faint); line-height: 1.2; text-transform: none; }
+.ret-cell-by .ret-by-sub.is-edit { color: var(--badge-yellow-text); }
+tr.ret-past-tr.is-fresh td { animation: retfreshin 1.8s ease; }
+@keyframes retfreshin { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+
 
 /* design C (2026-08-07): the log owns the page height; the sheet scrolls
    inside its card instead of the page ending where the rows do */

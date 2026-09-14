@@ -9,12 +9,14 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
 const returnsImport = require('./returns-import');
+const retsync = require('./retsync');
 
 let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
+let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
@@ -624,6 +626,21 @@ function listReceivingSessions(limit = 200) {
 }
 
 // Mirror the returns ledger to a CSV beside the other exports.
+// shared returns folder (Google Drive / OneDrive / a network share):
+// boot + every settings change re-point the sync engine; folder events
+// wake the renderer with exactly which returns moved
+function startRetSync() {
+  const cfg = config.load();
+  const res = retsync.configure({
+    sync: cfg.captureOnly ? null : cfg.returnsSync,
+    database: db,
+    userData: app.getPath('userData'),
+    writeCsv: writeReturnsCsv,
+    changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
+  });
+  retsyncMissed = (res && res.missed) || 0;
+}
+
 function writeReturnsCsv() {
   try {
     const folder = csvFolder();
@@ -1981,6 +1998,7 @@ function registerIpc() {
   ipcMain.handle('config:get', () => config.load());
   ipcMain.handle('config:set', (_e, patch) => {
     const cfg = config.save(patch || {});
+    if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     pushState();
     return cfg;
   });
@@ -2437,6 +2455,7 @@ function registerIpc() {
       // the worksheet's "Received by" remembers the last-used initials
       if (receivedBy) config.save({ returnsReceivedBy: receivedBy });
       writeReturnsCsv();
+      retsync.emitRow(db.getReturn(id)); // the shared folder hears about it
       // best effort: stamp the original order (processed orders may refuse)
       let noted = false;
       if (payload.orderId) {
@@ -2451,7 +2470,13 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('returns:list', () => db.listReturns());
+  ipcMain.handle('returns:list', () => {
+    // sync off: the legacy bare array (e2e and old callers know this shape)
+    if (!retsync.enabled()) return db.listReturns();
+    const missed = retsyncMissed;
+    retsyncMissed = 0; // the catch-up toast shows once
+    return { rows: retsync.list(), sync: { ...retsync.status(), missed } };
+  });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
   // rendered here (qrcode lib) and handed over as a data URL; po locks the
@@ -3336,7 +3361,11 @@ function registerIpc() {
   ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy, price, settle }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    // with the shared folder on, ids are "<station>:<localId>" — a return
+    // owned by ANOTHER desktop edits through the folder, never this db
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
     const newPo = String(po || '').trim(); // may be empty: PO-less entries are legal
     const newDay = String(day || '').trim();
@@ -3411,14 +3440,26 @@ function registerIpc() {
         recordNote = newNote;
         if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
       }
-      db.saveReturn(rec.id, {
+      const fields = {
         orderNumber: newPo, createdAt,
         customer: String(customer || '').trim().slice(0, 120),
         tracking: String(tracking || '').trim().slice(0, 100),
         note: recordNote, items, unmatched: rec.unmatched,
         receivedBy: String(receivedBy || '').trim().slice(0, 60),
-      });
-      writeReturnsCsv();
+      };
+      if (remote) {
+        // the owner's desktop (and everyone else) picks this up on the
+        // next folder tick — stock already moved above, Linnworks is global
+        retsync.emitPutFor(key, {
+          created_at: fields.createdAt, order_number: fields.orderNumber,
+          source: rec.source || '', customer: fields.customer, note: fields.note,
+          items, unmatched: !!rec.unmatched, tracking: fields.tracking, received_by: fields.receivedBy,
+        });
+      } else {
+        const saved = db.saveReturn(rec.id, fields);
+        writeReturnsCsv();
+        retsync.emitRow(saved);
+      }
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3427,13 +3468,42 @@ function registerIpc() {
   ipcMain.handle('returns:deleteUnit', async (_e, { id, itemIndex, removeStock }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
+    // one persistence seam for both worlds: my rows hit the db + csv and
+    // snapshot to my file; another station's rows go through the folder only
+    const persistDelete = () => {
+      if (remote) { retsync.emitDel(key); return; }
+      db.deleteReturn(rec.id);
+      writeReturnsCsv();
+      if (retsync.enabled()) retsync.emitDel(retsync.gidOf(rec.id));
+    };
+    const persistSave = (items) => {
+      const fields = {
+        orderNumber: rec.order_number, createdAt: rec.created_at,
+        customer: rec.customer, tracking: rec.tracking,
+        note: rec.note, items, unmatched: rec.unmatched,
+        receivedBy: rec.received_by,
+      };
+      if (remote) {
+        retsync.emitPutFor(key, {
+          created_at: rec.created_at, order_number: rec.order_number, source: rec.source || '',
+          customer: rec.customer, note: rec.note, items, unmatched: !!rec.unmatched,
+          tracking: rec.tracking, received_by: rec.received_by,
+        });
+        return;
+      }
+      const saved = db.saveReturn(rec.id, fields);
+      writeReturnsCsv();
+      retsync.emitRow(saved);
+    };
     const ii = Number(itemIndex);
     let stockNote = '';
     try {
       if (ii < 0 || rec.items.length === 0) {
-        db.deleteReturn(rec.id); // PO-only record: nothing ever moved stock
+        persistDelete(); // PO-only record: nothing ever moved stock
       } else {
         const it = rec.items[ii];
         if (!it) return { ok: false, error: 'Return line not found.' };
@@ -3448,17 +3518,9 @@ function registerIpc() {
         }
         const items = rec.items.slice();
         items.splice(ii, 1); // the row IS the line now — remove it whole
-        if (items.length === 0) db.deleteReturn(rec.id);
-        else {
-          db.saveReturn(rec.id, {
-            orderNumber: rec.order_number, createdAt: rec.created_at,
-            customer: rec.customer, tracking: rec.tracking,
-            note: rec.note, items, unmatched: rec.unmatched,
-            receivedBy: rec.received_by,
-          });
-        }
+        if (items.length === 0) persistDelete();
+        else persistSave(items);
       }
-      writeReturnsCsv();
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3939,6 +4001,21 @@ function registerIpc() {
   // the page itself is hidden unless pages.receiving is enabled.
   ipcMain.handle('receiving:finish', (_e, payload) => finishReceiving(payload));
   ipcMain.handle('receiving:list', () => listReceivingSessions());
+  // shared returns folder picker (Settings → Returns sync). Saving the
+  // config re-points the engine via the config:set hook above.
+  ipcMain.handle('retsync:chooseFolder', async () => {
+    const cur = (config.load().returnsSync || {}).folder || '';
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Choose the shared returns folder (Google Drive / OneDrive / network share)',
+      defaultPath: cur || app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, folder: cur };
+    config.save({ returnsSync: { folder: filePaths[0] } });
+    startRetSync();
+    pushState();
+    return { ok: true, folder: filePaths[0] };
+  });
   ipcMain.handle('receiving:chooseFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Choose receiving session folder',
@@ -4206,6 +4283,7 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   createWindow();
+  startRetSync();
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();
