@@ -87,6 +87,9 @@ const DEFAULTS = {
   // excludeLocationNames: orders at these stock locations never enter the
   // queue (WFS = fulfilled by Walmart, no label to make here).
   orderImport: { enabled: true, excludeLocationNames: ['WFS FULFILLED'] },
+  // shared returns across desktops: a file-synced folder (Google Drive /
+  // OneDrive / network share) + this station's name. Both empty = sync off.
+  returnsSync: { folder: '', station: '' },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {

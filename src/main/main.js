@@ -9,12 +9,14 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
 const returnsImport = require('./returns-import');
+const retsync = require('./retsync');
 
 let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
+let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
@@ -624,6 +626,21 @@ function listReceivingSessions(limit = 200) {
 }
 
 // Mirror the returns ledger to a CSV beside the other exports.
+// shared returns folder (Google Drive / OneDrive / a network share):
+// boot + every settings change re-point the sync engine; folder events
+// wake the renderer with exactly which returns moved
+function startRetSync() {
+  const cfg = config.load();
+  const res = retsync.configure({
+    sync: cfg.captureOnly ? null : cfg.returnsSync,
+    database: db,
+    userData: app.getPath('userData'),
+    writeCsv: writeReturnsCsv,
+    changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
+  });
+  retsyncMissed = (res && res.missed) || 0;
+}
+
 function writeReturnsCsv() {
   try {
     const folder = csvFolder();
@@ -1981,6 +1998,7 @@ function registerIpc() {
   ipcMain.handle('config:get', () => config.load());
   ipcMain.handle('config:set', (_e, patch) => {
     const cfg = config.save(patch || {});
+    if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     pushState();
     return cfg;
   });
@@ -2014,10 +2032,14 @@ function registerIpc() {
     }
   });
   // Shelf tab: the sell-through radar (owner design sessions 2026-08-25 —
-  // "what's rotting on the shelf?"). One row per stocked SKU with its last
-  // sale and when the stock arrived. No new API surface: sales ride the
-  // salesCache window, stock rides listInventory, arrival dates come from
-  // the returns log (condition SKUs) and receiving sessions (everything else).
+  // "what's rotting on the shelf?"; sales-rate upgrade signed off from the
+  // demo, owner 2026-09-12). One row per stocked SKU — plus SOLD-OUT
+  // condition SKUs, so a return that sold through still shows its numbers —
+  // with every sale in the 90-day window riding along ([ts, qty, revenue]
+  // triplets) so the renderer can aggregate any period without a refetch.
+  // No new API surface: sales ride the salesCache window, stock rides
+  // listInventory, arrival dates come from the returns log (condition SKUs)
+  // and receiving sessions (everything else).
   ipcMain.handle('shelf:get', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -2029,16 +2051,16 @@ function registerIpc() {
       if (!sales.ok) return sales;
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
-      // newest sale per SKU inside the window (per-unit price, not line total)
-      const last = new Map();
+      // every sale per SKU inside the window, newest first
+      const perSku = new Map();
       for (const l of sales.lines) {
         const k = String(l.sku || '').toUpperCase();
         const ts = Date.parse(l.processedOn);
         if (!k || Number.isNaN(ts)) continue;
-        if (!last.has(k) || ts > last.get(k).ts) {
-          last.set(k, { ts, price: l.qty ? Math.round((l.revenue / l.qty) * 100) / 100 : l.revenue });
-        }
+        if (!perSku.has(k)) perSku.set(k, []);
+        perSku.get(k).push([ts, Number(l.qty) || 0, Math.round((Number(l.revenue) || 0) * 100) / 100]);
       }
+      for (const list of perSku.values()) list.sort((a, b) => b[0] - a[0]);
       // when stock last ARRIVED: latest return routed into the SKU, or the
       // latest receiving session that carried it — whichever is newer
       const arrived = new Map();
@@ -2070,14 +2092,17 @@ function registerIpc() {
         const k = String(it.sku || '').toUpperCase();
         const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
         const units = Math.max(0, Number(home.stockLevel) || 0);
-        if (!units) continue; // the shelf shows what is ON it
-        const sale = last.get(k) || null;
+        const cond = condOf(k);
+        if (cond === 'new') continue; // returns only (owner 2026-09-12 trim)
+        const skuSales = perSku.get(k) || [];
+        // the shelf shows what is ON it — plus condition SKUs that SOLD OUT
+        // inside the window (the win would otherwise vanish from the page)
+        if (!units && !skuSales.length) continue;
         rows.push({
           sku: it.sku, title: it.title || '', units,
           price: Number(it.retailPrice) || 0,
-          cond: condOf(k),
-          lastTs: sale ? sale.ts : 0,
-          lastPrice: sale ? sale.price : 0,
+          cond,
+          sales: skuSales,
           arrivedTs: arrived.get(k) || 0,
         });
       }
@@ -2174,7 +2199,7 @@ function registerIpc() {
     const ext = (String(url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i) || [, 'jpg'])[1].toLowerCase();
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
       title: `Save image of ${sku}`,
-      defaultPath: path.join(app.getPath('pictures'), `${sku}.${ext}`),
+      defaultPath: path.join(app.getPath('downloads'), `${sku}.${ext}`),
       filters: [{ name: 'Image', extensions: [ext] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };
@@ -2430,6 +2455,7 @@ function registerIpc() {
       // the worksheet's "Received by" remembers the last-used initials
       if (receivedBy) config.save({ returnsReceivedBy: receivedBy });
       writeReturnsCsv();
+      retsync.emitRow(db.getReturn(id)); // the shared folder hears about it
       // best effort: stamp the original order (processed orders may refuse)
       let noted = false;
       if (payload.orderId) {
@@ -2444,7 +2470,13 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('returns:list', () => db.listReturns());
+  ipcMain.handle('returns:list', () => {
+    // sync off: the legacy bare array (e2e and old callers know this shape)
+    if (!retsync.enabled()) return db.listReturns();
+    const missed = retsyncMissed;
+    retsyncMissed = 0; // the catch-up toast shows once
+    return { rows: retsync.list(), sync: { ...retsync.status(), missed } };
+  });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
   // rendered here (qrcode lib) and handed over as a data URL; po locks the
@@ -3329,7 +3361,11 @@ function registerIpc() {
   ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy, price, settle }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    // with the shared folder on, ids are "<station>:<localId>" — a return
+    // owned by ANOTHER desktop edits through the folder, never this db
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
     const newPo = String(po || '').trim(); // may be empty: PO-less entries are legal
     const newDay = String(day || '').trim();
@@ -3404,14 +3440,26 @@ function registerIpc() {
         recordNote = newNote;
         if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
       }
-      db.saveReturn(rec.id, {
+      const fields = {
         orderNumber: newPo, createdAt,
         customer: String(customer || '').trim().slice(0, 120),
         tracking: String(tracking || '').trim().slice(0, 100),
         note: recordNote, items, unmatched: rec.unmatched,
         receivedBy: String(receivedBy || '').trim().slice(0, 60),
-      });
-      writeReturnsCsv();
+      };
+      if (remote) {
+        // the owner's desktop (and everyone else) picks this up on the
+        // next folder tick — stock already moved above, Linnworks is global
+        retsync.emitPutFor(key, {
+          created_at: fields.createdAt, order_number: fields.orderNumber,
+          source: rec.source || '', customer: fields.customer, note: fields.note,
+          items, unmatched: !!rec.unmatched, tracking: fields.tracking, received_by: fields.receivedBy,
+        });
+      } else {
+        const saved = db.saveReturn(rec.id, fields);
+        writeReturnsCsv();
+        retsync.emitRow(saved);
+      }
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3420,13 +3468,42 @@ function registerIpc() {
   ipcMain.handle('returns:deleteUnit', async (_e, { id, itemIndex, removeStock }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
+    // one persistence seam for both worlds: my rows hit the db + csv and
+    // snapshot to my file; another station's rows go through the folder only
+    const persistDelete = () => {
+      if (remote) { retsync.emitDel(key); return; }
+      db.deleteReturn(rec.id);
+      writeReturnsCsv();
+      if (retsync.enabled()) retsync.emitDel(retsync.gidOf(rec.id));
+    };
+    const persistSave = (items) => {
+      const fields = {
+        orderNumber: rec.order_number, createdAt: rec.created_at,
+        customer: rec.customer, tracking: rec.tracking,
+        note: rec.note, items, unmatched: rec.unmatched,
+        receivedBy: rec.received_by,
+      };
+      if (remote) {
+        retsync.emitPutFor(key, {
+          created_at: rec.created_at, order_number: rec.order_number, source: rec.source || '',
+          customer: rec.customer, note: rec.note, items, unmatched: !!rec.unmatched,
+          tracking: rec.tracking, received_by: rec.received_by,
+        });
+        return;
+      }
+      const saved = db.saveReturn(rec.id, fields);
+      writeReturnsCsv();
+      retsync.emitRow(saved);
+    };
     const ii = Number(itemIndex);
     let stockNote = '';
     try {
       if (ii < 0 || rec.items.length === 0) {
-        db.deleteReturn(rec.id); // PO-only record: nothing ever moved stock
+        persistDelete(); // PO-only record: nothing ever moved stock
       } else {
         const it = rec.items[ii];
         if (!it) return { ok: false, error: 'Return line not found.' };
@@ -3441,17 +3518,9 @@ function registerIpc() {
         }
         const items = rec.items.slice();
         items.splice(ii, 1); // the row IS the line now — remove it whole
-        if (items.length === 0) db.deleteReturn(rec.id);
-        else {
-          db.saveReturn(rec.id, {
-            orderNumber: rec.order_number, createdAt: rec.created_at,
-            customer: rec.customer, tracking: rec.tracking,
-            note: rec.note, items, unmatched: rec.unmatched,
-            receivedBy: rec.received_by,
-          });
-        }
+        if (items.length === 0) persistDelete();
+        else persistSave(items);
       }
-      writeReturnsCsv();
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3637,24 +3706,18 @@ function registerIpc() {
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
-        // — Linnworks item retail prices are deliberately left empty here)
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
+        // (the per-SKU channel-price lookup left with the Value idle column,
+        // owner 2026-09-12 — one fewer throttled API call per unlisted SKU)
         detail.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId, // the add-image button needs it
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
-    detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+    detail.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
     unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
@@ -3699,23 +3762,17 @@ function registerIpc() {
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
         kept.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId,
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
     if (changed) {
-      kept.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+      kept.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
       unlistedCache = { ...unlistedCache, skus: kept.map(d => d.sku), detail: kept, covered: [...covered] };
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
       if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
@@ -3730,6 +3787,9 @@ function registerIpc() {
     } catch { /* no saved scan yet */ }
   }
 
+  // the channel-bypass maps ride every unlisted response so the renderer
+  // can grey out "can't sell there" channels without an extra round trip
+  const skipCfg = (cfg) => ({ chanSkips: cfg.channelSkips || {} });
   ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3744,25 +3804,25 @@ function registerIpc() {
       if (force) {
         if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
           const c = await runUnlistedDelta(cfg);
-          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
         }
         const prev = unlistedCache;
         unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
         const scan = runUnlistedScan(cfg);
         if (prev.detail) {
           scan.catch(() => { if (!unlistedCache.detail) unlistedCache = prev; });
-          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], stale: true };
+          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale: true };
         }
         const c = await scan;
-        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
       }
       if (unlistedCache.detail) {
         const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
         if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
-        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], stale };
+        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale };
       }
       const c = await runUnlistedScan(cfg);
-      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3788,6 +3848,21 @@ function registerIpc() {
     config.save({ unlistedIgnore: [...list].sort() });
     unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
     return { ok: true, ignored: [...list].sort() };
+  });
+  // channel bypass (owner 2026-09-12: "grey out channels they wouldn't be
+  // able to sell to"): per-SKU one-offs and per-condition rules. Purely a
+  // reporting filter — nothing is touched in Linnworks.
+  ipcMain.handle('stock:channelSkip', (_e, { sku, channel, remove }) => {
+    const key = String(sku || '').trim().toUpperCase();
+    const ch = String(channel || '').trim().toLowerCase();
+    if (!key || !ch) return { ok: false, error: 'Missing SKU or channel.' };
+    const cfg = config.load();
+    const map = { ...(cfg.channelSkips || {}) };
+    const set = new Set(map[key] || []);
+    if (remove) set.delete(ch); else set.add(ch);
+    map[key] = [...set].sort();
+    config.save({ channelSkips: map });
+    return { ok: true, chanSkips: map };
   });
   // DropShip program + reorder points
   // shared by the desktop dropship view AND the phone stock editor
@@ -3926,6 +4001,21 @@ function registerIpc() {
   // the page itself is hidden unless pages.receiving is enabled.
   ipcMain.handle('receiving:finish', (_e, payload) => finishReceiving(payload));
   ipcMain.handle('receiving:list', () => listReceivingSessions());
+  // shared returns folder picker (Settings → Returns sync). Saving the
+  // config re-points the engine via the config:set hook above.
+  ipcMain.handle('retsync:chooseFolder', async () => {
+    const cur = (config.load().returnsSync || {}).folder || '';
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Choose the shared returns folder (Google Drive / OneDrive / network share)',
+      defaultPath: cur || app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, folder: cur };
+    config.save({ returnsSync: { folder: filePaths[0] } });
+    startRetSync();
+    pushState();
+    return { ok: true, folder: filePaths[0] };
+  });
   ipcMain.handle('receiving:chooseFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Choose receiving session folder',
@@ -3960,31 +4050,9 @@ function registerIpc() {
   // the pane header's globe: a native popup with the seller portals (native
   // so the marketplace page below can never draw over it); the current
   // site wears the checkmark
-  // the Returns tab's dropdown: Returns log | Shelf (owner 2026-08-25 —
-  // Shelf lives under Returns now; NATIVE menu because the marketplace pane
-  // is a native layer that would cover an HTML dropdown). Resolves with the
-  // picked page, or null when dismissed.
-  ipcMain.handle('nav:returnsMenu', (_e, payload) => new Promise((resolve) => {
-    if (!win || win.isDestroyed()) { resolve({ ok: false }); return; }
-    const cfg = config.load();
-    const current = payload && payload.current;
-    // the close callback fires BEFORE item click handlers — resolving there
-    // dropped every pick (v1.20.38 bug: menu opened, clicking did nothing).
-    // Clicks resolve directly; the callback only covers dismiss, after a
-    // beat so a click always wins the race.
-    let done = false;
-    const finish = (page) => { if (!done) { done = true; resolve({ ok: true, page }); } };
-    const items = [
-      { label: 'Returns log', key: 'returns' },
-      ...((cfg.pages || {}).stock ? [{ label: 'Shelf — what’s selling', key: 'shelf' }] : []),
-    ];
-    Menu.buildFromTemplate(items.map(it => ({
-      label: it.label,
-      type: 'checkbox',
-      checked: current === it.key,
-      click: () => finish(it.key),
-    }))).popup({ window: win, callback: () => setTimeout(() => finish(null), 120) });
-  }));
+  // (the Returns tab's Returns log | Shelf dropdown is an in-app <dialog>
+  // in the renderer now — owner 2026-09-12, "make it a dropdown"; the
+  // marketplace pane yields to open dialogs so it can't draw over it)
   ipcMain.handle('browser:platformMenu', () => {
     if (!paneView || !win || win.isDestroyed()) return { ok: false };
     const HOMES = [
@@ -4101,7 +4169,11 @@ function createWindow() {
 }
 
 function buildMenu() {
+  const mac = process.platform === 'darwin';
   const template = [
+    // macOS titles the FIRST menu with the app's name and expects the
+    // standard app menu there; without it File got swallowed into it
+    ...(mac ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
       submenu: [
@@ -4128,10 +4200,15 @@ function buildMenu() {
         { role: 'quit' },
       ],
     },
+    // Cmd+C/V/X/A/Z on macOS only work when the application menu carries
+    // the edit roles — without an Edit menu copy/paste did nothing on Mac
+    // (owner report 2026-09-12); Windows fires them natively either way
+    { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
-        { label: 'History', accelerator: 'CmdOrCtrl+H', click: () => win && win.webContents.send('ui:open-history') },
+        // Cmd+H is the system-wide Hide on macOS (the app menu owns it now)
+        { label: 'History', accelerator: mac ? 'Cmd+Shift+H' : 'Ctrl+H', click: () => win && win.webContents.send('ui:open-history') },
         { label: 'Ignored Clipboard Log', click: () => win && win.webContents.send('ui:open-debug') },
         { type: 'separator' },
         // dev-only tools stay out of installed builds (warehouse machines)
@@ -4206,6 +4283,7 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   createWindow();
+  startRetSync();
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();

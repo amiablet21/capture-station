@@ -30,6 +30,7 @@ const EVENTS = [
   'ui:open-debug',
   'ui:open-history',
   'returns:importProgress',
+  'returns:syncChanged',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -88,8 +89,9 @@ contextBridge.exposeInMainWorld('api', {
   returnsImportResolve: (entries) => ipcRenderer.invoke('returns:importResolve', { entries }),
   returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
   returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
+  returnsSyncChooseFolder: () => ipcRenderer.invoke('retsync:chooseFolder'),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
-  returnsMenu: (current) => ipcRenderer.invoke('nav:returnsMenu', { current }),
+  channelSkip: (sku, channel, remove) => ipcRenderer.invoke('stock:channelSkip', { sku, channel, remove }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),
   wfsCreate: (note, items) => ipcRenderer.invoke('wfs:create', { note, items }),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),

@@ -17,6 +17,12 @@
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
       <button id="tabListings" class="tab" hidden>Listings</button>
     </nav>
+    <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
+         under the tab; a <dialog> so the marketplace pane yields while open -->
+    <dialog id="returnsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="returns">Returns log</button>
+      <button class="tab-menu-item" data-page="shelf">Shelf</button>
+    </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
@@ -130,7 +136,6 @@
           <div id="stockChips" class="stock-chips" hidden></div>
           <div class="stock-band-right">
             <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
-            <div id="stockGapsLine" class="stock-gaps" hidden></div>
             <div class="stock-actions">
               <!-- with a condition view active the Shelf carries the selling
                    history — a pointer, not duplicated columns (owner 2026-08-25) -->
@@ -138,7 +143,6 @@
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
-              <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
                    2026-08-02); the dialogs and logic behind them are untouched.
                    WFS Shipments came back 2026-09-09 (owner asked for exactly
@@ -147,6 +151,11 @@
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
               <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
+              <!-- refresh rides at the end as a plain icon, out of the row of
+                   words (owner 2026-09-14: "make it an icon, not squished") -->
+              <button id="stockRefresh" class="btn btn-ghost stock-refresh-ico" title="Reload from Linnworks" aria-label="Refresh">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -160,12 +169,15 @@
        sorted stalest-first, last sale beside current price (mockups signed
        off 2026-08-25: no week columns, Idle is the one tinted cell) -->
   <section id="shelfPage" class="shelf-page" hidden>
+    <div class="shelf-tiles" id="shTiles"></div>
     <div class="shelf-toolbar">
       <div class="search-field shelf-search">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
         <input id="shSearch" class="search-input" type="text" placeholder="Search SKU" autocomplete="off" spellcheck="false" />
       </div>
       <div id="shChips" class="stock-chips"></div>
+      <span class="sh-range-lbl">Sold in</span>
+      <div id="shRangeChips" class="stock-chips"></div>
       <button id="shRefresh" class="btn btn-ghost" title="Re-pull 90 days of sales and fresh stock">Refresh</button>
     </div>
     <div class="shelf-card">
@@ -200,7 +212,8 @@
           <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
-          <button id="retImportBtn" class="btn btn-ghost" title="Upload the returns history sheet (.xlsx or .csv) — one row per received unit; duplicate PO rows collapse into unit counts">Import</button>
+          <!-- shared-folder sync: connection dot + one chip per station seen -->
+          <span id="retSyncLine" class="ret-sync-line" hidden></span>
           <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
           <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
         </div>
@@ -727,6 +740,19 @@
         <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
 
+      <h3 class="dlg-section">Returns sync</h3>
+      <div class="settings-row">
+        <span class="field-label">Shared returns folder</span>
+        <span id="setRetSyncFolder" class="test-result mono"></span>
+        <button id="chooseRetSyncBtn" class="btn btn-ghost">Change folder</button>
+        <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
+      </div>
+      <label class="field">
+        <span class="field-label">This station's name (stamped on every return it logs)</span>
+        <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share and they all see one returns log — open the app anywhere, see everyone's returns, edit any of them. Each station writes only its own file, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds.</p>
+
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">
         <label class="field">
@@ -850,7 +876,6 @@
       </div>
     </div>
   </dialog>
-  <datalist id="skuOptions"></datalist>
   <!-- the entry row's ⚠ popover (no-popup receiving, owner 2026-09-10):
        anchored beside the condition pill, never a modal -->
   <div id="wsFix" class="rv-fix" hidden>
@@ -1116,11 +1141,6 @@
         <div class="rv-row">
           <div class="rv-k">By</div>
           <div class="rv-v"><input id="rvBy" class="rv-in rv-in-sm mono" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></div>
-        </div>
-        <div class="rv-row">
-          <div class="rv-k">Dispute $</div>
-          <div class="rv-v"><input id="rvSettle" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="—"
-            aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></div>
         </div>
         <div class="rv-row">
           <div class="rv-k">Notes</div>

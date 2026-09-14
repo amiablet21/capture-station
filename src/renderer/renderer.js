@@ -44,8 +44,8 @@ if (!window.api) {
     returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
+    channelSkip: async () => ({ ok: false, error: 'Preview mode' }),
     shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
-    returnsMenu: async () => ({ ok: false }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -86,6 +86,7 @@ if (!window.api) {
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
+    returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
     copyText: async () => ({ ok: true }),
     on: () => {},
   };
@@ -951,6 +952,9 @@ async function openSettings() {
   $('setPageListings').checked = pg.listings !== false;
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
+  const rsy = cfg.returnsSync || {};
+  $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
+  $('setRetSyncStation').value = rsy.station || '';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -1019,6 +1023,25 @@ $('chooseRecvBtn').addEventListener('click', async () => {
   if (res.folder) $('setRecvFolder').textContent = res.folder;
 });
 
+$('chooseRetSyncBtn').addEventListener('click', async () => {
+  // the station name must exist BEFORE the folder starts syncing — it names
+  // this desktop's file. Save it from the field on the way in.
+  const st = $('setRetSyncStation').value.trim().toUpperCase();
+  if (!st) { toast('Give this station a name first — it labels every return it logs.'); $('setRetSyncStation').focus(); return; }
+  await api.setConfig({ returnsSync: { station: st } });
+  const res = await api.returnsSyncChooseFolder();
+  if (res.folder) $('setRetSyncFolder').textContent = res.folder;
+  if (res.ok) { retSyncToasted = false; loadRetPast(); }
+});
+
+$('clearRetSyncBtn').addEventListener('click', async () => {
+  await api.setConfig({ returnsSync: { folder: '' } });
+  $('setRetSyncFolder').textContent = 'off — returns stay on this desktop';
+  retSyncInfo = null;
+  renderRetSyncLine();
+  loadRetPast();
+});
+
 $('settingsSave').addEventListener('click', async () => {
   const sel = $('setLocation');
   const pinVal = $('setPin').value.trim();
@@ -1036,6 +1059,7 @@ $('settingsSave').addEventListener('click', async () => {
       listings: $('setPageListings').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
+    returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -1192,30 +1216,50 @@ $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
-// native menu (native because the pane layer covers HTML dropdowns)
-$('tabReturns').addEventListener('click', async (e) => {
+// in-app menu (a <dialog>, so the native marketplace pane yields while it is
+// open exactly like every other dialog — replaced the native popup, owner
+// 2026-09-12 "make it a dropdown")
+$('tabReturns').addEventListener('click', (e) => {
   const wantMenu = e.target.closest('.tab-caret') || activePage === 'returns' || activePage === 'shelf';
   if (!wantMenu) { showPage('returns'); return; }
-  const res = await api.returnsMenu(activePage === 'shelf' ? 'shelf' : 'returns').catch(() => null);
-  if (res && res.ok && res.page) showPage(res.page);
+  const dlg = $('returnsMenuDlg');
+  const shelfOn = !!(state && state.pages && state.pages.stock);
+  for (const b of dlg.querySelectorAll('.tab-menu-item')) {
+    b.hidden = b.dataset.page === 'shelf' && !shelfOn;
+    b.classList.toggle('is-current', activePage === b.dataset.page);
+  }
+  dlg.showModal();
+  // anchor under the tab, clamped so a narrow window never clips the menu
+  const r = $('tabReturns').getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+// a click on an item picks it; a click on the backdrop (the dialog itself)
+// dismisses; Esc closes natively
+$('returnsMenuDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('returnsMenuDlg').close();
+  if (item) showPage(item.dataset.page);
 });
 
-/* ---------- Shelf: the warehouse sell-through radar ---------- */
-// One row per stocked SKU, sorted stalest-first; Idle is the single tinted
-// column, Last sold keeps the exact date + what it fetched. Design locked
-// through mockups 2026-08-25 (no week columns — "simpler, then add on").
+/* ---------- Shelf: the returns sell-through radar ---------- */
+// One row per condition SKU (returns only — the owner cut All stock/New
+// 2026-09-12 along with the trend, sell-thru and money tiles), sorted
+// stalest-first; Idle is the single tinted column. Sold / Avg sold at /
+// Rate follow the Sold-in period picker, sold-out returns stay visible.
 let shData = null;
-let shView = 'cond'; // all | new | cond | openbox | used | scrap
+let shView = ''; // '' = every condition | openbox | used | scrap | soldout
+let shRange = 30; // the Sold-in period, days
+let shSort = { key: 'idle', dir: -1 }; // idle | sold | avg | rate; -1 = biggest first
 let shBusy = false;
 const SH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SH_GROUPS = [
-  ['all', 'All stock', () => true],
-  ['new', 'New', (r) => r.cond === 'new'],
-  ['cond', 'Conditions', (r) => r.cond !== 'new'],
   ['openbox', 'Open Box', (r) => r.cond === 'openbox'],
   ['used', 'Used', (r) => r.cond === 'used'],
   ['scrap', 'Scrap', (r) => r.cond === 'scrap'],
+  ['soldout', 'Sold out', (r) => !r.units],
 ];
+const SH_RANGES = [['This week', 7], ['30 days', 30], ['60 days', 60], ['90 days', 90]];
 
 function enterShelf() {
   if (shData) renderShelf(); // stale numbers instantly, fresh ones follow
@@ -1239,8 +1283,10 @@ async function loadShelf(force) {
   if (activePage === 'shelf') renderShelf();
 }
 
+// r.sales is [[ts, qty, revenue], …] newest first, the full 90-day window
+const shLastTs = (r) => (r.sales && r.sales.length ? r.sales[0][0] : 0);
 const shIdleDays = (r) => {
-  const t = r.lastTs || r.arrivedTs || 0;
+  const t = shLastTs(r) || r.arrivedTs || 0;
   return t ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : Infinity;
 };
 const shDay = (ts) => {
@@ -1249,49 +1295,119 @@ const shDay = (ts) => {
   return `${SH_MONTHS[d.getMonth()]} ${d.getDate()}${yr}`;
 };
 
+// aggregates inside the Sold-in period (newest-first lets the loop stop early)
+function shStats(r) {
+  const cut = Date.now() - shRange * 86400000;
+  let sold = 0;
+  let revenue = 0;
+  for (const [ts, qty, rev] of r.sales || []) {
+    if (ts < cut) break;
+    sold += qty;
+    revenue += rev;
+  }
+  const last = r.sales && r.sales[0];
+  return {
+    sold,
+    revenue,
+    avg: sold ? revenue / sold : 0,
+    rate: sold / (shRange / 7),
+    lastPrice: last ? (last[1] ? Math.round((last[2] / last[1]) * 100) / 100 : last[2]) : 0,
+  };
+}
+
+// one tile: how many returns sold in the period and the weekly pace
+// (the sales-$ / avg-price / dead-stock tiles were cut, owner 2026-09-12)
+function renderShTiles(rows, fn) {
+  let sold = 0;
+  for (const r of rows.filter(fn)) sold += shStats(r).sold;
+  const label = (SH_RANGES.find(x => x[1] === shRange) || SH_RANGES[1])[0].toLowerCase();
+  $('shTiles').innerHTML = `
+    <div class="sh-tile"><div class="sh-tile-l">Sold · ${label}</div><div class="sh-tile-b mono">${sold}</div><div class="sh-tile-f">${(sold / (shRange / 7)).toFixed(1)} per week</div></div>`;
+}
+
 function renderShelf() {
   if (!shData) return;
   const rows = shData.rows;
+  // chips toggle: the active one clicks off back to every condition
   $('shChips').innerHTML = '<div class="stock-tray">' + SH_GROUPS.map(([key, label, fn]) =>
     `<button class="view-chip ${shView === key ? 'is-active' : ''}" data-shview="${key}">${label} · ${rows.filter(fn).length}</button>`).join('') + '</div>';
+  $('shRangeChips').innerHTML = '<div class="stock-tray">' + SH_RANGES.map(([label, d]) =>
+    `<button class="view-chip ${shRange === d ? 'is-active' : ''}" data-shrange="${d}">${label}</button>`).join('') + '</div>';
+  const group = SH_GROUPS.find(g => g[0] === shView);
+  const fn = group ? group[2] : () => true;
+  renderShTiles(rows, fn);
   const q = $('shSearch').value.trim().toUpperCase();
-  const fn = (SH_GROUPS.find(g => g[0] === shView) || SH_GROUPS[0])[2];
+  const stats = new Map();
+  for (const r of rows) stats.set(r, shStats(r));
+  const keyOf = {
+    idle: (r) => shIdleDays(r),
+    sold: (r) => stats.get(r).sold,
+    avg: (r) => stats.get(r).avg,
+    rate: (r) => stats.get(r).rate,
+  }[shSort.key] || shIdleDays;
   const list = rows.filter(fn)
     .filter(r => !q || String(r.sku).toUpperCase().includes(q) || String(r.title).toUpperCase().includes(q))
-    .sort((a, b) => shIdleDays(b) - shIdleDays(a) || String(a.sku).localeCompare(String(b.sku)));
+    .sort((a, b) => (keyOf(b) - keyOf(a)) * -shSort.dir || String(a.sku).localeCompare(String(b.sku)));
   $('shTable').hidden = !list.length;
   $('shEmpty').hidden = !!list.length;
   if (!list.length) $('shEmpty').textContent = 'Nothing on the shelf matches.';
-  $('shTable').innerHTML = '<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th><th class="r">Idle</th><th>Last sold</th><th>Listed on</th></tr>'
+  const arr = (k) => shSort.key === k ? (shSort.dir < 0 ? ' ▼' : ' ▲') : '';
+  $('shTable').innerHTML = `<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th>`
+    + `<th class="r sh-sort" data-shsort="sold" title="Units sold inside the period — click to sort">Sold${arr('sold')}</th>`
+    + `<th class="r sh-sort" data-shsort="avg" title="Average realized price inside the period — click to sort">Avg sold at${arr('avg')}</th>`
+    + `<th class="r sh-sort" data-shsort="rate" title="Units per week inside the period — click to sort">Rate${arr('rate')}</th>`
+    + `<th class="r sh-sort" data-shsort="idle" title="Days since the last sale (or since arrival) — click to sort">Idle${arr('idle')}</th>`
+    + `<th>Last sold</th></tr>`
     + list.map((r, i) => {
+      const st = stats.get(r);
+      const soldOut = !r.units;
       const idle = shIdleDays(r);
       const idleTxt = idle === Infinity ? `>${shData.windowDays}d` : `${idle}d`;
       const idleCls = idle === Infinity || idle >= 30 ? 'sh-bad' : idle >= 14 ? 'sh-warn' : '';
+      const lastTs = shLastTs(r);
       // a sale OLDER than the current stock's arrival is history, not traction
-      const ghost = r.lastTs && r.arrivedTs && r.lastTs < r.arrivedTs;
+      const ghost = lastTs && r.arrivedTs && lastTs < r.arrivedTs;
       return `<tr><td class="gut">${i + 1}</td>`
-        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}</td>`
+        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}${soldOut ? ' <span class="sh-out">Sold out</span>' : ''}</td>`
         + `<td class="r mono">${r.units}</td>`
         + `<td class="r mono">${r.price ? `$${Number(r.price).toFixed(2)}` : '—'}</td>`
-        + `<td class="r mono ${idleCls}">${idleTxt}</td>`
-        + `<td class="mono ${r.lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
-        + (r.lastTs ? `${shDay(r.lastTs)} · $${Number(r.lastPrice).toFixed(2)}${ghost ? ' *' : ''}` : 'never') + '</td>'
-        + `<td class="mono sh-dim">${r.arrivedTs ? shDay(r.arrivedTs) : '—'}</td></tr>`;
+        + `<td class="r mono">${st.sold || '<span class="sh-dim">0</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `$${st.avg.toFixed(2)}` : '<span class="sh-dim">—</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `${st.rate.toFixed(1)}<span class="sh-dim">/wk</span>` : '<span class="sh-dim">—</span>'}</td>`
+        + (soldOut ? '<td class="r mono sh-good" title="Sold through — nothing left to move">✓</td>' : `<td class="r mono ${idleCls}">${idleTxt}</td>`)
+        + `<td class="mono ${lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
+        + (lastTs ? `${shDay(lastTs)} · $${Number(st.lastPrice).toFixed(2)}${ghost ? ' *' : ''}`
+          : (r.arrivedTs ? `never · listed ${shDay(r.arrivedTs)}` : 'never')) + '</td></tr>';
     }).join('');
   const units = list.reduce((s, r) => s + r.units, 0);
   const value = list.reduce((s, r) => s + r.units * (r.price || 0), 0);
-  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices`;
+  const soldHere = list.reduce((s, r) => s + stats.get(r).sold, 0);
+  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices · ${soldHere} sold in the last ${shRange} days`;
 }
 
 $('shChips').addEventListener('click', (e) => {
   const c = e.target.closest('[data-shview]');
   if (!c) return;
-  shView = c.dataset.shview;
+  shView = shView === c.dataset.shview ? '' : c.dataset.shview; // toggle off = all
+  renderShelf();
+});
+$('shRangeChips').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-shrange]');
+  if (!c) return;
+  shRange = Number(c.dataset.shrange);
+  renderShelf();
+});
+$('shTable').addEventListener('click', (e) => {
+  const th = e.target.closest('th.sh-sort');
+  if (!th) return;
+  const k = th.dataset.shsort;
+  if (shSort.key === k) shSort.dir = -shSort.dir;
+  else shSort = { key: k, dir: -1 };
   renderShelf();
 });
 $('shSearch').addEventListener('input', renderShelf);
 $('shRefresh').addEventListener('click', () => loadShelf(true));
-$('stockShelfLink').addEventListener('click', () => { shView = 'cond'; showPage('shelf'); });
+$('stockShelfLink').addEventListener('click', () => { shView = ''; showPage('shelf'); });
 
 // receiving lives on the Stock page now, as a dialog
 /* ---------- "shipped different item" substitution dialog ---------- */
@@ -1856,7 +1972,6 @@ let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed
 let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
 let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
-let stockMissingCh = ''; // 'walmart'|'ebay'|'temu' = in-stock items with no link on that channel
 let chLinked = null; // { walmart: Set(stockItemId), ebay: Set, temu: Set } | null
 let chLinkedLoading = false;
 
@@ -1875,48 +1990,9 @@ async function loadChLinked() {
   }
 }
 
-// the quiet subline under the toolbar: "MISSING LISTINGS  Walmart 2 · …"
-// (owner picked this over chips, 2026-08-08); a link toggles the filter
-function renderStockGaps() {
-  const line = $('stockGapsLine');
-  if (!line) return;
-  if (!chLinked || activePage !== 'stock') { line.hidden = true; return; }
-  const parts = ['walmart', 'ebay', 'temu'].flatMap(label => {
-    if (!chLinked[label]) return [];
-    const n = stockMissingList(label).length;
-    return n ? [
-      `<a data-gap="${label}" class="${stockMissingCh === label ? 'on' : ''}" title="Show in-stock items with no ${esc(channelLabel(label))} listing linked">${esc(channelLabel(label))} ${n}</a>`,
-    ] : [];
-  });
-  line.hidden = parts.length === 0;
-  line.innerHTML = `<span class="stock-gaps-lbl">Missing listings</span>${parts.join('')}`;
-}
-
-$('stockGapsLine').addEventListener('click', (e) => {
-  const a = e.target.closest('[data-gap]');
-  if (!a) return;
-  const label = a.dataset.gap;
-  stockMissingCh = stockMissingCh === label ? '' : label;
-  stockWfsActive = false;
-  stockLowActive = false;
-  stockDsActive = false;
-  stockUnlistedActive = false;
-  stockActiveView = null;
-  renderStockChips();
-  renderStock();
-});
-
-// in-stock items (primary) missing a link on the given channel
-function stockMissingList(label) {
-  if (!chLinked || !chLinked[label] || !stockCache) return [];
-  const set = chLinked[label];
-  return stockCache.items.filter(it => {
-    if (!it.stockItemId) return false;
-    const l = it.levels.find(x => x.locationId === stockCache.locationId);
-    if (!l || (Number(l.stockLevel) <= 0 && Number(l.available) <= 0)) return false;
-    return !set.has(it.stockItemId);
-  });
-}
+// (the "MISSING LISTINGS  Walmart 2 · …" subline and its per-channel gap
+// filter were removed at the owner's request 2026-09-12 — the Unlisted
+// view with its per-row channel chips is the one listings nag now)
 let dsPads = null; // { SKU: padQty } from config
 let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
 let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
@@ -2009,7 +2085,7 @@ function renderStockChips() {
   // NB: NOT "stock-tray" — that class is the per-row hover action tray and
   // ships visibility:hidden (the collision blanked this whole toolbar once)
   box.innerHTML = '<div class="chip-tray">' + [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive ? '' : 'is-active'}" data-view="">All</button>`,
     ...(views.length ? [
       `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
     ] : []),
@@ -2026,13 +2102,12 @@ function renderStockChips() {
   ].join('') + '</div>'
     // only exists while there is something to fix — in-stock SKUs no
     // marketplace can currently sell
-    + (unlistedDetail && unlistedDetail.length
-      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`
+    + ((unlistedDetail || chLinked) && unlActiveDetail().length
+      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs missing a marketplace listing on at least one channel — New included">Unlisted · ${unlActiveDetail().length}</button>`
       : '');
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
   $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW);
-  renderStockGaps();
 }
 
 $('stockChips').addEventListener('click', (e) => {
@@ -2040,13 +2115,7 @@ $('stockChips').addEventListener('click', (e) => {
   if (!chip) return;
   stockDsActive = false;
   stockUnlistedActive = false;
-  stockMissingCh = '';
-  if (chip.dataset.view.startsWith('miss:')) {
-    stockMissingCh = chip.dataset.view.slice(5);
-    stockWfsActive = false;
-    stockLowActive = false;
-    stockActiveView = null;
-  } else if (chip.dataset.view === 'unl') {
+  if (chip.dataset.view === 'unl') {
     stockUnlistedActive = true;
     stockWfsActive = false;
     stockLowActive = false;
@@ -2140,10 +2209,15 @@ try {
   }
 } catch { /* fresh start */ }
 
+// while the search box has text, columns hold the width they had when
+// typing began — auto table layout re-measured every keystroke and the
+// whole sheet shifted under the cursor (owner 2026-09-14)
+let stockFreezeWidths = null;
+
 function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
-  const w = stockColWidths[key];
+  const w = stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
   const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
   return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}"${style} title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
 }
@@ -2232,8 +2306,6 @@ function renderStock() {
       home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
     }))
     .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
-    .filter(it => !stockMissingCh || (it.stockItemId && chLinked && chLinked[stockMissingCh]
-      && !chLinked[stockMissingCh].has(it.stockItemId) && (it.l.stockLevel > 0 || it.l.available > 0)))
     .filter(it => !stockLowActive || stockIsLow(it))
     .filter(it => !stockActiveView || (stockActiveView.plain
       ? !(stockViews || []).some(v => stockViewMatch(it, v.pattern))
@@ -2255,9 +2327,7 @@ function renderStock() {
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
     ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
-    : stockMissingCh
-      ? `${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} with no ${channelLabel(stockMissingCh)} listing linked — map them in Mappings`
-      : stockLowActive
+    : stockLowActive
         ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
         : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
@@ -2301,6 +2371,11 @@ function renderStock() {
   const condPrefix = stockActiveView ? ({ 'open box': 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' })[String(stockActiveView.label).toLowerCase()] : '';
   const qUp = q.toUpperCase();
   const suggested = condPrefix && !qUp.startsWith(condPrefix) ? condPrefix + qUp : qUp;
+  // every search ends in an add-new option, hits or not (owner 2026-09-14:
+  // finding OPEN-BOX-S24 must not hide the way to create the plain S24)
+  const addNewFoot = q && rows.length > 0 && !state.captureOnly
+    ? `<p class="dlg-note stock-addnew"><button class="ebay-addbtn" data-quickadd="${esc(suggested)}">+ Add new listing — create ${esc(suggested)} in Linnworks</button></p>`
+    : '';
   $('stockList').innerHTML = rows.length === 0
     ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn eb-ml8" data-quickadd="${esc(suggested)}">Create ${esc(suggested)} in Linnworks</button>` : ''}</p>`
     : wfsLoc
@@ -2320,7 +2395,7 @@ function renderStock() {
             <td class="num cell-level"><span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span></td>
             <td class="num ${r.home.stockLevel <= 0 ? 'stock-home-zero' : ''}"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Your warehouse count — click to correct">${r.home.stockLevel}</button></td>
           </tr>`).join('')}</tbody>
-      </table>`
+      </table>${addNewFoot}`
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
         const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
@@ -2350,7 +2425,7 @@ function renderStock() {
             ${imgCell(r)}
             ${stockColOrder.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table>${addNewFoot}`;
       })();
   // one-click bulk apply for every differing suggested minimum
   const applyAll = $('minApplyAll');
@@ -2369,52 +2444,82 @@ function renderStock() {
   }
 }
 
-/* ---------- Unlisted view (in-stock SKUs no marketplace can sell) ---------- */
+/* ---------- Unlisted view (in-stock SKUs missing a channel listing) ---------- */
 
 function renderUnlistedView() {
   const aa = $('minApplyAll');
   if (aa) aa.hidden = true;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const rows = (unlistedDetail || []).filter(d => !q
+  const matches = unlMissingRows().filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
-  const idle = rows.reduce((s, d) => s + d.avail * d.retail, 0);
+  // rows whose every missing channel is bypassed step aside (restorable
+  // below); most gaps first, then most units — or most units first when the
+  // Avail header is toggled (owner 2026-09-14: "filter by most units")
+  const rows = matches.filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)))
+    .sort(unlSortUnits
+      ? (a, b) => b.avail - a.avail || b.missing.length - a.missing.length || a.sku.localeCompare(b.sku)
+      : (a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
+  const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
-    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing · ${fmtMoney(idle)} sitting idle`;
-  const missChips = unlistedChannels.length
-    ? unlistedChannels.map(c => `<span class="unl-chn">${esc(channelLabel(String(c).toLowerCase()) || c)} ✗</span>`).join('')
-    : '<span class="unl-chn">no channels linked</span>';
-  $('stockList').innerHTML = rows.length === 0
-    ? '<p class="dlg-note">Nothing here — every in-stock SKU has a marketplace listing. 🎉</p>'
-    : `<table class="stock-table">
+    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
+  // per-row chips, EVERY channel: filled ✓ = already listed there (owner
+  // 2026-09-14: show it, don't remove it), gold ✗ = missing (click: "I
+  // can't sell it there"), greyed — = bypassed (click restores)
+  const chnChips = (d) => unlChanKeys().map(ch => {
+    const name = channelLabel(ch);
+    if (!d.missing.includes(ch)) return `<span class="unl-chn is-listed" title="Already listed on ${name} — click the SKU to see the linked channel listings">${name} ✓</span>`;
+    const kind = chanSkipKind(d.sku, ch);
+    if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
+    return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
+  }).join('');
+  // skipped and never-listed SKUs stay VISIBLE as dimmed rows at the bottom
+  // (owner 2026-09-14: "I want to see the ones I removed and the ones I
+  // skipped, so I don't forget") — never-list rows borrow their details
+  // from the stock sheet when the SKU still exists there
+  const ignoredRows = unlistedIgnored
+    .filter(s => !q || String(s).toLowerCase().includes(q))
+    .map(s => {
+      const it = ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === String(s).toUpperCase());
+      const l = it && (it.levels || []).find(x => x.locationId === stockCache.locationId);
+      return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
+    });
+  const rowHtml = (d, idx, mode) => `
+        <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
+          <td class="cell-gutter">${mode ? '·' : idx}</td>
+          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
+          <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
+          <td class="num">${d.avail == null ? '—' : d.avail}</td>
+          <td>${mode === 'ignored'
+    ? `<span class="unl-dim-note">never listed</span>`
+    : chnChips(d)}</td>
+          <td class="cell-actions">${mode === 'ignored'
+    ? `<button class="ret-todo-copy" data-unign="${esc(d.sku)}" title="Start asking for listings for ${esc(d.sku)} again">↩ restore</button>`
+    : `<button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
+            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — moves it to the never-listed rows below">✕</button>`}</td>
+        </tr>`;
+  const dimCount = parked.length + ignoredRows.length;
+  $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
+    ? '<p class="dlg-note">Nothing here — every in-stock SKU is listed on every channel it\'s expected on. 🎉</p>'
+    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table">
       <thead><tr>
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
         <th>SKU</th>
-        <th class="num th-level">Avail</th>
-        <th>Missing on</th>
-        <th class="num">Value idle</th>
+        <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
+        <th>Channels</th>
         <th class="th-actions"></th>
       </tr></thead>
-      <tbody>${rows.map((d, idx) => `
-        <tr>
-          <td class="cell-gutter">${idx + 1}</td>
-          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-          <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
-          <td class="num">${d.avail}</td>
-          <td>${missChips}</td>
-          <td class="num mono" title="available × channel listing price (highest stored)">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
-          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
-            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
-        </tr>`).join('')}</tbody>
+      <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
+      ${dimCount ? `<tbody class="unl-dim-body">
+        <tr class="unl-sec-tr"><td colspan="6" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
+        ${parked.map(d => rowHtml(d, 0, 'parked')).join('')}
+        ${ignoredRows.map(d => rowHtml(d, 0, 'ignored')).join('')}
+      </tbody>` : ''}
     </table>
-    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).${
-      unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
 }
 
-function fmtMoney(n) {
-  return '$' + Math.round(Number(n) || 0).toLocaleString();
-}
 
 /* ---------- DropShip program view (pads · pace · BUY signals) ---------- */
 
@@ -2631,6 +2736,15 @@ $('stockRefresh').addEventListener('click', () => {
 });
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
+  if (!$('stockSearch').value) {
+    stockFreezeWidths = null; // box emptied: columns breathe again
+  } else if (!stockFreezeWidths) {
+    // first keystroke: capture the columns as they stand
+    stockFreezeWidths = {};
+    for (const th of document.querySelectorAll('#stockList th[data-sort]')) {
+      stockFreezeWidths[th.dataset.sort] = th.offsetWidth;
+    }
+  }
   renderStock();
 });
 // the same ✕ the capture find bar has: clears and refilters in place
@@ -2665,6 +2779,13 @@ function saveSheetFrac(el, key, w) {
   const room = el.parentElement ? el.parentElement.clientWidth : 0;
   if (!room) { localStorage.setItem(key, String(w)); return; } // px, converts on next read
   const frac = Math.min(1, w / room);
+  // dragged (about) to the edge = "just fill" — drop the override so the
+  // sheet rides the window from now on instead of freezing a fraction
+  if (frac >= 0.98) {
+    localStorage.removeItem(key);
+    el.style.width = '';
+    return;
+  }
   localStorage.setItem(key, String(frac));
   el.style.width = `${(frac * 100).toFixed(2)}%`; // % from here on: tracks window resizes
 }
@@ -2835,6 +2956,40 @@ $('stockList').addEventListener('dblclick', (e) => {
 $('stockList').addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
+  const us = e.target.closest('th[data-unlsort]');
+  if (us) {
+    unlSortUnits = !unlSortUnits;
+    localStorage.setItem('unlSortUnits', unlSortUnits ? '1' : '0');
+    renderStock();
+    return;
+  }
+  const skip = e.target.closest('[data-skipsku]');
+  if (skip) {
+    requireOwner(async () => {
+      const res = await api.channelSkip(skip.dataset.skipsku, skip.dataset.skipch, !!skip.dataset.skiprm);
+      if (!res.ok) { toast(res.error || 'Could not update.'); return; }
+      chanSkips = res.chanSkips || {};
+      toast(skip.dataset.skiprm
+        ? `${skip.dataset.skipsku} counts as missing on ${channelLabel(skip.dataset.skipch)} again`
+        : `${skip.dataset.skipsku} skipped on ${channelLabel(skip.dataset.skipch)}`);
+      renderStockChips(); renderStock();
+    });
+    return;
+  }
+  const unskip = e.target.closest('[data-unskip]');
+  if (unskip) {
+    requireOwner(async () => {
+      const sku = unskip.dataset.unskip;
+      // clear every per-SKU skip; rule skips stay (change those in the rules)
+      for (const ch of (chanSkips[String(sku).toUpperCase()] || [])) {
+        const res = await api.channelSkip(sku, ch, true);
+        if (res.ok) chanSkips = res.chanSkips || {};
+      }
+      toast(`${sku} back on the listings list`);
+      renderStockChips(); renderStock();
+    });
+    return;
+  }
   const ign = e.target.closest('[data-ign]');
   const unign = e.target.closest('[data-unign]');
   if (ign || unign) {
@@ -2913,7 +3068,11 @@ $('stockList').addEventListener('click', async (e) => {
   const minBtn = e.target.closest('button.stock-min-btn');
   if (minBtn) { beginStockMinEdit(minBtn); return; }
   const skuLink = e.target.closest('.sku-link');
-  if (skuLink) { openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid); return; }
+  if (skuLink) {
+    if (!skuLink.dataset.chsid) { toast(`${skuLink.dataset.chsku} isn't in the loaded stock sheet — refresh Stock first.`); return; }
+    openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid);
+    return;
+  }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
@@ -3102,7 +3261,7 @@ function rvFeedback(msg, ok = false) {
 function retOpenRecv(po = '', seed = null) {
   rv = rvBlank();
   rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
@@ -3114,7 +3273,6 @@ function retOpenRecv(po = '', seed = null) {
   if (s.units) $('rvQty').value = s.units;
   if (s.price) $('rvPrice').value = s.price;
   if (s.by) $('rvBy').value = s.by;
-  if (s.settle) $('rvSettle').value = s.settle;
   if (s.note) $('rvNote').value = s.note;
   rvRenderCond();
   rvRenderOrder();
@@ -3223,17 +3381,12 @@ function rvLoadItem(it) {
     $('rvSku').value = it.sku;
     $('rvQty').value = String(it.quantity || 1);
     $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
-    // Dispute Settlement autofills from the SAME order line the price came
-    // from — what the customer paid is the amount at stake; clear it when
-    // there is no dispute
-    $('rvSettle').value = $('rvPrice').value;
   } else {
     rv.itemIdx = -1;
     rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
     $('rvSku').value = '';
     $('rvQty').value = '1';
     $('rvPrice').value = '';
-    $('rvSettle').value = '';
   }
   rv.condition = 'new';
   rv.pick = '';
@@ -3432,7 +3585,6 @@ async function rvCommit() {
     items: sku ? [{
       sku, condition: rv.condition, targetSku: target, qty,
       price: retMoney($('rvPrice').value) || rv.price,
-      settle: retMoney($('rvSettle').value),
       note: $('rvNote').value.trim(),
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -3453,7 +3605,7 @@ $('rvSave').addEventListener('click', async () => {
   const next = rv.items.findIndex((_, i) => !rv.received[i]);
   if (next < 0) { $('retRecvDialog').close(); return; }
   $('rvNote').value = '';
-  rvLoadItemAt(next); // refills price + settle from the next line
+  rvLoadItemAt(next); // refills price from the next line
   $('rvQty').focus();
 });
 
@@ -3494,7 +3646,7 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
 // rebuilt) across renders so half-typed values survive every refresh.
 
 let retEntryTr = null;
-let wsEls = null; // { po, cust, trk, date, sku, units, price, by, settle, note }
+let wsEls = null; // { po, cust, trk, date, sku, units, price, by, note }
 let ws = null;    // inline receive state (mirrors the old popup's rv)
 let wsLookupApi = (po) => api.returnsLookup(po); // seam: e2e stubs the lookup
 
@@ -3507,7 +3659,6 @@ const WS_FIELDS = [
   ['units', '', 'mono ws-num', 'Units'],
   ['price', '', 'mono ws-num', 'Price'],
   ['by', '', '', 'Received by'],
-  ['settle', '', 'mono ws-num', 'Dispute settlement'],
   ['note', '', '', 'Notes'],
 ];
 
@@ -3568,7 +3719,6 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('units')}</td>
     <td class="ws-cell">${wsInput('price')}</td>
     <td class="ws-cell">${wsInput('by')}</td>
-    <td class="ws-cell">${wsInput('settle')}</td>
     <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
@@ -3593,6 +3743,7 @@ function retEntryRow() {
   wsEls.po.addEventListener('input', () => {
     ws.orderId = null; ws.source = ''; ws.unmatched = true;
     ws.items = []; ws.looked = '';
+    wsSetPhase('idle'); // the edited PO is a new draft, not the loaded order
   });
   wsEls.sku.addEventListener('input', () => {
     ws.targets = null; ws.pick = '';
@@ -3748,21 +3899,46 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
   wsRenderCond();
 });
 
+// the entry row's phase, worn where the eye already is (approved demo
+// pending-entry.html, owner 2026-09-14): while the lookup runs the +
+// becomes a loading circle (just the circle — no gray wash); a loaded,
+// not-yet-saved row tints green and the gutter turns into a ✓, so the
+// draft never reads as an already-saved row
+function wsSetPhase(p) {
+  if (!retEntryTr) return;
+  retEntryTr.classList.toggle('is-ready', p === 'ready');
+  const plus = retEntryTr.querySelector('#wsPlus');
+  if (!plus) return;
+  if (p === 'pending') {
+    plus.innerHTML = '<span class="ws-spin" aria-label="Looking the order up"></span>';
+    plus.title = 'Looking the order up…';
+  } else if (p === 'ready') {
+    plus.textContent = '✓';
+    plus.title = 'Order loaded — Enter (or click here) saves this return';
+  } else {
+    plus.textContent = '+';
+    plus.title = 'Save this return';
+  }
+}
+
 // PO# + Enter: the matched order LOADS OVER the row (owner 2026-09-10,
 // "as soon as you enter a PO# it will load and overwrite everything") —
 // the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
   ws.busy = true;
+  wsSetPhase('pending');
   const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
   ws.busy = false;
   ws.looked = po;
   if (!res || !res.ok) {
+    wsSetPhase('idle');
     ws.unmatched = true; ws.orderId = null; ws.source = '';
     toast(`${(res && res.error) || 'Not found.'} — enter the details by hand.`);
     wsEls.cust.focus();
     return;
   }
+  wsSetPhase('ready');
   const o = res.order;
   ws.unmatched = false;
   ws.orderId = o.orderId;
@@ -3790,9 +3966,6 @@ function wsUseLine(line) {
   ws.pick = '';
   wsEls.units.value = String(line.quantity || 1);
   wsEls.price.value = Number(line.price) ? Number(line.price).toFixed(2) : '';
-  // Dispute Settlement mirrors the price line — what the customer paid is
-  // the amount at stake (cleared by hand when there is no dispute)
-  wsEls.settle.value = wsEls.price.value;
   wsRenderCond();
 }
 
@@ -3834,6 +4007,7 @@ function wsReset() {
   for (const [key] of WS_FIELDS) wsEls[key].value = '';
   wsDateFill();
   ws = wsBlank();
+  wsSetPhase('idle');
   wsFixClose();
   const menu = document.querySelector('.ws-emenu');
   if (menu) menu.remove();
@@ -3911,7 +4085,6 @@ async function wsSave() {
       received: sku ? received : '',
       condition: ws.condition, targetSku: target, qty,
       price: retMoney(v.price),
-      settle: retMoney(v.settle),
       note: v.note,
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -3971,10 +4144,60 @@ let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-onl
 // condition SKUs holding returned stock with NO marketplace listing linked
 // yet — surfaced as "not listed" markers so the employee knows what to make
 let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
-let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle value
+let unlistedDetail = null; // [{sku,title,image,avail}] most units first
 let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
+// channel bypass ("I can't sell this there" — owner 2026-09-12): click a
+// channel chip on an Unlisted row to grey it out; the SKU stops counting
+// as missing there (per-SKU only — the owner passed on condition rules)
+let chanSkips = {}; // { 'SKU': ['walmart', …] }
+// Avail header toggle: most units first instead of most gaps first
+let unlSortUnits = localStorage.getItem('unlSortUnits') === '1';
+
+// is this channel bypassed for this SKU? ('' = expected, 'sku' = skipped)
+function chanSkipKind(sku, ch) {
+  return (chanSkips[String(sku).toUpperCase()] || []).includes(ch) ? 'sku' : '';
+}
+// the channels the Unlisted view judges against, normalized to the three
+// marketplace keys (raw sources arrive as 'EBAY', 'TEMU US', 'WALMART'…)
+function unlChanKeys() {
+  const keys = [];
+  for (const c of unlistedChannels) {
+    const k = /walmart/i.test(c) ? 'walmart' : /ebay/i.test(c) ? 'ebay' : /temu/i.test(c) ? 'temu' : '';
+    if (k && !keys.includes(k)) keys.push(k);
+  }
+  return keys.length ? keys.sort() : ['ebay', 'temu', 'walmart'];
+}
+// Every in-stock SKU missing a listing on AT LEAST ONE channel — New
+// included (owner 2026-09-14: "it should show every listing, new or open
+// box or used"). Computed from the loaded stock sheet + the truthful link
+// sets, zero extra API calls; each row carries its own missing-channel
+// list so partially-listed items show only the gaps. Until the link sets
+// land, the zero-listing scan stands in (those rows miss everywhere).
+function unlMissingRows() {
+  const chans = unlChanKeys();
+  if (stockCache && chLinked && chans.some(ch => chLinked[ch])) {
+    const ignored = new Set(unlistedIgnored.map(s => String(s).toUpperCase()));
+    const out = [];
+    for (const it of stockCache.items) {
+      if (!it.stockItemId || ignored.has(String(it.sku).toUpperCase())) continue;
+      const l = it.levels.find(x => x.locationId === stockCache.locationId);
+      const avail = l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : 0;
+      if (avail <= 0) continue;
+      const missing = chans.filter(ch => chLinked[ch] && !chLinked[ch].has(it.stockItemId));
+      if (!missing.length) continue;
+      out.push({ sku: it.sku, title: it.title || '', image: it.image || '', stockItemId: it.stockItemId, avail, missing });
+    }
+    return out;
+  }
+  return (unlistedDetail || []).map(d => ({ ...d, missing: chans.slice() }));
+}
+
+// rows still worth nagging about: at least one missing channel not bypassed
+function unlActiveDetail() {
+  return unlMissingRows().filter(r => r.missing.some(ch => !chanSkipKind(r.sku, ch)));
+}
 
 // a background rescan finished in main: swap the fresh sets in wherever shown
 api.on('unlisted:refreshed', () => {
@@ -3994,6 +4217,7 @@ async function loadUnlisted(force) {
       unlistedDetail = res.detail || [];
       unlistedChannels = res.channels || [];
       unlistedIgnored = res.ignored || [];
+      chanSkips = res.chanSkips || {};
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
       if (activePage === 'ebay') renderEbayQueue();
@@ -4402,7 +4626,7 @@ function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
   const note = i.note || r.note || '';
   return `
-    <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
+    <tr class="ret-past-tr${retFreshGids.has(String(r.id)) ? ' is-fresh' : ''}" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
       <td class="mono ret-cell-po ret-ecell" data-edit="po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="ret-cell-cust ret-ecell" data-edit="customer" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
@@ -4418,8 +4642,10 @@ function retLogRowHtml(r, i, ii, un, num) {
       </td>
       <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
       <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-settle mono ret-ecell" data-edit="settle" title="Dispute settlement amount">${Number(i.settle) ? retMoneyText(i.settle) : '<span class="cell-missing">—</span>'}</td>
+      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}${
+        r._st ? (r._actor && r._actor !== r._st
+          ? `<span class="ret-by-sub is-edit" title="Last edited at ${esc(r._actor)}">✎ ${esc(r._actor)}</span>`
+          : `<span class="ret-by-sub" title="Graded at ${esc(r._st)}">${esc(retSyncInfo && r._st === retSyncInfo.station ? 'this station' : r._st)}</span>`) : ''}</td>
       <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
@@ -4456,7 +4682,7 @@ function renderRetLog() {
   const compact = document.body.classList.contains('ret-compact');
   const noneMsg = retLogAll.length
     ? `Nothing matches “${esc(q)}”.`
-    : 'No returns yet — type a PO# in the green row above to receive the first one.';
+    : 'No returns yet — type a PO# in the entry row above to receive the first one.';
   // the entry row survives the innerHTML swap: remember where focus was,
   // rebuild the sheet, move the SAME <tr> back in, put focus back
   const af = document.activeElement;
@@ -4478,14 +4704,13 @@ function renderRetLog() {
           <th class="th-units">Units</th>
           <th class="th-price">Price</th>
           <th class="th-by">Received By</th>
-          <th class="th-settle">Dispute Settlement</th>
           <th class="th-note">Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
       <tbody class="ret-entry-body"></tbody>
       <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
-        || `<tr><td colspan="${compact ? 6 : 13}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
+        || `<tr><td colspan="${compact ? 6 : 12}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
@@ -4535,7 +4760,7 @@ function renderRetDisputes() {
         <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
         <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
         <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
-        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}:${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
+        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}|${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
       </div>`;
     }).join('')}
     <div class="ret-todo-note">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>`;
@@ -4553,8 +4778,10 @@ $('retDisputes').addEventListener('click', async (e) => {
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
   const done = e.target.closest('[data-dispdone]');
   if (!done) return;
-  const [rid, ii] = done.dataset.dispdone.split(':').map(Number);
-  const entry = (retLogAll || []).find(x => x.r.id === rid && x.ii === ii);
+  const cut = done.dataset.dispdone.lastIndexOf('|');
+  const rid = done.dataset.dispdone.slice(0, cut);
+  const ii = Number(done.dataset.dispdone.slice(cut + 1));
+  const entry = (retLogAll || []).find(x => String(x.r.id) === rid && x.ii === ii);
   if (!entry) return;
   const { r, i } = entry;
   const res = await api.returnsEditUnit({
@@ -4570,8 +4797,49 @@ $('retDisputes').addEventListener('click', async (e) => {
   loadRetPast();
 });
 
+/* shared returns folder (Google Drive / OneDrive / network share): every
+   desktop pointed at the same folder shows ONE returns log. The sheet keeps
+   its columns — sync shows as the station chips in the log bar, a station
+   subline under Received By, and a green wash on rows arriving from other
+   desktops (design signed off from the mockup, owner 2026-09-14). */
+let retSyncInfo = null;   // { enabled, station, stations, folderOk, missed }
+let retSyncToasted = false;
+const retFreshGids = new Set(); // rows to wash on the next render
+
+function renderRetSyncLine() {
+  const el = $('retSyncLine');
+  if (!el) return;
+  if (!retSyncInfo || !retSyncInfo.enabled) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}" title="${retSyncInfo.folderOk
+    ? 'Shared returns folder connected — every desktop sees this log'
+    : 'Shared returns folder unreachable — check the path in Settings'}"></span>`
+    + (retSyncInfo.stations || []).map(st => `<span class="ret-st-chip ${st.name === retSyncInfo.station ? 'is-you' : ''}">${esc(st.name)}${st.name === retSyncInfo.station ? ' · you' : ''}</span>`).join('');
+}
+
+// a peer's file synced in: refresh, wash the moved rows, say who did what
+api.on('returns:syncChanged', (d) => {
+  const changes = (d && d.changes) || [];
+  if (!changes.length) return;
+  for (const c of changes) retFreshGids.add(String(c.gid));
+  if (activePage !== 'returns') return; // the next page open reloads anyway
+  loadRetPast();
+  const news = changes.filter(c => c.op === 'put' && c.kind === 'new').length;
+  const edits = changes.length - news;
+  const who = [...new Set(changes.map(c => c.actor))].join(', ');
+  toast(`${who}: ${[news ? `${news} new return${news === 1 ? '' : 's'}` : '', edits ? `${edits} change${edits === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}`, 3500);
+});
+
 async function loadRetPast() {
-  const returns = await api.returnsList();
+  // shared-folder sync on: { rows, sync }; off: the legacy bare array
+  const res = await api.returnsList();
+  const returns = Array.isArray(res) ? res : (res && res.rows) || [];
+  retSyncInfo = Array.isArray(res) ? null : (res && res.sync) || null;
+  renderRetSyncLine();
+  if (retSyncInfo && retSyncInfo.missed > 0 && !retSyncToasted) {
+    retSyncToasted = true;
+    toast(`Caught up from the shared folder — ${retSyncInfo.missed} change${retSyncInfo.missed === 1 ? '' : 's'} from other stations while this one was closed`, 5000);
+  }
   retLogAll = [];
   for (const r of returns) {
     // a PO-only return has no item lines but still shows as one row (ii -1)
@@ -4585,6 +4853,7 @@ async function loadRetPast() {
   }
   renderRetLog();
   renderRetDisputes();
+  retFreshGids.clear(); // washed once; later re-renders stay calm
 }
 
 let retLogPage = 0;
@@ -4604,7 +4873,7 @@ $('retPastBox').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
   if (e.target.closest('.ret-log-del-btn')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (!entry) return;
     const qty = Number(entry.i.qty) || 1;
     retDelCtx = { rid: entry.r.id, ii: entry.ii, target: entry.i.targetSku || '' };
@@ -4620,7 +4889,7 @@ $('retPastBox').addEventListener('click', (e) => {
   // retired: "each column would be editable")
   const td = e.target.closest('td[data-edit]');
   if (td && !e.target.closest('button') && !td.querySelector('.ret-ein, .ret-emenu')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (entry) retBeginEdit(td, entry);
   }
 });
@@ -4654,7 +4923,7 @@ async function retSaveEdit(entry, field, value) {
     const m = String(value).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) { toast('Date must look like 09/05/2026.'); renderRetLog(); return; }
     payload.day = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-  } else if (field === 'price' || field === 'settle') {
+  } else if (field === 'price') {
     payload[field] = retMoney(value);
   } else if (field === 'units') {
     payload.units = String(value).trim();
@@ -4684,7 +4953,6 @@ function retEditValue({ r, i, ii }, field) {
     case 'units': return String(Number(i.qty) || 1);
     case 'price': return Number(i.price) ? Number(i.price).toFixed(2) : '';
     case 'receivedBy': return r.received_by || '';
-    case 'settle': return Number(i.settle) ? Number(i.settle).toFixed(2) : '';
     case 'note': return ii >= 0 ? (i.note || '') : (r.note || '');
     default: return '';
   }
@@ -4696,7 +4964,7 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   if (other) renderRetLog();
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
-  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy', 'settle'].includes(field);
+  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy'].includes(field);
   td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
   const input = td.querySelector('input');
   input.value = startVal;
@@ -4971,7 +5239,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'settle', 11: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;
@@ -5550,15 +5818,48 @@ $('imgDialog').addEventListener('close', () => {
 function wfsLineHtml() {
   return `
     <div class="wfs-line">
-      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" />
+      <div class="wfs-combo">
+        <input type="text" class="input mono wfs-sku" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" />
+        <div class="combo-list" hidden></div>
+      </div>
       <input type="text" class="input mono wfs-gtin" autocomplete="off" spellcheck="false" />
       <input type="number" class="input mono wfs-qty" min="1" step="1" />
       <button class="wfs-remove" title="Remove line" type="button">✕</button>
     </div>`;
 }
 
+// case-insensitive inventory lookup: the shared combo list first, the stock
+// sheet's cache as backstop (same items, whichever loaded first)
+function wfsFindSku(q) {
+  const k = String(q || '').trim().toLowerCase();
+  if (!k) return null;
+  if (recvBySku && recvBySku.has(k)) return recvBySku.get(k);
+  return stockCache ? stockCache.items.find(i => i.sku.toLowerCase() === k) || null : null;
+}
+
 function wfsAddLine() {
   $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
+  // each line gets the app's searchable combobox (SKU / title / barcode,
+  // same as the receiving worksheet) — the bare <datalist> matched SKU text
+  // only and wore the OS's own styling (owner 2026-09-12, "not good")
+  const line = $('wfsLines').lastElementChild;
+  const input = line.querySelector('.wfs-sku');
+  makeCombo(input, line.querySelector('.combo-list'), (item) => {
+    input.value = item.sku;
+    const gtin = line.querySelector('.wfs-gtin');
+    if (!gtin.value.trim()) gtin.value = item.barcode || '';
+    wfsGrow();
+    wfsTotals();
+    line.querySelector('.wfs-qty').focus();
+  });
+}
+
+// a fresh entry row appears only when the LAST row holds a real SKU (picked
+// or typed in full) — growing whenever every row had any text duplicated
+// the row at the first letter typed (owner report 2026-09-12)
+function wfsGrow() {
+  const last = $('wfsLines').lastElementChild;
+  if (last && wfsFindSku(last.querySelector('.wfs-sku').value)) wfsAddLine();
 }
 
 // the footer total says exactly what Save will deduct, live
@@ -5574,10 +5875,9 @@ function wfsTotals() {
 }
 
 async function openWfs() {
-  // SKU suggestions + GTIN autofill come from the loaded stock sheet
-  if (stockCache) {
-    $('skuOptions').innerHTML = stockCache.items.map(i => `<option value="${esc(i.sku)}"></option>`).join('');
-  }
+  // SKU suggestions ride the shared inventory list (combo shows "Loading…"
+  // until it lands); GTIN autofill comes from the same items
+  ensureInventory();
   $('wfsLines').innerHTML = '';
   wfsAddLine();
   $('wfsNote').value = '';
@@ -5621,19 +5921,18 @@ $('wfsLines').addEventListener('click', (e) => {
   wfsTotals();
 });
 
-// picking a known SKU pre-fills the GTIN from the item's barcode; filling
-// the last row grows a fresh one under it (spreadsheet feel)
+// typing a full known SKU (without picking from the list) still pre-fills
+// the GTIN and grows the sheet, exactly like a pick
 $('wfsLines').addEventListener('input', (e) => {
   const skuInput = e.target.closest('.wfs-sku');
-  if (skuInput && stockCache) {
-    const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
+  if (skuInput) {
+    const item = wfsFindSku(skuInput.value);
     if (item) {
       const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
       if (!gtin.value.trim()) gtin.value = item.barcode || '';
+      wfsGrow();
     }
   }
-  const lines = [...$('wfsLines').querySelectorAll('.wfs-line')];
-  if (lines.every(l => l.querySelector('.wfs-sku').value.trim())) wfsAddLine();
   wfsTotals();
 });
 
@@ -5650,8 +5949,14 @@ $('wfsSave').addEventListener('click', async () => {
     out.classList.add('is-fail');
     return;
   }
-  if (stockCache) {
-    const unknown = items.filter(i => !stockCache.items.some(s => s.sku === i.sku));
+  if (stockCache || recvBySku) {
+    // canonicalize casing so a hand-typed sku deducts the real item
+    const unknown = [];
+    for (const i of items) {
+      const known = wfsFindSku(i.sku);
+      if (known) i.sku = known.sku;
+      else unknown.push(i);
+    }
     if (unknown.length) {
       out.textContent = `Unknown SKU: ${unknown.map(u => u.sku).join(', ')}`;
       out.classList.add('is-fail');
@@ -5784,8 +6089,9 @@ function makeCombo(input, listEl, onPick, opts) {
   // while a list is open made the whole page shift (owner report 2026-08-06)
   const positionList = () => {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
-    // returns log AND the receive popup's sheet anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet')) return;
+    // returns log, the receive popup's sheet AND the WFS shipment sheet
+    // anchor to the viewport
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
@@ -7437,7 +7743,10 @@ function retImpStatHtml(parse, resolve) {
   return h;
 }
 
-$('retImportBtn').addEventListener('click', async () => {
+// the Import button is retired (owner 2026-09-14, history already in) —
+// the whole flow stays wired so it can come back with one button
+const retImportBtn = $('retImportBtn');
+if (retImportBtn) retImportBtn.addEventListener('click', async () => {
   const picked = await retImpPick().catch(e => ({ ok: false, error: e.message }));
   if (!picked || picked.canceled) return;
   if (!picked.ok) { toast(picked.error || 'Could not read that file.'); return; }

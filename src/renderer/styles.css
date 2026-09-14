@@ -438,7 +438,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .toast { animation: none; }
+  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast, tr.ret-past-tr.is-fresh td, .ret-sync-dot.is-bad, .ws-spin { animation: none; }
   * { transition: none !important; }
 }
 
@@ -983,9 +983,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-price { width: 78px; text-align: right; }
 .ret-sheet th.th-by { width: 100px; }
-.ret-sheet th.th-settle { width: 150px; text-align: right; }
-.ret-cell-price, .ret-cell-settle { text-align: right; font-size: 12px; }
-.ret-cell-settle { color: var(--pos-text); font-weight: 600; }
+.ret-cell-price { text-align: right; font-size: 12px; }
 
 .ret-sheet td { font-size: 12.5px; }
 .ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
@@ -1183,6 +1181,20 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-log-bar { display: flex; align-items: center; gap: 12px; }
 .ret-log-count { color: var(--muted); font-weight: 400; }
 .ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
+
+/* shared returns folder: the log bar's sync dot + station chips, the
+   Received-By station subline, and the arrival wash (owner 2026-09-14) */
+.ret-sync-line { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ret-sync-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--badge-green-text); flex: 0 0 auto; }
+.ret-sync-dot.is-bad { background: var(--neg-text); animation: retsyncpulse 1s ease infinite; }
+@keyframes retsyncpulse { 50% { opacity: 0.3; } }
+.ret-st-chip { font: 600 10.5px var(--mono); border-radius: 999px; padding: 1px 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.ret-st-chip.is-you { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+.ret-cell-by .ret-by-sub { display: block; font: 500 10px var(--mono); color: var(--faint); line-height: 1.2; text-transform: none; }
+.ret-cell-by .ret-by-sub.is-edit { color: var(--badge-yellow-text); }
+tr.ret-past-tr.is-fresh td { animation: retfreshin 1.8s ease; }
+@keyframes retfreshin { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+
 
 /* design C (2026-08-07): the log owns the page height; the sheet scrolls
    inside its card instead of the page ending where the rows do */
@@ -1422,34 +1434,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chmap-nfin { border-radius: 999px; }
 
-/* the quiet listing-gaps subline under the stock toolbar */
-.stock-gaps {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 26px 0;
-}
-.stock-gaps-lbl {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--faint);
-}
-.stock-gaps a {
-  color: var(--badge-yellow-text);
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 1px dotted var(--badge-yellow-text);
-}
-.stock-gaps a.on {
-  background: var(--badge-yellow-bg);
-  border-radius: 4px;
-  padding: 1px 7px;
-  border-bottom: none;
-}
 
 /* stock row actions: a floating tray on the right of the SKU cell, shown
    on hover (design B, 2026-08-08) — chart · DS enroll · delete */
@@ -1663,37 +1647,23 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-cell-units input::-webkit-inner-spin-button,
 .ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-/* ---- RETURNS-2 sheet, V1 polish (approved variants/returns-sheet-v2.html,
-   2026-09-05): softer green band, zebra rows, neutral gutter, condition as
-   a pastel pill, money without $ signs ---- */
-.recv-sheet-table.ret-log-table th {
-  background: #1f9d5b;
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border-right: 1px solid rgba(255, 255, 255, 0.22);
-  border-bottom: 1px solid #17854c;
-}
-.recv-sheet-table.ret-log-table th.th-gutter { background: #17854c; border-right: 1px solid rgba(255, 255, 255, 0.22); }
-.recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
-
-/* zebra on the LOG rows only (the entry tbody stays tinted) */
-.ret-log-table tbody:not(.ret-entry-body) tr:nth-child(even) td:not(.cell-gutter) { background: var(--surface-2); }
+/* ---- RETURNS sheet, sync-demo look (approved returns-sync mockup,
+   2026-09-14 "I like the design you had created"): the green skin is gone —
+   headers wear the app's own light sheet style (surface-2, uppercase faint
+   letters, hairlines), conditions are a colored dot + colored text ---- */
 
 /* the gutter goes quiet: plain numbers, red only for unmatched returns */
 .ret-log-table td.cell-gutter.st-captured { background: transparent; color: var(--muted); font-weight: 500; }
 .ret-log-table td.cell-gutter.st-failed { background: transparent; color: var(--neg-text); font-weight: 700; }
 
-/* condition as a pastel pill (the dot keeps its per-condition color) */
-.ret-log-table .ret-cond-ro { border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: 11.5px; }
-.ret-log-table .ret-cond-ro.is-new { background: var(--pos-bg); color: var(--pos-text); }
-.ret-log-table .ret-cond-ro.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.ret-log-table .ret-cond-ro.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
-.ret-log-table .ret-cond-ro.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+/* condition: per-condition dot + colored text, no pill */
+.ret-log-table .ret-cond-ro { font-weight: 600; font-size: 12px; }
+.ret-log-table .ret-cond-ro.is-new { color: var(--pos-text); }
+.ret-log-table .ret-cond-ro.is-openbox { color: var(--badge-blue-text); }
+.ret-log-table .ret-cond-ro.is-used { color: var(--badge-yellow-text); }
+.ret-log-table .ret-cond-ro.is-scrap { color: var(--neg-text); }
+.ret-log-table .ret-cond-ro.is-different { color: var(--muted); }
 
-/* money columns: price muted, settlement bold green (set further up) */
 .ret-cell-price { color: var(--muted); }
 
 /* "case: 12345" in a note renders as a small blue chip */
@@ -1724,18 +1694,47 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    (owner 2026-09-05, "popup instead of on the line"; 2026-09-09, every
    column takes typing) — a tinted band of bare inputs, closed by the
    green rule ---- */
-.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid #1f9d5b; }
+.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid var(--border); }
 .ret-log-table tr.ws-row td {
-  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+  background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
 }
+/* the empty entry row reads as an invitation, not data (demo look) */
+.ret-log-table tr.ws-row .ws-in::placeholder { font-style: italic; }
+.ret-log-table tr.ws-row td.ws-gutter { background: var(--surface-2); }
+.ret-log-table tr.ws-row td.ws-gutter:hover { background: var(--accent-soft); }
 .ret-log-table tr.ws-row td.ws-cell:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 2px;
 }
-.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; cursor: pointer; }
-.ws-gutter:hover { background: var(--accent-soft); }
+.ws-gutter { color: var(--muted); font-weight: 600; font-size: 15px; text-align: center; cursor: pointer; }
+.ws-gutter:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* entry-row phases (approved demo pending-entry.html, 2026-09-14):
+   pending = just the loading circle where the + was; ready = the loaded,
+   not-yet-saved draft tints green and the gutter becomes a save ✓ */
+.ws-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: ws-rot 0.7s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes ws-rot { to { transform: rotate(360deg); } }
+.ret-log-table tr.ws-row.is-ready td {
+  background: #f0f8f4;
+  box-shadow: inset 0 -2px 0 rgba(4, 120, 87, 0.35);
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter {
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter:hover { background: var(--accent-soft-text); }
 .ws-in {
   width: 100%;
   border: none;
@@ -1748,7 +1747,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
-.ws-in.ws-num { text-align: right; } /* units / price / settle line up with their columns */
+.ws-in.ws-num { text-align: right; } /* units / price line up with their columns */
 
 /* no-popup receiving (owner 2026-09-10): the condition pill lives in the
    row, its menu and the ⚠ popover anchor to the viewport — never modal */
@@ -1757,7 +1756,15 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    log's arrow line under the SKU */
 .ws-in.ws-recv { display: block; width: 100%; margin-top: 2px; font-size: 10.5px; color: var(--accent-soft-text); }
 .ws-in.ws-recv::placeholder { color: var(--faint); font-family: var(--mono); }
-.ws-cond-cell .ret-cond-ro { border: none; font-family: var(--font); cursor: pointer; }
+.ws-cond-cell .ret-cond-ro {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.ws-cond-cell .ret-cond-ro:hover { border-color: var(--border); background: var(--surface-2); }
 .ws-cond-cell .rv-warn { margin-left: 6px; vertical-align: middle; }
 .ws-emenu {
   position: fixed;
@@ -1789,7 +1796,7 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   padding: 0;
 }
 .ret-ein.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
-.ret-cell-units .ret-ein, .ret-cell-price .ret-ein, .ret-cell-settle .ret-ein { text-align: right; }
+.ret-cell-units .ret-ein, .ret-cell-price .ret-ein { text-align: right; }
 /* the condition cell edits through a compact 4-pill menu, right in the cell */
 .ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }
@@ -1832,6 +1839,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   color: var(--surface);
 }
 .unl-chn {
+  font-family: var(--font);
+  background: none;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 600;
   color: var(--badge-yellow-text);
@@ -1841,6 +1851,41 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   margin-right: 4px;
   white-space: nowrap;
 }
+.unl-chn:hover { background: var(--badge-yellow-bg); }
+.unl-chn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* bypassed channel ("can't sell it there"): quiet, still clickable to undo */
+.unl-chn.is-skip { color: var(--faint); border-color: var(--border); }
+.unl-chn.is-skip:hover { background: var(--surface-2); color: var(--muted); }
+/* already listed there: filled and settled, nothing to click */
+.unl-chn.is-listed {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  border: 1px solid transparent;
+  cursor: default;
+  display: inline-block;
+}
+/* the Avail header doubles as the units-first sort toggle */
+th.unl-sort-th { cursor: pointer; user-select: none; }
+th.unl-sort-th:hover { color: var(--accent); }
+
+/* skipped / never-listed SKUs stay visible as a dimmed section at the
+   bottom of the Unlisted sheet — a memory, not a nag */
+.unl-sec {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  background: var(--surface-2);
+  padding: 5px 10px;
+}
+tr.unl-dim td { opacity: 0.55; }
+tr.unl-dim:hover td { opacity: 1; }
+.unl-dim-note { font-size: 10.5px; color: var(--faint); font-style: italic; }
+
+/* every stock search ends in an add-new option under the results */
+.stock-addnew { padding: 8px 12px 2px; }
+.stock-addnew .ebay-addbtn { margin-left: 0; }
 
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
@@ -2364,11 +2409,14 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
    moderate widths (owner: "the spacing is weird", 2026-08-17) */
 /* the toolbar is a header band docked onto the sheet (owner pick 2026-08-17,
    mockup B): one bordered strip the table grows straight out of */
-.stock-main { display: flex; flex-direction: column; min-height: 0; max-width: calc(100% - 14px); }
+/* width: 100% matters — without it the sheet shrink-wraps its table and
+   re-snaps to content width on every render (owner 2026-09-14, "it auto
+   fixes itself and smushes"); cap-main and ret-main already carry it */
+.stock-main { display: flex; flex-direction: column; min-height: 0; width: 100%; min-width: 0; max-width: calc(100% - 14px); }
 .stock-band {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px; /* tight row-gap: a wrapped action row hugs the chips row */
   flex-wrap: wrap;
   padding: 8px 12px;
   background: var(--surface);
@@ -2376,11 +2424,18 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   border-bottom: none;
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
-.stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
+.stock-band .stock-search { flex: 0 1 220px; min-width: 130px; }
+/* one line for everything (owner 2026-09-14, "why can't we have them all on
+   the same line?"): search · chips · actions share the row; the chips strip
+   is the only elastic part, so on a narrow window the CHIPS flow onto a
+   second line inside their slot while search and the buttons stay put */
+.stock-band .stock-chips { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
-.stock-band .stock-gaps { padding: 0; gap: 8px; }
-.stock-band .stock-actions { display: flex; gap: 6px; }
+.stock-band .stock-actions { display: flex; align-items: center; gap: 6px; }
+/* refresh as a bare icon at the end of the band (owner 2026-09-14) */
+.stock-refresh-ico { display: inline-flex; align-items: center; padding: 5px 7px; }
+.stock-refresh-ico svg { width: 14px; height: 14px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -2436,14 +2491,13 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .chip-tray .view-chip.is-active.tint-red { color: var(--badge-red-text); }
 .chip-tray .view-chip.is-active.tint-green { color: var(--badge-green-text); }
 
-/* right-aligned action group, separated from search + chips by a hairline */
+/* right-aligned action group (the hairline separator left with the
+   missing-listings subline — it floated mid-air on wrapped rows) */
 .stock-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
 }
 
 .stock-hint {
@@ -2856,6 +2910,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   min-width: 0;
 }
 .wfs-line:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+/* the SKU cell wraps its input so a combo suggestion list can hang off it
+   (the list itself goes position:fixed — the sheet clips absolute children) */
+.wfs-combo { position: relative; display: flex; min-width: 0; }
+.wfs-combo .wfs-sku { flex: 1 1 auto; }
 .wfs-line .wfs-qty { text-align: right; -moz-appearance: textfield; appearance: textfield; }
 .wfs-line .wfs-qty::-webkit-outer-spin-button, .wfs-line .wfs-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .wfs-remove { border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; }
@@ -4221,10 +4279,34 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .sh-table td.sh-warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-weight: 600; }
 .sh-dim { color: var(--muted); font-size: 11.5px; }
 .sh-never { color: var(--neg-text); font-size: 11.5px; }
+/* sales-rate upgrade (owner 2026-09-12, built from the approved demo;
+   trimmed same day to the one Sold tile and no trend/sell-thru columns) */
+.shelf-tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.sh-tile { flex: 0 1 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 11px 14px 10px; }
+.sh-tile-l { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.sh-tile-b { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin-top: 1px; }
+.sh-tile-f { font-size: 11.5px; color: var(--muted); }
+.sh-tile.is-alarm .sh-tile-b { color: var(--neg-text); }
+.sh-range-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); margin: 0 -4px 0 4px; }
+.sh-table th.sh-sort { cursor: pointer; user-select: none; }
+.sh-table th.sh-sort:hover { color: var(--text); }
+.sh-table td.sh-good { color: var(--pos-text); font-weight: 600; }
+.sh-out { font-size: 10px; font-weight: 600; font-family: var(--font); background: var(--pos-bg); color: var(--pos-text); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
 .shelf-empty { padding: 26px 16px; font-size: 12px; color: var(--faint); text-align: center; }
 .shelf-sum { font-size: 11.5px; color: var(--muted); margin: 10px 2px 0; flex: 0 0 auto; }
 .tab-caret { font-size: 9px; margin-left: 2px; color: var(--faint); }
 .tab.is-active .tab-caret { color: var(--muted); }
+/* Returns tab dropdown: in-app menu that replaced the native popup so it
+   wears the app's own styling (owner 2026-09-12) */
+.tab-menu { position: fixed; margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 10px 28px rgba(47, 52, 55, 0.16); min-width: 210px; }
+.tab-menu::backdrop { background: transparent; }
+.tab-menu[open] { animation: dlgin 140ms var(--ease); }
+.tab-menu-item { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 12px 7px 8px; border: none; background: none; border-radius: 7px; font-family: inherit; font-size: 13px; color: var(--text); cursor: pointer; text-align: left; }
+.tab-menu-item:hover { background: var(--accent-soft); }
+.tab-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* the check column is always reserved so labels never shift */
+.tab-menu-item::before { content: '✓'; width: 13px; flex: 0 0 auto; font-size: 11px; color: transparent; }
+.tab-menu-item.is-current::before { color: var(--text); }
 .stock-shelf-link { font-family: inherit; font-size: 11.5px; font-weight: 500; border: none; background: none; color: var(--accent-soft-text); cursor: pointer; padding: 6px 4px; }
 .stock-shelf-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* hidden = invisible, NOT gone: if the link left the layout, the flexible
