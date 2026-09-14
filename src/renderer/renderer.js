@@ -2473,9 +2473,35 @@ function renderUnlistedView() {
     if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
     return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
   }).join('');
-  $('stockList').innerHTML = (rows.length === 0 && parked.length === 0)
+  // skipped and never-listed SKUs stay VISIBLE as dimmed rows at the bottom
+  // (owner 2026-09-14: "I want to see the ones I removed and the ones I
+  // skipped, so I don't forget") — never-list rows borrow their details
+  // from the stock sheet when the SKU still exists there
+  const ignoredRows = unlistedIgnored
+    .filter(s => !q || String(s).toLowerCase().includes(q))
+    .map(s => {
+      const it = ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === String(s).toUpperCase());
+      const l = it && (it.levels || []).find(x => x.locationId === stockCache.locationId);
+      return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
+    });
+  const rowHtml = (d, idx, mode) => `
+        <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
+          <td class="cell-gutter">${mode ? '·' : idx}</td>
+          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
+          <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
+          <td class="num">${d.avail == null ? '—' : d.avail}</td>
+          <td>${mode === 'ignored'
+    ? `<span class="unl-dim-note">never listed</span>`
+    : chnChips(d)}</td>
+          <td class="cell-actions">${mode === 'ignored'
+    ? `<button class="ret-todo-copy" data-unign="${esc(d.sku)}" title="Start asking for listings for ${esc(d.sku)} again">↩ restore</button>`
+    : `<button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
+            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — moves it to the never-listed rows below">✕</button>`}</td>
+        </tr>`;
+  const dimCount = parked.length + ignoredRows.length;
+  $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
     ? '<p class="dlg-note">Nothing here — every in-stock SKU is listed on every channel it\'s expected on. 🎉</p>'
-    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped.</p>' : `<table class="stock-table">
+    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table">
       <thead><tr>
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
@@ -2484,20 +2510,14 @@ function renderUnlistedView() {
         <th>Channels</th>
         <th class="th-actions"></th>
       </tr></thead>
-      <tbody>${rows.map((d, idx) => `
-        <tr>
-          <td class="cell-gutter">${idx + 1}</td>
-          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-          <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
-          <td class="num">${d.avail}</td>
-          <td>${chnChips(d)}</td>
-          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
-            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
-        </tr>`).join('')}</tbody>
-    </table>`}
-    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).${
-      parked.length ? `<br>Skipped on every channel: ${parked.map(d => `<button class="unign-chip mono" data-unskip="${esc(d.sku)}" title="Expect listings for ${esc(d.sku)} again">${esc(d.sku)} ↩</button>`).join(' ')}` : ''}${
-      unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
+      <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
+      ${dimCount ? `<tbody class="unl-dim-body">
+        <tr class="unl-sec-tr"><td colspan="6" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
+        ${parked.map(d => rowHtml(d, 0, 'parked')).join('')}
+        ${ignoredRows.map(d => rowHtml(d, 0, 'ignored')).join('')}
+      </tbody>` : ''}
+    </table>
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
 }
 
 
@@ -3041,7 +3061,11 @@ $('stockList').addEventListener('click', async (e) => {
   const minBtn = e.target.closest('button.stock-min-btn');
   if (minBtn) { beginStockMinEdit(minBtn); return; }
   const skuLink = e.target.closest('.sku-link');
-  if (skuLink) { openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid); return; }
+  if (skuLink) {
+    if (!skuLink.dataset.chsid) { toast(`${skuLink.dataset.chsku} isn't in the loaded stock sheet — refresh Stock first.`); return; }
+    openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid);
+    return;
+  }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
