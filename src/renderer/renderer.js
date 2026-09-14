@@ -2371,6 +2371,11 @@ function renderStock() {
   const condPrefix = stockActiveView ? ({ 'open box': 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' })[String(stockActiveView.label).toLowerCase()] : '';
   const qUp = q.toUpperCase();
   const suggested = condPrefix && !qUp.startsWith(condPrefix) ? condPrefix + qUp : qUp;
+  // every search ends in an add-new option, hits or not (owner 2026-09-14:
+  // finding OPEN-BOX-S24 must not hide the way to create the plain S24)
+  const addNewFoot = q && rows.length > 0 && !state.captureOnly
+    ? `<p class="dlg-note stock-addnew"><button class="ebay-addbtn" data-quickadd="${esc(suggested)}">+ Add new listing — create ${esc(suggested)} in Linnworks</button></p>`
+    : '';
   $('stockList').innerHTML = rows.length === 0
     ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn eb-ml8" data-quickadd="${esc(suggested)}">Create ${esc(suggested)} in Linnworks</button>` : ''}</p>`
     : wfsLoc
@@ -2390,7 +2395,7 @@ function renderStock() {
             <td class="num cell-level"><span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span></td>
             <td class="num ${r.home.stockLevel <= 0 ? 'stock-home-zero' : ''}"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Your warehouse count — click to correct">${r.home.stockLevel}</button></td>
           </tr>`).join('')}</tbody>
-      </table>`
+      </table>${addNewFoot}`
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
         const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
@@ -2420,7 +2425,7 @@ function renderStock() {
             ${imgCell(r)}
             ${stockColOrder.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table>${addNewFoot}`;
       })();
   // one-click bulk apply for every differing suggested minimum
   const applyAll = $('minApplyAll');

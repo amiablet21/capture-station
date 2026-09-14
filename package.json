@@ -1,6 +1,6 @@
 {
   "name": "capture-station",
-  "version": "1.27.35",
+  "version": "1.27.36",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {

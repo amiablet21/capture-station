@@ -1835,6 +1835,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 th.unl-sort-th { cursor: pointer; user-select: none; }
 th.unl-sort-th:hover { color: var(--accent); }
 
+/* every stock search ends in an add-new option under the results */
+.stock-addnew { padding: 8px 12px 2px; }
+.stock-addnew .ebay-addbtn { margin-left: 0; }
+
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
   background: var(--surface);
