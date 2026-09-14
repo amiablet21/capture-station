@@ -2779,6 +2779,13 @@ function saveSheetFrac(el, key, w) {
   const room = el.parentElement ? el.parentElement.clientWidth : 0;
   if (!room) { localStorage.setItem(key, String(w)); return; } // px, converts on next read
   const frac = Math.min(1, w / room);
+  // dragged (about) to the edge = "just fill" — drop the override so the
+  // sheet rides the window from now on instead of freezing a fraction
+  if (frac >= 0.98) {
+    localStorage.removeItem(key);
+    el.style.width = '';
+    return;
+  }
   localStorage.setItem(key, String(frac));
   el.style.width = `${(frac * 100).toFixed(2)}%`; // % from here on: tracks window resizes
 }

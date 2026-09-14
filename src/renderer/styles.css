@@ -2409,7 +2409,10 @@ tr.unl-dim:hover td { opacity: 1; }
    moderate widths (owner: "the spacing is weird", 2026-08-17) */
 /* the toolbar is a header band docked onto the sheet (owner pick 2026-08-17,
    mockup B): one bordered strip the table grows straight out of */
-.stock-main { display: flex; flex-direction: column; min-height: 0; max-width: calc(100% - 14px); }
+/* width: 100% matters — without it the sheet shrink-wraps its table and
+   re-snaps to content width on every render (owner 2026-09-14, "it auto
+   fixes itself and smushes"); cap-main and ret-main already carry it */
+.stock-main { display: flex; flex-direction: column; min-height: 0; width: 100%; min-width: 0; max-width: calc(100% - 14px); }
 .stock-band {
   display: flex;
   align-items: center;
