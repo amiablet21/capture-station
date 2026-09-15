@@ -2619,6 +2619,17 @@ tr.unl-dim:hover td { opacity: 1; }
 .stock-loading { min-width: 480px; }
 
 
+/* the unlisted sheet holds its shape: fixed columns, so typing a search
+   or slicing by condition never re-lays the table (owner 2026-09-15,
+   "it keeps adjusting the container") — the SKU column absorbs the rest */
+.unl-table { table-layout: fixed; width: 100%; min-width: 720px; }
+.unl-table .th-gutter { width: 34px; }
+.unl-table .th-img { width: 46px; }
+.unl-table .th-level { width: 84px; }
+.unl-table .th-chn { width: 330px; }
+.unl-table .th-actions { width: 130px; }
+.unl-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .stock-table th.sortable { cursor: pointer; user-select: none; }
 .stock-table th.sortable:hover { color: var(--text); }
 

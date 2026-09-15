@@ -2096,14 +2096,17 @@ function renderStockChips() {
       : stockViewMatch(d, v.pattern))).length;
     unlCnt = { all: inView(null), new: inView(STOCK_VIEW_NEW), views: views.map(v => inView(v)) };
   }
-  const cnt = (n) => unlCnt ? ` · ${n}` : '';
+  // counts live in the tooltips, not the labels: inline counts widened the
+  // tray whenever Unlisted toggled and shifted the whole band (owner
+  // 2026-09-15, "it keeps adjusting the container") — the summary line
+  // under the band still counts the active slice out loud
   box.innerHTML = '<div class="chip-tray">' + [
-    `<button class="view-chip ${(stockUnlistedActive ? !stockActiveView : !(stockActiveView || stockWfsActive || stockLowActive || stockDsActive)) ? 'is-active' : ''}" data-view=""${unlCnt ? ' title="Every SKU missing a listing, any condition"' : ''}>All${cnt(unlCnt && unlCnt.all)}</button>`,
+    `<button class="view-chip ${(stockUnlistedActive ? !stockActiveView : !(stockActiveView || stockWfsActive || stockLowActive || stockDsActive)) ? 'is-active' : ''}" data-view=""${unlCnt ? ` title="Every SKU missing a listing, any condition — ${unlCnt.all}"` : ''}>All</button>`,
     ...(views.length ? [
-      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="${unlCnt ? 'Only brand-new SKUs missing a listing' : 'Show only brand-new items — SKUs without a condition marker'}">New${cnt(unlCnt && unlCnt.new)}</button>`,
+      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="${unlCnt ? `Only brand-new SKUs missing a listing — ${unlCnt.new}` : 'Show only brand-new items — SKUs without a condition marker'}">New</button>`,
     ] : []),
     ...views.map((v, i) =>
-      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="${unlCnt ? `Only ${esc(v.label)} SKUs missing a listing` : `Show only ${esc(v.label)} items`}">${esc(v.label)}${cnt(unlCnt && unlCnt.views[i])}</button>`),
+      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="${unlCnt ? `Only ${esc(v.label)} SKUs missing a listing — ${unlCnt.views[i]}` : `Show only ${esc(v.label)} items`}">${esc(v.label)}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
     // the low-stock ALERTS and red Available tints stay)
     ...(wfsLoc
@@ -2557,13 +2560,13 @@ function renderUnlistedView() {
   const dimCount = parked.length + ignoredRows.length;
   $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
     ? `<p class="dlg-note">Nothing here — every in-stock ${stockActiveView ? `${esc(stockActiveView.label)} ` : ''}SKU is listed on every channel it's expected on. 🎉</p>`
-    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table">
+    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table unl-table">
       <thead><tr>
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
         <th>SKU</th>
         <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
-        <th>Channels</th>
+        <th class="th-chn">Channels</th>
         <th class="th-actions"></th>
       </tr></thead>
       <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
