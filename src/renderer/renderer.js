@@ -1197,7 +1197,12 @@ function showPage(page) {
       $('stockSearch').value = '';
       $('stockSearchClear').hidden = true;
       loadStockViews();
-      loadStock().then(() => { if (activePage === 'stock') $('stockSearch').focus(); });
+      loadStock().then(() => {
+        // the load takes a beat: never yank focus from a field the user has
+        // meanwhile started typing in (a pad edit fed the search bar once)
+        const ae = document.activeElement;
+        if (activePage === 'stock' && (!ae || ae === document.body)) $('stockSearch').focus();
+      });
     } else if (page === 'shelf') {
       enterShelf();
     } else if (page === 'returns') {
@@ -2290,6 +2295,11 @@ async function loadStockDeltas() {
 
 function renderStock() {
   if (!stockCache) return;
+  // an inline pad/stock edit is open and focused: redrawing the table now
+  // would destroy it mid-type (the lazy delta/reorder/unlisted loaders all
+  // land here) — the edit's own commit re-renders when it finishes
+  const ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains('stock-edit')) return;
   if (stockDsActive) { renderDropshipView(); return; }
   if (stockUnlistedActive) { renderUnlistedView(); return; }
   const q = $('stockSearch').value.trim().toLowerCase();
