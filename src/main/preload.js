@@ -31,6 +31,7 @@ const EVENTS = [
   'ui:open-history',
   'returns:importProgress',
   'returns:syncChanged',
+  'stock:imgInherited',
 ];
 
 contextBridge.exposeInMainWorld('api', {

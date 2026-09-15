@@ -2013,6 +2013,46 @@ function registerIpc() {
   });
   ipcMain.handle('debug:get', () => ignoredLog.slice().reverse());
   ipcMain.handle('history:get', () => db.historyRows());
+  // Condition SKUs inherit the New listing's photo (owner 2026-09-15):
+  // whenever the stock loads, any OPEN-BOX-/USED-/SCRAP- Linnworks item with
+  // NO image whose base SKU (the name after the prefix, exact match) has one
+  // gets that image attached by URL, set as main. Runs in the background per
+  // load; each SKU is attempted once per app session, and the renderer gets
+  // the new thumbnails pushed so the grid fills in without a refresh.
+  const IMG_INHERIT_PREFIXES = ['OPEN-BOX-', 'USED-', 'SCRAP-'];
+  const imgInheritTried = new Set();
+  let imgInheritBusy = false;
+
+  async function inheritConditionImages(client, items) {
+    if (imgInheritBusy) return;
+    imgInheritBusy = true;
+    try {
+      const bySku = new Map(items.map(i => [String(i.sku || '').toUpperCase(), i]));
+      const pairs = [];
+      for (const it of items) {
+        if (it.image) continue;
+        const sku = String(it.sku || '').toUpperCase();
+        const pre = IMG_INHERIT_PREFIXES.find(p => sku.startsWith(p));
+        if (!pre || imgInheritTried.has(sku)) continue;
+        const base = bySku.get(sku.slice(pre.length));
+        if (!base || !base.image) continue;
+        imgInheritTried.add(sku);
+        try {
+          await client.addItemImageByUrl(it.sku, it.stockItemId, base.image);
+          pairs.push({ sku: it.sku, image: base.image });
+        } catch { /* once per session; the next app launch retries */ }
+      }
+      if (pairs.length && win && !win.isDestroyed()) {
+        win.webContents.send('stock:imgInherited', { pairs });
+        win.webContents.send('app:notice', {
+          message: `${pairs.length} condition SKU${pairs.length === 1 ? '' : 's'} took the New listing's photo`,
+        });
+      }
+    } finally {
+      imgInheritBusy = false;
+    }
+  }
+
   ipcMain.handle('stock:get', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -2021,6 +2061,7 @@ function registerIpc() {
       const items = await client.listInventory();
       // fresh levels for free: run the low-stock crossing check on them
       runLowStockCheck(items).catch(() => { /* silent */ });
+      inheritConditionImages(client, items).catch(() => { /* silent */ });
       return {
         ok: true,
         locationId: cfg.linnworks.locationId,

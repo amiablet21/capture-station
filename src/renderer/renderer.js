@@ -2195,6 +2195,21 @@ $('minApplyAll').addEventListener('click', async () => {
 api.on('reorder:applied', ({ summary }) => toast(summary, 7000));
 api.on('app:notice', ({ message }) => toast(message, 7000));
 
+// condition SKUs that just inherited the New listing's photo (background
+// pass in main after each stock load): patch the cached items so the grid
+// fills in the thumbnails without another refresh
+api.on('stock:imgInherited', (d) => {
+  const pairs = (d && d.pairs) || [];
+  if (!stockCache || !pairs.length) return;
+  const byUpper = new Map(pairs.map(p => [String(p.sku).toUpperCase(), p.image]));
+  let touched = false;
+  for (const it of stockCache.items || []) {
+    const img = byUpper.get(String(it.sku).toUpperCase());
+    if (img && !it.image) { it.image = img; touched = true; }
+  }
+  if (touched && activePage === 'stock') renderStock();
+});
+
 // e2e/screenshot helper: seed the stock sheet without Linnworks
 function stockSeed(data) {
   stockCache = data;
