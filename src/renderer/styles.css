@@ -1188,8 +1188,30 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-sync-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--badge-green-text); flex: 0 0 auto; }
 .ret-sync-dot.is-bad { background: var(--neg-text); animation: retsyncpulse 1s ease infinite; }
 @keyframes retsyncpulse { 50% { opacity: 0.3; } }
-.ret-st-chip { font: 600 10.5px var(--mono); border-radius: 999px; padding: 1px 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
-.ret-st-chip.is-you { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-text); }
+/* option A (variants/returns-stations.html, owner pick 2026-09-15):
+   the people pill and its popover replace the row of name chips */
+.ret-sync-pill { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font); font-size: 12px; color: var(--text); border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 3px 10px 3px 5px; cursor: pointer; white-space: nowrap; }
+.ret-sync-pill:hover { border-color: var(--accent); }
+.ret-sync-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ret-sync-pill b { font-weight: 600; }
+.ret-avstack { display: inline-flex; }
+.ret-av { width: 20px; height: 20px; border-radius: 999px; display: inline-grid; place-items: center; font: 700 9px var(--font); letter-spacing: 0.02em; color: var(--accent-soft-text); background: var(--accent-soft); border: 2px solid var(--surface); flex: 0 0 auto; }
+.ret-avstack .ret-av + .ret-av { margin-left: -6px; }
+.ret-av.is-you { background: var(--accent); color: #fff; }
+.ret-av.is-idle { background: var(--surface-2); color: var(--faint); }
+.ret-sync-pop { position: fixed; z-index: 70; width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(47, 52, 55, 0.13); overflow: hidden; transform-origin: top right; }
+@media (prefers-reduced-motion: no-preference) { .ret-sync-pop { animation: condmenuin 160ms var(--ease); } }
+.ret-pop-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; }
+.ret-pop-row + .ret-pop-row { border-top: 1px solid var(--border-soft); }
+.ret-pop-row .ret-av { width: 26px; height: 26px; font-size: 10.5px; border: none; }
+.ret-pop-name { min-width: 0; overflow: hidden; }
+.ret-pop-name b { display: block; font: 600 12px var(--mono); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ret-pop-name span { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.ret-pop-you { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; flex: 0 0 auto; }
+.ret-pop-when { margin-left: auto; font-size: 11px; color: var(--faint); white-space: nowrap; flex: 0 0 auto; padding-left: 8px; }
+.ret-pop-when.is-live { color: var(--accent-soft-text); font-weight: 600; }
+.ret-pop-foot { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border-top: 1px solid var(--border); padding: 8px 14px; font-size: 11px; color: var(--muted); }
+.ret-pop-foot.is-bad { color: var(--neg-text); }
 .ret-cell-by .ret-by-sub { display: block; font: 500 10px var(--mono); color: var(--faint); line-height: 1.2; text-transform: none; }
 .ret-cell-by .ret-by-sub.is-edit { color: var(--badge-yellow-text); }
 tr.ret-past-tr.is-fresh td { animation: retfreshin 1.8s ease; }

@@ -4820,16 +4820,100 @@ let retSyncInfo = null;   // { enabled, station, stations, folderOk, missed }
 let retSyncToasted = false;
 const retFreshGids = new Set(); // rows to wash on the next render
 
+/* option A from variants/returns-stations.html (owner pick 2026-09-15):
+   one people pill — stacked initials + "N desktops" + connection dot —
+   with a click-open popover naming every desktop and when it was last
+   active. The name row of chips it replaces got long fast. */
+const RET_ST_IDLE_MS = 24 * 3600e3; // no file write in a day = gray avatar
+
+function retStInitials(name) {
+  const parts = String(name || '').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return ((parts[0][0] || '') + (parts[1] ? parts[1][0] : (parts[0][1] || ''))).toUpperCase();
+}
+
+// mtime of a station's file, spoken like a person would
+function retStAgo(ts) {
+  if (!ts) return '';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  if (s < 172800) return 'yesterday';
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+function retAvClass(st) {
+  if (st.name === retSyncInfo.station) return 'is-you';
+  return Date.now() - (st.lastTs || 0) > RET_ST_IDLE_MS ? 'is-idle' : '';
+}
+
 function renderRetSyncLine() {
   const el = $('retSyncLine');
   if (!el) return;
-  if (!retSyncInfo || !retSyncInfo.enabled) { el.hidden = true; return; }
+  if (!retSyncInfo || !retSyncInfo.enabled) { el.hidden = true; retSyncPopClose(); return; }
   el.hidden = false;
-  el.innerHTML = `<span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}" title="${retSyncInfo.folderOk
-    ? 'Shared returns folder connected — every desktop sees this log'
-    : 'Shared returns folder unreachable — check the path in Settings'}"></span>`
-    + (retSyncInfo.stations || []).map(st => `<span class="ret-st-chip ${st.name === retSyncInfo.station ? 'is-you' : ''}">${esc(st.name)}${st.name === retSyncInfo.station ? ' · you' : ''}</span>`).join('');
+  const sts = retSyncInfo.stations || [];
+  el.innerHTML = `<button id="retSyncPill" type="button" class="ret-sync-pill" title="${retSyncInfo.folderOk
+    ? 'Shared returns folder connected — click for the desktops'
+    : 'Shared returns folder unreachable — check the path in Settings'}">
+    <span class="ret-avstack">${sts.slice(0, 4).map(st => `<span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>`).join('')}</span>
+    <b>${sts.length} desktop${sts.length === 1 ? '' : 's'}</b>
+    <span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}"></span></button>`;
+  retSyncPopRefresh(); // an open popover follows fresh data
 }
+
+let retSyncPop = null;
+
+function retSyncPopClose() {
+  if (retSyncPop) { retSyncPop.remove(); retSyncPop = null; }
+}
+
+function retSyncPopHtml() {
+  const rows = (retSyncInfo.stations || []).map(st => {
+    const you = st.name === retSyncInfo.station;
+    return `<div class="ret-pop-row">
+      <span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>
+      <span class="ret-pop-name"><b>${esc(st.name)}</b>${you ? '<span>this desktop</span>' : ''}</span>
+      ${you ? '<span class="ret-pop-you">you</span>' : ''}
+      <span class="ret-pop-when${you ? ' is-live' : ''}">${you ? 'active now' : (retStAgo(st.lastTs) || '—')}</span>
+    </div>`;
+  }).join('');
+  const foot = retSyncInfo.folderOk
+    ? '<div class="ret-pop-foot"><span class="ret-sync-dot"></span>Shared folder connected — every desktop sees this log</div>'
+    : '<div class="ret-pop-foot is-bad"><span class="ret-sync-dot is-bad"></span>Shared folder unreachable — check the path in Settings</div>';
+  return rows + foot;
+}
+
+function retSyncPopRefresh() {
+  if (!retSyncPop) return;
+  if (!retSyncInfo || !retSyncInfo.enabled) { retSyncPopClose(); return; }
+  retSyncPop.innerHTML = retSyncPopHtml();
+}
+
+$('retSyncLine').addEventListener('click', (e) => {
+  if (!e.target.closest('#retSyncPill')) return;
+  if (retSyncPop) { retSyncPopClose(); return; }
+  const pill = $('retSyncPill');
+  retSyncPop = document.createElement('div');
+  retSyncPop.className = 'ret-sync-pop';
+  retSyncPop.innerHTML = retSyncPopHtml();
+  document.body.appendChild(retSyncPop);
+  const r = pill.getBoundingClientRect();
+  const w = retSyncPop.offsetWidth || 300; // right-aligned to the pill, kept on screen
+  retSyncPop.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+  retSyncPop.style.top = `${r.bottom + 8}px`;
+  const away = (ev) => {
+    if (ev.target.closest('.ret-sync-pop') || ev.target.closest('#retSyncPill')) return;
+    document.removeEventListener('mousedown', away, true);
+    retSyncPopClose();
+  };
+  setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') retSyncPopClose();
+});
 
 // a peer's file synced in: refresh, wash the moved rows, say who did what
 api.on('returns:syncChanged', (d) => {
