@@ -4928,9 +4928,18 @@ function retStAgo(ts) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
+// every desktop wears its own color, identical on every machine: the name
+// hashes to a palette slot (.ret-av.c0…c4 in styles.css). This desktop
+// stays the solid emerald; a quiet-for-a-day desktop just dims.
+function retStColor(name) {
+  let h = 0;
+  for (const ch of String(name)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+  return `c${h % 5}`;
+}
+
 function retAvClass(st) {
   if (st.name === retSyncInfo.station) return 'is-you';
-  return Date.now() - (st.lastTs || 0) > RET_ST_IDLE_MS ? 'is-idle' : '';
+  return retStColor(st.name) + (Date.now() - (st.lastTs || 0) > RET_ST_IDLE_MS ? ' is-idle' : '');
 }
 
 function renderRetSyncLine() {
@@ -4960,12 +4969,14 @@ function retSyncPopClose() {
 // station's file from the shared folder (its returns come back if that
 // computer ever syncs again under the same name)
 function retSyncPopHtml() {
+  // this desktop speaks only through its solid emerald avatar — no YOU tag,
+  // no dot (owner 2026-09-15: the highlight already says it)
   const rows = (retSyncInfo.stations || []).map(st => {
     const you = st.name === retSyncInfo.station;
-    return `<div class="ret-pop-row">
+    return `<div class="ret-pop-row"${you ? ' title="This desktop"' : ''}>
       <span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>
       <span class="ret-pop-name"><b>${esc(st.name)}</b></span>
-      ${you ? '<span class="ret-pop-you">you</span><span class="ret-pop-live" title="Active now"></span>' : `
+      ${you ? '' : `
         <span class="ret-pop-when">${retStAgo(st.lastTs) || '—'}</span>
         <button type="button" class="ret-pop-x" data-strm="${esc(st.name)}"
           title="Remove ${esc(st.name)} from the shared log — its returns leave every desktop, and come back if that computer syncs again">✕</button>`}

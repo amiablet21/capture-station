@@ -1198,7 +1198,15 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-av { width: 20px; height: 20px; border-radius: 999px; display: inline-grid; place-items: center; font: 700 9px var(--font); letter-spacing: 0.02em; color: var(--accent-soft-text); background: var(--accent-soft); border: 2px solid var(--surface); flex: 0 0 auto; }
 .ret-avstack .ret-av + .ret-av { margin-left: -6px; }
 .ret-av.is-you { background: var(--accent); color: #fff; }
-.ret-av.is-idle { background: var(--surface-2); color: var(--faint); }
+/* each desktop's own color — the name hashes to a slot (renderer
+   retStColor), so every machine paints the same desktop the same way;
+   soft washes in the app's badge register, none louder than the accent */
+.ret-av.c0 { background: #E7F0F7; color: #1F6C9F; }
+.ret-av.c1 { background: #FBF3DB; color: #956400; }
+.ret-av.c2 { background: #EFEBF7; color: #6B5CA5; }
+.ret-av.c3 { background: #E5F2F1; color: #2B7A78; }
+.ret-av.c4 { background: #F9EBEF; color: #A5586E; }
+.ret-av.is-idle { opacity: 0.45; } /* quiet for a day: same color, dimmed */
 .ret-sync-pop { position: fixed; z-index: 70; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(47, 52, 55, 0.13); overflow: hidden; transform-origin: top right; }
 @media (prefers-reduced-motion: no-preference) { .ret-sync-pop { animation: condmenuin 160ms var(--ease); } }
 .ret-pop-row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; }
@@ -1206,9 +1214,6 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-pop-row .ret-av { width: 22px; height: 22px; font-size: 9.5px; border: none; }
 .ret-pop-name { min-width: 0; overflow: hidden; }
 .ret-pop-name b { display: block; font: 500 11.5px var(--mono); color: var(--text); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ret-pop-you { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; flex: 0 0 auto; }
-/* the live desktop speaks with a dot, not a label (owner 2026-09-15) */
-.ret-pop-live { margin-left: auto; width: 7px; height: 7px; border-radius: 999px; background: var(--badge-green-text); flex: 0 0 auto; }
 .ret-pop-when { margin-left: auto; font-size: 10.5px; color: var(--faint); white-space: nowrap; flex: 0 0 auto; padding-left: 8px; }
 /* ✕ shows on row hover; first click arms it as "remove?" */
 .ret-pop-x { border: none; background: none; color: var(--faint); font: 600 10.5px var(--font); padding: 2px 4px; border-radius: 4px; cursor: pointer; opacity: 0; flex: 0 0 auto; }
