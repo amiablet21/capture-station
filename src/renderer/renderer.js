@@ -1193,7 +1193,6 @@ function showPage(page) {
     } else if (page === 'temu') {
       enterTemu();
     } else if (page === 'stock') {
-      applySheetWidth($('stockMain'), 'stockSheetWidth');
       $('stockSearch').value = '';
       $('stockSearchClear').hidden = true;
       loadStockViews();
@@ -2853,33 +2852,10 @@ function saveSheetFrac(el, key, w) {
   el.style.width = `${(frac * 100).toFixed(2)}%`; // % from here on: tracks window resizes
 }
 
-// whole-sheet resize: drag the handle on the right edge of the table
-let sheetDrag = null;
-
-$('sheetGrip').addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  sheetDrag = { startX: e.clientX, startW: $('stockMain').offsetWidth, w: 0 };
-  $('sheetGrip').classList.add('is-active');
-});
-
-window.addEventListener('mousemove', (e) => {
-  if (!sheetDrag) return;
-  const w = Math.max(480, sheetDrag.startW + (e.clientX - sheetDrag.startX));
-  sheetDrag.w = w;
-  $('stockMain').style.width = `${w}px`; // band + sheet resize as one
-});
-
-window.addEventListener('mouseup', () => {
-  if (!sheetDrag) return;
-  if (sheetDrag.w) saveSheetFrac($('stockMain'), 'stockSheetWidth', sheetDrag.w);
-  sheetDrag = null;
-  $('sheetGrip').classList.remove('is-active');
-});
-
-$('sheetGrip').addEventListener('dblclick', () => {
-  localStorage.removeItem('stockSheetWidth');
-  $('stockMain').style.width = '';
-});
+// the stock sheet's width grip retired (owner 2026-09-15, "remove this
+// sliding bar"): the sheet always fills the window now. Any width a past
+// drag stored is cleared so old installs snap back to full too.
+localStorage.removeItem('stockSheetWidth');
 
 // column resize: drag a header's right edge; double-click the edge to reset
 let gripDrag = null;

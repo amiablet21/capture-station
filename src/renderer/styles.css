@@ -2472,7 +2472,8 @@ tr.unl-dim:hover td { opacity: 1; }
 /* width: 100% matters — without it the sheet shrink-wraps its table and
    re-snaps to content width on every render (owner 2026-09-14, "it auto
    fixes itself and smushes"); cap-main and ret-main already carry it */
-.stock-main { display: flex; flex-direction: column; min-height: 0; width: 100%; min-width: 0; max-width: calc(100% - 14px); }
+/* the width grip is gone (owner 2026-09-15) — the sheet owns the full row */
+.stock-main { display: flex; flex-direction: column; min-height: 0; width: 100%; min-width: 0; max-width: 100%; }
 .stock-band {
   display: flex;
   align-items: center;
