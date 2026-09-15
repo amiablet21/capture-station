@@ -2623,7 +2623,6 @@ tr.unl-dim:hover td { opacity: 1; }
    (auto layout let them breathe with content, one more source of the
    sheet shifting under the cursor) */
 .stock-table .th-gutter { width: 36px; }
-.stock-table .th-img { width: 46px; }
 /* while the search box has text the whole table goes table-layout: fixed —
    the frozen header widths become law, so no keystroke can re-lay a single
    column (auto layout still let long cell content push past the frozen
@@ -2636,7 +2635,7 @@ tr.unl-dim:hover td { opacity: 1; }
    "it keeps adjusting the container") — the SKU column absorbs the rest */
 .unl-table { table-layout: fixed; width: 100%; min-width: 720px; }
 .unl-table .th-gutter { width: 34px; }
-.unl-table .th-img { width: 46px; }
+.unl-table .th-img { width: 50px; } /* 34px image + 16px padding, like the main sheet */
 .unl-table .th-level { width: 84px; }
 .unl-table .th-chn { width: 330px; }
 .unl-table .th-actions { width: 130px; }
@@ -2648,7 +2647,11 @@ tr.unl-dim:hover td { opacity: 1; }
 .rows-table th.th-sort { cursor: pointer; user-select: none; }
 .rows-table th.th-sort:hover { color: var(--text); }
 
-.stock-table .th-img, .stock-table .cell-img { width: 44px; padding: 3px 6px 3px 10px; }
+/* 50px = the 34px image + 16px of cell padding: under table-layout: fixed
+   (search freeze, Unlisted) the declared width is absolute, and the old
+   44px squished the image box (owner 2026-09-15) — auto layout was quietly
+   stretching it to ~50px all along */
+.stock-table .th-img, .stock-table .cell-img { width: 50px; padding: 3px 6px 3px 10px; }
 
 .stock-img {
   display: block;
