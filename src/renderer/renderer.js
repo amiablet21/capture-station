@@ -1692,7 +1692,6 @@ function applyBrowserPane() {
   // compact columns while the sheets share the window with the pane
   document.body.classList.toggle('ret-compact', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
-  $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
     // display-clamp only (the saved width survives): a pane remembered from a
     // wide window must never crush the sheet — the band needs room for its
@@ -1738,8 +1737,6 @@ function bExpandPane() {
     });
   }
 }
-
-$('retBExpand').addEventListener('click', bExpandPane);
 
 /* ---------- whole-app zoom: Ctrl+scroll, persisted ---------- */
 // (the marketplace pane keeps its own separate Ctrl+wheel zoom — this one

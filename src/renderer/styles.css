@@ -1775,6 +1775,28 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16);
   padding: 4px;
+  transform-origin: top left;
+}
+
+/* the condition menu drops out of its anchor, its rows settling in a
+   quick cascade (owner 2026-09-15: "the dropdown with an animation").
+   Guarded by no-preference so reduced-motion never sees it — the global
+   reduced-motion block sits earlier in the file and would lose the cascade. */
+@media (prefers-reduced-motion: no-preference) {
+  .ws-emenu { animation: condmenuin 160ms var(--ease); }
+  .ws-emenu .ret-emi, .ret-ecell .ret-emenu .ret-emi { animation: condmiin 180ms var(--ease) backwards; }
+  .ws-emenu .ret-emi:nth-child(2), .ret-ecell .ret-emenu .ret-emi:nth-child(2) { animation-delay: 22ms; }
+  .ws-emenu .ret-emi:nth-child(3), .ret-ecell .ret-emenu .ret-emi:nth-child(3) { animation-delay: 44ms; }
+  .ws-emenu .ret-emi:nth-child(4), .ret-ecell .ret-emenu .ret-emi:nth-child(4) { animation-delay: 66ms; }
+  .ws-emenu .ret-emi:nth-child(5), .ret-ecell .ret-emenu .ret-emi:nth-child(5) { animation-delay: 88ms; }
+}
+@keyframes condmenuin {
+  from { opacity: 0; transform: translateY(-5px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes condmiin {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: none; }
 }
 #wsFix { z-index: 70; }
 #wsFix .combo-list { left: 0; width: 310px; }

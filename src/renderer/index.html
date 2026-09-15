@@ -214,8 +214,11 @@
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
           <!-- shared-folder sync: connection dot + one chip per station seen -->
           <span id="retSyncLine" class="ret-sync-line" hidden></span>
-          <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
-          <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
+          <!-- refresh is a bare icon like Stock's (owner 2026-09-15: "make
+               the refresh button a symbol"); Browser removed the same day -->
+          <button id="retRefreshBtn" class="btn btn-ghost stock-refresh-ico" title="Reload the log and re-scan the listing gaps" aria-label="Refresh">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+          </button>
         </div>
         <div id="retPastBox" class="recv-past-box"></div>
       </div>
