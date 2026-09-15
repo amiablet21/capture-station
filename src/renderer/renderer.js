@@ -2427,7 +2427,7 @@ function renderStock() {
   $('stockList').innerHTML = rows.length === 0
     ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn eb-ml8" data-quickadd="${esc(suggested)}">Create ${esc(suggested)} in Linnworks</button>` : ''}</p>`
     : wfsLoc
-      ? `<table class="stock-table">
+      ? `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
@@ -2461,7 +2461,7 @@ function renderStock() {
             default: return '<td></td>';
           }
         };
-        return `<table class="stock-table">
+        return `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
