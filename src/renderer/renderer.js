@@ -2151,6 +2151,7 @@ $('stockChips').addEventListener('click', (e) => {
   }
   renderStockChips();
   renderStock();
+  $('stockList').scrollTop = 0; // a deliberate view change starts at the top
 });
 
 // remove a SKU from the dropship program: right-click its row in the view
@@ -2300,8 +2301,12 @@ function renderStock() {
   // land here) — the edit's own commit re-renders when it finishes
   const ae = document.activeElement;
   if (ae && ae.classList && ae.classList.contains('stock-edit')) return;
-  if (stockDsActive) { renderDropshipView(); return; }
-  if (stockUnlistedActive) { renderUnlistedView(); return; }
+  // background refreshes (deltas, reorder stats, unlisted markers, link
+  // sets) redraw this table: the sheet must stay where the user scrolled
+  // it, not snap back to the top on every arrival
+  const keepScroll = $('stockList').scrollTop;
+  if (stockDsActive) { renderDropshipView(); $('stockList').scrollTop = keepScroll; return; }
+  if (stockUnlistedActive) { renderUnlistedView(); $('stockList').scrollTop = keepScroll; return; }
   const q = $('stockSearch').value.trim().toLowerCase();
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
@@ -2452,6 +2457,7 @@ function renderStock() {
       applyAll.dataset.pending = JSON.stringify(pending);
     }
   }
+  $('stockList').scrollTop = keepScroll;
 }
 
 /* ---------- Unlisted view (in-stock SKUs missing a channel listing) ---------- */
@@ -2756,6 +2762,7 @@ $('stockSearch').addEventListener('input', () => {
     }
   }
   renderStock();
+  $('stockList').scrollTop = 0; // a fresh filter reads from the top
 });
 // the same ✕ the capture find bar has: clears and refilters in place
 $('stockSearchClear').addEventListener('click', () => {
