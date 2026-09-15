@@ -279,15 +279,24 @@ class LinnworksClient {
   async listInventory() {
     const out = [];
     for (let page = 1; ; page++) {
-      const items = await this.call('Stock/GetStockItemsFull', {
-        keyword: '',
-        loadCompositeParents: false,
-        loadVariationParents: false,
-        entriesPerPage: 200,
-        pageNumber: page,
-        dataRequirements: ['StockLevels', 'Images', 'ExtendedProperties'],
-        searchTypes: ['SKU', 'Title', 'Barcode'],
-      });
+      let items;
+      try {
+        items = await this.call('Stock/GetStockItemsFull', {
+          keyword: '',
+          loadCompositeParents: false,
+          loadVariationParents: false,
+          entriesPerPage: 200,
+          pageNumber: page,
+          dataRequirements: ['StockLevels', 'Images', 'ExtendedProperties'],
+          searchTypes: ['SKU', 'Title', 'Barcode'],
+        });
+      } catch (e) {
+        // an empty result set is a 400 ("No items found with given filter"),
+        // not an empty list - both a bare inventory and a page one past the
+        // end (item count an exact multiple of 200) land here
+        if (/no items found/i.test(e.message || '')) return out;
+        throw e;
+      }
       for (const it of items || []) {
         const img = (it.Images || []).find(i => i.IsMain) || (it.Images || [])[0] || null;
         // NB the API's property-name field really is spelt "ProperyName"
