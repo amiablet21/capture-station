@@ -4669,12 +4669,35 @@ function retMoneyText(v) {
   return Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 }
 
-// a "case: 12345" note renders as a small blue chip + the rest of the text
-function retNoteHtml(note) {
+// a "case: 12345" note renders as a small blue chip + the rest of the text.
+// The chip is a button: click opens the marketplace's case screen directly
+// (owner 2026-09-15, from the Walmart disputes URL), right-click copies.
+function retNoteHtml(note, source) {
   const m = String(note || '').match(DISPUTE_RE);
   if (!m) return esc(note || '');
   const rest = String(note).replace(m[0], '').replace(/^[\s—·,:-]+|[\s—·,:-]+$/g, '');
-  return `<span class="ret-note-case mono">case ${esc(m[1])}</span>${esc(rest)}`;
+  const ch = String(source || '').toLowerCase();
+  return `<button type="button" class="ret-note-case mono ret-case-open" data-caseno="${esc(m[1])}" data-ch="${esc(ch)}"
+    title="Open case ${esc(m[1])} on ${esc(channelLabel(ch))} · right-click to copy the number">case ${esc(m[1])}</button>${esc(rest)}`;
+}
+
+// open the marketplace's dispute case screen; a channel with no case URL
+// template (or a failed open) falls back to copying the number
+function retOpenCase(caseNo, ch) {
+  const after = (res) => {
+    if (res && res.ok) return;
+    copyFromApp(caseNo);
+    toast(`No case page set for ${channelLabel(ch)} — case ${caseNo} copied instead`, 4000);
+  };
+  if (!$('bDock').hidden) {
+    bShowLoading(`Opening case ${caseNo}`);
+    api.browserOpen(caseNo, ch, 'case').then((res) => {
+      if (!res.ok) bHideLoading();
+      after(res);
+    });
+  } else {
+    api.openOrderPage(caseNo, ch, 'case').then(after);
+  }
 }
 
 // every column edits IN PLACE (owner 2026-09-07, retiring the edit popup):
@@ -4703,7 +4726,7 @@ function retLogRowHtml(r, i, ii, un, num) {
         r._st ? (r._actor && r._actor !== r._st
           ? `<span class="ret-by-sub is-edit" title="Last edited at ${esc(r._actor)}">✎ ${esc(r._actor)}</span>`
           : `<span class="ret-by-sub" title="Graded at ${esc(r._st)}">${esc(retSyncInfo && r._st === retSyncInfo.station ? 'this station' : r._st)}</span>`) : ''}</td>
-      <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
+      <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note, r.source)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
@@ -4815,7 +4838,8 @@ function renderRetDisputes() {
       return `<div class="ret-todo-row">
         <span class="mono">${esc(r.order_number)}</span>${retPoOpenBtn(r.order_number, r.source)}
         <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
-        <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
+        <button class="ret-todo-copy ret-case-open" data-caseno="${esc(caseNo)}" data-ch="${esc(String(r.source || '').toLowerCase())}"
+          title="Open case ${esc(caseNo)} on ${esc(channelLabel(String(r.source || '').toLowerCase()))} · right-click to copy the number">case ${esc(caseNo)}</button>
         <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
         ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}|${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
       </div>`;
@@ -4829,6 +4853,8 @@ $('retDisputes').addEventListener('click', async (e) => {
     renderRetDisputes();
     return;
   }
+  const cs = e.target.closest('.ret-case-open');
+  if (cs) { retOpenCase(cs.dataset.caseno, cs.dataset.ch); return; }
   const c = e.target.closest('[data-copy]');
   if (c) { copyFromApp(c.dataset.copy); return; }
   const open = e.target.closest('.ret-po-open');
@@ -4853,6 +4879,16 @@ $('retDisputes').addEventListener('click', async (e) => {
   toast(`Dispute on ${r.order_number} marked resolved`);
   loadRetPast();
 });
+
+// right-click a case chip (log note or disputes card) = copy the number
+for (const host of ['retPastBox', 'retDisputes']) {
+  $(host).addEventListener('contextmenu', (e) => {
+    const cs = e.target.closest('.ret-case-open');
+    if (!cs) return;
+    e.preventDefault();
+    copyFromApp(cs.dataset.caseno);
+  });
+}
 
 /* shared returns folder (Google Drive / OneDrive / network share): every
    desktop pointed at the same folder shows ONE returns log. The sheet keeps
@@ -5009,6 +5045,8 @@ let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
+  const cs = e.target.closest('.ret-case-open');
+  if (cs) { retOpenCase(cs.dataset.caseno, cs.dataset.ch); return; }
   const cam = e.target.closest('.ret-log-cam');
   if (cam) { openClaimsPop(cam.dataset.campo); return; }
   const tr = e.target.closest('tr[data-rid]');

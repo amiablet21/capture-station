@@ -1689,14 +1689,20 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-cell-price { color: var(--muted); }
 
 /* "case: 12345" in a note renders as a small blue chip */
+/* now a button: click opens the marketplace's case screen (Walmart's
+   disputes page ships as the default template), right-click copies */
 .ret-note-case {
   font-size: 10.5px;
   background: var(--badge-blue-bg);
   color: var(--badge-blue-text);
+  border: none;
   border-radius: 4px;
   padding: 1px 6px;
   margin-right: 6px;
+  cursor: pointer;
 }
+.ret-note-case:hover { text-decoration: underline; text-underline-offset: 2px; }
+.ret-note-case:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* the bar chips holding the two collapsed cards */
 .ret-chips { display: inline-flex; gap: 6px; }

@@ -900,11 +900,15 @@ let routerRefusedRefs = new Set();
 // encoded, because the whole filter blob is an encoded JSON string.
 function buildMarketUrl(cfg, channel, po, kind) {
   const ch = String(channel || '').toLowerCase();
-  const tpl = String(
-    (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
-    || (cfg.orderUrlTemplates || {})[ch] || ''
+  // kind 'case': po carries the dispute case number, and there is no
+  // fallback — a case number means nothing to the order-search pages
+  const tpl = String(kind === 'case'
+    ? (cfg.caseUrlTemplates || {})[ch] || ''
+    : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+      || (cfg.orderUrlTemplates || {})[ch] || ''
   ).trim();
   if (!tpl || !/^https:\/\//i.test(tpl)) return '';
+  if (kind === 'case') return tpl.replace('{case}', encodeURIComponent(String(po)));
   const pad = (n) => String(n).padStart(2, '0');
   const day = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const enc2 = (s) => encodeURIComponent(encodeURIComponent(s));

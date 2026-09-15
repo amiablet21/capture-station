@@ -108,6 +108,14 @@ const DEFAULTS = {
     ebay: 'https://www.ebay.com/mesh/ord/details?orderid={po}',
     temu: '', // no return seen yet — falls back to the order page
   },
+  // And for DISPUTE CASES: a "case: 16160042" chip on the Returns page
+  // opens the marketplace's case screen directly. {case} is replaced.
+  // Empty template = clicking the chip copies the case number instead.
+  caseUrlTemplates: {
+    walmart: 'https://seller.walmart.com/orders/disputes?status=ALL&viewCase={case}',
+    ebay: '',
+    temu: '',
+  },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
   listingUrlTemplates: {
