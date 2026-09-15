@@ -4952,7 +4952,7 @@ function renderRetSyncLine() {
     ? 'Shared returns folder connected — click for the desktops'
     : 'Shared returns folder unreachable — check the path in Settings'}">
     <span class="ret-avstack">${sts.slice(0, 4).map(st => `<span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>`).join('')}</span>
-    <b>${sts.length} desktop${sts.length === 1 ? '' : 's'}</b>
+    <b>Users</b>
     <span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}"></span></button>`;
   retSyncPopRefresh(); // an open popover follows fresh data
 }
