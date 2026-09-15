@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Returns — showing the synced desktops, 3 ways</title>
+<style>
+  /* self-contained: base tokens inlined so this file renders anywhere */
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; background: var(--canvas); color: var(--text); padding: 28px 32px 40px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: var(--muted); margin-bottom: 26px; }
+  .tag { display: flex; align-items: baseline; gap: 8px; margin: 30px 4px 10px; }
+  .tag b { font-size: 13px; }
+  .tag span { font-size: 11.5px; color: var(--muted); }
+
+  /* the Returns log bar, as it stands today, for context */
+  .bar { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; }
+  .needpill { font-size: 11px; font-weight: 600; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .search { flex: 1; max-width: 300px; font-family: var(--mono); font-size: 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--faint); }
+  .btn { font-size: 12.5px; font-weight: 500; padding: 6px 13px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+  .spacer { flex: 1; }
+
+  /* ---------- A: people pill + popover ---------- */
+  .a-pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 4px 12px 4px 6px; cursor: pointer; }
+  .a-pill:hover { border-color: var(--accent); }
+  .avstack { display: inline-flex; }
+  .av { width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em; color: var(--accent-soft-text); background: var(--accent-soft); border: 2px solid var(--surface); }
+  .avstack .av + .av { margin-left: -7px; }
+  .av.is-you { background: var(--accent); color: #fff; }
+  .av.is-idle { background: var(--surface-2); color: var(--faint); }
+  .a-pill b { font-size: 12px; font-weight: 600; }
+  .a-pill .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); }
+  .pop { width: 300px; margin-top: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(47,52,55,0.13); overflow: hidden; }
+  .pop-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; }
+  .pop-row + .pop-row { border-top: 1px solid var(--border-soft); }
+  .pop-row .av { width: 26px; height: 26px; font-size: 10.5px; border: none; }
+  .pop-name { min-width: 0; }
+  .pop-name b { display: block; font-size: 12.5px; line-height: 1.35; }
+  .pop-name span { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; }
+  .youchip { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+  .pop-when { margin-left: auto; font-size: 11px; color: var(--faint); white-space: nowrap; }
+  .pop-when.live { color: var(--accent-soft-text); font-weight: 600; }
+  .pop-foot { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border-top: 1px solid var(--border); padding: 8px 14px; font-size: 11px; color: var(--muted); }
+  .pop-foot .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); flex: none; }
+
+  /* ---------- B: avatar row, no popover ---------- */
+  .b-wrap { display: inline-flex; align-items: center; gap: 8px; }
+  .b-wrap .av { width: 26px; height: 26px; font-size: 10px; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); }
+  .b-wrap .av.is-you { box-shadow: 0 0 0 2px var(--accent); }
+  .b-live { position: relative; }
+  .b-live::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 999px; background: var(--accent); border: 2px solid var(--surface); }
+
+  /* ---------- C: quiet subline ---------- */
+  .c-line { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); padding: 7px 4px 0; }
+  .c-line .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); flex: none; }
+  .c-line b { color: var(--text); font-weight: 600; }
+  .c-line .sep { color: var(--faint); }
+
+  .note { max-width: 760px; margin-top: 34px; border-top: 1px solid var(--border); padding-top: 14px; font-size: 12px; color: var(--muted); }
+  .note b { color: var(--text); }
+</style>
+</head>
+<body>
+  <h1>Returns — showing the synced desktops</h1>
+  <div class="sub">Today: a chip per machine name in the log bar. Three quieter ways below — same data (each desktop's name + when it was last active), no new plumbing.</div>
+
+  <div class="tag"><b>A — People pill with a popover</b><span>one compact control; click it to see who's who and when they were last active</span></div>
+  <div class="bar">
+    <span class="needpill">⚠ 45 need listings</span>
+    <input class="search" value="" placeholder="Search PO, SKU, customer, condition…" readonly />
+    <span class="spacer"></span>
+    <span class="a-pill"><span class="avstack">
+      <span class="av is-you">IW</span><span class="av">RS</span><span class="av">RP</span><span class="av is-idle">IM</span>
+    </span><b>4 desktops</b><span class="dot"></span></span>
+    <button class="btn">Refresh</button>
+    <button class="btn">Browser</button>
+  </div>
+  <div class="pop">
+    <div class="pop-row"><span class="av is-you">IW</span><div class="pop-name"><b>IMRAN-WORK-PC</b><span>this desktop</span></div><span class="youchip">you</span><span class="pop-when live">active now</span></div>
+    <div class="pop-row"><span class="av">RS</span><div class="pop-name"><b>RETURNS-STORAGE</b></div><span class="pop-when">12m ago</span></div>
+    <div class="pop-row"><span class="av">RP</span><div class="pop-name"><b>RETURNS-ROOM-PC</b></div><span class="pop-when">1h ago</span></div>
+    <div class="pop-row"><span class="av is-idle">IM</span><div class="pop-name"><b>IMRAN-MACBOOK-PRO</b></div><span class="pop-when">yesterday</span></div>
+    <div class="pop-foot"><span class="dot"></span>Shared folder connected — every desktop sees this log</div>
+  </div>
+
+  <div class="tag"><b>B — Just the faces</b><span>overlapping initials in the bar, emerald ring = you, green dot = active in the last hour; hover a face for name + last active</span></div>
+  <div class="bar">
+    <span class="needpill">⚠ 45 need listings</span>
+    <input class="search" value="" placeholder="Search PO, SKU, customer, condition…" readonly />
+    <span class="spacer"></span>
+    <span class="b-wrap">
+      <span class="av is-you b-live" title="IMRAN-WORK-PC — you, active now">IW</span>
+      <span class="av b-live" title="RETURNS-STORAGE — 12m ago">RS</span>
+      <span class="av" title="RETURNS-ROOM-PC — 1h ago">RP</span>
+      <span class="av is-idle" title="IMRAN-MACBOOK-PRO — yesterday">IM</span>
+    </span>
+    <button class="btn">Refresh</button>
+    <button class="btn">Browser</button>
+  </div>
+
+  <div class="tag"><b>C — The quiet sentence</b><span>nothing in the bar at all; one subline under it, spreadsheet-calm</span></div>
+  <div class="bar">
+    <span class="needpill">⚠ 45 need listings</span>
+    <input class="search" value="" placeholder="Search PO, SKU, customer, condition…" readonly />
+    <span class="spacer"></span>
+    <button class="btn">Refresh</button>
+    <button class="btn">Browser</button>
+  </div>
+  <div class="c-line"><span class="dot"></span><span>Synced with <b>3 desktops</b></span><span class="sep">·</span><span>last change 12m ago by <b>RETURNS-STORAGE</b></span></div>
+
+  <div class="note"><b>Also worth knowing:</b> the name each desktop shows is set on that desktop in Settings (yours is "IMRAN-WORK-PC" because it defaulted to the computer's name). Renaming them to people or rooms — "Imran", "Returns room", "Storage" — makes every option above read better, including the initials, and the Received-by column in the log. No code change needed for that part.</div>
+</body>
+</html>

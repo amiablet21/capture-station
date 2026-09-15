@@ -228,8 +228,17 @@ function load() {
   return cached;
 }
 
+// maps whose keys must be able to LEAVE: deepMerge only adds and overwrites,
+// so a SKU deleted from these would silently resurrect on save (dropship
+// removal looked like it "didn't work" for exactly this reason). Every
+// caller passes the complete map, which replaces wholesale here.
+const REPLACE_KEYS = ['dropshipPads', 'dropshipAlerted'];
+
 function save(patch) {
   const cfg = deepMerge(load(), patch || {});
+  for (const k of REPLACE_KEYS) {
+    if (patch && patch[k] && typeof patch[k] === 'object') cfg[k] = patch[k];
+  }
   cached = cfg;
   const persisted = structuredClone(cfg);
   const enc = encryptCreds(cfg.linnworks);
