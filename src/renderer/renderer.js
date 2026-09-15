@@ -2836,9 +2836,12 @@ function saveSheetFrac(el, key, w) {
   const room = el.parentElement ? el.parentElement.clientWidth : 0;
   if (!room) { localStorage.setItem(key, String(w)); return; } // px, converts on next read
   const frac = Math.min(1, w / room);
-  // dragged (about) to the edge = "just fill" — drop the override so the
-  // sheet rides the window from now on instead of freezing a fraction
-  if (frac >= 0.98) {
+  // dragged all the way to the edge = "just fill" — drop the override so
+  // the sheet rides the window from now on. The magnetic zone is the last
+  // 8px only (it was 2% of the window — ~30px on a laptop — which swallowed
+  // every small narrowing and sprang the sheet back: owner 2026-09-15,
+  // "it keeps clicking into place")
+  if (w >= room - 22) {
     localStorage.removeItem(key);
     el.style.width = '';
     return;
@@ -4948,18 +4951,25 @@ function retSyncPopClose() {
   if (retSyncPop) { retSyncPop.remove(); retSyncPop = null; }
 }
 
+// quiet rows (owner 2026-09-15): a green dot marks the live desktop instead
+// of an "active now" label, and every other desktop can be removed with the
+// ✕ that shows on hover — first click arms it, the second deletes that
+// station's file from the shared folder (its returns come back if that
+// computer ever syncs again under the same name)
 function retSyncPopHtml() {
   const rows = (retSyncInfo.stations || []).map(st => {
     const you = st.name === retSyncInfo.station;
     return `<div class="ret-pop-row">
       <span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>
-      <span class="ret-pop-name"><b>${esc(st.name)}</b>${you ? '<span>this desktop</span>' : ''}</span>
-      ${you ? '<span class="ret-pop-you">you</span>' : ''}
-      <span class="ret-pop-when${you ? ' is-live' : ''}">${you ? 'active now' : (retStAgo(st.lastTs) || '—')}</span>
+      <span class="ret-pop-name"><b>${esc(st.name)}</b></span>
+      ${you ? '<span class="ret-pop-you">you</span><span class="ret-pop-live" title="Active now"></span>' : `
+        <span class="ret-pop-when">${retStAgo(st.lastTs) || '—'}</span>
+        <button type="button" class="ret-pop-x" data-strm="${esc(st.name)}"
+          title="Remove ${esc(st.name)} from the shared log — its returns leave every desktop, and come back if that computer syncs again">✕</button>`}
     </div>`;
   }).join('');
   const foot = retSyncInfo.folderOk
-    ? '<div class="ret-pop-foot"><span class="ret-sync-dot"></span>Shared folder connected — every desktop sees this log</div>'
+    ? '<div class="ret-pop-foot"><span class="ret-sync-dot"></span>Shared folder connected</div>'
     : '<div class="ret-pop-foot is-bad"><span class="ret-sync-dot is-bad"></span>Shared folder unreachable — check the path in Settings</div>';
   return rows + foot;
 }
@@ -4977,6 +4987,22 @@ $('retSyncLine').addEventListener('click', (e) => {
   retSyncPop = document.createElement('div');
   retSyncPop.className = 'ret-sync-pop';
   retSyncPop.innerHTML = retSyncPopHtml();
+  // ✕ = two-step: first click arms ("remove?"), the second deletes the
+  // station's file from the shared folder and the log refreshes
+  retSyncPop.addEventListener('click', async (ev) => {
+    const x = ev.target.closest('.ret-pop-x');
+    if (!x) return;
+    if (!x.classList.contains('is-armed')) {
+      x.classList.add('is-armed');
+      x.textContent = 'remove?';
+      return;
+    }
+    const name = x.dataset.strm;
+    const res = await api.returnsSyncRemoveStation(name).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { toast((res && res.error) || `Could not remove ${name}.`); return; }
+    toast(`${name} removed from the shared log`);
+    loadRetPast(); // fresh fold: the chip, the popover and the sheet all follow
+  });
   document.body.appendChild(retSyncPop);
   const r = pill.getBoundingClientRect();
   const w = retSyncPop.offsetWidth || 300; // right-aligned to the pill, kept on screen

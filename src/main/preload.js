@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('api', {
   returnsImportCommit: (entries) => ipcRenderer.invoke('returns:importCommit', { entries }),
   returnsListingGaps: () => ipcRenderer.invoke('returns:listingGaps'),
   returnsSyncChooseFolder: () => ipcRenderer.invoke('retsync:chooseFolder'),
+  returnsSyncRemoveStation: (name) => ipcRenderer.invoke('retsync:removeStation', { name }),
   shelfGet: (force) => ipcRenderer.invoke('shelf:get', { force: !!force }),
   channelSkip: (sku, channel, remove) => ipcRenderer.invoke('stock:channelSkip', { sku, channel, remove }),
   wfsList: () => ipcRenderer.invoke('wfs:list'),

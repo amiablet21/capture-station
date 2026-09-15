@@ -4048,6 +4048,10 @@ function registerIpc() {
   ipcMain.handle('receiving:list', () => listReceivingSessions());
   // shared returns folder picker (Settings → Returns sync). Saving the
   // config re-points the engine via the config:set hook above.
+  // popover ✕: forget a stale/renamed desktop — deletes its file from the
+  // shared folder; its returns leave every desktop until it syncs again
+  ipcMain.handle('retsync:removeStation', (_e, { name }) => retsync.removeStation(name));
+
   ipcMain.handle('retsync:chooseFolder', async () => {
     const cur = (config.load().returnsSync || {}).folder || '';
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {

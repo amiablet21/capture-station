@@ -343,4 +343,25 @@ function configure({ sync, database, userData, changed, writeCsv }) {
   return { enabled: true, missed };
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan };
+// Remove a station from the shared folder (owner 2026-09-15: stale or
+// renamed desktops linger as chips forever). Deleting returns-<NAME>.jsonl
+// drops that station's returns from every desktop's merged log — but its
+// own local SQLite is untouched, so if that computer ever opens the app
+// against this folder again under the same name, backfill() rebuilds the
+// file and its history rejoins.
+function removeStation(name) {
+  const st = saneStation(name);
+  if (!enabled()) return { ok: false, error: 'Shared returns sync is off.' };
+  if (!st) return { ok: false, error: 'No station name given.' };
+  if (st === station) return { ok: false, error: 'This is this desktop — turn sync off in Settings instead.' };
+  try {
+    fs.rmSync(fileFor(st), { force: true });
+    lastFoldSig = null; // the next rescan/list refolds from scratch
+    writeMirror(fold()); // the spreadsheet mirror follows immediately
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation };
