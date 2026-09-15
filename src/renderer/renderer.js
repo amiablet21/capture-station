@@ -2086,13 +2086,24 @@ function renderStockChips() {
   // as the amber alert pill (it flags work, it isn't a view you live in)
   // NB: NOT "stock-tray" — that class is the per-row hover action tray and
   // ships visibility:hidden (the collision blanked this whole toolbar once)
+  // Unlisted on: the condition chips slice the gap list, so each carries
+  // its own gap count and the tray highlights the active slice
+  let unlCnt = null;
+  if (stockUnlistedActive) {
+    const live = unlMissingRows().filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)));
+    const inView = (v) => live.filter(d => !v ? true : (v.plain
+      ? !views.some(x => stockViewMatch(d, x.pattern))
+      : stockViewMatch(d, v.pattern))).length;
+    unlCnt = { all: inView(null), new: inView(STOCK_VIEW_NEW), views: views.map(v => inView(v)) };
+  }
+  const cnt = (n) => unlCnt ? ` · ${n}` : '';
   box.innerHTML = '<div class="chip-tray">' + [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${(stockUnlistedActive ? !stockActiveView : !(stockActiveView || stockWfsActive || stockLowActive || stockDsActive)) ? 'is-active' : ''}" data-view=""${unlCnt ? ' title="Every SKU missing a listing, any condition"' : ''}>All${cnt(unlCnt && unlCnt.all)}</button>`,
     ...(views.length ? [
-      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
+      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="${unlCnt ? 'Only brand-new SKUs missing a listing' : 'Show only brand-new items — SKUs without a condition marker'}">New${cnt(unlCnt && unlCnt.new)}</button>`,
     ] : []),
     ...views.map((v, i) =>
-      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="${unlCnt ? `Only ${esc(v.label)} SKUs missing a listing` : `Show only ${esc(v.label)} items`}">${esc(v.label)}${cnt(unlCnt && unlCnt.views[i])}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
     // the low-stock ALERTS and red Available tints stay)
     ...(wfsLoc
@@ -2109,16 +2120,19 @@ function renderStockChips() {
       : '');
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
-  $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW);
+  $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW && !stockUnlistedActive);
 }
 
 $('stockChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.view-chip');
   if (!chip) return;
+  const wasUnlisted = stockUnlistedActive;
   stockDsActive = false;
   stockUnlistedActive = false;
   if (chip.dataset.view === 'unl') {
-    stockUnlistedActive = true;
+    // the pill toggles: on = the gap list, off = back to the plain All view
+    // (the condition chips no longer leave Unlisted, so the pill is the exit)
+    stockUnlistedActive = !wasUnlisted;
     stockWfsActive = false;
     stockLowActive = false;
     stockActiveView = null;
@@ -2142,6 +2156,10 @@ $('stockChips').addEventListener('click', (e) => {
   } else {
     stockWfsActive = false;
     stockLowActive = false;
+    // with Unlisted on, the condition chips SLICE the unlisted list instead
+    // of leaving it — press the amber pill off to get the plain views back
+    // (owner 2026-09-15, from the approved unlisted-cond-filter mockup)
+    stockUnlistedActive = wasUnlisted;
     stockActiveView = chip.dataset.view === 'new' ? STOCK_VIEW_NEW
       : chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
     if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
@@ -2459,11 +2477,20 @@ function renderStock() {
 
 /* ---------- Unlisted view (in-stock SKUs missing a channel listing) ---------- */
 
+// does this row's SKU/title sit in the active condition view? (New = plain:
+// matches none of the configured condition patterns)
+function stockCondOk(d) {
+  if (!stockActiveView) return true;
+  return stockActiveView.plain
+    ? !(stockViews || []).some(v => stockViewMatch(d, v.pattern))
+    : stockViewMatch(d, stockActiveView.pattern);
+}
+
 function renderUnlistedView() {
   const aa = $('minApplyAll');
   if (aa) aa.hidden = true;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const matches = unlMissingRows().filter(d => !q
+  const matches = unlMissingRows().filter(stockCondOk).filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
   // rows whose every missing channel is bypassed step aside (restorable
@@ -2475,7 +2502,7 @@ function renderUnlistedView() {
       : (a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
   const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
-    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
+    `${rows.length} ${stockActiveView ? `${stockActiveView.label} ` : ''}SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
   // per-row chips, EVERY channel: filled ✓ = already listed there (owner
   // 2026-09-14: show it, don't remove it), gold ✗ = missing (click: "I
   // can't sell it there"), greyed — = bypassed (click restores)
@@ -2496,7 +2523,8 @@ function renderUnlistedView() {
       const it = ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === String(s).toUpperCase());
       const l = it && (it.levels || []).find(x => x.locationId === stockCache.locationId);
       return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
-    });
+    })
+    .filter(stockCondOk); // the dim rows follow the active slice too
   const rowHtml = (d, idx, mode) => `
         <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
           <td class="cell-gutter">${mode ? '·' : idx}</td>
@@ -2513,7 +2541,7 @@ function renderUnlistedView() {
         </tr>`;
   const dimCount = parked.length + ignoredRows.length;
   $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
-    ? '<p class="dlg-note">Nothing here — every in-stock SKU is listed on every channel it\'s expected on. 🎉</p>'
+    ? `<p class="dlg-note">Nothing here — every in-stock ${stockActiveView ? `${esc(stockActiveView.label)} ` : ''}SKU is listed on every channel it's expected on. 🎉</p>`
     : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table">
       <thead><tr>
         <th class="th-gutter">#</th>
