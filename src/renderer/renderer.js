@@ -2761,6 +2761,64 @@ function beginPadEdit(btn) {
 }
 
 // Inline edit of the In stock number: click -> type -> Enter saves to Linnworks.
+/* ---------- global undo: Ctrl/Cmd+Z reverses the last reversible action
+   (owner 2026-09-16, "for anything — like changing the stock qty").
+   Routing: text fields keep the browser's native text undo; the eBay/Temu
+   listers keep their own history (they bind Ctrl+Z themselves); the
+   capture page routes to its undo engine; everywhere else pops this
+   stack. Deleting a SKU and listings already live on eBay stay OUT —
+   they are not reversible, which is why delete has its checkbox. */
+const undoStack = []; // { label, run: async () => {} }, newest last
+let undoBusy = false;
+
+function pushUndo(label, run) {
+  undoStack.push({ label, run });
+  if (undoStack.length > 30) undoStack.shift(); // a session's worth, not a database
+}
+
+window.addEventListener('keydown', async (e) => {
+  if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return; // native text undo wins
+  if (anyDialogOpen()) return;
+  if (activePage === 'ebay' || activePage === 'temu') return; // the lister's own Ctrl+Z history
+  e.preventDefault();
+  if (activePage === 'capture') {
+    if ($('undoBtn').disabled) toast('Nothing to undo');
+    else $('undoBtn').click();
+    return;
+  }
+  if (undoBusy) return;
+  const u = undoStack.pop();
+  if (!u) { toast('Nothing to undo'); return; }
+  undoBusy = true;
+  try {
+    await u.run();
+    toast(`Undid: ${u.label}`);
+  } catch (err) {
+    toast(`Undo failed: ${err.message}`, 7000);
+  } finally {
+    undoBusy = false;
+  }
+});
+
+// shared by the stock-count edit and its undo: write the level, fold the
+// answer into the cache, repaint
+async function applyStockLevel(sku, value) {
+  const res = await api.setStockLevel(sku, value);
+  if (!res.ok) throw new Error(res.error || 'Stock update failed');
+  const item = stockCache && stockCache.items.find(i => i.sku === sku);
+  if (item) {
+    let l = item.levels.find(x => x.locationId === stockCache.locationId);
+    if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
+    l.stockLevel = res.stockLevel;
+    l.inOrders = res.inOrders;
+    l.available = res.available;
+  }
+  renderStock();
+  return res;
+}
+
 function beginStockEdit(btn) {
   const sku = btn.dataset.sku;
   const current = btn.textContent.trim();
@@ -2778,22 +2836,17 @@ function beginStockEdit(btn) {
     const val = input.value.trim();
     if (val === '' || Number(val) === Number(current)) { restore(); return; }
     input.disabled = true;
-    const res = await api.setStockLevel(sku, Number(val));
-    if (!res.ok) {
-      toast(res.error || 'Stock update failed');
+    let res;
+    try {
+      res = await applyStockLevel(sku, Number(val));
+    } catch (err) {
+      toast(err.message);
       restore();
       return;
     }
-    const item = stockCache && stockCache.items.find(i => i.sku === sku);
-    if (item) {
-      let l = item.levels.find(x => x.locationId === stockCache.locationId);
-      if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
-      l.stockLevel = res.stockLevel;
-      l.inOrders = res.inOrders;
-      l.available = res.available;
-    }
-    renderStock();
-    toast(`${sku}: stock set to ${res.stockLevel}`);
+    const prev = Number(current);
+    pushUndo(`${sku} count back to ${prev}`, () => applyStockLevel(sku, prev));
+    toast(`${sku}: stock set to ${res.stockLevel} — Ctrl+Z undoes`);
     // found returns raised by hand (OPEN-BOX/USED/SCRAP): re-scan so the
     // returns page's "needs listings" card hears about it right away
     loadUnlisted(true);
@@ -2842,6 +2895,18 @@ function beginStockMinEdit(btn) {
     }
     renderStockChips(); // the Low stock count follows the new minimum
     renderStock();
+    const prevMin = Number(current) || 0;
+    pushUndo(`${sku} minimum back to ${prevMin}`, async () => {
+      const r = await api.setStockMin(sid, prevMin);
+      if (!r.ok) throw new Error(r.error || 'Minimum update failed');
+      const it2 = stockCache && stockCache.items.find(i => i.sku === sku);
+      if (it2) {
+        const l2 = it2.levels.find(x => x.locationId === stockCache.locationId);
+        if (l2) l2.minimumLevel = r.minimumLevel;
+      }
+      renderStockChips();
+      renderStock();
+    });
     toast(`${sku}: minimum set to ${res.minimumLevel}`);
   };
   input.addEventListener('keydown', (e) => {
@@ -8076,7 +8141,14 @@ $("rnSave").addEventListener("click", async () => {
     recvBySku.set(res.sku.toLowerCase(), it);
   }
   $("renameDialog").close();
-  toast(`${rnCtx.sku} renamed to ${res.sku} — links and history followed`);
+  const oldSku = rnCtx.sku;
+  const sid = rnCtx.stockItemId;
+  pushUndo(`rename ${res.sku} back to ${oldSku}`, async () => {
+    const r = await api.stockRenameSku(sid, res.sku, oldSku);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
+    loadStock();
+  });
+  toast(`${oldSku} renamed to ${res.sku} — links and history followed`);
   rnCtx = null;
   loadStock();
 });
