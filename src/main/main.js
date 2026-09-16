@@ -1634,7 +1634,8 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const c = await runUnlistedScan(cfg);
-      return { ok: true, sets: c.sets || {} };
+      // the channel SKU strings ride along for the stock search box
+      return { ok: true, sets: c.sets || {}, chskus: c.chskus || {} };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3739,11 +3740,17 @@ function registerIpc() {
     const universe = new Set();
     const detail = [];
     const sets = { walmart: [], ebay: [], temu: [] };
+    const chskus = {}; // stockItemId -> channel SKU strings, for the stock search
     const label = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
     for (const it of inStock) {
       try {
         const channels = await client.getChannelSkus(it.stockItemId);
         for (const c of channels) {
+          if (c.sku) {
+            const list = chskus[it.stockItemId] || (chskus[it.stockItemId] = []);
+            const s = String(c.sku).toUpperCase();
+            if (!list.includes(s)) list.push(s);
+          }
           if (!c.source) continue;
           universe.add(String(c.source).toUpperCase());
           const l2 = label(c.source);
@@ -3763,7 +3770,7 @@ function registerIpc() {
       } catch { /* one bad lookup never hides the rest */ }
     }
     detail.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
-    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, covered: inStock.map(i => i.stockItemId) };
+    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, chskus, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
@@ -3801,6 +3808,12 @@ function registerIpc() {
         covered.add(it.stockItemId);
         changed = true;
         for (const c of channels) {
+          if (c.sku) {
+            if (!unlistedCache.chskus) unlistedCache.chskus = {};
+            const list = unlistedCache.chskus[it.stockItemId] || (unlistedCache.chskus[it.stockItemId] = []);
+            const s = String(c.sku).toUpperCase();
+            if (!list.includes(s)) list.push(s);
+          }
           if (!c.source) continue;
           const l2 = label(c.source);
           if (l2 && unlistedCache.sets && !unlistedCache.sets[l2].includes(it.stockItemId)) unlistedCache.sets[l2].push(it.stockItemId);

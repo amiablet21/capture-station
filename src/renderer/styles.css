@@ -2478,7 +2478,13 @@ tr.unl-dim:hover td { opacity: 1; }
   display: flex;
   align-items: center;
   gap: 6px 10px; /* tight row-gap: a wrapped action row hugs the chips row */
-  flex-wrap: wrap;
+  /* nowrap makes the "one line for everything" note below actually hold:
+     with wrap, flex line-breaking used the chips' UNSHRUNK width, so on a
+     narrow window the whole actions block dropped to a second row before
+     the chips ever compressed (owner 2026-09-16, "why is Mappings and WFS
+     squished on the bottom"). nowrap keeps search · chips · actions on one
+     line and lets the elastic chips strip wrap INSIDE its slot instead */
+  flex-wrap: nowrap;
   padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2596,8 +2602,16 @@ tr.unl-dim:hover td { opacity: 1; }
   flex: 1;
   min-height: 0;
   max-width: 100%;
+  /* the row spans the page instead of shrink-wrapping the sheet: v1.27.57's
+     "sheet always fills the window" gave .stock-main width:100%, but 100%
+     of a row that itself hugs the sheet's content is circular — the row
+     re-hugged whatever each render produced, so the sheet width jumped the
+     moment a search or chip changed the table (owner 2026-09-16, "suddenly
+     goes wide"). Stretched, 100% means the actual window, every render */
+  align-self: stretch;
   display: flex;
   align-items: stretch;
+  justify-content: center;
 }
 
 .stock-list {
@@ -3153,6 +3167,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .stock-table .stock-avail.is-low { color: var(--neg-text); }
 
 /* tiny day-over-day sales delta beside the SKU (units today vs yesterday) */
+/* the channel SKU a search matched, shown beside the Linnworks SKU */
+.stock-chhit { margin-left: 8px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
 .stock-delta { margin-left: 8px; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stock-delta.is-pos { color: var(--pos-text); }
 .stock-delta.is-neg { color: var(--neg-text); }

@@ -1974,6 +1974,7 @@ let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
 let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
 let chLinked = null; // { walmart: Set(stockItemId), ebay: Set, temu: Set } | null
+let chSkuMap = null; // { stockItemId: [channel SKUs] } — the search box matches these too
 let chLinkedLoading = false;
 
 async function loadChLinked() {
@@ -1984,6 +1985,8 @@ async function loadChLinked() {
     if (res.ok) {
       chLinked = {};
       for (const [k, ids] of Object.entries(res.sets || {})) chLinked[k] = new Set(ids);
+      chSkuMap = {};
+      for (const [id, list] of Object.entries(res.chskus || {})) chSkuMap[id] = list.map(s => String(s));
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
     }
   } finally {
@@ -2255,9 +2258,42 @@ let stockFreezeWidths = null;
 function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
-  const w = stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
-  const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
-  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}"${style} title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}" title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+}
+
+// widths the sheet settled on THIS session, per column: the first render
+// (the All view — every condition SKU included, so the widest content)
+// pins the columns the user never dragged, and chip flips / searches /
+// lazy badge loads stop re-deciding them. A fresh Linnworks load or a
+// grip double-click re-measures.
+let stockColAuto = {};
+
+// THE root cause of every "columns reset / go wide / all equal" report:
+// the page's CSP (style-src 'self') SILENTLY DROPS style="" attributes
+// that arrive via innerHTML, so widths stockTh used to inline — dragged,
+// frozen, or pinned — never applied on a re-render; under the is-frozen
+// fixed table layout that left NO widths at all and the browser split
+// the columns equally (owner 2026-09-16, "suddenly goes wide and makes
+// the length of the columns all different"). Setting th.style from JS is
+// the one styling path the CSP allows, so every width lands here, after
+// every header rebuild.
+function applyStockColWidths() {
+  const ths = [...document.querySelectorAll('#stockList th[data-sort]')];
+  ths.forEach(th => {
+    const key = th.dataset.sort;
+    const w = stockColAuto[key] || stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
+    th.style.width = w ? `${w}px` : '';
+    th.style.minWidth = w ? `${w}px` : '';
+    th.style.maxWidth = w ? `${w}px` : '';
+  });
+  // first render after a load (or a column reset): freeze the geometry the
+  // sheet ACTUALLY got. Auto layout stretches columns past their pins to
+  // fill the window, and the is-frozen fixed layout scales pins its own
+  // way — pinning the MEASURED widths is what makes browsing, searching
+  // and chip-flipping agree pixel for pixel.
+  if (ths.length && ths.some(th => !stockColAuto[th.dataset.sort])) {
+    ths.forEach(th => { stockColAuto[th.dataset.sort] = th.offsetWidth; });
+  }
 }
 
 async function loadStock() {
@@ -2273,6 +2309,7 @@ async function loadStock() {
     return;
   }
   stockCache = res;
+  stockColAuto = {}; // fresh inventory: let the columns re-measure once
   renderStockChips(); // the WFS + Low stock chips appear once data allows
   renderStock();
 }
@@ -2340,6 +2377,13 @@ function renderStock() {
   if (stockDsActive) { renderDropshipView(); $('stockList').scrollTop = keepScroll; return; }
   if (stockUnlistedActive) { renderUnlistedView(); $('stockList').scrollTop = keepScroll; return; }
   const q = $('stockSearch').value.trim().toLowerCase();
+  // the search also answers to a marketplace's OWN SKU (owner request
+  // 2026-09-16): the linked channel SKU strings ride the hourly unlisted
+  // scan, so a link made minutes ago may need a Refresh to become findable
+  const chSkuHit = (it) => {
+    if (!q || !chSkuMap || !it.stockItemId) return '';
+    return (chSkuMap[it.stockItemId] || []).find(s => s.toLowerCase().includes(q)) || '';
+  };
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
   const wfsLoc = stockWfsActive ? stockWfsLocation() : null;
@@ -2361,7 +2405,8 @@ function renderStock() {
       || it.sku.toLowerCase().includes(q)
       || it.title.toLowerCase().includes(q)
       || (it.barcode || '').toLowerCase().includes(q)
-      || (it.category || '').toLowerCase().includes(q))
+      || (it.category || '').toLowerCase().includes(q)
+      || !!chSkuHit(it))
     .sort((a, b) => {
       const col = STOCK_COLS[stockSort.key] || STOCK_COLS.stockLevel;
       const av = col.get(a);
@@ -2409,7 +2454,15 @@ function renderStock() {
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
       ${ds}${ren}${del}</span>`;
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
+  // when the search matched a linked channel SKU and not the row's own
+  // fields, the matching channel SKU shows beside the row so the hit
+  // doesn't look like a mistake
+  const chHitHtml = (r) => {
+    if (!q || r.sku.toLowerCase().includes(q) || r.title.toLowerCase().includes(q)) return '';
+    const hit = chSkuHit(r);
+    return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
+  };
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   // dead-end searches offer the missing SKU as a one-click create; inside a
@@ -2474,6 +2527,7 @@ function renderStock() {
           </tr>`).join('')}</tbody>
       </table>${addNewFoot}`;
       })();
+  applyStockColWidths();
   // one-click bulk apply for every differing suggested minimum
   const applyAll = $('minApplyAll');
   if (applyAll) {
@@ -2871,6 +2925,7 @@ $('stockList').addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   if (!gripDrag) return;
+  if (!e.buttons) { commitGripDrag(); return; } // the mouseup landed outside the window: save, don't wander
   const w = Math.max(50, gripDrag.startW + (e.clientX - gripDrag.startX));
   gripDrag.w = w;
   gripDrag.th.style.width = `${w}px`;
@@ -2878,7 +2933,7 @@ window.addEventListener('mousemove', (e) => {
   gripDrag.th.style.maxWidth = `${w}px`;
 });
 
-window.addEventListener('mouseup', () => {
+function commitGripDrag() {
   if (!gripDrag) return;
   if (gripDrag.w) {
     if (gripDrag.storeName === 'capture') {
@@ -2890,12 +2945,15 @@ window.addEventListener('mouseup', () => {
       applyRetColsAll(); // the other returns sheet mirrors the same column
     } else {
       stockColWidths[gripDrag.key] = gripDrag.w;
+      stockColAuto[gripDrag.key] = gripDrag.w; // the session pin follows the drag
       localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
     }
     suppressSortUntil = Date.now() + 250;
   }
   gripDrag = null;
-});
+}
+
+window.addEventListener('mouseup', commitGripDrag);
 
 /* ---------- capture table column resizing ---------- */
 
@@ -2987,6 +3045,7 @@ $('stockList').addEventListener('dblclick', (e) => {
   const grip = e.target.closest('.col-grip');
   if (!grip) return;
   delete stockColWidths[grip.dataset.grip];
+  delete stockColAuto[grip.dataset.grip]; // truly re-measure, not re-pin
   localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
   suppressSortUntil = Date.now() + 250;
   renderStock();
@@ -7838,7 +7897,12 @@ async function ebBakePhotos(photos) {
 let stockDragKey = null;
 $("stockList").addEventListener("dragstart", (e) => {
   const th = e.target.closest("th.sortable");
-  if (!th || !stockColOrder.includes(th.dataset.sort) || e.target.closest(".col-grip")) { e.preventDefault(); return; }
+  // dragstart targets the draggable TH even when the pointer sits on the
+  // grip, so asking the event where the drag began never detected a resize:
+  // mid-resize the native drag took over, ate the mouseup that saves the
+  // width, and could reorder columns by accident. The grip's mousedown sets
+  // gripDrag before any dragstart can fire — that is the real signal.
+  if (gripDrag || !th || !stockColOrder.includes(th.dataset.sort)) { e.preventDefault(); return; }
   stockDragKey = th.dataset.sort;
   e.dataTransfer.effectAllowed = "move";
   try { e.dataTransfer.setData("text/plain", stockDragKey); } catch { /* some drivers need it */ }
