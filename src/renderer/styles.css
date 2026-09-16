@@ -360,9 +360,23 @@ body {
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
 .cap-band .search-field { flex: 0 1 260px; min-width: 140px; }
-/* import · refresh · browser ride together at the right edge
-   (owner 2026-09-16: "make them all next to each other on the right") */
-.cap-band #shipImportBtn { margin-left: auto; }
+/* import · refresh · browser: one quiet icon cluster at the right edge —
+   tight gap, no button chrome, a soft wash on hover (owner 2026-09-16:
+   "closer... no borders, cleaner") */
+.cap-icons { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.cap-ico {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 5px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.cap-ico:hover { background: var(--surface-2); color: var(--text); }
+.cap-ico[hidden] { display: none; }
+.cap-ico svg { width: 15px; height: 15px; }
 .cap-band[hidden] + .rows { border-radius: var(--r-card); } /* band away: the sheet keeps its own corners */
 
 .rows {

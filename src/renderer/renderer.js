@@ -2991,13 +2991,12 @@ initCaptureCols();
 // whole-list resize: drag the handle on the right edge (mirrors the Stock sheet)
 // the search/chips toolbar tracks the sheet's width so they stay aligned
 function alignCaptureToolbar() {
-  const w = $('rowsMain').offsetWidth;
-  if (!w) return;
-  $('findBar').style.width = `${w}px`;
-  // the find bar is docked INSIDE the sheet column now (owner 2026-08-17,
-  // matching the Stock band) — it rides the sheet wherever the pane puts it,
-  // so there is nothing left to align; stale margins from the old layout
-  // are cleared once in case a session upgraded in place
+  // the find bar is docked INSIDE the sheet column (owner 2026-08-17) and
+  // stretches with it natively — the old code pinned it to a PIXEL width
+  // here, and nothing re-measured after a sheet-grip drag, so the band
+  // stuck out past the sheet's edge (owner 2026-09-16, "the dragger is
+  // broken"). Clearing the stale inline sizes is all that's left to do.
+  $('findBar').style.width = '';
   $('findBar').style.marginLeft = '';
   $('findBar').style.marginRight = '';
 }
