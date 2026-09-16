@@ -758,6 +758,64 @@ class LinnworksClient {
     }));
   }
 
+  /* ---------- eBay listing tools (Linnworks' configurator pipeline) ----------
+     Modeled on the official LinnworksNetSDK Listings controller. The flow is
+     Linnworks' own: fetch the account's configurators (each carries the
+     shared listing settings INCLUDING the eBay condition, category and
+     policies), build a template for an inventory item through one, overlay
+     the form's title / price / qty / specifics / description, then ask
+     Linnworks to push the template to eBay with its stored channel
+     authorization. NOT yet verified against a live account — errors from
+     Linnworks surface verbatim to the caller. */
+
+  async getEbayConfigurators() {
+    const data = await this.call('Listings/GeteBayConfigurators', {});
+    return (data || []).map(c => ({
+      id: c.pkConfigId,
+      name: c.ConfigName || '',
+      account: c.EbayAccount || '',
+      site: c.Site || '',
+      condition: (c.Condition && (c.Condition.Value != null ? c.Condition.Value : c.Condition.Key)) || '',
+      listingType: c.ListingType || '',
+    }));
+  }
+
+  // returns the raw EbayListing templates (PagedResult.Items) — callers
+  // amend fields on the raw objects and hand them back to process
+  async createEbayTemplates({ configId, subSource, inventoryItemIds }) {
+    const data = await this.call('Listings/CreateEbayTemplates', {
+      parameters: {
+        Source: 'EBAY',
+        SubSource: subSource,
+        ConfigId: configId,
+        InventoryItemIds: inventoryItemIds,
+        Token: globalThis.crypto.randomUUID(),
+        TemplatesType: 'Simple',
+      },
+    });
+    return (data && data.Items) || [];
+  }
+
+  async processEbayListings(items, action = 'Create') {
+    await this.call('Listings/ProcesseBayListings', { items, force: true, action });
+  }
+
+  async getEbayTemplates({ templateIds, subSource }) {
+    const data = await this.call('Listings/GeteBayTemplates', {
+      parameters: {
+        TemplateIds: templateIds || null,
+        Source: 'EBAY',
+        SubSource: subSource,
+        TemplatesType: 'Both',
+        OnlyWithErrors: false,
+        PageNumber: 1,
+        EntriesPerPage: 50,
+        Token: globalThis.crypto.randomUUID(),
+      },
+    });
+    return (data && data.Items) || [];
+  }
+
   // Channel prices stored in Linnworks for a stock item (Listing Descriptions:
   // one row per Source/SubSource; a row with an empty SubSource is that
   // channel's default price). These are what Linnworks pushes to channels —

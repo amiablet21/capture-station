@@ -129,6 +129,10 @@ const DEFAULTS = {
   // eBay lister: per-model spec cards (copied once from a live NEW listing or
   // typed once by hand) + the business-policy names the CSV references
   ebayModelCards: {},
+
+  // Linnworks-native eBay publishing: which configurator lists each
+  // condition (configurators carry the eBay condition), + the account
+  ebayLw: { subSource: '', byCond: {} }, // byCond: { new|openbox|used|scrap: configId }
   // owner's live policy names (renamed on eBay 2026-08-12) — the CSV
   // references business policies by exact name
   ebayProfiles: {

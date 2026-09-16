@@ -2681,41 +2681,47 @@ function registerIpc() {
   // Export: host the chosen photos on the Linnworks item (eBay's CSV upload
   // fetches PicURL over the internet), build the CSV, save where the user
   // picks. Nothing touches eBay until they upload the file in Seller Hub.
+  // photos land on the Linnworks item (hosted URLs), and the description's
+  // {{PHOTO_GALLERY}} placeholder becomes the two-column grid of them —
+  // shared by the CSV export and the Linnworks-native publish below
+  async function hostEbayMedia(client, listing, photoPaths) {
+    let picUrls = [];
+    if (photoPaths && photoPaths.length) {
+      let stockItemId = listing.stockItemId;
+      if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
+      if (!stockItemId) throw new Error(`${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.`);
+      // entries are plain paths (untouched photos) or {dataUrl, name}
+      // (baked in the editor — the EDITED pixels are what eBay gets)
+      const files = photoPaths.map((p, i) => {
+        if (p && typeof p === 'object' && p.dataUrl) {
+          const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+          if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
+          return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
+        }
+        const fp = typeof p === 'object' ? p.path : p;
+        return {
+          buffer: fs.readFileSync(fp),
+          name: path.basename(fp),
+          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
+        };
+      });
+      picUrls = await client.addItemImages(stockItemId, files);
+    }
+    // two-column grid (owner pick 2026-08-13); a single photo stays full width
+    const gallery = picUrls.length
+      ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
+      : '';
+    const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
+    return { picUrls, description };
+  }
+
   ipcMain.handle('ebay:export', async (_e, { listing, photoPaths }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const { buildEbayCsv } = require('./ebaycsv.js');
       const client = new LinnworksClient(cfg.linnworks);
-      let picUrls = [];
-      if (photoPaths && photoPaths.length) {
-        let stockItemId = listing.stockItemId;
-        if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
-        if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.` };
-        // entries are plain paths (untouched photos) or {dataUrl, name}
-        // (baked in the editor — the EDITED pixels are what eBay gets)
-        const files = photoPaths.map((p, i) => {
-          if (p && typeof p === 'object' && p.dataUrl) {
-            const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-            if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-            return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-          }
-          const fp = typeof p === 'object' ? p.path : p;
-          return {
-            buffer: fs.readFileSync(fp),
-            name: path.basename(fp),
-            mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-          };
-        });
-        picUrls = await client.addItemImages(stockItemId, files);
-      }
-      // the description's photo section gets the hosted URLs (the preview
-      // showed local files; buyers get the same images from Linnworks' CDN)
-      // two-column grid (owner pick 2026-08-13); a single photo stays full width
-      const gallery = picUrls.length
-        ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
-        : '';
-      const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
+      const { picUrls, description } = await hostEbayMedia(client, listing, photoPaths);
       const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
       const stamp = new Date();
       const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
@@ -2727,6 +2733,74 @@ function registerIpc() {
       if (r.canceled || !r.filePath) return { ok: false, canceled: true };
       fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8'); // BOM: Seller Hub reads UTF-8 reliably
       return { ok: true, path: r.filePath, picCount: picUrls.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
+     "rework the listings tab based on what linnworks does": instead of the
+     Seller Hub CSV round-trip, ask Linnworks to list directly through its
+     stored eBay authorization. Configurators (made once in Linnworks' UI)
+     carry the shared settings including the eBay CONDITION, so the app maps
+     each of its four conditions to a configurator. The CSV export stays as
+     the fallback. */
+  ipcMain.handle('ebay:lwConfigs', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      return { ok: true, configs: await client.getEbayConfigurators(), saved: cfg.ebayLw || {} };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ebay:lwPublish', async (_e, { listing, photoPaths, configId, subSource }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!configId) return { ok: false, error: 'Pick a Linnworks configurator for this condition first.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      let stockItemId = listing.stockItemId || await client.findStockItemIdBySku(listing.sku).catch(() => null);
+      if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks.` };
+      const { description } = await hostEbayMedia(client, { ...listing, stockItemId }, photoPaths);
+      const tpls = await client.createEbayTemplates({ configId, subSource, inventoryItemIds: [stockItemId] });
+      const tpl = tpls.find(t => t.InventoryItemId === stockItemId) || tpls[0];
+      if (!tpl) return { ok: false, error: 'Linnworks returned no template — check the configurator and that the eBay channel is enabled.' };
+      if (tpl.ErrorMessage) return { ok: false, error: `Linnworks template error: ${tpl.ErrorMessage}` };
+      // the form's values overlay whatever the configurator + item produced
+      if (listing.title) tpl.Title = String(listing.title).slice(0, 80);
+      if (description) tpl.Description = description;
+      const qty = Number(listing.qty) || 0;
+      if (qty > 0) tpl.AvailableQuantity = qty;
+      const price = Number(listing.price) || 0;
+      if (price > 0) {
+        tpl.Price = tpl.Price || { StartPrice: 0, ReservePrice: 0, BINPrice: 0, AutoAccept: 0, AutoDecline: 0, OriginalRetailPrice: 0 };
+        tpl.Price.StartPrice = price;
+        tpl.Price.BINPrice = price;
+      }
+      const have = new Map((tpl.Attributes || []).map(a => [String(a.AttrName || '').toLowerCase(), a]));
+      for (const [name, value] of Object.entries(listing.specs || {})) {
+        if (!String(value || '').trim()) continue;
+        const hit = have.get(String(name).toLowerCase());
+        if (hit) hit.Value = String(value);
+        else (tpl.Attributes = tpl.Attributes || []).push({ AttrName: name, Value: String(value), IsUserDefined: true, IsRequired: false });
+      }
+      await client.processEbayListings([tpl], 'Create');
+      return { ok: true, templateId: tpl.TemplateId, subSource: subSource || '' };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ebay:lwStatus', async (_e, { templateId, subSource }) => {
+    const cfg = config.load();
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const t = (await client.getEbayTemplates({ templateIds: [templateId], subSource }))[0];
+      if (!t) return { ok: true, status: 'UNKNOWN', error: '', listingIds: [] };
+      return { ok: true, status: String(t.Status || ''), error: t.ErrorMessage || '', listingIds: t.ListingIds || [] };
     } catch (e) {
       return { ok: false, error: e.message };
     }

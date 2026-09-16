@@ -7462,6 +7462,8 @@ function renderEbayForm() {
   if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
   $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
   $("ebExport").disabled = !has;
+  $("ebLwList").disabled = !has;
+  if (!ebLw.configs) ebLwLoadConfigs(); else ebLwFillSelect(); // tracks the condition toggles
   ebHistPush();  // every rendered state is one undo step
   ebSaveDraft(); // and the draft survives restarts / tab switches
 }
@@ -7626,11 +7628,9 @@ $("ebShots").addEventListener("click", async (e) => {
   const th = e.target.closest("[data-shoti]");
   if (th && ebCur) ebEditOpen(Number(th.dataset.shoti));
 });
-$("ebExport").addEventListener("click", async () => {
-  if (!ebCur || ebBusy) return;
-  if (!ebCur.sku) { toast("Type a SKU first."); return; }
-  ebBusy = true;
-  $("ebExport").textContent = "Exporting…";
+// the form's state as the payload the export AND the Linnworks publish
+// both send — one assembly, no drift between the two paths
+function ebBuildListingPayload() {
   const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
     sku: ebVarSku(v),
     details: `Storage=${v.storage};Color=${v.color}`,
@@ -7655,6 +7655,15 @@ $("ebExport").addEventListener("click", async () => {
     price: ebCur.price, qty: Number(ebCur.qty) || 1,
     variations: vars,
   };
+  return { vars, listing };
+}
+
+$("ebExport").addEventListener("click", async () => {
+  if (!ebCur || ebBusy) return;
+  if (!ebCur.sku) { toast("Type a SKU first."); return; }
+  ebBusy = true;
+  $("ebExport").textContent = "Exporting…";
+  const { vars, listing } = ebBuildListingPayload();
   let photos;
   try {
     photos = await ebBakePhotos(ebCur.photos); // edited pixels, not originals
@@ -7683,6 +7692,76 @@ $("ebExport").addEventListener("click", async () => {
 });
 // where the exported file gets uploaded: Seller Hub -> Reports -> Upload
 $("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/sh/reports/uploads"));
+
+/* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
+   "List on eBay" hands the SAME payload the CSV export builds to Linnworks'
+   configurator pipeline: template from the condition's configurator, the
+   form's fields overlaid, pushed through Linnworks' stored eBay connection.
+   Variations still ride the CSV path. Configurator picks persist per
+   condition (they carry the eBay condition, so one per condition). */
+let ebLw = { configs: null, byCond: {}, subSource: '' };
+
+async function ebLwLoadConfigs() {
+  if (ebLw.configs || (state && state.captureOnly)) { ebLwFillSelect(); return; }
+  ebLw.configs = []; // one load per session; a failure leaves the select disabled
+  const res = await api.ebayLwConfigs().catch(() => null);
+  if (res && res.ok) {
+    ebLw.configs = res.configs || [];
+    ebLw.byCond = (res.saved && res.saved.byCond) || {};
+    ebLw.subSource = (res.saved && res.saved.subSource) || '';
+  }
+  ebLwFillSelect();
+}
+
+function ebLwFillSelect() {
+  const sel = $('ebLwConfig');
+  const cond = ebCur ? ebCur.cond : 'new';
+  const list = ebLw.configs || [];
+  sel.innerHTML = `<option value="">configurator for ${esc(cond)}…</option>` + list.map(c =>
+    `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
+  sel.disabled = !list.length;
+}
+
+$('ebLwConfig').addEventListener('change', async () => {
+  const cond = ebCur ? ebCur.cond : 'new';
+  ebLw.byCond[cond] = $('ebLwConfig').value;
+  const chosen = (ebLw.configs || []).find(c => c.id === $('ebLwConfig').value);
+  if (chosen && chosen.account) ebLw.subSource = chosen.account;
+  await api.setConfig({ ebayLw: { subSource: ebLw.subSource, byCond: ebLw.byCond } }).catch(() => { /* re-picked next session */ });
+});
+
+$('ebLwList').addEventListener('click', async () => {
+  if (!ebCur || ebBusy) return;
+  if (!ebCur.sku) { toast('Type a SKU first.'); return; }
+  const configId = ebLw.byCond[ebCur.cond];
+  if (!configId) { toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`); return; }
+  const { vars, listing } = ebBuildListingPayload();
+  if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
+  ebBusy = true;
+  $('ebLwList').textContent = 'Listing…';
+  const done = (msg, ms) => { ebBusy = false; $('ebLwList').textContent = 'List on eBay'; if (msg) toast(msg, ms || 8000); };
+  let photos;
+  try {
+    photos = await ebBakePhotos(ebCur.photos);
+  } catch (err) { done(`Could not process a photo: ${err.message}`); return; }
+  const res = await api.ebayLwPublish(listing, photos, configId, ebLw.subSource).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { done((res && res.error) || 'Linnworks refused the listing.', 9000); return; }
+  // give Linnworks a beat to talk to eBay, then read the verdict
+  await new Promise(r => setTimeout(r, 4000));
+  const st = await api.ebayLwStatus(res.templateId, res.subSource).catch(() => null);
+  if (st && st.ok && st.error) { done(`Linnworks: ${st.error}`, 9000); return; }
+  const sku = ebCur.sku;
+  ebClaim([sku]);
+  delete ebDrafts[sku];
+  try { localStorage.setItem('ebayDrafts', JSON.stringify(ebDrafts)); } catch { /* best effort */ }
+  const status = st && st.ok ? st.status : '';
+  done(status === 'OK'
+    ? `${sku} is live on eBay${st.listingIds && st.listingIds.length ? ` · #${st.listingIds[0]}` : ''}`
+    : `${sku} handed to Linnworks (${status || 'listing'}) — eBay usually confirms within a minute`);
+  ebCur = null;
+  renderEbayQueue();
+  renderEbayForm();
+});
 $("ebGear").addEventListener("click", async () => {
   const cfg = await ebLoadCfg();
   const p = cfg.ebayProfiles || {};

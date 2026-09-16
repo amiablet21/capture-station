@@ -1463,6 +1463,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
 .chmap-qty { font-size: 10.5px; color: var(--faint); }
 
+/* the Linnworks configurator picker beside List on eBay */
+.eb-lw-config { max-width: 250px; font-size: 12px; }
+
 /* any SKU string in the mapping dialog copies on click (owner 2026-09-16) */
 .chmap-copy { cursor: copy; }
 .chmap-copy:hover { text-decoration: underline dotted; }
