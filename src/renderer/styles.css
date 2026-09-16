@@ -377,6 +377,10 @@ body {
 .cap-ico:hover { background: var(--surface-2); color: var(--text); }
 .cap-ico[hidden] { display: none; }
 .cap-ico svg { width: 15px; height: 15px; }
+/* busy = motion or a dim, never words: the refresh arrow spins while
+   fetching, the import tray dims while the file dialog / parse runs */
+.cap-ico.is-spinning svg { animation: ovSpin 700ms linear infinite; }
+.cap-ico.is-busy { opacity: 0.45; }
 .cap-band[hidden] + .rows { border-radius: var(--r-card); } /* band away: the sheet keeps its own corners */
 
 .rows {

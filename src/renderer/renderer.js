@@ -659,14 +659,17 @@ $('findInput').addEventListener('keydown', (e) => {
 
 $('findClose').addEventListener('click', closeFind);
 
+// busy states are CLASSES, never textContent — these buttons are icons now,
+// and a textContent swap would wipe the SVG and leave a word behind
+// (owner 2026-09-16: "don't have the text. The refresh can spin around tho")
 $('ordersRefreshBtn').addEventListener('click', async () => {
   const btn = $('ordersRefreshBtn');
   btn.disabled = true;
-  btn.textContent = 'Refreshing…';
+  btn.classList.add('is-spinning');
   await api.refreshOrders();
   await refresh();
   btn.disabled = false;
-  btn.textContent = 'Refresh';
+  btn.classList.remove('is-spinning');
   toast('Orders refreshed from Linnworks');
 });
 
@@ -674,10 +677,10 @@ $('ordersRefreshBtn').addEventListener('click', async () => {
 $('shipImportBtn').addEventListener('click', async () => {
   const btn = $('shipImportBtn');
   btn.disabled = true;
-  btn.textContent = 'Importing…';
+  btn.classList.add('is-busy');
   const res = await api.shipImport().catch(e => ({ ok: false, error: e.message }));
   btn.disabled = false;
-  btn.textContent = 'Import shipped';
+  btn.classList.remove('is-busy');
   if (!res || res.canceled) return;
   if (!res.ok) { toast(res.error || 'Could not read that file.'); return; }
   await refresh();
