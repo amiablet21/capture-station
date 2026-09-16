@@ -1811,35 +1811,10 @@ function registerIpc() {
     if (win && !win.isDestroyed()) win.webContents.focus();
     return { ok: true };
   });
-  // PO# clicks reuse ONE window (owner 2026-09-16: "instead of opening a
-  // tab each time, can it work off the same Walmart order tab") — a single
-  // persistent app window that navigates in place on every click. It rides
-  // the marketplace pane's partition, so the seller login carries over and
-  // survives restarts; closing it just means the next click reopens it.
-  let orderWin = null;
-  function openInOrderWindow(url) {
-    if (orderWin && !orderWin.isDestroyed()) {
-      orderWin.loadURL(url).catch(() => { /* nav errors show in-window */ });
-      if (orderWin.isMinimized()) orderWin.restore();
-      orderWin.focus();
-      return;
-    }
-    orderWin = new BrowserWindow({
-      width: 1360,
-      height: 940,
-      title: 'Marketplace orders',
-      autoHideMenuBar: true,
-      backgroundColor: '#FFFFFF',
-      webPreferences: { partition: PANE_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
-    });
-    orderWin.on('closed', () => { orderWin = null; });
-    orderWin.loadURL(url).catch(() => { /* nav errors show in-window */ });
-  }
-
   ipcMain.handle('order:openExternal', (_e, { orderNumber, channel, kind }) => {
     const url = buildMarketUrl(config.load(), channel, orderNumber, kind);
     if (!url) return { ok: false, error: 'No marketplace link set for this channel.' };
-    openInOrderWindow(url);
+    shell.openExternal(url);
     return { ok: true };
   });
   ipcMain.handle('orders:refresh', async () => {
