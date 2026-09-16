@@ -1467,6 +1467,10 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
 .chmap-qty { font-size: 10.5px; color: var(--faint); }
 
+/* the rename dialog's delete escape hatch: quiet, red, far from Rename */
+.rn-del { margin-right: auto; color: var(--neg-text); }
+.rn-del:hover { border-color: var(--neg-text); }
+
 /* the Linnworks configurator picker beside List on eBay */
 .eb-lw-config { max-width: 250px; font-size: 12px; }
 

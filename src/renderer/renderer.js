@@ -8047,6 +8047,14 @@ function openRenameDialog(sku, stockItemId) {
   $("rnNew").select();
 }
 $("rnCancel").addEventListener("click", () => $("renameDialog").close());
+// delete lives here too (owner 2026-09-16) — it hands off to the existing
+// guarded delete dialog, which live-checks linked listings and warns
+$("rnDelete").addEventListener("click", () => {
+  if (!rnCtx) return;
+  const { sku, stockItemId } = rnCtx;
+  $("renameDialog").close();
+  openStockDelete(sku, stockItemId);
+});
 $("rnNew").addEventListener("input", () => { $("rnNew").value = $("rnNew").value.toUpperCase(); });
 $("rnNew").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
 $("rnSave").addEventListener("click", async () => {
