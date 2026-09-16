@@ -347,15 +347,22 @@ body {
   display: flex;
   align-items: center;
   gap: 8px 12px;
-  flex-wrap: wrap;
+  /* one line, always (owner 2026-09-16): a compressed sheet used to push
+     the trailing buttons out past the edge (words too wide to shrink,
+     wrap not wanted) — the buttons are icons now, the search field gives
+     ground first, and nothing leaves the row */
+  flex-wrap: nowrap;
+  min-width: 0;
   padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
-.cap-band .search-field { flex: 0 1 260px; min-width: 170px; }
-.cap-band #ordersRefreshBtn { margin-left: auto; }
+.cap-band .search-field { flex: 0 1 260px; min-width: 140px; }
+/* import · refresh · browser ride together at the right edge
+   (owner 2026-09-16: "make them all next to each other on the right") */
+.cap-band #shipImportBtn { margin-left: auto; }
 .cap-band[hidden] + .rows { border-radius: var(--r-card); } /* band away: the sheet keeps its own corners */
 
 .rows {
