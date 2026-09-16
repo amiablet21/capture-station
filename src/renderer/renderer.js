@@ -116,6 +116,16 @@ function esc(s) {
   }[c]));
 }
 
+// separator-blind search: "s24 fe" finds S24-FE-128GB-… (owner 2026-09-16,
+// "search without needing to add the dash") — the query splits on spaces
+// and dashes and every piece must appear somewhere in the target, so dashed
+// queries keep working exactly as before
+function skuMatch(hay, q) {
+  if (!q) return true;
+  const h = String(hay || '').toLowerCase();
+  return String(q).toLowerCase().split(/[\s-]+/).every(t => !t || h.includes(t));
+}
+
 function shorten(s, n = 12) {
   s = String(s ?? '');
   return s.length > n ? s.slice(0, n) + '…' : s;
@@ -2382,7 +2392,7 @@ function renderStock() {
   // scan, so a link made minutes ago may need a Refresh to become findable
   const chSkuHit = (it) => {
     if (!q || !chSkuMap || !it.stockItemId) return '';
-    return (chSkuMap[it.stockItemId] || []).find(s => s.toLowerCase().includes(q)) || '';
+    return (chSkuMap[it.stockItemId] || []).find(s => skuMatch(s, q)) || '';
   };
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
@@ -2402,10 +2412,10 @@ function renderStock() {
       ? !(stockViews || []).some(v => stockViewMatch(it, v.pattern))
       : stockViewMatch(it, stockActiveView.pattern)))
     .filter(it => !q
-      || it.sku.toLowerCase().includes(q)
-      || it.title.toLowerCase().includes(q)
-      || (it.barcode || '').toLowerCase().includes(q)
-      || (it.category || '').toLowerCase().includes(q)
+      || skuMatch(it.sku, q)
+      || skuMatch(it.title, q)
+      || skuMatch(it.barcode, q)
+      || skuMatch(it.category, q)
       || !!chSkuHit(it))
     .sort((a, b) => {
       const col = STOCK_COLS[stockSort.key] || STOCK_COLS.stockLevel;
@@ -2458,7 +2468,7 @@ function renderStock() {
   // fields, the matching channel SKU shows beside the row so the hit
   // doesn't look like a mistake
   const chHitHtml = (r) => {
-    if (!q || r.sku.toLowerCase().includes(q) || r.title.toLowerCase().includes(q)) return '';
+    if (!q || skuMatch(r.sku, q) || skuMatch(r.title, q)) return '';
     const hit = chSkuHit(r);
     return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
   };
@@ -4405,8 +4415,7 @@ function renderChmap() {
     if (chmap.hasQty && !w.linked && !(w.qty > 0)) return false;
     if (!q1) return true;
     const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || '';
-    return w.sku.toLowerCase().includes(q1) || w.title.toLowerCase().includes(q1)
-      || linkedSku.toLowerCase().includes(q1);
+    return skuMatch(w.sku, q1) || skuMatch(w.title, q1) || skuMatch(linkedSku, q1);
   });
   const unlinked = chmap.items.filter(w => !w.linked).length;
   $('chmapWmCount').textContent = chmap.busy ? '' : `${unlinked} unlinked / ${chmap.items.length}`;
@@ -4427,8 +4436,8 @@ function renderChmap() {
 
   const q2 = $('chmapLwQ').value.trim().toLowerCase();
   let inv = recvItems ? recvItems.filter(l => !q2
-    || String(l.sku || '').toLowerCase().includes(q2)
-    || String(l.title || '').toLowerCase().includes(q2)) : [];
+    || skuMatch(l.sku, q2)
+    || skuMatch(l.title, q2)) : [];
   if (chmap.fresh) {
     const i = inv.findIndex(l => l.sku === chmap.fresh);
     if (i > 0) inv.unshift(inv.splice(i, 1)[0]);
