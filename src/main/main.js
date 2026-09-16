@@ -1156,6 +1156,19 @@ function startOrderImporter() {
 
 /* ---------- stock routing scheduler ---------- */
 
+// Single-router election (owner 2026-09-16: "can I pick my computer as the
+// main one?"). The shared folder holds router.json = { station, setAt };
+// when it names a station, ONLY that station runs routing — every other
+// desktop's routing settings become a dead letter, so two computers with
+// different rules can never ping-pong the same orders. No shared folder or
+// no election yet: the local toggle rules alone, as before.
+function routerAllowedHere() {
+  if (!retsync.enabled()) return true;
+  const r = retsync.readShared('router');
+  if (!r || !r.station) return true;
+  return r.station === retsync.stationName();
+}
+
 // Periodically move out-of-stock orders to the fallback location and pull
 // them back once the primary is replenished (see router.js). Silent unless
 // something actually moved.
@@ -1163,6 +1176,7 @@ function startStockRouter() {
   const tick = async () => {
     const cfg = config.load();
     if (cfg.captureOnly || !cfg.stockRouting || !cfg.stockRouting.enabled) return;
+    if (!routerAllowedHere()) return;
     const res = await runRouting();
     updateRouterRefusals(res);
     if (res && (res.movedOut || res.movedBack || (res.errors && res.errors.length))) {
@@ -1822,7 +1836,7 @@ function registerIpc() {
     // stock changes made OUTSIDE the app (Linnworks edits, marketplace
     // sales) take effect immediately instead of waiting the 5-minute tick
     const cfg = config.load();
-    if (!cfg.captureOnly && cfg.stockRouting && cfg.stockRouting.enabled) {
+    if (!cfg.captureOnly && cfg.stockRouting && cfg.stockRouting.enabled && routerAllowedHere()) {
       try {
         const routed = await runRouting();
         updateRouterRefusals(routed);
@@ -2522,6 +2536,24 @@ function registerIpc() {
     const missed = retsyncMissed;
     retsyncMissed = 0; // the catch-up toast shows once
     return { rows: retsync.list(), sync: { ...retsync.status(), missed } };
+  });
+
+  // Router election (Settings > Shared folder): which desktop's routing
+  // settings are live. See routerAllowedHere() for the enforcement.
+  ipcMain.handle('router:status', () => {
+    const r = retsync.enabled() ? retsync.readShared('router') : null;
+    return {
+      ok: true,
+      shared: retsync.enabled(),
+      station: retsync.stationName() || '',
+      elected: (r && r.station) || '',
+      setAt: (r && r.setAt) || '',
+    };
+  });
+  ipcMain.handle('router:claim', () => {
+    if (!retsync.enabled()) return { ok: false, error: 'Set up the shared folder and a station name first — the election lives there.' };
+    const ok = retsync.writeShared('router', { station: retsync.stationName(), setAt: new Date().toISOString() });
+    return ok ? { ok: true, elected: retsync.stationName() } : { ok: false, error: 'Could not write to the shared folder — is it reachable?' };
   });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
@@ -4122,7 +4154,7 @@ function registerIpc() {
       // have some"): re-route and re-import right away instead of waiting
       // for the 5-minute passes
       (async () => {
-        await runRouting();
+        if (routerAllowedHere()) await runRouting();
         openOrdersCache = { at: 0, data: null, promise: null };
         await runOrderImport();
       })().catch(() => { /* the scheduled passes will catch up */ });

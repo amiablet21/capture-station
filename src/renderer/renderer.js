@@ -972,6 +972,7 @@ async function openSettings() {
   const rsy = cfg.returnsSync || {};
   $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
   $('setRetSyncStation').value = rsy.station || '';
+  refreshRouterLine();
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -1057,6 +1058,27 @@ $('clearRetSyncBtn').addEventListener('click', async () => {
   retSyncInfo = null;
   renderRetSyncLine();
   loadRetPast();
+  refreshRouterLine();
+});
+
+// Router election line in Settings: who holds it now, phrased from this
+// desktop's point of view
+async function refreshRouterLine() {
+  const el = $('setRouterStation');
+  if (!el) return;
+  try {
+    const st = await api.routerStatus();
+    if (!st.shared) { el.textContent = 'this desktop’s own settings (no shared folder)'; return; }
+    if (!st.elected) { el.textContent = 'every desktop’s own settings — no router elected yet'; return; }
+    el.textContent = st.elected === st.station ? `${st.elected} (this desktop)` : st.elected;
+  } catch { el.textContent = '—'; }
+}
+
+$('claimRouterBtn').addEventListener('click', async () => {
+  const res = await api.routerClaim();
+  if (!res.ok) { toast(res.error || 'Could not claim the router.'); return; }
+  toast(`This desktop (${res.elected}) is now the stock router — other computers stop moving orders within a few minutes, once the folder syncs to them.`);
+  refreshRouterLine();
 });
 
 $('settingsSave').addEventListener('click', async () => {

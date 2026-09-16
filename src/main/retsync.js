@@ -403,4 +403,19 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux };
+// one shared, rarely-written JSON per name (the router election). This
+// knowingly bends the no-shared-writes contract: writes happen on a human
+// button press, so a Drive conflict would need two owners clicking within
+// one sync window — and the file is tiny and re-writable if it ever does.
+function readShared(name) {
+  if (!enabled()) return null;
+  try { return JSON.parse(fs.readFileSync(path.join(folder, `${name}.json`), 'utf8')); }
+  catch { return null; }
+}
+function writeShared(name, obj) {
+  if (!enabled()) return false;
+  try { fs.writeFileSync(path.join(folder, `${name}.json`), JSON.stringify(obj, null, 2)); return true; }
+  catch { return false; }
+}
+
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux, readShared, writeShared };
