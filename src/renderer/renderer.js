@@ -777,8 +777,12 @@ $('rowsBody').addEventListener('click', async (e) => {
       await api.reopenRow(row.id);
       await refresh();
     }
-    // pane open -> the order loads beside the list; collapsed -> external browser
-    if (!$('bDock').hidden) {
+    // the order loads in the app's browser pane, opening it first if it's
+    // collapsed (owner 2026-09-16: "work off the same Walmart order tab...
+    // as in the electron window" — never a new system-browser tab); only a
+    // capture-only install, with no pane at all, still goes external
+    if (bReady && browserAllowed()) {
+      if ($('bDock').hidden) { bPane.visible = true; api.setConfig({ browserPane: { visible: true } }); applyBrowserPane(); }
       bShowLoading(`Opening order ${link.dataset.po}`);
       const opened = await api.browserOpen(link.dataset.po, link.dataset.ch);
       if (!opened.ok) {
