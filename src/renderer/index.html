@@ -771,12 +771,6 @@
         <span class="field-label">This station's name (stamped on everything it logs)</span>
         <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
       </label>
-      <div class="settings-row">
-        <span class="field-label">Stock router runs on</span>
-        <span id="setRouterStation" class="test-result mono"></span>
-        <button id="claimRouterBtn" class="btn btn-ghost">Make this desktop the router</button>
-      </div>
-      <p class="dlg-note">Only the elected desktop moves orders and runs the routing rules — its Settings win, and every other computer's routing switches go quiet so two machines can never fight over the same orders. Claim it from the computer whose rules should be in charge; claiming from another desktop later simply takes over.</p>
       <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
 
       <h3 class="dlg-section">Linnworks</h3>
