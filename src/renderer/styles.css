@@ -1467,8 +1467,34 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
 .chmap-qty { font-size: 10.5px; color: var(--faint); }
 
-/* the delete dialog's one warning: connected channel SKUs, in red */
-.sdel-warn { color: var(--neg-text); font-weight: 600; }
+/* the delete dialog's one fact: connected channel SKUs as a tinted panel —
+   soft red when links exist, quiet neutral when clear */
+.sdel-links {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.sdel-links.is-clear { color: var(--pos-text); background: var(--pos-bg); border-color: transparent; }
+.sdel-links.is-warn { background: var(--neg-bg); border-color: transparent; }
+.sdel-links-h { font-weight: 600; color: var(--neg-text); }
+.sdel-links-sub { font-size: 11.5px; color: var(--neg-text); opacity: 0.75; margin: 1px 0 8px; }
+.sdel-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  margin-top: 4px;
+  background: var(--surface);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+.sdel-link-ch { color: var(--muted); font-size: 11.5px; }
 
 /* the rename dialog's delete escape hatch: quiet, red, far from Rename */
 .rn-del { margin-right: auto; color: var(--neg-text); }

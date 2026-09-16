@@ -5748,10 +5748,14 @@ async function openStockDelete(sku, sid) {
   if (!sdelCtx || sdelCtx.sid !== sid) return; // dialog moved on
   const list = res.ok ? res.channels : null;
   $('sdelFacts').innerHTML = !list
-    ? 'Could not check connected channel SKUs.'
+    ? '<div class="sdel-links">Could not check connected channel SKUs.</div>'
     : list.length === 0
-      ? 'No channel SKUs connected.'
-      : `<span class="sdel-warn">⚠ ${list.length} connected channel SKU${list.length === 1 ? '' : 's'} — the listing${list.length === 1 ? ' keeps' : 's keep'} selling without stock sync:</span><br>${list.map(c => `<span class="mono">${esc(c.sku || '')}</span> · ${esc(channelLabel((c.source || '').toLowerCase()) || c.source || '')}`).join('<br>')}`;
+      ? '<div class="sdel-links is-clear">No channel SKUs connected.</div>'
+      : `<div class="sdel-links is-warn">
+          <div class="sdel-links-h">${list.length} connected channel SKU${list.length === 1 ? '' : 's'}</div>
+          <div class="sdel-links-sub">The listing${list.length === 1 ? '' : 's'} will keep selling without stock sync.</div>
+          ${list.map(c => `<div class="sdel-link-row"><span class="mono">${esc(c.sku || '')}</span><span class="sdel-link-ch">${esc(channelLabel((c.source || '').toLowerCase()) || c.source || '')}</span></div>`).join('')}
+        </div>`;
 }
 
 $('sdelAck').addEventListener('change', () => { $('sdelGo').disabled = !$('sdelAck').checked; });
