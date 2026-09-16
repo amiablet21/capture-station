@@ -4105,6 +4105,48 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  // Dead-row sweep for the channel-SKUs popup (owner 2026-09-16: a SKU
+  // renamed on the channel leaves a stale link record behind). A record is
+  // "gone" only when its SKU is absent from the channel's CURRENT scanned
+  // catalog — the caller additionally restricts the sweep to sync-off rows,
+  // because the scan feed lags and a listing created minutes ago would
+  // otherwise vanish from the popup while very much alive.
+  ipcMain.handle('stock:channelSkusGone', async (_e, { records }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = Array.isArray(records) ? records.slice(0, 50) : [];
+    if (!list.length) return { ok: true, gone: [] };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const channels = await client.getMappingChannels();
+      const feeds = new Map(); // channel key -> Set of catalog SKUs, or null when unreadable
+      const gone = [];
+      for (const r of list) {
+        const ch = channels.find(c => c.source === r.source && c.subSource === r.subSource);
+        if (!ch) continue; // channel unknown: cannot verify, keep the row
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        if (!feeds.has(key)) {
+          let skus = null;
+          try {
+            let hit = mappingCache.get(key);
+            if (!hit || Date.now() - hit.at > 10 * 60 * 1000) {
+              hit = { at: Date.now(), items: await client.getChannelItems(ch.id, ch.source, ch.subSource) };
+              mappingCache.set(key, hit); // the mapping dialog reuses it
+            }
+            skus = new Set(hit.items.map(i => String(i.sku).toUpperCase()));
+          } catch { /* feed unreachable: keep every row of this channel */ }
+          feeds.set(key, skus);
+        }
+        const skus = feeds.get(key);
+        if (skus && skus.size && !skus.has(String(r.sku).toUpperCase())) {
+          gone.push({ sku: r.sku, source: r.source, subSource: r.subSource });
+        }
+      }
+      return { ok: true, gone };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   // shared by the desktop grid AND the phone dashboard's stock editor
   async function stockSetLevel(sku, level) {
     const cfg = config.load();

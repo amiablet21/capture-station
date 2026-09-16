@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('api', {
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),
   getChannelSkus: (stockItemId) => ipcRenderer.invoke('stock:channelSkus', { stockItemId }),
+  channelSkusGone: (records) => ipcRenderer.invoke('stock:channelSkusGone', { records }),
   stockUnlisted: (force) => ipcRenderer.invoke('stock:unlisted', { force: !!force }),
   dropshipSetPad: (sku, qty) => ipcRenderer.invoke('dropship:setPad', { sku, qty }),
   dropshipRemove: (sku) => ipcRenderer.invoke('dropship:remove', { sku }),

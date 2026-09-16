@@ -5856,6 +5856,8 @@ $('sdelGo').addEventListener('click', async () => {
 
 /* ---------- linked channel SKUs per stock item ---------- */
 
+let chsSweep = 0; // invalidates a stale background sweep after a re-open
+
 async function openChannelSkus(sku, stockItemId) {
   $('chsTitle').textContent = `Channel SKUs linked to ${sku}`;
   $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
@@ -5868,7 +5870,7 @@ async function openChannelSkus(sku, stockItemId) {
   $('chsList').innerHTML = res.channels.length === 0
     ? '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>'
     : res.channels.map(c => `
-      <div class="chs-row">
+      <div class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}">
         <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
         <span class="chs-sub">${esc(c.subSource)}</span>
         <button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
@@ -5881,6 +5883,27 @@ async function openChannelSkus(sku, stockItemId) {
           : '<span class="chs-price chs-price-none" title="No price stored in Linnworks for this listing">—</span>'}
         ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
       </div>`).join('');
+  // A SKU renamed or ended ON the channel leaves its old link record behind
+  // in Linnworks (owner 2026-09-16). Sweep sync-off rows against the
+  // channel's current catalog in the background and drop the ones that are
+  // truly gone. Only sync-off rows: the catalog scan lags, and a listing
+  // created minutes ago must not blink out of the popup.
+  const staleCandidates = res.channels
+    .filter(c => c.ignoreSync && c.sku)
+    .map(c => ({ sku: c.sku, source: c.source, subSource: c.subSource }));
+  if (!staleCandidates.length) return;
+  const my = ++chsSweep;
+  api.channelSkusGone(staleCandidates).then((v) => {
+    if (my !== chsSweep || !v || !v.ok || !v.gone || !v.gone.length) return;
+    for (const g of v.gone) {
+      for (const row of document.querySelectorAll('#chsList .chs-row')) {
+        if (row.dataset.sku === g.sku && row.dataset.src === g.source && row.dataset.sub === g.subSource) row.remove();
+      }
+    }
+    if (!document.querySelector('#chsList .chs-row')) {
+      $('chsList').innerHTML = '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>';
+    }
+  }).catch(() => { /* the sweep is a cleanup, never an error */ });
 }
 
 // click a channel SKU -> that listing opens on its marketplace (pane if
