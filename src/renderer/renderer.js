@@ -6166,6 +6166,7 @@ async function renderWfsPast() {
       <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          ${s.station ? `<span class="wfs-card-st${s.mine ? ' is-me' : ''}" title="${s.mine ? 'Logged on this desktop' : `Logged on ${esc(s.station)}`}">${esc(s.station)}</span>` : ''}
           <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}

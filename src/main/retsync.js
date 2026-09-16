@@ -364,4 +364,43 @@ function removeStation(name) {
   }
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation };
+/* ---------- aux logs: other record types ride the same folder ---------- */
+// WFS shipments (and whatever comes next) share the returns sync's contract:
+// each station appends ONLY to its own <prefix>-<STATION>.jsonl, so the
+// consumer sync service can never conflict; readers fold every station's
+// file. Append-only records need no put/del machinery — a line IS the event.
+
+function appendAux(prefix, event) {
+  if (!enabled()) return false;
+  try {
+    fs.appendFileSync(path.join(folder, `${prefix}-${station}.jsonl`), JSON.stringify(event) + '\n');
+    return true;
+  } catch { return false; }
+}
+
+// one-time seed: history logged before sync was on joins the shared folder
+function auxBackfill(prefix, events) {
+  if (!enabled() || !events.length) return;
+  const f = path.join(folder, `${prefix}-${station}.jsonl`);
+  try {
+    if (!fs.existsSync(f)) fs.writeFileSync(f, events.map(e => JSON.stringify(e)).join('\n') + '\n');
+  } catch { /* best effort — the next open retries */ }
+}
+
+function readAux(prefix) {
+  if (!enabled()) return [];
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(folder)) {
+      const m = f.match(new RegExp(`^${prefix}-([A-Z0-9-]+)\\.jsonl$`));
+      if (!m) continue;
+      for (const ln of fs.readFileSync(path.join(folder, f), 'utf8').split('\n')) {
+        if (!ln.trim()) continue;
+        try { out.push({ ...JSON.parse(ln), station: m[1] }); } catch { /* torn line mid-sync */ }
+      }
+    }
+  } catch { /* folder unreachable: the local view stands alone */ }
+  return out;
+}
+
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux };

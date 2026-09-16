@@ -3094,6 +3094,20 @@ tr.unl-dim:hover td { opacity: 1; }
 .wfs-card-h { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
 .wfs-card-h b { font-weight: 600; }
 .wfs-card-u { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; }
+
+/* which desktop logged the shipment — emerald when it was this one,
+   matching the Returns people-pill's color language */
+.wfs-card-st {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wfs-card-st.is-me { background: #E7F3EC; color: #17854C; }
 .wfs-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 3px; }
 .wfs-card-item .mono { font-size: 11.5px; }

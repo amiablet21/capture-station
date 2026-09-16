@@ -3651,7 +3651,23 @@ function registerIpc() {
   });
   // force = the page's Refresh button: bust the cache and re-page
   ipcMain.handle('sales:query', (_e, { from, to, force }) => querySales(from, to, !!force));
-  ipcMain.handle('wfs:list', () => db.listWfsShipments());
+  // with the shared folder on, every desktop sees every station's WFS
+  // shipments, each row wearing the station that logged it (owner
+  // 2026-09-16: "see which user did what"); local SQLite stays this
+  // station's own storage, other stations' shipments come from the fold
+  ipcMain.handle('wfs:list', () => {
+    const st = retsync.stationName() || '';
+    const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
+    if (!retsync.enabled()) return mine;
+    retsync.auxBackfill('wfs', db.listWfsShipments(1000).slice().reverse()
+      .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
+    const foreign = retsync.readAux('wfs')
+      .filter(e => e.station !== st)
+      .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+    return mine.concat(foreign)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 200);
+  });
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3670,6 +3686,8 @@ function registerIpc() {
         'Capture Station WFS shipment'
       );
       const id = db.createWfsShipment({ note, items });
+      // the shared folder hears about it at once (append-only aux log)
+      retsync.appendAux('wfs', { id, ts: new Date().toISOString(), note, items });
       writeWfsCsv();
       return { ok: true, id };
     } catch (e) {
