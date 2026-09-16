@@ -4416,9 +4416,9 @@ function renderChmap() {
       const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || (w.linked ? '(linked)' : '');
       return `
       <tr class="${chmap.sel === w.sku ? 'sel' : ''}" data-wm="${esc(w.sku)}">
-        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''} · listed qty ${w.qty || 0}">${esc(w.sku)}${w.qty > 0 ? ` <span class="chmap-qty">×${w.qty}</span>` : ''}</td>
+        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''} · listed qty ${w.qty || 0}"><span class="chmap-copy" data-copy="${esc(w.sku)}" title="Click to copy ${esc(w.sku)}">${esc(w.sku)}</span>${w.qty > 0 ? ` <span class="chmap-qty">×${w.qty}</span>` : ''}</td>
         <td>${w.linked
-          ? `<span class="mono chmap-grn">${esc(linkedSku)}</span>`
+          ? `<span class="mono chmap-grn${linkedSku && linkedSku !== '(linked)' ? ' chmap-copy' : ''}"${linkedSku && linkedSku !== '(linked)' ? ` data-copy="${esc(linkedSku)}" title="Click to copy ${esc(linkedSku)}"` : ''}>${esc(linkedSku)}</span>`
           : '<span class="chmap-lk">not linked</span>'}</td>
         <td class="chmap-act">${w.linked && w.rowId ? '<button class="pillbtn chmap-unlink" type="button">Unlink</button>' : ''}</td>
       </tr>`;
@@ -4439,7 +4439,7 @@ function renderChmap() {
       <tr data-lw="${esc(l.sku)}" class="${l.sku === chmap.fresh ? 'chmap-fresh' : ''}">
         <td class="chmap-act2"><button class="pillbtn chmap-link" type="button" ${chmap.sel ? '' : 'disabled'}
           title="${chmap.sel ? `Link ${esc(chmap.sel)} → ${esc(l.sku)}` : 'Select a listing on the left first'}"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48,128.05l24-24a56,56,0,0,1,76.81-2.28,8,8,0,1,1-10.64,11.95A40,40,0,0,0,83.35,115.4l-24,24a40,40,0,0,0,56.57,56.56l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.57,56.56l-24,24a40,40,0,0,1-54.85,1.6A8,8,0,1,0,106.8,153.8a56,56,0,0,0,76.81-2.26l24-24A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Link</button></td>
-        <td class="mono" title="${esc(l.title || '')}">${esc(l.sku)}${l.sku === chmap.fresh ? ' <span class="chmap-new">new</span>' : ''}</td>
+        <td class="mono" title="${esc(l.title || '')}"><span class="chmap-copy" data-copy="${esc(l.sku)}" title="Click to copy ${esc(l.sku)}">${esc(l.sku)}</span>${l.sku === chmap.fresh ? ' <span class="chmap-new">new</span>' : ''}</td>
       </tr>`).join('')
       || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
 }
@@ -4482,6 +4482,10 @@ document.addEventListener('mousedown', (e) => {
 });
 
 $('chmapWmBody').addEventListener('click', async (e) => {
+  // clicking a SKU string copies it (owner 2026-09-16); the row still
+  // selects/deselects underneath, so linking flows exactly as before
+  const cp = e.target.closest('.chmap-copy');
+  if (cp) copyFromApp(cp.dataset.copy);
   const tr = e.target.closest('tr[data-wm]');
   if (!tr) return;
   const item = chmap.items.find(x => x.sku === tr.dataset.wm);
@@ -4516,6 +4520,8 @@ $('chmapWmBody').addEventListener('click', async (e) => {
 });
 
 $('chmapLwBody').addEventListener('click', async (e) => {
+  const cp = e.target.closest('.chmap-copy');
+  if (cp) { copyFromApp(cp.dataset.copy); return; } // the Link pill keeps its own click
   const btn = e.target.closest('.chmap-link');
   if (!btn || btn.disabled || !chmap.sel) return;
   const target = e.target.closest('tr[data-lw]').dataset.lw;
