@@ -5740,26 +5740,18 @@ async function openStockDelete(sku, sid) {
   $('sdelAck').checked = false;
   $('sdelGo').disabled = true;
   $('sdelGo').textContent = 'Delete SKU';
-  // the blast radius: units on hand, dropship pad, linked listings
-  const it = stockCache && stockCache.items.find(x => x.stockItemId === sid);
-  const lvl = it && it.levels.find(l => l.locationId === stockCache.locationId);
-  const units = lvl ? Number(lvl.stockLevel) || 0 : 0;
-  const pad = dsPads && dsPads[String(sku).toUpperCase()];
-  const facts = [
-    `${units} unit${units === 1 ? '' : 's'} in stock at the warehouse${units > 0 ? ' — these counts are lost' : ''}`,
-    pad ? `enrolled in the DropShip program (pad ${pad}) — enrollment is removed` : '',
-    'checking linked listings…',
-  ].filter(Boolean);
-  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+  // one fact only (owner 2026-09-16, "just show if there are connected
+  // channel SKUs"): the live channel links, each named, or the all-clear
+  $('sdelFacts').innerHTML = 'Checking connected channel SKUs…';
   $('stockDelDialog').showModal();
   const res = await api.getChannelSkus(sid);
   if (!sdelCtx || sdelCtx.sid !== sid) return; // dialog moved on
-  facts.pop();
-  const n = res.ok ? res.channels.length : -1;
-  facts.push(n === -1 ? 'could not check linked listings'
-    : n === 0 ? 'no marketplace listings linked'
-      : `${n} marketplace listing${n === 1 ? '' : 's'} linked (${res.channels.map(c => channelLabel((c.source || '').toLowerCase())).join(', ')}) — they keep selling WITHOUT stock sync until ended or relinked`);
-  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+  const list = res.ok ? res.channels : null;
+  $('sdelFacts').innerHTML = !list
+    ? 'Could not check connected channel SKUs.'
+    : list.length === 0
+      ? 'No channel SKUs connected.'
+      : `<span class="sdel-warn">⚠ ${list.length} connected channel SKU${list.length === 1 ? '' : 's'} — the listing${list.length === 1 ? ' keeps' : 's keep'} selling without stock sync:</span><br>${list.map(c => `<span class="mono">${esc(c.sku || '')}</span> · ${esc(channelLabel((c.source || '').toLowerCase()) || c.source || '')}`).join('<br>')}`;
 }
 
 $('sdelAck').addEventListener('change', () => { $('sdelGo').disabled = !$('sdelAck').checked; });

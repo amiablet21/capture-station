@@ -1006,9 +1006,10 @@
     <div class="dlg-body">
       <h2 class="dlg-title">Delete Linnworks SKU</h2>
       <p class="dlg-note mono" id="sdelSku"></p>
+      <!-- one fact only (owner 2026-09-16, "more simple"): the connected
+           channel SKUs — the rest of the blast radius lives in the tooltip -->
       <div id="sdelFacts" class="dlg-note"></div>
-      <p class="dlg-note">This permanently deletes the item from Linnworks — its stock count, history and channel links go with it. Marketplace listings are <b>not</b> ended: they keep selling with no stock sync, so end or relink them on the marketplace too.</p>
-      <label class="check"><input id="sdelAck" type="checkbox" />
+      <label class="check" title="Deletes the item, its stock count, history and channel links from Linnworks. Marketplace listings are NOT ended — they keep selling with no stock sync until ended or relinked."><input id="sdelAck" type="checkbox" />
         <span>I understand this cannot be undone</span></label>
       <div class="dlg-actions">
         <button id="sdelCancel" class="btn btn-ghost" type="button">Cancel</button>

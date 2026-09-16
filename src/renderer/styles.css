@@ -1467,6 +1467,9 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
 .chmap-qty { font-size: 10.5px; color: var(--faint); }
 
+/* the delete dialog's one warning: connected channel SKUs, in red */
+.sdel-warn { color: var(--neg-text); font-weight: 600; }
+
 /* the rename dialog's delete escape hatch: quiet, red, far from Rename */
 .rn-del { margin-right: auto; color: var(--neg-text); }
 .rn-del:hover { border-color: var(--neg-text); }
