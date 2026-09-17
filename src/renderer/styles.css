@@ -1488,6 +1488,29 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .rn-del { margin-right: auto; color: var(--neg-text); }
 .rn-del:hover { border-color: var(--neg-text); }
 
+/* bulk stock import dialog (owner 2026-09-17): file → preview → history */
+.bulk-dlg { width: 580px; max-width: 92vw; }
+.bulk-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bulk-top .test-result { font-size: 11.5px; }
+.bulk-mode { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+.bulk-mode label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.bulk-mode b { color: var(--text); }
+.bulk-mode input { accent-color: var(--accent); }
+.bulk-preview { max-height: 280px; overflow-y: auto; }
+.bulk-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.bulk-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+.bulk-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft); }
+.bulk-table .num { text-align: right; }
+.bulk-up { color: var(--accent); }
+.bulk-down { color: var(--neg-text); }
+.bulk-warn { color: var(--badge-yellow-text); }
+.bulk-hist { max-height: 240px; overflow-y: auto; }
+.bulk-h-line { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 12px; color: var(--muted); text-align: left; padding: 8px 4px; border: none; border-top: 1px solid var(--border-soft); background: none; cursor: pointer; flex-wrap: wrap; }
+.bulk-h-line b { color: var(--text); font-weight: 600; }
+.bulk-h-line:hover { background: var(--surface-2); }
+.bulk-h-chev { margin-left: auto; color: var(--faint); }
+.bulk-h-body { padding: 2px 4px 10px; }
+
 /* the Linnworks configurator picker beside List on eBay */
 .eb-lw-config { flex: 0 1 250px; max-width: 250px; min-width: 140px; font-size: 12px; }
 

@@ -160,6 +160,7 @@
               <button id="stockShelfLink" class="stock-shelf-link" hidden>selling history → Shelf ↗</button>
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
+              <button id="stockBulkBtn" class="btn btn-ghost" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import</button>
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
                    2026-08-02); the dialogs and logic behind them are untouched.
@@ -1015,6 +1016,29 @@
         <button id="sdelCancel" class="btn btn-ghost" type="button">Cancel</button>
         <button id="sdelGo" class="btn btn-danger" type="button" disabled>Delete SKU</button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- Bulk stock import (owner 2026-09-17): a SKU + Qty sheet adds to or
+       replaces the warehouse levels; every import lands in the history -->
+  <dialog id="bulkDialog" class="dlg bulk-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Bulk stock import</h2>
+      <div class="bulk-top">
+        <button id="bulkPickBtn" class="btn btn-secondary" type="button">Choose file…</button>
+        <span id="bulkFile" class="test-result"></span>
+      </div>
+      <div class="bulk-mode">
+        <label><input type="radio" name="bulkMode" value="add" checked /> <b>Add to stock</b> — newly received units, each qty goes on top of the current count</label>
+        <label><input type="radio" name="bulkMode" value="set" /> <b>Set exact qty</b> — a correction or recount, each qty becomes the new count</label>
+      </div>
+      <div id="bulkPreview" class="bulk-preview"></div>
+      <div class="dlg-actions">
+        <button id="bulkCancel" class="btn btn-ghost" type="button">Close</button>
+        <button id="bulkApply" class="btn btn-primary" type="button" disabled>Import</button>
+      </div>
+      <h3 class="dlg-section">History</h3>
+      <div id="bulkHist" class="bulk-hist"></div>
     </div>
   </dialog>
 

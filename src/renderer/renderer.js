@@ -5980,6 +5980,112 @@ $('chsList').addEventListener('contextmenu', (e) => {
 
 $('chsClose').addEventListener('click', () => $('chsDialog').close());
 
+/* ---------- bulk stock import (owner 2026-09-17) ---------- */
+// A SKU + Qty sheet either ADDS to the warehouse counts (newly received
+// units) or SETS them exactly (a correction). Every import writes a
+// history entry that syncs through the shared folder with the station name.
+let bulk = null; // { rows, bad, dups, file } while a parsed file is loaded
+
+const bulkMode = () => (document.querySelector('input[name="bulkMode"]:checked') || {}).value || 'add';
+
+$('stockBulkBtn').addEventListener('click', () => {
+  bulk = null;
+  $('bulkFile').textContent = 'a sheet with SKU + Qty columns (or two plain columns)';
+  $('bulkPreview').innerHTML = '';
+  $('bulkApply').disabled = true;
+  $('bulkDialog').showModal();
+  bulkHistLoad();
+});
+$('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
+
+$('bulkPickBtn').addEventListener('click', async () => {
+  const res = await api.stockBulkPick();
+  if (!res.ok) { if (!res.canceled) toast(res.error || 'Could not read that file.'); return; }
+  bulk = res;
+  $('bulkFile').textContent = `${res.file} — ${res.rows.length} SKU${res.rows.length === 1 ? '' : 's'}`
+    + (res.dups ? ` · ${res.dups} duplicate line${res.dups === 1 ? '' : 's'} merged` : '')
+    + (res.bad.length ? ` · ${res.bad.length} unreadable line${res.bad.length === 1 ? '' : 's'} skipped` : '');
+  bulkRender();
+});
+document.querySelectorAll('input[name="bulkMode"]').forEach(r => r.addEventListener('change', () => bulkRender()));
+
+function bulkRender() {
+  if (!bulk) return;
+  const mode = bulkMode();
+  const known = bulk.rows.filter(r => r.known);
+  const unknown = bulk.rows.filter(r => !r.known);
+  $('bulkApply').disabled = !known.length;
+  $('bulkPreview').innerHTML = `
+    <table class="bulk-table">
+      <thead><tr><th>SKU</th><th class="num">Now</th><th class="num">Change</th><th class="num">After</th></tr></thead>
+      <tbody>${known.map(r => {
+    const after = mode === 'add' ? (r.current || 0) + r.qty : r.qty;
+    const change = after - (r.current || 0);
+    return `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.current == null ? '—' : r.current}</td>
+      <td class="num mono ${change > 0 ? 'bulk-up' : change < 0 ? 'bulk-down' : ''}">${change > 0 ? '+' : ''}${change}</td>
+      <td class="num mono"><b>${after}</b></td></tr>`;
+  }).join('')}</tbody>
+    </table>
+    ${unknown.length ? `<p class="dlg-note bulk-warn">⚠ Not in Linnworks — skipped: <span class="mono">${unknown.map(u => esc(u.sku)).join(', ')}</span></p>` : ''}`;
+}
+
+$('bulkApply').addEventListener('click', async () => {
+  if (!bulk) return;
+  const mode = bulkMode();
+  $('bulkApply').disabled = true;
+  $('bulkApply').textContent = 'Importing…';
+  const res = await api.stockBulkApply({ mode, rows: bulk.rows.filter(r => r.known).map(r => ({ sku: r.sku, qty: r.qty })), file: bulk.file });
+  $('bulkApply').textContent = 'Import';
+  if (!res.ok) { toast(res.error || 'Import failed.'); $('bulkApply').disabled = false; return; }
+  // one Ctrl+Z takes the WHOLE import back: every SKU returns to its
+  // before-count (sequential sets — slow for huge files, says so honestly)
+  const befores = res.entry.rows.map(r => ({ sku: r.sku, level: r.before }));
+  pushUndo(`bulk import of ${befores.length} SKU${befores.length === 1 ? '' : 's'}`, async () => {
+    for (const b of befores) await api.setStockLevel(b.sku, b.level);
+    loadStock();
+  });
+  toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the sheet counts'}${res.entry.skipped.length ? ` — ${res.entry.skipped.length} unknown skipped` : ''} · Ctrl+Z reverses the whole import`, 7000);
+  bulk = null;
+  $('bulkPreview').innerHTML = '';
+  $('bulkFile').textContent = 'done — pick another file or close';
+  loadStock();
+  bulkHistLoad();
+});
+
+async function bulkHistLoad() {
+  const box = $('bulkHist');
+  const res = await api.stockBulkHistory().catch(() => null);
+  if (!res || !res.ok || !res.entries.length) {
+    box.innerHTML = '<p class="dlg-note">No bulk imports yet — every import lands here with who ran it, and syncs to the other desktops through the shared folder.</p>';
+    return;
+  }
+  box.innerHTML = res.entries.map((e, i) => {
+    const units = e.rows.reduce((a, r) => a + (e.mode === 'add' ? r.qty : (r.after - r.before)), 0);
+    return `
+    <div class="bulk-h">
+      <button type="button" class="bulk-h-line" data-bh="${i}">
+        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'}` : 'set counts'} · ${e.rows.length} SKU${e.rows.length === 1 ? '' : 's'}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}
+        <span class="bulk-h-chev">▸</span>
+      </button>
+      <div class="bulk-h-body" hidden>
+        <table class="bulk-table">
+          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : 'Set to'}</th><th class="num">After</th></tr></thead>
+          <tbody>${e.rows.map(r => `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.before}</td><td class="num mono">${e.mode === 'add' ? `+${r.qty}` : r.qty}</td><td class="num mono">${r.after}</td></tr>`).join('')}</tbody>
+        </table>
+        ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('bulkHist').addEventListener('click', (e) => {
+  const line = e.target.closest('.bulk-h-line');
+  if (!line) return;
+  const body = line.parentElement.querySelector('.bulk-h-body');
+  body.hidden = !body.hidden;
+  line.querySelector('.bulk-h-chev').textContent = body.hidden ? '▸' : '▾';
+});
+
 /* ---------- product image dialog (idle / loading / success / error) ---------- */
 
 let imgTarget = null; // { sku, sid, url (grid image), title, preview (fresh data URL) }
