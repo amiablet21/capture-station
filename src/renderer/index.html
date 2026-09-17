@@ -15,13 +15,19 @@
       <button id="tabStock" class="tab">Stock</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
-      <button id="tabListings" class="tab" hidden>Listings</button>
+      <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
     </nav>
     <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
          under the tab; a <dialog> so the marketplace pane yields while open -->
     <dialog id="returnsMenuDlg" class="tab-menu">
       <button class="tab-menu-item" data-page="returns">Returns log</button>
       <button class="tab-menu-item" data-page="shelf">Shelf</button>
+    </dialog>
+    <!-- Listings tab menu (eBay | Temu): same dropdown pattern — replaced
+         the floating pill row (owner picked option A, 2026-09-17) -->
+    <dialog id="listingsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="ebay">eBay lister</button>
+      <button class="tab-menu-item" data-page="temu">Temu lister</button>
     </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -283,14 +289,11 @@
   <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
        Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
   <section id="ebayPage" class="ebay-page" hidden>
-    <!-- one Listings tab, marketplace pills switch the page (owner 2026-08-14) -->
-    <div class="lst-switch">
-      <button class="lst-pill is-on" data-lst="ebay">eBay</button>
-      <button class="lst-pill" data-lst="temu">Temu</button>
-    </div>
+    <!-- marketplace switch moved into the Listings ▾ tab dropdown (owner
+         picked option A, 2026-09-17) -->
     <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
          "I like the previous design") -->
-    <div class="ebay-cols">
+    <div class="ebay-cols ebay-cols-pad">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on eBay
           <span class="eb-right">
@@ -298,6 +301,7 @@
             <button id="ebScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
           </span>
         </div>
+        <div id="ebQChips" class="ebay-qchips"></div>
         <div id="ebQueue" class="ebay-qlist"></div>
       </div>
 
@@ -367,11 +371,7 @@
   <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
        SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
   <section id="temuPage" class="ebay-page" hidden>
-    <div class="lst-switch">
-      <button class="lst-pill" data-lst="ebay">eBay</button>
-      <button class="lst-pill is-on" data-lst="temu">Temu</button>
-    </div>
-    <div class="ebay-cols">
+    <div class="ebay-cols ebay-cols-pad">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on Temu
           <span class="eb-right">

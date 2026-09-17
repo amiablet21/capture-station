@@ -2005,6 +2005,7 @@ async function loadChLinked() {
       chSkuMap = {};
       for (const [id, list] of Object.entries(res.chskus || {})) chSkuMap[id] = list.map(s => String(s));
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
+      if (activePage === 'ebay') renderEbayQueue(); // the queue reads the eBay link set
     }
   } finally {
     chLinkedLoading = false;
@@ -2574,11 +2575,60 @@ function stockCondOk(d) {
     : stockViewMatch(d, stockActiveView.pattern);
 }
 
+// CHANNELS column filter (owner 2026-09-17: "a small filter on the column
+// … multi select"): the ticked channels keep only rows MISSING on every
+// one of them. Persisted per desktop; the funnel glows while active.
+let unlChanSel = [];
+try { unlChanSel = JSON.parse(localStorage.getItem('unlChanSel') || '[]'); } catch { unlChanSel = []; }
+const unlChanSelOk = (d) => unlChanSel.every(ch => d.missing.includes(ch));
+
+function unlChanPopupToggle(anchor) {
+  const old = document.querySelector('.unl-fpop');
+  if (old) { old.remove(); return; }
+  const pop = document.createElement('div');
+  pop.className = 'unl-fpop';
+  pop.innerHTML = '<h5>Show SKUs missing on</h5>'
+    + unlChanKeys().map(ch => `
+      <label class="unl-fchk"><input type="checkbox" data-fch="${ch}" ${unlChanSel.includes(ch) ? 'checked' : ''} /> ${channelLabel(ch)}</label>`).join('')
+    + '<button type="button" class="unl-fclear">Clear filter</button>';
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 10, window.innerWidth - 190)))}px`;
+  pop.style.top = `${Math.round(r.bottom + 6)}px`;
+  document.body.appendChild(pop);
+  const away = (e) => {
+    if (e.target.closest('.unl-fpop') || e.target.closest('#unlChanFilterBtn')) return;
+    document.removeEventListener('mousedown', away, true);
+    pop.remove();
+  };
+  document.addEventListener('mousedown', away, true);
+  const save = () => {
+    try { localStorage.setItem('unlChanSel', JSON.stringify(unlChanSel)); } catch { /* best effort */ }
+    renderStock(); // rebuilds the sheet (and the funnel's active state)
+  };
+  pop.addEventListener('change', (e) => {
+    const c = e.target.closest('[data-fch]');
+    if (!c) return;
+    unlChanSel = c.checked ? [...new Set([...unlChanSel, c.dataset.fch])] : unlChanSel.filter(x => x !== c.dataset.fch);
+    save();
+  });
+  pop.addEventListener('click', (e) => {
+    if (!e.target.closest('.unl-fclear')) return;
+    unlChanSel = [];
+    for (const c of pop.querySelectorAll('[data-fch]')) c.checked = false;
+    save();
+  });
+}
+
+$('stockList').addEventListener('click', (e) => {
+  const f = e.target.closest('#unlChanFilterBtn');
+  if (f) unlChanPopupToggle(f);
+});
+
 function renderUnlistedView() {
   const aa = $('minApplyAll');
   if (aa) aa.hidden = true;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const matches = unlMissingRows().filter(stockCondOk).filter(d => !q
+  const matches = unlMissingRows().filter(stockCondOk).filter(unlChanSelOk).filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
   // rows whose every missing channel is bypassed step aside (restorable
@@ -2590,7 +2640,7 @@ function renderUnlistedView() {
       : (a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
   const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
-    `${rows.length} ${stockActiveView ? `${stockActiveView.label} ` : ''}SKU${rows.length === 1 ? '' : 's'} in stock missing a listing somewhere`;
+    `${rows.length} ${stockActiveView ? `${stockActiveView.label} ` : ''}SKU${rows.length === 1 ? '' : 's'} in stock missing a listing ${unlChanSel.length ? `on ${unlChanSel.map(channelLabel).join(' + ')}` : 'somewhere'}`;
   // per-row chips, EVERY channel: filled ✓ = already listed there (owner
   // 2026-09-14: show it, don't remove it), gold ✗ = missing (click: "I
   // can't sell it there"), greyed — = bypassed (click restores)
@@ -2636,7 +2686,10 @@ function renderUnlistedView() {
         <th class="th-img"></th>
         <th>SKU</th>
         <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
-        <th class="th-chn">Channels</th>
+        <th class="th-chn">Channels
+          <button type="button" id="unlChanFilterBtn" class="unl-funnel ${unlChanSel.length ? 'is-active' : ''}"
+            title="${unlChanSel.length ? `Filtering: missing on ${esc(unlChanSel.map(channelLabel).join(' + '))} — click to change` : 'Filter by channel'}"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/></svg></button>
+        </th>
         <th class="th-actions"></th>
       </tr></thead>
       <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
@@ -7305,21 +7358,49 @@ function ebClaim(skus) {
 function ebQueueRows() {
   const rows = [];
   const cutoff = Date.now() - 14 * 86400000;
-  for (const d of unlistedDetail || []) {
+  // EVERY in-stock SKU with no eBay listing, New included (owner 2026-09-17:
+  // "the listings page will show all listings not listed on eBay or Temu").
+  // Needs the stock sheet + the truthful link sets; until they load, the
+  // zero-listing scan stands in (those SKUs are missing everywhere anyway).
+  const src = (stockCache && chLinked && chLinked.ebay)
+    ? unlMissingRows().filter(d => d.missing.includes('ebay') && !chanSkipKind(d.sku, 'ebay'))
+    : (unlistedDetail || []);
+  for (const d of src) {
     const p = ebParseSku(d.sku);
-    if (!p.cond) continue;
     const claim = ebClaimed[String(d.sku).toUpperCase()];
     if (claim && claim > cutoff) continue; // exported — off the to-do list
-    rows.push({ sku: d.sku, cond: p.cond, qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
+    rows.push({ sku: d.sku, cond: p.cond || "new", qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
   }
   return rows;
 }
 
+// condition chips over the queue (owner 2026-09-17: "just a filter for the
+// conditions" — the sheet redesign was passed on, the one-column queue
+// stays). Session-only; All on every open.
+let ebQFilter = '';
+
 function renderEbayQueue() {
   const box = $("ebQueue");
-  const rows = ebQueueRows();
+  const all = ebQueueRows();
+  const chips = $("ebQChips");
+  if (chips) {
+    const counts = { new: 0, openbox: 0, used: 0, scrap: 0 };
+    for (const r of all) if (counts[r.cond] != null) counts[r.cond] += 1;
+    if (ebQFilter && !counts[ebQFilter]) ebQFilter = ''; // the filtered slice emptied out
+    const chip = (key, label, n) => `<button type="button" class="eb-qchip ${ebQFilter === key ? 'is-on' : ''}" data-qcond="${key}">${label} · ${n}</button>`;
+    chips.innerHTML = all.length ? [
+      chip('', 'All', all.length),
+      counts.new ? chip('new', 'New', counts.new) : '',
+      counts.openbox ? chip('openbox', 'Open Box', counts.openbox) : '',
+      counts.used ? chip('used', 'Used', counts.used) : '',
+      counts.scrap ? chip('scrap', 'Parts', counts.scrap) : '',
+    ].join('') : '';
+  }
+  const rows = ebQFilter ? all.filter(r => r.cond === ebQFilter) : all;
   if (!rows.length) {
-    box.innerHTML = `<div class="ebay-qempty">No returned condition SKUs waiting — receive a return, or press New listing to start from scratch.</div>`;
+    box.innerHTML = `<div class="ebay-qempty">${all.length
+      ? 'Nothing in this condition — pick another chip.'
+      : 'Nothing waiting — every in-stock SKU has an eBay listing. Press New listing to start one from scratch.'}</div>`;
     return;
   }
   box.innerHTML = rows.map(r => `
@@ -7349,7 +7430,9 @@ async function ebSelect(sku, scratch) {
   }
   ebCur = {
     sku, scratch: !!scratch,
-    cond: p.cond || "openbox",
+    // queue rows carry their real condition (a base SKU is New); a scratch
+    // SKU typed by hand keeps the old open-box default until parsed
+    cond: (q && q.cond) || p.cond || (scratch ? "openbox" : "new"),
     stockItemId: (q && q.stockItemId) || "",
     title: "", price: "", qty: q ? q.qty : 1,
     specs: {}, vars: [], photos: [],
@@ -7437,7 +7520,7 @@ function ebVarSku(v) {
 function ebAutoSiblings() {
   if (!ebCur || !ebCur.sku) return;
   const p = ebParseSku(ebCur.sku);
-  if (!p.cond || !p.model) return;
+  if (!p.model) return; // New SKUs pair too (cond '' matches cond '')
   for (const r of ebQueueRows()) {
     if (r.sku === ebCur.sku) continue;
     const ps = ebParseSku(r.sku);
@@ -7458,8 +7541,9 @@ function ebAutoSiblings() {
 function ebLiveFamily() {
   if (!ebCur || !ebCur.sku || !recvItems || !chLinked || !chLinked.ebay) return [];
   const p = ebParseSku(ebCur.sku);
-  if (!p.cond || !p.model) return [];
-  const prefix = `${EB_PREFIX[p.cond || ebCur.cond]}-${p.model}-`;
+  if (!p.model) return [];
+  const pre = EB_PREFIX[p.cond || ebCur.cond]; // New has no prefix
+  const prefix = pre ? `${pre}-${p.model}-` : `${p.model}-`;
   const inListing = new Set([ebCur.sku, ...ebCur.vars.map(v => ebVarSku(v))]);
   const out = [];
   for (const it of recvItems) {
@@ -7628,6 +7712,9 @@ function enterEbay() {
   if (!unlistedDetail) loadUnlisted();
   ensureInventory(); // ghost cards need sku -> stockItemId
   loadChLinked();    // ...and the eBay link set
+  // the queue is now "everything missing an eBay listing", which reads the
+  // stock sheet — load it here too, then swap the fuller queue in
+  if (!stockCache) loadStock().then(() => { if (activePage === 'ebay') renderEbayQueue(); }).catch(() => {});
   renderEbayQueue();
   renderEbayForm();
 }
@@ -7635,6 +7722,12 @@ function enterEbay() {
 $("ebQueue").addEventListener("click", (e) => {
   const r = e.target.closest(".ebay-qrow");
   if (r) ebSelect(r.dataset.sku, false);
+});
+$("ebQChips").addEventListener("click", (e) => {
+  const c = e.target.closest("[data-qcond]");
+  if (!c) return;
+  ebQFilter = c.dataset.qcond;
+  renderEbayQueue();
 });
 $("ebScratch").addEventListener("click", () => {
   ebSelect("", true);
@@ -7871,15 +7964,30 @@ $("ebgSave").addEventListener("click", async () => {
   $("ebGearDialog").close();
   toast("eBay listing settings saved");
 });
-// one Listings tab covers every marketplace lister; the pills inside switch
-$("tabListings").addEventListener("click", () => {
-  let ch = "ebay";
-  try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
-  showPage(ch);
+// Listings is a dropdown (eBay lister | Temu lister), the same pattern as
+// Returns ▾ (owner picked option A, 2026-09-17 — the floating pill row is
+// gone): first click lands on the last-used lister; the caret — or a click
+// while already on either lister — opens the menu
+$("tabListings").addEventListener("click", (e) => {
+  const wantMenu = e.target.closest(".tab-caret") || activePage === "ebay" || activePage === "temu";
+  if (!wantMenu) {
+    let ch = "ebay";
+    try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
+    showPage(ch);
+    return;
+  }
+  const dlg = $("listingsMenuDlg");
+  for (const b of dlg.querySelectorAll(".tab-menu-item")) b.classList.toggle("is-current", activePage === b.dataset.page);
+  dlg.showModal();
+  const r = $("tabListings").getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
 });
-document.querySelectorAll(".lst-pill").forEach(b => b.addEventListener("click", () => {
-  if (!b.disabled && b.dataset.lst !== activePage) showPage(b.dataset.lst);
-}));
+$("listingsMenuDlg").addEventListener("click", (e) => {
+  const item = e.target.closest(".tab-menu-item");
+  $("listingsMenuDlg").close();
+  if (item) showPage(item.dataset.page);
+});
 
 /* ---------- eBay lister: photo objects, QR capture, editor ---------- */
 // Approved designs: variants/ebay-photos-qr.html (phone = capture only) and

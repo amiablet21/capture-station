@@ -1996,6 +1996,20 @@ tr.unl-dim td { opacity: 0.55; }
 tr.unl-dim:hover td { opacity: 1; }
 .unl-dim-note { font-size: 10.5px; color: var(--faint); font-style: italic; }
 
+/* CHANNELS column filter (owner 2026-09-17): funnel in the header, popup
+   with a channel multi-select — ticked = show rows missing on all of them */
+.unl-funnel { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; vertical-align: -5px; padding: 0; }
+.unl-funnel svg { width: 11px; height: 11px; stroke: var(--muted); fill: none; stroke-width: 2.4; }
+.unl-funnel:hover { border-color: var(--accent); }
+.unl-funnel.is-active { border-color: var(--accent); background: var(--accent-soft); }
+.unl-funnel.is-active svg { stroke: var(--accent); }
+.unl-fpop { position: fixed; z-index: 80; width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 28px rgba(47, 52, 55, 0.16); padding: 12px 14px; }
+.unl-fpop h5 { margin: 0 0 8px; font-size: 10.5px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.unl-fchk { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; cursor: pointer; }
+.unl-fchk input { accent-color: var(--accent); }
+.unl-fclear { font: inherit; font-size: 11px; color: var(--muted); background: none; border: none; padding: 6px 0 0; cursor: pointer; text-decoration: underline dotted; }
+.unl-fclear:hover { color: var(--text); }
+
 /* every stock search ends in an add-new option under the results */
 .stock-addnew { padding: 8px 12px 2px; }
 .stock-addnew .ebay-addbtn { margin-left: 0; }
@@ -3949,6 +3963,12 @@ tr.unl-dim:hover td { opacity: 1; }
 
 /* queue */
 .ebay-queue { flex: 0 1 270px; min-width: 200px; }
+/* condition filter chips over the queue (owner 2026-09-17) */
+.ebay-qchips { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); }
+.ebay-qchips:empty { display: none; }
+.eb-qchip { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.eb-qchip:hover { border-color: var(--accent); }
+.eb-qchip.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
 .ebay-qlist { max-height: calc(100vh - 190px); overflow-y: auto; }
 .ebay-qrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
 .ebay-qrow:hover, .ebay-qrow.is-on { background: var(--accent-soft); }
@@ -4276,11 +4296,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
 /* one Listings tab: marketplace pills switch between the lister pages */
-.lst-switch { display: flex; gap: 10px; justify-content: center; padding: 14px 0 16px; }
-.lst-pill { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 16px; background: var(--surface); cursor: pointer; }
-.lst-pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-soft-text); }
-.lst-pill.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
-.lst-pill:disabled { opacity: 0.45; cursor: default; }
+/* the eBay/Temu pill row became the Listings ▾ tab dropdown (owner picked
+   option A, 2026-09-17); the panels keep its breathing room */
+.ebay-cols-pad { padding-top: 14px; }
 
 /* ---------- Overview tab (approved design: variants/overview-v2.html) ---------- */
 .ov-page { flex: 1; overflow-y: auto; }
