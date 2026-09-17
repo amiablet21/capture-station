@@ -2471,23 +2471,16 @@ function registerIpc() {
       if (day !== today) createdAt = `${day}T12:00:00.000Z`;
     }
     const stockItems = items.filter(i => i.targetSku);
+    // remember non-new mappings so the next return of this SKU is one click
+    for (const i of stockItems) {
+      if (i.condition !== 'new' && i.targetSku !== i.sku) {
+        db.saveConditionMapping(i.sku, i.condition, i.targetSku);
+      }
+    }
+    const receivedBy = String(payload.receivedBy || '').trim().slice(0, 60);
+    let id;
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      if (stockItems.length) {
-        await client.changeStockLevels(
-          stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
-          cfg.linnworks.locationId,
-          'Capture Station return'
-        );
-      }
-      // remember non-new mappings so the next return of this SKU is one click
-      for (const i of stockItems) {
-        if (i.condition !== 'new' && i.targetSku !== i.sku) {
-          db.saveConditionMapping(i.sku, i.condition, i.targetSku);
-        }
-      }
-      const receivedBy = String(payload.receivedBy || '').trim().slice(0, 60);
-      const id = db.createReturn({
+      id = db.createReturn({
         orderNumber: String(payload.orderNumber || ''),
         source: String(payload.source || ''),
         customer: String(payload.customer || ''),
@@ -2502,19 +2495,59 @@ function registerIpc() {
       if (receivedBy) config.save({ returnsReceivedBy: receivedBy });
       writeReturnsCsv();
       retsync.emitRow(db.getReturn(id)); // the shared folder hears about it
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    // The two Linnworks round-trips (restock + order note) used to sit
+    // between Enter and the row appearing — seconds of dead air per return
+    // (owner 2026-09-17). The entry is logged and synced above, so they run
+    // in the background now; a restock that still fails after retries is
+    // stamped LOUDLY on the row itself (synced to every station) + toasted.
+    (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      if (stockItems.length) {
+        let lastErr = '';
+        for (const wait of [0, 2000, 8000]) {
+          if (wait) await new Promise(r => setTimeout(r, wait));
+          try {
+            await client.changeStockLevels(
+              stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
+              cfg.linnworks.locationId,
+              'Capture Station return'
+            );
+            lastErr = '';
+            break;
+          } catch (e) { lastErr = e.message; }
+        }
+        if (lastErr) {
+          const what = stockItems.map(i => `+${i.qty} ${i.targetSku}`).join(', ');
+          try {
+            const r = db.getReturn(id);
+            if (r) {
+              const warn = `⚠ STOCK NOT ADJUSTED (${what}) — add the units in Linnworks by hand`;
+              db.saveReturn(id, {
+                orderNumber: r.order_number, createdAt: r.created_at, customer: r.customer,
+                tracking: r.tracking, note: r.note ? `${r.note} | ${warn}` : warn,
+                items: r.items, unmatched: r.unmatched, receivedBy: r.received_by,
+              });
+              writeReturnsCsv();
+              retsync.emitRow(db.getReturn(id));
+            }
+          } catch { /* the toast below still fires */ }
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('app:notice', { message: `Return saved, but Linnworks stock was NOT adjusted (${what}): ${lastErr}` });
+          }
+        }
+      }
       // best effort: stamp the original order (processed orders may refuse)
-      let noted = false;
       if (payload.orderId) {
         try {
           const summary = items.map(i => `${i.sku} -> ${i.condition}${i.targetSku ? ` (${i.targetSku})` : ''} x${i.qty}`).join('; ') || 'no items recorded';
           await client.addOrderNote(payload.orderId, `Return received: ${summary}${payload.note ? ` | ${payload.note}` : ''}`);
-          noted = true;
         } catch { /* order note is a bonus, not a requirement */ }
       }
-      return { ok: true, id, noted };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
+    })().catch(() => {});
+    return { ok: true, id, noted: false };
   });
   ipcMain.handle('returns:list', () => {
     // sync off: the legacy bare array (e2e and old callers know this shape)
