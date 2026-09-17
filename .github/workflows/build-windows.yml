@@ -134,11 +134,23 @@ jobs:
         run: |
           TAG="${{ inputs.release_tag }}"
           [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
+          PUBLISHED=0
           for i in 1 2 3 4; do
-            [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = "true" ] || exit 0
+            if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" != "true" ]; then PUBLISHED=1; break; fi
             echo "attempt $i: publishing draft $TAG"
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false && exit 0
+            if gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false; then PUBLISHED=1; break; fi
             sleep 20
           done
-          echo "::error::release $TAG is still a draft after 4 attempts"
-          exit 1
+          if [ "$PUBLISHED" != "1" ]; then
+            echo "::error::release $TAG is still a draft after 4 attempts"
+            exit 1
+          fi
+          # a stranded duplicate draft carrying the same tag name would sit
+          # invisibly forever (softprops can leave one behind when its
+          # publish call flakes and a later run recreates the release)
+          KEEP="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.draft and .tag_name==\"$TAG\" and .id != $KEEP) | .id" | while read -r RID; do
+            echo "deleting stranded duplicate draft $RID"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RID" || true
+          done
