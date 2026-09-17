@@ -2862,7 +2862,14 @@ window.addEventListener('keydown', async (e) => {
 // shared by the stock-count edit and its undo: write the level, fold the
 // answer into the cache, repaint
 async function applyStockLevel(sku, value) {
-  const res = await api.setStockLevel(sku, value);
+  // the cache's current level rides along so the shared history records
+  // before → after for every hand edit (owner 2026-09-17: "everytime
+  // someone adds stock, I want it in the history")
+  let prev;
+  const item0 = stockCache && stockCache.items.find(i => i.sku === sku);
+  const l0 = item0 && (item0.levels || []).find(x => x.locationId === stockCache.locationId);
+  if (l0) prev = Number(l0.stockLevel) || 0;
+  const res = await api.setStockLevel(sku, value, prev);
   if (!res.ok) throw new Error(res.error || 'Stock update failed');
   const item = stockCache && stockCache.items.find(i => i.sku === sku);
   if (item) {
@@ -5980,74 +5987,152 @@ $('chsList').addEventListener('contextmenu', (e) => {
 
 $('chsClose').addEventListener('click', () => $('chsDialog').close());
 
-/* ---------- bulk stock import (owner 2026-09-17) ---------- */
-// A SKU + Qty sheet either ADDS to the warehouse counts (newly received
-// units) or SETS them exactly (a correction). Every import writes a
-// history entry that syncs through the shared folder with the station name.
-let bulk = null; // { rows, bad, dups, file } while a parsed file is loaded
+/* ---------- bulk stock update (owner 2026-09-17, reworked same day:
+   "no excel import — I just want to write the SKU on the left column and
+   on the right side the qty") ---------- */
+// A typed two-column grid: SKU left, qty right, a fresh empty line appears
+// as you go. Add mode piles received units on top; Set mode replaces the
+// count. Every apply writes a history entry that syncs through the shared
+// folder with the station name.
 
-const bulkMode = () => (document.querySelector('input[name="bulkMode"]:checked') || {}).value || 'add';
+// segmented toggle (owner picked version 1): the pill switch + a hint that
+// says what the quantities will mean
+let bulkModeVal = 'add';
+const bulkMode = () => bulkModeVal;
+const BULK_HINTS = {
+  add: 'received units — each qty goes on top of the current count',
+  set: 'a correction or recount — each qty becomes the new count',
+};
+function bulkSetMode(m) {
+  bulkModeVal = m === 'set' ? 'set' : 'add';
+  document.querySelectorAll('#bulkSeg .view-chip').forEach(b => b.classList.toggle('is-active', b.dataset.bm === bulkModeVal));
+  $('bulkModeHint').textContent = BULK_HINTS[bulkModeVal];
+  bulkRefresh();
+}
+$('bulkSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bm]');
+  if (b) bulkSetMode(b.dataset.bm);
+});
+
+// the stock sheet answers "Now" live while typing; unknown SKUs go amber
+function bulkStockOf(sku) {
+  if (!stockCache || !sku) return null;
+  const it = (stockCache.items || []).find(i => String(i.sku).toUpperCase() === sku);
+  if (!it) return null;
+  const l = (it.levels || []).find(x => x.locationId === stockCache.locationId);
+  return { level: l ? Number(l.stockLevel) || 0 : 0 };
+}
+
+function bulkAddRow(sku, qty) {
+  const row = document.createElement('div');
+  row.className = 'bulk-g-row';
+  row.innerHTML = `
+    <input class="input mono bulk-g-sku" data-bf="sku" placeholder="SKU" autocomplete="off" spellcheck="false" />
+    <input class="input mono bulk-g-qty" data-bf="qty" placeholder="0" autocomplete="off" inputmode="numeric" />
+    <span class="bulk-g-now mono">—</span>
+    <span class="bulk-g-after mono">—</span>
+    <button type="button" class="bulk-g-x" title="Remove this line" tabindex="-1">✕</button>`;
+  row.querySelector('[data-bf="sku"]').value = sku || '';
+  row.querySelector('[data-bf="qty"]').value = qty || '';
+  $('bulkGridRows').appendChild(row);
+  bulkRowCalc(row);
+  return row;
+}
+
+function bulkRowCalc(row) {
+  const skuIn = row.querySelector('[data-bf="sku"]');
+  const sku = skuIn.value.trim().toUpperCase();
+  const qs = row.querySelector('[data-bf="qty"]').value.trim();
+  const qty = /^\d+$/.test(qs) ? Number(qs) : NaN;
+  const hit = bulkStockOf(sku);
+  skuIn.classList.toggle('bulk-g-bad', !!sku && !!stockCache && !hit);
+  row.querySelector('.bulk-g-now').textContent = hit ? hit.level : '—';
+  const afterEl = row.querySelector('.bulk-g-after');
+  if (hit && Number.isInteger(qty)) {
+    const after = bulkMode() === 'add' ? hit.level + qty : qty;
+    afterEl.innerHTML = `<b>${after}</b>`;
+    afterEl.classList.toggle('bulk-up', after > hit.level);
+    afterEl.classList.toggle('bulk-down', after < hit.level);
+  } else {
+    afterEl.textContent = '—';
+    afterEl.classList.remove('bulk-up', 'bulk-down');
+  }
+}
+
+function bulkValidRows() {
+  const out = [];
+  for (const row of document.querySelectorAll('#bulkGridRows .bulk-g-row')) {
+    const sku = row.querySelector('[data-bf="sku"]').value.trim().toUpperCase();
+    const qs = row.querySelector('[data-bf="qty"]').value.trim();
+    if (!sku || !/^\d+$/.test(qs)) continue;
+    if (stockCache && !bulkStockOf(sku)) continue; // amber rows never apply
+    out.push({ sku, qty: Number(qs) });
+  }
+  return out;
+}
+
+function bulkRefresh() {
+  for (const row of document.querySelectorAll('#bulkGridRows .bulk-g-row')) bulkRowCalc(row);
+  const rows = $('bulkGridRows');
+  const last = rows.lastElementChild;
+  if (!last || last.querySelector('[data-bf="sku"]').value.trim() || last.querySelector('[data-bf="qty"]').value.trim()) bulkAddRow();
+  $('bulkApply').disabled = !bulkValidRows().length;
+}
 
 $('stockBulkBtn').addEventListener('click', () => {
-  bulk = null;
-  $('bulkFile').textContent = 'a sheet with SKU + Qty columns (or two plain columns)';
-  $('bulkPreview').innerHTML = '';
+  $('bulkGridRows').innerHTML = '';
+  bulkAddRow();
+  bulkSetMode('add'); // every open starts on the safe mode
   $('bulkApply').disabled = true;
   $('bulkDialog').showModal();
+  const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
+  if (first) first.focus();
+  if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
   bulkHistLoad();
 });
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
-$('bulkPickBtn').addEventListener('click', async () => {
-  const res = await api.stockBulkPick();
-  if (!res.ok) { if (!res.canceled) toast(res.error || 'Could not read that file.'); return; }
-  bulk = res;
-  $('bulkFile').textContent = `${res.file} — ${res.rows.length} SKU${res.rows.length === 1 ? '' : 's'}`
-    + (res.dups ? ` · ${res.dups} duplicate line${res.dups === 1 ? '' : 's'} merged` : '')
-    + (res.bad.length ? ` · ${res.bad.length} unreadable line${res.bad.length === 1 ? '' : 's'} skipped` : '');
-  bulkRender();
+$('bulkGridRows').addEventListener('input', () => bulkRefresh());
+$('bulkGridRows').addEventListener('click', (e) => {
+  const x = e.target.closest('.bulk-g-x');
+  if (!x) return;
+  x.closest('.bulk-g-row').remove();
+  bulkRefresh();
 });
-document.querySelectorAll('input[name="bulkMode"]').forEach(r => r.addEventListener('change', () => bulkRender()));
-
-function bulkRender() {
-  if (!bulk) return;
-  const mode = bulkMode();
-  const known = bulk.rows.filter(r => r.known);
-  const unknown = bulk.rows.filter(r => !r.known);
-  $('bulkApply').disabled = !known.length;
-  $('bulkPreview').innerHTML = `
-    <table class="bulk-table">
-      <thead><tr><th>SKU</th><th class="num">Now</th><th class="num">Change</th><th class="num">After</th></tr></thead>
-      <tbody>${known.map(r => {
-    const after = mode === 'add' ? (r.current || 0) + r.qty : r.qty;
-    const change = after - (r.current || 0);
-    return `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.current == null ? '—' : r.current}</td>
-      <td class="num mono ${change > 0 ? 'bulk-up' : change < 0 ? 'bulk-down' : ''}">${change > 0 ? '+' : ''}${change}</td>
-      <td class="num mono"><b>${after}</b></td></tr>`;
-  }).join('')}</tbody>
-    </table>
-    ${unknown.length ? `<p class="dlg-note bulk-warn">⚠ Not in Linnworks — skipped: <span class="mono">${unknown.map(u => esc(u.sku)).join(', ')}</span></p>` : ''}`;
-}
+// pasting two spreadsheet columns still fills the grid, one row per line
+$('bulkGridRows').addEventListener('paste', (e) => {
+  const text = e.clipboardData ? e.clipboardData.getData('text') : '';
+  if (!text || (!text.includes('\n') && !text.includes('\t'))) return; // plain text pastes normally
+  e.preventDefault();
+  const startRow = e.target.closest('.bulk-g-row');
+  if (startRow && !startRow.querySelector('[data-bf="sku"]').value.trim()) startRow.remove();
+  for (const ln of text.split(/\r?\n/)) {
+    const parts = ln.split(/[\t,]+/).map(s => s.trim()).filter(Boolean);
+    if (parts.length) bulkAddRow(String(parts[0]).toUpperCase(), parts[1] || '');
+  }
+  bulkRefresh();
+});
 
 $('bulkApply').addEventListener('click', async () => {
-  if (!bulk) return;
+  const rows = bulkValidRows();
+  if (!rows.length) return;
   const mode = bulkMode();
   $('bulkApply').disabled = true;
   $('bulkApply').textContent = 'Importing…';
-  const res = await api.stockBulkApply({ mode, rows: bulk.rows.filter(r => r.known).map(r => ({ sku: r.sku, qty: r.qty })), file: bulk.file });
+  const res = await api.stockBulkApply({ mode, rows, file: '' });
   $('bulkApply').textContent = 'Import';
   if (!res.ok) { toast(res.error || 'Import failed.'); $('bulkApply').disabled = false; return; }
-  // one Ctrl+Z takes the WHOLE import back: every SKU returns to its
-  // before-count (sequential sets — slow for huge files, says so honestly)
-  const befores = res.entry.rows.map(r => ({ sku: r.sku, level: r.before }));
-  pushUndo(`bulk import of ${befores.length} SKU${befores.length === 1 ? '' : 's'}`, async () => {
-    for (const b of befores) await api.setStockLevel(b.sku, b.level);
+  // one Ctrl+Z takes the WHOLE update back — through the same revert the
+  // history buttons use, so the undo shows up in the history too
+  pushUndo(`bulk import of ${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'}`, async () => {
+    const r = await api.stockBulkRevert(res.entry.id);
+    if (!r.ok) throw new Error(r.error || 'Revert failed');
     loadStock();
+    bulkHistLoad();
   });
-  toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the sheet counts'}${res.entry.skipped.length ? ` — ${res.entry.skipped.length} unknown skipped` : ''} · Ctrl+Z reverses the whole import`, 7000);
-  bulk = null;
-  $('bulkPreview').innerHTML = '';
-  $('bulkFile').textContent = 'done — pick another file or close';
+  toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the typed counts'} · Ctrl+Z reverses the whole import`, 7000);
+  $('bulkGridRows').innerHTML = '';
+  bulkAddRow();
   loadStock();
   bulkHistLoad();
 });
@@ -6056,21 +6141,31 @@ async function bulkHistLoad() {
   const box = $('bulkHist');
   const res = await api.stockBulkHistory().catch(() => null);
   if (!res || !res.ok || !res.entries.length) {
-    box.innerHTML = '<p class="dlg-note">No bulk imports yet — every import lands here with who ran it, and syncs to the other desktops through the shared folder.</p>';
+    box.innerHTML = '<p class="dlg-note">Nothing yet — bulk imports, hand edits and reverts all land here with who did them, synced to every desktop through the shared folder.</p>';
     return;
   }
+  const reverted = new Set(res.entries.filter(e => e.revertOf).map(e => e.revertOf));
   box.innerHTML = res.entries.map((e, i) => {
-    const units = e.rows.reduce((a, r) => a + (e.mode === 'add' ? r.qty : (r.after - r.before)), 0);
+    const rows = e.rows || [];
+    const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
+    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
+    const what = e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} · ${nSku}`
+      : e.mode === 'set' ? `set counts · ${nSku}`
+        : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
+          : `↩ reversed an earlier change · ${nSku}`;
+    const act = reverted.has(e.id)
+      ? '<span class="bulk-h-rvtd">reverted ✓</span>'
+      : `<button type="button" class="bulk-h-revert" data-brv="${esc(e.id)}" title="Reverse this change — subtracts what it added (or restores what it removed), leaving everything since alone">↩ Revert</button>`;
     return `
     <div class="bulk-h">
-      <button type="button" class="bulk-h-line" data-bh="${i}">
-        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'}` : 'set counts'} · ${e.rows.length} SKU${e.rows.length === 1 ? '' : 's'}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}
-        <span class="bulk-h-chev">▸</span>
-      </button>
+      <div class="bulk-h-line" data-bh="${i}">
+        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}
+        ${act}<span class="bulk-h-chev">▸</span>
+      </div>
       <div class="bulk-h-body" hidden>
         <table class="bulk-table">
-          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : 'Set to'}</th><th class="num">After</th></tr></thead>
-          <tbody>${e.rows.map(r => `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.before}</td><td class="num mono">${e.mode === 'add' ? `+${r.qty}` : r.qty}</td><td class="num mono">${r.after}</td></tr>`).join('')}</tbody>
+          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' ? 'Change' : 'Set to'}</th><th class="num">After</th></tr></thead>
+          <tbody>${rows.map(r => `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${e.mode === 'add' ? `+${r.qty}` : e.mode === 'revert' && r.qty > 0 ? `+${r.qty}` : r.qty}</td><td class="num mono">${r.after}</td></tr>`).join('')}</tbody>
         </table>
         ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
       </div>
@@ -6078,7 +6173,18 @@ async function bulkHistLoad() {
   }).join('');
 }
 
-$('bulkHist').addEventListener('click', (e) => {
+$('bulkHist').addEventListener('click', async (e) => {
+  const rv = e.target.closest('.bulk-h-revert');
+  if (rv) {
+    if (!confirm('Reverse this change? It subtracts what was added (or restores what was removed), leaving everything that happened since alone.')) return;
+    rv.disabled = true;
+    const res = await api.stockBulkRevert(rv.dataset.brv);
+    if (!res.ok) { toast(res.error || 'Could not revert.'); rv.disabled = false; return; }
+    toast('Reversed — the history keeps both entries.');
+    loadStock();
+    bulkHistLoad();
+    return;
+  }
   const line = e.target.closest('.bulk-h-line');
   if (!line) return;
   const body = line.parentElement.querySelector('.bulk-h-body');

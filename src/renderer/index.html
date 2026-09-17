@@ -1024,15 +1024,21 @@
   <dialog id="bulkDialog" class="dlg bulk-dlg">
     <div class="dlg-body">
       <h2 class="dlg-title">Bulk stock import</h2>
-      <div class="bulk-top">
-        <button id="bulkPickBtn" class="btn btn-secondary" type="button">Choose file…</button>
-        <span id="bulkFile" class="test-result"></span>
+      <!-- segmented toggle + live hint (owner picked version 1, 2026-09-17) -->
+      <div class="bulk-modebar">
+        <div class="chip-tray" id="bulkSeg">
+          <button type="button" class="view-chip is-active" data-bm="add">+ Add to stock</button>
+          <button type="button" class="view-chip" data-bm="set">Set exact qty</button>
+        </div>
+        <span id="bulkModeHint" class="bulk-mode-hint">received units — each qty goes on top of the current count</span>
       </div>
-      <div class="bulk-mode">
-        <label><input type="radio" name="bulkMode" value="add" checked /> <b>Add to stock</b> — newly received units, each qty goes on top of the current count</label>
-        <label><input type="radio" name="bulkMode" value="set" /> <b>Set exact qty</b> — a correction or recount, each qty becomes the new count</label>
+      <!-- typed two-column grid (owner: "no excel import — write the SKU on
+           the left column and on the right side the qty") -->
+      <div class="bulk-grid">
+        <div class="bulk-g-head"><span>SKU</span><span class="bulk-g-r">Qty</span><span class="bulk-g-r">Now</span><span class="bulk-g-r">After</span><span></span></div>
+        <div id="bulkGridRows"></div>
       </div>
-      <div id="bulkPreview" class="bulk-preview"></div>
+      <p class="dlg-note">A new line appears as you type. Pasting two columns straight from a spreadsheet fills the grid too.</p>
       <div class="dlg-actions">
         <button id="bulkCancel" class="btn btn-ghost" type="button">Close</button>
         <button id="bulkApply" class="btn btn-primary" type="button" disabled>Import</button>

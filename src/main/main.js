@@ -9,7 +9,6 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
 const returnsImport = require('./returns-import');
-const stockImport = require('./stock-import');
 const retsync = require('./retsync');
 
 let win = null;
@@ -4148,8 +4147,11 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  // shared by the desktop grid AND the phone dashboard's stock editor
-  async function stockSetLevel(sku, level) {
+  // shared by the desktop grid AND the phone dashboard's stock editor.
+  // prev = the level the caller was looking at, so the shared history can
+  // record before → after (owner 2026-09-17: "everytime someone adds
+  // stock, I want it in the history so I can see what people are doing")
+  async function stockSetLevel(sku, level, prev) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const n = Number(level);
@@ -4157,6 +4159,11 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // every hand edit joins the shared history the bulk imports use
+      const before = Number.isFinite(Number(prev)) ? Number(prev) : null;
+      if (before !== n) {
+        bulkLogEntry({ mode: 'edit', file: '', rows: [{ sku: String(sku).toUpperCase(), before, qty: n, after: n }], skipped: [] });
+      }
       // a hand-raised count on an unlisted SKU (found returns: OPEN-BOX /
       // USED / SCRAP) must reach the "needs listings" card at once, not
       // after the hour cache
@@ -4174,43 +4181,30 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   }
-  ipcMain.handle('stock:set', (_e, { sku, level }) => stockSetLevel(sku, level));
+  ipcMain.handle('stock:set', (_e, { sku, level, prev }) => stockSetLevel(sku, level, prev));
 
-  /* ---- bulk stock import (owner 2026-09-17): a SKU + Qty sheet adds to
-     or replaces the warehouse levels, with a per-desktop history that
-     rides the shared folder like WFS shipments ---- */
+  /* ---- bulk stock entry (owner 2026-09-17, reworked same day: "no excel
+     import — I just want to write the SKU on the left column and the qty
+     on the right"): typed SKU+Qty lines add to or replace the warehouse
+     levels, with a history that rides the shared folder like WFS ---- */
   const bulkHistPath = () => path.join(app.getPath('userData'), 'stock-imports.json');
   const loadBulkHist = () => {
     try { const j = JSON.parse(fs.readFileSync(bulkHistPath(), 'utf8')); return Array.isArray(j) ? j : []; }
     catch { return []; }
   };
-  // pick + parse + preview data: current levels ride along so the dialog
-  // shows before/after without a second call
-  ipcMain.handle('stock:bulkPick', async () => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
-    const pick = await dialog.showOpenDialog(win, {
-      title: 'Bulk stock import — a sheet with SKU and Qty columns',
-      filters: [{ name: 'Spreadsheet', extensions: ['xlsx', 'xls', 'csv'] }],
-      properties: ['openFile'],
-    });
-    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
-    try {
-      const parsed = stockImport.parseStockFile(pick.filePaths[0]);
-      if (parsed.rows.length > 500) return { ok: false, error: `${parsed.rows.length} SKUs — cap is 500 per import; split the file.` };
-      const client = new LinnworksClient(cfg.linnworks);
-      const items = await client.listInventory();
-      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
-      const rows = parsed.rows.map(r => {
-        const it = bySku.get(r.sku);
-        const lvl = it && (it.levels || []).find(l => l.locationId === cfg.linnworks.locationId);
-        return { ...r, known: !!it, current: lvl ? Number(lvl.stockLevel) || 0 : (it ? 0 : null) };
-      });
-      return { ok: true, rows, bad: parsed.bad, dups: parsed.dups, file: path.basename(pick.filePaths[0]) };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
+  // one entry = one stock movement (bulk import, hand edit, revert):
+  // written locally AND appended to the shared folder with the station name
+  function bulkLogEntry(partial) {
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: new Date().toISOString(),
+      station: retsync.stationName() || 'this desktop',
+      ...partial,
+    };
+    try { fs.writeFileSync(bulkHistPath(), JSON.stringify([entry, ...loadBulkHist()].slice(0, 200))); } catch { /* best effort */ }
+    retsync.appendAux('stockimports', entry);
+    return entry;
+  }
   ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -4241,15 +4235,7 @@ function registerIpc() {
         await client.changeStockLevels(deltas, cfg.linnworks.locationId,
           mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
       }
-      const entry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ts: new Date().toISOString(),
-        station: retsync.stationName() || 'this desktop',
-        mode, file: String(file || ''),
-        rows: entryRows, skipped,
-      };
-      try { fs.writeFileSync(bulkHistPath(), JSON.stringify([entry, ...loadBulkHist()].slice(0, 200))); } catch { /* best effort */ }
-      retsync.appendAux('stockimports', entry); // every desktop sees who imported what
+      const entry = bulkLogEntry({ mode, file: String(file || ''), rows: entryRows, skipped });
       // same after-care as a single stock correction: fresh unlisted scan,
       // immediate re-route + re-import instead of waiting the 5-minute pass
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
@@ -4259,6 +4245,50 @@ function registerIpc() {
         await runOrderImport();
       })().catch(() => { /* the scheduled passes will catch up */ });
       return { ok: true, entry };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Reverse any history entry (owner 2026-09-17: "I can go in the history
+  // and reverse any action"). It reverses the CHANGE, not the snapshot —
+  // deltas, so sales and edits made since stay intact; a row whose change
+  // would push below zero is clamped at zero and recorded as applied.
+  ipcMain.handle('stock:bulkRevert', async (_e, { id }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = [...retsync.readAux('stockimports'), ...loadBulkHist()];
+    const entry = all.find(e => e && e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'Already reverted.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const rows = [];
+      const deltas = [];
+      for (const r of entry.rows || []) {
+        if (r.before == null) continue; // an old edit with no recorded before: nothing to compute
+        const it = bySku.get(String(r.sku).toUpperCase());
+        if (!it) continue; // SKU deleted since
+        const lvl = (it.levels || []).find(l => l.locationId === cfg.linnworks.locationId);
+        const cur = lvl ? Number(lvl.stockLevel) || 0 : 0;
+        const change = (Number(r.after) || 0) - (Number(r.before) || 0);
+        if (!change) continue;
+        const delta = Math.max(-cur, -change);
+        if (!delta) continue;
+        rows.push({ sku: String(r.sku).toUpperCase(), before: cur, qty: delta, after: cur + delta });
+        deltas.push({ sku: it.sku, delta });
+      }
+      if (!deltas.length) return { ok: false, error: 'Nothing to reverse — the change was zero, already gone, or the SKUs no longer exist.' };
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert');
+      const rec = bulkLogEntry({ mode: 'revert', revertOf: id, file: '', rows, skipped: [] });
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, entry: rec };
     } catch (e) {
       return { ok: false, error: e.message };
     }
