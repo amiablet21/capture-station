@@ -1489,7 +1489,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .rn-del:hover { border-color: var(--neg-text); }
 
 /* the Linnworks configurator picker beside List on eBay */
-.eb-lw-config { max-width: 250px; font-size: 12px; }
+.eb-lw-config { flex: 0 1 250px; max-width: 250px; min-width: 140px; font-size: 12px; }
 
 /* any SKU string in the mapping dialog copies on click (owner 2026-09-16) */
 .chmap-copy { cursor: copy; }
@@ -3990,7 +3990,12 @@ tr.unl-dim:hover td { opacity: 1; }
 .ebay-shot { position: relative; width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); background-size: cover; background-position: center; background-color: var(--surface-2); }
 .ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
 .ebay-shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
-.ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); }
+.ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); flex-wrap: wrap; }
+/* buttons never fold mid-word — a row too narrow wraps whole buttons
+   instead (owner 2026-09-17: the upload button collapsed into a sliver
+   poking out of the panel) */
+.ebay-factions .btn, .ebay-factions .ebay-addbtn { white-space: nowrap; }
+.ebay-factions #ebUploadPage { margin-left: 0; }
 
 /* buyer preview: renders the WirelessTechnoStore template */
 .ebay-out { flex: 1 1 420px; min-width: 340px; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
