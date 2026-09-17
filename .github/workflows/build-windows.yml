@@ -63,11 +63,44 @@ jobs:
 
       - name: Attach the installer to the release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        # GitHub's asset-upload service dropped good uploads twice on
+        # 2026-09-17 ("Error saving asset" after a clean build) — never
+        # fail the run here; the next step verifies and retries for real
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
           files: dist/*.exe
           generate_release_notes: true
+
+      - name: Make sure the installer really sits on the release (retry the flaky upload)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
+          for i in 1 2 3 4; do
+            MISSING=0
+            for F in dist/*.exe; do
+              N="$(basename "$F" | tr ' ' '.')"   # GitHub stores asset names with dots
+              if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N"; then
+                MISSING=1
+                echo "attempt $i: uploading $N"
+                gh release upload "$TAG" "$F" --repo "$GITHUB_REPOSITORY" --clobber || true
+              fi
+            done
+            [ "$MISSING" = "0" ] && exit 0
+            sleep 20
+          done
+          for F in dist/*.exe; do
+            N="$(basename "$F" | tr ' ' '.')"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
+              || { echo "::error::$N never landed on $TAG after 4 attempts"; exit 1; }
+          done
 
       # uploads only add files — anything from an earlier, differently
       # named build would linger on the release forever. Sweep every
