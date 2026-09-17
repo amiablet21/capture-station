@@ -4572,7 +4572,13 @@ function buildMenu() {
         { type: 'separator' },
         // dev-only tools stay out of installed builds (warehouse machines)
         ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
-        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+        // zoom goes through the renderer's own pipeline: the raw Electron
+        // roles zoomed the page but never told browserLayout, so the native
+        // marketplace pane kept its old bounds and overlapped the sheet
+        // (owner 2026-09-17, "the split screen for the capture page is broken")
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => win && win.webContents.send('ui:zoom', { dir: 'reset' }) },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => win && win.webContents.send('ui:zoom', { dir: 'in' }) },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => win && win.webContents.send('ui:zoom', { dir: 'out' }) },
       ],
     },
   ];

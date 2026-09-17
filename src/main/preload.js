@@ -27,6 +27,7 @@ const EVENTS = [
   'ebay:photoUploaded',
   'unlisted:refreshed',
   'ui:open-settings',
+  'ui:zoom',
   'ui:open-debug',
   'ui:open-history',
   'returns:importProgress',

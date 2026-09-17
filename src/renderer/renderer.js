@@ -1776,6 +1776,13 @@ window.addEventListener('wheel', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === '0') { e.preventDefault(); uiApplyZoom(1); }
 });
+// the app menu's zoom items (Cmd/Ctrl +, −, 0) land here so the native
+// pane's bounds re-sync — the raw Electron menu roles skipped that and the
+// marketplace pane overlapped the sheet after a menu zoom (owner 2026-09-17)
+api.on('ui:zoom', (d) => {
+  const dir = (d && d.dir) || 'reset';
+  uiApplyZoom(dir === 'reset' ? 1 : api.uiZoomGet() + (dir === 'in' ? 0.1 : -0.1));
+});
 try {
   const savedZ = Number(localStorage.getItem('uiZoom'));
   if (savedZ && Math.abs(savedZ - 1) > 0.01) api.uiZoom(savedZ);
@@ -1820,6 +1827,10 @@ document.addEventListener('close', (e) => {
 }, true);
 
 new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
+// belt and braces: anything that reflows the layout without tripping the
+// observers (the menu zoom roles did, 2026-09-17) self-heals within a
+// second — the native pane can never stay parked over the sheet
+setInterval(() => { if (!$('bDock').hidden) syncBrowserBounds(); }, 1000);
 window.addEventListener('resize', () => {
   // shrinking the window re-clamps the pane so the sheet side never vanishes
   if (!$('bDock').hidden) applyBrowserPane();
