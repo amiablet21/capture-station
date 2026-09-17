@@ -4579,12 +4579,25 @@ $('chmapWmBody').addEventListener('click', async (e) => {
     }
     const res = await api.mappingUnlink(item.rowId);
     if (!res.ok) { toast(res.error || 'Could not unlink.'); return; }
-    // mirror of the link path: the sets forget the id at once
+    // mirror of the link path — but the item may hold ANOTHER link on the
+    // same channel (a WFS listing, a second SKU), so the chip only flips to
+    // unlisted when the remaining link records say the channel is really
+    // empty (owner 2026-09-17: unlinking one of two Walmart SKUs wrongly
+    // reverted the Walmart chip)
     if (item.linkedItemId && chLinked) {
       const label = chmapChanLabel(chmap.chan).toLowerCase();
-      if (chLinked[label]) chLinked[label].delete(item.linkedItemId);
-      renderStockChips();
-      if (activePage === 'stock' && stockCache) renderStock();
+      const id = item.linkedItemId;
+      api.getChannelSkus(id).then((r) => {
+        const still = !!(r && r.ok && (r.channels || []).some((c) => {
+          const src = String(c.source || '');
+          const l = /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
+          return l === label;
+        }));
+        if (still || !chLinked || !chLinked[label]) return;
+        chLinked[label].delete(id);
+        renderStockChips();
+        if (activePage === 'stock' && stockCache) renderStock();
+      }).catch(() => { /* chip stays; the next full scan settles it */ });
     }
     item.linked = false;
     item.linkedItemId = '';
