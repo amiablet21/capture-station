@@ -1522,6 +1522,8 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .bulk-h-line:hover { background: var(--surface-2); }
 .bulk-h-chev { color: var(--faint); }
 .bulk-h-body { padding: 2px 4px 10px; }
+.bulk-note { margin: 8px 0 2px; font-size: 12.5px; width: 100%; }
+.bulk-h-note { font-style: italic; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
 .bulk-h-revert { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 2px 9px; margin-left: auto; cursor: pointer; white-space: nowrap; }
 .bulk-h-revert:hover { border-color: var(--accent); color: var(--accent-soft-text); }
 .bulk-h-rvtd { font-size: 10.5px; color: var(--faint); margin-left: auto; white-space: nowrap; }

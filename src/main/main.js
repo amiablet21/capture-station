@@ -4205,7 +4205,7 @@ function registerIpc() {
     retsync.appendAux('stockimports', entry);
     return entry;
   }
-  ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file }) => {
+  ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     const want = (Array.isArray(rows) ? rows : []).slice(0, 500)
@@ -4235,7 +4235,7 @@ function registerIpc() {
         await client.changeStockLevels(deltas, cfg.linnworks.locationId,
           mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
       }
-      const entry = bulkLogEntry({ mode, file: String(file || ''), rows: entryRows, skipped });
+      const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped });
       // same after-care as a single stock correction: fresh unlisted scan,
       // immediate re-route + re-import instead of waiting the 5-minute pass
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };

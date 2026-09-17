@@ -6095,6 +6095,7 @@ function bulkRefresh() {
 $('stockBulkBtn').addEventListener('click', () => {
   ensureInventory(); // the SKU picker's lookup data
   $('bulkGridRows').innerHTML = '';
+  $('bulkNote').value = '';
   bulkAddRow();
   bulkSetMode('add'); // every open starts on the safe mode
   $('bulkApply').disabled = true;
@@ -6133,7 +6134,7 @@ $('bulkApply').addEventListener('click', async () => {
   const mode = bulkMode();
   $('bulkApply').disabled = true;
   $('bulkApply').textContent = 'Importing…';
-  const res = await api.stockBulkApply({ mode, rows, file: '' });
+  const res = await api.stockBulkApply({ mode, rows, file: '', note: $('bulkNote').value.trim() });
   $('bulkApply').textContent = 'Import';
   if (!res.ok) { toast(res.error || 'Import failed.'); $('bulkApply').disabled = false; return; }
   // one Ctrl+Z takes the WHOLE update back — through the same revert the
@@ -6147,6 +6148,7 @@ $('bulkApply').addEventListener('click', async () => {
   toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the typed counts'} · Ctrl+Z reverses the whole import`, 7000);
   $('bulkGridRows').innerHTML = '';
   bulkAddRow();
+  $('bulkNote').value = '';
   loadStock();
   bulkHistLoad();
 });
@@ -6155,7 +6157,7 @@ async function bulkHistLoad() {
   const box = $('bulkHist');
   const res = await api.stockBulkHistory().catch(() => null);
   if (!res || !res.ok || !res.entries.length) {
-    box.innerHTML = '<p class="dlg-note">Nothing yet — bulk imports, hand edits and reverts all land here with who did them, synced to every desktop through the shared folder.</p>';
+    box.innerHTML = '<p class="dlg-note">Nothing yet.</p>';
     return;
   }
   const reverted = new Set(res.entries.filter(e => e.revertOf).map(e => e.revertOf));
@@ -6173,7 +6175,7 @@ async function bulkHistLoad() {
     return `
     <div class="bulk-h">
       <div class="bulk-h-line" data-bh="${i}">
-        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}
+        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
         ${act}<span class="bulk-h-chev">▸</span>
       </div>
       <div class="bulk-h-body" hidden>
