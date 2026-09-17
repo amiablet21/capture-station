@@ -4725,9 +4725,9 @@ let retDispCount = 0;
 function renderRetChips() {
   const box = $('retChips');
   if (!box) return;
+  // the "⚠ N need listings" chip left this bar (owner 2026-09-17: "it gets
+  // too crowded") — the Stock tab's Unlisted view is the one listings nag
   box.innerHTML = [
-    retTodoCount ? `<button type="button" class="ret-chip is-warn ${retCardOpen.todo ? 'is-on' : ''}" data-chip="todo"
-      title="${retCardOpen.todo ? 'Hide' : 'Show'} the SKUs still needing marketplace listings">⚠ ${retTodoCount} need${retTodoCount === 1 ? 's' : ''} listings</button>` : '',
     retDispCount ? `<button type="button" class="ret-chip is-disp ${retCardOpen.disp ? 'is-on' : ''}" data-chip="disp"
       title="${retCardOpen.disp ? 'Hide' : 'Show'} the open disputes">${retDispCount} dispute${retDispCount === 1 ? '' : 's'} open</button>` : '',
   ].join('');
@@ -4744,31 +4744,12 @@ $('retChips').addEventListener('click', (e) => {
 });
 
 function renderRetTodo() {
+  // the chip and its card left the Returns page (owner 2026-09-17: "it gets
+  // too crowded") — the Stock tab's Unlisted view carries the listings nag;
+  // callers stay wired so re-enabling is a matter of restoring this body
   const box = $('retTodo');
-  if (!box) return;
-  retTodoCount = unlistedSkus ? unlistedSkus.size : 0;
-  renderRetChips();
-  if (!retTodoCount) { box.hidden = true; return; }
-  const rows = [...unlistedSkus].map(sku => {
-    const it = recvBySku && recvBySku.get(sku.toLowerCase());
-    const lvl = it && (it.levels || []).find(l => l.locationId === recvLocationId);
-    return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
-  }).sort((a, b) => (b.units || 0) - (a.units || 0));
-  box.hidden = !retCardOpen.todo;
-  // plain always-visible card (owner reverted the task-row redesign
-  // 2026-08-13); kept: SKU click -> eBay lister, >4 rows defaults collapsed
-  const stored = localStorage.getItem('retTodoCol');
-  const col = stored === null ? rows.length > 4 : stored === '1';
-  box.classList.toggle('is-collapsed', col);
-  box.innerHTML = `
-    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
-    ${rows.map(r => `<div class="ret-todo-row">
-      <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Build this listing in the eBay tab">${esc(r.sku)}</button>
-      <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
-      <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
-      <button class="ret-todo-ign" data-ign="${esc(r.sku)}" title="Never list this SKU (claim bins, fakes) — remove it from this card and the Unlisted view for good">✕</button>
-    </div>`).join('')}
-    <div class="ret-todo-note">Click a SKU to build its eBay listing — Linnworks links it automatically once it goes live.</div>`;
+  if (box) box.hidden = true;
+  retTodoCount = 0;
 }
 
 $('retTodo').addEventListener('click', async (e) => {
