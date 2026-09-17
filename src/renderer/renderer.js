@@ -6027,13 +6027,26 @@ function bulkAddRow(sku, qty) {
   const row = document.createElement('div');
   row.className = 'bulk-g-row';
   row.innerHTML = `
-    <input class="input mono bulk-g-sku" data-bf="sku" placeholder="SKU" autocomplete="off" spellcheck="false" />
+    <span class="bulk-g-skuwrap">
+      <input class="input mono bulk-g-sku" data-bf="sku" placeholder="SKU" autocomplete="off" spellcheck="false" />
+      <div class="combo-list" hidden></div>
+    </span>
     <input class="input mono bulk-g-qty" data-bf="qty" placeholder="0" autocomplete="off" inputmode="numeric" />
     <span class="bulk-g-now mono">—</span>
     <span class="bulk-g-after mono">—</span>
     <button type="button" class="bulk-g-x" title="Remove this line" tabindex="-1">✕</button>`;
-  row.querySelector('[data-bf="sku"]').value = sku || '';
-  row.querySelector('[data-bf="qty"]').value = qty || '';
+  const skuIn = row.querySelector('[data-bf="sku"]');
+  const qtyIn = row.querySelector('[data-bf="qty"]');
+  skuIn.value = sku || '';
+  qtyIn.value = qty || '';
+  // the same SKU/title/barcode picker the returns sheets use (owner
+  // 2026-09-17: "why does it not prefill or show me options")
+  makeCombo(skuIn, row.querySelector('.combo-list'), (item) => {
+    skuIn.value = item.sku;
+    bulkRefresh();
+    qtyIn.focus();
+    qtyIn.select();
+  });
   $('bulkGridRows').appendChild(row);
   bulkRowCalc(row);
   return row;
@@ -6080,6 +6093,7 @@ function bulkRefresh() {
 }
 
 $('stockBulkBtn').addEventListener('click', () => {
+  ensureInventory(); // the SKU picker's lookup data
   $('bulkGridRows').innerHTML = '';
   bulkAddRow();
   bulkSetMode('add'); // every open starts on the safe mode
@@ -6710,7 +6724,7 @@ function makeCombo(input, listEl, onPick, opts) {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
     // returns log, the receive popup's sheet AND the WFS shipment sheet
     // anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet')) return;
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;

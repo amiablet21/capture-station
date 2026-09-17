@@ -1499,6 +1499,11 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .bulk-g-row { margin-bottom: 5px; }
 .bulk-g-r, .bulk-g-qty, .bulk-g-now, .bulk-g-after { text-align: right; }
 .bulk-g-sku, .bulk-g-qty { font-size: 12.5px; padding: 7px 9px; }
+/* SKU cells carry the shared inventory picker; the grid scrolls, so its
+   dropdown anchors to the viewport (combo-list.is-fixed) */
+.bulk-g-skuwrap { position: relative; display: flex; min-width: 0; }
+.bulk-g-skuwrap .bulk-g-sku { width: 100%; }
+.bulk-g-skuwrap .combo-list { left: 0; width: min(440px, 70vw); }
 .bulk-g-sku.bulk-g-bad { border-color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
 .bulk-g-now { font-size: 12.5px; color: var(--muted); }
 .bulk-g-after { font-size: 12.5px; }
