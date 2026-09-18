@@ -269,7 +269,7 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -284,7 +284,7 @@ function render() {
   }
   $('tabOverview').hidden = !pages.stock || pages.overview === false;
   $('tabStock').hidden = !pages.stock;
-  $('tabPricing').hidden = !pages.stock; // pricing rides the stock flag
+  $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
@@ -955,6 +955,7 @@ async function openSettings() {
   const pg = cfg.pages || {};
   $('setPageOverview').checked = pg.overview !== false;
   $('setPageStock').checked = pg.stock !== false;
+  $('setPagePricing').checked = !!pg.pricing; // opt-in: default off
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
@@ -1062,6 +1063,7 @@ $('settingsSave').addEventListener('click', async () => {
     pages: {
       overview: $('setPageOverview').checked,
       stock: $('setPageStock').checked,
+      pricing: $('setPagePricing').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
@@ -5389,7 +5391,9 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   // saves typed text when the lookup has nothing (offline, new SKU).
   if (isSku) {
     ensureInventory();
-    makeCombo(input, td.querySelector('.combo-list'), (item) => { input.value = item.sku; finish(true); });
+    // SKU only, no title line in the list (owner 2026-09-18) — titles
+    // still match while typing, they just don't render
+    makeCombo(input, td.querySelector('.combo-list'), (item) => { input.value = item.sku; finish(true); }, { noTitle: true });
   }
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
@@ -7334,7 +7338,7 @@ function makeCombo(input, listEl, onPick, opts) {
         <button class="combo-opt ${i === hl ? 'is-hl' : ''} ${blocked ? 'is-blocked' : ''}" data-i="${i}"
                 title="${blocked ? 'Every unit is already promised as a substitute on another order — process that one first' : `${esc(it.sku)} — ${esc(it.title)}`}">
           <span class="mono">${esc(it.sku)}</span>
-          <span class="combo-opt-title">${esc(it.title || '')}</span>
+          ${opts && opts.noTitle ? '' : `<span class="combo-opt-title">${esc(it.title || '')}</span>`}
           ${availTxt ? `<span class="combo-avail ${a > 0 && !blocked ? '' : 'is-zero'}">${availTxt}</span>` : ''}
         </button>`;
       }).join('');
@@ -7368,7 +7372,10 @@ function makeCombo(input, listEl, onPick, opts) {
     const exact = recvLookupExact(input.value.trim());
     if (exact && !blockedOf(exact)) { close(); onPick(exact); return; }
     if (exact) return; // blocked: leave the list open, the tooltip says why
-    if (isOpen && hl >= 0 && matches[hl] && !blockedOf(matches[hl])) { close(); onPick(matches[hl]); }
+    // grab the match BEFORE close() — close() empties the matches array,
+    // so reading it afterwards handed onPick undefined (Enter on a
+    // highlighted, non-exact hit crashed every combo)
+    if (isOpen && hl >= 0 && matches[hl] && !blockedOf(matches[hl])) { const it = matches[hl]; close(); onPick(it); }
   });
   listEl.addEventListener('mousedown', (e) => {
     const opt = e.target.closest('.combo-opt');

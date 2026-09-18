@@ -73,7 +73,8 @@ const DEFAULTS = {
   // Per-install page flags. Capture is always on; capture-only mode overrides
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
-  pages: { stock: true, history: true, returns: false },
+  // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
+  pages: { stock: true, history: true, returns: false, pricing: false },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
