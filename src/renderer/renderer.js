@@ -6467,10 +6467,12 @@ function prRender() {
     }).join('');
   };
 
-  const sugHtml = (p) => (p.suggest || []).map(s => `
+  // stacked, one suggestion per line (owner 2026-09-18)
+  const sugHtml = (p, lead) => `
+      <div class="pr-vsugwrap"><span class="pr-vsuglead">${lead}</span>${(p.suggest || []).map(s => `
       <span class="pr-vsug"><span class="mono">${esc(s)}</span>
         <button type="button" class="pr-vsadd" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Group ${esc(s)} under ${esc(p.sku)}">Add</button>
-        <button type="button" class="pr-vsign" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Stop suggesting this pairing">Ignore</button></span>`).join('');
+        <button type="button" class="pr-vsign" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Stop suggesting this pairing">Ignore</button></span>`).join('')}</div>`;
 
   $('prBody').innerHTML = rows.map((p, n) => {
     const vars = p.variations || [];
@@ -6512,12 +6514,12 @@ function prRender() {
       parts.push(`
     <div class="pr-vfoot">
       <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
-      ${p.suggest ? `<span class="pr-vsuglead">Suggested from the naming:</span>${sugHtml(p)}` : ''}
+      ${p.suggest ? sugHtml(p, 'Suggested from the naming:') : ''}
     </div>`);
     } else if (!vars.length && p.suggest && !q) {
       parts.push(`
     <div class="pr-vfoot pr-vfoot-sug">
-      <span class="pr-vsuglead">Variations? Suggested from the naming:</span>${sugHtml(p)}
+      ${sugHtml(p, 'Variations? Suggested from the naming:')}
     </div>`);
     }
     return parts.join('');

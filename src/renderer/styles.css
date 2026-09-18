@@ -1597,10 +1597,12 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-vx { position: absolute; top: 2px; right: 10px; border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0; transition: opacity 0.12s; }
 .pr-vrow:hover .pr-vx { opacity: 1; }
 .pr-vx:hover { color: var(--neg-text); }
-.pr-vfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.pr-vfoot { display: flex; align-items: flex-start; gap: 14px; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .pr-vfoot-sug { background: none; padding-top: 2px; }
+/* suggestions stack, one per line (owner 2026-09-18) */
+.pr-vsugwrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .pr-vsuglead { font-size: 10.5px; color: var(--faint); font-style: italic; }
-.pr-vsug { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; }
+.pr-vsug { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
 .pr-vsug .mono { font-size: 11px; color: var(--muted); }
 .pr-vsadd, .pr-vsign { font: inherit; font-size: 10px; font-weight: 600; border-radius: var(--r-ctl); padding: 1px 8px; cursor: pointer; }
 .pr-vsadd { border: 1px solid transparent; background: var(--accent-soft); color: var(--accent-soft-text); }

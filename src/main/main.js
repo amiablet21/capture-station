@@ -2000,6 +2000,9 @@ function registerIpc() {
         seenSrc.add(k);
         columns.push({ id: ch.id, source: ch.source, subSource: ch.subSource, key: k, fluctuates: priceFluctuates(ch.source) });
       }
+      // Walmart leads the columns (owner 2026-09-18); the rest keep
+      // Linnworks' order
+      columns.sort((a, b) => Number(b.fluctuates) - Number(a.fluctuates));
       const items = await client.listInventory();
       const byId = new Map(items.map(i => [String(i.stockItemId), i]));
       const levelOf = (it) => {
@@ -2102,8 +2105,18 @@ function registerIpc() {
         childRow.grouped = true;
         (parentRow.variations = parentRow.variations || []).push(childRow);
       }
+      // grade order inside a group: Open box, Used, Scrap, then anything
+      // else (owner 2026-09-18), alphabetical within a grade
+      const GRADE_ORDER = { openbox: 0, used: 1, scrap: 2 };
+      const gradeRank = (sku) => {
+        const c = db.conditionOfSku(sku);
+        return c && c.cond in GRADE_ORDER ? GRADE_ORDER[c.cond] : 3;
+      };
       for (const r of products.values()) {
-        if (r.variations) r.variations.sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
+        if (r.variations) {
+          r.variations.sort((a, b) =>
+            (gradeRank(a.sku) - gradeRank(b.sku)) || String(a.sku).localeCompare(String(b.sku)));
+        }
       }
 
       // naming-convention SUGGESTIONS (never auto-applied): condition SKUs
@@ -2131,9 +2144,9 @@ function registerIpc() {
           if (groups.ignored.has(`${selfU}|${u}`)) continue;
           if (!bySku.has(u)) continue;
           sug.push(bySku.get(u).sku);
-          if (sug.length >= 3) break;
         }
-        if (sug.length) row.suggest = sug;
+        sug.sort((a, b) => (gradeRank(a) - gradeRank(b)) || String(a).localeCompare(String(b)));
+        if (sug.length) row.suggest = sug.slice(0, 3);
       }
 
       const out = {
