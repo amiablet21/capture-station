@@ -3962,7 +3962,7 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('cust')}</td>
     <td class="ws-cell">${wsInput('trk')}</td>
     <td class="ws-cell">${wsInput('date')}</td>
-    <td class="ws-cell">${wsInput('sku')}</td>
+    <td class="ws-cell">${wsInput('sku')}<div class="combo-list ws-skulist" hidden></div></td>
     <td class="ws-cell ws-cond-cell" id="wsCondCell"></td>
     <td class="ws-cell">${wsInput('units')}</td>
     <td class="ws-cell">${wsInput('price')}</td>
@@ -3975,8 +3975,13 @@ function retEntryRow() {
   wsDateFill();
   wsEls.date.addEventListener('input', () => { wsDateAuto = false; });
   wsRenderCond();
+  // the SKU dropdown's own keys win while it shows options: Enter picks,
+  // Esc closes the list — neither saves nor clears the row
+  const skuList = tr.querySelector('.ws-skulist');
+  const skuListLive = () => !skuList.hidden && !!skuList.querySelector('.combo-opt');
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
+      if (key === 'sku' && skuListLive() && (e.key === 'Enter' || e.key === 'Escape')) return;
       if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -3986,6 +3991,18 @@ function retEntryRow() {
       else wsSave();
     });
   }
+  // suggestions while typing a SKU, like every other picker in the app
+  // (owner 2026-09-18: "why am I not seeing suggestions?") — SKU only,
+  // no title line; picking resolves the condition targets and moves on
+  makeCombo(wsEls.sku, skuList, (item) => {
+    wsEls.sku.value = item.sku;
+    ws.targets = null;
+    ws.pick = '';
+    ws.itemIdx = -1;
+    wsResolveTargets();
+    wsEls.units.focus();
+    wsEls.units.select();
+  }, { noTitle: true });
   // editing the PO after a match voids the match (a stale orderId must
   // never ride along); a re-typed SKU is no longer "that order line"
   wsEls.po.addEventListener('input', () => {
