@@ -6364,7 +6364,7 @@ function prRender() {
   const head = $('prHead');
   head.hidden = false;
   head.innerHTML = '<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>'
-    + cols.map((c, i) => `<div class="pr-hc pr-hch" data-ci="${i}">${esc(c.source.toUpperCase())}${c.fluctuates ? ' <span class="pr-fluct">· fluctuates</span>' : ''}</div>`).join('');
+    + cols.map((c, i) => `<div class="pr-hc pr-hch" data-ci="${i}">${esc(c.source.toUpperCase())}</div>`).join('');
   head.style.gridTemplateColumns = prGridCols();
   for (const el of head.querySelectorAll('.pr-hch')) el.style.color = PR_COLORS[Number(el.dataset.ci) % PR_COLORS.length];
 
