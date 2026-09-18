@@ -1541,6 +1541,71 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .bulk-h-fixqty { flex: 0 0 62px; text-align: right; font-size: 12px; padding: 3px 6px; }
 .bulk-h-fixwrap .combo-list { min-width: 280px; }
 
+/* ---------- Pricing tab (owner 2026-09-18) ---------- */
+
+.pricing-page { flex: 1 1 auto; min-height: 0; display: flex; padding: 12px 24px 20px; }
+.pr-sheet { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); display: flex; flex-direction: column; overflow: hidden; }
+.pr-bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.pr-search { flex: 0 0 280px; border-radius: 999px; }
+.pr-hint { flex: 1; font-size: 12px; color: var(--muted); }
+.pr-head { display: grid; gap: 0; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
+.pr-fluct { font-weight: 400; letter-spacing: 0; color: var(--faint); }
+.pr-body { flex: 1; min-height: 0; overflow: auto; }
+.pr-note { padding: 18px; }
+.pr-row { display: grid; gap: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); align-items: start; }
+.pr-cell { min-width: 0; padding-right: 18px; }
+.pr-num { color: var(--faint); font-size: 12px; }
+.pr-prod { display: flex; gap: 10px; align-items: flex-start; }
+.pr-thumb { width: 42px; height: 42px; border-radius: 6px; border: 1px solid var(--border); object-fit: contain; background: var(--surface-2); flex-shrink: 0; }
+.pr-thumb-empty { background: var(--surface-2); }
+.pr-prodtxt { display: flex; flex-direction: column; min-width: 0; }
+.pr-psku { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-pstock { font-size: 11px; color: var(--faint); }
+.pr-ch { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.pr-line { display: flex; align-items: center; gap: 6px; }
+.pr-csku { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
+.pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
+.pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }
+.pr-price:hover { border-color: var(--accent); }
+.pr-price-ro { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; min-width: 76px; text-align: right; padding: 3px 0; }
+.pr-open { border: none; background: none; color: var(--faint); font-size: 12px; cursor: pointer; padding: 0 2px; }
+.pr-open:hover { color: var(--accent); }
+.pr-add { border: 1px dashed var(--border); border-radius: var(--r-ctl); background: none; color: var(--faint); font-size: 10.5px; padding: 2px 8px; cursor: pointer; align-self: flex-start; }
+.pr-add:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+.pr-none { font-size: 11.5px; color: var(--faint); font-style: italic; }
+.pr-editwrap { display: inline-flex; }
+.pr-editin { width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-color: var(--accent); }
+
+/* + channel SKU picker (anchored popover) */
+.prpick { position: fixed; width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16); z-index: 60; overflow: hidden; display: flex; flex-direction: column; }
+.prpick-head { font-size: 12px; color: var(--muted); padding: 10px 14px 8px; }
+.prpick-in { margin: 0 12px 8px; }
+.prpick-list { max-height: 240px; overflow: auto; }
+.prpick-opt { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; padding: 7px 14px; border: none; border-top: 1px dashed var(--border); background: none; cursor: pointer; font-family: var(--font); }
+.prpick-opt:hover { background: var(--accent-soft); }
+.prpick-opt .mono { font-size: 12px; font-weight: 600; }
+.prpick-title { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prpick-foot { font-size: 10.5px; color: var(--faint); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
+
+/* price history popup */
+.prh-dlg { width: 780px; max-width: 92vw; }
+.prh-body { max-height: 50vh; overflow: auto; margin: 6px 0 4px; }
+.prh-row { display: flex; align-items: center; gap: 12px; padding: 8px 2px; border-top: 1px dashed var(--border); font-size: 12px; }
+.prh-when { font-size: 11px; color: var(--muted); flex: 0 0 138px; }
+.prh-who { display: flex; flex-direction: column; line-height: 1.25; flex: 0 0 158px; min-width: 0; }
+.prh-who b { font-size: 12px; }
+.prh-who span { font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prh-sku { font-size: 11px; flex: 0 0 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prh-move { font-size: 12px; white-space: nowrap; }
+.prh-move s { color: var(--faint); font-weight: 400; }
+.prh-act { margin-left: auto; }
+.prh-auto { font-size: 10.5px; color: var(--faint); font-style: italic; }
+.prh-rvtd { font-size: 10.5px; color: var(--faint); }
+.prh-revert { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 2px 9px; cursor: pointer; white-space: nowrap; }
+.prh-revert:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+.prh-foot { font-size: 10.5px; color: var(--faint); margin-right: auto; }
+
 /* the Linnworks configurator picker beside List on eBay */
 .eb-lw-config { flex: 0 1 250px; max-width: 250px; min-width: 140px; font-size: 12px; }
 

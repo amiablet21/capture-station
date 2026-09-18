@@ -974,6 +974,91 @@ function sourceToChannel(source) {
   return s || 'other';
 }
 
+/* ---- Pricing tab data (owner 2026-09-18, design 'Pricing and Overview'):
+   per-channel-SKU sales tally + price-change history. Both ride the shared
+   folder (aux files) like the stock history, so every desktop sees them. */
+
+function chanSalePath() { return path.join(app.getPath('userData'), 'chan-sales.json'); }
+function loadChanSales() {
+  try { const j = JSON.parse(fs.readFileSync(chanSalePath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+// one entry per freshly imported order: { ref, source, lines: [{c, q}] }
+function chanSaleLog(partial) {
+  const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ts: new Date().toISOString(), ...partial };
+  try { fs.writeFileSync(chanSalePath(), JSON.stringify([entry, ...loadChanSales()].slice(0, 20000))); } catch { /* best effort */ }
+  try { retsync.appendAux('chansales', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+// units sold per channel SKU over the trailing 60 days, deduped by order
+// reference (every desktop logs the same imports)
+function readChanSales60() {
+  const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  const seen = new Set();
+  const units = {};
+  let since = '';
+  let aux = [];
+  try { aux = retsync.readAux('chansales'); } catch { aux = []; }
+  for (const e of [...aux, ...loadChanSales()]) {
+    if (!e || !e.ref || seen.has(e.ref)) continue;
+    seen.add(e.ref);
+    const t = Date.parse(e.ts) || 0;
+    if (!since || e.ts < since) since = e.ts;
+    if (t < cutoff) continue;
+    for (const l of e.lines || []) {
+      if (!l || !l.c) continue;
+      units[l.c] = (units[l.c] || 0) + (Number(l.q) || 1);
+    }
+  }
+  return { units, since };
+}
+
+function priceHistPath() { return path.join(app.getPath('userData'), 'price-history.json'); }
+function loadPriceHist() {
+  try { const j = JSON.parse(fs.readFileSync(priceHistPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+// one entry per price event: mode 'set' (hand change), 'auto' (a move the
+// channel made, seen on refresh), 'revert'; station + initials say who and
+// from which computer (owner 2026-09-18)
+function priceLogEntry(partial) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    ...partial,
+  };
+  try { fs.writeFileSync(priceHistPath(), JSON.stringify([entry, ...loadPriceHist()].slice(0, 500))); } catch { /* best effort */ }
+  try { retsync.appendAux('pricechanges', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+function mergedPriceHist() {
+  const seen = new Set();
+  const all = [];
+  let aux = [];
+  try { aux = retsync.readAux('pricechanges'); } catch { aux = []; }
+  for (const e of [...aux, ...loadPriceHist()]) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    seen.add(e.id);
+    all.push(e);
+  }
+  all.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  return all;
+}
+
+function priceSnapPath() { return path.join(app.getPath('userData'), 'price-snapshot.json'); }
+function loadPriceSnap() {
+  try { return JSON.parse(fs.readFileSync(priceSnapPath(), 'utf8')) || {}; }
+  catch { return {}; }
+}
+function savePriceSnap(snap) {
+  try { fs.writeFileSync(priceSnapPath(), JSON.stringify(snap)); } catch { /* best effort */ }
+}
+
+// channels whose price the marketplace's own repricer owns: the app never
+// writes these, only watches (owner 2026-09-18 — ~140 items enrolled)
+function priceFluctuates(source) { return /walmart/i.test(String(source || '')); }
+
 async function runOrderImport() {
   const cfg = config.load();
   if (cfg.captureOnly || !(cfg.orderImport && cfg.orderImport.enabled)) return;
@@ -1003,10 +1088,12 @@ async function runOrderImport() {
       if (!byRef.has(ref)) byRef.set(ref, []);
       byRef.get(ref).push(o);
     }
+    const newSales = []; // channel-SKU sales tally entries for the Pricing tab
     for (const [ref, parts] of byRef) {
       openRefs.add(ref);
       const isSplit = parts.length > 1;
       parts.forEach((o, pi) => {
+        let createdNew = false;
         const key = isSplit ? `${ref}#${o.orderId}` : ref;
         if (isSplit) openParts.add(key);
         meta[key] = {
@@ -1042,6 +1129,7 @@ async function runOrderImport() {
             } else {
               row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
               added++;
+              createdNew = true;
             }
           }
         } else {
@@ -1049,6 +1137,7 @@ async function runOrderImport() {
           if (!row) {
             row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
             added++;
+            createdNew = true;
           } else if (!row.lw_order_id) {
             row = db.setRowPart(row.id, o.orderId); // backfill for older rows
           }
@@ -1058,8 +1147,19 @@ async function runOrderImport() {
         if (row && (!row.items || !row.items.length) && meta[key].items.length) {
           db.setRowItems(row.id, meta[key].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
         }
+        // a freshly imported order = a sale: tally its channel SKUs for the
+        // Pricing tab's per-listing sold counts (every desktop imports the
+        // same orders, so the aggregation dedupes by order reference)
+        if (createdNew && meta[key].items.length) {
+          newSales.push({
+            ref: key,
+            source: String(o.source || ''),
+            lines: meta[key].items.map(i => ({ c: String(i.channelSku || i.sku || '').toUpperCase(), q: Number(i.qty) || 1 })).filter(l => l.c),
+          });
+        }
       });
     }
+    for (const s of newSales) { try { chanSaleLog(s); } catch { /* tally is best effort */ } }
     // untouched imported rows whose order left open orders: cancelled or
     // handled elsewhere - remove them so the queue stays truthful. A split
     // part vanishes when ITS part id is gone AND it isn't the surviving
@@ -1780,6 +1880,171 @@ function registerIpc() {
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---------- Pricing tab (owner 2026-09-18) ----------
+     One row per product, one auto-generated column per connected channel.
+     Prices come from the channel scan feed (falling back to the newest
+     hand-set value, then Linnworks' retail price). Walmart (the repricer's
+     channels) is strictly read-only; eBay/Temu prices push via Linnworks'
+     channel price records. */
+  let pricingCache = { at: 0, data: null };
+
+  ipcMain.handle('pricing:list', async (_e, { force } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (!force && pricingCache.data && Date.now() - pricingCache.at < 5 * 60 * 1000) {
+      return { ok: true, cached: true, ...pricingCache.data };
+    }
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      // one column per Source; the first channel of each source carries the
+      // catalog. New marketplaces in Linnworks appear here automatically.
+      const chans = await client.getMappingChannels();
+      const seenSrc = new Set();
+      const columns = [];
+      for (const ch of chans) {
+        const k = ch.source.toUpperCase();
+        if (seenSrc.has(k)) continue;
+        seenSrc.add(k);
+        columns.push({ id: ch.id, source: ch.source, subSource: ch.subSource, key: k, fluctuates: priceFluctuates(ch.source) });
+      }
+      const items = await client.listInventory();
+      const byId = new Map(items.map(i => [String(i.stockItemId), i]));
+      const levelOf = (it) => {
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+        return l ? Number(l.stockLevel) || 0 : 0;
+      };
+      // channel catalogs — same cache the Mappings dialog fills
+      const catalogs = {};
+      for (const col of columns) {
+        const key = `${col.id}|${col.source}|${col.subSource}`;
+        const hit = mappingCache.get(key);
+        let rows;
+        if (!force && hit && Date.now() - hit.at < 10 * 60 * 1000) {
+          rows = hit.items;
+        } else {
+          rows = await client.getChannelItems(col.id, col.source, col.subSource);
+          mappingCache.set(key, { at: Date.now(), items: rows });
+        }
+        catalogs[col.key] = rows;
+      }
+      // the newest hand-set price per (source, channel sku) overrides the
+      // scan feed, which lags what we just pushed
+      const handSet = {};
+      for (const e of mergedPriceHist()) {
+        if (e.mode !== 'set' && e.mode !== 'revert') continue;
+        const k = `${String(e.source).toUpperCase()}|${String(e.channelSku).toUpperCase()}`;
+        if (!(k in handSet)) handSet[k] = Number(e.mode === 'revert' ? e.newPrice : e.newPrice) || 0;
+      }
+      const sales = readChanSales60();
+      const products = new Map(); // stockItemId -> row
+      for (const col of columns) {
+        for (const li of catalogs[col.key]) {
+          if (!li.linked || !li.linkedItemId) continue;
+          const inv = byId.get(String(li.linkedItemId));
+          if (!inv) continue;
+          let row = products.get(String(inv.stockItemId));
+          if (!row) {
+            row = { stockItemId: inv.stockItemId, sku: inv.sku, image: inv.image || '', stock: levelOf(inv), channels: {} };
+            products.set(String(inv.stockItemId), row);
+          }
+          const over = handSet[`${col.key}|${String(li.sku).toUpperCase()}`];
+          const price = li.price || over || Number(inv.retailPrice) || 0;
+          (row.channels[col.key] = row.channels[col.key] || []).push({
+            csku: li.sku,
+            price: over && !li.price ? over : price,
+            approx: !li.price, // the feed didn't carry it: shown as ≈
+            refId: li.channelRefId || '',
+            sold: sales.units[String(li.sku).toUpperCase()] || 0,
+            wfs: !!li.wfs,
+          });
+        }
+      }
+      // watch the repricer: a fluctuating channel's price that moved since
+      // the last look gets an 'auto' history entry (seen on refresh)
+      const snap = loadPriceSnap();
+      for (const row of products.values()) {
+        for (const col of columns) {
+          if (!col.fluctuates) continue;
+          for (const l of row.channels[col.key] || []) {
+            if (!l.price) continue;
+            const k = `${col.key}|${String(l.csku).toUpperCase()}`;
+            const prev = Number(snap[k]) || 0;
+            if (prev && Math.abs(prev - l.price) >= 0.01) {
+              priceLogEntry({
+                mode: 'auto', by: '', source: col.source, subSource: col.subSource,
+                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: l.price,
+              });
+            }
+            snap[k] = l.price;
+          }
+        }
+      }
+      savePriceSnap(snap);
+      const out = {
+        channels: columns,
+        products: [...products.values()].sort((a, b) =>
+          (b.stock - a.stock) || String(a.sku).localeCompare(String(b.sku))),
+        salesSince: sales.since || '',
+      };
+      pricingCache = { at: Date.now(), data: out };
+      return { ok: true, ...out };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (priceFluctuates(source)) return { ok: false, error: 'Walmart prices belong to the repricer — the app never overwrites them.' };
+    const p = Math.round(Number(price) * 100) / 100;
+    if (!Number.isFinite(p) || p <= 0) return { ok: false, error: 'Enter a price above zero.' };
+    if (!stockItemId || !channelSku) return { ok: false, error: 'Missing listing details — refresh and retry.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.setChannelPrice(stockItemId, source, subSource, p);
+      const entry = priceLogEntry({
+        mode: 'set', by: String(cfg.returnsReceivedBy || '').trim(),
+        source, subSource: subSource || '', channelSku, stockSku: stockSku || '',
+        oldPrice: Number(old) || 0, newPrice: p,
+      });
+      pricingCache = { at: 0, data: null };
+      return { ok: true, entry };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('pricing:history', () => ({ ok: true, entries: mergedPriceHist().slice(0, 200) }));
+
+  ipcMain.handle('pricing:revert', async (_e, { id }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = mergedPriceHist();
+    const entry = all.find(e => e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (entry.mode !== 'set' && entry.mode !== 'revert') return { ok: false, error: 'Only hand changes can be reverted.' };
+    if (priceFluctuates(entry.source)) return { ok: false, error: 'Walmart prices belong to the repricer.' };
+    if (all.some(e => e.revertOf === id)) return { ok: false, error: 'Already reverted.' };
+    const back = Number(entry.oldPrice) || 0;
+    if (!(back > 0)) return { ok: false, error: 'No previous price on record for that change.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const stockItemId = await client.findStockItemIdBySku(entry.stockSku);
+      if (!stockItemId) return { ok: false, error: `${entry.stockSku} not found in Linnworks.` };
+      await client.setChannelPrice(stockItemId, entry.source, entry.subSource, back);
+      const rec = priceLogEntry({
+        mode: 'revert', revertOf: id, by: String(cfg.returnsReceivedBy || '').trim(),
+        source: entry.source, subSource: entry.subSource || '', channelSku: entry.channelSku,
+        stockSku: entry.stockSku, oldPrice: Number(entry.newPrice) || 0, newPrice: back,
+      });
+      pricingCache = { at: 0, data: null };
+      return { ok: true, entry: rec };
     } catch (e) {
       return { ok: false, error: e.message };
     }

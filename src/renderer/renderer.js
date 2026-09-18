@@ -269,7 +269,7 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -284,6 +284,7 @@ function render() {
   }
   $('tabOverview').hidden = !pages.stock || pages.overview === false;
   $('tabStock').hidden = !pages.stock;
+  $('tabPricing').hidden = !pages.stock; // pricing rides the stock flag
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
@@ -777,21 +778,11 @@ $('rowsBody').addEventListener('click', async (e) => {
       await api.reopenRow(row.id);
       await refresh();
     }
-    // the order loads in the app's browser pane, opening it first if it's
-    // collapsed (owner 2026-09-16: "work off the same Walmart order tab...
-    // as in the electron window" — never a new system-browser tab); only a
-    // capture-only install, with no pane at all, still goes external
-    if (bReady && browserAllowed()) {
-      if ($('bDock').hidden) { bPane.visible = true; api.setConfig({ browserPane: { visible: true } }); applyBrowserPane(); }
-      bShowLoading(`Opening order ${link.dataset.po}`);
-      const opened = await api.browserOpen(link.dataset.po, link.dataset.ch);
-      if (!opened.ok) {
-        bHideLoading();
-        if (opened.error) toast(opened.error);
-      }
-    } else {
-      api.openOrderPage(link.dataset.po, link.dataset.ch);
-    }
+    // the order opens in the SYSTEM browser (owner 2026-09-18: "I want to
+    // open the browser, not the side browser... like the default" — this
+    // reverses the 2026-09-16 pane routing); the pane keeps its own
+    // navigation and stays as whatever it was showing
+    api.openOrderPage(link.dataset.po, link.dataset.ch);
     return;
   }
   const btn = e.target.closest('[data-act]');
@@ -1184,6 +1175,7 @@ function showPage(page) {
   $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
+  $('pricingPage').hidden = page !== 'pricing';
   $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
@@ -1191,6 +1183,7 @@ function showPage(page) {
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
+  $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
@@ -1219,6 +1212,8 @@ function showPage(page) {
         const ae = document.activeElement;
         if (activePage === 'stock' && (!ae || ae === document.body)) $('stockSearch').focus();
       });
+    } else if (page === 'pricing') {
+      enterPricing();
     } else if (page === 'shelf') {
       enterShelf();
     } else if (page === 'returns') {
@@ -1235,6 +1230,7 @@ function showPage(page) {
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
+$('tabPricing').addEventListener('click', () => showPage('pricing'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -6336,6 +6332,241 @@ $('bulkRevGo').addEventListener('click', async () => {
   toast('Reversed — the history keeps both entries.');
   loadStock();
   bulkHistLoad();
+});
+
+/* ---------- Pricing tab (owner 2026-09-18, design 'Pricing and Overview'):
+   products × auto-generated channel columns. Walmart (repricer-owned)
+   prices are display-only with ≈; other channels click-to-edit. ---------- */
+
+let prData = null;
+let prQ = '';
+const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
+const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
+
+async function enterPricing(force) {
+  if (!prData) $('prBody').innerHTML = '<p class="dlg-note pr-note">Loading listings and prices…</p>';
+  const res = await api.pricingList(!!force).catch(e => ({ ok: false, error: e.message }));
+  if (activePage !== 'pricing') return;
+  if (!res || !res.ok) {
+    $('prBody').innerHTML = `<p class="dlg-note pr-note">${esc((res && res.error) || 'Could not load prices.')}</p>`;
+    return;
+  }
+  prData = res;
+  prRender();
+}
+
+function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channels || []).length}, minmax(240px, 1.15fr))`; }
+
+function prRender() {
+  if (!prData) return;
+  const cols = prData.channels || [];
+  const head = $('prHead');
+  head.hidden = false;
+  head.innerHTML = '<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>'
+    + cols.map((c, i) => `<div class="pr-hc pr-hch" data-ci="${i}">${esc(c.source.toUpperCase())}${c.fluctuates ? ' <span class="pr-fluct">· fluctuates</span>' : ''}</div>`).join('');
+  head.style.gridTemplateColumns = prGridCols();
+  for (const el of head.querySelectorAll('.pr-hch')) el.style.color = PR_COLORS[Number(el.dataset.ci) % PR_COLORS.length];
+
+  const q = prQ.trim();
+  const match = (p) => !q || skuMatch(p.sku, q)
+    || cols.some(c => (p.channels[c.key] || []).some(l => skuMatch(l.csku, q)));
+  const rows = (prData.products || []).filter(match);
+  if (!rows.length) {
+    $('prBody').innerHTML = `<p class="dlg-note pr-note">${q ? 'No SKUs match.' : 'No linked listings yet — link channel SKUs in Mappings and refresh.'}</p>`;
+    return;
+  }
+  $('prBody').innerHTML = rows.map((p, n) => {
+    const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
+    return `
+    <div class="pr-row" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
+      <div class="pr-cell pr-num">${n + 1}</div>
+      <div class="pr-cell pr-prod">
+        ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(p.sku)}</span>
+          <span class="pr-pstock">${p.stock} in stock</span>
+        </div>
+      </div>
+      ${cols.map((c, ci) => {
+    const lines = p.channels[c.key] || [];
+    const inner = lines.map(l => `
+        <div class="pr-line">
+          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
+          <span class="pr-sold ${l.sold > 0 && l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>
+          ${c.fluctuates
+    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">≈ ${prMoney(l.price)}</span>`
+    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
+          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
+        </div>`).join('');
+    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+        <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
+      </div>`;
+  }).join('')}
+    </div>`;
+  }).join('');
+  for (const el of $('prBody').querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
+}
+
+$('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
+$('prRefresh').addEventListener('click', () => enterPricing(true));
+
+// click a price -> inline editor; Enter pushes via Linnworks
+function prEditPrice(btn) {
+  const row = btn.closest('.pr-row');
+  const c = (prData.channels || [])[Number(btn.dataset.ci)];
+  if (!row || !c) return;
+  const old = Number(btn.dataset.old) || 0;
+  const wrap = document.createElement('span');
+  wrap.className = 'pr-editwrap';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '0.01';
+  input.min = '0.01';
+  input.className = 'input mono pr-editin';
+  input.value = old ? old.toFixed(2) : '';
+  wrap.appendChild(input);
+  btn.replaceWith(wrap);
+  const cancel = () => { wrap.replaceWith(btn); };
+  const apply = async () => {
+    const p = Number(input.value);
+    if (!Number.isFinite(p) || p <= 0) { toast('Enter a price above zero.'); input.focus(); return; }
+    if (Math.abs(p - old) < 0.005) { cancel(); return; }
+    input.disabled = true;
+    const res = await api.pricingSet({
+      stockItemId: row.dataset.pid, stockSku: row.dataset.psku,
+      source: c.source, subSource: c.subSource,
+      channelSku: btn.dataset.csku, price: p, old,
+    });
+    if (!res.ok) { input.disabled = false; toast(res.error || 'Could not change the price.'); return; }
+    toast(`${btn.dataset.csku} → $${p.toFixed(2)} — saved to Linnworks, pushing to ${c.source}`);
+    enterPricing(true);
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cancel(); }
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+  });
+  input.addEventListener('blur', () => { if (!input.disabled) setTimeout(() => { if (wrap.isConnected && !input.disabled) cancel(); }, 150); });
+  input.focus();
+  input.select();
+}
+
+// + channel SKU: an anchored picker of that channel's UNLINKED listings;
+// picking one creates the real Linnworks mapping (mapping:link)
+let prPickEl = null;
+function prPickClose() {
+  if (prPickEl) { prPickEl.remove(); prPickEl = null; }
+  document.removeEventListener('mousedown', prPickAway, true);
+}
+function prPickAway(e) { if (prPickEl && !prPickEl.contains(e.target)) prPickClose(); }
+
+async function prPickOpen(btn) {
+  prPickClose();
+  const row = btn.closest('.pr-row');
+  const c = (prData.channels || [])[Number(btn.dataset.ci)];
+  if (!row || !c) return;
+  const psku = row.dataset.psku;
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Link a <b>${esc(c.source)}</b> SKU to <span class="mono">${esc(psku)}</span></div>
+    <input class="input mono prpick-in" type="text" placeholder="Search unlinked listings…" autocomplete="off" spellcheck="false" />
+    <div class="prpick-list"><p class="dlg-note">Loading the ${esc(c.source)} catalog…</p></div>
+    <div class="prpick-foot">Only listings not linked to anything yet · picking one maps it in Linnworks</div>`;
+  document.body.appendChild(pop);
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + 340 > window.innerHeight ? `${Math.max(8, r.top - 346)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const input = pop.querySelector('.prpick-in');
+  const listEl = pop.querySelector('.prpick-list');
+  input.focus();
+  const res = await api.mappingItems(c.id, c.source, c.subSource, false).catch(e => ({ ok: false, error: e.message }));
+  if (!prPickEl) return;
+  if (!res.ok) { listEl.innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the catalog.')}</p>`; return; }
+  const unlinked = (res.items || []).filter(i => !i.linked && i.sku);
+  const renderList = () => {
+    const q = input.value.trim();
+    const hits = unlinked.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
+    listEl.innerHTML = hits.length
+      ? hits.map(i => `
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" data-ref="${esc(i.channelRefId || '')}">
+          <span class="mono">${esc(i.sku)}</span>
+          <span class="prpick-title">${esc(i.title || '')}${i.price ? ` — $${Number(i.price).toFixed(2)}` : ''}</span>
+        </button>`).join('')
+      : `<p class="dlg-note">${q ? 'Nothing unlinked matches.' : `No unlinked ${esc(c.source)} listings.`}</p>`;
+  };
+  renderList();
+  input.addEventListener('input', renderList);
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); prPickClose(); } });
+  listEl.addEventListener('click', async (ev) => {
+    const opt = ev.target.closest('.prpick-opt');
+    if (!opt) return;
+    const csku = opt.dataset.sku;
+    opt.disabled = true;
+    const link = await api.mappingLink(csku, c.source, c.subSource, psku, opt.dataset.ref);
+    if (!link.ok) { opt.disabled = false; toast(link.error || 'Could not link.'); return; }
+    prPickClose();
+    const ord = link.orders;
+    if (ord && ord.pending > 0) {
+      toast(`${csku} → ${psku} linked — ${ord.pending} open order${ord.pending === 1 ? '' : 's'} did NOT pick up the link. If they ship that way, deduct ${ord.units} unit${ord.units === 1 ? '' : 's'} by hand.`, 9000);
+    } else {
+      toast(`${csku} → ${psku} linked in Linnworks`);
+    }
+    enterPricing(true);
+  });
+}
+
+$('prBody').addEventListener('click', (e) => {
+  const price = e.target.closest('.pr-price');
+  if (price) { prEditPrice(price); return; }
+  const open = e.target.closest('.pr-open');
+  if (open) {
+    const c = (prData.channels || [])[Number(open.dataset.ci)];
+    // system browser, like the PO# links (owner 2026-09-18)
+    api.listingOpen(open.dataset.csku, c ? c.source.toLowerCase() : '', true, open.dataset.ref)
+      .then(r => { if (!r.ok && r.error) toast(r.error); });
+    return;
+  }
+  const add = e.target.closest('.pr-add');
+  if (add) prPickOpen(add);
+});
+
+/* price history: the centered popup */
+async function prHistLoad() {
+  const res = await api.pricingHistory().catch(() => null);
+  const list = (res && res.ok && res.entries) || [];
+  if (!list.length) { $('prHistBody').innerHTML = '<p class="dlg-note">Nothing yet.</p>'; return; }
+  const reverted = new Set(list.filter(e => e.revertOf).map(e => e.revertOf));
+  $('prHistBody').innerHTML = list.map(e => {
+    const auto = e.mode === 'auto';
+    const who = auto ? esc(e.source || 'channel') : esc(e.by || '—');
+    const sub = auto ? 'repricer · seen on refresh' : esc(e.station || '');
+    const act = auto ? '<span class="prh-auto">automatic</span>'
+      : reverted.has(e.id) ? '<span class="prh-rvtd">reverted ✓</span>'
+        : `<button type="button" class="prh-revert" data-prv="${esc(e.id)}" title="Push $${(Number(e.oldPrice) || 0).toFixed(2)} back to ${esc(e.source)}">↩ Revert</button>`;
+    return `
+    <div class="prh-row">
+      <span class="mono prh-when">${esc(new Date(e.ts).toLocaleString())}</span>
+      <span class="prh-who"><b>${who}</b><span>${sub}</span></span>
+      <span class="mono prh-sku" title="${esc(e.stockSku || '')}">${esc(e.channelSku || '')}</span>
+      <span class="mono prh-move">${Number(e.oldPrice) > 0 ? `<s>$${Number(e.oldPrice).toFixed(2)}</s>` : '—'} → <b>$${(Number(e.newPrice) || 0).toFixed(2)}</b></span>
+      <span class="prh-act">${act}</span>
+    </div>`;
+  }).join('');
+}
+
+$('prHistBtn').addEventListener('click', () => { prHistLoad(); $('priceHistDialog').showModal(); });
+$('prHistClose').addEventListener('click', () => $('priceHistDialog').close());
+$('prHistBody').addEventListener('click', async (e) => {
+  const rv = e.target.closest('.prh-revert');
+  if (!rv) return;
+  rv.disabled = true;
+  const res = await api.pricingRevert(rv.dataset.prv);
+  if (!res.ok) { rv.disabled = false; toast(res.error || 'Could not revert.'); return; }
+  toast('Old price pushed back — the history keeps both entries.');
+  prHistLoad();
+  enterPricing(true);
 });
 
 /* ---------- product image dialog (idle / loading / success / error) ---------- */

@@ -13,6 +13,7 @@
       <button id="tabOverview" class="tab" hidden>Overview</button>
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
+      <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
       <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
@@ -286,6 +287,34 @@
     <div id="ovGrip" class="sheet-grip" title="Drag to widen or narrow the page · double-click to reset"></div>
     </div>
   </section>
+
+  <!-- Pricing (owner 2026-09-18, design canvas 'Pricing and Overview'):
+       products × channel columns. Walmart is repricer-owned (read-only ≈
+       prices); eBay/Temu prices click-to-edit and push via Linnworks. -->
+  <section id="pricingPage" class="pricing-page" hidden>
+    <div class="pr-sheet">
+      <div class="pr-bar">
+        <input id="prSearch" class="input pr-search" type="text" placeholder="Search SKU…" autocomplete="off" spellcheck="false" />
+        <span class="pr-hint">Walmart prices fluctuate (repricer) — shown, never written · other channels: click a price, Enter pushes it</span>
+        <button id="prHistBtn" class="btn btn-ghost">History</button>
+        <button id="prRefresh" class="btn btn-ghost" title="Refresh listings and prices from Linnworks">Refresh</button>
+      </div>
+      <div id="prHead" class="pr-head" hidden></div>
+      <div id="prBody" class="pr-body"><p class="dlg-note pr-note">Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- Pricing: price-change history, a centered popup (owner 2026-09-18) -->
+  <dialog id="priceHistDialog" class="dlg prh-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Price history</h2>
+      <div id="prHistBody" class="prh-body"><p class="dlg-note">Nothing yet.</p></div>
+      <div class="dlg-actions">
+        <span class="prh-foot">Every change from every desktop — Revert pushes the old price back</span>
+        <button id="prHistClose" class="btn btn-ghost" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
        Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->

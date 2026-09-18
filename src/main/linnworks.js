@@ -409,6 +409,12 @@ class LinnworksClient {
           sku: r.SKU || '',
           title: r.Title || '',
           qty: Number(r.Quantity) || 0, // listed qty on the channel
+          // the channel scan's own listing price where the feed carries one
+          // (field name varies by channel; 0 = the feed didn't say)
+          price: (() => {
+            const p = Number(r.Price ?? r.SalePrice ?? r.RetailPrice ?? r.ListPrice);
+            return Number.isFinite(p) && p > 0 ? Math.round(p * 100) / 100 : 0;
+          })(),
           wfs: !!r.WFS,
           linked: !!r.IsLinked,
           linkedItemId: r.LinkedItemId && r.LinkedItemId !== '00000000-0000-0000-0000-000000000000' ? r.LinkedItemId : '',
@@ -827,6 +833,34 @@ class LinnworksClient {
       subSource: p.SubSource || '',
       price: Number(p.Price),
     })).filter(p => Number.isFinite(p.price));
+  }
+
+  // Set the Linnworks channel price record for one Source/SubSource — the
+  // price Linnworks pushes to that marketplace. Updates the existing row in
+  // place; with no exact row, falls back to the channel's default row (empty
+  // SubSource); with neither, creates one. The create path follows the
+  // documented AddInventoryItemPrices shape and has not been exercised live.
+  async setChannelPrice(stockItemId, source, subSource, price) {
+    const rows = await this.call(`Inventory/GetInventoryItemPrices?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }) || [];
+    const same = (a, b) => String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+    const hit = rows.find(p => same(p.Source, source) && same(p.SubSource, subSource))
+      || rows.find(p => same(p.Source, source) && !String(p.SubSource || '').trim());
+    if (hit) {
+      hit.Price = Number(price);
+      await this.call('Inventory/UpdateInventoryItemPrices', { inventoryItemPrices: [hit] });
+      return { updated: true };
+    }
+    await this.call('Inventory/AddInventoryItemPrices', {
+      inventoryItemPrices: [{
+        pkRowId: '00000000-0000-0000-0000-000000000000',
+        StockItemId: stockItemId,
+        Source: source,
+        SubSource: subSource || '',
+        Price: Number(price),
+        Tag: '',
+      }],
+    });
+    return { created: true };
   }
 
   // Adjust stock levels by a delta per SKU at one location (negative = deduct).
