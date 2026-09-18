@@ -5363,7 +5363,10 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   // only one editor open: any other cell mid-edit falls back to display
   const other = $('retPastBox').querySelector('.ret-ein, .ret-emenu');
   if (other) renderRetLog();
+  const stray = document.querySelector('.ret-notebox');
+  if (stray) stray.remove();
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
+  if (field === 'note') { retBeginNoteEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
   const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy'].includes(field);
   td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
@@ -5381,6 +5384,41 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+// the note edits in a floating box over the cell — the column is too
+// narrow to read what you type (owner 2026-09-18). Enter saves,
+// Shift+Enter makes a new line, Esc cancels.
+function retBeginNoteEdit(td, entry) {
+  const startVal = retEditValue(entry, 'note');
+  const r = td.getBoundingClientRect();
+  td.innerHTML = '<input class="ret-ein" type="text" hidden />'; // keeps the cell's edit ring on
+  const box = document.createElement('div');
+  box.className = 'ret-notebox';
+  box.innerHTML = '<textarea class="ret-notein" rows="3" spellcheck="false"></textarea><div class="ret-notehint">Enter saves · Esc cancels</div>';
+  document.body.appendChild(box);
+  const w = Math.max(340, Math.min(r.width + 60, 480));
+  box.style.width = `${w}px`;
+  box.style.left = `${Math.max(8, Math.min(r.left - 6, window.innerWidth - w - 8))}px`;
+  box.style.top = `${Math.max(8, Math.min(r.top - 8, window.innerHeight - 132))}px`;
+  const input = box.querySelector('textarea');
+  input.value = startVal;
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    box.remove();
+    const val = input.value;
+    if (save && val.trim() !== startVal.trim()) retSaveEdit(entry, 'note', val);
+    else renderRetLog();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
   input.addEventListener('blur', () => finish(true));

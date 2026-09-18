@@ -2059,6 +2059,11 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 }
 .ret-ein.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ret-cell-units .ret-ein, .ret-cell-price .ret-ein { text-align: right; }
+/* the note edits in a floating box — the column squishes a plain input
+   (owner 2026-09-18) */
+.ret-notebox { position: fixed; z-index: 70; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 28px rgba(47, 52, 55, 0.18); padding: 8px 10px 5px; display: flex; flex-direction: column; gap: 3px; }
+.ret-notein { border: none; outline: none; background: transparent; resize: none; font-family: var(--font); font-size: 12.5px; color: var(--text); line-height: 1.45; min-height: 56px; }
+.ret-notehint { font-size: 10px; color: var(--faint); text-align: right; }
 /* the condition cell edits through a compact 4-pill menu, right in the cell */
 .ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }
