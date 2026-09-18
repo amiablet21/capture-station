@@ -33,6 +33,7 @@ const EVENTS = [
   'returns:importProgress',
   'returns:syncChanged',
   'stock:imgInherited',
+  'update:available',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -70,6 +71,7 @@ contextBridge.exposeInMainWorld('api', {
   pricingSet: (payload) => ipcRenderer.invoke('pricing:set', payload),
   pricingHistory: () => ipcRenderer.invoke('pricing:history'),
   pricingRevert: (id) => ipcRenderer.invoke('pricing:revert', { id }),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),
   getChannelSkus: (stockItemId) => ipcRenderer.invoke('stock:channelSkus', { stockItemId }),

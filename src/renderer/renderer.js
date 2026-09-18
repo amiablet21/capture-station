@@ -6438,7 +6438,7 @@ function prEditPrice(btn) {
       channelSku: btn.dataset.csku, price: p, old,
     });
     if (!res.ok) { input.disabled = false; toast(res.error || 'Could not change the price.'); return; }
-    toast(`${btn.dataset.csku} → $${p.toFixed(2)} — saved to Linnworks, pushing to ${c.source}`);
+    toast(`${btn.dataset.csku} → $${p.toFixed(2)} — saved to Linnworks (goes live on ${c.source} when its price sync is on)`);
     enterPricing(true);
   };
   input.addEventListener('keydown', (ev) => {
@@ -6555,6 +6555,29 @@ async function prHistLoad() {
     </div>`;
   }).join('');
 }
+
+/* in-app updater: a new release lights the footer button; one click
+   downloads the right installer and opens it (owner 2026-09-18) */
+api.on('update:available', (d) => {
+  const b = $('updateBtn');
+  b.textContent = `Update to v${(d && d.version) || 'latest'}`;
+  b.hidden = false;
+});
+$('updateBtn').addEventListener('click', async () => {
+  const b = $('updateBtn');
+  if (b.disabled) return;
+  b.disabled = true;
+  b.textContent = 'Downloading…';
+  const res = await api.updateInstall();
+  if (!res.ok) {
+    b.disabled = false;
+    b.textContent = 'Update — retry';
+    toast(res.error || 'Could not download the update.');
+    return;
+  }
+  b.textContent = 'Installer opened';
+  toast(`Installer opened — run it through and the app comes back updated (saved to Downloads as ${res.file})`, 9000);
+});
 
 $('prHistBtn').addEventListener('click', () => { prHistLoad(); $('priceHistDialog').showModal(); });
 $('prHistClose').addEventListener('click', () => $('priceHistDialog').close());

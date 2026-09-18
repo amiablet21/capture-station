@@ -2022,6 +2022,53 @@ function registerIpc() {
 
   ipcMain.handle('pricing:history', () => ({ ok: true, entries: mergedPriceHist().slice(0, 200) }));
 
+  /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
+     to GitHub... install it here") — checks the latest GitHub release; one
+     click downloads the right installer and opens it. ---------- */
+  const UPDATE_REPO = 'amiablet21/capture-station';
+  let updateInfo = null; // { version, url, name }
+  const verNewer = (a, b) => { // is a newer than b (x.y.z strings)
+    const pa = String(a).split('.').map(Number);
+    const pb = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true;
+      if ((pa[i] || 0) < (pb[i] || 0)) return false;
+    }
+    return false;
+  };
+  async function checkForUpdate() {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+        headers: { 'User-Agent': 'CaptureStation', Accept: 'application/vnd.github+json' },
+      });
+      if (!res.ok) return;
+      const j = await res.json();
+      const latest = String(j.tag_name || '').replace(/^v/, '');
+      if (!latest || !verNewer(latest, app.getVersion())) return;
+      const want = process.platform === 'darwin' ? /\.dmg$/i : /\.exe$/i;
+      const asset = (j.assets || []).find(a => want.test(String(a.name || '')));
+      if (!asset) return; // the platform's installer hasn't finished building yet
+      updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
+      if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest });
+    } catch { /* offline or rate-limited: next pass tries again */ }
+  }
+  ipcMain.handle('update:install', async () => {
+    if (!updateInfo) return { ok: false, error: 'No update on record — try again in a minute.' };
+    try {
+      const res = await fetch(updateInfo.url, { headers: { 'User-Agent': 'CaptureStation' }, redirect: 'follow' });
+      if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const dest = paneUniquePath(app.getPath('downloads'), updateInfo.name);
+      fs.writeFileSync(dest, buf);
+      await shell.openPath(dest);
+      return { ok: true, file: path.basename(dest), version: updateInfo.version };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  setTimeout(() => { checkForUpdate(); }, 20 * 1000); // let startup settle first
+  setInterval(() => { checkForUpdate(); }, 4 * 60 * 60 * 1000);
+
   ipcMain.handle('pricing:revert', async (_e, { id }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };

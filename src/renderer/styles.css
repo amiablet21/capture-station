@@ -1541,6 +1541,10 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .bulk-h-fixqty { flex: 0 0 62px; text-align: right; font-size: 12px; padding: 3px 6px; }
 .bulk-h-fixwrap .combo-list { min-width: 280px; }
 
+/* in-app updater button: quiet until a release is newer than this build */
+.update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+.update-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+
 /* ---------- Pricing tab (owner 2026-09-18) ---------- */
 
 .pricing-page { flex: 1 1 auto; min-height: 0; display: flex; padding: 12px 24px 20px; }
