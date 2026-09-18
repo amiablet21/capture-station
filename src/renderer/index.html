@@ -1019,6 +1019,21 @@
     </div>
   </dialog>
 
+  <!-- revert confirmation (owner 2026-09-17: "before reverts, have a popup
+       saying are you sure you want to revert?") -->
+  <dialog id="bulkRevDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Are you sure you want to revert?</h2>
+      <p class="dlg-note" id="bulkRevWhat"></p>
+      <p class="dlg-note">This reverses that change — what it added is subtracted, what it removed comes back. Everything that happened since stays as it is.</p>
+      <div class="dlg-actions">
+        <button id="bulkRevCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="bulkRevGo" class="btn btn-danger" type="button">↩ Revert</button>
+      </div>
+    </div>
+  </dialog>
+
+
   <!-- Bulk stock import (owner 2026-09-17): a SKU + Qty sheet adds to or
        replaces the warehouse levels; every import lands in the history -->
   <dialog id="bulkDialog" class="dlg bulk-dlg">

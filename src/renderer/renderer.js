@@ -6057,6 +6057,14 @@ function bulkAddRow(sku, qty) {
     bulkRefresh();
     qtyIn.focus();
     qtyIn.select();
+  }, {
+    // dead-end search → the New SKU popup, prefilled; on create the row
+    // fills and the fresh item flows into the grid's Now column
+    addNew: (text) => openNewSkuDialog({ sku: text }, () => {
+      skuIn.value = text;
+      loadStock().then(() => bulkRefresh()).catch(() => bulkRefresh());
+      qtyIn.focus();
+    }),
   });
   $('bulkGridRows').appendChild(row);
   bulkRowCalc(row);
@@ -6164,22 +6172,36 @@ $('bulkApply').addEventListener('click', async () => {
   bulkHistLoad();
 });
 
+let bulkHistEntries = []; // the revert confirm names the entry from here
+
+// units of entry `id`, line `rowIdx`, already moved to another SKU by fix
+// entries — a reverted fix gave its units back, so it doesn't count
+function bulkFixMoved(id, rowIdx) {
+  const undone = new Set(bulkHistEntries.filter(x => x.revertOf).map(x => x.revertOf));
+  return bulkHistEntries
+    .filter(x => x.mode === 'fix' && x.fixOf === id && Number(x.fixRow) === Number(rowIdx) && !undone.has(x.id))
+    .reduce((s, x) => s + (Number(x.fixQty) || 0), 0);
+}
+
 async function bulkHistLoad() {
   const box = $('bulkHist');
   const res = await api.stockBulkHistory().catch(() => null);
-  if (!res || !res.ok || !res.entries.length) {
+  bulkHistEntries = (res && res.ok && res.entries) || [];
+  if (!bulkHistEntries.length) {
     box.innerHTML = '<p class="dlg-note">Nothing yet.</p>';
     return;
   }
-  const reverted = new Set(res.entries.filter(e => e.revertOf).map(e => e.revertOf));
-  box.innerHTML = res.entries.map((e, i) => {
+  const reverted = new Set(bulkHistEntries.filter(e => e.revertOf).map(e => e.revertOf));
+  box.innerHTML = bulkHistEntries.map((e, i) => {
     const rows = e.rows || [];
     const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
     const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
     const what = e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} · ${nSku}`
       : e.mode === 'set' ? `set counts · ${nSku}`
         : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
-          : `↩ reversed an earlier change · ${nSku}`;
+          : e.mode === 'fix' ? `moved ${e.fixQty || ''} unit${Number(e.fixQty) === 1 ? '' : 's'} <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> → <span class="mono">${esc(rows[rows.length - 1] ? rows[rows.length - 1].sku : '')}</span>`
+            : `↩ reversed an earlier change · ${nSku}`;
+    const fixable = !reverted.has(e.id) && (e.mode === 'add' || e.mode === 'set' || e.mode === 'edit');
     const act = reverted.has(e.id)
       ? '<span class="bulk-h-rvtd">reverted ✓</span>'
       : `<button type="button" class="bulk-h-revert" data-brv="${esc(e.id)}" title="Reverse this change — subtracts what it added (or restores what it removed), leaving everything since alone">↩ Revert</button>`;
@@ -6191,8 +6213,18 @@ async function bulkHistLoad() {
       </div>
       <div class="bulk-h-body" hidden>
         <table class="bulk-table">
-          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' ? 'Change' : 'Set to'}</th><th class="num">After</th></tr></thead>
-          <tbody>${rows.map(r => `<tr><td class="mono">${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${e.mode === 'add' ? `+${r.qty}` : e.mode === 'revert' && r.qty > 0 ? `+${r.qty}` : r.qty}</td><td class="num mono">${r.after}</td></tr>`).join('')}</tbody>
+          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
+          <tbody>${rows.map((r, ri) => {
+    const change = (Number(r.after) || 0) - (Number(r.before) || 0);
+    const moved = fixable ? bulkFixMoved(e.id, ri) : 0;
+    const avail = change - moved;
+    const canFix = fixable && change > 0 && avail > 0;
+    const cell = (canFix
+      ? `<button type="button" class="bulk-h-fix" title="Wrong SKU? Change it in place — the units move to the SKU you pick">✎</button>` : '')
+      + (moved > 0 ? `<span class="bulk-h-moved" title="${moved} unit${moved === 1 ? '' : 's'} moved to another SKU — see the “moved” entries above">↷ ${moved} moved</span>` : '');
+    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix') && r.qty > 0)) ? `+${r.qty}` : r.qty;
+    return `<tr><td class="mono bulk-h-sku"${canFix ? ` data-bfx="${esc(e.id)}" data-bfr="${ri}" title="Double-click to change which SKU these units went to"` : ''}>${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${q}</td><td class="num mono">${r.after == null ? '—' : r.after}</td><td class="bulk-h-fixcell">${cell}</td></tr>`;
+  }).join('')}</tbody>
         </table>
         ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
       </div>
@@ -6200,16 +6232,91 @@ async function bulkHistLoad() {
   }).join('');
 }
 
-$('bulkHist').addEventListener('click', async (e) => {
-  const rv = e.target.closest('.bulk-h-revert');
-  if (rv) {
-    if (!confirm('Reverse this change? It subtracts what was added (or restores what was removed), leaving everything that happened since alone.')) return;
-    rv.disabled = true;
-    const res = await api.stockBulkRevert(rv.dataset.brv);
-    if (!res.ok) { toast(res.error || 'Could not revert.'); rv.disabled = false; return; }
-    toast('Reversed — the history keeps both entries.');
+let bulkRevPending = ''; // entry id awaiting the confirm popup
+
+// In-place SKU correction (owner 2026-09-17: "double click within the
+// history and just change it really quickly"): the SKU cell swaps into an
+// input with suggestions + a small units box (prefilled with everything
+// still movable). Enter applies the move, Esc cancels.
+let bulkFixClose = null; // open editor's cleanup, one at a time
+
+function bulkFixInlineOpen(td) {
+  if (bulkFixClose) bulkFixClose();
+  const entry = bulkHistEntries.find(x => x.id === td.dataset.bfx);
+  const ri = Number(td.dataset.bfr);
+  const row = entry && (entry.rows || [])[ri];
+  if (!row) return;
+  const change = (Number(row.after) || 0) - (Number(row.before) || 0);
+  const avail = change - bulkFixMoved(entry.id, ri);
+  if (avail < 1) { toast('Those units were already moved.'); return; }
+  ensureInventory(); // the SKU picker's lookup data
+  const orig = td.innerHTML;
+  td.innerHTML = `
+    <div class="bulk-h-fixwrap">
+      <input class="input mono bulk-h-fixsku" type="text" autocomplete="off" spellcheck="false" aria-label="Correct SKU" />
+      <input class="input mono bulk-h-fixqty" type="number" min="1" max="${avail}" step="1" value="${avail}" aria-label="Units to move" title="How many of the ${avail} unit${avail === 1 ? '' : 's'} to move" />
+      <div class="combo-list" hidden></div>
+    </div>`;
+  const skuIn = td.querySelector('.bulk-h-fixsku');
+  const qtyIn = td.querySelector('.bulk-h-fixqty');
+  const listEl = td.querySelector('.combo-list');
+  skuIn.value = String(row.sku);
+  const close = () => {
+    document.removeEventListener('mousedown', away, true);
+    td.innerHTML = orig;
+    bulkFixClose = null;
+  };
+  const away = (ev) => { if (!td.contains(ev.target) && !listEl.contains(ev.target)) close(); };
+  const apply = async () => {
+    const to = skuIn.value.trim().toUpperCase();
+    const m = Number(qtyIn.value);
+    if (!to || to === String(row.sku).toUpperCase()) { close(); return; } // unchanged — never mind
+    if (!Number.isInteger(m) || m < 1 || m > avail) { toast(`Units must be a whole number between 1 and ${avail}.`); qtyIn.focus(); return; }
+    skuIn.disabled = true; qtyIn.disabled = true;
+    const res = await api.stockBulkFix(entry.id, ri, to, m);
+    if (!res.ok) { skuIn.disabled = false; qtyIn.disabled = false; toast(res.error || 'Could not move the units.'); return; }
+    close();
+    toast(`Moved ${m} × ${row.sku} → ${to}`);
     loadStock();
     bulkHistLoad();
+  };
+  makeCombo(skuIn, listEl, (item) => { skuIn.value = item.sku; qtyIn.focus(); });
+  const onKey = (ev) => {
+    // preventDefault on Esc also keeps the bulk dialog itself open
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+  };
+  skuIn.addEventListener('keydown', onKey);
+  qtyIn.addEventListener('keydown', onKey);
+  document.addEventListener('mousedown', away, true);
+  bulkFixClose = close;
+  skuIn.focus();
+  skuIn.select();
+}
+
+$('bulkHist').addEventListener('dblclick', (e) => {
+  const td = e.target.closest('td.bulk-h-sku[data-bfx]');
+  if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
+});
+
+$('bulkHist').addEventListener('click', (e) => {
+  const fx = e.target.closest('.bulk-h-fix');
+  if (fx) {
+    const td = fx.closest('tr').querySelector('td.bulk-h-sku[data-bfx]');
+    if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
+    return;
+  }
+  const rv = e.target.closest('.bulk-h-revert');
+  if (rv) {
+    bulkRevPending = rv.dataset.brv;
+    const entry = bulkHistEntries.find(x => x.id === bulkRevPending);
+    const rows = (entry && entry.rows) || [];
+    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
+    $('bulkRevWhat').textContent = entry
+      ? `${new Date(entry.ts).toLocaleString()} · ${entry.station || ''} · ${entry.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} across` : entry.mode === 'set' ? 'set counts on' : entry.mode === 'edit' ? 'edited' : 'reversed a change on'} ${rows.length === 1 ? rows[0].sku : `${rows.length} SKUs`}${entry.note ? ` · “${entry.note}”` : ''}`
+      : '';
+    $('bulkRevGo').disabled = false;
+    $('bulkRevDialog').showModal();
     return;
   }
   const line = e.target.closest('.bulk-h-line');
@@ -6217,6 +6324,18 @@ $('bulkHist').addEventListener('click', async (e) => {
   const body = line.parentElement.querySelector('.bulk-h-body');
   body.hidden = !body.hidden;
   line.querySelector('.bulk-h-chev').textContent = body.hidden ? '▸' : '▾';
+});
+
+$('bulkRevCancel').addEventListener('click', () => $('bulkRevDialog').close());
+$('bulkRevGo').addEventListener('click', async () => {
+  if (!bulkRevPending) return;
+  $('bulkRevGo').disabled = true;
+  const res = await api.stockBulkRevert(bulkRevPending);
+  $('bulkRevDialog').close();
+  if (!res.ok) { toast(res.error || 'Could not revert.'); return; }
+  toast('Reversed — the history keeps both entries.');
+  loadStock();
+  bulkHistLoad();
 });
 
 /* ---------- product image dialog (idle / loading / success / error) ---------- */
@@ -6737,7 +6856,7 @@ function makeCombo(input, listEl, onPick, opts) {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
     // returns log, the receive popup's sheet AND the WFS shipment sheet
     // anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid')) return;
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
@@ -6749,7 +6868,13 @@ function makeCombo(input, listEl, onPick, opts) {
     if (recvLookup === 'loading') {
       listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
     } else if (!matches.length) {
-      listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
+      // a dead-end search can end in "create it" (owner 2026-09-17) —
+      // only where the caller opted in via opts.addNew
+      const q = input.value.trim().toUpperCase();
+      listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`
+        + (opts && opts.addNew && q && recvLookup === 'ready'
+          ? `<button class="combo-opt combo-addnew"><span class="mono">+ Create ${esc(q)}</span><span class="combo-opt-title">new SKU in Linnworks</span></button>`
+          : '');
     } else {
       listEl.innerHTML = matches.map((it, i) => {
         const a = invAvailAtPrimary(it);
@@ -6800,6 +6925,12 @@ function makeCombo(input, listEl, onPick, opts) {
     const opt = e.target.closest('.combo-opt');
     if (!opt) return;
     e.preventDefault();
+    if (opt.classList.contains('combo-addnew')) {
+      const q = input.value.trim().toUpperCase();
+      close();
+      if (opts && opts.addNew && q) opts.addNew(q);
+      return;
+    }
     const item = matches[Number(opt.dataset.i)];
     if (item && blockedOf(item)) return; // unclickable by design
     close();
@@ -6906,7 +7037,11 @@ function comboFilter(q) {
     if (!q
       || it.sku.toLowerCase().includes(q)
       || (it.title || '').toLowerCase().includes(q)
-      || (it.barcode || '').toLowerCase().includes(q)) {
+      || (it.barcode || '').toLowerCase().includes(q)
+      // separator-blind, same rule as the stock search (owner 2026-09-17:
+      // "I don't want to have to write the dash"): "x133 64gb gray" finds
+      // SM-X133-64GB-GRAY
+      || skuMatch(it.sku, q) || skuMatch(it.title || '', q)) {
       out.push(it);
       if (out.length >= 50) break;
     }

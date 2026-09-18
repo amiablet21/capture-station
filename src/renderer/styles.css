@@ -997,6 +997,8 @@ body.ret-compact .ret-sheet { min-width: 0; }
    escaping every clipping container without changing the sheet's overflow —
    toggling overflow while typing made the whole page shift */
 .combo-list.is-fixed { position: fixed; }
+/* dead-end search → create the typed SKU (owner 2026-09-17) */
+.combo-addnew .mono { color: var(--accent-soft-text); font-weight: 600; }
 
 /* fixed layout: columns hold their widths, Customer + Notes flex with the
    window; below 1100px the sheet scrolls sideways instead of crushing */
@@ -1527,6 +1529,17 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .bulk-h-revert { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 2px 9px; margin-left: auto; cursor: pointer; white-space: nowrap; }
 .bulk-h-revert:hover { border-color: var(--accent); color: var(--accent-soft-text); }
 .bulk-h-rvtd { font-size: 10.5px; color: var(--faint); margin-left: auto; white-space: nowrap; }
+
+/* per-line correction: dblclick the SKU (or its ✎) edits it in place */
+.bulk-h-fixcell { text-align: right; white-space: nowrap; width: 1%; }
+.bulk-h-fix { font: inherit; font-size: 11px; color: var(--muted); border: none; background: none; padding: 0 4px; cursor: pointer; }
+.bulk-h-fix:hover { color: var(--accent-soft-text); }
+.bulk-h-moved { font-size: 10px; color: var(--faint); margin-left: 4px; white-space: nowrap; }
+td.bulk-h-sku[data-bfx] { cursor: text; }
+.bulk-h-fixwrap { display: flex; gap: 6px; align-items: center; }
+.bulk-h-fixsku { flex: 1 1 auto; min-width: 200px; font-size: 12px; padding: 3px 8px; }
+.bulk-h-fixqty { flex: 0 0 62px; text-align: right; font-size: 12px; padding: 3px 6px; }
+.bulk-h-fixwrap .combo-list { min-width: 280px; }
 
 /* the Linnworks configurator picker beside List on eBay */
 .eb-lw-config { flex: 0 1 250px; max-width: 250px; min-width: 140px; font-size: 12px; }

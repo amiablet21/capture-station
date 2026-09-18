@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   stockBulkApply: (payload) => ipcRenderer.invoke('stock:bulkApply', payload),
   stockBulkHistory: () => ipcRenderer.invoke('stock:bulkHistory'),
   stockBulkRevert: (id) => ipcRenderer.invoke('stock:bulkRevert', { id }),
+  stockBulkFix: (id, rowIdx, toSku, qty) => ipcRenderer.invoke('stock:bulkFix', { id, rowIdx, toSku, qty }),
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),
   getChannelSkus: (stockItemId) => ipcRenderer.invoke('stock:channelSkus', { stockItemId }),

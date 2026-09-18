@@ -4293,6 +4293,12 @@ function registerIpc() {
     const entry = all.find(e => e && e.id === id);
     if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
     if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'Already reverted.' };
+    // an entry whose units were partly moved to another SKU can't be
+    // reverted wholesale — the moved units would be subtracted twice
+    const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
+    if (all.some(e => e && e.mode === 'fix' && e.fixOf === id && !undone.has(e.id))) {
+      return { ok: false, error: 'Units from this entry were moved to another SKU — revert those moves first.' };
+    }
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
@@ -4315,6 +4321,70 @@ function registerIpc() {
       if (!deltas.length) return { ok: false, error: 'Nothing to reverse — the change was zero, already gone, or the SKUs no longer exist.' };
       await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert');
       const rec = bulkLogEntry({ mode: 'revert', revertOf: id, file: '', rows, skipped: [] });
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, entry: rec };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Move units of one past history line onto the SKU they SHOULD have gone
+  // to (owner 2026-09-17: an import went in as brand new when the units were
+  // open box). Deducts from the wrongly credited SKU (clamped at zero, like
+  // reverts), credits the right one, and logs the move as its own entry —
+  // reversible like everything else.
+  ipcMain.handle('stock:bulkFix', async (_e, { id, rowIdx, toSku, qty }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = [...retsync.readAux('stockimports'), ...loadBulkHist()];
+    const entry = all.find(e => e && e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'That entry was reverted — there is nothing left to move.' };
+    const row = (entry.rows || [])[Number(rowIdx)];
+    if (!row) return { ok: false, error: 'That line is missing from the entry.' };
+    const change = (Number(row.after) || 0) - (Number(row.before) || 0);
+    if (change <= 0) return { ok: false, error: 'Only lines that ADDED stock can be moved to another SKU.' };
+    const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
+    const moved = all
+      .filter(e => e && e.mode === 'fix' && e.fixOf === id && Number(e.fixRow) === Number(rowIdx) && !undone.has(e.id))
+      .reduce((s, e) => s + (Number(e.fixQty) || 0), 0);
+    const avail = change - moved;
+    if (avail <= 0) return { ok: false, error: 'Those units were already moved.' };
+    const m = Number(qty);
+    if (!Number.isInteger(m) || m < 1 || m > avail) return { ok: false, error: `Units must be a whole number between 1 and ${avail}.` };
+    const from = String(row.sku || '').toUpperCase();
+    const to = String(toSku || '').trim().toUpperCase();
+    if (!to) return { ok: false, error: 'Pick the SKU the units should have gone to.' };
+    if (to === from) return { ok: false, error: 'That is the same SKU.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const toIt = bySku.get(to);
+      if (!toIt) return { ok: false, error: `${to} does not exist in Linnworks.` };
+      const levelOf = (it) => {
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+        return l ? Number(l.stockLevel) || 0 : 0;
+      };
+      const fromIt = bySku.get(from);
+      const fromCur = fromIt ? levelOf(fromIt) : 0;
+      const toCur = levelOf(toIt);
+      const dFrom = fromIt ? Math.max(-fromCur, -m) : 0; // never below zero
+      const deltas = [{ sku: toIt.sku, delta: m }];
+      if (dFrom) deltas.push({ sku: fromIt.sku, delta: dFrom });
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)');
+      const rec = bulkLogEntry({
+        mode: 'fix', fixOf: id, fixRow: Number(rowIdx), fixQty: m, file: '',
+        rows: [
+          { sku: from, before: fromIt ? fromCur : null, qty: dFrom, after: fromIt ? fromCur + dFrom : null },
+          { sku: to, before: toCur, qty: m, after: toCur + m },
+        ],
+        skipped: [],
+      });
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       (async () => {
         await runRouting();
