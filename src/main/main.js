@@ -4113,9 +4113,24 @@ function registerIpc() {
         };
       } else {
         // PO-only pseudo row: record fields, plus an item line if a SKU was
-        // typed (log-only, no stock move — the unit never bumped stock)
+        // typed. The unit never bumped stock at receive time (no product
+        // was known), so writing one in restocks it now like a normal
+        // receive (owner 2026-09-18: rows whose PO didn't match still
+        // matter). No landing listing = log-only, never an error.
         recordNote = newNote;
-        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
+        if (newSku) {
+          const skus = await getInventorySkus(cfg).catch(() => []);
+          const isReal = skus.some(s => String(s).toUpperCase() === newSku.toUpperCase());
+          let target = '';
+          if (newCond === 'new' || newCond === 'different') target = isReal ? newSku : '';
+          else target = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
+          if (target) {
+            const client = new LinnworksClient(cfg.linnworks);
+            await client.changeStockLevels([{ sku: target, delta: newQty }], cfg.linnworks.locationId, 'Capture Station return edit');
+            stockNote = `+${newQty} ${target} restocked`;
+          }
+          items.push({ sku: newSku, condition: newCond, targetSku: target, qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
+        }
       }
       const fields = {
         orderNumber: newPo, createdAt,

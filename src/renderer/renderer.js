@@ -5369,7 +5369,8 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   if (field === 'note') { retBeginNoteEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
   const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy'].includes(field);
-  td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
+  const isSku = field === 'sku';
+  td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />${isSku ? '<div class="combo-list" hidden></div>' : ''}`;
   const input = td.querySelector('input');
   input.value = startVal;
   input.focus();
@@ -5382,11 +5383,19 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
     if (save && val.trim() !== startVal.trim()) retSaveEdit(entry, field, val);
     else renderRetLog();
   };
+  // the SKU cell queries the inventory like every other picker — a PO
+  // that arrived without its product still gets a searched, real SKU
+  // (owner 2026-09-18). The combo's Enter picks; the fallback below
+  // saves typed text when the lookup has nothing (offline, new SKU).
+  if (isSku) {
+    ensureInventory();
+    makeCombo(input, td.querySelector('.combo-list'), (item) => { input.value = item.sku; finish(true); });
+  }
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
-  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('blur', () => { if (isSku) setTimeout(() => finish(true), 150); else finish(true); });
 }
 
 // the note edits in a floating box over the cell — the column is too
