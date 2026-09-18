@@ -3442,6 +3442,11 @@ function enterReturns() {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
     // the date cell follows today only while the receiver hasn't typed one
     if (retEntryTr && wsDateAuto) wsDateFill();
+    // PO-format channel guessing for the log's open buttons
+    retPoPatterns = (cfg.orderPatterns || []).map(p => {
+      try { return { ch: p.channel, re: new RegExp(p.pattern) }; } catch { return null; }
+    }).filter(Boolean);
+    if (retLogAll) renderRetLog(); // buttons on rows rendered before the patterns arrived
   });
 }
 
@@ -4373,8 +4378,19 @@ function retChannel(source) {
   return hasLink ? key : '';
 }
 
+// an unmatched row has no source, but the PO's FORMAT usually gives the
+// marketplace away (owner 2026-09-18: "always have a link to the PO#") —
+// the same Settings patterns that classify scanned order numbers decide
+let retPoPatterns = null; // [{ch, re}] compiled once per returns visit
+function retPoGuess(po) {
+  for (const p of retPoPatterns || []) {
+    if (p.re.test(po)) return retChannel(p.ch);
+  }
+  return '';
+}
+
 function retPoOpenBtn(po, source) {
-  const ch = po ? retChannel(source) : '';
+  const ch = po ? (retChannel(source) || retPoGuess(String(po).trim())) : '';
   if (!ch) return '';
   return `<button class="btn-icon ret-po-open" data-po="${esc(po)}" data-ch="${ch}"
     title="Open the ${esc(channelLabel(ch))} return for ${esc(po)}">${ICONS.arrowOut}</button>`;

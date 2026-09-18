@@ -4080,10 +4080,18 @@ function registerIpc() {
         if (!it) return { ok: false, error: 'Return line not found.' };
         if (!newSku) return { ok: false, error: 'Pick the returned SKU.' };
         const oldQty = Number(it.qty) || 1;
+        const changed = newSku !== it.sku || newCond !== it.condition;
         let newTarget = it.targetSku || '';
-        if (newSku !== it.sku || newCond !== it.condition) {
-          if (newCond === 'new') newTarget = newSku;
-          else if (newCond === 'different') {
+        // resolve the landing on any change, AND on a line that never had
+        // one (owner 2026-09-18: a log-only line took "Scrap" silently with
+        // no scrap listing and no stock move — pick/create must gate grade
+        // changes, and an old log-only line heals on its next edit)
+        if (changed || !it.targetSku) {
+          if (newCond === 'new') {
+            // restocks only as a real listing; unknown SKUs log with no stock
+            const skus = await getInventorySkus(cfg).catch(() => []);
+            newTarget = skus.some(s => String(s).toUpperCase() === newSku.toUpperCase()) ? newSku : '';
+          } else if (newCond === 'different') {
             // the line's "received" (what actually came back) decides:
             // a real listing restocks itself, anything else logs with no
             // stock (never an error). Editing the SKU cell edits the
@@ -4094,33 +4102,40 @@ function registerIpc() {
           } else {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
-            if (!newTarget && it.targetSku) {
-              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
+            if (!newTarget) {
+              // an explicit grade/SKU change must land somewhere; an
+              // unrelated edit (note, price) on a stuck line stays log-only
+              if (changed) return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
+              newTarget = '';
             }
           }
         }
         // stock corrections: target moved (swap old qty out, new qty in),
         // target GONE (a Different return of unlisted junk: old stock out),
-        // or quantity changed on the same target (delta the difference)
+        // or quantity changed on the same target (delta the difference).
+        // A line that never restocked (log-only) gains its landing now.
+        const deltas = [];
         if (it.targetSku) {
-          const deltas = [];
           if (newTarget && newTarget !== it.targetSku) {
             deltas.push({ sku: it.targetSku, delta: -oldQty }, { sku: newTarget, delta: newQty });
             stockNote = `stock corrected: -${oldQty} ${it.targetSku}, +${newQty} ${newTarget}`;
-          } else if (!newTarget && (newSku !== it.sku || newCond !== it.condition)) {
+          } else if (!newTarget && changed) {
             deltas.push({ sku: it.targetSku, delta: -oldQty });
             stockNote = `stock corrected: -${oldQty} ${it.targetSku} (nothing restocked)`;
           } else if (newQty !== oldQty) {
             deltas.push({ sku: it.targetSku, delta: newQty - oldQty });
             stockNote = `stock corrected: ${newQty > oldQty ? '+' : ''}${newQty - oldQty} ${it.targetSku}`;
           }
-          if (deltas.length) {
-            const client = new LinnworksClient(cfg.linnworks);
-            await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
-          }
+        } else if (newTarget) {
+          deltas.push({ sku: newTarget, delta: newQty });
+          stockNote = `+${newQty} ${newTarget} restocked`;
+        }
+        if (deltas.length) {
+          const client = new LinnworksClient(cfg.linnworks);
+          await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
         }
         items[ii] = {
-          ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: newQty,
+          ...it, sku: newSku, condition: newCond, targetSku: newTarget, note: newNote, qty: newQty,
           ...(newPrice === null ? {} : { price: newPrice }),
           ...(newSettle === null ? {} : { settle: newSettle }),
         };
