@@ -150,6 +150,32 @@ function toPng(buf) {
   }
 }
 
+// Walmart's dispute uploader refuses files over 25MB (owner 2026-09-18),
+// and claim photos stay PNG (owner 2026-09-18). A lossless PNG of a modern
+// phone photo can balloon far past the cap, and PNG has no quality dial —
+// so an oversized encode shrinks its PIXELS until the file fits, first in
+// one measured step, then by steps of 30% if the estimate ran hot.
+const CLAIM_CAP = 24 * 1024 * 1024; // margin under Walmart's 25MB
+function toPngUnder(buf) {
+  let png = toPng(buf);
+  if (!png) return null;
+  if (png.length <= CLAIM_CAP) return png;
+  try {
+    const { nativeImage } = require('electron');
+    let img = nativeImage.createFromBuffer(png);
+    for (let i = 0; i < 5 && !img.isEmpty(); i++) {
+      const { width } = img.getSize();
+      // PNG bytes scale roughly with pixel count: width scales by the
+      // square root of the byte ratio (with margin)
+      const scale = i === 0 ? Math.sqrt(CLAIM_CAP / png.length) * 0.9 : 0.7;
+      img = img.resize({ width: Math.max(1, Math.round(width * scale)) });
+      png = img.toPNG();
+      if (png.length <= CLAIM_CAP) return png;
+    }
+  } catch { /* fall through — the caller keeps the original bytes */ }
+  return null;
+}
+
 function tokenOk(token, t) {
   const a = Buffer.from(String(t || ''));
   const b = Buffer.from(token);
@@ -403,6 +429,19 @@ function start(opts) {
   };
   const removed = cleanupOld(dir);
   sweepListings();
+  // claim PNGs saved before the 25MB rule may be oversized — shrink them
+  // once at startup so Walmart takes them without a re-shoot
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (!/\.png$/i.test(n)) continue;
+      const f = path.join(dir, n);
+      try {
+        if (fs.statSync(f).size <= CLAIM_CAP) continue;
+        const out = toPngUnder(fs.readFileSync(f));
+        if (out) fs.writeFileSync(f, out);
+      } catch { /* per-file best effort */ }
+    }
+  } catch { /* sweep is best effort */ }
   // the shelf life must hold even if the app stays open for days: re-sweep
   // every 6 hours, not only at startup
   const sweeper = setInterval(() => { cleanupOld(dir); sweepListings(); }, 6 * 3600 * 1000);
@@ -486,11 +525,13 @@ function start(opts) {
         let buf = Buffer.concat(chunks);
         let ext = magicExt(buf);
         if (!ext) { res.writeHead(415, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"not an image"}'); return; }
-        // owner wants uniform PNGs in the folder: re-encode whatever the
-        // phone sent (JPEG, usually). Formats Electron can't decode (HEIC)
-        // keep their real extension rather than being lost.
+        // owner wants uniform PNGs in the folder, each under Walmart's
+        // 25MB dispute cap: re-encode whatever the phone sent, shrinking
+        // pixels if the PNG balloons. Formats Electron can't decode (HEIC)
+        // keep their real extension rather than being lost — the 15MB
+        // upload cap already keeps those under Walmart's limit.
         if (ext !== '.png') {
-          const png = toPng(buf);
+          const png = toPngUnder(buf);
           if (png) { buf = png; ext = '.png'; }
         }
         const name = `${po}_${stamp(new Date())}_${nextIndex(dir, po)}${ext}`;
@@ -527,4 +568,4 @@ function start(opts) {
   });
 }
 
-module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation } };
+module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation, toPngUnder, CLAIM_CAP } };
