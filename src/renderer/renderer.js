@@ -6340,6 +6340,7 @@ $('bulkRevGo').addEventListener('click', async () => {
 
 let prData = null;
 let prQ = '';
+const prExpanded = new Set(); // parent SKUs (upper) with the variations open
 const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
 const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
 
@@ -6368,28 +6369,22 @@ function prRender() {
   for (const el of head.querySelectorAll('.pr-hch')) el.style.color = PR_COLORS[Number(el.dataset.ci) % PR_COLORS.length];
 
   const q = prQ.trim();
-  const match = (p) => !q || skuMatch(p.sku, q)
+  const matchOne = (p) => !q || skuMatch(p.sku, q)
     || cols.some(c => (p.channels[c.key] || []).some(l => skuMatch(l.csku, q)));
+  const match = (p) => matchOne(p) || (p.variations || []).some(matchOne);
   const rows = (prData.products || []).filter(match);
   if (!rows.length) {
     $('prBody').innerHTML = `<p class="dlg-note pr-note">${q ? 'No SKUs match.' : 'No linked listings yet — link channel SKUs in Mappings and refresh.'}</p>`;
     return;
   }
-  $('prBody').innerHTML = rows.map((p, n) => {
+
+  // one product's channel cells — shared by parent and variation rows,
+  // each with its own top-seller highlight
+  const chCells = (p) => {
     const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
-    return `
-    <div class="pr-row" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
-      <div class="pr-cell pr-num">${n + 1}</div>
-      <div class="pr-cell pr-prod">
-        ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
-        <div class="pr-prodtxt">
-          <span class="mono pr-psku">${esc(p.sku)}</span>
-          <span class="pr-pstock">${p.stock} in stock</span>
-        </div>
-      </div>
-      ${cols.map((c, ci) => {
-    const lines = p.channels[c.key] || [];
-    const inner = lines.map(l => `
+    return cols.map((c, ci) => {
+      const lines = p.channels[c.key] || [];
+      const inner = lines.map(l => `
         <div class="pr-line">
           <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
           <span class="pr-sold ${l.sold > 0 && l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>
@@ -6398,11 +6393,66 @@ function prRender() {
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
           <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
         </div>`).join('');
-    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+      return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
         <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
       </div>`;
-  }).join('')}
-    </div>`;
+    }).join('');
+  };
+
+  const sugHtml = (p) => (p.suggest || []).map(s => `
+      <span class="pr-vsug"><span class="mono">${esc(s)}</span>
+        <button type="button" class="pr-vsadd" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Group ${esc(s)} under ${esc(p.sku)}">Add</button>
+        <button type="button" class="pr-vsign" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Stop suggesting this pairing">Ignore</button></span>`).join('');
+
+  $('prBody').innerHTML = rows.map((p, n) => {
+    const vars = p.variations || [];
+    const vunits = vars.reduce((a, v) => a + (Number(v.stock) || 0), 0);
+    const pU = String(p.sku).toUpperCase();
+    // searching a condition SKU opens its group so the hit is visible
+    const open = vars.length > 0 && (prExpanded.has(pU) || (q && !matchOne(p) && vars.some(matchOne)));
+    const parts = [`
+    <div class="pr-row" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
+      <div class="pr-cell pr-num">${n + 1}</div>
+      <div class="pr-cell pr-prod">
+        ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(p.sku)}</span>
+          <span class="pr-pstock">${p.stock} in stock</span>
+          ${vars.length
+    ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${open ? '▾' : '▸'} ${vars.length} variation${vars.length === 1 ? '' : 's'} · ${vunits} unit${vunits === 1 ? '' : 's'}</button>`
+    : `<button type="button" class="pr-varadd" data-va="${esc(p.sku)}" title="Group a condition SKU (open box / used / …) under this product">+ variation</button>`}
+        </div>
+      </div>
+      ${chCells(p)}
+    </div>`];
+    if (open) {
+      for (const v of vars) {
+        parts.push(`
+    <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
+      <div class="pr-cell pr-num pr-velbow">└</div>
+      <div class="pr-cell pr-prod">
+        ${v.image ? `<img class="pr-thumb" src="${esc(v.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(v.sku)}</span>
+          <span class="pr-pstock">${v.stock} in stock</span>
+        </div>
+        <button type="button" class="pr-vx" data-vx="${esc(v.sku)}" title="Detach — ${esc(v.sku)} goes back to its own row">✕</button>
+      </div>
+      ${chCells(v)}
+    </div>`);
+      }
+      parts.push(`
+    <div class="pr-vfoot">
+      <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
+      ${p.suggest ? `<span class="pr-vsuglead">Suggested from the naming:</span>${sugHtml(p)}` : ''}
+    </div>`);
+    } else if (!vars.length && p.suggest && !q) {
+      parts.push(`
+    <div class="pr-vfoot pr-vfoot-sug">
+      <span class="pr-vsuglead">Variations? Suggested from the naming:</span>${sugHtml(p)}
+    </div>`);
+    }
+    return parts.join('');
   }).join('');
   for (const el of $('prBody').querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
 }
@@ -6528,9 +6578,107 @@ $('prBody').addEventListener('click', (e) => {
       .then(r => { if (!r.ok && r.error) toast(r.error); });
     return;
   }
+  const vt = e.target.closest('.pr-vartog');
+  if (vt) {
+    const k = vt.dataset.vt.toUpperCase();
+    if (prExpanded.has(k)) prExpanded.delete(k); else prExpanded.add(k);
+    prRender();
+    return;
+  }
+  const vx = e.target.closest('.pr-vx');
+  if (vx) {
+    api.pricingGroupRemove(vx.dataset.vx).then(r => {
+      if (!r.ok) { toast(r.error || 'Could not detach.'); return; }
+      toast(`${vx.dataset.vx} is back on its own row`);
+      enterPricing();
+    });
+    return;
+  }
+  const va = e.target.closest('.pr-varadd');
+  if (va) { prVarPickOpen(va); return; }
+  const vs = e.target.closest('.pr-vsadd');
+  if (vs) {
+    api.pricingGroupAdd(vs.dataset.vp, vs.dataset.vc).then(r => {
+      if (!r.ok) { toast(r.error || 'Could not group.'); return; }
+      prExpanded.add(vs.dataset.vp.toUpperCase());
+      toast(`${vs.dataset.vc} grouped under ${vs.dataset.vp} — synced to every desktop`);
+      enterPricing();
+    });
+    return;
+  }
+  const vi = e.target.closest('.pr-vsign');
+  if (vi) {
+    api.pricingGroupIgnore(vi.dataset.vp, vi.dataset.vc).then(r => {
+      if (!r.ok) { toast(r.error || 'Could not save that.'); return; }
+      enterPricing();
+    });
+    return;
+  }
   const add = e.target.closest('.pr-add');
   if (add) prPickOpen(add);
 });
+
+// + variation: an anchored picker over the FULL inventory (any SKU can be
+// a variation — the naming convention only suggests, never restricts)
+async function prVarPickOpen(btn) {
+  prPickClose();
+  const parent = btn.dataset.va;
+  if (!parent || !prData) return;
+  const grouped = new Set();
+  for (const p of prData.products || []) {
+    for (const v of p.variations || []) grouped.add(String(v.sku).toUpperCase());
+  }
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Group a variation under <span class="mono">${esc(parent)}</span></div>
+    <input class="input mono prpick-in" type="text" placeholder="Search inventory SKUs…" autocomplete="off" spellcheck="false" />
+    <div class="prpick-list"><p class="dlg-note">Loading the inventory…</p></div>
+    <div class="prpick-foot">Any inventory SKU can attach · ✕ on its row detaches it again</div>`;
+  document.body.appendChild(pop);
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + 340 > window.innerHeight ? `${Math.max(8, r.top - 346)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const input = pop.querySelector('.prpick-in');
+  const listEl = pop.querySelector('.prpick-list');
+  input.focus();
+  await ensureInventory();
+  if (!prPickEl) return;
+  const parentU = parent.toUpperCase();
+  const pool = (recvItems || []).filter(i => i.sku
+    && String(i.sku).toUpperCase() !== parentU
+    && !grouped.has(String(i.sku).toUpperCase()));
+  const renderList = () => {
+    const q = input.value.trim();
+    const hits = pool.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
+    listEl.innerHTML = hits.length
+      ? hits.map(i => `
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}">
+          <span class="mono">${esc(i.sku)}</span>
+          <span class="prpick-title">${esc(i.title || '')}</span>
+        </button>`).join('')
+      : `<p class="dlg-note">${q ? 'No inventory SKU matches.' : 'Nothing to attach.'}</p>`;
+  };
+  renderList();
+  input.addEventListener('input', renderList);
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); prPickClose(); } });
+  listEl.addEventListener('click', async (ev) => {
+    const opt = ev.target.closest('.prpick-opt');
+    if (!opt) return;
+    opt.disabled = true;
+    const res = await api.pricingGroupAdd(parent, opt.dataset.sku);
+    if (!res.ok) { opt.disabled = false; toast(res.error || 'Could not group.'); return; }
+    prPickClose();
+    prExpanded.add(parentU);
+    toast(`${opt.dataset.sku} grouped under ${parent} — synced to every desktop`);
+    enterPricing();
+  });
+}
+
+// the background stored-price fill finished a batch — repaint quietly
+api.on('pricing:refreshed', () => { if (activePage === 'pricing') enterPricing(); });
 
 /* price history: the centered popup */
 async function prHistLoad() {
@@ -8239,7 +8387,7 @@ function renderEbayForm() {
   // the app CSP strips style attributes from injected HTML — thumbnails are
   // painted via CSSOM right after render (owner hit blank thumbs 2026-08-13)
   $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button><button class="cp" data-shotc="${i}" title="Copy this photo (with its edits) — then paste with Ctrl+V straight into eBay's photo box">⧉</button></span>`).join("")
     + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
     + `<button class="ebay-addbtn eb-m0" id="ebShotAdd">add photos</button>`
     + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint eb-fullrow">✎ edits bake into the exported photos</span>` : "");
@@ -8431,6 +8579,23 @@ $("ebShots").addEventListener("click", async (e) => {
   if (e.target.closest("#ebShotQr") && ebCur) { ebOpenQr(); return; }
   const x = e.target.closest("[data-shotx]");
   if (x && ebCur) { e.stopPropagation(); ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); return; }
+  // copy one photo (edits baked) onto the clipboard — pasting with Ctrl+V
+  // into eBay's photo box uploads it without exporting files (owner
+  // 2026-09-18). Clipboards hold one image, so it goes photo by photo.
+  const cp = e.target.closest("[data-shotc]");
+  if (cp && ebCur) {
+    e.stopPropagation();
+    const p = ebCur.photos[Number(cp.dataset.shotc)];
+    if (!p) return;
+    try {
+      const baked = (await ebBakePhotos([p]))[0];
+      const res = await api.copyImage(typeof baked === "string" ? { path: baked } : { dataUrl: baked.dataUrl });
+      toast(res && res.ok ? "Photo copied — paste it into eBay's photo box with Ctrl+V (⌘V on the Mac)" : (res && res.error) || "Could not copy the photo.");
+    } catch (err) {
+      toast(`Could not copy the photo: ${err.message}`);
+    }
+    return;
+  }
   const th = e.target.closest("[data-shoti]");
   if (th && ebCur) ebEditOpen(Number(th.dataset.shoti));
 });

@@ -34,6 +34,7 @@ const EVENTS = [
   'returns:syncChanged',
   'stock:imgInherited',
   'update:available',
+  'pricing:refreshed',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -71,6 +72,10 @@ contextBridge.exposeInMainWorld('api', {
   pricingSet: (payload) => ipcRenderer.invoke('pricing:set', payload),
   pricingHistory: () => ipcRenderer.invoke('pricing:history'),
   pricingRevert: (id) => ipcRenderer.invoke('pricing:revert', { id }),
+  pricingGroupAdd: (parent, child) => ipcRenderer.invoke('pricing:groupAdd', { parent, child }),
+  pricingGroupRemove: (child) => ipcRenderer.invoke('pricing:groupRemove', { child }),
+  pricingGroupIgnore: (parent, child) => ipcRenderer.invoke('pricing:groupIgnore', { parent, child }),
+  copyImage: (payload) => ipcRenderer.invoke('util:copyImage', payload),
   updateInstall: () => ipcRenderer.invoke('update:install'),
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),

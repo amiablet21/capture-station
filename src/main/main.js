@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell, WebContentsView, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell, WebContentsView, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -1059,6 +1059,51 @@ function savePriceSnap(snap) {
 // writes these, only watches (owner 2026-09-18 — ~140 items enrolled)
 function priceFluctuates(source) { return /walmart/i.test(String(source || '')); }
 
+/* ---- variation groups (owner 2026-09-18): condition SKUs (OPEN-BOX-…,
+   USED-…) grouped under their New product on the Pricing tab. Grouping is
+   MANUAL — the naming convention only suggests. An op log (add / remove /
+   ignore) rides the shared folder so groups match on every desktop. */
+function priceGroupPath() { return path.join(app.getPath('userData'), 'price-groups.json'); }
+function loadPriceGroups() {
+  try { const j = JSON.parse(fs.readFileSync(priceGroupPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+function priceGroupLog(partial) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    ...partial, // op 'add' | 'remove' | 'ignore', parent, child
+  };
+  try { fs.writeFileSync(priceGroupPath(), JSON.stringify([entry, ...loadPriceGroups()].slice(0, 5000))); } catch { /* best effort */ }
+  try { retsync.appendAux('pricegroups', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+// replay the op log oldest-first: the newest op on a child wins, so a
+// remove on one desktop undoes an add from another regardless of arrival
+function priceGroupState() {
+  const seen = new Set();
+  const ops = [];
+  let aux = [];
+  try { aux = retsync.readAux('pricegroups'); } catch { aux = []; }
+  for (const e of [...aux, ...loadPriceGroups()]) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    seen.add(e.id);
+    ops.push(e);
+  }
+  ops.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  const parentOf = {}; // CHILD (upper) -> parent sku as written
+  const ignored = new Set(); // 'PARENT|CHILD' upper — dismissed suggestions
+  for (const op of ops) {
+    const c = String(op.child || '').toUpperCase();
+    const pair = `${String(op.parent || '').toUpperCase()}|${c}`;
+    if (op.op === 'add') { parentOf[c] = op.parent; ignored.delete(pair); }
+    else if (op.op === 'remove') delete parentOf[c];
+    else if (op.op === 'ignore') ignored.add(pair);
+  }
+  return { parentOf, ignored };
+}
+
 async function runOrderImport() {
   const cfg = config.load();
   if (cfg.captureOnly || !(cfg.orderImport && cfg.orderImport.enabled)) return;
@@ -1893,6 +1938,49 @@ function registerIpc() {
      channel price records. */
   let pricingCache = { at: 0, data: null };
 
+  // stored channel-price records (what Linnworks' price sync would push).
+  // The scan feed rarely carries prices, so these fill the blanks; fetched
+  // slowly in the background one item at a time, kept for 12 hours.
+  const chPricePath = () => path.join(app.getPath('userData'), 'channel-prices.json');
+  let chPrices = null; // { stockItemId: { at, prices: { 'SRC|SUB': n } } }
+  const loadChPrices = () => {
+    if (chPrices) return chPrices;
+    try { chPrices = JSON.parse(fs.readFileSync(chPricePath(), 'utf8')) || {}; }
+    catch { chPrices = {}; }
+    return chPrices;
+  };
+  const saveChPrices = () => {
+    try { fs.writeFileSync(chPricePath(), JSON.stringify(chPrices || {})); } catch { /* best effort */ }
+  };
+  let chPriceFillRunning = false;
+  async function fillStoredPrices(client, ids) {
+    if (chPriceFillRunning || !ids.length) return;
+    chPriceFillRunning = true;
+    try {
+      let filled = 0;
+      for (const id of ids) {
+        try {
+          const rows = await client.getChannelPrices(id);
+          const prices = {};
+          for (const r of rows || []) {
+            prices[`${String(r.source).toUpperCase()}|${String(r.subSource || '').toUpperCase()}`] = Number(r.price) || 0;
+          }
+          loadChPrices()[String(id)] = { at: Date.now(), prices };
+          filled++;
+          if (filled % 25 === 0) saveChPrices();
+        } catch { /* no records / transient — next refresh retries */ }
+        await new Promise(r => setTimeout(r, 120));
+      }
+      saveChPrices();
+      if (filled) {
+        pricingCache = { at: 0, data: null };
+        if (win && !win.isDestroyed()) win.webContents.send('pricing:refreshed');
+      }
+    } finally {
+      chPriceFillRunning = false;
+    }
+  }
+
   ipcMain.handle('pricing:list', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -1953,10 +2041,15 @@ function registerIpc() {
             products.set(String(inv.stockItemId), row);
           }
           const over = handSet[`${col.key}|${String(li.sku).toUpperCase()}`];
-          const price = li.price || over || Number(inv.retailPrice) || 0;
+          // feed price → newest hand-set → stored channel record → retail
+          const rec = loadChPrices()[String(inv.stockItemId)];
+          const stored = rec
+            ? (rec.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || rec.prices[`${col.key}|`] || 0)
+            : 0;
+          const price = li.price || over || stored || Number(inv.retailPrice) || 0;
           (row.channels[col.key] = row.channels[col.key] || []).push({
             csku: li.sku,
-            price: over && !li.price ? over : price,
+            price,
             approx: !li.price, // the feed didn't carry it: shown as ≈
             refId: li.channelRefId || '',
             sold: sales.units[String(li.sku).toUpperCase()] || 0,
@@ -1985,13 +2078,79 @@ function registerIpc() {
         }
       }
       savePriceSnap(snap);
+
+      // variation groups: grouped SKUs leave the top level and nest under
+      // their parent (owner 2026-09-18). A grouped SKU with no listings
+      // still shows — as a bare row with its stock and empty channels.
+      const groups = priceGroupState();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const rowBySku = new Map([...products.values()].map(r => [String(r.sku).toUpperCase(), r]));
+      const ensureRow = (skuU) => {
+        let row = rowBySku.get(skuU);
+        if (row) return row;
+        const inv = bySku.get(skuU);
+        if (!inv) return null; // gone from Linnworks — the group entry waits
+        row = { stockItemId: inv.stockItemId, sku: inv.sku, image: inv.image || '', stock: levelOf(inv), channels: {} };
+        products.set(String(inv.stockItemId), row);
+        rowBySku.set(skuU, row);
+        return row;
+      };
+      for (const [childU, parentSku] of Object.entries(groups.parentOf)) {
+        const parentRow = ensureRow(String(parentSku).toUpperCase());
+        const childRow = ensureRow(childU);
+        if (!parentRow || !childRow || parentRow === childRow) continue;
+        childRow.grouped = true;
+        (parentRow.variations = parentRow.variations || []).push(childRow);
+      }
+      for (const r of products.values()) {
+        if (r.variations) r.variations.sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
+      }
+
+      // naming-convention SUGGESTIONS (never auto-applied): condition SKUs
+      // whose stripped core is this product, plus the Returns condition
+      // mappings' targets. Add / Ignore lives in the renderer.
+      const coreIndex = new Map(); // CORE upper -> [inventory sku,...]
+      for (const it of items) {
+        const c = db.conditionOfSku(it.sku);
+        if (!c) continue;
+        const k = String(c.core).toUpperCase();
+        if (!coreIndex.has(k)) coreIndex.set(k, []);
+        coreIndex.get(k).push(it.sku);
+      }
+      const condMap = db.getConditionMap();
+      for (const row of products.values()) {
+        if (row.grouped) continue;
+        const selfU = String(row.sku).toUpperCase();
+        const grouped = new Set((row.variations || []).map(v => String(v.sku).toUpperCase()));
+        const cands = new Set(coreIndex.get(selfU) || []);
+        for (const t of Object.values(condMap[row.sku] || {})) if (t) cands.add(t);
+        const sug = [];
+        for (const s of cands) {
+          const u = String(s).toUpperCase();
+          if (u === selfU || grouped.has(u) || groups.parentOf[u]) continue;
+          if (groups.ignored.has(`${selfU}|${u}`)) continue;
+          if (!bySku.has(u)) continue;
+          sug.push(bySku.get(u).sku);
+          if (sug.length >= 3) break;
+        }
+        if (sug.length) row.suggest = sug;
+      }
+
       const out = {
         channels: columns,
-        products: [...products.values()].sort((a, b) =>
+        products: [...products.values()].filter(r => !r.grouped).sort((a, b) =>
           (b.stock - a.stock) || String(a.sku).localeCompare(String(b.sku))),
         salesSince: sales.since || '',
       };
       pricingCache = { at: Date.now(), data: out };
+
+      // top up the stored-price records in the background; when a batch
+      // lands the renderer hears 'pricing:refreshed' and repaints
+      const stale = [...products.values()]
+        .filter(r => { const rec = loadChPrices()[String(r.stockItemId)]; return !rec || Date.now() - rec.at > 12 * 3600 * 1000; })
+        .map(r => r.stockItemId);
+      fillStoredPrices(client, stale); // fire and forget — single-flight
+
       return { ok: true, ...out };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -2013,6 +2172,11 @@ function registerIpc() {
         source, subSource: subSource || '', channelSku, stockSku: stockSku || '',
         oldPrice: Number(old) || 0, newPrice: p,
       });
+      // the stored-record cache follows immediately — no 12h wait
+      const rec = loadChPrices()[String(stockItemId)] || (loadChPrices()[String(stockItemId)] = { at: 0, prices: {} });
+      rec.prices[`${String(source).toUpperCase()}|${String(subSource || '').toUpperCase()}`] = p;
+      rec.at = Date.now();
+      saveChPrices();
       pricingCache = { at: 0, data: null };
       return { ok: true, entry };
     } catch (e) {
@@ -2021,6 +2185,54 @@ function registerIpc() {
   });
 
   ipcMain.handle('pricing:history', () => ({ ok: true, entries: mergedPriceHist().slice(0, 200) }));
+
+  /* ---------- variation grouping (owner 2026-09-18): manual add/remove of
+     condition SKUs under a product; one level deep, never nested ---------- */
+  ipcMain.handle('pricing:groupAdd', (_e, { parent, child } = {}) => {
+    const p = String(parent || '').trim();
+    const c = String(child || '').trim();
+    if (!p || !c) return { ok: false, error: 'Missing SKU.' };
+    if (p.toUpperCase() === c.toUpperCase()) return { ok: false, error: 'A product cannot be its own variation.' };
+    const { parentOf } = priceGroupState();
+    if (parentOf[p.toUpperCase()]) return { ok: false, error: `${p} is itself a variation of ${parentOf[p.toUpperCase()]} — detach it there first.` };
+    if (Object.values(parentOf).some(x => String(x).toUpperCase() === c.toUpperCase())) {
+      return { ok: false, error: `${c} has variations of its own — detach those first.` };
+    }
+    priceGroupLog({ op: 'add', parent: p, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+  ipcMain.handle('pricing:groupRemove', (_e, { child } = {}) => {
+    const c = String(child || '').trim();
+    const { parentOf } = priceGroupState();
+    const par = parentOf[c.toUpperCase()];
+    if (!par) return { ok: false, error: `${c} is not grouped.` };
+    priceGroupLog({ op: 'remove', parent: par, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+  ipcMain.handle('pricing:groupIgnore', (_e, { parent, child } = {}) => {
+    const p = String(parent || '').trim();
+    const c = String(child || '').trim();
+    if (!p || !c) return { ok: false, error: 'Missing SKU.' };
+    priceGroupLog({ op: 'ignore', parent: p, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+
+  // copy a lister photo (edited pixels) onto the OS clipboard — paste it
+  // straight into eBay's photo box instead of exporting files (owner
+  // 2026-09-18). OS clipboards hold ONE image, so it is per-photo.
+  ipcMain.handle('util:copyImage', (_e, { path: p, dataUrl } = {}) => {
+    try {
+      const img = dataUrl ? nativeImage.createFromDataURL(String(dataUrl)) : nativeImage.createFromPath(String(p || ''));
+      if (!img || img.isEmpty()) return { ok: false, error: 'Could not read the image.' };
+      clipboard.writeImage(img);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
 
   /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
      to GitHub... install it here") — checks the latest GitHub release; one

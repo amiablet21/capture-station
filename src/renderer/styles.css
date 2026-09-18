@@ -1581,6 +1581,33 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-editwrap { display: inline-flex; }
 .pr-editin { width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-color: var(--accent); }
 
+/* variations (owner 2026-09-18): condition SKUs nested under the New row.
+   No condition chips — the SKU name already says it. */
+.pr-vartog { border: none; background: none; font: inherit; font-size: 11px; font-weight: 600; color: var(--accent-soft-text); padding: 2px 0 0; cursor: pointer; text-align: left; align-self: flex-start; white-space: nowrap; }
+.pr-vartog:hover { text-decoration: underline dotted; }
+.pr-varadd { border: none; background: none; font: inherit; font-size: 10.5px; color: var(--faint); padding: 2px 0 0; cursor: pointer; text-align: left; align-self: flex-start; opacity: 0; transition: opacity 0.12s; white-space: nowrap; }
+.pr-row:hover .pr-varadd, .pr-varadd-foot { opacity: 1; }
+.pr-varadd:hover { color: var(--accent-soft-text); }
+.pr-varadd-foot { border: 1px dashed var(--border); border-radius: var(--r-ctl); padding: 2px 8px; }
+.pr-varadd-foot:hover { border-color: var(--accent); }
+.pr-vrow { background: var(--surface-2); }
+.pr-vrow .pr-prod { position: relative; padding-left: 14px; }
+.pr-velbow { color: var(--faint); font-family: var(--mono); padding-left: 14px; }
+.pr-vrow .pr-thumb { width: 34px; height: 34px; }
+.pr-vx { position: absolute; top: 2px; right: 10px; border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0; transition: opacity 0.12s; }
+.pr-vrow:hover .pr-vx { opacity: 1; }
+.pr-vx:hover { color: var(--neg-text); }
+.pr-vfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.pr-vfoot-sug { background: none; padding-top: 2px; }
+.pr-vsuglead { font-size: 10.5px; color: var(--faint); font-style: italic; }
+.pr-vsug { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; }
+.pr-vsug .mono { font-size: 11px; color: var(--muted); }
+.pr-vsadd, .pr-vsign { font: inherit; font-size: 10px; font-weight: 600; border-radius: var(--r-ctl); padding: 1px 8px; cursor: pointer; }
+.pr-vsadd { border: 1px solid transparent; background: var(--accent-soft); color: var(--accent-soft-text); }
+.pr-vsadd:hover { border-color: var(--accent); }
+.pr-vsign { border: 1px dashed var(--border); background: none; color: var(--faint); }
+.pr-vsign:hover { color: var(--muted); }
+
 /* + channel SKU picker (anchored popover) */
 .prpick { position: fixed; width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16); z-index: 60; overflow: hidden; display: flex; flex-direction: column; }
 .prpick-head { font-size: 12px; color: var(--muted); padding: 10px 14px 8px; }
@@ -4132,6 +4159,10 @@ tr.unl-dim:hover td { opacity: 1; }
 .ebay-shot { position: relative; width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); background-size: cover; background-position: center; background-color: var(--surface-2); }
 .ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
 .ebay-shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+/* copy the photo to the clipboard for pasting into eBay (owner 2026-09-18) */
+.ebay-shot .cp { position: absolute; top: -6px; left: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 9px; border: 1px solid var(--border); cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.12s; }
+.ebay-shot:hover .cp { opacity: 1; }
+.ebay-shot .cp:hover { color: var(--accent-soft-text); border-color: var(--accent); }
 .ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); flex-wrap: wrap; }
 /* buttons never fold mid-word — a row too narrow wraps whole buttons
    instead (owner 2026-09-17: the upload button collapsed into a sliver
