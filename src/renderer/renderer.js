@@ -6425,6 +6425,7 @@ $('bulkRevGo').addEventListener('click', async () => {
 let prData = null;
 let prQ = '';
 const prExpanded = new Set(); // parent SKUs (upper) with the variations open
+let prJustOpened = null; // parent whose group should curtain down on this render
 const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
 const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
 
@@ -6513,6 +6514,12 @@ function prRender() {
       ${chCells(p)}
     </div>`];
     if (open) {
+      // curtain animation (owner-picked B, 2026-09-20): the group's rows sit
+      // in a 0fr→1fr grid wrapper; a just-toggled group starts folded and
+      // unrolls after render, groups already open render open with no motion
+      const justNow = prJustOpened === pU;
+      if (justNow) prJustOpened = null;
+      parts.push(`<div class="pr-vgroup${justNow ? '' : ' open'}" data-vg="${esc(pU)}"><div class="pr-vclip">`);
       for (const v of vars) {
         parts.push(`
     <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
@@ -6531,11 +6538,15 @@ function prRender() {
       parts.push(`
     <div class="pr-vfoot">
       <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
-    </div>`);
+    </div></div></div>`);
     }
     return parts.join('');
   }).join('');
   for (const el of $('prBody').querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
+  // unroll the group that was toggled open on this render (double rAF so the
+  // folded 0fr state paints first and the transition actually runs)
+  const fresh = $('prBody').querySelector('.pr-vgroup:not(.open)');
+  if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => fresh.classList.add('open')));
 }
 
 $('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
@@ -6662,8 +6673,20 @@ $('prBody').addEventListener('click', (e) => {
   const vt = e.target.closest('.pr-vartog');
   if (vt) {
     const k = vt.dataset.vt.toUpperCase();
-    if (prExpanded.has(k)) prExpanded.delete(k); else prExpanded.add(k);
-    prRender();
+    if (prExpanded.has(k)) {
+      // fold the curtain first, then re-render without the rows
+      prExpanded.delete(k);
+      const vg = $('prBody').querySelector(`.pr-vgroup[data-vg="${CSS.escape(k)}"]`);
+      if (vg) {
+        vt.innerHTML = vt.innerHTML.replace('▾', '▸'); // caret answers instantly
+        vg.classList.remove('open');
+        setTimeout(prRender, 360);
+      } else prRender();
+    } else {
+      prExpanded.add(k);
+      prJustOpened = k;
+      prRender();
+    }
     return;
   }
   const vx = e.target.closest('.pr-vx');

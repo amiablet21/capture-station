@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Capacity siblings — 3 options</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA;
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; background: var(--canvas); color: var(--text); padding: 28px 36px 64px; }
+  h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: var(--muted); margin-bottom: 28px; max-width: 760px; }
+  .opt { margin-bottom: 40px; max-width: 940px; }
+  .opt-label { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .opt-label b { font-size: 13px; }
+  .opt-label span { font-size: 11.5px; color: var(--muted); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .search { width: 220px; font-size: 12px; color: var(--faint); border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 5px 10px; }
+  .sortset { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); overflow: hidden; }
+  .sortset button { font-family: var(--font); font-size: 11px; font-weight: 600; padding: 3px 13px; border: none; background: none; color: var(--muted); cursor: pointer; }
+  .sortset button.on { background: var(--text); color: #fff; }
+  .sortlead { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+
+  .tbl { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  .row { display: grid; grid-template-columns: 44px 300px 1fr 1fr; align-items: center; border-bottom: 1px solid var(--border); }
+  .row > div { padding: 8px 12px; }
+  .row:last-child { border-bottom: none; }
+  .num { color: var(--faint); font-size: 12px; }
+  .prod { display: flex; align-items: center; gap: 10px; }
+  .thumb { width: 34px; height: 34px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); flex: 0 0 auto; display: grid; place-items: center; color: var(--faint); font-size: 15px; }
+  .prodtxt { display: flex; flex-direction: column; line-height: 1.45; }
+  .psku { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .pstock { font-size: 11px; color: var(--muted); }
+  .chcell { font-size: 11.5px; color: var(--faint); }
+  .vartog { font-family: var(--font); font-size: 11px; font-weight: 600; color: var(--accent-soft-text); background: none; border: none; padding: 0; cursor: pointer; width: fit-content; }
+  .vartog:hover { text-decoration: underline; }
+  .elbow { color: var(--faint); font-size: 12px; text-align: right; }
+  .vrow { background: var(--surface-2); }
+  .capbadge { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; padding: 0 7px; border-radius: 999px; background: var(--badge-blue-bg); color: var(--badge-blue-text); margin-left: 8px; }
+
+  /* A — family rail */
+  .fam .row { position: relative; }
+  .fam .row.in-fam::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: 0.55; }
+  .fam .row.in-fam.fam-first::before { border-top-right-radius: 3px; }
+  .fam .row.in-fam.fam-last::before { border-bottom-right-radius: 3px; }
+
+  /* B — sibling strip */
+  .sibstrip { display: flex; align-items: center; gap: 8px; padding: 6px 12px 7px 56px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .sibstrip-lead { font-size: 11px; color: var(--muted); }
+  .sibchip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 1px 11px; cursor: pointer; font-family: var(--font); }
+  .sibchip .mono { font-size: 11px; }
+  .sibchip .u { color: var(--muted); font-size: 10.5px; }
+  .sibchip:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .sibrow { background: none; }
+  .sibrow .psku { font-weight: 600; }
+  .sibnote { font-size: 10px; color: var(--faint); }
+  .sib-x { font-size: 11px; border: none; background: none; color: var(--faint); cursor: pointer; margin-left: auto; }
+  .sib-x:hover { color: var(--muted); }
+
+  /* C — family headers */
+  .famhead { display: flex; align-items: center; gap: 10px; padding: 5px 12px 5px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11px; }
+  .famhead b { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em; }
+  .famhead .caps { color: var(--muted); }
+  .famhead .tot { margin-left: auto; color: var(--faint); font-size: 10.5px; }
+</style>
+</head>
+<body>
+
+<h1>Capacity siblings on the Pricing tab</h1>
+<div class="sub">The list already sorts by most stock — which scatters families: X400-<b>128GB</b>-GRAY sits at #5 while X400-<b>256GB</b>-GRAY is far below. Three ways to bring the other capacities right under, with their own variations. Siblings come from the SKU naming (same model + color, different GB).</div>
+
+<!-- ======= A ======= -->
+<div class="opt">
+  <div class="opt-label"><b>A — Family sort</b><span>a sort switch in the toolbar; "Family" keeps the biggest-stock order but pulls each product's other capacities directly under it (emerald rail marks the family)</span></div>
+  <div class="toolbar">
+    <span class="search">Search SKU…</span>
+    <span class="sortlead">Sort</span>
+    <span class="sortset"><button>Stock</button><button class="on">Family</button></span>
+  </div>
+  <div class="tbl fam">
+    <div class="row in-fam fam-first">
+      <div class="num">5</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY<span class="capbadge">128GB</span></span><span class="pstock">582 in stock</span><button class="vartog">▸ 1 variation · 8 units</button></div></div>
+      <div class="chcell">X400-128GB-BLACK-INTL-VER</div><div class="chcell">X400-128GB-GRAY</div>
+    </div>
+    <div class="row in-fam fam-last">
+      <div class="num"></div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-256GB-GRAY<span class="capbadge">256GB</span></span><span class="pstock">210 in stock</span><button class="vartog">▾ 1 variation · 6 units</button></div></div>
+      <div class="chcell">X400-256GB-GRAY-2</div><div class="chcell">not listed</div>
+    </div>
+    <div class="row vrow">
+      <div class="elbow">└</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">OPEN-BOX-X400-256GB-GRAY</span><span class="pstock">6 in stock</span></div></div>
+      <div class="chcell">not listed</div><div class="chcell">OPEN-BOX-X400-256GB-GRAY</div>
+    </div>
+    <div class="row">
+      <div class="num">6</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY-CASE</span><span class="pstock">332 in stock</span></div></div>
+      <div class="chcell">X400-CASE-GRAY-2</div><div class="chcell">X400-128GB-GRAY-CASE</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======= B ======= -->
+<div class="opt">
+  <div class="opt-label"><b>B — Sibling chips, pull down on demand</b><span>stock sort stays; a quiet strip under the row names the other capacities — clicking a chip drops that sibling (and its variations) in right here, ✕ sends it back</span></div>
+  <div class="tbl">
+    <div class="row">
+      <div class="num">5</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY</span><span class="pstock">582 in stock</span><button class="vartog">▸ 1 variation · 8 units</button></div></div>
+      <div class="chcell">X400-128GB-BLACK-INTL-VER</div><div class="chcell">X400-128GB-GRAY</div>
+    </div>
+    <div class="sibstrip">
+      <span class="sibstrip-lead">⧉ other capacities:</span>
+      <button class="sibchip"><span class="mono">256GB</span><span class="u">· 210 units — shown below</span></button>
+      <button class="sib-x" title="Tuck the sibling back to its own place in the list">✕ tuck back</button>
+    </div>
+    <div class="row sibrow">
+      <div class="num"></div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-256GB-GRAY</span><span class="pstock">210 in stock · <span class="sibnote">pulled down from #23</span></span><button class="vartog">▾ 1 variation · 6 units</button></div></div>
+      <div class="chcell">X400-256GB-GRAY-2</div><div class="chcell">not listed</div>
+    </div>
+    <div class="row vrow">
+      <div class="elbow">└</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">OPEN-BOX-X400-256GB-GRAY</span><span class="pstock">6 in stock</span></div></div>
+      <div class="chcell">not listed</div><div class="chcell">OPEN-BOX-X400-256GB-GRAY</div>
+    </div>
+    <div class="row">
+      <div class="num">6</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY-CASE</span><span class="pstock">332 in stock</span></div></div>
+      <div class="chcell">X400-CASE-GRAY-2</div><div class="chcell">X400-128GB-GRAY-CASE</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======= C ======= -->
+<div class="opt">
+  <div class="opt-label"><b>C — Family headers</b><span>always grouped: a slim header names the model and its capacities, members sit under it, families ordered by total stock</span></div>
+  <div class="tbl">
+    <div class="famhead"><b>X400 · GRAY</b><span class="caps">128GB + 256GB</span><span class="tot">792 units across the family</span></div>
+    <div class="row">
+      <div class="num">5</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY</span><span class="pstock">582 in stock</span><button class="vartog">▸ 1 variation · 8 units</button></div></div>
+      <div class="chcell">X400-128GB-BLACK-INTL-VER</div><div class="chcell">X400-128GB-GRAY</div>
+    </div>
+    <div class="row">
+      <div class="num"></div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-256GB-GRAY</span><span class="pstock">210 in stock</span><button class="vartog">▸ 1 variation · 6 units</button></div></div>
+      <div class="chcell">X400-256GB-GRAY-2</div><div class="chcell">not listed</div>
+    </div>
+    <div class="famhead"><b>X400 · GRAY · CASE</b><span class="caps">128GB</span><span class="tot">332 units</span></div>
+    <div class="row">
+      <div class="num">6</div>
+      <div class="prod"><div class="thumb">▦</div><div class="prodtxt"><span class="psku">X400-128GB-GRAY-CASE</span><span class="pstock">332 in stock</span></div></div>
+      <div class="chcell">X400-CASE-GRAY-2</div><div class="chcell">X400-128GB-GRAY-CASE</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

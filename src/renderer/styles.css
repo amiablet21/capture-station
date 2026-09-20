@@ -1598,6 +1598,11 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-vrow:hover .pr-vx { opacity: 1; }
 .pr-vx:hover { color: var(--neg-text); }
 .pr-vfoot { display: flex; align-items: flex-start; gap: 14px; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+/* the variation group curtains open and closed (owner-picked animation B
+   of pr-var-dropdown.html, 2026-09-20) */
+.pr-vgroup { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 340ms var(--ease); }
+.pr-vgroup.open { grid-template-rows: 1fr; }
+.pr-vclip { min-height: 0; overflow: hidden; }
 /* ✦ suggestions: one quiet chip on the row + a popover (owner-approved
    Option A of pr-suggest-variants.html, 2026-09-20 — no "Add both") */
 .pr-vschip { font: inherit; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; border: none; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; }

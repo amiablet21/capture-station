@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview with Top sellers — full page mockup (flip A/B/C, awaiting owner's pick)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-soft: #FBF3DB; --amber-text: #956400;
+    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* mockup-only: the style picker strip */
+  .pickstrip { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; background: #2F3437; color: #fff; padding: 8px 22px; font-size: 11.5px; }
+  .pickstrip b { font-weight: 700; }
+  .pickstrip .pbtn { font-family: inherit; font-size: 11px; font-weight: 600; color: #D5D3CE; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  .pickstrip .pbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 14px 22px 26px; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .head .d { font-size: 11.5px; color: var(--faint); }
+  .ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .rbtn.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .ranges.mini .rbtn { padding: 3px 10px; font-size: 10.5px; }
+
+  .customrow { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .customrow[hidden] { display: none; }
+  .customrow input { font-family: var(--mono); font-size: 11px; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: #fff; width: 88px; }
+  .customrow .go { font-size: 11px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; padding: 4px 12px; font-family: inherit; cursor: pointer; }
+
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 10px; margin-bottom: 10px; }
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+  .panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+
+  .today { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .today .big { font-family: var(--mono); font-size: 38px; font-weight: 700; line-height: 1.1; }
+  .today .delta { font-size: 10.5px; color: var(--accent-deep); }
+  .mkrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
+  .mkrow .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .mkrow .n { font-size: 12px; font-weight: 600; }
+  .mkrow .v { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+  .share { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; }
+  .share span { display: block; }
+
+  .chartbox { min-height: 190px; }
+  .chartbox svg { display: block; width: 100%; }
+  .chartbox text { font-family: var(--mono); }
+  .hovslice { cursor: crosshair; }
+  .tt { animation: ttPop .18s var(--ease); }
+  @keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .mcard { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 120ms var(--ease); }
+  .mcard:hover { background: var(--surface-2); }
+  .mcard .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .mcard .chev { margin-left: auto; font-size: 10px; }
+  .mcard .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
+  .mcard .s { font-size: 10.5px; color: var(--muted); }
+  .big.r { color: var(--neg-text); } .big.a { color: var(--amber-text); } .big.g { color: var(--accent-deep); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-2); }
+  td.rank { width: 26px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: right; padding-right: 2px; }
+  td.sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #1F6C9F; }
+  td.qty { font-family: var(--mono); font-size: 12px; font-weight: 700; text-align: right; width: 60px; }
+  td.barcell { width: 34%; }
+  .bar { height: 7px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+  .topsellers { margin-top: 10px; animation: ttPop .18s var(--ease); }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; }
+</style>
+</head>
+<body>
+<!-- MOCKUP ONLY: dark strip picks the table style; it is not part of the app -->
+<div class="pickstrip"><b>Mockup — pick a table style:</b>
+  <button class="pbtn on" data-v="A">A · bars, shares the page filter</button>
+  <button class="pbtn" data-v="B">B · own filter + custom dates</button>
+  <button class="pbtn" data-v="C">C · two columns × 15, plain</button>
+  <span style="margin-left:auto;color:#A5A29C">everything below is the real Overview layout</span>
+</div>
+
+<div class="topbar"><div class="tabs">
+  <button class="tab on">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Pricing</button><button class="tab">Returns</button><button class="tab">Listings</button>
+</div></div>
+<div class="wrap">
+  <div class="head"><h1>Overview</h1><span class="d">Friday, September 18</span>
+    <span class="ranges" id="ranges">
+      <button class="rbtn" data-r="Day">Day</button>
+      <button class="rbtn on" data-r="Month">Month</button>
+      <button class="rbtn" data-r="Year">Year</button>
+      <button class="rbtn" data-r="Custom" id="pageCustomBtn">Custom</button>
+    </span>
+    <span class="customrow" id="pageCustom" hidden>
+      <input type="text" value="2026-09-01" /> <span>→</span> <input type="text" value="2026-09-18" />
+      <button class="go">Apply</button>
+    </span>
+  </div>
+
+  <div class="grid">
+    <div class="panel today">
+      <div><div class="k">Orders today</div><div class="big">47</div><div class="delta">▲ <b class="mono">+9</b> vs yesterday</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="mkrow"><span class="dot" style="background:var(--wm)"></span><span class="n">Walmart</span><span class="v">31</span></div>
+        <div class="mkrow"><span class="dot" style="background:var(--eb)"></span><span class="n">eBay</span><span class="v">11</span></div>
+        <div class="mkrow"><span class="dot" style="background:var(--tm)"></span><span class="n">Temu</span><span class="v">5</span></div>
+      </div>
+      <div class="share"><span style="flex:31;background:var(--wm)"></span><span style="flex:11;background:var(--eb)"></span><span style="flex:5;background:var(--tm)"></span></div>
+    </div>
+    <div class="panel">
+      <h4>Sales<span class="sub" id="chartSub"></span></h4>
+      <div class="chartbox" id="chart"></div>
+    </div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div class="mcard"><div class="k">Missed sales<span class="chev">▾</span></div><div class="big r">$10,010</div><div class="s">4 SKUs at zero that were selling</div></div>
+    <div class="mcard"><div class="k">Buy soon<span class="chev">▾</span></div><div class="big a">9 SKUs</div><div class="s">run out inside the 10-day lead time</div></div>
+    <div class="mcard"><div class="k">Send to WFS<span class="chev">▾</span></div><div class="big g">520 units</div><div class="s">6 fast sellers · last shipment Sep 12</div></div>
+  </div>
+
+  <!-- NEW: Top sellers panel, below the money cards -->
+  <div class="panel topsellers" id="topsellers"></div>
+</div>
+
+<script>
+// ---- sample sales curve (same as approved overview-v2) ----
+const monthVals = [31,35,29,38,33,41,37,44,39,36,43,47,41,45,40,48,44,38,46,49,43,47,45,41,48,44,46,43,45,47];
+const monthTips = monthVals.map((_, i) => { if (i === 29) return 'Today'; const day = 20 + i; return day <= 31 ? 'Aug ' + day : 'Sep ' + (day - 31); });
+const monthLabels = monthVals.map((_, i) => i===0?'Aug 20':i===7?'Aug 27':i===14?'Sep 3':i===21?'Sep 10':i===29?'Today':'');
+const DATA = {
+  Day:   { vals: [2,5,9,14,20,26,31,36,41,45,47], labels: ['8a','','10a','','12p','','2p','','4p','','now'], tips: ['8 am','9 am','10 am','11 am','12 pm','1 pm','2 pm','3 pm','4 pm','5 pm','now'], sub: 'today · orders as they come in' },
+  Month: { vals: monthVals, labels: monthLabels, tips: monthTips, sub: 'last 30 days · orders per day' },
+  Year:  { vals: [520,610,580,700,760,820,905,880,940,1010,970,1180], labels: ['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'], tips: ["Oct '25","Nov '25","Dec '25","Jan '26","Feb '26","Mar '26","Apr '26","May '26","Jun '26","Jul '26","Aug '26","Sep '26"], sub: 'last 12 months · orders per month' },
+  Custom:{ vals: [38,46,49,43,47,45,41,48,44,46,43,45,47,44,42,46,48,45], labels: ['Sep 1','','','','','','','Sep 8','','','','','','','Sep 15','','','Sep 18'], tips: Array.from({length:18},(_,i)=>'Sep '+(i+1)), sub: 'Sep 1 – Sep 18 · orders per day' }
+};
+let range = 'Month', hoverI = null;
+
+function smoothPath(pts) {
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    d += ` C ${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+function drawChart() {
+  const { vals, labels, tips, sub } = DATA[range];
+  document.getElementById('chartSub').textContent = sub;
+  const W = 680, H = 190, padL = 36, padR = 48, padT = 14, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const rawMax = Math.max(...vals);
+  const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
+  const max = Math.ceil(rawMax / unit) * unit;
+  const X = i => padL + (i / (vals.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  const pts = vals.map((v, i) => [Math.round(X(i)), Math.round(Y(v))]);
+  const line = smoothPath(pts);
+  const area = line + ` L ${pts[pts.length-1][0]},${padT+ih} L ${pts[0][0]},${padT+ih} Z`;
+  let out = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
+  [0,.5,1].forEach(f => { const v = Math.round(max*f), y = Y(v);
+    out += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL-7}" y="${y+3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`; });
+  labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H-6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
+  out += `<path d="${area}" fill="url(#g)"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
+  const last = pts[pts.length-1];
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0]+8}" y="${last[1]+3}" font-size="10" font-weight="700" fill="#047857">${vals[vals.length-1]}</text>`;
+  if (hoverI != null && hoverI < vals.length) {
+    const hx = pts[hoverI][0], hy = pts[hoverI][1];
+    const txt = `${tips[hoverI]} · ${vals[hoverI].toLocaleString()} orders`;
+    const tw = txt.length * 5.9 + 18;
+    const tx = Math.min(Math.max(hx, padL + tw/2), W - padR + 40 - tw/2);
+    const ty = Math.max(hy - 38, 2);
+    out += `<line x1="${hx}" y1="${padT}" x2="${hx}" y2="${padT+ih}" stroke="#D8D6D0" stroke-dasharray="3 3"/>`
+        + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
+        + `<g class="tt"><rect x="${tx-tw/2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty+14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
+  }
+  const slice = iw / (vals.length - 1);
+  vals.forEach((v, i) => { out += `<rect class="hovslice" data-i="${i}" x="${X(i)-slice/2}" y="0" width="${slice}" height="${H}" fill="transparent"/>`; });
+  const box = document.getElementById('chart');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+  box.querySelectorAll('.hovslice').forEach(r => r.addEventListener('mouseenter', () => { hoverI = +r.dataset.i; drawChart(); }));
+  box.querySelector('svg').addEventListener('mouseleave', () => { hoverI = null; drawChart(); });
+}
+
+// ---- top sellers: sample data per range ----
+const SKUS = ['S25-FE-256GB-ICEBLUE','S24-128GB-ONYXBLACK','IP15-128GB-BLUE','PIX8A-128GB-OBSIDIAN','S23-FE-128GB-MINT','IP14-128GB-MIDNIGHT','MOTO-G84-256GB-BLUE','S25-256GB-NAVY','IP13-128GB-STARLIGHT','PIX7A-128GB-SEA','S22-128GB-PINKGOLD','IP12-64GB-BLACK','MOTO-EDGE50-256GB','PIX9-128GB-PORCELAIN','S21-FE-128GB-GRAPHITE'];
+const TOPQ = { Day: [9,7,6,5,4,4,3,3,2,2,2,1,1,1,1], Month: [86,70,57,50,43,38,31,27,22,18,15,12,10,8,6], Year: [612,540,498,431,380,342,296,255,214,186,150,121,98,77,60], Custom: [54,46,39,33,29,24,20,17,14,11,9,7,5,4,3] };
+const SUBTXT = { Day: 'Friday, September 18 · units sold', Month: 'September · units sold', Year: 'last 12 months · units sold', Custom: 'Sep 1 – Sep 18 · units sold' };
+let variant = 'A', tsRange = 'Month'; // B keeps its own range; A/C follow the page
+
+function miniRanges(current, withCustom) {
+  const rs = ['Day','Month','Year'].concat(withCustom ? ['Custom'] : []);
+  return `<span class="ranges mini" data-mini>` + rs.map(r =>
+    `<button class="rbtn${r===current?' on':''}" data-tr="${r}">${r}</button>`).join('') + `</span>`;
+}
+function rowsHtml(list, opts) {
+  const max = list[0].q;
+  return list.map((e, i) => {
+    const rank = opts.medals && i < 3 ? ['🥇','🥈','🥉'][i] : (i + 1);
+    const bar = opts.bars ? `<td class="barcell"><div class="bar"><span style="width:${Math.round(e.q/max*100)}%"></span></div></td>` : '';
+    return `<tr><td class="rank">${rank}</td><td class="sku">${e.sku}</td>${bar}<td class="qty">${e.q}</td></tr>`;
+  }).join('');
+}
+function drawTopSellers() {
+  const r = (variant === 'B') ? tsRange : range === 'Custom' ? 'Custom' : range;
+  const qs = TOPQ[r];
+  const list = SKUS.map((sku, i) => ({ sku, q: qs[i] }));
+  const box = document.getElementById('topsellers');
+  const head3 = `<thead><tr><th style="width:26px"></th><th>SKU</th><th class="rr">Qty</th></tr></thead>`;
+  if (variant === 'A') {
+    box.innerHTML = `<h4>Top sellers<span class="sub">${SUBTXT[r]} · follows the filter above</span></h4>
+      <table><thead><tr><th></th><th>SKU</th><th></th><th class="rr">Qty</th></tr></thead>
+      <tbody>${rowsHtml(list.slice(0, 10), { bars: true })}</tbody></table>`;
+  } else if (variant === 'B') {
+    const custom = r === 'Custom'
+      ? `<span class="sub customrow"><input type="text" value="2026-09-01" /> <span>→</span> <input type="text" value="2026-09-18" /> <button class="go">Apply</button></span>`
+      : `<span class="sub">${SUBTXT[r]}</span>`;
+    box.innerHTML = `<h4>Top sellers ${miniRanges(r, true)} ${custom}</h4>
+      <table>${head3}<tbody>${rowsHtml(list.slice(0, 10), { medals: true })}</tbody></table>`;
+    box.querySelector('[data-mini]').addEventListener('click', e => {
+      const b = e.target.closest('[data-tr]'); if (!b) return;
+      tsRange = b.dataset.tr; drawTopSellers();
+    });
+  } else {
+    box.innerHTML = `<h4>Top sellers<span class="sub">${SUBTXT[r]} · follows the filter above</span></h4>
+      <div class="twocol">
+        <table>${head3}<tbody>${rowsHtml(list.slice(0, 8), {})}</tbody></table>
+        <table>${head3}<tbody>${list.slice(8, 15).map((e, i) =>
+          `<tr><td class="rank">${i + 9}</td><td class="sku">${e.sku}</td><td class="qty">${e.q}</td></tr>`).join('')}</tbody></table>
+      </div>`;
+  }
+}
+
+// page range buttons (Custom shows the date row — variant A/C behavior)
+document.getElementById('ranges').addEventListener('click', e => {
+  const b = e.target.closest('.rbtn'); if (!b) return;
+  range = b.dataset.r; hoverI = null;
+  document.querySelectorAll('#ranges .rbtn').forEach(x => x.classList.toggle('on', x === b));
+  document.getElementById('pageCustom').hidden = (range !== 'Custom');
+  drawChart(); drawTopSellers();
+});
+// mockup style picker
+document.querySelector('.pickstrip').addEventListener('click', e => {
+  const b = e.target.closest('.pbtn'); if (!b) return;
+  variant = b.dataset.v;
+  document.querySelectorAll('.pbtn').forEach(x => x.classList.toggle('on', x === b));
+  drawTopSellers();
+});
+drawChart(); drawTopSellers();
+</script>
+</body>
+</html>
