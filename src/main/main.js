@@ -1762,7 +1762,7 @@ function registerIpc() {
     } else {
       const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
       if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
-      url = tpl.replace('{sku}', encodeURIComponent(String(sku)));
+      url = tpl.replaceAll('{sku}', encodeURIComponent(String(sku)));
     }
     if (external || cfg.captureOnly) {
       shell.openExternal(url);

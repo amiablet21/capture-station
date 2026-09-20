@@ -119,8 +119,14 @@ const DEFAULTS = {
   },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
+  // Walmart: the legacy manage-items URL now redirects into the new Catalog
+  // page, which restores the PREVIOUS session's search text on top of the
+  // redirect (owner-seen 2026-09-20: stale searchQuery + new SKU mixed).
+  // Deep-link the new page directly, exactly as its own SKU search writes
+  // the URL: blank searchQuery (kills the restored text) + a double-encoded
+  // productOfferId filter carrying the SKU.
   listingUrlTemplates: {
-    walmart: 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}',
+    walmart: 'https://seller.walmart.com/catalog/list-items?searchQuery=&filters=%257B%2522productOfferId%2522%253A%2522{sku}%2522%257D',
     ebay: 'https://www.ebay.com/sh/lst/active?keyword={sku}&source=filterbar&action=search',
     temu: '', // Temu seller search URL unknown yet — clicking copies the SKU
   },
@@ -214,6 +220,13 @@ function load() {
   if (stored.listingUrlTemplates
       && stored.listingUrlTemplates.ebay === 'https://www.ebay.com/sh/lst/active?q={sku}') {
     stored.listingUrlTemplates.ebay = DEFAULTS.listingUrlTemplates.ebay;
+  }
+  // migration: Walmart's manage-items redirect started resurrecting the
+  // previous search over the SKU the app passed — saved configs still on
+  // the legacy URL move to the direct Catalog deep link (2026-09-20)
+  if (stored.listingUrlTemplates
+      && stored.listingUrlTemplates.walmart === 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}') {
+    stored.listingUrlTemplates.walmart = DEFAULTS.listingUrlTemplates.walmart;
   }
   // migration: eBay lister profiles saved before the real policy names were
   // set on eBay hold empty strings — empty means "never configured", so the
