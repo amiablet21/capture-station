@@ -6425,7 +6425,6 @@ $('bulkRevGo').addEventListener('click', async () => {
 let prData = null;
 let prQ = '';
 const prExpanded = new Set(); // parent SKUs (upper) with the variations open
-let prJustOpened = null; // parent whose group should curtain down on this render
 const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
 const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
 
@@ -6442,6 +6441,55 @@ async function enterPricing(force) {
 }
 
 function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channels || []).length}, minmax(240px, 1.15fr))`; }
+
+// one product's channel cells — shared by parent and variation rows, each
+// with its own top-seller highlight (module-level so the variations toggle
+// can build ONE group without re-rendering the whole table)
+function prChCells(p) {
+  const cols = (prData && prData.channels) || [];
+  const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
+  return cols.map((c, ci) => {
+    const lines = p.channels[c.key] || [];
+    const inner = lines.map(l => `
+        <div class="pr-line">
+          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
+          <span class="pr-sold ${l.sold > 0 && l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>
+          ${c.fluctuates
+    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">≈ ${prMoney(l.price)}</span>`
+    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
+          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
+        </div>`).join('');
+    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+        <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
+      </div>`;
+  }).join('');
+}
+
+// the inside of one variation group (the rows + the footer), without the
+// curtain wrapper — prRender and the toggle share it
+function prGroupInner(p) {
+  const parts = [];
+  for (const v of p.variations || []) {
+    parts.push(`
+    <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
+      <div class="pr-cell pr-num pr-velbow">└</div>
+      <div class="pr-cell pr-prod">
+        ${v.image ? `<img class="pr-thumb" src="${esc(v.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(v.sku)}</span>
+          <span class="pr-pstock">${v.stock} in stock</span>
+        </div>
+        <button type="button" class="pr-vx" data-vx="${esc(v.sku)}" title="Detach — ${esc(v.sku)} goes back to its own row">✕</button>
+      </div>
+      ${prChCells(v)}
+    </div>`);
+  }
+  parts.push(`
+    <div class="pr-vfoot">
+      <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
+    </div>`);
+  return parts.join('');
+}
 
 function prRender() {
   if (!prData) return;
@@ -6462,27 +6510,6 @@ function prRender() {
     $('prBody').innerHTML = `<p class="dlg-note pr-note">${q ? 'No SKUs match.' : 'No linked listings yet — link channel SKUs in Mappings and refresh.'}</p>`;
     return;
   }
-
-  // one product's channel cells — shared by parent and variation rows,
-  // each with its own top-seller highlight
-  const chCells = (p) => {
-    const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
-    return cols.map((c, ci) => {
-      const lines = p.channels[c.key] || [];
-      const inner = lines.map(l => `
-        <div class="pr-line">
-          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
-          <span class="pr-sold ${l.sold > 0 && l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>
-          ${c.fluctuates
-    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">≈ ${prMoney(l.price)}</span>`
-    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
-          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
-        </div>`).join('');
-      return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
-        <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
-      </div>`;
-    }).join('');
-  };
 
   // one quiet chip on the row; the details live in a popover (owner picked
   // this over the stacked lines, 2026-09-20)
@@ -6511,42 +6538,17 @@ function prRender() {
           ${sugChip(p)}
         </div>
       </div>
-      ${chCells(p)}
+      ${prChCells(p)}
     </div>`];
     if (open) {
-      // curtain animation (owner-picked B, 2026-09-20): the group's rows sit
-      // in a 0fr→1fr grid wrapper; a just-toggled group starts folded and
-      // unrolls after render, groups already open render open with no motion
-      const justNow = prJustOpened === pU;
-      if (justNow) prJustOpened = null;
-      parts.push(`<div class="pr-vgroup${justNow ? '' : ' open'}" data-vg="${esc(pU)}"><div class="pr-vclip">`);
-      for (const v of vars) {
-        parts.push(`
-    <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
-      <div class="pr-cell pr-num pr-velbow">└</div>
-      <div class="pr-cell pr-prod">
-        ${v.image ? `<img class="pr-thumb" src="${esc(v.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
-        <div class="pr-prodtxt">
-          <span class="mono pr-psku">${esc(v.sku)}</span>
-          <span class="pr-pstock">${v.stock} in stock</span>
-        </div>
-        <button type="button" class="pr-vx" data-vx="${esc(v.sku)}" title="Detach — ${esc(v.sku)} goes back to its own row">✕</button>
-      </div>
-      ${chCells(v)}
-    </div>`);
-      }
-      parts.push(`
-    <div class="pr-vfoot">
-      <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
-    </div></div></div>`);
+      // groups render open with no motion here — the curtain only plays on
+      // a toggle click, which splices the one group in place (lag fix
+      // 2026-09-20: a full re-render before the animation stuttered)
+      parts.push(`<div class="pr-vgroup open" data-vg="${esc(pU)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
     }
     return parts.join('');
   }).join('');
   for (const el of $('prBody').querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
-  // unroll the group that was toggled open on this render (double rAF so the
-  // folded 0fr state paints first and the transition actually runs)
-  const fresh = $('prBody').querySelector('.pr-vgroup:not(.open)');
-  if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => fresh.classList.add('open')));
 }
 
 $('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
@@ -6672,20 +6674,29 @@ $('prBody').addEventListener('click', (e) => {
   }
   const vt = e.target.closest('.pr-vartog');
   if (vt) {
+    // the curtain splices ONE group in or out — never a full re-render,
+    // which made the animation stutter on big tables (owner 2026-09-20)
     const k = vt.dataset.vt.toUpperCase();
+    const parentRow = vt.closest('.pr-row');
     if (prExpanded.has(k)) {
-      // fold the curtain first, then re-render without the rows
       prExpanded.delete(k);
       const vg = $('prBody').querySelector(`.pr-vgroup[data-vg="${CSS.escape(k)}"]`);
-      if (vg) {
-        vt.innerHTML = vt.innerHTML.replace('▾', '▸'); // caret answers instantly
-        vg.classList.remove('open');
-        setTimeout(prRender, 360);
-      } else prRender();
+      if (!vg) { prRender(); return; }
+      vt.innerHTML = vt.innerHTML.replace('▾', '▸'); // caret answers instantly
+      vg.classList.remove('open');
+      vg.addEventListener('transitionend', () => vg.remove(), { once: true });
+      setTimeout(() => vg.remove(), 420); // in case transitionend never fires
     } else {
+      const p = ((prData && prData.products) || []).find(x => String(x.sku).toUpperCase() === k);
+      if (!p || !parentRow) return;
       prExpanded.add(k);
-      prJustOpened = k;
-      prRender();
+      vt.innerHTML = vt.innerHTML.replace('▸', '▾');
+      parentRow.insertAdjacentHTML('afterend',
+        `<div class="pr-vgroup" data-vg="${esc(k)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
+      const vg = parentRow.nextElementSibling;
+      for (const el of vg.querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
+      // double rAF: the folded 0fr state paints first, then the unroll plays
+      requestAnimationFrame(() => requestAnimationFrame(() => vg.classList.add('open')));
     }
     return;
   }

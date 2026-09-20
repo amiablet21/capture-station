@@ -1981,12 +1981,21 @@ function registerIpc() {
     }
   }
 
-  ipcMain.handle('pricing:list', async (_e, { force } = {}) => {
+  // the finished table also lands on disk: a fresh app start paints the
+  // last known prices instantly (stale: true) while the real rebuild runs
+  // behind it and 'pricing:refreshed' swaps the fresh one in (owner asked
+  // why prices "load like this all the time", 2026-09-20)
+  const pricingSnapPath = () => path.join(app.getPath('userData'), 'pricing-cache.json');
+  let pricingRebuilding = false;
+  const kickPricingRebuild = () => {
+    if (pricingRebuilding) return;
+    pricingRebuilding = true;
+    buildPricingData().then((res) => {
+      if (res && res.ok && win && !win.isDestroyed()) win.webContents.send('pricing:refreshed');
+    }).finally(() => { pricingRebuilding = false; });
+  };
+  async function buildPricingData(force) {
     const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
-    if (!force && pricingCache.data && Date.now() - pricingCache.at < 5 * 60 * 1000) {
-      return { ok: true, cached: true, ...pricingCache.data };
-    }
     try {
       const client = new LinnworksClient(cfg.linnworks);
       // one column per Source; the first channel of each source carries the
@@ -2156,6 +2165,7 @@ function registerIpc() {
         salesSince: sales.since || '',
       };
       pricingCache = { at: Date.now(), data: out };
+      try { fs.writeFileSync(pricingSnapPath(), JSON.stringify(out)); } catch { /* best effort */ }
 
       // top up the stored-price records in the background; when a batch
       // lands the renderer hears 'pricing:refreshed' and repaints
@@ -2168,6 +2178,24 @@ function registerIpc() {
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  }
+
+  ipcMain.handle('pricing:list', async (_e, { force } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (!force && pricingCache.data && Date.now() - pricingCache.at < 5 * 60 * 1000) {
+      return { ok: true, cached: true, ...pricingCache.data };
+    }
+    // cold start: the disk snapshot paints at once, the rebuild follows
+    if (!force && !pricingCache.data) {
+      let snap = null;
+      try { snap = JSON.parse(fs.readFileSync(pricingSnapPath(), 'utf8')); } catch { /* first ever run */ }
+      if (snap && Array.isArray(snap.products) && snap.products.length) {
+        kickPricingRebuild();
+        return { ok: true, stale: true, ...snap };
+      }
+    }
+    return buildPricingData(force);
   });
 
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
