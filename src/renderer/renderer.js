@@ -6483,12 +6483,12 @@ function prRender() {
     }).join('');
   };
 
-  // stacked, one suggestion per line (owner 2026-09-18)
-  const sugHtml = (p, lead) => `
-      <div class="pr-vsugwrap"><span class="pr-vsuglead">${lead}</span>${(p.suggest || []).map(s => `
-      <span class="pr-vsug"><span class="mono">${esc(s)}</span>
-        <button type="button" class="pr-vsadd" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Group ${esc(s)} under ${esc(p.sku)}">Add</button>
-        <button type="button" class="pr-vsign" data-vp="${esc(p.sku)}" data-vc="${esc(s)}" title="Stop suggesting this pairing">Ignore</button></span>`).join('')}</div>`;
+  // one quiet chip on the row; the details live in a popover (owner picked
+  // this over the stacked lines, 2026-09-20)
+  const sugChip = (p) => {
+    const n = (p.suggest || []).length;
+    return n ? `<button type="button" class="pr-vschip" data-vsp="${esc(p.sku)}" title="Condition SKUs that look like ${esc(p.sku)} — click to review">✦ ${n} possible variation${n === 1 ? '' : 's'}</button>` : '';
+  };
 
   $('prBody').innerHTML = rows.map((p, n) => {
     const vars = p.variations || [];
@@ -6507,6 +6507,7 @@ function prRender() {
           ${vars.length
     ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${open ? '▾' : '▸'} ${vars.length} variation${vars.length === 1 ? '' : 's'} · ${vunits} unit${vunits === 1 ? '' : 's'}</button>`
     : `<button type="button" class="pr-varadd" data-va="${esc(p.sku)}" title="Group a condition SKU (open box / used / …) under this product">+ variation</button>`}
+          ${sugChip(p)}
         </div>
       </div>
       ${chCells(p)}
@@ -6530,12 +6531,6 @@ function prRender() {
       parts.push(`
     <div class="pr-vfoot">
       <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
-      ${p.suggest ? sugHtml(p, 'Suggested from the naming:') : ''}
-    </div>`);
-    } else if (!vars.length && p.suggest && !q) {
-      parts.push(`
-    <div class="pr-vfoot pr-vfoot-sug">
-      ${sugHtml(p, 'Variations? Suggested from the naming:')}
     </div>`);
     }
     return parts.join('');
@@ -6682,27 +6677,75 @@ $('prBody').addEventListener('click', (e) => {
   }
   const va = e.target.closest('.pr-varadd');
   if (va) { prVarPickOpen(va); return; }
-  const vs = e.target.closest('.pr-vsadd');
-  if (vs) {
-    api.pricingGroupAdd(vs.dataset.vp, vs.dataset.vc).then(r => {
-      if (!r.ok) { toast(r.error || 'Could not group.'); return; }
-      prExpanded.add(vs.dataset.vp.toUpperCase());
-      toast(`${vs.dataset.vc} grouped under ${vs.dataset.vp} — synced to every desktop`);
-      enterPricing();
-    });
-    return;
-  }
-  const vi = e.target.closest('.pr-vsign');
-  if (vi) {
-    api.pricingGroupIgnore(vi.dataset.vp, vi.dataset.vc).then(r => {
-      if (!r.ok) { toast(r.error || 'Could not save that.'); return; }
-      enterPricing();
-    });
-    return;
-  }
+  const vsc = e.target.closest('.pr-vschip');
+  if (vsc) { prSugPopOpen(vsc); return; }
   const add = e.target.closest('.pr-add');
   if (add) prPickOpen(add);
 });
+
+// the ✦ chip: an anchored popover over the naming suggestions — Add groups
+// that SKU, ✕ mutes the pairing, the footer link mutes all of them at once
+function prSugPopOpen(btn) {
+  prPickClose();
+  const parent = btn.dataset.vsp;
+  const p = ((prData && prData.products) || []).find(x => String(x.sku) === parent);
+  const sugs = (p && p.suggest) || [];
+  if (!sugs.length) return;
+  const condBadge = (s) => {
+    if (/^OPEN.?BOX/i.test(s)) return '<span class="prsug-cond prsug-ob">Open box</span>';
+    if (/^USED/i.test(s)) return '<span class="prsug-cond prsug-used">Used</span>';
+    if (/^SCRAP/i.test(s)) return '<span class="prsug-cond prsug-scrap">Scrap</span>';
+    return '';
+  };
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Condition SKUs that look like <span class="mono">${esc(parent)}</span></div>
+    ${sugs.map(s => `
+    <div class="prsug-row" data-s="${esc(s)}">
+      ${condBadge(s)}
+      <span class="mono prsug-sku">${esc(s)}</span>
+      <button type="button" class="prsug-add" title="Group ${esc(s)} under ${esc(parent)}">Add</button>
+      <button type="button" class="prsug-x" title="Stop suggesting this pairing">✕</button>
+    </div>`).join('')}
+    <div class="prpick-foot prsug-foot"><button type="button" class="prsug-never">never suggest for this product</button></div>`;
+  document.body.appendChild(pop);
+  const h = pop.offsetHeight || 200;
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + h + 12 > window.innerHeight ? `${Math.max(8, r.top - h - 6)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const gone = (row) => { row.remove(); if (!pop.querySelector('.prsug-row')) prPickClose(); };
+  pop.addEventListener('click', async (ev) => {
+    if (ev.target.closest('.prsug-never')) {
+      ev.target.closest('.prsug-never').disabled = true;
+      for (const el of pop.querySelectorAll('.prsug-row')) {
+        await api.pricingGroupIgnore(parent, el.dataset.s).catch(() => { /* best effort */ });
+      }
+      prPickClose();
+      enterPricing();
+      return;
+    }
+    const row = ev.target.closest('.prsug-row');
+    if (!row) return;
+    const addBtn = ev.target.closest('.prsug-add');
+    if (addBtn) {
+      addBtn.disabled = true;
+      const res = await api.pricingGroupAdd(parent, row.dataset.s);
+      if (!res.ok) { addBtn.disabled = false; toast(res.error || 'Could not group.'); return; }
+      prExpanded.add(parent.toUpperCase());
+      toast(`${row.dataset.s} grouped under ${parent} — synced to every desktop`);
+      gone(row);
+      enterPricing();
+    } else if (ev.target.closest('.prsug-x')) {
+      const res = await api.pricingGroupIgnore(parent, row.dataset.s);
+      if (!res.ok) { toast(res.error || 'Could not save that.'); return; }
+      gone(row);
+      enterPricing();
+    }
+  });
+}
 
 // + variation: an anchored picker over the FULL inventory (any SKU can be
 // a variation — the naming convention only suggests, never restricts)

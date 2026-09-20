@@ -1598,17 +1598,24 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-vrow:hover .pr-vx { opacity: 1; }
 .pr-vx:hover { color: var(--neg-text); }
 .pr-vfoot { display: flex; align-items: flex-start; gap: 14px; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.pr-vfoot-sug { background: none; padding-top: 2px; }
-/* suggestions stack, one per line (owner 2026-09-18) */
-.pr-vsugwrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.pr-vsuglead { font-size: 10.5px; color: var(--faint); font-style: italic; }
-.pr-vsug { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
-.pr-vsug .mono { font-size: 11px; color: var(--muted); }
-.pr-vsadd, .pr-vsign { font: inherit; font-size: 10px; font-weight: 600; border-radius: var(--r-ctl); padding: 1px 8px; cursor: pointer; }
-.pr-vsadd { border: 1px solid transparent; background: var(--accent-soft); color: var(--accent-soft-text); }
-.pr-vsadd:hover { border-color: var(--accent); }
-.pr-vsign { border: 1px dashed var(--border); background: none; color: var(--faint); }
-.pr-vsign:hover { color: var(--muted); }
+/* ✦ suggestions: one quiet chip on the row + a popover (owner-approved
+   Option A of pr-suggest-variants.html, 2026-09-20 — no "Add both") */
+.pr-vschip { font: inherit; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; border: none; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; }
+.pr-vschip:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.prsug-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px dashed var(--border); }
+.prsug-sku { flex: 1; font-size: 12px; }
+.prsug-cond { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.prsug-ob { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.prsug-used { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.prsug-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.prsug-add { font: inherit; font-size: 11px; font-weight: 600; border: none; border-radius: var(--r-ctl); padding: 3px 12px; background: var(--accent); color: #fff; cursor: pointer; }
+.prsug-add:hover { background: var(--accent-hover); }
+.prsug-add:disabled { opacity: 0.5; cursor: default; }
+.prsug-x { font: inherit; font-size: 12px; border: none; background: none; color: var(--faint); cursor: pointer; padding: 2px 4px; }
+.prsug-x:hover { color: var(--neg-text); }
+.prsug-foot { display: flex; justify-content: flex-end; padding: 6px 14px; }
+.prsug-never { font: inherit; font-size: 10.5px; border: none; background: none; color: var(--faint); cursor: pointer; }
+.prsug-never:hover { color: var(--muted); text-decoration: underline; }
 
 /* + channel SKU picker (anchored popover) */
 .prpick { position: fixed; width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16); z-index: 60; overflow: hidden; display: flex; flex-direction: column; }
