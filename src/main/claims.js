@@ -2,8 +2,12 @@
 // Claim photos: a tiny LAN-only upload server. The warehouse phone scans a QR
 // shown by the app, shoots, and each photo is POSTed straight here — landing as
 // plain files in Documents\Capture Station\claim photos, named
-// PO#_MMDD-HHMM_n.jpg. Nothing is saved on the phone, nothing leaves the LAN.
+// PO#_MMDD-HHMM_n.png. Nothing is saved on the phone, nothing leaves the LAN.
 // Files older than KEEP_DAYS are removed when the app starts.
+//
+// Walmart's case upload takes the photos as PNGs, capped at 25 MB COMBINED,
+// so case photos are saved as downscaled PNGs and each PO's folder total is
+// held under that budget (see casePng below).
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -13,6 +17,13 @@ const crypto = require('node:crypto');
 
 const MAX_BYTES = 15 * 1024 * 1024;
 const KEEP_DAYS = 5;
+
+// Walmart case-image rules: PNG format, 25 MB for ALL of a case's images
+// combined. One PO = one case, so the budget is enforced per PO.
+const CASE_BUDGET = 25 * 1024 * 1024;
+const CASE_PHOTO_SHARE = Math.floor(CASE_BUDGET / 10); // soft target: ~10 shots fit a case
+const CASE_MAX_EDGE = 1600; // long edge of a saved case PNG (first attempt)
+const CASE_MIN_EDGE = 800;  // floor — smaller and damage/serial detail is gone
 
 function sanitizePo(po) {
   return String(po || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
@@ -119,12 +130,25 @@ function jpegOrientation(buf) {
 }
 
 // JPEG/WebP -> upright PNG via Electron's decoder (EXIF rotation applied);
-// null if the format is beyond it
-function toPng(buf) {
+// null if the format is beyond it. maxEdge (optional) downscales so the long
+// edge fits — PNG is lossless, so pixel count is the only size lever there is.
+function toPng(buf, maxEdge) {
   try {
     const { nativeImage } = require('electron');
-    const img = nativeImage.createFromBuffer(buf);
+    let img = nativeImage.createFromBuffer(buf);
     if (img.isEmpty()) return null;
+    if (maxEdge) {
+      const { width, height } = img.getSize();
+      const long = Math.max(width, height);
+      if (long > maxEdge) {
+        const f = maxEdge / long;
+        img = img.resize({
+          width: Math.max(1, Math.round(width * f)),
+          height: Math.max(1, Math.round(height * f)),
+          quality: 'best',
+        });
+      }
+    }
     const o = jpegOrientation(buf);
     if (o !== 3 && o !== 6 && o !== 8) return img.toPNG();
     const { width: w, height: h } = img.getSize();
@@ -148,6 +172,34 @@ function toPng(buf) {
   } catch {
     return null;
   }
+}
+
+// bytes already stored for this PO — its photos share one Walmart case upload
+function caseBytes(dir, po) {
+  let total = 0;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return 0; }
+  for (const n of names) {
+    if (!n.startsWith(`${po}_`)) continue;
+    try { total += fs.statSync(path.join(dir, n)).size; } catch { /* already gone */ }
+  }
+  return total;
+}
+
+// A full-res camera JPEG re-encoded to lossless PNG lands at 10-20 MB — two
+// shots would spend Walmart's whole 25 MB case budget. So case photos start
+// at CASE_MAX_EDGE and shrink until the PNG fits its share of what's left of
+// the PO's budget (or hits the detail floor; the hard cap is checked by the
+// caller). Returns null for formats Electron can't decode (HEIC).
+function casePng(buf, remaining) {
+  const target = Math.min(remaining, CASE_PHOTO_SHARE);
+  let edge = CASE_MAX_EDGE;
+  let png = toPng(buf, edge);
+  while (png && png.length > target && edge > CASE_MIN_EDGE) {
+    edge = Math.max(CASE_MIN_EDGE, Math.round(edge * 0.8));
+    png = toPng(buf, edge);
+  }
+  return png;
 }
 
 function tokenOk(token, t) {
@@ -486,12 +538,17 @@ function start(opts) {
         let buf = Buffer.concat(chunks);
         let ext = magicExt(buf);
         if (!ext) { res.writeHead(415, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"not an image"}'); return; }
-        // owner wants uniform PNGs in the folder: re-encode whatever the
-        // phone sent (JPEG, usually). Formats Electron can't decode (HEIC)
-        // keep their real extension rather than being lost.
-        if (ext !== '.png') {
-          const png = toPng(buf);
-          if (png) { buf = png; ext = '.png'; }
+        // Walmart wants case images as PNGs, 25 MB combined per case: save a
+        // downscaled PNG sized to what's left of this PO's budget. Formats
+        // Electron can't decode (HEIC) keep their real extension rather than
+        // being lost.
+        const used = caseBytes(dir, po);
+        const png = casePng(buf, Math.max(0, CASE_BUDGET - used));
+        if (png) { buf = png; ext = '.png'; }
+        if (used + buf.length > CASE_BUDGET) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: `this PO's photos already fill Walmart's 25 MB case limit (${(used / 1048576).toFixed(1)} MB stored) — delete some from the claim photos folder first` }));
+          return;
         }
         const name = `${po}_${stamp(new Date())}_${nextIndex(dir, po)}${ext}`;
         try {
@@ -527,4 +584,4 @@ function start(opts) {
   });
 }
 
-module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation } };
+module.exports = { start, _test: { sanitizePo, magicExt, nextIndex, cleanupOld, stamp, todayCount, jpegOrientation, caseBytes, casePng, CASE_BUDGET } };
