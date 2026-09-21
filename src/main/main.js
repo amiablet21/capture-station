@@ -4739,6 +4739,12 @@ function registerIpc() {
   // catalog — the caller additionally restricts the sweep to sync-off rows,
   // because the scan feed lags and a listing created minutes ago would
   // otherwise vanish from the popup while very much alive.
+  // Linnworks' catalog scans FLICKER: a snapshot can miss a listing that is
+  // alive and Published (X13364GBSILVER-INTL vanished from one Walmart scan
+  // and returned in the next, owner-chased 2026-09-21). One absent snapshot
+  // is never proof — a row is "gone" only when TWO independent feed
+  // downloads ≥15 minutes apart both lack it.
+  const chGoneStrikes = new Map(); // 'chanKey|SKU' -> { firstAt, feedAt }
   ipcMain.handle('stock:channelSkusGone', async (_e, { records }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -4747,7 +4753,7 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const channels = await client.getMappingChannels();
-      const feeds = new Map(); // channel key -> Set of catalog SKUs, or null when unreadable
+      const feeds = new Map(); // channel key -> { skus: Set|null, at }
       const gone = [];
       for (const r of list) {
         const ch = channels.find(c => c.source === r.source && c.subSource === r.subSource);
@@ -4755,6 +4761,7 @@ function registerIpc() {
         const key = `${ch.id}|${ch.source}|${ch.subSource}`;
         if (!feeds.has(key)) {
           let skus = null;
+          let at = 0;
           try {
             let hit = mappingCache.get(key);
             if (!hit || Date.now() - hit.at > 10 * 60 * 1000) {
@@ -4762,13 +4769,19 @@ function registerIpc() {
               mappingCache.set(key, hit); // the mapping dialog reuses it
             }
             skus = new Set(hit.items.map(i => String(i.sku).toUpperCase()));
+            at = hit.at;
           } catch { /* feed unreachable: keep every row of this channel */ }
-          feeds.set(key, skus);
+          feeds.set(key, { skus, at });
         }
-        const skus = feeds.get(key);
-        if (skus && skus.size && !skus.has(String(r.sku).toUpperCase())) {
-          gone.push({ sku: r.sku, source: r.source, subSource: r.subSource });
-        }
+        const f = feeds.get(key);
+        if (!f.skus || !f.skus.size) continue;
+        const u = String(r.sku).toUpperCase();
+        const gk = `${key}|${u}`;
+        if (f.skus.has(u)) { chGoneStrikes.delete(gk); continue; } // it's back: clean slate
+        const strike = chGoneStrikes.get(gk);
+        if (!strike) { chGoneStrikes.set(gk, { firstAt: Date.now(), feedAt: f.at }); continue; }
+        if (f.at === strike.feedAt || Date.now() - strike.firstAt < 15 * 60 * 1000) continue;
+        gone.push({ sku: r.sku, source: r.source, subSource: r.subSource });
       }
       return { ok: true, gone };
     } catch (e) {
