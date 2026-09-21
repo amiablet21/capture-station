@@ -5408,8 +5408,7 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
   // only one editor open: any other cell mid-edit falls back to display
   const other = $('retPastBox').querySelector('.ret-ein, .ret-emenu');
   if (other) renderRetLog();
-  const stray = document.querySelector('.ret-notebox');
-  if (stray) stray.remove();
+  for (const stray of document.querySelectorAll('.ret-notebox, .ret-emenu-pop')) stray.remove();
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
   if (field === 'note') { retBeginNoteEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
@@ -5483,19 +5482,33 @@ function retBeginNoteEdit(td, entry) {
 // the condition cell edits through a small menu of the four pills
 function retBeginCondEdit(td, entry) {
   if (!entry.i.sku) return; // a PO-only row has no line to grade
-  td.innerHTML = `<div class="ret-emenu">${RET_CONDS.map(c => `
+  // the menu FLOATS over the table (owner-picked pop-over, 2026-09-21) —
+  // packed into the cell it stretched the whole row open
+  const r = td.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'ret-emenu ret-emenu-pop';
+  menu.innerHTML = RET_CONDS.map(c => `
     <button type="button" class="ret-emi ${entry.i.condition === c.key ? 'is-sel' : ''}" data-cond="${c.key}">
-      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('')}</div>`;
-  const menu = td.querySelector('.ret-emenu');
-  const away = (e) => {
-    if (e.target.closest('.ret-emenu')) return;
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
+  document.body.appendChild(menu);
+  menu.style.left = `${Math.max(8, Math.min(r.left - 4, window.innerWidth - menu.offsetWidth - 8))}px`;
+  const below = r.bottom + 4;
+  menu.style.top = `${below + menu.offsetHeight + 8 > window.innerHeight ? Math.max(8, r.top - menu.offsetHeight - 4) : below}px`;
+  td.classList.add('is-econd'); // the cell keeps its edit ring while the menu floats
+  const cleanup = () => {
+    menu.remove();
+    td.classList.remove('is-econd');
     document.removeEventListener('mousedown', away, true);
+  };
+  const away = (e) => {
+    if (e.target.closest('.ret-emenu-pop')) return;
+    cleanup();
     renderRetLog();
   };
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cond]');
     if (!b) return;
-    document.removeEventListener('mousedown', away, true);
+    cleanup();
     if (b.dataset.cond === entry.i.condition) { renderRetLog(); return; }
     retCondEdit(entry, b.dataset.cond);
   });
@@ -7702,21 +7715,27 @@ let comboHl = -1;
 function comboFilter(q) {
   if (!recvItems) return [];
   q = q.trim().toLowerCase();
-  const out = [];
+  if (!q) return recvItems.slice(0, 50);
+  // ranked, closest first (owner 2026-09-21: typing the exact SKU listed it
+  // LAST): exact SKU > SKU prefix > SKU contains > separator-blind SKU
+  // ("x133 64gb gray" finds SM-X133-64GB-GRAY, owner 2026-09-17) > title/
+  // barcode. Shorter SKUs win ties so the plain SKU beats its -CASE cousin.
+  const scored = [];
   for (const it of recvItems) {
-    if (!q
-      || it.sku.toLowerCase().includes(q)
-      || (it.title || '').toLowerCase().includes(q)
+    const sku = it.sku.toLowerCase();
+    let rank;
+    if (sku === q) rank = 0;
+    else if (sku.startsWith(q)) rank = 1;
+    else if (sku.includes(q)) rank = 2;
+    else if (skuMatch(it.sku, q)) rank = 3;
+    else if ((it.title || '').toLowerCase().includes(q)
       || (it.barcode || '').toLowerCase().includes(q)
-      // separator-blind, same rule as the stock search (owner 2026-09-17:
-      // "I don't want to have to write the dash"): "x133 64gb gray" finds
-      // SM-X133-64GB-GRAY
-      || skuMatch(it.sku, q) || skuMatch(it.title || '', q)) {
-      out.push(it);
-      if (out.length >= 50) break;
-    }
+      || skuMatch(it.title || '', q)) rank = 4;
+    else continue;
+    scored.push({ it, rank });
   }
-  return out;
+  scored.sort((a, b) => a.rank - b.rank || a.it.sku.length - b.it.sku.length || a.it.sku.localeCompare(b.it.sku));
+  return scored.slice(0, 50).map(s => s.it);
 }
 
 function openCombo() {

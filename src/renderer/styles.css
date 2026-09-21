@@ -2060,11 +2060,11 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
    reduced-motion block sits earlier in the file and would lose the cascade. */
 @media (prefers-reduced-motion: no-preference) {
   .ws-emenu { animation: condmenuin 160ms var(--ease); }
-  .ws-emenu .ret-emi, .ret-ecell .ret-emenu .ret-emi { animation: condmiin 180ms var(--ease) backwards; }
-  .ws-emenu .ret-emi:nth-child(2), .ret-ecell .ret-emenu .ret-emi:nth-child(2) { animation-delay: 22ms; }
-  .ws-emenu .ret-emi:nth-child(3), .ret-ecell .ret-emenu .ret-emi:nth-child(3) { animation-delay: 44ms; }
-  .ws-emenu .ret-emi:nth-child(4), .ret-ecell .ret-emenu .ret-emi:nth-child(4) { animation-delay: 66ms; }
-  .ws-emenu .ret-emi:nth-child(5), .ret-ecell .ret-emenu .ret-emi:nth-child(5) { animation-delay: 88ms; }
+  .ws-emenu .ret-emi, .ret-emenu-pop .ret-emi { animation: condmiin 180ms var(--ease) backwards; }
+  .ws-emenu .ret-emi:nth-child(2), .ret-emenu-pop .ret-emi:nth-child(2) { animation-delay: 22ms; }
+  .ws-emenu .ret-emi:nth-child(3), .ret-emenu-pop .ret-emi:nth-child(3) { animation-delay: 44ms; }
+  .ws-emenu .ret-emi:nth-child(4), .ret-emenu-pop .ret-emi:nth-child(4) { animation-delay: 66ms; }
+  .ws-emenu .ret-emi:nth-child(5), .ret-emenu-pop .ret-emi:nth-child(5) { animation-delay: 88ms; }
 }
 @keyframes condmenuin {
   from { opacity: 0; transform: translateY(-5px) scale(0.96); }
@@ -2101,8 +2101,11 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ret-notein { border: none; outline: none; background: transparent; resize: none; font-family: var(--font); font-size: 12.5px; color: var(--text); line-height: 1.45; min-height: 56px; }
 .ret-notehint { font-size: 10px; color: var(--faint); text-align: right; }
 /* the condition cell edits through a compact 4-pill menu, right in the cell */
-.ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
+/* the condition menu floats over the table (owner-picked pop-over,
+   2026-09-21) — in the cell it stretched the row */
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }
+.ret-emenu-pop { position: fixed; z-index: 70; min-width: 168px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 28px rgba(47, 52, 55, 0.16); padding: 4px; transform-origin: top left; animation: condmenuin 140ms var(--ease); }
+.ret-ecell.is-econd { box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface) !important; }
 .ret-emi {
   display: flex;
   align-items: center;
