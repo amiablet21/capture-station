@@ -2158,6 +2158,30 @@ function registerIpc() {
         if (sug.length) row.suggest = sug.slice(0, 3);
       }
 
+      // the catalog scans FLICKER — a snapshot can miss a listing that is
+      // alive and Published (chased live 2026-09-21: OPEN-BOX-X133-64GB-GRAY
+      // and X13364GBSILVER-INTL both blinked out of Walmart's feed). Any
+      // channel-SKU LINK RECORD the hourly link scan knows about that the
+      // feed snapshot missed still gets a line, priced from the stored
+      // channel price (approx) instead of the feed's.
+      const chrecs = (unlistedCache && unlistedCache.chrecs) || {};
+      for (const row of products.values()) {
+        const recs = chrecs[String(row.stockItemId)] || [];
+        for (const rec of recs) {
+          const col = columns.find(c => c.key === String(rec.source || '').toUpperCase()
+            && String(c.subSource || '') === String(rec.subSource || ''));
+          if (!col) continue;
+          const lines = row.channels[col.key] = row.channels[col.key] || [];
+          const u = String(rec.sku).toUpperCase();
+          if (lines.some(l => String(l.csku).toUpperCase() === u)) continue;
+          const recStored = loadChPrices()[String(row.stockItemId)];
+          const stored = recStored
+            ? (recStored.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || recStored.prices[`${col.key}|`] || 0)
+            : 0;
+          lines.push({ csku: rec.sku, price: stored, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false });
+        }
+      }
+
       const out = {
         channels: columns,
         products: [...products.values()].filter(r => !r.grouped).sort((a, b) =>
@@ -4461,6 +4485,8 @@ function registerIpc() {
     const detail = [];
     const sets = { walmart: [], ebay: [], temu: [] };
     const chskus = {}; // stockItemId -> channel SKU strings, for the stock search
+    const chrecs = {}; // stockItemId -> [{sku,source,subSource,refId}] — the REAL
+    // link records, so Pricing can survive a catalog-scan flicker (2026-09-21)
     const label = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
     for (const it of inStock) {
       try {
@@ -4470,6 +4496,11 @@ function registerIpc() {
             const list = chskus[it.stockItemId] || (chskus[it.stockItemId] = []);
             const s = String(c.sku).toUpperCase();
             if (!list.includes(s)) list.push(s);
+            if (c.source) {
+              (chrecs[it.stockItemId] = chrecs[it.stockItemId] || []).push({
+                sku: c.sku, source: c.source, subSource: c.subSource || '', refId: c.refId || '',
+              });
+            }
           }
           if (!c.source) continue;
           universe.add(String(c.source).toUpperCase());
@@ -4490,7 +4521,7 @@ function registerIpc() {
       } catch { /* one bad lookup never hides the rest */ }
     }
     detail.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
-    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, chskus, covered: inStock.map(i => i.stockItemId) };
+    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, chskus, chrecs, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
@@ -4504,7 +4535,8 @@ function registerIpc() {
   // just created — a handful of calls, seconds instead of minutes.
   async function runUnlistedDelta(cfg) {
     const stale = !unlistedCache.detail || Date.now() - unlistedCache.at > 60 * 60 * 1000;
-    if (stale || !Array.isArray(unlistedCache.covered)) return runUnlistedScan(cfg);
+    // pre-chrecs caches lack the per-channel link records: one full rescan fills them
+    if (stale || !Array.isArray(unlistedCache.covered) || !unlistedCache.chrecs) return runUnlistedScan(cfg);
     if (unlistedScanRunning) return unlistedScanRunning; // a full scan is already underway
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
@@ -4533,6 +4565,13 @@ function registerIpc() {
             const list = unlistedCache.chskus[it.stockItemId] || (unlistedCache.chskus[it.stockItemId] = []);
             const s = String(c.sku).toUpperCase();
             if (!list.includes(s)) list.push(s);
+            if (c.source) {
+              if (!unlistedCache.chrecs) unlistedCache.chrecs = {};
+              const recs = unlistedCache.chrecs[it.stockItemId] || (unlistedCache.chrecs[it.stockItemId] = []);
+              if (!recs.some(r => String(r.sku).toUpperCase() === s && r.source === c.source && (r.subSource || '') === (c.subSource || ''))) {
+                recs.push({ sku: c.sku, source: c.source, subSource: c.subSource || '', refId: c.refId || '' });
+              }
+            }
           }
           if (!c.source) continue;
           const l2 = label(c.source);
