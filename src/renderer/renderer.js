@@ -2709,6 +2709,16 @@ function renderUnlistedView() {
       </tbody>` : ''}
     </table>
     <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
+  // wear the main sheet's SKU width so the chip flip never shifts the
+  // columns (owner 2026-09-21, "the formatting changes"); gutter/img/level
+  // widths already match via CSS. th.style is the CSP-safe styling path.
+  const skuW = stockColAuto.sku || stockColWidths.sku || 0;
+  const skuTh = $('stockList').querySelector('.unl-table th:nth-child(3)');
+  if (skuTh && skuW) {
+    skuTh.style.width = `${skuW}px`;
+    skuTh.style.minWidth = `${skuW}px`;
+    skuTh.style.maxWidth = `${skuW}px`;
+  }
 }
 
 
@@ -6683,11 +6693,12 @@ async function prPickOpen(btn) {
   const renderList = () => {
     const q = input.value.trim();
     const hits = unlinked.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
+    // SKUs only, one per line (owner 2026-09-21) — the title still matches
+    // the search and waits in the hover tooltip
     listEl.innerHTML = hits.length
       ? hits.map(i => `
-        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" data-ref="${esc(i.channelRefId || '')}">
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" data-ref="${esc(i.channelRefId || '')}" title="${esc(i.title || '')}${i.price ? ` — $${Number(i.price).toFixed(2)}` : ''}">
           <span class="mono">${esc(i.sku)}</span>
-          <span class="prpick-title">${esc(i.title || '')}${i.price ? ` — $${Number(i.price).toFixed(2)}` : ''}</span>
         </button>`).join('')
       : `<p class="dlg-note">${q ? 'Nothing unlinked matches.' : `No unlinked ${esc(c.source)} listings.`}</p>`;
   };
@@ -6869,9 +6880,8 @@ async function prVarPickOpen(btn) {
     const hits = pool.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
     listEl.innerHTML = hits.length
       ? hits.map(i => `
-        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}">
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" title="${esc(i.title || '')}">
           <span class="mono">${esc(i.sku)}</span>
-          <span class="prpick-title">${esc(i.title || '')}</span>
         </button>`).join('')
       : `<p class="dlg-note">${q ? 'No inventory SKU matches.' : 'Nothing to attach.'}</p>`;
   };

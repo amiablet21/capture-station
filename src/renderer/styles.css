@@ -2904,10 +2904,13 @@ tr.unl-dim:hover td { opacity: 1; }
 /* the unlisted sheet holds its shape: fixed columns, so typing a search
    or slicing by condition never re-lays the table (owner 2026-09-15,
    "it keeps adjusting the container") — the SKU column absorbs the rest */
+/* the Unlisted sheet wears the main sheet's geometry — same gutter, image
+   and level widths (and the SKU pin lands from JS) so the chip flip never
+   shifts the columns (owner 2026-09-21, "the formatting changes") */
 .unl-table { table-layout: fixed; width: 100%; min-width: 720px; }
-.unl-table .th-gutter { width: 34px; }
+.unl-table .th-gutter { width: 36px; }
 .unl-table .th-img { width: 50px; } /* 34px image + 16px padding, like the main sheet */
-.unl-table .th-level { width: 84px; }
+.unl-table .th-level { width: 96px; }
 .unl-table .th-chn { width: 330px; }
 .unl-table .th-actions { width: 130px; }
 .unl-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
