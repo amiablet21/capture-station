@@ -1646,6 +1646,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .prpick-head { font-size: 12px; color: var(--muted); padding: 10px 14px 8px; }
 .prpick-in { margin: 0 12px 8px; }
 .prpick-list { max-height: 240px; overflow: auto; }
+/* empty/loading notes align with the picker's 14px gutter (owner
+   2026-09-21, "the spacing looks weird") */
+.prpick-list .dlg-note { margin: 2px 0 10px; padding: 0 14px; }
 .prpick-opt { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; padding: 7px 14px; border: none; border-top: 1px dashed var(--border); background: none; cursor: pointer; font-family: var(--font); }
 .prpick-opt:hover { background: var(--accent-soft); }
 .prpick-opt .mono { font-size: 12px; font-weight: 600; }
