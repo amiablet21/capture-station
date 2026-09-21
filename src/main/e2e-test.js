@@ -1552,13 +1552,23 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { up1, up2 });
       check('claims: upload events carried the running day count',
         uploads.length === 2 && uploads[1].todayCount === 2, uploads);
-      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (owner
-      // wants uniform PNGs); the fake-JPEG uploads above cannot decode, so
-      // they keep .jpg — which doubles as the fallback-path check
+      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (Walmart
+      // wants case images as PNGs); the fake-JPEG uploads above cannot
+      // decode, so they keep .jpg — which doubles as the fallback-path check
       const realJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
       const up3 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: realJpeg })).json();
       check('claims: real photos re-encode to PNG',
         up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, up3.name)), up3);
+      // Walmart caps a case's images at 25 MB combined: a PO whose folder
+      // already fills the budget refuses the next photo with a clear error
+      const fullPo = '119990000000099';
+      const claimsBudget = require('./claims.js')._test.CASE_BUDGET;
+      fs.writeFileSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`), Buffer.alloc(claimsBudget));
+      const upFull = await fetch(`${cbase}/photo?t=${crun.token}&po=${fullPo}`, { method: 'POST', body: realJpeg });
+      const upFullBody = await upFull.json();
+      check('claims: Walmart 25 MB combined case budget refuses the overflow photo',
+        upFull.status === 413 && /25 MB/.test(upFullBody.error || ''), { status: upFull.status, upFullBody });
+      fs.unlinkSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`));
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);

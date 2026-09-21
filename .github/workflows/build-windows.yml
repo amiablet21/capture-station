@@ -70,6 +70,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
+          # without these, a dispatch-created tag lands on the DEFAULT branch
+          # (not the built commit) and the release inherits that old commit's
+          # date, losing the "latest" marker the self-updater follows
+          # (v1.27.106, 2026-09-21)
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: dist/*.exe
           generate_release_notes: true
 
