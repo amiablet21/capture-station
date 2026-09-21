@@ -1709,6 +1709,21 @@ function registerIpc() {
       const clash = await client.findStockItemIdBySku(next).catch(() => null);
       if (clash) return { ok: false, error: `${next} already exists in Linnworks.` };
       await client.renameSku(stockItemId, next);
+      // the returns condition map stores SKU STRINGS — follow the rename
+      // through base keys AND landing targets, or stale names 400 every
+      // later stock move (owner-hit 2026-09-21)
+      try {
+        const map = db.getConditionMap();
+        for (const [base, conds] of Object.entries(map)) {
+          for (const [cond, target] of Object.entries(conds || {})) {
+            const baseHit = String(base).toUpperCase() === prev;
+            const tgtHit = String(target || '').toUpperCase() === prev;
+            if (!baseHit && !tgtHit) continue;
+            if (baseHit) db.deleteConditionMapping(base, cond);
+            db.saveConditionMapping(baseHit ? next : base, cond, tgtHit ? next : target);
+          }
+        }
+      } catch { /* mappings can be re-picked by hand */ }
       // string-matched local config follows the item to its new name
       const patch = {};
       if ((cfg.unlistedIgnore || []).includes(prev)) {
@@ -4100,6 +4115,27 @@ function registerIpc() {
   // apply to the unit, splitting a qty>1 line when needed. Stock is
   // corrected only when the unit originally moved stock (targetSku set)
   // and its landing spot changes: -1 old target, +1 new target.
+  // a return's stock legs, tolerant of renamed-away landings: a MINUS on a
+  // SKU Linnworks no longer knows is skipped with a note — the owner renames
+  // SKUs and old log lines keep the old string (hit live 2026-09-21:
+  // "No item found for SKU A15-128GB-BLACK-US"). A failed PLUS still throws:
+  // stock that should land somewhere must never silently vanish.
+  async function applyReturnDeltas(client, cfg, deltas, source) {
+    const skipped = [];
+    for (const d of deltas) {
+      try {
+        await client.changeStockLevels([d], cfg.linnworks.locationId, source);
+      } catch (e) {
+        if (d.delta < 0 && /No item found for SKU/i.test(e.message || '')) {
+          skipped.push(`${d.sku} no longer exists (renamed?) — nothing to remove there`);
+          continue;
+        }
+        throw e;
+      }
+    }
+    return skipped;
+  }
+
   ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy, price, settle }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -4184,7 +4220,8 @@ function registerIpc() {
         }
         if (deltas.length) {
           const client = new LinnworksClient(cfg.linnworks);
-          await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
+          const skipped = await applyReturnDeltas(client, cfg, deltas, 'Capture Station return edit');
+          if (skipped.length) stockNote = `${stockNote}${stockNote ? ' · ' : ''}${skipped.join(' · ')}`;
         }
         items[ii] = {
           ...it, sku: newSku, condition: newCond, targetSku: newTarget, note: newNote, qty: newQty,
@@ -4282,11 +4319,9 @@ function registerIpc() {
         const qty = Number(it.qty) || 1;
         if (removeStock && it.targetSku) {
           const client = new LinnworksClient(cfg.linnworks);
-          await client.changeStockLevels(
-            [{ sku: it.targetSku, delta: -qty }],
-            cfg.linnworks.locationId, 'Capture Station return delete'
-          );
-          stockNote = `stock corrected: -${qty} ${it.targetSku}`;
+          const skipped = await applyReturnDeltas(client, cfg,
+            [{ sku: it.targetSku, delta: -qty }], 'Capture Station return delete');
+          stockNote = skipped.length ? skipped.join(' · ') : `stock corrected: -${qty} ${it.targetSku}`;
         }
         const items = rec.items.slice();
         items.splice(ii, 1); // the row IS the line now — remove it whole
