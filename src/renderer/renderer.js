@@ -6420,7 +6420,7 @@ $('bulkRevGo').addEventListener('click', async () => {
 
 /* ---------- Pricing tab (owner 2026-09-18, design 'Pricing and Overview'):
    products × auto-generated channel columns. Walmart (repricer-owned)
-   prices are display-only with ≈; other channels click-to-edit. ---------- */
+   prices are display-only (grey); other channels click-to-edit. ---------- */
 
 let prData = null;
 let prQ = '';
@@ -6453,9 +6453,9 @@ function prChCells(p) {
     const inner = lines.map(l => `
         <div class="pr-line">
           <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
-          <span class="pr-sold ${l.sold > 0 && l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>
+          ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
           ${c.fluctuates
-    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">≈ ${prMoney(l.price)}</span>`
+    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
           <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
         </div>`).join('');

@@ -1572,7 +1572,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
 .pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }
 .pr-price:hover { border-color: var(--accent); }
-.pr-price-ro { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; min-width: 76px; text-align: right; padding: 3px 0; }
+/* read-only (repricer-owned): grey carries the meaning — the ≈ prefix
+   confused the owner and was dropped 2026-09-21 */
+.pr-price-ro { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 500; color: var(--muted); min-width: 76px; text-align: right; padding: 3px 0; }
 .pr-open { border: none; background: none; color: var(--faint); font-size: 12px; cursor: pointer; padding: 0 2px; }
 .pr-open:hover { color: var(--accent); }
 .pr-add { border: 1px dashed var(--border); border-radius: var(--r-ctl); background: none; color: var(--faint); font-size: 10.5px; padding: 2px 8px; cursor: pointer; align-self: flex-start; }
