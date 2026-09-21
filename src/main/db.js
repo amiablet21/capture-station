@@ -506,11 +506,16 @@ function resolveConditionTargets(baseSku, inventorySkus) {
   const own = conditionOfSku(baseSku);
   const core = own ? own.core : baseSku;
   const savedCore = own ? (getConditionMap()[core] || {}) : {};
+  // a saved mapping whose target left the inventory (renamed / deleted) is
+  // DEAD — trusting it 400s every stock move (owner-hit 2026-09-21). When
+  // the inventory list is at hand, a dead mapping falls through to the
+  // name-derived listings; with no list (lookup offline) it stands as-is.
+  const alive = (t) => t && (!bySkuUpper.size || bySkuUpper.has(String(t).toUpperCase())) ? t : '';
   const targets = { new: baseSku };
   for (const cond of Object.keys(CONDITION_SUFFIX)) {
-    targets[cond] = saved[cond]
+    targets[cond] = alive(saved[cond])
       || (own && cond === own.cond ? baseSku : '')
-      || savedCore[cond]
+      || alive(savedCore[cond])
       || bySkuUpper.get(`${CONDITION_PREFIX[cond]}${core}`.toUpperCase())
       || bySkuUpper.get(`${core}${CONDITION_SUFFIX[cond]}`.toUpperCase())
       || '';
