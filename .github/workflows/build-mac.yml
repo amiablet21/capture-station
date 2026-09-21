@@ -94,6 +94,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
+          # same fix as build-windows.yml: tag the built commit, claim Latest
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: dist/*.dmg
           generate_release_notes: true
 
