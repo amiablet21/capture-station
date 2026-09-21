@@ -25,6 +25,7 @@ let folder = '';
 let station = '';
 let watcher = null;
 let debounce = null;
+let watchRetry = null; // re-attach timer after the watcher dies
 let lastFoldSig = null; // Map gid -> "ts|actor|op" for change detection
 let lastSeenTs = 0;     // newest foreign event already shown to the user
 
@@ -306,6 +307,7 @@ function stopWatch() {
   if (watcher) { try { watcher.close(); } catch { /* already gone */ } watcher = null; }
   clearTimeout(debounce);
   clearTimeout(mirrorTimer);
+  clearTimeout(watchRetry);
 }
 
 function startWatch(writeCsv) {
@@ -315,6 +317,15 @@ function startWatch(writeCsv) {
     watcher = fs.watch(folder, { persistent: false }, () => {
       clearTimeout(debounce);
       debounce = setTimeout(() => rescan(writeCsv), 1500);
+    });
+    // Windows kills a running watch with UNKNOWN when the sync folder
+    // blips (cloud-drive rehydration, network drop) — unhandled, that
+    // crashed the whole main process (owner's dialog 2026-09-21). Fold
+    // the tent, wait, watch again; the rescan covers whatever we missed.
+    watcher.on('error', (e) => {
+      console.error('[retsync] watch error:', e.message);
+      stopWatch();
+      watchRetry = setTimeout(() => { startWatch(writeCsv); rescan(writeCsv); }, 30 * 1000);
     });
   } catch (e) {
     console.error('[retsync] watch failed:', e.message);
