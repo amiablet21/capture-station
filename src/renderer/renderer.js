@@ -5491,14 +5491,25 @@ function retBeginCondEdit(td, entry) {
     <button type="button" class="ret-emi ${entry.i.condition === c.key ? 'is-sel' : ''}" data-cond="${c.key}">
       <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
   document.body.appendChild(menu);
-  menu.style.left = `${Math.max(8, Math.min(r.left - 4, window.innerWidth - menu.offsetWidth - 8))}px`;
-  const below = r.bottom + 4;
-  menu.style.top = `${below + menu.offsetHeight + 8 > window.innerHeight ? Math.max(8, r.top - menu.offsetHeight - 4) : below}px`;
+  const place = () => {
+    const rr = td.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(rr.left - 4, window.innerWidth - menu.offsetWidth - 8))}px`;
+    const below = rr.bottom + 4;
+    menu.style.top = `${below + menu.offsetHeight + 8 > window.innerHeight ? Math.max(8, rr.top - menu.offsetHeight - 4) : below}px`;
+  };
+  place();
   td.classList.add('is-econd'); // the cell keeps its edit ring while the menu floats
+  // the menu follows its cell while anything scrolls (same drift the SKU
+  // combo had, owner 2026-09-21)
+  const follow = () => { if (document.contains(td)) place(); else cleanup(); };
+  window.addEventListener('scroll', follow, true);
+  window.addEventListener('resize', follow);
   const cleanup = () => {
     menu.remove();
     td.classList.remove('is-econd');
     document.removeEventListener('mousedown', away, true);
+    window.removeEventListener('scroll', follow, true);
+    window.removeEventListener('resize', follow);
   };
   const away = (e) => {
     if (e.target.closest('.ret-emenu-pop')) return;
@@ -7544,6 +7555,20 @@ function makeCombo(input, listEl, onPick, opts) {
     const below = r.bottom + 4;
     listEl.style.top = `${below + 260 > window.innerHeight ? Math.max(8, r.top - 264) : below}px`;
   };
+  // fixed-position lists FOLLOW their input while anything scrolls — the
+  // position was computed once at open, so the list stayed put while the
+  // row moved (owner 2026-09-21, "I have to scroll down for the bar to
+  // match"). Self-cleans once the input leaves the page.
+  const follow = () => {
+    if (!document.contains(input)) {
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+      return;
+    }
+    if (!listEl.hidden) positionList();
+  };
+  window.addEventListener('scroll', follow, true);
+  window.addEventListener('resize', follow);
   const render = () => {
     if (recvLookup === 'loading') {
       listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
