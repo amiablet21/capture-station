@@ -295,6 +295,9 @@
     <div class="pr-sheet">
       <div class="pr-bar">
         <input id="prSearch" class="input pr-search" type="text" placeholder="Search SKU…" autocomplete="off" spellcheck="false" />
+        <span id="prSortSet" class="pr-sortset" title="Family keeps the biggest sellers on top but pulls each product's other capacities (same model + color) directly under it">
+          <button type="button" data-prsort="stock">Stock</button><button type="button" data-prsort="family">Family</button>
+        </span>
         <span class="pr-hint">Walmart prices fluctuate (repricer) — shown, never written · other channels: click a price, Enter pushes it</span>
         <button id="prHistBtn" class="btn btn-ghost">History</button>
         <button id="prRefresh" class="btn btn-ghost" title="Refresh listings and prices from Linnworks">Refresh</button>

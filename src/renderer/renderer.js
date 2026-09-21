@@ -6425,6 +6425,21 @@ $('bulkRevGo').addEventListener('click', async () => {
 let prData = null;
 let prQ = '';
 const prExpanded = new Set(); // parent SKUs (upper) with the variations open
+// Stock (server order) or Family — capacity siblings pulled together
+// (owner-picked Option A of pr-family-variants.html, 2026-09-21)
+let prSort = 'stock';
+try { prSort = localStorage.getItem('prSort') === 'family' ? 'family' : 'stock'; } catch { /* default */ }
+// the family = the SKU with its capacity token wildcarded, so
+// X400-128GB-GRAY and X400-256GB-GRAY meet at X400-*-GRAY
+const prFamKey = (sku) => {
+  const s = String(sku).toUpperCase();
+  const m = s.match(/\d+\s*[GT]B/);
+  return m ? s.replace(m[0], '*') : s;
+};
+const prCapBadge = (sku) => {
+  const m = String(sku).toUpperCase().match(/\d+\s*[GT]B/);
+  return m ? `<span class="pr-capbadge">${m[0]}</span>` : '';
+};
 const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
 const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
 
@@ -6518,19 +6533,43 @@ function prRender() {
     return n ? `<button type="button" class="pr-vschip" data-vsp="${esc(p.sku)}" title="Condition SKUs that look like ${esc(p.sku)} — click to review">✦ ${n} possible variation${n === 1 ? '' : 's'}</button>` : '';
   };
 
-  $('prBody').innerHTML = rows.map((p, n) => {
+  // family sort: the leaders keep the biggest-stock order, but capacity
+  // siblings (same model + color, different GB) ride directly under the
+  // biggest one, marked with the emerald rail and a capacity badge
+  const view = [];
+  if (prSort === 'family') {
+    const fams = new Map(); // key -> members, stock order preserved
+    for (const p of rows) {
+      const k = prFamKey(p.sku);
+      if (!fams.has(k)) fams.set(k, []);
+      fams.get(k).push(p);
+    }
+    let num = 0;
+    for (const fam of fams.values()) {
+      num++;
+      fam.forEach((p, i) => view.push({
+        p,
+        num: i === 0 ? num : 0,
+        fam: fam.length > 1 ? `pr-fam${i === 0 ? ' pr-fam-first' : ''}${i === fam.length - 1 ? ' pr-fam-last' : ''}` : '',
+      }));
+    }
+  } else {
+    rows.forEach((p, i) => view.push({ p, num: i + 1, fam: '' }));
+  }
+
+  $('prBody').innerHTML = view.map(({ p, num, fam }) => {
     const vars = p.variations || [];
     const vunits = vars.reduce((a, v) => a + (Number(v.stock) || 0), 0);
     const pU = String(p.sku).toUpperCase();
     // searching a condition SKU opens its group so the hit is visible
     const open = vars.length > 0 && (prExpanded.has(pU) || (q && !matchOne(p) && vars.some(matchOne)));
     const parts = [`
-    <div class="pr-row" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
-      <div class="pr-cell pr-num">${n + 1}</div>
+    <div class="pr-row ${fam}" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
+      <div class="pr-cell pr-num">${num || ''}</div>
       <div class="pr-cell pr-prod">
         ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
         <div class="pr-prodtxt">
-          <span class="mono pr-psku">${esc(p.sku)}</span>
+          <span class="mono pr-psku">${esc(p.sku)}${fam ? prCapBadge(p.sku) : ''}</span>
           <span class="pr-pstock">${p.stock} in stock</span>
           ${vars.length
     ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${open ? '▾' : '▸'} ${vars.length} variation${vars.length === 1 ? '' : 's'} · ${vunits} unit${vunits === 1 ? '' : 's'}</button>`
@@ -6544,7 +6583,7 @@ function prRender() {
       // groups render open with no motion here — the curtain only plays on
       // a toggle click, which splices the one group in place (lag fix
       // 2026-09-20: a full re-render before the animation stuttered)
-      parts.push(`<div class="pr-vgroup open" data-vg="${esc(pU)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
+      parts.push(`<div class="pr-vgroup open${fam ? ' pr-fam' : ''}" data-vg="${esc(pU)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
     }
     return parts.join('');
   }).join('');
@@ -6553,6 +6592,18 @@ function prRender() {
 
 $('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
 $('prRefresh').addEventListener('click', () => enterPricing(true));
+const prSortPaint = () => {
+  for (const b of document.querySelectorAll('#prSortSet button')) b.classList.toggle('is-on', b.dataset.prsort === prSort);
+};
+prSortPaint();
+$('prSortSet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-prsort]');
+  if (!b || b.dataset.prsort === prSort) return;
+  prSort = b.dataset.prsort;
+  try { localStorage.setItem('prSort', prSort); } catch { /* remembered next time instead */ }
+  prSortPaint();
+  prRender();
+});
 
 // click a price -> inline editor; Enter pushes via Linnworks
 function prEditPrice(btn) {
@@ -6692,7 +6743,7 @@ $('prBody').addEventListener('click', (e) => {
       prExpanded.add(k);
       vt.innerHTML = vt.innerHTML.replace('▸', '▾');
       parentRow.insertAdjacentHTML('afterend',
-        `<div class="pr-vgroup" data-vg="${esc(k)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
+        `<div class="pr-vgroup${parentRow.classList.contains('pr-fam') ? ' pr-fam' : ''}" data-vg="${esc(k)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
       const vg = parentRow.nextElementSibling;
       for (const el of vg.querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
       // double rAF: the folded 0fr state paints first, then the unroll plays

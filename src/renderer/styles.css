@@ -1605,6 +1605,18 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-vgroup { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 340ms var(--ease); }
 .pr-vgroup.open { grid-template-rows: 1fr; }
 .pr-vclip { min-height: 0; overflow: hidden; }
+/* Stock ↔ Family sort + the family rail (owner-picked Option A of
+   pr-family-variants.html, 2026-09-21): capacity siblings sit under the
+   biggest one, marked emerald with a GB badge */
+.pr-sortset { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: 0 0 auto; }
+.pr-sortset button { font: inherit; font-size: 11px; font-weight: 600; padding: 3px 13px; border: none; background: none; color: var(--muted); cursor: pointer; }
+.pr-sortset button:hover { color: var(--text); }
+.pr-sortset button.is-on { background: var(--text); color: #fff; }
+.pr-row.pr-fam, .pr-vgroup.pr-fam { position: relative; }
+.pr-row.pr-fam::before, .pr-vgroup.pr-fam::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: 0.55; }
+.pr-fam-first::before { border-top-right-radius: 3px; }
+.pr-fam-last::before { border-bottom-right-radius: 3px; }
+.pr-capbadge { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; padding: 0 7px; border-radius: 999px; background: var(--badge-blue-bg); color: var(--badge-blue-text); margin-left: 8px; vertical-align: 1px; }
 /* ✦ suggestions: one quiet chip on the row + a popover (owner-approved
    Option A of pr-suggest-variants.html, 2026-09-20 — no "Add both") */
 .pr-vschip { font: inherit; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; border: none; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; }
