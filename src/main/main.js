@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell, WebContentsView, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell, WebContentsView, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -9,12 +9,14 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
 const returnsImport = require('./returns-import');
+const retsync = require('./retsync');
 
 let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
+let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
@@ -624,6 +626,21 @@ function listReceivingSessions(limit = 200) {
 }
 
 // Mirror the returns ledger to a CSV beside the other exports.
+// shared returns folder (Google Drive / OneDrive / a network share):
+// boot + every settings change re-point the sync engine; folder events
+// wake the renderer with exactly which returns moved
+function startRetSync() {
+  const cfg = config.load();
+  const res = retsync.configure({
+    sync: cfg.captureOnly ? null : cfg.returnsSync,
+    database: db,
+    userData: app.getPath('userData'),
+    writeCsv: writeReturnsCsv,
+    changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
+  });
+  retsyncMissed = (res && res.missed) || 0;
+}
+
 function writeReturnsCsv() {
   try {
     const folder = csvFolder();
@@ -883,11 +900,15 @@ let routerRefusedRefs = new Set();
 // encoded, because the whole filter blob is an encoded JSON string.
 function buildMarketUrl(cfg, channel, po, kind) {
   const ch = String(channel || '').toLowerCase();
-  const tpl = String(
-    (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
-    || (cfg.orderUrlTemplates || {})[ch] || ''
+  // kind 'case': po carries the dispute case number, and there is no
+  // fallback — a case number means nothing to the order-search pages
+  const tpl = String(kind === 'case'
+    ? (cfg.caseUrlTemplates || {})[ch] || ''
+    : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+      || (cfg.orderUrlTemplates || {})[ch] || ''
   ).trim();
   if (!tpl || !/^https:\/\//i.test(tpl)) return '';
+  if (kind === 'case') return tpl.replace('{case}', encodeURIComponent(String(po)));
   const pad = (n) => String(n).padStart(2, '0');
   const day = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const enc2 = (s) => encodeURIComponent(encodeURIComponent(s));
@@ -953,6 +974,136 @@ function sourceToChannel(source) {
   return s || 'other';
 }
 
+/* ---- Pricing tab data (owner 2026-09-18, design 'Pricing and Overview'):
+   per-channel-SKU sales tally + price-change history. Both ride the shared
+   folder (aux files) like the stock history, so every desktop sees them. */
+
+function chanSalePath() { return path.join(app.getPath('userData'), 'chan-sales.json'); }
+function loadChanSales() {
+  try { const j = JSON.parse(fs.readFileSync(chanSalePath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+// one entry per freshly imported order: { ref, source, lines: [{c, q}] }
+function chanSaleLog(partial) {
+  const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ts: new Date().toISOString(), ...partial };
+  try { fs.writeFileSync(chanSalePath(), JSON.stringify([entry, ...loadChanSales()].slice(0, 20000))); } catch { /* best effort */ }
+  try { retsync.appendAux('chansales', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+// units sold per channel SKU over the trailing 60 days, deduped by order
+// reference (every desktop logs the same imports)
+function readChanSales60() {
+  const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  const seen = new Set();
+  const units = {};
+  let since = '';
+  let aux = [];
+  try { aux = retsync.readAux('chansales'); } catch { aux = []; }
+  for (const e of [...aux, ...loadChanSales()]) {
+    if (!e || !e.ref || seen.has(e.ref)) continue;
+    seen.add(e.ref);
+    const t = Date.parse(e.ts) || 0;
+    if (!since || e.ts < since) since = e.ts;
+    if (t < cutoff) continue;
+    for (const l of e.lines || []) {
+      if (!l || !l.c) continue;
+      units[l.c] = (units[l.c] || 0) + (Number(l.q) || 1);
+    }
+  }
+  return { units, since };
+}
+
+function priceHistPath() { return path.join(app.getPath('userData'), 'price-history.json'); }
+function loadPriceHist() {
+  try { const j = JSON.parse(fs.readFileSync(priceHistPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+// one entry per price event: mode 'set' (hand change), 'auto' (a move the
+// channel made, seen on refresh), 'revert'; station + initials say who and
+// from which computer (owner 2026-09-18)
+function priceLogEntry(partial) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    ...partial,
+  };
+  try { fs.writeFileSync(priceHistPath(), JSON.stringify([entry, ...loadPriceHist()].slice(0, 500))); } catch { /* best effort */ }
+  try { retsync.appendAux('pricechanges', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+function mergedPriceHist() {
+  const seen = new Set();
+  const all = [];
+  let aux = [];
+  try { aux = retsync.readAux('pricechanges'); } catch { aux = []; }
+  for (const e of [...aux, ...loadPriceHist()]) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    seen.add(e.id);
+    all.push(e);
+  }
+  all.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  return all;
+}
+
+function priceSnapPath() { return path.join(app.getPath('userData'), 'price-snapshot.json'); }
+function loadPriceSnap() {
+  try { return JSON.parse(fs.readFileSync(priceSnapPath(), 'utf8')) || {}; }
+  catch { return {}; }
+}
+function savePriceSnap(snap) {
+  try { fs.writeFileSync(priceSnapPath(), JSON.stringify(snap)); } catch { /* best effort */ }
+}
+
+// channels whose price the marketplace's own repricer owns: the app never
+// writes these, only watches (owner 2026-09-18 — ~140 items enrolled)
+function priceFluctuates(source) { return /walmart/i.test(String(source || '')); }
+
+/* ---- variation groups (owner 2026-09-18): condition SKUs (OPEN-BOX-…,
+   USED-…) grouped under their New product on the Pricing tab. Grouping is
+   MANUAL — the naming convention only suggests. An op log (add / remove /
+   ignore) rides the shared folder so groups match on every desktop. */
+function priceGroupPath() { return path.join(app.getPath('userData'), 'price-groups.json'); }
+function loadPriceGroups() {
+  try { const j = JSON.parse(fs.readFileSync(priceGroupPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+function priceGroupLog(partial) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    ...partial, // op 'add' | 'remove' | 'ignore', parent, child
+  };
+  try { fs.writeFileSync(priceGroupPath(), JSON.stringify([entry, ...loadPriceGroups()].slice(0, 5000))); } catch { /* best effort */ }
+  try { retsync.appendAux('pricegroups', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+// replay the op log oldest-first: the newest op on a child wins, so a
+// remove on one desktop undoes an add from another regardless of arrival
+function priceGroupState() {
+  const seen = new Set();
+  const ops = [];
+  let aux = [];
+  try { aux = retsync.readAux('pricegroups'); } catch { aux = []; }
+  for (const e of [...aux, ...loadPriceGroups()]) {
+    if (!e || !e.id || seen.has(e.id)) continue;
+    seen.add(e.id);
+    ops.push(e);
+  }
+  ops.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  const parentOf = {}; // CHILD (upper) -> parent sku as written
+  const ignored = new Set(); // 'PARENT|CHILD' upper — dismissed suggestions
+  for (const op of ops) {
+    const c = String(op.child || '').toUpperCase();
+    const pair = `${String(op.parent || '').toUpperCase()}|${c}`;
+    if (op.op === 'add') { parentOf[c] = op.parent; ignored.delete(pair); }
+    else if (op.op === 'remove') delete parentOf[c];
+    else if (op.op === 'ignore') ignored.add(pair);
+  }
+  return { parentOf, ignored };
+}
+
 async function runOrderImport() {
   const cfg = config.load();
   if (cfg.captureOnly || !(cfg.orderImport && cfg.orderImport.enabled)) return;
@@ -982,10 +1133,12 @@ async function runOrderImport() {
       if (!byRef.has(ref)) byRef.set(ref, []);
       byRef.get(ref).push(o);
     }
+    const newSales = []; // channel-SKU sales tally entries for the Pricing tab
     for (const [ref, parts] of byRef) {
       openRefs.add(ref);
       const isSplit = parts.length > 1;
       parts.forEach((o, pi) => {
+        let createdNew = false;
         const key = isSplit ? `${ref}#${o.orderId}` : ref;
         if (isSplit) openParts.add(key);
         meta[key] = {
@@ -1021,6 +1174,7 @@ async function runOrderImport() {
             } else {
               row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
               added++;
+              createdNew = true;
             }
           }
         } else {
@@ -1028,6 +1182,7 @@ async function runOrderImport() {
           if (!row) {
             row = db.createRow({ channel: sourceToChannel(o.source), orderNumber: ref, origin: 'linnworks', lwOrderId: o.orderId });
             added++;
+            createdNew = true;
           } else if (!row.lw_order_id) {
             row = db.setRowPart(row.id, o.orderId); // backfill for older rows
           }
@@ -1037,8 +1192,19 @@ async function runOrderImport() {
         if (row && (!row.items || !row.items.length) && meta[key].items.length) {
           db.setRowItems(row.id, meta[key].items.map(i => ({ sku: i.sku || i.channelSku || i.title, qty: i.qty })));
         }
+        // a freshly imported order = a sale: tally its channel SKUs for the
+        // Pricing tab's per-listing sold counts (every desktop imports the
+        // same orders, so the aggregation dedupes by order reference)
+        if (createdNew && meta[key].items.length) {
+          newSales.push({
+            ref: key,
+            source: String(o.source || ''),
+            lines: meta[key].items.map(i => ({ c: String(i.channelSku || i.sku || '').toUpperCase(), q: Number(i.qty) || 1 })).filter(l => l.c),
+          });
+        }
       });
     }
+    for (const s of newSales) { try { chanSaleLog(s); } catch { /* tally is best effort */ } }
     // untouched imported rows whose order left open orders: cancelled or
     // handled elsewhere - remove them so the queue stays truthful. A split
     // part vanishes when ITS part id is gone AND it isn't the surviving
@@ -1596,7 +1762,7 @@ function registerIpc() {
     } else {
       const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
       if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
-      url = tpl.replace('{sku}', encodeURIComponent(String(sku)));
+      url = tpl.replaceAll('{sku}', encodeURIComponent(String(sku)));
     }
     if (external || cfg.captureOnly) {
       shell.openExternal(url);
@@ -1613,7 +1779,8 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const c = await runUnlistedScan(cfg);
-      return { ok: true, sets: c.sets || {} };
+      // the channel SKU strings ride along for the stock search box
+      return { ok: true, sets: c.sets || {}, chskus: c.chskus || {} };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1758,6 +1925,426 @@ function registerIpc() {
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---------- Pricing tab (owner 2026-09-18) ----------
+     One row per product, one auto-generated column per connected channel.
+     Prices come from the channel scan feed (falling back to the newest
+     hand-set value, then Linnworks' retail price). Walmart (the repricer's
+     channels) is strictly read-only; eBay/Temu prices push via Linnworks'
+     channel price records. */
+  let pricingCache = { at: 0, data: null };
+
+  // stored channel-price records (what Linnworks' price sync would push).
+  // The scan feed rarely carries prices, so these fill the blanks; fetched
+  // slowly in the background one item at a time, kept for 12 hours.
+  const chPricePath = () => path.join(app.getPath('userData'), 'channel-prices.json');
+  let chPrices = null; // { stockItemId: { at, prices: { 'SRC|SUB': n } } }
+  const loadChPrices = () => {
+    if (chPrices) return chPrices;
+    try { chPrices = JSON.parse(fs.readFileSync(chPricePath(), 'utf8')) || {}; }
+    catch { chPrices = {}; }
+    return chPrices;
+  };
+  const saveChPrices = () => {
+    try { fs.writeFileSync(chPricePath(), JSON.stringify(chPrices || {})); } catch { /* best effort */ }
+  };
+  let chPriceFillRunning = false;
+  async function fillStoredPrices(client, ids) {
+    if (chPriceFillRunning || !ids.length) return;
+    chPriceFillRunning = true;
+    try {
+      let filled = 0;
+      for (const id of ids) {
+        try {
+          const rows = await client.getChannelPrices(id);
+          const prices = {};
+          for (const r of rows || []) {
+            prices[`${String(r.source).toUpperCase()}|${String(r.subSource || '').toUpperCase()}`] = Number(r.price) || 0;
+          }
+          loadChPrices()[String(id)] = { at: Date.now(), prices };
+          filled++;
+          if (filled % 25 === 0) saveChPrices();
+        } catch { /* no records / transient — next refresh retries */ }
+        await new Promise(r => setTimeout(r, 120));
+      }
+      saveChPrices();
+      if (filled) {
+        pricingCache = { at: 0, data: null };
+        if (win && !win.isDestroyed()) win.webContents.send('pricing:refreshed');
+      }
+    } finally {
+      chPriceFillRunning = false;
+    }
+  }
+
+  // the finished table also lands on disk: a fresh app start paints the
+  // last known prices instantly (stale: true) while the real rebuild runs
+  // behind it and 'pricing:refreshed' swaps the fresh one in (owner asked
+  // why prices "load like this all the time", 2026-09-20)
+  const pricingSnapPath = () => path.join(app.getPath('userData'), 'pricing-cache.json');
+  let pricingRebuilding = false;
+  const kickPricingRebuild = () => {
+    if (pricingRebuilding) return;
+    pricingRebuilding = true;
+    buildPricingData().then((res) => {
+      if (res && res.ok && win && !win.isDestroyed()) win.webContents.send('pricing:refreshed');
+    }).finally(() => { pricingRebuilding = false; });
+  };
+  async function buildPricingData(force) {
+    const cfg = config.load();
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      // one column per Source; the first channel of each source carries the
+      // catalog. New marketplaces in Linnworks appear here automatically.
+      const chans = await client.getMappingChannels();
+      const seenSrc = new Set();
+      const columns = [];
+      for (const ch of chans) {
+        const k = ch.source.toUpperCase();
+        if (seenSrc.has(k)) continue;
+        seenSrc.add(k);
+        columns.push({ id: ch.id, source: ch.source, subSource: ch.subSource, key: k, fluctuates: priceFluctuates(ch.source) });
+      }
+      // Walmart leads the columns (owner 2026-09-18); the rest keep
+      // Linnworks' order
+      columns.sort((a, b) => Number(b.fluctuates) - Number(a.fluctuates));
+      const items = await client.listInventory();
+      const byId = new Map(items.map(i => [String(i.stockItemId), i]));
+      const levelOf = (it) => {
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+        return l ? Number(l.stockLevel) || 0 : 0;
+      };
+      // channel catalogs — same cache the Mappings dialog fills
+      const catalogs = {};
+      for (const col of columns) {
+        const key = `${col.id}|${col.source}|${col.subSource}`;
+        const hit = mappingCache.get(key);
+        let rows;
+        if (!force && hit && Date.now() - hit.at < 10 * 60 * 1000) {
+          rows = hit.items;
+        } else {
+          rows = await client.getChannelItems(col.id, col.source, col.subSource);
+          mappingCache.set(key, { at: Date.now(), items: rows });
+        }
+        catalogs[col.key] = rows;
+      }
+      // the newest hand-set price per (source, channel sku) overrides the
+      // scan feed, which lags what we just pushed
+      const handSet = {};
+      for (const e of mergedPriceHist()) {
+        if (e.mode !== 'set' && e.mode !== 'revert') continue;
+        const k = `${String(e.source).toUpperCase()}|${String(e.channelSku).toUpperCase()}`;
+        if (!(k in handSet)) handSet[k] = Number(e.mode === 'revert' ? e.newPrice : e.newPrice) || 0;
+      }
+      const sales = readChanSales60();
+      const products = new Map(); // stockItemId -> row
+      for (const col of columns) {
+        for (const li of catalogs[col.key]) {
+          if (!li.linked || !li.linkedItemId) continue;
+          const inv = byId.get(String(li.linkedItemId));
+          if (!inv) continue;
+          let row = products.get(String(inv.stockItemId));
+          if (!row) {
+            row = { stockItemId: inv.stockItemId, sku: inv.sku, image: inv.image || '', stock: levelOf(inv), channels: {} };
+            products.set(String(inv.stockItemId), row);
+          }
+          const over = handSet[`${col.key}|${String(li.sku).toUpperCase()}`];
+          // feed price → newest hand-set → stored channel record → retail
+          const rec = loadChPrices()[String(inv.stockItemId)];
+          const stored = rec
+            ? (rec.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || rec.prices[`${col.key}|`] || 0)
+            : 0;
+          const price = li.price || over || stored || Number(inv.retailPrice) || 0;
+          (row.channels[col.key] = row.channels[col.key] || []).push({
+            csku: li.sku,
+            price,
+            approx: !li.price, // the feed didn't carry it: shown as ≈
+            refId: li.channelRefId || '',
+            sold: sales.units[String(li.sku).toUpperCase()] || 0,
+            wfs: !!li.wfs,
+          });
+        }
+      }
+      // watch the repricer: a fluctuating channel's price that moved since
+      // the last look gets an 'auto' history entry (seen on refresh)
+      const snap = loadPriceSnap();
+      for (const row of products.values()) {
+        for (const col of columns) {
+          if (!col.fluctuates) continue;
+          for (const l of row.channels[col.key] || []) {
+            if (!l.price) continue;
+            const k = `${col.key}|${String(l.csku).toUpperCase()}`;
+            const prev = Number(snap[k]) || 0;
+            if (prev && Math.abs(prev - l.price) >= 0.01) {
+              priceLogEntry({
+                mode: 'auto', by: '', source: col.source, subSource: col.subSource,
+                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: l.price,
+              });
+            }
+            snap[k] = l.price;
+          }
+        }
+      }
+      savePriceSnap(snap);
+
+      // variation groups: grouped SKUs leave the top level and nest under
+      // their parent (owner 2026-09-18). A grouped SKU with no listings
+      // still shows — as a bare row with its stock and empty channels.
+      const groups = priceGroupState();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const rowBySku = new Map([...products.values()].map(r => [String(r.sku).toUpperCase(), r]));
+      const ensureRow = (skuU) => {
+        let row = rowBySku.get(skuU);
+        if (row) return row;
+        const inv = bySku.get(skuU);
+        if (!inv) return null; // gone from Linnworks — the group entry waits
+        row = { stockItemId: inv.stockItemId, sku: inv.sku, image: inv.image || '', stock: levelOf(inv), channels: {} };
+        products.set(String(inv.stockItemId), row);
+        rowBySku.set(skuU, row);
+        return row;
+      };
+      for (const [childU, parentSku] of Object.entries(groups.parentOf)) {
+        const parentRow = ensureRow(String(parentSku).toUpperCase());
+        const childRow = ensureRow(childU);
+        if (!parentRow || !childRow || parentRow === childRow) continue;
+        childRow.grouped = true;
+        (parentRow.variations = parentRow.variations || []).push(childRow);
+      }
+      // grade order inside a group: Open box, Used, Scrap, then anything
+      // else (owner 2026-09-18), alphabetical within a grade
+      const GRADE_ORDER = { openbox: 0, used: 1, scrap: 2 };
+      const gradeRank = (sku) => {
+        const c = db.conditionOfSku(sku);
+        return c && c.cond in GRADE_ORDER ? GRADE_ORDER[c.cond] : 3;
+      };
+      for (const r of products.values()) {
+        if (r.variations) {
+          r.variations.sort((a, b) =>
+            (gradeRank(a.sku) - gradeRank(b.sku)) || String(a.sku).localeCompare(String(b.sku)));
+        }
+      }
+
+      // naming-convention SUGGESTIONS (never auto-applied): condition SKUs
+      // whose stripped core is this product, plus the Returns condition
+      // mappings' targets. Add / Ignore lives in the renderer.
+      const coreIndex = new Map(); // CORE upper -> [inventory sku,...]
+      for (const it of items) {
+        const c = db.conditionOfSku(it.sku);
+        if (!c) continue;
+        const k = String(c.core).toUpperCase();
+        if (!coreIndex.has(k)) coreIndex.set(k, []);
+        coreIndex.get(k).push(it.sku);
+      }
+      const condMap = db.getConditionMap();
+      for (const row of products.values()) {
+        if (row.grouped) continue;
+        const selfU = String(row.sku).toUpperCase();
+        const grouped = new Set((row.variations || []).map(v => String(v.sku).toUpperCase()));
+        const cands = new Set(coreIndex.get(selfU) || []);
+        for (const t of Object.values(condMap[row.sku] || {})) if (t) cands.add(t);
+        const sug = [];
+        for (const s of cands) {
+          const u = String(s).toUpperCase();
+          if (u === selfU || grouped.has(u) || groups.parentOf[u]) continue;
+          if (groups.ignored.has(`${selfU}|${u}`)) continue;
+          if (!bySku.has(u)) continue;
+          sug.push(bySku.get(u).sku);
+        }
+        sug.sort((a, b) => (gradeRank(a) - gradeRank(b)) || String(a).localeCompare(String(b)));
+        if (sug.length) row.suggest = sug.slice(0, 3);
+      }
+
+      const out = {
+        channels: columns,
+        products: [...products.values()].filter(r => !r.grouped).sort((a, b) =>
+          (b.stock - a.stock) || String(a.sku).localeCompare(String(b.sku))),
+        salesSince: sales.since || '',
+      };
+      pricingCache = { at: Date.now(), data: out };
+      try { fs.writeFileSync(pricingSnapPath(), JSON.stringify(out)); } catch { /* best effort */ }
+
+      // top up the stored-price records in the background; when a batch
+      // lands the renderer hears 'pricing:refreshed' and repaints
+      const stale = [...products.values()]
+        .filter(r => { const rec = loadChPrices()[String(r.stockItemId)]; return !rec || Date.now() - rec.at > 12 * 3600 * 1000; })
+        .map(r => r.stockItemId);
+      fillStoredPrices(client, stale); // fire and forget — single-flight
+
+      return { ok: true, ...out };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  ipcMain.handle('pricing:list', async (_e, { force } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (!force && pricingCache.data && Date.now() - pricingCache.at < 5 * 60 * 1000) {
+      return { ok: true, cached: true, ...pricingCache.data };
+    }
+    // cold start: the disk snapshot paints at once, the rebuild follows
+    if (!force && !pricingCache.data) {
+      let snap = null;
+      try { snap = JSON.parse(fs.readFileSync(pricingSnapPath(), 'utf8')); } catch { /* first ever run */ }
+      if (snap && Array.isArray(snap.products) && snap.products.length) {
+        kickPricingRebuild();
+        return { ok: true, stale: true, ...snap };
+      }
+    }
+    return buildPricingData(force);
+  });
+
+  ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (priceFluctuates(source)) return { ok: false, error: 'Walmart prices belong to the repricer — the app never overwrites them.' };
+    const p = Math.round(Number(price) * 100) / 100;
+    if (!Number.isFinite(p) || p <= 0) return { ok: false, error: 'Enter a price above zero.' };
+    if (!stockItemId || !channelSku) return { ok: false, error: 'Missing listing details — refresh and retry.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.setChannelPrice(stockItemId, source, subSource, p);
+      const entry = priceLogEntry({
+        mode: 'set', by: String(cfg.returnsReceivedBy || '').trim(),
+        source, subSource: subSource || '', channelSku, stockSku: stockSku || '',
+        oldPrice: Number(old) || 0, newPrice: p,
+      });
+      // the stored-record cache follows immediately — no 12h wait
+      const rec = loadChPrices()[String(stockItemId)] || (loadChPrices()[String(stockItemId)] = { at: 0, prices: {} });
+      rec.prices[`${String(source).toUpperCase()}|${String(subSource || '').toUpperCase()}`] = p;
+      rec.at = Date.now();
+      saveChPrices();
+      pricingCache = { at: 0, data: null };
+      return { ok: true, entry };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('pricing:history', () => ({ ok: true, entries: mergedPriceHist().slice(0, 200) }));
+
+  /* ---------- variation grouping (owner 2026-09-18): manual add/remove of
+     condition SKUs under a product; one level deep, never nested ---------- */
+  ipcMain.handle('pricing:groupAdd', (_e, { parent, child } = {}) => {
+    const p = String(parent || '').trim();
+    const c = String(child || '').trim();
+    if (!p || !c) return { ok: false, error: 'Missing SKU.' };
+    if (p.toUpperCase() === c.toUpperCase()) return { ok: false, error: 'A product cannot be its own variation.' };
+    const { parentOf } = priceGroupState();
+    if (parentOf[p.toUpperCase()]) return { ok: false, error: `${p} is itself a variation of ${parentOf[p.toUpperCase()]} — detach it there first.` };
+    if (Object.values(parentOf).some(x => String(x).toUpperCase() === c.toUpperCase())) {
+      return { ok: false, error: `${c} has variations of its own — detach those first.` };
+    }
+    priceGroupLog({ op: 'add', parent: p, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+  ipcMain.handle('pricing:groupRemove', (_e, { child } = {}) => {
+    const c = String(child || '').trim();
+    const { parentOf } = priceGroupState();
+    const par = parentOf[c.toUpperCase()];
+    if (!par) return { ok: false, error: `${c} is not grouped.` };
+    priceGroupLog({ op: 'remove', parent: par, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+  ipcMain.handle('pricing:groupIgnore', (_e, { parent, child } = {}) => {
+    const p = String(parent || '').trim();
+    const c = String(child || '').trim();
+    if (!p || !c) return { ok: false, error: 'Missing SKU.' };
+    priceGroupLog({ op: 'ignore', parent: p, child: c });
+    pricingCache = { at: 0, data: null };
+    return { ok: true };
+  });
+
+  // copy a lister photo (edited pixels) onto the OS clipboard — paste it
+  // straight into eBay's photo box instead of exporting files (owner
+  // 2026-09-18). OS clipboards hold ONE image, so it is per-photo.
+  ipcMain.handle('util:copyImage', (_e, { path: p, dataUrl } = {}) => {
+    try {
+      const img = dataUrl ? nativeImage.createFromDataURL(String(dataUrl)) : nativeImage.createFromPath(String(p || ''));
+      if (!img || img.isEmpty()) return { ok: false, error: 'Could not read the image.' };
+      clipboard.writeImage(img);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
+     to GitHub... install it here") — checks the latest GitHub release; one
+     click downloads the right installer and opens it. ---------- */
+  const UPDATE_REPO = 'amiablet21/capture-station';
+  let updateInfo = null; // { version, url, name }
+  const verNewer = (a, b) => { // is a newer than b (x.y.z strings)
+    const pa = String(a).split('.').map(Number);
+    const pb = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true;
+      if ((pa[i] || 0) < (pb[i] || 0)) return false;
+    }
+    return false;
+  };
+  async function checkForUpdate() {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+        headers: { 'User-Agent': 'CaptureStation', Accept: 'application/vnd.github+json' },
+      });
+      if (!res.ok) return;
+      const j = await res.json();
+      const latest = String(j.tag_name || '').replace(/^v/, '');
+      if (!latest || !verNewer(latest, app.getVersion())) return;
+      const want = process.platform === 'darwin' ? /\.dmg$/i : /\.exe$/i;
+      const asset = (j.assets || []).find(a => want.test(String(a.name || '')));
+      if (!asset) return; // the platform's installer hasn't finished building yet
+      updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
+      if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest });
+    } catch { /* offline or rate-limited: next pass tries again */ }
+  }
+  ipcMain.handle('update:install', async () => {
+    if (!updateInfo) return { ok: false, error: 'No update on record — try again in a minute.' };
+    try {
+      const res = await fetch(updateInfo.url, { headers: { 'User-Agent': 'CaptureStation' }, redirect: 'follow' });
+      if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const dest = paneUniquePath(app.getPath('downloads'), updateInfo.name);
+      fs.writeFileSync(dest, buf);
+      await shell.openPath(dest);
+      return { ok: true, file: path.basename(dest), version: updateInfo.version };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  setTimeout(() => { checkForUpdate(); }, 20 * 1000); // let startup settle first
+  setInterval(() => { checkForUpdate(); }, 4 * 60 * 60 * 1000);
+
+  ipcMain.handle('pricing:revert', async (_e, { id }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = mergedPriceHist();
+    const entry = all.find(e => e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (entry.mode !== 'set' && entry.mode !== 'revert') return { ok: false, error: 'Only hand changes can be reverted.' };
+    if (priceFluctuates(entry.source)) return { ok: false, error: 'Walmart prices belong to the repricer.' };
+    if (all.some(e => e.revertOf === id)) return { ok: false, error: 'Already reverted.' };
+    const back = Number(entry.oldPrice) || 0;
+    if (!(back > 0)) return { ok: false, error: 'No previous price on record for that change.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const stockItemId = await client.findStockItemIdBySku(entry.stockSku);
+      if (!stockItemId) return { ok: false, error: `${entry.stockSku} not found in Linnworks.` };
+      await client.setChannelPrice(stockItemId, entry.source, entry.subSource, back);
+      const rec = priceLogEntry({
+        mode: 'revert', revertOf: id, by: String(cfg.returnsReceivedBy || '').trim(),
+        source: entry.source, subSource: entry.subSource || '', channelSku: entry.channelSku,
+        stockSku: entry.stockSku, oldPrice: Number(entry.newPrice) || 0, newPrice: back,
+      });
+      pricingCache = { at: 0, data: null };
+      return { ok: true, entry: rec };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1981,6 +2568,7 @@ function registerIpc() {
   ipcMain.handle('config:get', () => config.load());
   ipcMain.handle('config:set', (_e, patch) => {
     const cfg = config.save(patch || {});
+    if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     pushState();
     return cfg;
   });
@@ -1995,6 +2583,46 @@ function registerIpc() {
   });
   ipcMain.handle('debug:get', () => ignoredLog.slice().reverse());
   ipcMain.handle('history:get', () => db.historyRows());
+  // Condition SKUs inherit the New listing's photo (owner 2026-09-15):
+  // whenever the stock loads, any OPEN-BOX-/USED-/SCRAP- Linnworks item with
+  // NO image whose base SKU (the name after the prefix, exact match) has one
+  // gets that image attached by URL, set as main. Runs in the background per
+  // load; each SKU is attempted once per app session, and the renderer gets
+  // the new thumbnails pushed so the grid fills in without a refresh.
+  const IMG_INHERIT_PREFIXES = ['OPEN-BOX-', 'USED-', 'SCRAP-'];
+  const imgInheritTried = new Set();
+  let imgInheritBusy = false;
+
+  async function inheritConditionImages(client, items) {
+    if (imgInheritBusy) return;
+    imgInheritBusy = true;
+    try {
+      const bySku = new Map(items.map(i => [String(i.sku || '').toUpperCase(), i]));
+      const pairs = [];
+      for (const it of items) {
+        if (it.image) continue;
+        const sku = String(it.sku || '').toUpperCase();
+        const pre = IMG_INHERIT_PREFIXES.find(p => sku.startsWith(p));
+        if (!pre || imgInheritTried.has(sku)) continue;
+        const base = bySku.get(sku.slice(pre.length));
+        if (!base || !base.image) continue;
+        imgInheritTried.add(sku);
+        try {
+          await client.addItemImageByUrl(it.sku, it.stockItemId, base.image);
+          pairs.push({ sku: it.sku, image: base.image });
+        } catch { /* once per session; the next app launch retries */ }
+      }
+      if (pairs.length && win && !win.isDestroyed()) {
+        win.webContents.send('stock:imgInherited', { pairs });
+        win.webContents.send('app:notice', {
+          message: `${pairs.length} condition SKU${pairs.length === 1 ? '' : 's'} took the New listing's photo`,
+        });
+      }
+    } finally {
+      imgInheritBusy = false;
+    }
+  }
+
   ipcMain.handle('stock:get', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -2003,6 +2631,7 @@ function registerIpc() {
       const items = await client.listInventory();
       // fresh levels for free: run the low-stock crossing check on them
       runLowStockCheck(items).catch(() => { /* silent */ });
+      inheritConditionImages(client, items).catch(() => { /* silent */ });
       return {
         ok: true,
         locationId: cfg.linnworks.locationId,
@@ -2014,10 +2643,14 @@ function registerIpc() {
     }
   });
   // Shelf tab: the sell-through radar (owner design sessions 2026-08-25 —
-  // "what's rotting on the shelf?"). One row per stocked SKU with its last
-  // sale and when the stock arrived. No new API surface: sales ride the
-  // salesCache window, stock rides listInventory, arrival dates come from
-  // the returns log (condition SKUs) and receiving sessions (everything else).
+  // "what's rotting on the shelf?"; sales-rate upgrade signed off from the
+  // demo, owner 2026-09-12). One row per stocked SKU — plus SOLD-OUT
+  // condition SKUs, so a return that sold through still shows its numbers —
+  // with every sale in the 90-day window riding along ([ts, qty, revenue]
+  // triplets) so the renderer can aggregate any period without a refetch.
+  // No new API surface: sales ride the salesCache window, stock rides
+  // listInventory, arrival dates come from the returns log (condition SKUs)
+  // and receiving sessions (everything else).
   ipcMain.handle('shelf:get', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
@@ -2029,16 +2662,16 @@ function registerIpc() {
       if (!sales.ok) return sales;
       const client = new LinnworksClient(cfg.linnworks);
       const items = await client.listInventory();
-      // newest sale per SKU inside the window (per-unit price, not line total)
-      const last = new Map();
+      // every sale per SKU inside the window, newest first
+      const perSku = new Map();
       for (const l of sales.lines) {
         const k = String(l.sku || '').toUpperCase();
         const ts = Date.parse(l.processedOn);
         if (!k || Number.isNaN(ts)) continue;
-        if (!last.has(k) || ts > last.get(k).ts) {
-          last.set(k, { ts, price: l.qty ? Math.round((l.revenue / l.qty) * 100) / 100 : l.revenue });
-        }
+        if (!perSku.has(k)) perSku.set(k, []);
+        perSku.get(k).push([ts, Number(l.qty) || 0, Math.round((Number(l.revenue) || 0) * 100) / 100]);
       }
+      for (const list of perSku.values()) list.sort((a, b) => b[0] - a[0]);
       // when stock last ARRIVED: latest return routed into the SKU, or the
       // latest receiving session that carried it — whichever is newer
       const arrived = new Map();
@@ -2070,14 +2703,17 @@ function registerIpc() {
         const k = String(it.sku || '').toUpperCase();
         const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
         const units = Math.max(0, Number(home.stockLevel) || 0);
-        if (!units) continue; // the shelf shows what is ON it
-        const sale = last.get(k) || null;
+        const cond = condOf(k);
+        if (cond === 'new') continue; // returns only (owner 2026-09-12 trim)
+        const skuSales = perSku.get(k) || [];
+        // the shelf shows what is ON it — plus condition SKUs that SOLD OUT
+        // inside the window (the win would otherwise vanish from the page)
+        if (!units && !skuSales.length) continue;
         rows.push({
           sku: it.sku, title: it.title || '', units,
           price: Number(it.retailPrice) || 0,
-          cond: condOf(k),
-          lastTs: sale ? sale.ts : 0,
-          lastPrice: sale ? sale.price : 0,
+          cond,
+          sales: skuSales,
           arrivedTs: arrived.get(k) || 0,
         });
       }
@@ -2174,7 +2810,7 @@ function registerIpc() {
     const ext = (String(url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i) || [, 'jpg'])[1].toLowerCase();
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
       title: `Save image of ${sku}`,
-      defaultPath: path.join(app.getPath('pictures'), `${sku}.${ext}`),
+      defaultPath: path.join(app.getPath('downloads'), `${sku}.${ext}`),
       filters: [{ name: 'Image', extensions: [ext] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };
@@ -2400,23 +3036,16 @@ function registerIpc() {
       if (day !== today) createdAt = `${day}T12:00:00.000Z`;
     }
     const stockItems = items.filter(i => i.targetSku);
+    // remember non-new mappings so the next return of this SKU is one click
+    for (const i of stockItems) {
+      if (i.condition !== 'new' && i.targetSku !== i.sku) {
+        db.saveConditionMapping(i.sku, i.condition, i.targetSku);
+      }
+    }
+    const receivedBy = String(payload.receivedBy || '').trim().slice(0, 60);
+    let id;
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      if (stockItems.length) {
-        await client.changeStockLevels(
-          stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
-          cfg.linnworks.locationId,
-          'Capture Station return'
-        );
-      }
-      // remember non-new mappings so the next return of this SKU is one click
-      for (const i of stockItems) {
-        if (i.condition !== 'new' && i.targetSku !== i.sku) {
-          db.saveConditionMapping(i.sku, i.condition, i.targetSku);
-        }
-      }
-      const receivedBy = String(payload.receivedBy || '').trim().slice(0, 60);
-      const id = db.createReturn({
+      id = db.createReturn({
         orderNumber: String(payload.orderNumber || ''),
         source: String(payload.source || ''),
         customer: String(payload.customer || ''),
@@ -2430,21 +3059,68 @@ function registerIpc() {
       // the worksheet's "Received by" remembers the last-used initials
       if (receivedBy) config.save({ returnsReceivedBy: receivedBy });
       writeReturnsCsv();
+      retsync.emitRow(db.getReturn(id)); // the shared folder hears about it
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    // The two Linnworks round-trips (restock + order note) used to sit
+    // between Enter and the row appearing — seconds of dead air per return
+    // (owner 2026-09-17). The entry is logged and synced above, so they run
+    // in the background now; a restock that still fails after retries is
+    // stamped LOUDLY on the row itself (synced to every station) + toasted.
+    (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      if (stockItems.length) {
+        let lastErr = '';
+        for (const wait of [0, 2000, 8000]) {
+          if (wait) await new Promise(r => setTimeout(r, wait));
+          try {
+            await client.changeStockLevels(
+              stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
+              cfg.linnworks.locationId,
+              'Capture Station return'
+            );
+            lastErr = '';
+            break;
+          } catch (e) { lastErr = e.message; }
+        }
+        if (lastErr) {
+          const what = stockItems.map(i => `+${i.qty} ${i.targetSku}`).join(', ');
+          try {
+            const r = db.getReturn(id);
+            if (r) {
+              const warn = `⚠ STOCK NOT ADJUSTED (${what}) — add the units in Linnworks by hand`;
+              db.saveReturn(id, {
+                orderNumber: r.order_number, createdAt: r.created_at, customer: r.customer,
+                tracking: r.tracking, note: r.note ? `${r.note} | ${warn}` : warn,
+                items: r.items, unmatched: r.unmatched, receivedBy: r.received_by,
+              });
+              writeReturnsCsv();
+              retsync.emitRow(db.getReturn(id));
+            }
+          } catch { /* the toast below still fires */ }
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('app:notice', { message: `Return saved, but Linnworks stock was NOT adjusted (${what}): ${lastErr}` });
+          }
+        }
+      }
       // best effort: stamp the original order (processed orders may refuse)
-      let noted = false;
       if (payload.orderId) {
         try {
           const summary = items.map(i => `${i.sku} -> ${i.condition}${i.targetSku ? ` (${i.targetSku})` : ''} x${i.qty}`).join('; ') || 'no items recorded';
           await client.addOrderNote(payload.orderId, `Return received: ${summary}${payload.note ? ` | ${payload.note}` : ''}`);
-          noted = true;
         } catch { /* order note is a bonus, not a requirement */ }
       }
-      return { ok: true, id, noted };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
+    })().catch(() => {});
+    return { ok: true, id, noted: false };
   });
-  ipcMain.handle('returns:list', () => db.listReturns());
+  ipcMain.handle('returns:list', () => {
+    // sync off: the legacy bare array (e2e and old callers know this shape)
+    if (!retsync.enabled()) return db.listReturns();
+    const missed = retsyncMissed;
+    retsyncMissed = 0; // the catch-up toast shows once
+    return { rows: retsync.list(), sync: { ...retsync.status(), missed } };
+  });
 
   // Claim photos: QR + status for the Upload Photos corner button. The QR is
   // rendered here (qrcode lib) and handed over as a data URL; po locks the
@@ -2603,41 +3279,47 @@ function registerIpc() {
   // Export: host the chosen photos on the Linnworks item (eBay's CSV upload
   // fetches PicURL over the internet), build the CSV, save where the user
   // picks. Nothing touches eBay until they upload the file in Seller Hub.
+  // photos land on the Linnworks item (hosted URLs), and the description's
+  // {{PHOTO_GALLERY}} placeholder becomes the two-column grid of them —
+  // shared by the CSV export and the Linnworks-native publish below
+  async function hostEbayMedia(client, listing, photoPaths) {
+    let picUrls = [];
+    if (photoPaths && photoPaths.length) {
+      let stockItemId = listing.stockItemId;
+      if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
+      if (!stockItemId) throw new Error(`${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.`);
+      // entries are plain paths (untouched photos) or {dataUrl, name}
+      // (baked in the editor — the EDITED pixels are what eBay gets)
+      const files = photoPaths.map((p, i) => {
+        if (p && typeof p === 'object' && p.dataUrl) {
+          const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+          if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
+          return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
+        }
+        const fp = typeof p === 'object' ? p.path : p;
+        return {
+          buffer: fs.readFileSync(fp),
+          name: path.basename(fp),
+          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
+        };
+      });
+      picUrls = await client.addItemImages(stockItemId, files);
+    }
+    // two-column grid (owner pick 2026-08-13); a single photo stays full width
+    const gallery = picUrls.length
+      ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
+      : '';
+    const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
+    return { picUrls, description };
+  }
+
   ipcMain.handle('ebay:export', async (_e, { listing, photoPaths }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const { buildEbayCsv } = require('./ebaycsv.js');
       const client = new LinnworksClient(cfg.linnworks);
-      let picUrls = [];
-      if (photoPaths && photoPaths.length) {
-        let stockItemId = listing.stockItemId;
-        if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
-        if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.` };
-        // entries are plain paths (untouched photos) or {dataUrl, name}
-        // (baked in the editor — the EDITED pixels are what eBay gets)
-        const files = photoPaths.map((p, i) => {
-          if (p && typeof p === 'object' && p.dataUrl) {
-            const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-            if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-            return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-          }
-          const fp = typeof p === 'object' ? p.path : p;
-          return {
-            buffer: fs.readFileSync(fp),
-            name: path.basename(fp),
-            mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-          };
-        });
-        picUrls = await client.addItemImages(stockItemId, files);
-      }
-      // the description's photo section gets the hosted URLs (the preview
-      // showed local files; buyers get the same images from Linnworks' CDN)
-      // two-column grid (owner pick 2026-08-13); a single photo stays full width
-      const gallery = picUrls.length
-        ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
-        : '';
-      const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
+      const { picUrls, description } = await hostEbayMedia(client, listing, photoPaths);
       const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
       const stamp = new Date();
       const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
@@ -2649,6 +3331,74 @@ function registerIpc() {
       if (r.canceled || !r.filePath) return { ok: false, canceled: true };
       fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8'); // BOM: Seller Hub reads UTF-8 reliably
       return { ok: true, path: r.filePath, picCount: picUrls.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
+     "rework the listings tab based on what linnworks does": instead of the
+     Seller Hub CSV round-trip, ask Linnworks to list directly through its
+     stored eBay authorization. Configurators (made once in Linnworks' UI)
+     carry the shared settings including the eBay CONDITION, so the app maps
+     each of its four conditions to a configurator. The CSV export stays as
+     the fallback. */
+  ipcMain.handle('ebay:lwConfigs', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      return { ok: true, configs: await client.getEbayConfigurators(), saved: cfg.ebayLw || {} };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ebay:lwPublish', async (_e, { listing, photoPaths, configId, subSource }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!configId) return { ok: false, error: 'Pick a Linnworks configurator for this condition first.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      let stockItemId = listing.stockItemId || await client.findStockItemIdBySku(listing.sku).catch(() => null);
+      if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks.` };
+      const { description } = await hostEbayMedia(client, { ...listing, stockItemId }, photoPaths);
+      const tpls = await client.createEbayTemplates({ configId, subSource, inventoryItemIds: [stockItemId] });
+      const tpl = tpls.find(t => t.InventoryItemId === stockItemId) || tpls[0];
+      if (!tpl) return { ok: false, error: 'Linnworks returned no template — check the configurator and that the eBay channel is enabled.' };
+      if (tpl.ErrorMessage) return { ok: false, error: `Linnworks template error: ${tpl.ErrorMessage}` };
+      // the form's values overlay whatever the configurator + item produced
+      if (listing.title) tpl.Title = String(listing.title).slice(0, 80);
+      if (description) tpl.Description = description;
+      const qty = Number(listing.qty) || 0;
+      if (qty > 0) tpl.AvailableQuantity = qty;
+      const price = Number(listing.price) || 0;
+      if (price > 0) {
+        tpl.Price = tpl.Price || { StartPrice: 0, ReservePrice: 0, BINPrice: 0, AutoAccept: 0, AutoDecline: 0, OriginalRetailPrice: 0 };
+        tpl.Price.StartPrice = price;
+        tpl.Price.BINPrice = price;
+      }
+      const have = new Map((tpl.Attributes || []).map(a => [String(a.AttrName || '').toLowerCase(), a]));
+      for (const [name, value] of Object.entries(listing.specs || {})) {
+        if (!String(value || '').trim()) continue;
+        const hit = have.get(String(name).toLowerCase());
+        if (hit) hit.Value = String(value);
+        else (tpl.Attributes = tpl.Attributes || []).push({ AttrName: name, Value: String(value), IsUserDefined: true, IsRequired: false });
+      }
+      await client.processEbayListings([tpl], 'Create');
+      return { ok: true, templateId: tpl.TemplateId, subSource: subSource || '' };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ebay:lwStatus', async (_e, { templateId, subSource }) => {
+    const cfg = config.load();
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const t = (await client.getEbayTemplates({ templateIds: [templateId], subSource }))[0];
+      if (!t) return { ok: true, status: 'UNKNOWN', error: '', listingIds: [] };
+      return { ok: true, status: String(t.Status || ''), error: t.ErrorMessage || '', listingIds: t.ListingIds || [] };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3329,7 +4079,11 @@ function registerIpc() {
   ipcMain.handle('returns:editUnit', async (_e, { id, itemIndex, po, day, customer, tracking, sku, condition, note, units, receivedBy, price, settle }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    // with the shared folder on, ids are "<station>:<localId>" — a return
+    // owned by ANOTHER desktop edits through the folder, never this db
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
     const newPo = String(po || '').trim(); // may be empty: PO-less entries are legal
     const newDay = String(day || '').trim();
@@ -3354,10 +4108,18 @@ function registerIpc() {
         if (!it) return { ok: false, error: 'Return line not found.' };
         if (!newSku) return { ok: false, error: 'Pick the returned SKU.' };
         const oldQty = Number(it.qty) || 1;
+        const changed = newSku !== it.sku || newCond !== it.condition;
         let newTarget = it.targetSku || '';
-        if (newSku !== it.sku || newCond !== it.condition) {
-          if (newCond === 'new') newTarget = newSku;
-          else if (newCond === 'different') {
+        // resolve the landing on any change, AND on a line that never had
+        // one (owner 2026-09-18: a log-only line took "Scrap" silently with
+        // no scrap listing and no stock move — pick/create must gate grade
+        // changes, and an old log-only line heals on its next edit)
+        if (changed || !it.targetSku) {
+          if (newCond === 'new') {
+            // restocks only as a real listing; unknown SKUs log with no stock
+            const skus = await getInventorySkus(cfg).catch(() => []);
+            newTarget = skus.some(s => String(s).toUpperCase() === newSku.toUpperCase()) ? newSku : '';
+          } else if (newCond === 'different') {
             // the line's "received" (what actually came back) decides:
             // a real listing restocks itself, anything else logs with no
             // stock (never an error). Editing the SKU cell edits the
@@ -3368,50 +4130,84 @@ function registerIpc() {
           } else {
             const skus = await getInventorySkus(cfg).catch(() => []);
             newTarget = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
-            if (!newTarget && it.targetSku) {
-              return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
+            if (!newTarget) {
+              // an explicit grade/SKU change must land somewhere; an
+              // unrelated edit (note, price) on a stuck line stays log-only
+              if (changed) return { ok: false, error: `No ${newCond} listing mapped for ${newSku} — pick or create one first.` };
+              newTarget = '';
             }
           }
         }
         // stock corrections: target moved (swap old qty out, new qty in),
         // target GONE (a Different return of unlisted junk: old stock out),
-        // or quantity changed on the same target (delta the difference)
+        // or quantity changed on the same target (delta the difference).
+        // A line that never restocked (log-only) gains its landing now.
+        const deltas = [];
         if (it.targetSku) {
-          const deltas = [];
           if (newTarget && newTarget !== it.targetSku) {
             deltas.push({ sku: it.targetSku, delta: -oldQty }, { sku: newTarget, delta: newQty });
             stockNote = `stock corrected: -${oldQty} ${it.targetSku}, +${newQty} ${newTarget}`;
-          } else if (!newTarget && (newSku !== it.sku || newCond !== it.condition)) {
+          } else if (!newTarget && changed) {
             deltas.push({ sku: it.targetSku, delta: -oldQty });
             stockNote = `stock corrected: -${oldQty} ${it.targetSku} (nothing restocked)`;
           } else if (newQty !== oldQty) {
             deltas.push({ sku: it.targetSku, delta: newQty - oldQty });
             stockNote = `stock corrected: ${newQty > oldQty ? '+' : ''}${newQty - oldQty} ${it.targetSku}`;
           }
-          if (deltas.length) {
-            const client = new LinnworksClient(cfg.linnworks);
-            await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
-          }
+        } else if (newTarget) {
+          deltas.push({ sku: newTarget, delta: newQty });
+          stockNote = `+${newQty} ${newTarget} restocked`;
+        }
+        if (deltas.length) {
+          const client = new LinnworksClient(cfg.linnworks);
+          await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
         }
         items[ii] = {
-          ...it, sku: newSku, condition: newCond, targetSku: it.targetSku ? newTarget : '', note: newNote, qty: newQty,
+          ...it, sku: newSku, condition: newCond, targetSku: newTarget, note: newNote, qty: newQty,
           ...(newPrice === null ? {} : { price: newPrice }),
           ...(newSettle === null ? {} : { settle: newSettle }),
         };
       } else {
         // PO-only pseudo row: record fields, plus an item line if a SKU was
-        // typed (log-only, no stock move — the unit never bumped stock)
+        // typed. The unit never bumped stock at receive time (no product
+        // was known), so writing one in restocks it now like a normal
+        // receive (owner 2026-09-18: rows whose PO didn't match still
+        // matter). No landing listing = log-only, never an error.
         recordNote = newNote;
-        if (newSku) items.push({ sku: newSku, condition: newCond, targetSku: '', qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
+        if (newSku) {
+          const skus = await getInventorySkus(cfg).catch(() => []);
+          const isReal = skus.some(s => String(s).toUpperCase() === newSku.toUpperCase());
+          let target = '';
+          if (newCond === 'new' || newCond === 'different') target = isReal ? newSku : '';
+          else target = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
+          if (target) {
+            const client = new LinnworksClient(cfg.linnworks);
+            await client.changeStockLevels([{ sku: target, delta: newQty }], cfg.linnworks.locationId, 'Capture Station return edit');
+            stockNote = `+${newQty} ${target} restocked`;
+          }
+          items.push({ sku: newSku, condition: newCond, targetSku: target, qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
+        }
       }
-      db.saveReturn(rec.id, {
+      const fields = {
         orderNumber: newPo, createdAt,
         customer: String(customer || '').trim().slice(0, 120),
         tracking: String(tracking || '').trim().slice(0, 100),
         note: recordNote, items, unmatched: rec.unmatched,
         receivedBy: String(receivedBy || '').trim().slice(0, 60),
-      });
-      writeReturnsCsv();
+      };
+      if (remote) {
+        // the owner's desktop (and everyone else) picks this up on the
+        // next folder tick — stock already moved above, Linnworks is global
+        retsync.emitPutFor(key, {
+          created_at: fields.createdAt, order_number: fields.orderNumber,
+          source: rec.source || '', customer: fields.customer, note: fields.note,
+          items, unmatched: !!rec.unmatched, tracking: fields.tracking, received_by: fields.receivedBy,
+        });
+      } else {
+        const saved = db.saveReturn(rec.id, fields);
+        writeReturnsCsv();
+        retsync.emitRow(saved);
+      }
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3420,13 +4216,42 @@ function registerIpc() {
   ipcMain.handle('returns:deleteUnit', async (_e, { id, itemIndex, removeStock }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const rec = db.getReturn(Number(id));
+    const key = String(id);
+    const remote = retsync.enabled() && key.includes(':') && retsync.ownerOf(key) !== retsync.stationName();
+    const rec = remote ? retsync.getRec(key) : db.getReturn(Number(key.includes(':') ? key.split(':')[1] : key));
     if (!rec) return { ok: false, error: 'Return not found.' };
+    // one persistence seam for both worlds: my rows hit the db + csv and
+    // snapshot to my file; another station's rows go through the folder only
+    const persistDelete = () => {
+      if (remote) { retsync.emitDel(key); return; }
+      db.deleteReturn(rec.id);
+      writeReturnsCsv();
+      if (retsync.enabled()) retsync.emitDel(retsync.gidOf(rec.id));
+    };
+    const persistSave = (items) => {
+      const fields = {
+        orderNumber: rec.order_number, createdAt: rec.created_at,
+        customer: rec.customer, tracking: rec.tracking,
+        note: rec.note, items, unmatched: rec.unmatched,
+        receivedBy: rec.received_by,
+      };
+      if (remote) {
+        retsync.emitPutFor(key, {
+          created_at: rec.created_at, order_number: rec.order_number, source: rec.source || '',
+          customer: rec.customer, note: rec.note, items, unmatched: !!rec.unmatched,
+          tracking: rec.tracking, received_by: rec.received_by,
+        });
+        return;
+      }
+      const saved = db.saveReturn(rec.id, fields);
+      writeReturnsCsv();
+      retsync.emitRow(saved);
+    };
     const ii = Number(itemIndex);
     let stockNote = '';
     try {
       if (ii < 0 || rec.items.length === 0) {
-        db.deleteReturn(rec.id); // PO-only record: nothing ever moved stock
+        persistDelete(); // PO-only record: nothing ever moved stock
       } else {
         const it = rec.items[ii];
         if (!it) return { ok: false, error: 'Return line not found.' };
@@ -3441,17 +4266,9 @@ function registerIpc() {
         }
         const items = rec.items.slice();
         items.splice(ii, 1); // the row IS the line now — remove it whole
-        if (items.length === 0) db.deleteReturn(rec.id);
-        else {
-          db.saveReturn(rec.id, {
-            orderNumber: rec.order_number, createdAt: rec.created_at,
-            customer: rec.customer, tracking: rec.tracking,
-            note: rec.note, items, unmatched: rec.unmatched,
-            receivedBy: rec.received_by,
-          });
-        }
+        if (items.length === 0) persistDelete();
+        else persistSave(items);
       }
-      writeReturnsCsv();
       return { ok: true, stockNote };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3536,7 +4353,23 @@ function registerIpc() {
   });
   // force = the page's Refresh button: bust the cache and re-page
   ipcMain.handle('sales:query', (_e, { from, to, force }) => querySales(from, to, !!force));
-  ipcMain.handle('wfs:list', () => db.listWfsShipments());
+  // with the shared folder on, every desktop sees every station's WFS
+  // shipments, each row wearing the station that logged it (owner
+  // 2026-09-16: "see which user did what"); local SQLite stays this
+  // station's own storage, other stations' shipments come from the fold
+  ipcMain.handle('wfs:list', () => {
+    const st = retsync.stationName() || '';
+    const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
+    if (!retsync.enabled()) return mine;
+    retsync.auxBackfill('wfs', db.listWfsShipments(1000).slice().reverse()
+      .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
+    const foreign = retsync.readAux('wfs')
+      .filter(e => e.station !== st)
+      .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+    return mine.concat(foreign)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 200);
+  });
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3555,6 +4388,8 @@ function registerIpc() {
         'Capture Station WFS shipment'
       );
       const id = db.createWfsShipment({ note, items });
+      // the shared folder hears about it at once (append-only aux log)
+      retsync.appendAux('wfs', { id, ts: new Date().toISOString(), note, items });
       writeWfsCsv();
       return { ok: true, id };
     } catch (e) {
@@ -3625,11 +4460,17 @@ function registerIpc() {
     const universe = new Set();
     const detail = [];
     const sets = { walmart: [], ebay: [], temu: [] };
+    const chskus = {}; // stockItemId -> channel SKU strings, for the stock search
     const label = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
     for (const it of inStock) {
       try {
         const channels = await client.getChannelSkus(it.stockItemId);
         for (const c of channels) {
+          if (c.sku) {
+            const list = chskus[it.stockItemId] || (chskus[it.stockItemId] = []);
+            const s = String(c.sku).toUpperCase();
+            if (!list.includes(s)) list.push(s);
+          }
           if (!c.source) continue;
           universe.add(String(c.source).toUpperCase());
           const l2 = label(c.source);
@@ -3637,25 +4478,19 @@ function registerIpc() {
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        // "value idle" uses CHANNEL listing prices (owner request 2026-08-08
-        // — Linnworks item retail prices are deliberately left empty here)
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
+        // (the per-SKU channel-price lookup left with the Value idle column,
+        // owner 2026-09-12 — one fewer throttled API call per unlisted SKU)
         detail.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId, // the add-image button needs it
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
-    detail.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
-    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, covered: inStock.map(i => i.stockItemId) };
+    detail.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
+    unlistedCache = { at: Date.now(), skus: detail.map(d => d.sku), detail, channels: [...universe].sort(), sets, chskus, covered: inStock.map(i => i.stockItemId) };
     // the scan takes minutes: persist it so the NEXT boot shows cards at
     // once (stale-while-revalidate), and tell the renderer fresh data landed
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
@@ -3693,29 +4528,29 @@ function registerIpc() {
         covered.add(it.stockItemId);
         changed = true;
         for (const c of channels) {
+          if (c.sku) {
+            if (!unlistedCache.chskus) unlistedCache.chskus = {};
+            const list = unlistedCache.chskus[it.stockItemId] || (unlistedCache.chskus[it.stockItemId] = []);
+            const s = String(c.sku).toUpperCase();
+            if (!list.includes(s)) list.push(s);
+          }
           if (!c.source) continue;
           const l2 = label(c.source);
           if (l2 && unlistedCache.sets && !unlistedCache.sets[l2].includes(it.stockItemId)) unlistedCache.sets[l2].push(it.stockItemId);
         }
         if (channels.length) continue;
         const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId) || {};
-        let price = 0;
-        try {
-          const prices = await client.getChannelPrices(it.stockItemId);
-          price = prices.reduce((m, p) => Math.max(m, p.price), 0);
-        } catch { /* no stored channel price: the column shows an em-dash */ }
         kept.push({
           sku: String(it.sku).toUpperCase(),
           title: it.title || '',
           image: it.image || '',
           stockItemId: it.stockItemId,
           avail: Math.max(Number(l.available) || 0, Number(l.stockLevel) || 0),
-          retail: price,
         });
       } catch { /* one bad lookup never hides the rest */ }
     }
     if (changed) {
-      kept.sort((a, b) => (b.avail * b.retail) - (a.avail * a.retail));
+      kept.sort((a, b) => b.avail - a.avail || a.sku.localeCompare(b.sku));
       unlistedCache = { ...unlistedCache, skus: kept.map(d => d.sku), detail: kept, covered: [...covered] };
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
       if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
@@ -3730,6 +4565,9 @@ function registerIpc() {
     } catch { /* no saved scan yet */ }
   }
 
+  // the channel-bypass maps ride every unlisted response so the renderer
+  // can grey out "can't sell there" channels without an extra round trip
+  const skipCfg = (cfg) => ({ chanSkips: cfg.channelSkips || {} });
   ipcMain.handle('stock:unlisted', async (_e, { force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -3744,25 +4582,25 @@ function registerIpc() {
       if (force) {
         if (unlistedCache.detail && Date.now() - unlistedCache.at < 60 * 60 * 1000) {
           const c = await runUnlistedDelta(cfg);
-          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+          return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
         }
         const prev = unlistedCache;
         unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
         const scan = runUnlistedScan(cfg);
         if (prev.detail) {
           scan.catch(() => { if (!unlistedCache.detail) unlistedCache = prev; });
-          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], stale: true };
+          return { ok: true, skus: prev.skus, detail: prev.detail, channels: prev.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale: true };
         }
         const c = await scan;
-        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+        return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
       }
       if (unlistedCache.detail) {
         const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
         if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
-        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], stale };
+        return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale };
       }
       const c = await runUnlistedScan(cfg);
-      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [] };
+      return { ok: true, skus: c.skus, detail: c.detail, channels: c.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg) };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3788,6 +4626,21 @@ function registerIpc() {
     config.save({ unlistedIgnore: [...list].sort() });
     unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
     return { ok: true, ignored: [...list].sort() };
+  });
+  // channel bypass (owner 2026-09-12: "grey out channels they wouldn't be
+  // able to sell to"): per-SKU one-offs and per-condition rules. Purely a
+  // reporting filter — nothing is touched in Linnworks.
+  ipcMain.handle('stock:channelSkip', (_e, { sku, channel, remove }) => {
+    const key = String(sku || '').trim().toUpperCase();
+    const ch = String(channel || '').trim().toLowerCase();
+    if (!key || !ch) return { ok: false, error: 'Missing SKU or channel.' };
+    const cfg = config.load();
+    const map = { ...(cfg.channelSkips || {}) };
+    const set = new Set(map[key] || []);
+    if (remove) set.delete(ch); else set.add(ch);
+    map[key] = [...set].sort();
+    config.save({ channelSkips: map });
+    return { ok: true, chanSkips: map };
   });
   // DropShip program + reorder points
   // shared by the desktop dropship view AND the phone stock editor
@@ -3880,8 +4733,53 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  // shared by the desktop grid AND the phone dashboard's stock editor
-  async function stockSetLevel(sku, level) {
+  // Dead-row sweep for the channel-SKUs popup (owner 2026-09-16: a SKU
+  // renamed on the channel leaves a stale link record behind). A record is
+  // "gone" only when its SKU is absent from the channel's CURRENT scanned
+  // catalog — the caller additionally restricts the sweep to sync-off rows,
+  // because the scan feed lags and a listing created minutes ago would
+  // otherwise vanish from the popup while very much alive.
+  ipcMain.handle('stock:channelSkusGone', async (_e, { records }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = Array.isArray(records) ? records.slice(0, 50) : [];
+    if (!list.length) return { ok: true, gone: [] };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const channels = await client.getMappingChannels();
+      const feeds = new Map(); // channel key -> Set of catalog SKUs, or null when unreadable
+      const gone = [];
+      for (const r of list) {
+        const ch = channels.find(c => c.source === r.source && c.subSource === r.subSource);
+        if (!ch) continue; // channel unknown: cannot verify, keep the row
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        if (!feeds.has(key)) {
+          let skus = null;
+          try {
+            let hit = mappingCache.get(key);
+            if (!hit || Date.now() - hit.at > 10 * 60 * 1000) {
+              hit = { at: Date.now(), items: await client.getChannelItems(ch.id, ch.source, ch.subSource) };
+              mappingCache.set(key, hit); // the mapping dialog reuses it
+            }
+            skus = new Set(hit.items.map(i => String(i.sku).toUpperCase()));
+          } catch { /* feed unreachable: keep every row of this channel */ }
+          feeds.set(key, skus);
+        }
+        const skus = feeds.get(key);
+        if (skus && skus.size && !skus.has(String(r.sku).toUpperCase())) {
+          gone.push({ sku: r.sku, source: r.source, subSource: r.subSource });
+        }
+      }
+      return { ok: true, gone };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // shared by the desktop grid AND the phone dashboard's stock editor.
+  // prev = the level the caller was looking at, so the shared history can
+  // record before → after (owner 2026-09-17: "everytime someone adds
+  // stock, I want it in the history so I can see what people are doing")
+  async function stockSetLevel(sku, level, prev) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const n = Number(level);
@@ -3889,6 +4787,11 @@ function registerIpc() {
     try {
       const client = new LinnworksClient(cfg.linnworks);
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // every hand edit joins the shared history the bulk imports use
+      const before = Number.isFinite(Number(prev)) ? Number(prev) : null;
+      if (before !== n) {
+        bulkLogEntry({ mode: 'edit', file: '', rows: [{ sku: String(sku).toUpperCase(), before, qty: n, after: n }], skipped: [] });
+      }
       // a hand-raised count on an unlisted SKU (found returns: OPEN-BOX /
       // USED / SCRAP) must reach the "needs listings" card at once, not
       // after the hour cache
@@ -3906,7 +4809,199 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   }
-  ipcMain.handle('stock:set', (_e, { sku, level }) => stockSetLevel(sku, level));
+  ipcMain.handle('stock:set', (_e, { sku, level, prev }) => stockSetLevel(sku, level, prev));
+
+  /* ---- bulk stock entry (owner 2026-09-17, reworked same day: "no excel
+     import — I just want to write the SKU on the left column and the qty
+     on the right"): typed SKU+Qty lines add to or replace the warehouse
+     levels, with a history that rides the shared folder like WFS ---- */
+  const bulkHistPath = () => path.join(app.getPath('userData'), 'stock-imports.json');
+  const loadBulkHist = () => {
+    try { const j = JSON.parse(fs.readFileSync(bulkHistPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+    catch { return []; }
+  };
+  // one entry = one stock movement (bulk import, hand edit, revert):
+  // written locally AND appended to the shared folder with the station name
+  function bulkLogEntry(partial) {
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: new Date().toISOString(),
+      station: retsync.stationName() || 'this desktop',
+      ...partial,
+    };
+    try { fs.writeFileSync(bulkHistPath(), JSON.stringify([entry, ...loadBulkHist()].slice(0, 200))); } catch { /* best effort */ }
+    retsync.appendAux('stockimports', entry);
+    return entry;
+  }
+  ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const want = (Array.isArray(rows) ? rows : []).slice(0, 500)
+      .map(r => ({ sku: String(r.sku || '').trim().toUpperCase(), qty: Number(r.qty) }))
+      .filter(r => r.sku && Number.isInteger(r.qty) && r.qty >= 0);
+    if (!want.length) return { ok: false, error: 'Nothing to import.' };
+    if (mode !== 'add' && mode !== 'set') return { ok: false, error: 'Pick add or set.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      // fresh levels at apply time — the preview may be minutes old
+      const items = await client.listInventory();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const entryRows = [];
+      const skipped = [];
+      const deltas = [];
+      for (const r of want) {
+        const it = bySku.get(r.sku);
+        if (!it) { skipped.push(r.sku); continue; }
+        const lvl = (it.levels || []).find(l => l.locationId === cfg.linnworks.locationId);
+        const before = lvl ? Number(lvl.stockLevel) || 0 : 0;
+        const delta = mode === 'add' ? r.qty : r.qty - before;
+        entryRows.push({ sku: r.sku, before, qty: r.qty, after: before + delta });
+        if (delta !== 0) deltas.push({ sku: it.sku, delta });
+      }
+      if (!entryRows.length) return { ok: false, error: 'None of those SKUs exist in Linnworks.' };
+      if (deltas.length) {
+        await client.changeStockLevels(deltas, cfg.linnworks.locationId,
+          mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
+      }
+      const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped });
+      // same after-care as a single stock correction: fresh unlisted scan,
+      // immediate re-route + re-import instead of waiting the 5-minute pass
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, entry };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Reverse any history entry (owner 2026-09-17: "I can go in the history
+  // and reverse any action"). It reverses the CHANGE, not the snapshot —
+  // deltas, so sales and edits made since stay intact; a row whose change
+  // would push below zero is clamped at zero and recorded as applied.
+  ipcMain.handle('stock:bulkRevert', async (_e, { id }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = [...retsync.readAux('stockimports'), ...loadBulkHist()];
+    const entry = all.find(e => e && e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'Already reverted.' };
+    // an entry whose units were partly moved to another SKU can't be
+    // reverted wholesale — the moved units would be subtracted twice
+    const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
+    if (all.some(e => e && e.mode === 'fix' && e.fixOf === id && !undone.has(e.id))) {
+      return { ok: false, error: 'Units from this entry were moved to another SKU — revert those moves first.' };
+    }
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const rows = [];
+      const deltas = [];
+      for (const r of entry.rows || []) {
+        if (r.before == null) continue; // an old edit with no recorded before: nothing to compute
+        const it = bySku.get(String(r.sku).toUpperCase());
+        if (!it) continue; // SKU deleted since
+        const lvl = (it.levels || []).find(l => l.locationId === cfg.linnworks.locationId);
+        const cur = lvl ? Number(lvl.stockLevel) || 0 : 0;
+        const change = (Number(r.after) || 0) - (Number(r.before) || 0);
+        if (!change) continue;
+        const delta = Math.max(-cur, -change);
+        if (!delta) continue;
+        rows.push({ sku: String(r.sku).toUpperCase(), before: cur, qty: delta, after: cur + delta });
+        deltas.push({ sku: it.sku, delta });
+      }
+      if (!deltas.length) return { ok: false, error: 'Nothing to reverse — the change was zero, already gone, or the SKUs no longer exist.' };
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert');
+      const rec = bulkLogEntry({ mode: 'revert', revertOf: id, file: '', rows, skipped: [] });
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, entry: rec };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Move units of one past history line onto the SKU they SHOULD have gone
+  // to (owner 2026-09-17: an import went in as brand new when the units were
+  // open box). Deducts from the wrongly credited SKU (clamped at zero, like
+  // reverts), credits the right one, and logs the move as its own entry —
+  // reversible like everything else.
+  ipcMain.handle('stock:bulkFix', async (_e, { id, rowIdx, toSku, qty }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const all = [...retsync.readAux('stockimports'), ...loadBulkHist()];
+    const entry = all.find(e => e && e.id === id);
+    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
+    if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'That entry was reverted — there is nothing left to move.' };
+    const row = (entry.rows || [])[Number(rowIdx)];
+    if (!row) return { ok: false, error: 'That line is missing from the entry.' };
+    const change = (Number(row.after) || 0) - (Number(row.before) || 0);
+    if (change <= 0) return { ok: false, error: 'Only lines that ADDED stock can be moved to another SKU.' };
+    const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
+    const moved = all
+      .filter(e => e && e.mode === 'fix' && e.fixOf === id && Number(e.fixRow) === Number(rowIdx) && !undone.has(e.id))
+      .reduce((s, e) => s + (Number(e.fixQty) || 0), 0);
+    const avail = change - moved;
+    if (avail <= 0) return { ok: false, error: 'Those units were already moved.' };
+    const m = Number(qty);
+    if (!Number.isInteger(m) || m < 1 || m > avail) return { ok: false, error: `Units must be a whole number between 1 and ${avail}.` };
+    const from = String(row.sku || '').toUpperCase();
+    const to = String(toSku || '').trim().toUpperCase();
+    if (!to) return { ok: false, error: 'Pick the SKU the units should have gone to.' };
+    if (to === from) return { ok: false, error: 'That is the same SKU.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      const items = await client.listInventory();
+      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
+      const toIt = bySku.get(to);
+      if (!toIt) return { ok: false, error: `${to} does not exist in Linnworks.` };
+      const levelOf = (it) => {
+        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+        return l ? Number(l.stockLevel) || 0 : 0;
+      };
+      const fromIt = bySku.get(from);
+      const fromCur = fromIt ? levelOf(fromIt) : 0;
+      const toCur = levelOf(toIt);
+      const dFrom = fromIt ? Math.max(-fromCur, -m) : 0; // never below zero
+      const deltas = [{ sku: toIt.sku, delta: m }];
+      if (dFrom) deltas.push({ sku: fromIt.sku, delta: dFrom });
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)');
+      const rec = bulkLogEntry({
+        mode: 'fix', fixOf: id, fixRow: Number(rowIdx), fixQty: m, file: '',
+        rows: [
+          { sku: from, before: fromIt ? fromCur : null, qty: dFrom, after: fromIt ? fromCur + dFrom : null },
+          { sku: to, before: toCur, qty: m, after: toCur + m },
+        ],
+        skipped: [],
+      });
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, entry: rec };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('stock:bulkHistory', () => {
+    const seen = new Set();
+    const all = [];
+    for (const e of [...retsync.readAux('stockimports'), ...loadBulkHist()]) {
+      if (!e || !e.id || seen.has(e.id)) continue;
+      seen.add(e.id);
+      all.push(e);
+    }
+    all.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+    return { ok: true, entries: all.slice(0, 100) };
+  });
   // Minimum (reorder alert) level for one SKU at the primary warehouse.
   ipcMain.handle('stock:setMin', async (_e, { stockItemId, level }) => {
     const cfg = config.load();
@@ -3926,6 +5021,25 @@ function registerIpc() {
   // the page itself is hidden unless pages.receiving is enabled.
   ipcMain.handle('receiving:finish', (_e, payload) => finishReceiving(payload));
   ipcMain.handle('receiving:list', () => listReceivingSessions());
+  // shared returns folder picker (Settings → Returns sync). Saving the
+  // config re-points the engine via the config:set hook above.
+  // popover ✕: forget a stale/renamed desktop — deletes its file from the
+  // shared folder; its returns leave every desktop until it syncs again
+  ipcMain.handle('retsync:removeStation', (_e, { name }) => retsync.removeStation(name));
+
+  ipcMain.handle('retsync:chooseFolder', async () => {
+    const cur = (config.load().returnsSync || {}).folder || '';
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Choose the shared returns folder (Google Drive / OneDrive / network share)',
+      defaultPath: cur || app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, folder: cur };
+    config.save({ returnsSync: { folder: filePaths[0] } });
+    startRetSync();
+    pushState();
+    return { ok: true, folder: filePaths[0] };
+  });
   ipcMain.handle('receiving:chooseFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Choose receiving session folder',
@@ -3960,31 +5074,9 @@ function registerIpc() {
   // the pane header's globe: a native popup with the seller portals (native
   // so the marketplace page below can never draw over it); the current
   // site wears the checkmark
-  // the Returns tab's dropdown: Returns log | Shelf (owner 2026-08-25 —
-  // Shelf lives under Returns now; NATIVE menu because the marketplace pane
-  // is a native layer that would cover an HTML dropdown). Resolves with the
-  // picked page, or null when dismissed.
-  ipcMain.handle('nav:returnsMenu', (_e, payload) => new Promise((resolve) => {
-    if (!win || win.isDestroyed()) { resolve({ ok: false }); return; }
-    const cfg = config.load();
-    const current = payload && payload.current;
-    // the close callback fires BEFORE item click handlers — resolving there
-    // dropped every pick (v1.20.38 bug: menu opened, clicking did nothing).
-    // Clicks resolve directly; the callback only covers dismiss, after a
-    // beat so a click always wins the race.
-    let done = false;
-    const finish = (page) => { if (!done) { done = true; resolve({ ok: true, page }); } };
-    const items = [
-      { label: 'Returns log', key: 'returns' },
-      ...((cfg.pages || {}).stock ? [{ label: 'Shelf — what’s selling', key: 'shelf' }] : []),
-    ];
-    Menu.buildFromTemplate(items.map(it => ({
-      label: it.label,
-      type: 'checkbox',
-      checked: current === it.key,
-      click: () => finish(it.key),
-    }))).popup({ window: win, callback: () => setTimeout(() => finish(null), 120) });
-  }));
+  // (the Returns tab's Returns log | Shelf dropdown is an in-app <dialog>
+  // in the renderer now — owner 2026-09-12, "make it a dropdown"; the
+  // marketplace pane yields to open dialogs so it can't draw over it)
   ipcMain.handle('browser:platformMenu', () => {
     if (!paneView || !win || win.isDestroyed()) return { ok: false };
     const HOMES = [
@@ -4101,7 +5193,11 @@ function createWindow() {
 }
 
 function buildMenu() {
+  const mac = process.platform === 'darwin';
   const template = [
+    // macOS titles the FIRST menu with the app's name and expects the
+    // standard app menu there; without it File got swallowed into it
+    ...(mac ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
       submenu: [
@@ -4128,15 +5224,26 @@ function buildMenu() {
         { role: 'quit' },
       ],
     },
+    // Cmd+C/V/X/A/Z on macOS only work when the application menu carries
+    // the edit roles — without an Edit menu copy/paste did nothing on Mac
+    // (owner report 2026-09-12); Windows fires them natively either way
+    { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
-        { label: 'History', accelerator: 'CmdOrCtrl+H', click: () => win && win.webContents.send('ui:open-history') },
+        // Cmd+H is the system-wide Hide on macOS (the app menu owns it now)
+        { label: 'History', accelerator: mac ? 'Cmd+Shift+H' : 'Ctrl+H', click: () => win && win.webContents.send('ui:open-history') },
         { label: 'Ignored Clipboard Log', click: () => win && win.webContents.send('ui:open-debug') },
         { type: 'separator' },
         // dev-only tools stay out of installed builds (warehouse machines)
         ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
-        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+        // zoom goes through the renderer's own pipeline: the raw Electron
+        // roles zoomed the page but never told browserLayout, so the native
+        // marketplace pane kept its old bounds and overlapped the sheet
+        // (owner 2026-09-17, "the split screen for the capture page is broken")
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => win && win.webContents.send('ui:zoom', { dir: 'reset' }) },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => win && win.webContents.send('ui:zoom', { dir: 'in' }) },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => win && win.webContents.send('ui:zoom', { dir: 'out' }) },
       ],
     },
   ];
@@ -4206,6 +5313,7 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   createWindow();
+  startRetSync();
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();

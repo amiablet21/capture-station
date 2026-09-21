@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Variation suggestions — 3 options</title>
+<style>
+  /* _base.css tokens inlined so the mockup renders standalone */
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --pos-bg: #EDF3EC; --pos-text: #346538;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --badge-blue-bg: #E1F3FE; --badge-blue-text: #1F6C9F;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.6; background: var(--canvas); color: var(--text); }
+  body { padding: 28px 36px 64px; }
+  h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: var(--muted); margin-bottom: 28px; }
+
+  .opt { margin-bottom: 40px; max-width: 980px; }
+  .opt-label { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .opt-label b { font-size: 13px; }
+  .opt-label span { font-size: 11.5px; color: var(--muted); }
+
+  /* ------- shared pricing-table skeleton ------- */
+  .tbl { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: visible; }
+  .thead, .row { display: grid; grid-template-columns: 44px 340px 1fr 1fr; align-items: center; }
+  .thead { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); border-bottom: 1px solid var(--border); }
+  .thead > div, .row > div { padding: 8px 12px; }
+  .row { border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .num { color: var(--faint); font-size: 12px; }
+  .prod { display: flex; align-items: center; gap: 10px; }
+  .thumb { width: 34px; height: 34px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); flex: 0 0 auto; display: grid; place-items: center; color: var(--faint); font-size: 15px; }
+  .prodtxt { display: flex; flex-direction: column; line-height: 1.45; }
+  .psku { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .pstock { font-size: 11px; color: var(--muted); }
+  .chcell { font-size: 11.5px; color: var(--faint); }
+  .chadd { display: inline-block; margin-top: 2px; font-size: 10.5px; color: var(--faint); border: 1px dashed var(--border); border-radius: var(--r-ctl); padding: 1px 8px; background: none; cursor: pointer; }
+  button { font-family: var(--font); }
+  .mono { font-family: var(--mono); }
+
+  /* =========== OPTION A — one quiet chip, popover on click =========== */
+  .vchip { display: inline-flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 2px 10px; cursor: pointer; width: fit-content; }
+  .vchip:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+  .vchip .spark { font-size: 11px; }
+  .a-anchor { position: relative; }
+  .pop { position: absolute; top: calc(100% + 6px); left: 56px; z-index: 5; width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: 0 12px 32px rgba(47,52,55,0.16); overflow: hidden; }
+  .pop-head { font-size: 11px; color: var(--muted); padding: 10px 14px 8px; border-bottom: 1px solid var(--border); }
+  .pop-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px dashed var(--border); }
+  .pop-row:last-of-type { border-bottom: none; }
+  .pop-row .mono { font-size: 12px; flex: 1; }
+  .pop-cond { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; }
+  .cond-ob { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .cond-used { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .pop-add { font-size: 11px; font-weight: 600; border: none; background: var(--accent); color: #fff; border-radius: var(--r-ctl); padding: 3px 12px; cursor: pointer; }
+  .pop-add:hover { background: var(--accent-hover); }
+  .pop-x { font-size: 12px; border: none; background: none; color: var(--faint); cursor: pointer; padding: 2px 4px; }
+  .pop-x:hover { color: var(--neg-text); }
+  .pop-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; background: var(--surface-2); }
+  .pop-all { font-size: 11px; font-weight: 600; border: 1px solid var(--accent); background: none; color: var(--accent); border-radius: var(--r-ctl); padding: 3px 12px; cursor: pointer; }
+  .pop-all:hover { background: var(--accent-soft); }
+  .pop-never { font-size: 10.5px; border: none; background: none; color: var(--faint); cursor: pointer; }
+  .pop-never:hover { color: var(--muted); text-decoration: underline; }
+
+  /* =========== OPTION B — ghost variation rows =========== */
+  .vrow-ghost { background: repeating-linear-gradient(-45deg, transparent 0 10px, rgba(0,0,0,0.012) 10px 20px), var(--surface-2); }
+  .vrow-ghost > div { padding-top: 6px; padding-bottom: 6px; }
+  .elbow { color: var(--faint); font-size: 12px; text-align: right; }
+  .thumb-ghost { border-style: dashed; background: none; }
+  .psku-ghost { color: var(--muted); font-weight: 500; }
+  .gtag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .gbtns { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .gadd { font-size: 11px; font-weight: 600; border: 1px solid transparent; background: var(--accent-soft); color: var(--accent-soft-text); border-radius: var(--r-ctl); padding: 3px 12px; cursor: pointer; }
+  .gadd:hover { border-color: var(--accent); }
+  .gign { font-size: 11px; border: none; background: none; color: var(--faint); cursor: pointer; padding: 3px 6px; }
+  .gign:hover { color: var(--muted); }
+
+  /* =========== OPTION C — one-line chip strip =========== */
+  .strip { display: flex; align-items: center; gap: 8px; padding: 7px 12px 8px 56px; border-top: 1px dashed var(--border); background: var(--surface); }
+  .strip-lead { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .strip-lead .spark { color: var(--accent); font-size: 12px; }
+  .skuchip { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; background: var(--surface); }
+  .skuchip .mono { font-size: 11.5px; color: var(--text); padding: 2px 8px 2px 11px; }
+  .skuchip-add { font-size: 12px; font-weight: 700; border: none; border-left: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-soft-text); padding: 2px 9px; cursor: pointer; line-height: 1.4; }
+  .skuchip-add:hover { background: var(--accent); color: #fff; }
+  .skuchip-x { font-size: 10px; border: none; background: none; color: var(--faint); padding: 2px 8px 2px 2px; cursor: pointer; }
+  .skuchip-x:hover { color: var(--neg-text); }
+  .strip-dismiss { margin-left: auto; font-size: 10.5px; border: none; background: none; color: var(--faint); cursor: pointer; white-space: nowrap; }
+  .strip-dismiss:hover { color: var(--muted); text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>Variation suggestions — three treatments</h1>
+<div class="sub">Same row (X210-128GB-GRAY · 737 in stock), same two suggestions. Pick the one that reads best.</div>
+
+<!-- ============ OPTION A ============ -->
+<div class="opt">
+  <div class="opt-label"><b>Option A — quiet chip, details on click</b>
+    <span>the table stays clean: one small emerald chip on the row; clicking it opens this popover (shown open)</span></div>
+  <div class="tbl">
+    <div class="thead"><div>#</div><div>Product</div><div>Walmart</div><div>eBay</div></div>
+    <div class="row a-anchor" style="border-bottom:none">
+      <div class="num">3</div>
+      <div class="prod">
+        <div class="thumb">▦</div>
+        <div class="prodtxt">
+          <span class="psku">X210-128GB-GRAY</span>
+          <span class="pstock">737 in stock</span>
+          <button class="vchip"><span class="spark">✦</span> 2 possible variations</button>
+        </div>
+      </div>
+      <div class="chcell">X210-128GB… <br /><button class="chadd">+ channel SKU</button></div>
+      <div class="chcell">not listed <br /><button class="chadd">+ channel SKU</button></div>
+      <div class="pop">
+        <div class="pop-head">Condition SKUs that look like <b class="mono">X210-128GB-GRAY</b></div>
+        <div class="pop-row">
+          <span class="pop-cond cond-ob">Open box</span>
+          <span class="mono">OPEN-BOX-X210-128GB-GRAY</span>
+          <button class="pop-add">Add</button>
+          <button class="pop-x" title="Stop suggesting this pairing">✕</button>
+        </div>
+        <div class="pop-row">
+          <span class="pop-cond cond-used">Used</span>
+          <span class="mono">USED-X210-128GB-GRAY</span>
+          <button class="pop-add">Add</button>
+          <button class="pop-x" title="Stop suggesting this pairing">✕</button>
+        </div>
+        <div class="pop-foot">
+          <button class="pop-all">Add both</button>
+          <button class="pop-never">never suggest for this product</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:150px"></div>
+</div>
+
+<!-- ============ OPTION B ============ -->
+<div class="opt">
+  <div class="opt-label"><b>Option B — ghost rows</b>
+    <span>suggestions preview as faded variation rows, exactly where they would land — Add makes the row real</span></div>
+  <div class="tbl">
+    <div class="thead"><div>#</div><div>Product</div><div>Walmart</div><div>eBay</div></div>
+    <div class="row">
+      <div class="num">3</div>
+      <div class="prod">
+        <div class="thumb">▦</div>
+        <div class="prodtxt">
+          <span class="psku">X210-128GB-GRAY</span>
+          <span class="pstock">737 in stock</span>
+        </div>
+      </div>
+      <div class="chcell">X210-128GB… <br /><button class="chadd">+ channel SKU</button></div>
+      <div class="chcell">not listed <br /><button class="chadd">+ channel SKU</button></div>
+    </div>
+    <div class="row vrow-ghost">
+      <div class="elbow">└</div>
+      <div class="prod">
+        <div class="thumb thumb-ghost">?</div>
+        <div class="prodtxt">
+          <span class="psku psku-ghost mono">OPEN-BOX-X210-128GB-GRAY</span>
+          <span class="gtag">✦ suggested from the naming</span>
+        </div>
+      </div>
+      <div></div>
+      <div class="gbtns">
+        <button class="gadd">Add as variation</button>
+        <button class="gign" title="Stop suggesting this pairing">ignore</button>
+      </div>
+    </div>
+    <div class="row vrow-ghost">
+      <div class="elbow">└</div>
+      <div class="prod">
+        <div class="thumb thumb-ghost">?</div>
+        <div class="prodtxt">
+          <span class="psku psku-ghost mono">USED-X210-128GB-GRAY</span>
+          <span class="gtag">✦ suggested from the naming</span>
+        </div>
+      </div>
+      <div></div>
+      <div class="gbtns">
+        <button class="gadd">Add as variation</button>
+        <button class="gign" title="Stop suggesting this pairing">ignore</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ OPTION C ============ -->
+<div class="opt">
+  <div class="opt-label"><b>Option C — one-line chip strip</b>
+    <span>everything on a single tidy line under the row: chip = SKU, green + adds it, small ✕ dismisses</span></div>
+  <div class="tbl">
+    <div class="thead"><div>#</div><div>Product</div><div>Walmart</div><div>eBay</div></div>
+    <div class="row" style="border-bottom:none">
+      <div class="num">3</div>
+      <div class="prod">
+        <div class="thumb">▦</div>
+        <div class="prodtxt">
+          <span class="psku">X210-128GB-GRAY</span>
+          <span class="pstock">737 in stock</span>
+        </div>
+      </div>
+      <div class="chcell">X210-128GB… <br /><button class="chadd">+ channel SKU</button></div>
+      <div class="chcell">not listed <br /><button class="chadd">+ channel SKU</button></div>
+    </div>
+    <div class="strip">
+      <span class="strip-lead"><span class="spark">✦</span> Group as variations?</span>
+      <span class="skuchip">
+        <span class="mono">OPEN-BOX-X210-128GB-GRAY</span>
+        <button class="skuchip-add" title="Group under X210-128GB-GRAY">+</button>
+        <button class="skuchip-x" title="Stop suggesting this pairing">✕</button>
+      </span>
+      <span class="skuchip">
+        <span class="mono">USED-X210-128GB-GRAY</span>
+        <button class="skuchip-add" title="Group under X210-128GB-GRAY">+</button>
+        <button class="skuchip-x" title="Stop suggesting this pairing">✕</button>
+      </span>
+      <button class="strip-dismiss">dismiss all</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

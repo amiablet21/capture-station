@@ -455,6 +455,20 @@ function start(opts) {
   };
   const removed = cleanupOld(dir);
   sweepListings();
+  // claim PNGs saved before the combined-25MB rule may be full-res and
+  // oversized — shrink each to its share of the case budget once at
+  // startup, so photos Walmart already refused work without a re-shoot
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (!/\.png$/i.test(n)) continue;
+      const f = path.join(dir, n);
+      try {
+        if (fs.statSync(f).size <= CASE_PHOTO_SHARE) continue;
+        const out = casePng(fs.readFileSync(f), CASE_BUDGET);
+        if (out) fs.writeFileSync(f, out);
+      } catch { /* per-file best effort */ }
+    }
+  } catch { /* sweep is best effort */ }
   // the shelf life must hold even if the app stays open for days: re-sweep
   // every 6 hours, not only at startup
   const sweeper = setInterval(() => { cleanupOld(dir); sweepListings(); }, 6 * 3600 * 1000);
