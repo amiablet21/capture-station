@@ -4526,6 +4526,7 @@ function registerIpc() {
     // once (stale-while-revalidate), and tell the renderer fresh data landed
     try { fs.writeFileSync(path.join(app.getPath('userData'), 'unlisted-cache.json'), JSON.stringify(unlistedCache)); } catch { /* best effort */ }
     if (win && !win.isDestroyed()) win.webContents.send('unlisted:refreshed');
+    kickPricingRebuild(); // Pricing's overlay reads chrecs — fold the fresh records in
     return unlistedCache;
   }
 
@@ -4635,7 +4636,9 @@ function registerIpc() {
       }
       if (unlistedCache.detail) {
         const stale = Date.now() - unlistedCache.at > 60 * 60 * 1000;
-        if (stale) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
+        // a pre-chrecs cache (upgrade) rescans NOW, not in up to an hour —
+        // Pricing's link-record overlay is dry until the records exist
+        if (stale || !unlistedCache.chrecs) runUnlistedScan(cfg).catch(() => { /* the cards keep the stale view */ });
         return { ok: true, skus: unlistedCache.skus, detail: unlistedCache.detail, channels: unlistedCache.channels, ignored: cfg.unlistedIgnore || [], ...skipCfg(cfg), stale };
       }
       const c = await runUnlistedScan(cfg);
