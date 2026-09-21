@@ -1583,7 +1583,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-add:hover { border-color: var(--accent); color: var(--accent-soft-text); }
 .pr-none { font-size: 11.5px; color: var(--faint); font-style: italic; }
 .pr-editwrap { display: inline-flex; }
-.pr-editin { width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-color: var(--accent); }
+.pr-editin { width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-color: var(--accent); appearance: textfield; }
+/* no spinner arrows on the price editor (owner 2026-09-21, "unnecessary") */
+.pr-editin::-webkit-inner-spin-button, .pr-editin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* variations (owner 2026-09-18): condition SKUs nested under the New row.
    No condition chips — the SKU name already says it. */
