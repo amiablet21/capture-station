@@ -1610,6 +1610,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 /* Stock ↔ Family sort + the family rail (owner-picked Option A of
    pr-family-variants.html, 2026-09-21): capacity siblings sit under the
    biggest one, marked emerald with a GB badge */
+/* channel headers drag to rearrange (owner 2026-09-21) */
+.pr-hch { cursor: grab; user-select: none; }
+.pr-hch:active { cursor: grabbing; }
 .pr-sortset { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: 0 0 auto; }
 .pr-sortset button { font: inherit; font-size: 11px; font-weight: 600; padding: 3px 13px; border: none; background: none; color: var(--muted); cursor: pointer; }
 .pr-sortset button:hover { color: var(--text); }

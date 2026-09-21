@@ -6451,6 +6451,24 @@ const prCapBadge = (sku) => {
   return m ? `<span class="pr-capbadge">${m[0]}</span>` : '';
 };
 const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
+// drag a channel header to rearrange the columns (owner 2026-09-21,
+// "allow me to drag around and arrange the viewing"); order sticks per
+// desktop. Colors follow the CHANNEL, not the column position.
+let prChanOrder = [];
+try { prChanOrder = JSON.parse(localStorage.getItem('prChanOrder') || '[]'); } catch { /* server order */ }
+function prCols() {
+  const base = (prData && prData.channels) || [];
+  if (!Array.isArray(prChanOrder) || !prChanOrder.length) return base;
+  const byKey = new Map(base.map(c => [c.key, c]));
+  const out = [];
+  for (const k of prChanOrder) { const c = byKey.get(k); if (c) { out.push(c); byKey.delete(k); } }
+  for (const c of base) if (byKey.has(c.key)) out.push(c);
+  return out;
+}
+function prChanColor(c) {
+  const base = (prData && prData.channels) || [];
+  return PR_COLORS[Math.max(0, base.findIndex(x => x.key === c.key)) % PR_COLORS.length];
+}
 const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
 
 async function enterPricing(force) {
@@ -6471,7 +6489,7 @@ function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channel
 // with its own top-seller highlight (module-level so the variations toggle
 // can build ONE group without re-rendering the whole table)
 function prChCells(p) {
-  const cols = (prData && prData.channels) || [];
+  const cols = prCols();
   const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
   return cols.map((c, ci) => {
     const lines = p.channels[c.key] || [];
@@ -6518,13 +6536,13 @@ function prGroupInner(p) {
 
 function prRender() {
   if (!prData) return;
-  const cols = prData.channels || [];
+  const cols = prCols();
   const head = $('prHead');
   head.hidden = false;
   head.innerHTML = '<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>'
-    + cols.map((c, i) => `<div class="pr-hc pr-hch" data-ci="${i}">${esc(c.source.toUpperCase())}</div>`).join('');
+    + cols.map((c, i) => `<div class="pr-hc pr-hch" draggable="true" data-ci="${i}" data-key="${esc(c.key)}" title="Drag to rearrange the channel columns">${esc(c.source.toUpperCase())}</div>`).join('');
   head.style.gridTemplateColumns = prGridCols();
-  for (const el of head.querySelectorAll('.pr-hch')) el.style.color = PR_COLORS[Number(el.dataset.ci) % PR_COLORS.length];
+  for (const el of head.querySelectorAll('.pr-hch')) el.style.color = prChanColor(cols[Number(el.dataset.ci)]);
 
   const q = prQ.trim();
   const matchOne = (p) => !q || skuMatch(p.sku, q)
@@ -6614,11 +6632,34 @@ $('prSortSet').addEventListener('click', (e) => {
   prSortPaint();
   prRender();
 });
+// dragging a channel header drops it in front of the header it lands on
+let prDragKey = null;
+$('prHead').addEventListener('dragstart', (e) => {
+  const h = e.target.closest('.pr-hch');
+  if (!h) return;
+  prDragKey = h.dataset.key;
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('prHead').addEventListener('dragover', (e) => {
+  if (prDragKey && e.target.closest('.pr-hch')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+});
+$('prHead').addEventListener('drop', (e) => {
+  const h = e.target.closest('.pr-hch');
+  const from = prDragKey;
+  prDragKey = null;
+  if (!h || !from || h.dataset.key === from) return;
+  e.preventDefault();
+  const order = prCols().map(c => c.key);
+  order.splice(order.indexOf(h.dataset.key), 0, ...order.splice(order.indexOf(from), 1));
+  prChanOrder = order;
+  try { localStorage.setItem('prChanOrder', JSON.stringify(order)); } catch { /* this session only */ }
+  prRender();
+});
 
 // click a price -> inline editor; Enter pushes via Linnworks
 function prEditPrice(btn) {
   const row = btn.closest('.pr-row');
-  const c = (prData.channels || [])[Number(btn.dataset.ci)];
+  const c = prCols()[Number(btn.dataset.ci)];
   if (!row || !c) return;
   const old = Number(btn.dataset.old) || 0;
   const wrap = document.createElement('span');
@@ -6667,7 +6708,7 @@ function prPickAway(e) { if (prPickEl && !prPickEl.contains(e.target)) prPickClo
 async function prPickOpen(btn) {
   prPickClose();
   const row = btn.closest('.pr-row');
-  const c = (prData.channels || [])[Number(btn.dataset.ci)];
+  const c = prCols()[Number(btn.dataset.ci)];
   if (!row || !c) return;
   const psku = row.dataset.psku;
   const r = btn.getBoundingClientRect();
@@ -6728,7 +6769,7 @@ $('prBody').addEventListener('click', (e) => {
   if (price) { prEditPrice(price); return; }
   const open = e.target.closest('.pr-open');
   if (open) {
-    const c = (prData.channels || [])[Number(open.dataset.ci)];
+    const c = prCols()[Number(open.dataset.ci)];
     // system browser, like the PO# links (owner 2026-09-18)
     api.listingOpen(open.dataset.csku, c ? c.source.toLowerCase() : '', true, open.dataset.ref)
       .then(r => { if (!r.ok && r.error) toast(r.error); });
