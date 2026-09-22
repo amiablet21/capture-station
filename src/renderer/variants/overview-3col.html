@@ -6,349 +6,266 @@
     1. Send to WFS   - which items are moving + which channel SKUs to prioritise for WFS
     2. Sold Items    - Excel-style grid of every SKU sold today (SKU, units)
     3. Running Low   - SKUs selling that are low on stock + an order prediction from sales history
-  Four treatments below share the same data; flip with the switcher.
-  Forecast shown everywhere:
-    WFS send qty   = Walmart 7d avg/day x 30d target cover - units at WFS (capped by warehouse available)
-    Reorder qty    = 30d avg/day x (14d lead time + 30d cover) - on hand, rounded up to 5
+  Round 2 (owner: "don't look native"): built INSIDE the app shell on the real
+  styles.css, reusing only existing Overview components - .ov-mcard, .ov-xgrid
+  (the "full grid" the owner picked for Latest orders), .ov-drawer-style tables,
+  .ov-pill, .ov-chcells, .ov-ranges, .view-chip. The only new CSS is column
+  layout + grid column templates (the "ov3-" block below).
+  Flip designs with the Design A/B/C toggle in the top-left.
+  Forecast rules (same in every design):
+    WFS send qty = Walmart 7d avg/day x 30d target cover - units at WFS (capped by warehouse available)
+    Reorder qty  = 30d avg/day x (14d lead time + 30d cover) - on hand, rounded up to 5
 -->
+<link rel="stylesheet" href="../styles.css" />
 <style>
-  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
-  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
-  :root {
-    color-scheme: only light;
-    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
-    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
-    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
-    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
-    --neg: #C0392B; --neg-soft: #FDEBEC; --neg-text: #9F2F2D;
-    --amber: #D9A21B; --amber-soft: #FBF3DB; --amber-text: #956400;
-    --blue-soft: #E1F3FE; --blue-text: #1F6C9F;
-    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
-    --xl: #217346; --xl-grid: #D4D4D4; --xl-head: #F3F3F3;
-    --ink: #101D16; --ink2: #16281F; --ink-line: rgba(255,255,255,.08);
-    --font: 'Geist', 'Segoe UI', sans-serif;
-    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
-  .switcher { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 9; flex-wrap: wrap; }
-  .switcher .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-  .opt { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 13px; background: #fff; cursor: pointer; font-family: inherit; }
-  .opt.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
-  .note { font-size: 11px; color: var(--muted); margin-left: auto; }
-  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  .sku { font-family: var(--mono); font-weight: 600; color: var(--blue-text); font-size: 11.5px; }
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
-  .d-wm { background: var(--wm); } .d-eb { background: var(--eb); } .d-tm { background: var(--tm); }
-  .pill { font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; white-space: nowrap; display: inline-block; }
-  .p-green { background: var(--accent-soft); color: var(--accent-soft-text); }
-  .p-amber { background: var(--amber-soft); color: var(--amber-text); }
-  .p-red { background: var(--neg-soft); color: var(--neg-text); }
-  .p-blue { background: var(--blue-soft); color: var(--blue-text); }
-  .up { color: var(--accent-deep); } .down { color: var(--neg-text); }
-  .stage { padding: 16px 20px 28px; max-width: 1320px; margin: 0 auto; }
-  .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
-  .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
-  .head .dt { font-size: 11.5px; color: var(--faint); }
-  .head .r { margin-left: auto; font-size: 11px; color: var(--muted); }
-  .cols { display: grid; gap: 12px; align-items: start; }
-  svg.spark { display: block; }
+  /* ---- mockup-only: the design picker in the brand slot ---- */
+  .ov3-pick { display: flex; align-items: center; gap: 8px; }
+  .ov3-pick .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .ov3-pick .ov-ranges { margin-left: 0; }
 
-  /* ======================= A · Ledger (three quiet lists) ======================= */
-  .a .cols { grid-template-columns: 1fr 1fr 1fr; }
-  .a-col { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .a-top { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
-  .a-top h4 { margin: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); display: flex; gap: 6px; align-items: center; }
-  .a-top .v { font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1.25; margin-top: 2px; }
-  .a-top .s { font-size: 10.5px; color: var(--muted); }
-  .a-col table { width: 100%; border-collapse: collapse; }
-  .a-col th { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 14px 5px; border-bottom: 1px solid var(--border-soft); }
-  .a-col th.n, .a-col td.n { text-align: right; }
-  .a-col td { font-size: 12px; padding: 6px 14px; border-bottom: 1px solid var(--border-soft); }
-  .a-col tr:last-child td { border-bottom: none; }
-  .a-col tbody tr:hover td { background: var(--surface-2); }
-  .a-foot { font-size: 10.5px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
+  /* ---- new layout: three columns under the header ---- */
+  .ov3-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; align-items: start; }
+  .ov3-cols.mid-wide { grid-template-columns: 1fr 1.1fr 1fr; }
+  .ov-panel.ov3-flush { padding: 0; overflow: hidden; }
+  .ov3-cardhead { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+  .ov3-cardhead .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .ov3-cardhead .k .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+  .ov3-cardhead .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
+  .ov3-cardhead .s { font-size: 10.5px; color: var(--muted); }
+  .ov3-body { padding: 4px 6px 6px; }
+  .ov3-foot { font-size: 10.5px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
+  .ov3-foot a, .ov-more a { color: #065F46; font-weight: 600; cursor: pointer; }
 
-  /* ======================= B · Spreadsheet (Excel center stage) ======================= */
-  .b .cols { grid-template-columns: 1fr 1.15fr 1fr; }
-  .b-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
-  .b-card h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
-  .b-card h4 .c { margin-left: auto; font-family: var(--mono); letter-spacing: 0; text-transform: none; font-size: 11px; }
-  .b-item { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
-  .b-item:last-child { border-bottom: none; }
-  .b-item .meta { font-size: 10.5px; color: var(--muted); grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
-  .b-bar { height: 4px; background: #EFEEEA; border-radius: 999px; overflow: hidden; grid-column: 1 / -1; margin-top: 3px; }
-  .b-bar i { display: block; height: 100%; border-radius: 999px; }
-  .xl { background: #fff; border: 1px solid #C6C6C6; border-radius: 6px; overflow: hidden; font-family: 'Segoe UI', var(--font); box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-  .xl-title { background: var(--xl); color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
-  .xl-title .ic { background: #fff; color: var(--xl); font-weight: 800; font-size: 10px; border-radius: 2px; padding: 0 4px; }
-  .xl-title .r { margin-left: auto; font-weight: 400; opacity: .85; font-size: 11px; }
-  .xl-fx { display: flex; border-bottom: 1px solid var(--xl-grid); font-size: 11.5px; }
-  .xl-fx .nm { width: 64px; border-right: 1px solid var(--xl-grid); padding: 3px 8px; color: #444; }
-  .xl-fx .fx { padding: 3px 8px; color: #888; font-style: italic; border-right: 1px solid var(--xl-grid); }
-  .xl-fx .val { padding: 3px 8px; font-family: var(--mono); color: #222; }
-  .xl table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  .xl th, .xl td { border: 1px solid var(--xl-grid); padding: 3px 8px; height: 22px; }
-  .xl thead th { background: var(--xl-head); color: #555; font-weight: 400; text-align: center; font-size: 11px; }
-  .xl .rn { background: var(--xl-head); color: #666; text-align: center; width: 34px; font-size: 11px; }
-  .xl tr.hdr td { font-weight: 700; background: #E2EFDA; }
-  .xl td.num { text-align: right; font-family: var(--mono); }
-  .xl td.s { font-family: var(--mono); }
-  .xl tr.tot td { font-weight: 700; border-top: 2px double #555; background: #FAFAFA; }
-  .xl tr.sel td.num { outline: 2px solid var(--xl); outline-offset: -2px; }
-  .xl-tabs { display: flex; font-size: 11px; background: var(--xl-head); border-top: 1px solid var(--xl-grid); }
-  .xl-tabs span { padding: 3px 14px; color: #555; border-right: 1px solid var(--xl-grid); }
-  .xl-tabs span.on { background: #fff; color: var(--xl); font-weight: 600; border-bottom: 2px solid var(--xl); }
-  .xl-tabs .st { margin-left: auto; border: none; color: #444; }
+  /* drawer-style tables living inside a column card */
+  .ov3-t { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .ov3-t th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 6px 8px 5px; border-bottom: 1px solid var(--border); }
+  .ov3-t th.rr, .ov3-t td.rr { text-align: right; }
+  .ov3-t td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  .ov3-t tr:last-child td { border-bottom: none; }
+  .ov3-t tbody tr:hover td { background: var(--surface-2); }
+  .ov3-t .chsku { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .ov3-t .runs { display: block; font-size: 10px; color: var(--muted); }
 
-  /* ======================= C · Action cards (one decision per row) ======================= */
-  .c .cols { grid-template-columns: 1.1fr .9fr 1.1fr; }
-  .c-h { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
-  .c-h h3 { margin: 0; font-size: 13px; font-weight: 700; }
-  .c-h .cnt { font-family: var(--mono); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 0 8px; }
-  .c-h .sub { margin-left: auto; font-size: 10.5px; color: var(--muted); }
-  .c-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; margin-bottom: 8px; border-left: 3px solid var(--border); }
-  .c-card.hot { border-left-color: var(--neg); }
-  .c-card.warm { border-left-color: var(--amber); }
-  .c-card.ok { border-left-color: var(--accent); }
-  .c-row1 { display: flex; align-items: center; gap: 8px; }
-  .c-row1 .rank { font-family: var(--mono); font-size: 10px; color: var(--faint); width: 16px; }
-  .c-row1 .act { margin-left: auto; }
-  .c-btn { font-family: var(--font); font-size: 11.5px; font-weight: 600; border-radius: 6px; border: none; padding: 4px 11px; cursor: pointer; }
-  .c-btn.g { background: var(--accent); color: #fff; }
-  .c-btn.a { background: var(--amber-soft); color: var(--amber-text); }
-  .c-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
-  .c-stats div { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 700; }
-  .c-stats b { display: block; font-family: var(--mono); font-size: 13px; color: var(--text); letter-spacing: 0; text-transform: none; }
-  .c-why { font-size: 10.5px; color: var(--muted); margin-top: 6px; display: flex; align-items: center; gap: 8px; }
-  .c-sold { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .c-sold table { width: 100%; border-collapse: collapse; }
-  .c-sold th { background: var(--surface-2); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--border); }
-  .c-sold td { padding: 5px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
-  .c-sold tr:nth-child(even) td { background: #FCFCFB; }
-  .c-sold .n { text-align: right; font-family: var(--mono); font-weight: 700; }
-  .c-sold tfoot td { font-weight: 700; background: var(--accent-soft); color: var(--accent-deep); border-top: 1px solid var(--border); }
+  /* the Latest-orders Excel grid, reused for SKU | Units (no bottom fade:
+     every sold SKU must stay readable) */
+  .ov-xgrid.ov3-full { -webkit-mask-image: none; mask-image: none; }
+  .ov3-g2 .ov-xhead, .ov3-g2 .ov-feedrow { grid-template-columns: 34px 1fr 64px 60px; }
+  .ov3-g2.no-ch .ov-xhead, .ov3-g2.no-ch .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
+  .ov3-g2 .xrn { color: var(--faint); text-align: center; text-overflow: clip; background: #F4F3F0; font-family: var(--mono); font-size: 9.5px; }
+  .ov3-g2 .ov-xhead span:last-child { text-align: right; }
+  .ov3-g2 .ov-feedrow .xu { font-family: var(--mono); font-size: 11.5px; font-weight: 700; text-align: right; }
+  .ov3-g2 .ov-feedrow .xsku { color: var(--text); font-size: 10.5px; font-family: var(--mono); }
+  .ov3-g2 .ov-feedrow.tot { background: var(--surface-2); border-top: 1px solid #E0DED8; }
+  .ov3-g2 .ov-feedrow.tot span { font-weight: 700; }
+  .ov3-g5 .ov-xhead, .ov3-g5 .ov-feedrow { grid-template-columns: 1fr 44px 48px 52px 56px; }
+  .ov3-g5 .ov-feedrow span.n, .ov3-g5 .ov-xhead span.n { text-align: right; font-family: var(--mono); }
+  .ov3-g5 .ov-feedrow span.n { font-size: 11px; }
+  .ov3-g5 .ov-feedrow .xsku { color: var(--badge-blue-text); font-weight: 600; font-size: 10.5px; font-family: var(--mono); }
+  .ov3-g5 .ov-feedrow .strong { font-weight: 700; color: var(--text); }
 
-  /* ======================= D · Control room (dark ink, dense) ======================= */
-  .d { background: var(--ink); min-height: calc(100vh - 42px); }
-  .d .stage { color: #E6EDE9; }
-  .d .head h1 { color: #fff; } .d .head .dt { color: #7F9A8C; } .d .head .r { color: #9DB4A8; }
-  .d .cols { grid-template-columns: 1fr 1fr 1fr; }
-  .d-col { background: var(--ink2); border: 1px solid var(--ink-line); border-radius: 10px; overflow: hidden; }
-  .d-top { padding: 11px 14px; border-bottom: 1px solid var(--ink-line); display: flex; align-items: baseline; gap: 10px; }
-  .d-top h4 { margin: 0; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9DB4A8; }
-  .d-top .v { margin-left: auto; font-family: var(--mono); font-size: 20px; font-weight: 700; }
-  .d-col table { width: 100%; border-collapse: collapse; }
-  .d-col th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #6E8A7C; text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--ink-line); }
-  .d-col th.n, .d-col td.n { text-align: right; }
-  .d-col td { font-size: 12px; padding: 5px 12px; border-bottom: 1px solid var(--ink-line); color: #D5E0DA; }
-  .d-col td .sku { color: #8FC8F5; }
-  .d-col tbody tr:hover td { background: rgba(255,255,255,.03); }
-  .heat { font-family: var(--mono); font-weight: 700; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
-  .h3 { background: #5B1F1B; color: #FFB4AC; } .h2 { background: #4A3A10; color: #F4D27A; } .h1 { background: #133B2B; color: #7FE0B3; }
-  .d-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--ink-line); }
-  .d-cell { background: var(--ink2); padding: 7px 10px; }
-  .d-cell .sku { color: #8FC8F5; font-size: 10.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .d-cell .u { font-family: var(--mono); font-size: 18px; font-weight: 700; color: #fff; }
-  .d-cell .ch { font-size: 9.5px; color: #7F9A8C; }
-  .d-foot { font-size: 10.5px; color: #7F9A8C; padding: 8px 14px; border-top: 1px solid var(--ink-line); }
+  /* sold column as a "today" card: channel cells pinned to its bottom */
+  .ov3-sold { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+
+  /* urgency bar under a WFS / low-stock row */
+  .ov3-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+  .ov3-bar i { display: block; height: 100%; border-radius: 999px; }
+  .ov3-chips { display: flex; gap: 4px; padding: 0 0 8px; }
 </style>
 </head>
 <body>
-<div class="switcher">
-  <span class="lbl">Overview · 3 columns</span>
-  <button class="opt on" data-v="a">A · Ledger</button>
-  <button class="opt" data-v="b">B · Spreadsheet</button>
-  <button class="opt" data-v="c">C · Action cards</button>
-  <button class="opt" data-v="d">D · Control room</button>
-  <span class="note">Same data in every view · mock numbers</span>
-</div>
-<div id="root"></div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="ov3-pick"><span class="lbl">Design</span>
+        <span class="ov-ranges" id="pick">
+          <button class="ov-rbtn is-on" data-v="a">A</button>
+          <button class="ov-rbtn" data-v="b">B</button>
+          <button class="ov-rbtn" data-v="c">C</button>
+        </span>
+      </span>
+    </div>
+    <nav class="tabs">
+      <button class="tab is-active">Overview</button>
+      <button class="tab">Capture</button>
+      <button class="tab">Stock</button>
+      <button class="tab">Returns <span class="tab-caret">▾</span></button>
+      <button class="tab">Listings</button>
+    </nav>
+    <div class="topbar-right"></div>
+  </header>
+
+  <section class="ov-page">
+    <div class="ov-sheet-row">
+      <div class="ov-wrap">
+        <div class="ov-head"><h1>Overview</h1><span class="ov-date">Tuesday, September 22</span>
+          <button class="btn btn-ghost ov-refresh" title="Refresh the numbers now">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+            Refresh</button>
+          <button class="btn btn-ghost ov-phone">Phone</button>
+        </div>
+        <div id="root"></div>
+      </div>
+      <div class="sheet-grip"></div>
+    </div>
+  </section>
+
+  <footer class="footbar">
+    <div class="footbar-left"></div>
+    <div class="footbar-right">
+      <span class="sync-status">Last sync 2:14 PM</span>
+      <button class="btn btn-ghost">History</button>
+    </div>
+  </footer>
 
 <script>
 // ---------- shared mock data ----------
-// Send to WFS: Walmart listings moving, ranked by days of cover left at WFS
+// Send to WFS: Walmart listings moving. [inventory SKU, Walmart channel SKU, walmart 7d units, at WFS, warehouse avail]
 const WFS = [
-  // sku, walmart 7d units, units at WFS, warehouse available, trend (last 7 days units)
-  ['X400-128GB-GRAY',      42,  6, 58, [4,5,6,5,7,7,8]],
-  ['BUDS-3-WHITE',         35,  9, 40, [3,4,5,5,6,6,6]],
-  ['S24-FE-128GB-BLACK',   21,  4, 17, [2,3,3,3,3,3,4]],
-  ['X520-256GB-SILVER',    18, 12, 33, [2,2,3,2,3,3,3]],
-  ['SM-X133-64GB-GREY',    14, 11, 26, [1,2,2,2,2,2,3]],
-  ['X730-512GB-GRAY',      10, 14, 22, [1,1,2,1,2,1,2]],
-  ['TABA9+64GB',            8, 15, 30, [1,1,1,1,1,2,1]],
+  ['X400-128GB-GRAY',    'WM-X400-128-GRY',  42,  6, 58],
+  ['BUDS-3-WHITE',       'WM-BUDS3-WHT',     35,  9, 40],
+  ['S24-FE-128GB-BLACK', 'WM-S24FE-128-BLK', 21,  4, 17],
+  ['X520-256GB-SILVER',  'WM-X520-256-SLV',  18, 12, 33],
+  ['SM-X133-64GB-GREY',  'WM-X133-64-GRY',   14, 11, 26],
+  ['X730-512GB-GRAY',    'WM-X730-512-GRY',  10, 14, 22],
+  ['TABA9+64GB',         'WM-TABA9-64',       8, 15, 30],
 ];
-// Sold today (SKU, units, channel)
 const SOLD = [
-  ['X400-128GB-GRAY', 9, 'wm'], ['BUDS-3-WHITE', 7, 'wm'], ['X520-128GB-SILVER', 5, 'eb'],
-  ['S24-FE-128GB-BLACK', 4, 'wm'], ['BUDS-2-GRAPHITE', 4, 'tm'], ['X230-256GB-GRAY', 3, 'eb'],
-  ['SM-X133-64GB-GREY', 3, 'wm'], ['X620-128GB-SILVER', 2, 'eb'], ['X730-512GB-GRAY', 2, 'wm'],
-  ['TABA9+64GB', 2, 'tm'], ['X400-256GB-SILVER', 1, 'eb'], ['SGTT220GRAY', 1, 'tm'],
-  ['X520-256GB-SILVER', 1, 'wm'], ['X400-128GB-GRAY-CASE', 1, 'eb'],
+  ['X400-128GB-GRAY', 9, 'walmart'], ['BUDS-3-WHITE', 7, 'walmart'], ['X520-128GB-SILVER', 5, 'ebay'],
+  ['S24-FE-128GB-BLACK', 4, 'walmart'], ['BUDS-2-GRAPHITE', 4, 'temu'], ['X230-256GB-GRAY', 3, 'ebay'],
+  ['SM-X133-64GB-GREY', 3, 'walmart'], ['X620-128GB-SILVER', 2, 'ebay'], ['X730-512GB-GRAY', 2, 'walmart'],
+  ['TABA9+64GB', 2, 'temu'], ['X400-256GB-SILVER', 1, 'ebay'], ['SGTT220GRAY', 1, 'temu'],
+  ['X520-256GB-SILVER', 1, 'walmart'], ['X400-128GB-GRAY-CASE', 1, 'ebay'],
 ];
-// Running low: sku, on hand (all locations), 30d units sold, lead days, trend (4 weekly totals)
+// Running low: [sku, on hand, 30d units sold, lead days, recent-vs-older pace]
 const LOW = [
-  ['S24-FE-128GB-BLACK', 17, 96, 14, [18,22,26,30]],
-  ['BUDS-2-GRAPHITE',     6, 38, 10, [8,9,10,11]],
-  ['X620-128GB-SILVER',   9, 41, 14, [11,10,10,10]],
-  ['X230-256GB-GRAY',    12, 45, 14, [9,11,12,13]],
-  ['X520-128GB-SILVER',  21, 62, 14, [14,15,16,17]],
-  ['SGTT220GRAY',         4, 11, 21, [2,3,3,3]],
+  ['S24-FE-128GB-BLACK', 17, 96, 14, 1.3],
+  ['BUDS-2-GRAPHITE',     6, 38, 10, 1.2],
+  ['X620-128GB-SILVER',   9, 41, 14, 1.0],
+  ['X230-256GB-GRAY',    12, 45, 14, 1.2],
+  ['X520-128GB-SILVER',  21, 62, 14, 1.1],
+  ['SGTT220GRAY',         4, 11, 21, 1.0],
 ];
-const CH = { wm: 'Walmart', eb: 'eBay', tm: 'Temu' };
+const CH = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
 const TARGET = 30;
 
-const wfsRows = WFS.map(([sku, u7, atWfs, wh, tr]) => {
+const wfs = WFS.map(([sku, ch, u7, atWfs, wh]) => {
   const perDay = u7 / 7, cover = atWfs / perDay;
-  const send = Math.max(0, Math.min(wh, Math.ceil(perDay * TARGET - atWfs)));
-  return { sku, u7, perDay, atWfs, wh, cover, send, tr };
+  return { sku, ch, u7, perDay, atWfs, wh, cover, send: Math.max(0, Math.min(wh, Math.ceil(perDay * TARGET - atWfs))) };
 }).sort((a, b) => a.cover - b.cover);
-const lowRows = LOW.map(([sku, onHand, u30, lead, tr]) => {
+const low = LOW.map(([sku, onHand, u30, lead, accel]) => {
   const perDay = u30 / 30, daysLeft = onHand / perDay;
-  const order = Math.max(0, Math.ceil((perDay * (lead + TARGET) - onHand) / 5) * 5);
-  const stockout = new Date(2026, 8, 22 + Math.floor(daysLeft));
-  return { sku, onHand, u30, perDay, lead, daysLeft, order, tr, out: stockout.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+  const out = new Date(2026, 8, 22 + Math.floor(daysLeft)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return { sku, onHand, u30, perDay, lead, daysLeft, accel, out, order: Math.max(0, Math.ceil((perDay * (lead + TARGET) - onHand) / 5) * 5) };
 }).sort((a, b) => a.daysLeft - b.daysLeft);
-const soldRows = [...SOLD].sort((a, b) => b[1] - a[1]);
-const soldTotal = soldRows.reduce((s, r) => s + r[1], 0);
-const wfsTotal = wfsRows.reduce((s, r) => s + r.send, 0);
-const orderTotal = lowRows.reduce((s, r) => s + r.order, 0);
+const sold = [...SOLD].sort((a, b) => b[1] - a[1]);
+const soldUnits = sold.reduce((s, r) => s + r[1], 0);
+const byCh = sold.reduce((m, [, u, c]) => (m[c] = (m[c] || 0) + u, m), {});
+const wfsUnits = wfs.reduce((s, r) => s + r.send, 0);
+const orderUnits = low.reduce((s, r) => s + r.order, 0);
 
-const tone = d => d < 5 ? 'red' : d < 10 ? 'amber' : 'green';
-const heat = d => d < 5 ? 'h3' : d < 10 ? 'h2' : 'h1';
+const pill = d => d < 5 ? 'r' : d < 10 ? 'a' : 'g';
+const tone = d => d < 5 ? 'var(--neg-text)' : d < 10 ? 'var(--badge-yellow-text)' : 'var(--accent)';
 const f1 = n => n.toFixed(1);
-function spark(vals, w = 56, h = 16, color = '#047857') {
-  const mx = Math.max(...vals), mn = Math.min(...vals), rng = mx - mn || 1;
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * (w - 2) + 1},${h - 2 - ((v - mn) / rng) * (h - 4)}`).join(' ');
-  return `<svg class="spark" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
-}
-const head = right => `<div class="head"><h1>Overview</h1><span class="dt">Tuesday, Sep 22 2026 · updated 2:14 PM</span><span class="r">${right || ''}</span></div>`;
 
-// ---------- A · Ledger ----------
+// Excel grid of sold SKUs (the owner's "full grid" from Latest orders)
+function soldGrid(withChannel) {
+  const ch = (c) => withChannel ? `<span class="xch xch-${c}">${c ? CH[c] : ''}</span>` : '';
+  return `<div class="ov-xgrid ov3-full ov3-g2${withChannel ? '' : ' no-ch'}">
+    <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span>${withChannel ? '<span>Channel</span>' : ''}<span>Units</span></div>
+    ${sold.map(([s, u, c], i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span><span class="xsku" title="${s}">${s}</span>${ch(c)}<span class="xu">${u}</span></div>`).join('')}
+    <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.length} SKUs</span>${ch('')}<span class="xu">${soldUnits}</span></div>
+  </div>`;
+}
+
+// ---------- A · Three cards: money-card header + drawer table in each column ----------
 function A() {
-  return `<div class="a"><div class="stage">${head('Target cover 30 days · lead time 14 days')}
-  <div class="cols">
-    <div class="a-col">
-      <div class="a-top"><h4><span class="dot d-wm"></span>Send to WFS</h4><div class="v" style="color:var(--accent-deep)">${wfsTotal} <span style="font-size:13px;font-weight:600">units</span></div><div class="s">${wfsRows.length} Walmart SKUs moving · sorted by cover left at WFS</div></div>
-      <table><thead><tr><th>SKU</th><th class="n">/day</th><th class="n">At WFS</th><th class="n">Cover</th><th class="n">Send</th></tr></thead><tbody>
-      ${wfsRows.map(r => `<tr><td><span class="sku">${r.sku}</span></td><td class="n mono">${f1(r.perDay)}</td><td class="n mono">${r.atWfs}</td><td class="n"><span class="pill p-${tone(r.cover)}">${f1(r.cover)}d</span></td><td class="n mono" style="font-weight:700">${r.send}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="a-foot">Send = 7-day Walmart pace × 30 days − at WFS, capped by warehouse stock</div>
+  return `<div class="ov3-cols">
+    <div class="ov-panel ov3-flush">
+      <div class="ov3-cardhead"><div class="k">Send to WFS<span class="sub">most urgent first</span></div>
+        <div class="big ov-big-g">${wfsUnits} units</div><div class="s">${wfs.length} Walmart SKUs outrunning their WFS stock</div></div>
+      <div class="ov3-body"><table class="ov3-t"><thead><tr><th>SKU</th><th>Sold/wk</th><th>Covers</th><th class="rr">Send</th></tr></thead><tbody>
+      ${wfs.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch}</span></td><td class="mono">${r.u7}</td><td class="ov-dim">${f1(r.cover)} days</td><td class="rr"><span class="ov-pill ${pill(r.cover)}">+ ${r.send}</span></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="ov3-foot">7-day Walmart pace × 30 days − at WFS · <a>WFS Shipments</a></div>
     </div>
-    <div class="a-col">
-      <div class="a-top"><h4>Sold today</h4><div class="v">${soldTotal} <span style="font-size:13px;font-weight:600">units</span></div><div class="s">${soldRows.length} SKUs · <span class="dot d-wm"></span>Walmart <span class="dot d-eb" style="margin-left:6px"></span>eBay <span class="dot d-tm" style="margin-left:6px"></span>Temu</div></div>
-      <table><thead><tr><th>SKU</th><th class="n">Units</th></tr></thead><tbody>
-      ${soldRows.map(([s, u, c]) => `<tr><td><span class="dot d-${c}" title="${CH[c]}"></span><span class="sku">${s}</span></td><td class="n mono" style="font-weight:700">${u}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="a-foot" style="display:flex"><b>Total</b><b class="mono" style="margin-left:auto">${soldTotal}</b></div>
+    <div class="ov-panel ov3-flush">
+      <div class="ov3-cardhead"><div class="k">Sold today<span class="sub">${sold.length} SKUs</span></div>
+        <div class="big">${soldUnits} units</div><div class="s">every SKU that sold today</div></div>
+      <div style="padding:10px 12px 12px">${soldGrid(true)}</div>
     </div>
-    <div class="a-col">
-      <div class="a-top"><h4>Running low</h4><div class="v" style="color:var(--amber-text)">${orderTotal} <span style="font-size:13px;font-weight:600">to order</span></div><div class="s">${lowRows.length} SKUs will run out before a reorder lands</div></div>
-      <table><thead><tr><th>SKU</th><th class="n">On hand</th><th class="n">Days left</th><th class="n">Order</th></tr></thead><tbody>
-      ${lowRows.map(r => `<tr><td><span class="sku">${r.sku}</span><div style="font-size:10px;color:var(--muted)">${f1(r.perDay)}/day · out ~${r.out}</div></td><td class="n mono">${r.onHand}</td><td class="n"><span class="pill p-${tone(r.daysLeft)}">${Math.floor(r.daysLeft)}d</span></td><td class="n mono" style="font-weight:700">${r.order}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="a-foot">Order = 30-day avg × (lead + 30 days) − on hand, rounded to 5</div>
+    <div class="ov-panel ov3-flush">
+      <div class="ov3-cardhead"><div class="k">Running low<span class="sub">from 30-day sales</span></div>
+        <div class="big ov-big-a">${orderUnits} to order</div><div class="s">${low.length} SKUs run out before a reorder lands</div></div>
+      <div class="ov3-body"><table class="ov3-t"><thead><tr><th>SKU</th><th>On shelf</th><th>Runs out</th><th class="rr">Order</th></tr></thead><tbody>
+      ${low.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="runs">${f1(r.perDay)}/day${r.accel > 1.1 ? ' · <span style="color:var(--neg-text)">selling faster</span>' : ''}</span></td><td class="mono">${r.onHand}</td><td class="ov-dim">in ${Math.floor(r.daysLeft)} days</td><td class="rr"><span class="ov-pill a">${r.order}</span></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="ov3-foot">30-day avg × (lead + 30 days) − on shelf · <a>open Stock</a></div>
     </div>
-  </div></div></div>`;
+  </div>`;
 }
 
-// ---------- B · Spreadsheet ----------
+// ---------- B · All grids: three money cards on top, Excel grids below ----------
 function B() {
-  const maxSend = Math.max(...wfsRows.map(r => r.send));
-  return `<div class="b"><div class="stage">${head()}
-  <div class="cols">
-    <div class="b-card">
-      <h4><span class="dot d-wm"></span>Send to WFS<span class="c up">${wfsTotal} units</span></h4>
-      ${wfsRows.map(r => `<div class="b-item"><span class="sku">${r.sku}</span><span class="mono" style="font-weight:700">+${r.send}</span>
-        <div class="b-bar"><i style="width:${(r.send / maxSend) * 100}%;background:${r.cover < 5 ? 'var(--neg)' : r.cover < 10 ? 'var(--amber)' : 'var(--accent)'}"></i></div>
-        <div class="meta"><span>${r.u7} sold / 7d</span><span>${r.atWfs} at WFS</span><span class="pill p-${tone(r.cover)}" style="margin-left:auto">${f1(r.cover)}d cover</span></div></div>`).join('')}
+  return `<div class="ov-cards" style="margin-bottom:10px">
+      <div class="ov-mcard"><div class="k">Send to WFS</div><div class="big ov-big-g">${wfsUnits} units</div><div class="s">${wfs.filter(r => r.cover < 10).length} Walmart SKUs under 10 days of cover</div></div>
+      <div class="ov-mcard"><div class="k">Sold today</div><div class="big">${soldUnits} units</div><div class="s">${sold.length} SKUs · Walmart ${byCh.walmart} · eBay ${byCh.ebay} · Temu ${byCh.temu}</div></div>
+      <div class="ov-mcard"><div class="k">Running low</div><div class="big ov-big-a">${low.length} SKUs</div><div class="s">order ${orderUnits} units to cover lead + 30 days</div></div>
     </div>
-    <div class="xl">
-      <div class="xl-title"><span class="ic">X</span>Sold_Today_2026-09-22.xlsx<span class="r">${soldRows.length} rows</span></div>
-      <div class="xl-fx"><span class="nm">B${soldRows.length + 3}</span><span class="fx">fx</span><span class="val">=SUM(B2:B${soldRows.length + 1})</span></div>
-      <table><thead><tr><th class="rn"></th><th>A</th><th style="width:70px">B</th><th style="width:80px">C</th></tr></thead><tbody>
-        <tr class="hdr"><td class="rn">1</td><td>SKU</td><td class="num" style="font-family:inherit">Units</td><td>Channel</td></tr>
-        ${soldRows.map(([s, u, c], i) => `<tr><td class="rn">${i + 2}</td><td class="s">${s}</td><td class="num">${u}</td><td><span class="dot d-${c}"></span>${CH[c]}</td></tr>`).join('')}
-        <tr><td class="rn">${soldRows.length + 2}</td><td></td><td></td><td></td></tr>
-        <tr class="tot sel"><td class="rn">${soldRows.length + 3}</td><td>TOTAL</td><td class="num">${soldTotal}</td><td></td></tr>
-      </tbody></table>
-      <div class="xl-tabs"><span class="on">Today</span><span>Yesterday</span><span>7 days</span><span class="st">Sum: ${soldTotal} · Count: ${soldRows.length}</span></div>
-    </div>
-    <div class="b-card">
-      <h4>Running low<span class="c" style="color:var(--amber-text)">order ${orderTotal}</span></h4>
-      ${lowRows.map(r => `<div class="b-item"><span class="sku">${r.sku}</span><span class="pill p-amber">order ${r.order}</span>
-        <div class="b-bar"><i style="width:${Math.min(100, (r.daysLeft / r.lead) * 100)}%;background:${r.daysLeft < 5 ? 'var(--neg)' : 'var(--amber)'}"></i></div>
-        <div class="meta"><span>${r.onHand} on hand</span><span>${f1(r.perDay)}/day</span><span style="margin-left:auto" class="${r.daysLeft < 5 ? 'down' : ''}">out ~${r.out}</span></div></div>`).join('')}
-      <div style="font-size:10px;color:var(--faint);margin-top:6px">Bar = days left vs. ${14}-day lead time. Order covers lead + 30 days.</div>
-    </div>
-  </div></div></div>`;
-}
-
-// ---------- C · Action cards ----------
-function C() {
-  const kind = d => d < 5 ? 'hot' : d < 10 ? 'warm' : 'ok';
-  return `<div class="c"><div class="stage">${head('Each card = one decision')}
-  <div class="cols">
-    <div>
-      <div class="c-h"><h3>Send to WFS</h3><span class="cnt p-green">${wfsRows.filter(r => r.send).length}</span><span class="sub">most urgent first</span></div>
-      ${wfsRows.slice(0, 5).map((r, i) => `<div class="c-card ${kind(r.cover)}">
-        <div class="c-row1"><span class="rank">${i + 1}</span><span class="sku">${r.sku}</span>${spark(r.tr)}<span class="act"><button class="c-btn g">Send ${r.send}</button></span></div>
-        <div class="c-stats"><div>/day<b>${f1(r.perDay)}</b></div><div>At WFS<b>${r.atWfs}</b></div><div>Cover<b class="${r.cover < 5 ? 'down' : ''}">${f1(r.cover)}d</b></div><div>Warehouse<b>${r.wh}</b></div></div>
-      </div>`).join('')}
-      <div style="font-size:11px;color:var(--muted);padding:2px 4px">+ ${wfsRows.length - 5} more with 10+ days cover</div>
-    </div>
-    <div>
-      <div class="c-h"><h3>Sold items</h3><span class="cnt p-blue">${soldTotal}</span><span class="sub">today</span></div>
-      <div class="c-sold"><table><thead><tr><th>SKU</th><th style="text-align:right">Units</th></tr></thead><tbody>
-      ${soldRows.map(([s, u, c]) => `<tr><td><span class="dot d-${c}"></span><span class="sku">${s}</span></td><td class="n">${u}</td></tr>`).join('')}
-      </tbody><tfoot><tr><td>Total · ${soldRows.length} SKUs</td><td class="n">${soldTotal}</td></tr></tfoot></table></div>
-    </div>
-    <div>
-      <div class="c-h"><h3>Running low</h3><span class="cnt p-amber">${lowRows.length}</span><span class="sub">forecast from 30-day history</span></div>
-      ${lowRows.slice(0, 5).map(r => `<div class="c-card ${kind(r.daysLeft)}">
-        <div class="c-row1"><span class="sku">${r.sku}</span>${spark(r.tr, 56, 16, '#956400')}<span class="act"><button class="c-btn a">Order ${r.order}</button></span></div>
-        <div class="c-stats"><div>On hand<b>${r.onHand}</b></div><div>/day<b>${f1(r.perDay)}</b></div><div>Days left<b class="${r.daysLeft < 5 ? 'down' : ''}">${Math.floor(r.daysLeft)}</b></div><div>Lead<b>${r.lead}d</b></div></div>
-        <div class="c-why">Runs out ~<b>${r.out}</b> · ${r.tr[3] > r.tr[0] ? '<span class="down">▲ selling faster</span>' : 'steady pace'}</div>
-      </div>`).join('')}
-    </div>
-  </div></div></div>`;
-}
-
-// ---------- D · Control room ----------
-function D() {
-  return `<div class="d"><div class="stage">${head('Red &lt; 5 days · amber &lt; 10 · green OK')}
-  <div class="cols">
-    <div class="d-col">
-      <div class="d-top"><h4>Send to WFS</h4><span class="v" style="color:#7FE0B3">${wfsTotal}</span></div>
-      <table><thead><tr><th>SKU</th><th>7d</th><th class="n">Cover</th><th class="n">Send</th></tr></thead><tbody>
-      ${wfsRows.map(r => `<tr><td><span class="sku">${r.sku}</span></td><td>${spark(r.tr, 44, 14, '#7FE0B3')}</td><td class="n"><span class="heat ${heat(r.cover)}">${f1(r.cover)}d</span></td><td class="n mono" style="font-weight:700;color:#fff">${r.send}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="d-foot">7-day Walmart pace → 30 days at WFS</div>
-    </div>
-    <div class="d-col">
-      <div class="d-top"><h4>Sold today</h4><span class="v">${soldTotal}</span></div>
-      <div class="d-grid">
-      ${soldRows.map(([s, u, c]) => `<div class="d-cell"><span class="sku" title="${s}">${s}</span><span class="u">${u}</span> <span class="ch"><span class="dot d-${c}"></span>${CH[c]}</span></div>`).join('')}
+    <div class="ov3-cols">
+      <div class="ov-panel"><h4 style="color:#065F46">Send to WFS<span class="sub">sorted by days of cover</span></h4>
+        <div class="ov-xgrid ov3-full ov3-g5">
+          <div class="ov-xhead"><span>Walmart SKU</span><span class="n">/wk</span><span class="n">WFS</span><span class="n">Cover</span><span class="n">Send</span></div>
+          ${wfs.map(r => `<div class="ov-feedrow"><span class="xsku" title="${r.ch}">${r.sku}</span><span class="n">${r.u7}</span><span class="n">${r.atWfs}</span><span class="n" style="color:${tone(r.cover)};font-weight:700">${f1(r.cover)}d</span><span class="n strong">+${r.send}</span></div>`).join('')}
+        </div>
+        <div class="ov-more">7-day Walmart pace × 30 days − at WFS · <a>WFS Shipments</a></div>
       </div>
-      <div class="d-foot">${soldRows.length} SKUs · click a tile to open the SKU</div>
-    </div>
-    <div class="d-col">
-      <div class="d-top"><h4>Running low</h4><span class="v" style="color:#F4D27A">${orderTotal}</span></div>
-      <table><thead><tr><th>SKU</th><th class="n">Left</th><th class="n">Days</th><th class="n">Order</th></tr></thead><tbody>
-      ${lowRows.map(r => `<tr><td><span class="sku">${r.sku}</span></td><td class="n mono">${r.onHand}</td><td class="n"><span class="heat ${heat(r.daysLeft)}">${Math.floor(r.daysLeft)}d</span></td><td class="n mono" style="font-weight:700;color:#fff">${r.order}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="d-foot">30-day avg × (lead + 30d) − on hand</div>
-    </div>
-  </div></div></div>`;
+      <div class="ov-panel"><h4>Sold items<span class="sub">today</span></h4>${soldGrid(true)}</div>
+      <div class="ov-panel"><h4 style="color:var(--badge-yellow-text)">Running low<span class="sub">30-day forecast</span></h4>
+        <div class="ov-xgrid ov3-full ov3-g5">
+          <div class="ov-xhead"><span>SKU</span><span class="n">Shelf</span><span class="n">/day</span><span class="n">Left</span><span class="n">Order</span></div>
+          ${low.map(r => `<div class="ov-feedrow"><span class="xsku">${r.sku}</span><span class="n">${r.onHand}</span><span class="n">${f1(r.perDay)}</span><span class="n" style="color:${tone(r.daysLeft)};font-weight:700">${Math.floor(r.daysLeft)}d</span><span class="n strong">${r.order}</span></div>`).join('')}
+        </div>
+        <div class="ov-more">30-day avg × (lead + 30 days) − on shelf · <a>open Stock</a></div>
+      </div>
+    </div>`;
 }
 
-const V = { a: A, b: B, c: C, d: D };
+// ---------- C · Today card in the middle, ranked lists either side ----------
+function C() {
+  return `<div class="ov3-cols mid-wide">
+    <div class="ov-panel">
+      <h4 style="color:#065F46">Send to WFS · ${wfsUnits} units<span class="sub">${wfs.length} Walmart SKUs</span></h4>
+      <div class="ov3-chips"><button class="view-chip is-active">All</button><button class="view-chip">Under 5 days</button><button class="view-chip">This week</button></div>
+      <table class="ov3-t"><tbody>
+      ${wfs.map((r, i) => `<tr><td style="width:18px" class="ov-dim mono">${i + 1}</td><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch} · ${r.u7}/wk · ${r.atWfs} at WFS</span>
+        <div class="ov3-bar"><i style="width:${Math.min(100, r.cover / 14 * 100)}%;background:${tone(r.cover)}"></i></div></td>
+        <td class="rr"><span class="ov-pill ${pill(r.cover)}">+ ${r.send}</span><span class="runs" style="margin-top:3px">${f1(r.cover)}d left</span></td></tr>`).join('')}
+      </tbody></table>
+    </div>
+    <div class="ov-panel ov-today ov3-sold">
+      <div><div class="k">Units sold today</div>
+        <div class="big mono">${soldUnits}</div>
+        <div class="delta">▲ <b class="mono">+7</b> vs yesterday</div></div>
+      ${soldGrid(false)}
+      <div class="ov-chcells">${['walmart', 'ebay', 'temu'].map(k => `<div class="ov-chcell"><div class="cn cn-${k}">${CH[k]}</div><div class="cv">${byCh[k]}</div></div>`).join('')}</div>
+    </div>
+    <div class="ov-panel">
+      <h4 style="color:var(--badge-yellow-text)">Running low · order ${orderUnits}<span class="sub">30-day history</span></h4>
+      <table class="ov3-t"><tbody>
+      ${low.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.onHand} on shelf · ${f1(r.perDay)}/day · out ~${r.out}</span>
+        <div class="ov3-bar"><i style="width:${Math.min(100, r.daysLeft / r.lead * 100)}%;background:${tone(r.daysLeft)}"></i></div></td>
+        <td class="rr"><span class="ov-pill a">${r.order}</span><span class="runs" style="margin-top:3px">${Math.floor(r.daysLeft)}d left</span></td></tr>`).join('')}
+      </tbody></table>
+      <div class="ov-more">Bar = days left vs. lead time · <a>open Stock</a></div>
+    </div>
+  </div>`;
+}
+
+const V = { a: A, b: B, c: C };
 function show(v) {
   document.getElementById('root').innerHTML = V[v]();
-  document.querySelectorAll('.opt').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-  document.body.style.background = v === 'd' ? 'var(--ink)' : 'var(--canvas)';
+  document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.classList.toggle('is-on', b.dataset.v === v));
 }
-document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => show(b.dataset.v)));
+document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.addEventListener('click', () => show(b.dataset.v)));
 show('a');
 </script>
 </body>
