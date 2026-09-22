@@ -4074,8 +4074,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ov-date { font-size: 11.5px; color: var(--faint); }
 
 /* three columns (owner 2026-09-22, variants/overview-3col.html C1):
-   Send to WFS | Sold today | Running low */
-.ov-cols { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 10px; align-items: start; }
+   Sold today | Send to WFS | Running low - sold moved to the left the same
+   day; the WFS column (widest, it carries the buttons) sits in the middle */
+.ov-cols { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: start; }
 .ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
 .ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
@@ -4108,7 +4109,7 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ov-sec { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 12px 6px 4px; display: flex; }
 .ov-sec .n { margin-left: auto; font-family: var(--mono); }
 
-/* middle column: the today card - big number, the sold grid, channel
+/* left column: the today card - big number, the sold grid, channel
    cells pinned to the bottom edge */
 .ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }

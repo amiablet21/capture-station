@@ -7666,9 +7666,9 @@ $("ebRefresh").addEventListener("click", () => {
 
 /* ==================== Overview tab ==================== */
 // Three columns (owner 2026-09-22; approved design variants/overview-3col.html,
-// C1): Send to WFS (with Send | Ignore per SKU and the shipments on their
-// way), Sold today (every SKU and its units, Excel-style), Running low (with
-// an order quantity from the sales pace).
+// C1, with Sold moved to the left): Sold today (every SKU and its units,
+// Excel-style), Send to WFS (with Send | Ignore per SKU and the shipments on
+// their way), Running low (with an order quantity from the sales pace).
 
 let ovData = null;
 let ovFetching = false;
