@@ -2564,17 +2564,22 @@ function renderStock() {
             default: return '<td></td>';
           }
         };
+        // the room split only means something for NEW stock — condition
+        // SKUs are returns-room stock by definition (owner 2026-09-22:
+        // "the warehouse won't have open box, used, scrap items")
+        const colsInView = stockColOrder.filter(k =>
+          (k !== 'newRoom' && k !== 'returnsRoom') || stockActiveView === STOCK_VIEW_NEW);
         return `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
-          ${stockColOrder.map(k => stockTh(k, TH_EXTRA[k])).join('')}
+          ${colsInView.map(k => stockTh(k, TH_EXTRA[k])).join('')}
         </tr></thead>
         <tbody>${rows.map((r, idx) => `
           <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
             <td class="cell-gutter">${idx + 1}</td>
             ${imgCell(r)}
-            ${stockColOrder.map(k => cellFor(k, r)).join('')}
+            ${colsInView.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
       </table>${addNewFoot}`;
       })();
