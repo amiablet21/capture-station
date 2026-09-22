@@ -5258,28 +5258,10 @@ function retMarkEditing(gid) {
   if (g) api.presenceEditing(g, true).catch(() => { /* beat catches up */ });
 }
 
-// paints WITHOUT re-rendering: chips and avatars land on the existing DOM
+// paints WITHOUT re-rendering: chips land on the existing DOM. The bar's
+// own Users pill already shows who's around — no second avatar cluster
+// (owner 2026-09-22: "the right side is not necessary")
 function retPaintPresence() {
-  const box = $('retUsers');
-  if (box) {
-    const names = retPresence.online || [];
-    box.hidden = !names.length;
-    box.textContent = '';
-    for (const n of names) {
-      const av = document.createElement('span');
-      av.className = 'ret-av';
-      av.textContent = retUserInitials(n);
-      av.title = `${n} is online`;
-      av.style.background = retUserColor(n);
-      box.appendChild(av);
-    }
-    if (names.length) {
-      const lbl = document.createElement('span');
-      lbl.className = 'ret-users-lbl';
-      lbl.textContent = `${names.length + 1} online`;
-      box.appendChild(lbl);
-    }
-  }
   for (const el of document.querySelectorAll('.ret-user-chip')) el.remove();
   for (const tr of document.querySelectorAll('#retPastBox tr.ret-busy')) {
     tr.classList.remove('ret-busy');
