@@ -3148,9 +3148,6 @@ function registerIpc() {
               'Capture Station return'
             );
             lastErr = '';
-            // physically, every restocked return lands in the RETURNS ROOM
-            // (owner 2026-09-22) — the room ledger hears it with the restock
-            for (const i of stockItems) roomEvent({ sku: String(i.targetSku).toUpperCase(), delta: i.qty });
             break;
           } catch (e) { lastErr = e.message; }
         }
@@ -4954,59 +4951,7 @@ function registerIpc() {
     retsync.appendAux('stockimports', entry);
     return entry;
   }
-  /* ---------- warehouse rooms (owner 2026-09-22): one Linnworks total,
-     shown as New room + Returns rm. The ledger stores ONLY the returns-room
-     count per SKU, as append-only events in the shared folder
-     (rooms-<station>.jsonl — the same mechanism as the import history);
-     the new room is always DERIVED (total − returns), so the two can never
-     disagree. Sync off -> a local file stands in. */
-  const roomsLocalPath = () => path.join(app.getPath('userData'), 'rooms-local.jsonl');
-  const loadRoomsLocal = () => {
-    try {
-      return fs.readFileSync(roomsLocalPath(), 'utf8').split('\n').filter(Boolean)
-        .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    } catch { return []; }
-  };
-  let roomsCache = { at: 0, map: null };
-  function roomCounts() {
-    if (roomsCache.map && Date.now() - roomsCache.at < 30 * 1000) return roomsCache.map;
-    const evs = [...retsync.readAux('rooms'), ...loadRoomsLocal()];
-    evs.sort((a, b) => String(a.ts || '').localeCompare(String(b.ts || '')));
-    const map = {};
-    for (const e of evs) {
-      const k = String((e && e.sku) || '').toUpperCase();
-      if (!k) continue;
-      if (e.set !== undefined) map[k] = Math.max(0, Number(e.set) || 0);
-      else map[k] = Math.max(0, (map[k] || 0) + (Number(e.delta) || 0));
-    }
-    roomsCache = { at: Date.now(), map };
-    return map;
-  }
-  function roomEvent(ev) {
-    const entry = { ts: new Date().toISOString(), station: retsync.stationName() || 'this desktop', ...ev };
-    if (!retsync.appendAux('rooms', entry)) {
-      try { fs.appendFileSync(roomsLocalPath(), JSON.stringify(entry) + '\n'); } catch { /* next edit retries */ }
-    }
-    roomsCache = { at: 0, map: null };
-  }
-  ipcMain.handle('rooms:get', () => ({ ok: true, map: roomCounts() }));
-  // count the room you're standing in; the app does the math and tells
-  // Linnworks the new TOTAL (in stock itself is never edited directly)
-  ipcMain.handle('rooms:setCount', async (_e, { sku, room, count, prevReturns, prevLevel }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const n = Math.max(0, Math.round(Number(count) || 0));
-    const rr = Math.max(0, Math.round(Number(prevReturns) || 0));
-    const total = room === 'returns'
-      ? Math.max(0, (Number(prevLevel) || 0) + (n - rr))
-      : n + rr;
-    const res = await stockSetLevel(sku, total, prevLevel);
-    if (!res.ok) return res;
-    if (room === 'returns') roomEvent({ sku: String(sku).toUpperCase(), set: n });
-    return { ...res, returnsRoom: room === 'returns' ? n : rr };
-  });
-
-  ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note, room }) => {
+  ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     const want = (Array.isArray(rows) ? rows : []).slice(0, 500)
@@ -5036,10 +4981,7 @@ function registerIpc() {
         await client.changeStockLevels(deltas, cfg.linnworks.locationId,
           mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
       }
-      const toReturns = mode === 'add' && room === 'returns';
-      const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped, ...(toReturns ? { room: 'returns' } : {}) });
-      // the batch physically landed in the returns room: the ledger hears it
-      if (toReturns) for (const r of entryRows) if (r.qty > 0) roomEvent({ sku: r.sku, delta: r.qty });
+      const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped });
       // same after-care as a single stock correction: fresh unlisted scan,
       // immediate re-route + re-import instead of waiting the 5-minute pass
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
@@ -5067,7 +5009,7 @@ function registerIpc() {
     // an entry whose units were partly moved to another SKU can't be
     // reverted wholesale — the moved units would be subtracted twice
     const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
-    if (all.some(e => e && (e.mode === 'fix' || e.mode === 'fixbatch') && e.fixOf === id && !undone.has(e.id))) {
+    if (all.some(e => e && e.mode === 'fix' && e.fixOf === id && !undone.has(e.id))) {
       return { ok: false, error: 'Units from this entry were moved to another SKU — revert those moves first.' };
     }
     try {
@@ -5120,12 +5062,9 @@ function registerIpc() {
     const change = (Number(row.after) || 0) - (Number(row.before) || 0);
     if (change <= 0) return { ok: false, error: 'Only lines that ADDED stock can be moved to another SKU.' };
     const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
-    const moved = all.reduce((sum, e) => {
-      if (!e || undone.has(e.id) || e.fixOf !== id) return sum;
-      if (e.mode === 'fix' && Number(e.fixRow) === Number(rowIdx)) return sum + (Number(e.fixQty) || 0);
-      if (e.mode === 'fixbatch') return sum + (e.moves || []).filter(m => Number(m.row) === Number(rowIdx)).reduce((x, m) => x + (Number(m.qty) || 0), 0);
-      return sum;
-    }, 0);
+    const moved = all
+      .filter(e => e && e.mode === 'fix' && e.fixOf === id && Number(e.fixRow) === Number(rowIdx) && !undone.has(e.id))
+      .reduce((s, e) => s + (Number(e.fixQty) || 0), 0);
     const avail = change - moved;
     if (avail <= 0) return { ok: false, error: 'Those units were already moved.' };
     const m = Number(qty);
@@ -5158,82 +5097,6 @@ function registerIpc() {
           { sku: to, before: toCur, qty: m, after: toCur + m },
         ],
         skipped: [],
-      });
-      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
-      (async () => {
-        await runRouting();
-        openOrdersCache = { at: 0, data: null, promise: null };
-        await runOrderImport();
-      })().catch(() => { /* the scheduled passes will catch up */ });
-      return { ok: true, entry: rec };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-  // Batch form of the fix (owner 2026-09-22: "I want to edit all of them
-  // and then make the change"): every corrected line applies in ONE pass
-  // and the ledger gains ONE dated entry. rows[] carries every stock leg,
-  // so the generic revert reverses the whole correction in one click.
-  ipcMain.handle('stock:bulkFixBatch', async (_e, { id, moves }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
-    const all = [...retsync.readAux('stockimports'), ...loadBulkHist()];
-    const entry = all.find(e => e && e.id === id);
-    if (!entry) return { ok: false, error: 'That history entry has not synced to this desktop yet.' };
-    if (all.some(e => e && e.revertOf === id)) return { ok: false, error: 'That entry was reverted — there is nothing left to move.' };
-    const undone = new Set(all.filter(e => e && e.revertOf).map(e => e.revertOf));
-    const movedOf = (ri) => all.reduce((s, e) => {
-      if (!e || undone.has(e.id) || e.fixOf !== id) return s;
-      if (e.mode === 'fix' && Number(e.fixRow) === ri) return s + (Number(e.fixQty) || 0);
-      if (e.mode === 'fixbatch') return s + (e.moves || []).filter(m => Number(m.row) === ri).reduce((x, m) => x + (Number(m.qty) || 0), 0);
-      return s;
-    }, 0);
-    const clean = [];
-    for (const m of (Array.isArray(moves) ? moves : []).slice(0, 100)) {
-      const ri = Number(m.rowIdx);
-      const row = (entry.rows || [])[ri];
-      const to = String(m.to || '').trim().toUpperCase();
-      const qty = Number(m.qty);
-      if (!row || !to || !Number.isInteger(qty) || qty < 1) continue;
-      const from = String(row.sku || '').toUpperCase();
-      if (to === from) continue;
-      const change = (Number(row.after) || 0) - (Number(row.before) || 0);
-      const avail = change - movedOf(ri);
-      if (change <= 0 || qty > avail) return { ok: false, error: `${from}: only ${Math.max(0, avail)} unit(s) left to move.` };
-      clean.push({ row: ri, from, to, qty });
-    }
-    if (!clean.length) return { ok: false, error: 'Nothing changed.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const items = await client.listInventory();
-      const bySku = new Map(items.map(i => [String(i.sku).toUpperCase(), i]));
-      for (const m of clean) if (!bySku.has(m.to)) return { ok: false, error: `${m.to} does not exist in Linnworks.` };
-      const levelOf = (it) => {
-        const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
-        return l ? Number(l.stockLevel) || 0 : 0;
-      };
-      // running levels: several moves touching one SKU stay coherent
-      const cur = new Map();
-      const level = (u) => { if (!cur.has(u)) cur.set(u, bySku.has(u) ? levelOf(bySku.get(u)) : 0); return cur.get(u); };
-      const rows = [];
-      const deltas = [];
-      for (const m of clean) {
-        const fromIt = bySku.get(m.from);
-        const dFrom = fromIt ? Math.max(-level(m.from), -m.qty) : 0; // never below zero
-        if (fromIt && dFrom) {
-          rows.push({ sku: m.from, before: level(m.from), qty: dFrom, after: level(m.from) + dFrom });
-          deltas.push({ sku: fromIt.sku, delta: dFrom });
-          cur.set(m.from, level(m.from) + dFrom);
-        }
-        rows.push({ sku: m.to, before: level(m.to), qty: m.qty, after: level(m.to) + m.qty });
-        deltas.push({ sku: bySku.get(m.to).sku, delta: m.qty });
-        cur.set(m.to, level(m.to) + m.qty);
-      }
-      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (batch)');
-      const rec = bulkLogEntry({
-        mode: 'fixbatch', fixOf: id, file: '',
-        moves: clean,
-        rows, skipped: [],
       });
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       (async () => {
