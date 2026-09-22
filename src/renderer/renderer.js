@@ -2543,12 +2543,17 @@ function renderStock() {
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
         const TH_EXTRA = { sku: '', stockLevel: 'num th-level', newRoom: 'num', returnsRoom: 'num', inOrders: 'num', minimumLevel: 'num', available: 'num' };
+        // rooms only show in the New view; WITH them In stock is the sum
+        // and reads only — WITHOUT them (condition views, All) it stays
+        // the editable count it always was (owner-hit 2026-09-22: "I can't
+        // edit the stock in OPEN BOX")
+        const roomsShown = stockActiveView === STOCK_VIEW_NEW;
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
-            // In stock is the SUM of the rooms and reads only — you count
-            // the room you're standing in (owner 2026-09-22)
-            case 'stockLevel': return `<td class="num cell-level"><span class="stock-num-ro" title="New room + Returns rm — correct a room count, not the total">${r.l.stockLevel}</span></td>`;
+            case 'stockLevel': return roomsShown
+              ? `<td class="num cell-level"><span class="stock-num-ro" title="New room + Returns rm — correct a room count, not the total">${r.l.stockLevel}</span></td>`
+              : `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
             case 'newRoom': return `<td class="num"><button class="stock-num-btn" data-roomsku="${esc(r.sku)}" data-room="new" data-cur="${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}" title="Units in the new-stock room — click to correct (the total follows)">${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}</button></td>`;
             case 'returnsRoom': return (() => {
               const rr = stockRoomOf(r);
