@@ -2260,7 +2260,7 @@ function stockRoomOf(r) {
 const STOCK_COLS = {
   sku: { label: 'SKU', get: r => r.sku, text: true },
   stockLevel: { label: 'In stock', get: r => r.l.stockLevel },
-  newRoom: { label: 'New room', get: r => (Number(r.l.stockLevel) || 0) - stockRoomOf(r) },
+  newRoom: { label: 'Warehouse', get: r => (Number(r.l.stockLevel) || 0) - stockRoomOf(r) },
   returnsRoom: { label: 'Returns rm', get: r => stockRoomOf(r) },
   inOrders: { label: 'In orders', get: r => r.l.inOrders },
   minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
@@ -2554,7 +2554,7 @@ function renderStock() {
             case 'stockLevel': return roomsShown
               ? `<td class="num cell-level"><span class="stock-num-ro" title="New room + Returns rm — correct a room count, not the total">${r.l.stockLevel}</span></td>`
               : `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
-            case 'newRoom': return `<td class="num"><button class="stock-num-btn" data-roomsku="${esc(r.sku)}" data-room="new" data-cur="${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}" title="Units in the new-stock room — click to correct (the total follows)">${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}</button></td>`;
+            case 'newRoom': return `<td class="num"><button class="stock-num-btn" data-roomsku="${esc(r.sku)}" data-room="new" data-cur="${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}" title="Units in the warehouse — click to correct (the total follows)">${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}</button></td>`;
             case 'returnsRoom': return (() => {
               const rr = stockRoomOf(r);
               return `<td class="num"><button class="stock-num-btn stock-rr-btn ${rr > 0 ? 'rr-has' : ''}" data-roomsku="${esc(r.sku)}" data-room="returns" data-cur="${rr}" title="Units in the returns room — click to correct (the total follows)">${rr > 0 ? rr : '—'}</button></td>`;
