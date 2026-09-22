@@ -4950,8 +4950,7 @@ function retLogRowHtml(r, i, ii, un, num) {
     ? `<div class="ret-cell-target" title="${i.targetSku ? `What came back — stock landed on ${esc(i.targetSku)}` : 'What came back — not a listing, no stock moved'}">→ ${esc(i.received || i.targetSku)}${i.targetSku ? retUnlistedMark(i.targetSku) : ''}</div>`
     : (i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : ''))}
       </td>
-      <td class="ret-cell-cond ret-ecell" data-edit="condition">
-        ${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      <td class="ret-cell-cond ret-ecell" data-edit="condition">${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
       </td>
       <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
       <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>

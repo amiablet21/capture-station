@@ -1929,7 +1929,11 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .ret-log-table td.cell-gutter.st-failed { background: transparent; color: var(--neg-text); font-weight: 700; }
 
 /* condition: per-condition dot + colored text, no pill */
+/* the log rows' condition lines up with the entry row's pill (its 6px
+   padding + 1px border) — adjacent rows sat a few px apart (owner
+   2026-09-22, "why is this not aligned") */
 .ret-log-table .ret-cond-ro { font-weight: 600; font-size: 12px; }
+.ret-log-table .ret-cell-cond .ret-cond-ro { margin-left: 7px; }
 .ret-log-table .ret-cond-ro.is-new { color: var(--pos-text); }
 .ret-log-table .ret-cond-ro.is-openbox { color: var(--badge-blue-text); }
 .ret-log-table .ret-cond-ro.is-used { color: var(--badge-yellow-text); }
