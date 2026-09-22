@@ -1555,6 +1555,14 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .stock-rr-btn { color: var(--faint); }
 .stock-rr-btn.rr-has { color: var(--badge-yellow-text); font-weight: 700; }
 
+/* the header right-click Columns menu + the room-title inline editor */
+.colmenu { position: fixed; z-index: 70; min-width: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 28px rgba(47, 52, 55, 0.16); padding: 4px; }
+.colmenu-h { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); padding: 4px 10px 5px; }
+.colmenu-i { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-family: var(--font); font-size: 12px; padding: 5px 10px; border: none; border-radius: 6px; background: none; color: var(--text); cursor: pointer; }
+.colmenu-i:hover { background: var(--surface-2); }
+.colmenu-tick { display: inline-block; width: 14px; color: var(--accent); font-weight: 700; }
+.stock-collabel-in { width: 100px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 6px; border-color: var(--accent); }
+
 /* in-app updater button: quiet until a release is newer than this build */
 .update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
 .update-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }

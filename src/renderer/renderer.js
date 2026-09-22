@@ -2295,10 +2295,17 @@ try {
 // whole sheet shifted under the cursor (owner 2026-09-14)
 let stockFreezeWidths = null;
 
+// hidden columns + the owner's own names for the room columns (both
+// per-desktop, right-click any header for the picker — owner 2026-09-22)
+let stockColHidden = new Set();
+try { stockColHidden = new Set(JSON.parse(localStorage.getItem('stockColHidden') || '[]')); } catch { /* all visible */ }
+let stockRoomLabels = {};
+try { stockRoomLabels = JSON.parse(localStorage.getItem('stockRoomLabels') || '{}') || {}; } catch { /* defaults */ }
+const stockColLabel = (key) => String(stockRoomLabels[key] || '').trim() || (STOCK_COLS[key] ? STOCK_COLS[key].label : key);
+
 function stockTh(key, extraClass = '', labelOverride = '') {
-  const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
-  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}" title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}" title="Click to sort · drag edge to resize · drag the header to move the column · right-click to hide/show columns">${labelOverride || esc(stockColLabel(key))}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
 }
 
 // widths the sheet settled on THIS session, per column: the first render
@@ -2573,7 +2580,8 @@ function renderStock() {
         // SKUs are returns-room stock by definition (owner 2026-09-22:
         // "the warehouse won't have open box, used, scrap items")
         const colsInView = stockColOrder.filter(k =>
-          (k !== 'newRoom' && k !== 'returnsRoom') || stockActiveView === STOCK_VIEW_NEW);
+          ((k !== 'newRoom' && k !== 'returnsRoom') || stockActiveView === STOCK_VIEW_NEW)
+          && (k === 'sku' || !stockColHidden.has(k)));
         return `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
@@ -3165,6 +3173,82 @@ function saveSheetFrac(el, key, w) {
 // sliding bar"): the sheet always fills the window now. Any width a past
 // drag stored is cleared so old installs snap back to full too.
 localStorage.removeItem('stockSheetWidth');
+
+// right-click any header -> hide/show columns (owner 2026-09-22); SKU
+// always stays. The choice persists per desktop.
+let colMenuEl = null;
+function colMenuClose() {
+  if (colMenuEl) { colMenuEl.remove(); colMenuEl = null; }
+  document.removeEventListener('mousedown', colMenuAway, true);
+}
+function colMenuAway(e) { if (colMenuEl && !colMenuEl.contains(e.target)) colMenuClose(); }
+$('stockList').addEventListener('contextmenu', (e) => {
+  const th = e.target.closest('th[data-sort]');
+  if (!th) return;
+  e.preventDefault();
+  e.stopPropagation(); // the app-wide copy/paste menu yields to this one
+  colMenuClose();
+  const keys = stockColOrder.filter(k => STOCK_COLS[k] && k !== 'sku' && k !== 'home'
+    && ((k !== 'newRoom' && k !== 'returnsRoom') || stockActiveView === STOCK_VIEW_NEW));
+  const menu = document.createElement('div');
+  menu.className = 'colmenu';
+  menu.innerHTML = '<div class="colmenu-h">Columns</div>' + keys.map(k => `
+    <button type="button" class="colmenu-i" data-colk="${k}"><span class="colmenu-tick">${stockColHidden.has(k) ? '' : '✓'}</span>${esc(stockColLabel(k))}</button>`).join('');
+  document.body.appendChild(menu);
+  menu.style.left = `${Math.max(8, Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 8))}px`;
+  colMenuEl = menu;
+  document.addEventListener('mousedown', colMenuAway, true);
+  menu.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-colk]');
+    if (!b) return;
+    const k = b.dataset.colk;
+    if (stockColHidden.has(k)) stockColHidden.delete(k); else stockColHidden.add(k);
+    try { localStorage.setItem('stockColHidden', JSON.stringify([...stockColHidden])); } catch { /* session only */ }
+    b.querySelector('.colmenu-tick').textContent = stockColHidden.has(k) ? '' : '✓';
+    renderStock();
+  });
+});
+
+// double-click a room column's header to name it yourself (owner
+// 2026-09-22 "double click and edit"); Enter saves, Esc cancels, empty
+// falls back to the built-in name
+$('stockList').addEventListener('dblclick', (e) => {
+  if (e.target.closest('.col-grip')) return; // grip dblclick = width reset
+  const th = e.target.closest('th[data-sort="newRoom"], th[data-sort="returnsRoom"]');
+  if (!th || th.querySelector('input')) return;
+  e.preventDefault();
+  const key = th.dataset.sort;
+  const grip = th.querySelector('.col-grip');
+  th.draggable = false;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 20;
+  input.className = 'input stock-collabel-in';
+  input.value = stockColLabel(key);
+  th.textContent = '';
+  th.appendChild(input);
+  if (grip) th.appendChild(grip);
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save) {
+      stockRoomLabels[key] = input.value.trim(); // '' = back to the default
+      try { localStorage.setItem('stockRoomLabels', JSON.stringify(stockRoomLabels)); } catch { /* session only */ }
+    }
+    renderStock();
+  };
+  input.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (ev) => ev.stopPropagation()); // clicking in must not sort
+  input.focus();
+  input.select();
+});
 
 // column resize: drag a header's right edge; double-click the edge to reset
 let gripDrag = null;
