@@ -212,9 +212,8 @@
     </div>
   </section>
 
-  <!-- Overview: the morning read - orders per marketplace, smooth sales curve
-       with Day/Month/Year filter, and three money cards expanding into a
-       shared SKU drawer. Approved design: variants/overview-v2.html -->
+  <!-- Overview: three columns (owner 2026-09-22) - Send to WFS | Sold
+       today | Running low. Approved design: variants/overview-3col.html (C1) -->
   <section id="overviewPage" class="ov-page" hidden>
     <div class="ov-sheet-row">
     <div class="ov-wrap" id="ovWrap">
@@ -224,27 +223,11 @@
           Refresh</button>
         <button id="ovPhoneBtn" class="btn btn-ghost ov-phone" title="Scan a QR code to open this dashboard on your phone">Phone</button>
       </div>
-      <div class="ov-grid">
-        <div class="ov-panel ov-today" id="ovToday"></div>
-        <div class="ov-panel ov-chartpanel">
-          <!-- ranges live in the chart header (owner mockup 2026-08-17); they
-               drive BOTH the curve and the totals card on the left -->
-          <h4>Sales
-            <span class="ov-mtoggle" id="ovMetric">
-              <button class="ov-mbtn" data-m="orders">Orders</button>
-              <button class="ov-mbtn is-on" data-m="sales">Gross $</button>
-            </span>
-            <span class="ov-ranges" id="ovRanges">
-              <button class="ov-rbtn is-on" data-r="Day">Day</button>
-              <button class="ov-rbtn" data-r="Month">Month</button>
-              <button class="ov-rbtn" data-r="Year">Year</button>
-            </span>
-          </h4>
-          <div class="ov-chartbox" id="ovChart"></div>
-        </div>
+      <div class="ov-cols" id="ovCols">
+        <div class="ov-panel" id="ovWfs"></div>
+        <div class="ov-panel ov-today ov-sold" id="ovSold"></div>
+        <div class="ov-panel" id="ovLow"></div>
       </div>
-      <div class="ov-cards" id="ovCards"></div>
-      <div class="ov-panel ov-drawer" id="ovDrawer" hidden></div>
     </div>
     <div id="ovGrip" class="sheet-grip" title="Drag to widen or narrow the page · double-click to reset"></div>
     </div>
@@ -826,6 +809,7 @@
     <div class="wfs-cols">
       <div class="wfs-left">
         <h2 class="dlg-title">WFS Shipments</h2>
+        <p id="wfsFromOv" class="wfs-from" hidden></p>
         <div class="wfs-sheet">
           <div class="wfs-sheet-h"><span>SKU</span><span>GTIN / Walmart ID</span><span class="wfs-h-qty">Qty</span><span></span></div>
           <div id="wfsLines"></div>

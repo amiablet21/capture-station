@@ -114,6 +114,21 @@ function open() {
   if (!cols.includes('lw_order_id')) {
     db.exec(`ALTER TABLE rows ADD COLUMN lw_order_id TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: WFS shipments carry a received date (Overview marks them
+  // received by hand until a Walmart connection can say so itself)
+  const wfsCols = db.prepare(`SELECT name FROM pragma_table_info('wfs_shipments')`).all().map(c => c.name);
+  if (!wfsCols.includes('received_at')) {
+    db.exec(`ALTER TABLE wfs_shipments ADD COLUMN received_at TEXT NOT NULL DEFAULT ''`);
+  }
+  // Overview "Ignore" on a Send-to-WFS suggestion: hidden until `until`,
+  // or sooner if the SKU's WFS pace outgrows the pace it was ignored at
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wfs_ignores (
+      sku TEXT PRIMARY KEY,
+      until TEXT NOT NULL,
+      pace REAL NOT NULL DEFAULT 0
+    );
+  `);
   return db;
 }
 
@@ -418,6 +433,29 @@ function listWfsShipments(limit = 200) {
     .map(s => ({ ...s, items: JSON.parse(s.items) }));
 }
 
+function markWfsReceived(id, received) {
+  open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?')
+    .run(received ? new Date().toISOString() : '', id);
+}
+
+function setWfsIgnore(sku, days, pace) {
+  const until = new Date(Date.now() + days * 86400000).toISOString();
+  open().prepare('INSERT INTO wfs_ignores (sku, until, pace) VALUES (?, ?, ?) ON CONFLICT(sku) DO UPDATE SET until = excluded.until, pace = excluded.pace')
+    .run(String(sku).toUpperCase(), until, Number(pace) || 0);
+}
+
+// sku omitted = restore every ignored suggestion
+function clearWfsIgnore(sku) {
+  if (sku) open().prepare('DELETE FROM wfs_ignores WHERE sku = ?').run(String(sku).toUpperCase());
+  else open().prepare('DELETE FROM wfs_ignores').run();
+}
+
+function listWfsIgnores() {
+  const now = new Date().toISOString();
+  open().prepare('DELETE FROM wfs_ignores WHERE until <= ?').run(now);
+  return open().prepare('SELECT * FROM wfs_ignores').all();
+}
+
 // Graded customer returns. items: [{ sku, condition, targetSku, qty, price, note }]
 // unmatched = physically arrived without a Linnworks order behind it
 // (pre-Linnworks sale, WFS removal shipment, missing PO#).
@@ -608,7 +646,7 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
   lowStockCrossings,

@@ -158,6 +158,10 @@ const DEFAULTS = {
   // buy quantity ≈ perDay × (coverDays + leadTimeDays). suggest shows them
   // in the Min column; auto applies them nightly (only when ±20% off).
   reorder: { suggest: true, auto: false, leadTimeDays: 7, coverDays: 21 },
+  // Overview "Send to WFS": suggest a top-up when WFS stock (plus units on
+  // the way) covers fewer than triggerDays of WFS sales; send enough to
+  // reach targetDays. Ignore hides a suggestion for ignoreDays.
+  wfs: { targetDays: 30, triggerDays: 14, ignoreDays: 7 },
   // one-per-crossing latch for dropship BUY alerts (like lowStockBelow)
   dropshipAlerted: {},
   // Embedded marketplace browser pane on the Capture page (sync mode only):

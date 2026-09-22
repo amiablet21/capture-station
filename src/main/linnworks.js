@@ -663,6 +663,12 @@ class LinnworksClient {
       }
       if (!hits.length || page >= (po.TotalPages || 1)) break;
     }
+    return this.linesForOrders(headers);
+  }
+
+  // Item lines for known processed-order headers ({ orderId, source,
+  // processedOn }), 50 orders per GetOrdersById call
+  async linesForOrders(headers) {
     const headById = new Map(headers.map(h => [h.orderId, h]));
     const lines = [];
     for (let i = 0; i < headers.length; i += 50) {
@@ -687,6 +693,7 @@ class LinnworksClient {
             locationId,
             processedOn: head.processedOn || '',
             sku: it.SKU || it.ItemNumber || '',
+            channelSku: it.ChannelSKU || '',
             title: it.Title || '',
             qty,
             // line revenue: the channel's line total (inc tax) when present,

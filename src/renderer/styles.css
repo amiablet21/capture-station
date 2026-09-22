@@ -4072,20 +4072,48 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .phone-note { font-size: 11px; color: var(--faint); max-width: 300px; margin: 0 auto 14px; line-height: 1.5; }
 .ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .ov-date { font-size: 11.5px; color: var(--faint); }
-/* ranges sit in the chart header now, sized to match the metric toggle */
-.ov-ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 8px; padding: 2px; gap: 2px; }
-.ov-rbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 10px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
-.ov-rbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
-.ov-grid { display: grid; grid-template-columns: 420px 1fr; gap: 10px; margin-bottom: 10px; } /* wide enough for full SKUs in the feed */
-.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+
+/* three columns (owner 2026-09-22, variants/overview-3col.html C1):
+   Send to WFS | Sold today | Running low */
+.ov-cols { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 10px; align-items: start; }
+.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
 .ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
-.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 12px; }
+.ov-panel h4.ov-h-g { color: #065F46; }
+.ov-panel h4.ov-h-a { color: var(--badge-yellow-text); }
+
+/* ranked rows in the side columns */
+.ov-t { border-collapse: collapse; width: 100%; font-size: 12px; }
+.ov-t td { padding: 7px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+.ov-t tr:last-child td { border-bottom: none; }
+.ov-t tbody tr:hover td { background: var(--surface-2); }
+.ov-t td.rr { text-align: right; white-space: nowrap; }
+.ov-rank { width: 16px; color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.ov-meta { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 1px; }
+.ov-t td.rr .ov-meta { font-family: var(--font); color: var(--muted); margin-top: 3px; }
+.ov-faster { color: var(--neg-text); }
+.ov-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+.ov-bar i { display: block; height: 100%; border-radius: 999px; }
+.ov-bar i.r { background: var(--neg-text); }
+.ov-bar i.a { background: var(--badge-yellow-text); }
+.ov-bar i.g { background: var(--accent); }
+/* Send | Ignore | Mark received: the app's own buttons at row size */
+.ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
+.ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
+.ov-badge { font-size: 9.5px; padding: 1px 8px; }
+.ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.ov-link:hover { color: var(--text); }
+.ov-undo { font-size: 11px; color: var(--muted); padding: 6px; border-bottom: 1px solid var(--border-soft); }
+.ov-undo a { color: #065F46; font-weight: 600; cursor: pointer; margin-left: 6px; }
+.ov-sec { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 12px 6px 4px; display: flex; }
+.ov-sec .n { margin-left: auto; font-family: var(--mono); }
+
+/* middle column: the today card - big number, the sold grid, channel
+   cells pinned to the bottom edge */
+.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; margin: 4px 0 6px; }
-.ov-today .delta { font-size: 10.5px; color: var(--accent-soft-text); min-height: 14px; }
-.ov-today .delta.neg { color: var(--neg-text); }
-/* channel cells pinned to the card's bottom edge (owner mockup 2026-08-17) */
+.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; margin: 4px 0 6px; }
+.ov-today .delta { font-size: 10.5px; color: var(--muted); min-height: 14px; }
 .ov-chcells { margin: auto -16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
 .ov-chcell { padding: 9px 8px 12px; text-align: center; }
 .ov-chcell + .ov-chcell { border-left: 1px solid var(--border); }
@@ -4093,79 +4121,26 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .cn-walmart { color: #2E86D9; }
 .cn-ebay { color: #047857; }
 .cn-temu { color: #C97B12; }
-.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; border-radius: 5px; }
-/* the orders-today number rolls like a mechanical counter when it rises
-   (owner pick: "odometer roll") — the marketplace row flashes its +1 and a
-   soft chip names the channel */
-.ov-odo { display: inline-flex; overflow: hidden; }
-.ov-odo .dcol { position: relative; height: 1.1em; overflow: hidden; display: inline-block; }
-.ov-odo .dstack { display: flex; flex-direction: column; transition: transform 500ms var(--ease); }
-.ov-odo .dstack i { font-style: normal; height: 1.1em; line-height: 1.1em; display: block; }
-.dsep { display: inline-block; height: 1.1em; line-height: 1.1em; } /* static $ and commas between rolling digits */
-.ov-chcell .cv.ov-hit { animation: ovHit 800ms var(--ease); }
-/* the latest-orders feed (owner pick 2026-08-17: "full grid"): an Excel-style
-   table — shaded header row, cell borders both ways — whose new arrivals
-   slide in from the top with a soft emerald flash */
-.ov-feed { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.ov-feed .fk { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 5px; }
-/* continuous feed (owner 2026-08-17): the table runs long and dissolves at
-   the bottom instead of stopping at a frame edge */
-.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); }
-.ov-xhead { display: grid; grid-template-columns: 100px 1fr 60px 52px; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
+.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; }
+
+/* the "full grid" (owner pick 2026-08-17): Excel-style, shaded header row,
+   cell borders both ways - here SKU | Units with row numbers and a total */
+.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; }
+.ov-xhead { display: grid; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
 .ov-xhead span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 8px; border-right: 1px solid #E0DED8; }
 .ov-xhead span:last-child { border-right: none; text-align: right; }
-.ov-feedrow { display: grid; grid-template-columns: 100px 1fr 60px 52px; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
+.ov-feedrow { display: grid; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
 .ov-feedrow:last-child { border-bottom: none; }
 .ov-feedrow span { padding: 5px 8px; border-right: 1px solid #EAE8E3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-feedrow span:last-child { border-right: none; }
-.ov-feedrow .xpo { font-size: 10.5px; font-weight: 600; }
-.ov-feedrow .xsku { font-size: 10px; color: var(--muted); }
-.ov-feedrow .xch { font-size: 10px; font-weight: 600; }
-.xch-walmart { color: #2E86D9; }
-.xch-ebay { color: #047857; }
-.xch-temu { color: #C97B12; }
-.ov-feedrow .xtm { font-family: var(--mono); font-size: 10px; color: var(--faint); text-align: right; }
-@keyframes ovFeedIn { 0% { opacity: 0; transform: translateY(-9px); } 40% { background: var(--accent-soft); } 100% { opacity: 1; transform: none; } }
-.ov-feedrow.is-new { animation: ovFeedIn 700ms var(--ease) both; }
-@keyframes ovHit { 0% { background: var(--accent-soft); color: var(--accent-soft-text); } 100% { background: transparent; } }
-.ov-toast { height: 18px; text-align: center; }
-.ov-toast span { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 10px; opacity: 0; }
-.ov-toast span.show { animation: ovToast 1.8s var(--ease); }
-@keyframes ovToast { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+.ov-soldgrid .ov-xhead, .ov-soldgrid .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
+.ov-soldgrid .xrn { color: var(--faint); text-align: center; text-overflow: clip; background: #F4F3F0; font-family: var(--mono); font-size: 9.5px; }
+.ov-soldgrid .xsku { font-family: var(--mono); font-size: 10.5px; cursor: pointer; }
+.ov-soldgrid .xsku:hover { color: var(--badge-blue-text); }
+.ov-soldgrid .xu { font-family: var(--mono); font-size: 11.5px; font-weight: 700; text-align: right; }
+.ov-soldgrid .tot { background: var(--surface-2); border-top: 1px solid #E0DED8; }
+.ov-soldgrid .tot span { font-weight: 700; }
 
-.ov-mtoggle { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; margin-left: 10px; }
-.ov-mbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 9px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
-.ov-mbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
-.ov-chartpanel { display: flex; flex-direction: column; } /* the chart fills whatever height the card column sets */
-/* trace-in flourish on Refresh / page entry (owner pick A, 2026-08-17) */
-.ov-anim-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ovTrace 850ms var(--ease) forwards; }
-.ov-anim-late { animation: ovFadeLate 950ms both; }
-.ov-anim-dot { animation: ovDotPop 320ms var(--ease) 620ms both; transform-box: fill-box; transform-origin: center; }
-@keyframes ovTrace { to { stroke-dashoffset: 0; } }
-@keyframes ovFadeLate { 0% { opacity: 0; } 55% { opacity: 0; } 100% { opacity: 1; } }
-@keyframes ovDotPop { 0% { opacity: 0; transform: scale(.3); } 70% { transform: scale(1.25); } 100% { opacity: 1; transform: scale(1); } }
-.ov-chartbox { flex: 1; min-height: 190px; }
-.ov-chartbox svg { display: block; width: 100%; }
-.ov-chartbox text { font-family: var(--mono); }
-.ov-hovslice { cursor: crosshair; }
-.ov-tt { animation: ttPop .18s var(--ease); }
-@keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-.ov-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.ov-mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 120ms var(--ease); }
-.ov-mcard:hover { background: var(--surface-2); }
-.ov-mcard .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-mcard .chev { margin-left: auto; font-size: 10px; }
-.ov-mcard .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
-.ov-mcard .s { font-size: 10.5px; color: var(--muted); }
-.ov-big-r { color: var(--neg-text); } .ov-big-a { color: var(--badge-yellow-text); } .ov-big-g { color: #065F46; }
-.ov-drawer { margin-top: 10px; animation: ttPop .18s var(--ease); }
-.ov-drawer h4.r { color: var(--neg-text); } .ov-drawer h4.a { color: var(--badge-yellow-text); } .ov-drawer h4.g { color: #065F46; }
-.ov-drawer table { border-collapse: collapse; width: 100%; font-size: 12px; }
-.ov-drawer th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); background: none; }
-.ov-drawer th.rr, .ov-drawer td.rr { text-align: right; }
-.ov-drawer td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
-.ov-drawer tr:last-child td { border-bottom: none; }
-.ov-drawer tr:hover td { background: var(--surface-2); }
 .ov-sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--badge-blue-text); cursor: pointer; }
 .ov-dim { color: var(--muted); }
 .ov-pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
@@ -4175,6 +4150,11 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ov-more { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .ov-more a { color: #065F46; font-weight: 600; text-decoration: none; cursor: pointer; }
 .ov-empty { padding: 14px 4px; font-size: 11.5px; color: var(--faint); }
+
+/* WFS Shipments: where an Overview Send came from, and each past
+   shipment's status */
+.wfs-from { font-size: 11px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin: -4px 0 12px; }
+.wfs-badge { font-size: 9px; padding: 0 7px; }
 
 /* ---------- Temu lister (reuses the eBay three-panel skeleton) ---------- */
 /* centered columns clip their LEFT side unreachably when they overflow the
@@ -4232,7 +4212,5 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
    condition click (owner 2026-09-09, "it shifts the whole tab") */
 .stock-shelf-link[hidden] { display: inline-block !important; visibility: hidden; }
 
-/* Overview drawers hold 25 rows now — they scroll instead of stretching */
-.ov-drawer { max-height: 380px; overflow-y: auto; }
 
 

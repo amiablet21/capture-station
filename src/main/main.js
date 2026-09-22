@@ -2823,6 +2823,9 @@ function registerIpc() {
   // every range speaks the same language. 60s cache; SQLite captures stand in
   // when Linnworks is unreachable.
   let overviewTodayCache = { at: 0, data: null };
+  // processed orders never change, so their item lines are fetched once per
+  // order and kept for the day (the Sold today grid re-reads every minute)
+  let soldLines = { day: '', byOrder: new Map() };
   async function overviewLiveToday(cfg) {
     if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < 60 * 1000) return overviewTodayCache.data;
     const client = new LinnworksClient(cfg.linnworks);
@@ -2832,18 +2835,43 @@ function registerIpc() {
     const chan = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
     const seen = new Set();
     const orders = [];
+    const soldHeads = [];
     const heads = await client.listProcessedHeaders(dayStart.toISOString(), new Date().toISOString());
     for (const h of heads) {
       const ts = Date.parse(h.receivedOn || h.processedOn);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(h.orderId)) continue;
       seen.add(h.orderId);
       orders.push({ ts, source: h.source, charge: h.totalCharge });
+      soldHeads.push(h);
     }
+    // units sold today per SKU: open orders that arrived today plus the
+    // arrived-and-already-processed ones (their lines fetched once, cached)
+    const sold = new Map();
+    const addSold = (sku, qty, source) => {
+      const k = String(sku || '').toUpperCase();
+      if (!k) return;
+      const r = sold.get(k) || { sku: String(sku), units: 0, channels: {} };
+      r.units += qty;
+      const c = chan(source);
+      r.channels[c] = (r.channels[c] || 0) + qty;
+      sold.set(k, r);
+    };
     for (const o of await getOpenOrdersCached(cfg)) {
       const ts = Date.parse(o.receivedDate);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
       seen.add(o.orderId);
       orders.push({ ts, source: o.source, charge: o.totalCharge });
+      for (const it of o.items || []) if (!it.isService) addSold(it.sku || it.channelSku, it.quantity, o.source);
+    }
+    if (soldLines.day !== today) soldLines = { day: today, byOrder: new Map() };
+    const missing = soldHeads.filter(h => !soldLines.byOrder.has(h.orderId));
+    if (missing.length) {
+      const lines = await client.linesForOrders(missing);
+      for (const h of missing) soldLines.byOrder.set(h.orderId, []);
+      for (const l of lines) soldLines.byOrder.get(l.orderId)?.push(l);
+    }
+    for (const h of soldHeads) {
+      for (const l of soldLines.byOrder.get(h.orderId) || []) addSold(l.sku || l.channelSku, l.qty, l.source);
     }
     const byChannel = {};
     const byChannelSales = {};
@@ -2866,9 +2894,13 @@ function registerIpc() {
       sales.push(Math.round(upto.reduce((s, o) => s + o.charge, 0)));
       tips.push(h === nowH ? 'now' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`);
     }
+    const soldList = [...sold.values()].sort((a, b) => b.units - a.units || a.sku.localeCompare(b.sku));
+    const unitsByChannel = {};
+    for (const r of soldList) for (const [c, n] of Object.entries(r.channels)) unitsByChannel[c] = (unitsByChannel[c] || 0) + n;
     const data = {
       series: { vals, sales, tips },
       today: { total: orders.length, byChannel, totalSales: Math.round(totalSales), byChannelSales },
+      sold: { rows: soldList, units: soldList.reduce((a, r) => a + r.units, 0), byChannel: unitsByChannel },
     };
     overviewTodayCache = { at: Date.now(), data };
     return data;
@@ -2886,18 +2918,32 @@ function registerIpc() {
     // per-SKU: 4-week qty, revenue, last sale, channels
     const stats = {};
     const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
+    const items = await client.listInventory();
+    const homeLoc = cfg.linnworks.locationId;
+    // the Walmart-fed WFS location: sales despatched from it are WFS sales
+    let wfsLocId = '';
+    for (const it of items) {
+      const l = (it.levels || []).find(x => /wfs/i.test(x.locationName || ''));
+      if (l) { wfsLocId = String(l.locationId || '').toLowerCase(); break; }
+    }
+    const nowTs = to.getTime();
     for (const l of sales.lines) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
-      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set() };
+      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfs28: 0, wfs7: 0, chSku: '' };
       s.qty += l.qty;
       s.revenue += l.revenue;
       const ts = Date.parse(l.processedOn) || 0;
       if (ts > s.last) s.last = ts;
       if (l.source) s.channels.add(label(l.source));
+      // pace trend: last 14 days vs the 14 before
+      if (nowTs - ts <= 14 * 86400000) s.recent += l.qty; else s.prior += l.qty;
+      if (wfsLocId && String(l.locationId || '').toLowerCase() === wfsLocId) {
+        s.wfs28 += l.qty;
+        if (nowTs - ts <= 7 * 86400000) s.wfs7 += l.qty;
+        if (l.channelSku) s.chSku = l.channelSku;
+      }
     }
-    const items = await client.listInventory();
-    const homeLoc = cfg.linnworks.locationId;
     const pads = {};
     for (const it of items) if (it.dsPad) pads[String(it.sku).toUpperCase()] = true;
     const lead = Number((cfg.reorder || {}).leadTimeDays) || 7;
@@ -2955,6 +3001,45 @@ function registerIpc() {
     missed.sort((a, b) => b.value - a.value);
     buy.sort((a, b) => a.daysLeft - b.daysLeft);
     wfs.sort((a, b) => b.weekly - a.weekly);
+
+    // 3-column Overview (owner 2026-09-22). Send-to-WFS candidates: SKUs
+    // WFS actually sells, paced by WFS-despatched sales (the faster of the
+    // 28- and 7-day rates, so a SKU that sat empty at WFS isn't undercounted).
+    // Shipments in flight and ignores are local state, applied per request.
+    const cover = Number((cfg.reorder || {}).coverDays) || 21;
+    const wfsCand = [];
+    const low = [];
+    for (const it of items) {
+      const k = String(it.sku).toUpperCase();
+      const s = stats[k];
+      if (!s) continue;
+      const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+      const avail = Math.max(0, Number(home.available) || 0);
+      const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+      const atWfs = wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0;
+      if (wfsLvl && s.wfs28 >= 2) {
+        const perDay = Math.max(s.wfs28 / 28, s.wfs7 / 7);
+        wfsCand.push({ sku: it.sku, chSku: s.chSku, gtin: it.barcode || '', perDay: Math.round(perDay * 100) / 100, atWfs, avail });
+      }
+      // Running low: everything we hold (shelf + WFS) against all-channel
+      // pace; flagged when it runs out inside the lead time. Order covers
+      // lead + cover days, per the reorder settings, rounded up to 5.
+      if (!pads[k] && s.qty >= 2) {
+        const perDay = s.qty / 28;
+        const onHand = avail + atWfs;
+        const daysLeft = onHand / perDay;
+        if (daysLeft <= lead) {
+          low.push({
+            sku: it.sku, avail, atWfs, perDay: Math.round(perDay * 100) / 100,
+            daysLeft: Math.floor(daysLeft),
+            outOn: fmtDay(nowTs + Math.floor(daysLeft) * 86400000),
+            order: Math.max(5, Math.ceil((perDay * (lead + cover) - onHand) / 5) * 5),
+            faster: s.recent > s.prior * 1.2 && s.recent - s.prior >= 2,
+          });
+        }
+      }
+    }
+    low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // 25-row cap instead of the old 5-6 (owner 2026-08-25: "I would like to
     // see more products instead of a selection of like 4") — the drawers
     // scroll; the unit total counts EVERYTHING, listed or not
@@ -2966,6 +3051,11 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
+      v: 2, // v2: + wfsCand / low for the 3-column Overview
+      wfsCand,
+      low: low.slice(0, 40),
+      lowCount: low.length,
+      coverDays: cover,
     };
   }
 
@@ -3005,17 +3095,62 @@ function registerIpc() {
       },
       historyPending: !hist,
     };
+    const sold = live ? live.sold : null;
     let money = overviewCache.money;
-    if (!money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    if (!money || money.v !== 2 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
       const p = refreshOverviewMoney(cfg);
-      // stale view answers instantly while a refresh runs; first call waits
-      if (!money) {
-        try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message }; }
+      // stale view answers instantly while a refresh runs; first call (or a
+      // cache from before the 3-column Overview) waits
+      if (!money || money.v !== 2) {
+        try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
       } else {
         p.catch(() => { /* stale money stands */ });
       }
     }
-    return { ok: true, orders, money };
+    return { ok: true, orders, money, sold, wfsPlan: overviewWfsPlan(cfg, money) };
+  }
+
+  // Send to WFS column: candidates from the money pass + local shipment log
+  // and ignores. A shipment is Pending until marked received (no Walmart
+  // connection yet to say so); pending units count as already at WFS for
+  // 30 days so a SKU on its way is never suggested twice. Pending 14+ days
+  // turns into "Check" (look in Seller Center).
+  function overviewWfsPlan(cfg, money) {
+    const w = { targetDays: 30, triggerDays: 14, ignoreDays: 7, ...(cfg.wfs || {}) };
+    const now = Date.now();
+    const shipments = db.listWfsShipments(100);
+    const inFlight = {};
+    const flight = [];
+    for (const sh of shipments) {
+      const age = (now - Date.parse(sh.created_at)) / 86400000;
+      const units = sh.items.reduce((a, i) => a + i.qty, 0);
+      let status;
+      if (sh.received_at) {
+        if ((now - Date.parse(sh.received_at)) / 86400000 > 3) continue; // received rows linger 3 days
+        status = 'received';
+      } else {
+        if (age <= 30) for (const i of sh.items) inFlight[i.sku.toUpperCase()] = (inFlight[i.sku.toUpperCase()] || 0) + i.qty;
+        if (age > 60) continue; // long-forgotten logs drop off the Overview
+        status = age >= 14 ? 'check' : 'pending';
+      }
+      flight.push({ id: sh.id, createdAt: sh.created_at, note: sh.note, units, status, items: sh.items });
+    }
+    const ignores = new Map(db.listWfsIgnores().map(r => [r.sku, r]));
+    const rows = [];
+    const ignored = [];
+    for (const c of (money && money.wfsCand) || []) {
+      const k = c.sku.toUpperCase();
+      const flightUnits = inFlight[k] || 0;
+      const coverDays = (c.atWfs + flightUnits) / c.perDay;
+      const send = Math.min(c.avail, Math.ceil(c.perDay * w.targetDays - c.atWfs - flightUnits));
+      if (coverDays >= w.triggerDays || send < 1) continue;
+      const row = { ...c, flightUnits, coverDays: Math.round(coverDays * 10) / 10, send };
+      const ig = ignores.get(k);
+      // an ignore lapses early when the pace grows half again past it
+      if (ig && !(c.perDay > ig.pace * 1.5)) ignored.push(row); else rows.push(row);
+    }
+    rows.sort((a, b) => a.coverDays - b.coverDays);
+    return { rows, ignored, flight, ...w, ready: !!(money && money.wfsCand) };
   }
   ipcMain.handle('overview:data', () => overviewDataPayload());
 
@@ -3537,6 +3672,20 @@ function registerIpc() {
   // force = the page's Refresh button: bust the cache and re-page
   ipcMain.handle('sales:query', (_e, { from, to, force }) => querySales(from, to, !!force));
   ipcMain.handle('wfs:list', () => db.listWfsShipments());
+  ipcMain.handle('wfs:received', (_e, { id, received }) => {
+    db.markWfsReceived(Number(id), received !== false);
+    return { ok: true };
+  });
+  ipcMain.handle('overview:wfsIgnore', (_e, { sku, pace }) => {
+    if (!sku) return { ok: false, error: 'Missing SKU.' };
+    const w = { ignoreDays: 7, ...(config.load().wfs || {}) };
+    db.setWfsIgnore(sku, w.ignoreDays, pace);
+    return { ok: true };
+  });
+  ipcMain.handle('overview:wfsUnignore', (_e, payload) => {
+    db.clearWfsIgnore(payload && payload.sku);
+    return { ok: true };
+  });
   ipcMain.handle('wfs:create', async (_e, payload) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

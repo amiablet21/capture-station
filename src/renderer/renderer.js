@@ -83,6 +83,10 @@ if (!window.api) {
     returnsMapDelete: async () => ({ ok: false, error: 'Preview mode' }),
     wfsList: async () => [],
     wfsCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
+    wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
+    overviewData: async () => ({ ok: false, error: 'Preview mode' }),
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
@@ -5573,12 +5577,24 @@ function wfsTotals() {
     : 'Nothing to send yet — type a SKU above';
 }
 
-async function openWfs() {
+// prefill (from the Overview's Send button): { lines: [{sku, gtin, qty}], from }
+let wfsFromOverview = false;
+async function openWfs(prefill) {
   // SKU suggestions + GTIN autofill come from the loaded stock sheet
   if (stockCache) {
     $('skuOptions').innerHTML = stockCache.items.map(i => `<option value="${esc(i.sku)}"></option>`).join('');
   }
+  wfsFromOverview = !!(prefill && prefill.lines);
+  $('wfsFromOv').hidden = !wfsFromOverview;
+  $('wfsFromOv').textContent = wfsFromOverview ? prefill.from || '' : '';
   $('wfsLines').innerHTML = '';
+  for (const l of wfsFromOverview ? prefill.lines : []) {
+    wfsAddLine();
+    const row = $('wfsLines').lastElementChild;
+    row.querySelector('.wfs-sku').value = l.sku;
+    row.querySelector('.wfs-gtin').value = l.gtin || '';
+    row.querySelector('.wfs-qty').value = l.qty;
+  }
   wfsAddLine();
   $('wfsNote').value = '';
   $('wfsResult').textContent = '';
@@ -5590,6 +5606,15 @@ async function openWfs() {
   if (first) first.focus();
 }
 
+// Pending until marked received on the Overview; 14+ days pending = Check
+function wfsStatusBadge(s) {
+  if (s.received_at) return '<span class="badge wfs-badge status-synced">Received</span>';
+  const age = (Date.now() - Date.parse(s.created_at)) / 86400000;
+  return age >= 14
+    ? '<span class="badge wfs-badge badge-parked">Check</span>'
+    : '<span class="badge wfs-badge status-pending">Pending</span>';
+}
+
 async function renderWfsPast() {
   const shipments = await api.wfsList();
   $('wfsPast').innerHTML = shipments.length === 0
@@ -5598,6 +5623,7 @@ async function renderWfsPast() {
       <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          ${wfsStatusBadge(s)}
           <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
@@ -5609,7 +5635,7 @@ async function renderWfsPast() {
       </div>`).join('');
 }
 
-$('wfsBtn').addEventListener('click', openWfs);
+$('wfsBtn').addEventListener('click', () => openWfs());
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
 
@@ -5673,6 +5699,13 @@ $('wfsSave').addEventListener('click', async () => {
   wfsAddLine();
   wfsTotals();
   $('wfsNote').value = '';
+  if (wfsFromOverview) {
+    // back to the Overview, where the shipment now shows as Pending
+    wfsFromOverview = false;
+    $('wfsDialog').close();
+    showPage('overview');
+    return;
+  }
   await renderWfsPast();
   loadStock(); // show the reduced warehouse counts
 });
@@ -7632,27 +7665,25 @@ $("ebRefresh").addEventListener("click", () => {
 });
 
 /* ==================== Overview tab ==================== */
-// The morning read (approved design variants/overview-v2.html): orders per
-// marketplace from SQLite, a smooth catmull-rom sales curve with Day/Month/
-// Year filter + hover tooltip, and three money cards sharing one SKU drawer.
+// Three columns (owner 2026-09-22; approved design variants/overview-3col.html,
+// C1): Send to WFS (with Send | Ignore per SKU and the shipments on their
+// way), Sold today (every SKU and its units, Excel-style), Running low (with
+// an order quantity from the sales pace).
 
 let ovData = null;
-let ovRange = 'Day';
-let ovMetric = 'sales'; // 'orders' | 'sales' — Gross $ is the default (owner call 2026-08-17)
-let ovHoverI = null;
-let ovChartAnim = false; // next chart draw plays the trace-in (owner pick: A)
-let ovOpen = 'missed'; // default drawer per the handoff
 let ovFetching = false;
-
-const ovMoneyShort = (v) => v >= 100000 ? `$${Math.round(v / 1000)}k` : v >= 10000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v).toLocaleString()}`;
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const ovTone = (days) => days < 5 ? 'r' : days < 10 ? 'a' : 'g';
+const ovShortDate = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${OV_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+};
 
 function enterOverview() {
   const d = new Date();
   $('ovDate').textContent = `${OV_WDAYS[d.getDay()]}, ${OV_MONTHS[d.getMonth()]} ${d.getDate()}`;
-  ovChartAnim = true; // the curve traces in on page entry, like on Refresh
   ovRenderAll();
   ovFetch();
 }
@@ -7661,315 +7692,116 @@ async function ovFetch() {
   if (ovFetching) return;
   ovFetching = true;
   try {
-    const prevSeries = ovData ? JSON.stringify(ovData.orders.series[ovRange]) : '';
     const r = await api.overviewData().catch(() => null);
     if (r && r.ok) {
       ovData = r;
-      if (activePage === 'overview') {
-        ovRenderToday();
-        ovRenderCards();
-        ovRenderDrawer();
-        // don't wipe an in-progress hover for an identical curve
-        if (JSON.stringify(ovData.orders.series[ovRange]) !== prevSeries) ovDrawChart();
-      }
+      if (activePage === 'overview') ovRenderAll();
     }
   } finally {
     ovFetching = false;
   }
 }
 
-// the number rolls while you watch: refresh every minute on the page, and
-// right after a capture lands (the new order is usually the one just scanned)
+// refresh every minute on the page, and right after a capture lands
 setInterval(() => { if (activePage === 'overview') ovFetch(); }, 60000);
 api.on('order:detected', () => { if (activePage === 'overview') setTimeout(ovFetch, 800); });
 api.on('orders:imported', () => { if (activePage === 'overview') ovFetch(); });
 
 function ovRenderAll() {
-  ovRenderToday();
-  ovDrawChart();
-  ovRenderCards();
-  ovRenderDrawer();
+  ovRenderWfs();
+  ovRenderSold();
+  ovRenderLow();
+  // bar widths go through the CSSOM: the CSP blocks inline style attributes
+  $('ovCols').querySelectorAll('.ov-bar i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
 }
 
-let ovPrevToday = null; // last rendered totals: the odometer rolls on increase
-let ovFeedMax = -1; // highest feed row id rendered; -1 = first paint cascades
-
-function ovOdometer(el, from, to) {
-  // thousands separators render as static glyphs between the rolling digit
-  // columns, so "$5,710" reads like the mockup while still animating
-  const s = Math.max(0, Math.round(to)).toLocaleString('en-US');
-  const tDigits = s.replace(/\D/g, '');
-  const fDigits = Math.max(0, Math.round(from)).toLocaleString('en-US').replace(/\D/g, '')
-    .padStart(tDigits.length, '0').slice(-tDigits.length);
-  el.innerHTML = [...s].map(ch => /\d/.test(ch)
-    ? `<span class="dcol"><span class="dstack">${'0123456789'.split('').map(x => `<i>${x}</i>`).join('')}</span></span>`
-    : `<span class="dsep">${ch}</span>`).join('');
-  const stacks = el.querySelectorAll('.dstack');
-  stacks.forEach((st, i) => {
-    st.style.transition = 'none';
-    st.style.transform = `translateY(-${Number(fDigits[i]) * 1.1}em)`;
-  });
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    stacks.forEach((st, i) => {
-      st.style.transition = '';
-      st.style.transform = `translateY(-${Number(tDigits[i]) * 1.1}em)`;
-    });
-  }));
-}
-
-function ovRenderToday() {
-  const box = $('ovToday');
-  const t = ovData && ovData.orders.today;
-  if (!t) { box.innerHTML = '<div class="ov-empty">Loading today…</div>'; return; }
-  const money = ovMetric === 'sales' && t.totalSales !== undefined;
-  // the card follows the range filter (owner mockup 2026-08-17): Day shows
-  // the live today numbers, Month/Year sum the received-day history
-  const view = ovRange === 'Day' ? t : ((ovData.orders.ranges || {})[ovRange] || null);
-  const nowD = new Date();
-  const label = `${money ? 'Gross' : 'Orders'} ${ovRange === 'Day' ? 'today' : ovRange === 'Month' ? `· ${OV_MONTHS[nowD.getMonth()]}` : '· 12 months'}`;
-  if (!view) {
-    box.innerHTML = `<div><div class="k">${label}</div><div class="big">…</div>
-      <div class="delta">crunching the order history…</div></div>`;
+function ovRenderWfs() {
+  const box = $('ovWfs');
+  const plan = ovData && ovData.wfsPlan;
+  if (!plan || !plan.ready) {
+    const err = ovData && ovData.moneyError;
+    box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  const prevRef = ovRange === 'Day'
-    ? { t: t.yesterday, s: t.yesterdaySales || 0, vs: 'vs yesterday' }
-    : ovRange === 'Month' && view.prevTotal !== undefined
-      ? { t: view.prevTotal, s: view.prevTotalSales || 0, vs: `vs ${OV_MONTHS[(nowD.getMonth() + 11) % 12].slice(0, 3)} 1–${nowD.getDate()}` }
-      : null; // the year window has no prior year of history to compare
-  const delta = prevRef ? (money ? view.totalSales - prevRef.s : view.total - prevRef.t) : null;
-  const deltaHtml = prevRef
-    ? `<div class="delta ${delta < 0 ? 'neg' : ''}">${delta >= 0 ? '▲' : '▼'} <b class="mono">${delta < 0 ? '−' : '+'}${money ? '$' : ''}${Math.abs(delta).toLocaleString()}</b> ${prevRef.vs}</div>`
-    : '<div class="delta"></div>';
+  const units = plan.rows.reduce((a, r) => a + r.send, 0);
+  const rowsHtml = plan.rows.map((r, i) => {
+    const weekly = Math.round(r.perDay * 7);
+    const meta = [r.chSku && r.chSku.toUpperCase() !== r.sku.toUpperCase() ? esc(r.chSku) : '', `${weekly}/wk`, `${r.atWfs} at WFS`,
+      r.flightUnits ? `${r.flightUnits} on the way` : ''].filter(Boolean).join(' · ');
+    return `<tr><td class="ov-rank">${i + 1}</td>
+      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="ov-meta">${meta}</span>
+        <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
+      <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">+ ${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span>
+        <span class="ov-act"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
+  }).join('');
+  const undo = plan.ignored.length
+    ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
+  const badge = { pending: ['status-pending', 'Pending'], check: ['badge-parked', 'Check'], received: ['status-synced', 'Received'] };
+  const onWay = plan.flight.filter(f => f.status !== 'received').reduce((a, f) => a + f.units, 0);
+  const flightHtml = plan.flight.map(f => {
+    const [cls, label] = badge[f.status];
+    const first = f.items[0] || { sku: '' };
+    const when = f.status === 'check'
+      ? `sent ${ovShortDate(f.createdAt)} · check Seller Center`
+      : `${f.units} sent ${ovShortDate(f.createdAt)}${f.note ? ` · ${esc(f.note)}` : ''}`;
+    return `<tr><td class="ov-rank"></td>
+      <td><span class="ov-sku" data-ovsku="${esc(first.sku)}">${esc(first.sku)}</span>${f.items.length > 1 ? ` <span class="ov-dim">+${f.items.length - 1} more</span>` : ''}<span class="ov-meta">${when}</span></td>
+      <td class="rr"><span class="badge ov-badge ${cls}">${label}</span>
+        ${f.status === 'received' ? `<a class="ov-link" data-ovunrecv="${f.id}">Undo</a>` : `<span class="ov-act"><button class="btn btn-ghost" data-ovrecv="${f.id}">Mark received</button></span>`}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<h4 class="ov-h-g">Send to WFS · ${units.toLocaleString()} units<span class="sub">${plan.rows.length} SKU${plan.rows.length === 1 ? '' : 's'} under ${plan.triggerDays} days</span></h4>
+    ${plan.rows.length ? `<table class="ov-t"><tbody>${rowsHtml}</tbody></table>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
+    ${undo}
+    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><table class="ov-t"><tbody>${flightHtml}</tbody></table>` : ''}
+    <div class="ov-more">Send = WFS pace × ${plan.targetDays} days − at WFS − on the way</div>`;
+}
+
+function ovRenderSold() {
+  const box = $('ovSold');
+  const sold = ovData && ovData.sold;
+  const today = ovData && ovData.orders && ovData.orders.today;
+  if (!sold) {
+    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty">${ovData ? 'Could not reach Linnworks for today’s orders.' : 'Loading today…'}</div></div>`;
+    return;
+  }
+  const grid = sold.rows.length
+    ? `<div class="ov-xgrid ov-xgrid-full ov-soldgrid">
+        <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
+        ${sold.rows.map((r, i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span><span class="xsku" title="${esc(r.sku)}" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="xu">${r.units}</span></div>`).join('')}
+        <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</span><span class="xu">${sold.units}</span></div>
+      </div>`
+    : '<div class="ov-empty">Nothing sold yet today.</div>';
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
-  const chVal = (k) => money
-    ? `$${Math.round((view.byChannelSales || {})[k] || 0).toLocaleString()}`
-    : ((view.byChannel || {})[k] || 0).toLocaleString();
-  // live feed of the latest orders in the card's middle (owner sketch
-  // 2026-08-17): new arrivals slide in at the top with a soft emerald flash
-  const feed = ovData.orders.recent || [];
-  const fmtT = (iso) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    const h = d.getHours();
-    return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`;
-  };
-  const firstFeed = ovFeedMax < 0;
-  const chName = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
-  // owner pick 2026-08-17: "full grid" — an Excel-style table with a shaded
-  // header row and cell borders both ways
-  const feedHtml = feed.map(r => `
-      <div class="ov-feedrow${(firstFeed || r.id > ovFeedMax) ? ' is-new' : ''}">
-        <span class="xpo mono" title="${esc(r.order)}">${esc(r.order)}</span>
-        <span class="xsku mono" title="${esc(r.sku || '')}">${esc(r.sku || '—')}${r.more ? ` +${r.more}` : ''}</span>
-        <span class="xch xch-${r.channel}">${chName[r.channel] || esc(r.channel || '—')}</span>
-        <span class="xtm">${fmtT(r.at)}</span></div>`).join('');
   box.innerHTML = `
-    <div><div class="k">${label}</div>
-      <div class="big">${money ? '<span class="dsep">$</span>' : ''}<span class="ov-odo"></span></div>
-      ${deltaHtml}</div>
-    <div class="ov-feed"><div class="fk">Latest orders</div>
-      ${feed.length ? `<div class="ov-xgrid">
-        <div class="ov-xhead"><span>PO#</span><span>SKU</span><span>Channel</span><span>Time</span></div>
-        ${feedHtml}</div>` : '<div class="ov-empty">Orders appear here as they are captured.</div>'}</div>
-    <div class="ov-toast"><span id="ovToastChip"></span></div>
+    <div><div class="k">Units sold today</div>
+      <div class="big mono">${sold.units.toLocaleString()}</div>
+      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</div></div>
+    ${grid}
     <div class="ov-chcells">${chans.map(([k, n]) => `
-      <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv" data-ovch="${k}">${chVal(k)}</div></div>`).join('')}
+      <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv">${((sold.byChannel || {})[k] || 0).toLocaleString()}</div></div>`).join('')}
     </div>`;
-  if (firstFeed) {
-    // first paint cascades the rows in; afterwards only true arrivals animate
-    box.querySelectorAll('.ov-feedrow.is-new').forEach((el, i) => { el.style.animationDelay = `${i * 70}ms`; });
-  }
-  ovFeedMax = feed.reduce((m, r) => Math.max(m, r.id), ovFeedMax < 0 ? 0 : ovFeedMax);
-  const bigTo = money ? Math.round(view.totalSales) : view.total;
-  const prev = ovPrevToday;
-  // the odometer rolls on EVERY change of the big number — new orders and
-  // range/metric switches alike (owner request 2026-08-17)
-  const roll = prev && prev.big !== bigTo;
-  ovOdometer(box.querySelector('.ov-odo'), roll ? prev.big : bigTo, bigTo);
-  // the live-order flourish keys on TODAY's counts whatever window is shown
-  const rose = prev && prev.total != null && t.total > prev.total;
-  if (rose) {
-    const grew = chans.filter(([k]) => (t.byChannel[k] || 0) > ((prev.byChannel || {})[k] || 0));
-    grew.forEach(([k]) => {
-      const v = box.querySelector(`[data-ovch="${k}"]`);
-      if (v) v.classList.add('ov-hit');
-    });
-    const chip = box.querySelector('#ovToastChip');
-    const n = t.total - prev.total;
-    chip.textContent = grew.length === 1
-      ? `+${n} ${grew[0][1]} order${n === 1 ? '' : 's'}`
-      : `+${n} order${n === 1 ? '' : 's'}`;
-    chip.classList.add('show');
-  }
-  ovPrevToday = { big: bigTo, total: t.total, byChannel: { ...t.byChannel } };
 }
 
-// catmull-rom -> cubic bezier: the "smooth, never jagged" requirement
-function ovSmoothPath(pts) {
-  let d = `M ${pts[0][0]},${pts[0][1]}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-    d += ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0]},${p2[1]}`;
-  }
-  return d;
-}
-
-function ovLabelsFor(range, tips) {
-  if (range === 'Day') return tips.map((tp, i) => (i % 2 === 0 || tp === 'now') ? tp.replace(' am', 'a').replace(' pm', 'p') : '');
-  if (range === 'Month') return tips.map((tp, i) => [0, 7, 14, 21, tips.length - 1].includes(i) ? tp : '');
-  return tips.map(tp => tp.split(" '")[0]);
-}
-
-function ovDrawChart() {
-  const box = $('ovChart');
-  const series = ovData && ovData.orders.series[ovRange];
-  const money = ovMetric === 'sales';
-  if (!series || series.vals.length < 2) { box.innerHTML = '<div class="ov-empty">Not enough orders captured yet — the curve grows as days pass.</div>'; return; }
-  const tips = series.tips;
-  const vals = money && Array.isArray(series.sales) ? series.sales : series.vals;
-  const fmtAxis = (v) => money ? ovMoneyShort(v) : String(v);
-  const fmtTip = (v) => money ? `$${Math.round(v).toLocaleString()}` : `${v.toLocaleString()} order${v === 1 ? '' : 's'}`;
-  const labels = ovLabelsFor(ovRange, tips);
-  // native-resolution canvas: the viewBox tracks the box's real pixel size so
-  // strokes and text never fatten when the page is widened (owner, 2026-08-17).
-  // measure EMPTY: with the old svg still in the box, its height feeds back
-  // into clientHeight and the chart ratchets taller every redraw (owner
-  // screenshot 2026-08-17) — cleared, the grid row is sized by the card
-  box.innerHTML = '';
-  const W = Math.max(560, Math.round(box.clientWidth) || 680);
-  const H = Math.max(190, Math.round(box.clientHeight) || 190);
-  const padL = money ? 52 : 36, padR = 48, padT = 14, padB = 24;
-  const iw = W - padL - padR, ih = H - padT - padB;
-  // the ceiling sits at DOUBLE the peak, rounded to a clean step (owner
-  // 2026-08-17: a $75k peak reads against a $150k axis) — the curve breathes
-  // in the lower half instead of hugging the top edge
-  const rawMax = Math.max(1, ...vals) * 2;
-  const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
-  const max = Math.ceil(rawMax / unit) * unit;
-  const X = i => padL + (i / (vals.length - 1)) * iw;
-  const Y = v => padT + ih - (v / max) * ih;
-  const pts = vals.map((v, i) => [Math.round(X(i)), Math.round(Y(v))]);
-  const line = ovSmoothPath(pts);
-  const area = line + ` L ${pts[pts.length - 1][0]},${padT + ih} L ${pts[0][0]},${padT + ih} Z`;
-  let out = `<defs><linearGradient id="ovg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
-  [0, .5, 1].forEach(f => {
-    const v = Math.round(max * f), y = Y(v);
-    out += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL - 7}" y="${y + 3}" font-size="9" fill="#A5A29C" text-anchor="end">${fmtAxis(v)}</text>`;
-  });
-  labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H - 6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
-  // trace-in flourish (owner pick A, 2026-08-17): the line draws itself
-  // left to right, the fill fades in behind it, the endpoint dot pops.
-  // One-shot: the flag is consumed here so hover redraws stay static.
-  const anim = ovChartAnim;
-  ovChartAnim = false;
-  const lineA = anim ? ' pathLength="1" class="ov-anim-line"' : '';
-  const lateA = anim ? ' class="ov-anim-late"' : '';
-  const dotA = anim ? ' class="ov-anim-dot"' : '';
-  out += `<path d="${area}" fill="url(#ovg)"${lateA}/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"${lineA}/>`;
-  const last = pts[pts.length - 1];
-  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"${dotA}/><text x="${last[0] + 8}" y="${last[1] + 3}" font-size="10" font-weight="700" fill="#047857"${lateA}>${money ? ovMoneyShort(vals[vals.length - 1]) : vals[vals.length - 1].toLocaleString()}</text>`;
-  if (ovHoverI != null && ovHoverI < vals.length) {
-    const hx = pts[ovHoverI][0], hy = pts[ovHoverI][1];
-    const txt = `${tips[ovHoverI]} · ${fmtTip(vals[ovHoverI])}`;
-    const tw = txt.length * 5.9 + 18;
-    const tx = Math.min(Math.max(hx, padL + tw / 2), W - padR + 40 - tw / 2);
-    const ty = Math.max(hy - 38, 2);
-    out += `<line x1="${hx}" y1="${padT}" x2="${hx}" y2="${padT + ih}" stroke="#D8D6D0" stroke-dasharray="3 3"/>`
-      + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
-      + `<g class="ov-tt"><rect x="${tx - tw / 2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty + 14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
-  }
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
-  // hover rides ONE mousemove on the svg (per-slice enter events proved
-  // unreliable through innerHTML re-renders): map the pointer back through
-  // the viewBox scaling, snap to the nearest point, redraw only on change
-  const svg = box.querySelector('svg');
-  if (svg) {
-    svg.style.cursor = 'crosshair';
-    svg.addEventListener('mousemove', (e) => {
-      const r = svg.getBoundingClientRect();
-      const scale = Math.min(r.width / W, r.height / H);
-      const vx = (e.clientX - r.left - (r.width - W * scale) / 2) / scale;
-      const i = Math.max(0, Math.min(vals.length - 1, Math.round((vx - padL) / iw * (vals.length - 1))));
-      if (i !== ovHoverI) { ovHoverI = i; ovDrawChart(); }
-    });
-    svg.addEventListener('mouseleave', () => { if (ovHoverI != null) { ovHoverI = null; ovDrawChart(); } });
-  }
-}
-
-function ovRenderCards() {
+function ovRenderLow() {
+  const box = $('ovLow');
   const m = ovData && ovData.money;
-  const err = ovData && ovData.moneyError;
-  const cardDef = [
-    { key: 'missed', label: 'Missed sales', cls: 'ov-big-r', big: m ? `$${m.missedTotal.toLocaleString()}` : '…', s: m ? `${m.missed.length} SKU${m.missed.length === 1 ? '' : 's'} at zero that were selling` : (err || 'crunching the sales history…') },
-    { key: 'buy', label: 'Buy soon', cls: 'ov-big-a', big: m ? `${m.buyCount} SKUs` : '…', s: m ? `run out inside the ${m.leadDays}-day lead time` : '' },
-    { key: 'wfs', label: 'Send to WFS', cls: 'ov-big-g', big: m ? `${m.wfsUnits.toLocaleString()} units` : '…', s: m ? `${m.wfs.length} fast seller${m.wfs.length === 1 ? '' : 's'} outrunning the shelf` : '' },
-  ];
-  $('ovCards').innerHTML = cardDef.map(c => `
-    <div class="ov-mcard" data-ovcard="${c.key}">
-      <div class="k">${c.label}<span class="chev">${ovOpen === c.key ? '▴' : '▾'}</span></div>
-      <div class="big ${c.cls}">${c.big}</div><div class="s">${esc(c.s)}</div>
-    </div>`).join('');
-}
-
-function ovRenderDrawer() {
-  const box = $('ovDrawer');
-  const m = ovData && ovData.money;
-  if (!ovOpen || !m) { box.hidden = true; return; }
-  box.hidden = false;
-  // restart the entrance animation
-  box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  if (ovOpen === 'missed') {
-    box.innerHTML = `<h4 class="r">Missed sales · $${m.missedTotal.toLocaleString()}<span class="sub">click a SKU to open it in Stock</span></h4>
-      ${m.missed.length ? `<table><tr><th>SKU</th><th>Zero since</th><th>Was selling</th><th class="rr">Missed</th></tr>
-      ${m.missed.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${esc(r.since)}</td><td class="ov-dim">${r.weekly}/wk on ${esc(r.channels)}</td><td class="rr"><span class="ov-pill r">$${r.value.toLocaleString()}</span></td></tr>`).join('')}</table>`
-      : '<div class="ov-empty">Nothing was selling and hit zero — good.</div>'}`;
-  } else if (ovOpen === 'buy') {
-    box.innerHTML = `<h4 class="a">Buy soon · ${m.buyCount} SKUs<span class="sub">velocity × ${m.leadDays}-day lead × 1.5 buffer</span></h4>
-      ${m.buy.length ? `<table><tr><th>SKU</th><th>On shelf</th><th>Runs out</th><th class="rr">Order</th></tr>
-      ${m.buy.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${r.avail}</td><td class="${r.daysLeft <= 7 ? 'ov-dim' : 'ov-dim'}">in ${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'}</td><td class="rr"><span class="ov-pill a">${r.order}</span></td></tr>`).join('')}</table>`
-      : '<div class="ov-empty">Nothing runs out inside the lead window.</div>'}
-      ${m.buyCount > m.buy.length ? `<div class="ov-more">+ ${m.buyCount - m.buy.length} more under their minimum — <a data-ovlow>open Stock</a></div>` : ''}`;
-  } else {
-    box.innerHTML = `<h4 class="g">Send to WFS · ${m.wfsUnits.toLocaleString()} units<span class="sub">${m.wfs.length} fast sellers outrunning the shelf</span></h4>
-      ${m.wfs.length ? `<table><tr><th>SKU</th><th>Sold/wk</th><th>Shelf covers</th><th class="rr">Send</th></tr>
-      ${m.wfs.map(r => `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span></td><td class="mono">${r.weekly}</td><td class="ov-dim">${r.coverDays} days</td><td class="rr"><span class="ov-pill g">+ ${r.send}</span></td></tr>`).join('')}</table>`
-      : '<div class="ov-empty">No fast sellers need a WFS top-up right now.</div>'}`;
+  if (!m || !m.low) {
+    const err = ovData && ovData.moneyError;
+    box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
+    return;
   }
+  const total = m.low.reduce((a, r) => a + r.order, 0);
+  const rows = m.low.map(r => {
+    const meta = [`${r.avail} on shelf`, r.atWfs ? `${r.atWfs} at WFS` : '', `${r.perDay.toFixed(1)}/day`, `out ~${esc(r.outOn)}`].filter(Boolean).join(' · ');
+    return `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="ov-meta">${meta}${r.faster ? ' · <span class="ov-faster">selling faster</span>' : ''}</span>
+        <div class="ov-bar"><i class="${ovTone(r.daysLeft)}" data-w="${Math.min(100, r.daysLeft / m.leadDays * 100)}"></i></div></td>
+      <td class="rr"><span class="ov-pill a">${r.order}</span><span class="ov-meta">${r.daysLeft}d left</span></td></tr>`;
+  }).join('');
+  box.innerHTML = `<h4 class="ov-h-a">Running low · order ${total.toLocaleString()}<span class="sub">${m.leadDays}-day lead time</span></h4>
+    ${m.low.length ? `<table class="ov-t"><tbody>${rows}</tbody></table>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
+    ${m.lowCount > m.low.length ? `<div class="ov-more">+ ${m.lowCount - m.low.length} more — <a data-ovlow>open Stock</a></div>` : ''}
+    <div class="ov-more">Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock · <a data-ovlow>open Stock</a></div>`;
 }
-
-// double-click the LATEST ORDERS label to watch a pretend order drop —
-// visual only (owner asked to see the animation, 2026-08-17); a re-render
-// four seconds later restores the truth
-let ovDemoTimer = 0;
-function ovPlayDemo() {
-  const box = $('ovToday');
-  const grid = box.querySelector('.ov-xgrid');
-  const t = ovData && ovData.orders.today;
-  if (!grid || !t) return;
-  const row = document.createElement('div');
-  row.className = 'ov-feedrow is-new';
-  const now = new Date();
-  const h = now.getHours();
-  row.innerHTML = `<span class="xpo mono">10${Math.floor(8800000000 + Math.random() * 99999999)}</span>`
-    + '<span class="xsku mono">SM-DEMO-128GB-GRAY</span><span class="xch xch-walmart">Walmart</span>'
-    + `<span class="xtm">${h % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')}${h < 12 ? 'a' : 'p'}</span>`;
-  grid.querySelector('.ov-xhead').after(row);
-  const money = ovMetric === 'sales' && t.totalSales !== undefined;
-  const view = ovRange === 'Day' ? t : ((ovData.orders.ranges || {})[ovRange] || t);
-  const big = money ? Math.round(view.totalSales) : view.total;
-  const odo = box.querySelector('.ov-odo');
-  if (odo) ovOdometer(odo, big, big + (money ? 249 : 1));
-  const cell = box.querySelector('[data-ovch="walmart"]');
-  if (cell) { cell.classList.remove('ov-hit'); void cell.offsetWidth; cell.classList.add('ov-hit'); }
-  const chip = box.querySelector('#ovToastChip');
-  if (chip) { chip.textContent = '+1 Walmart order'; chip.classList.remove('show'); void chip.offsetWidth; chip.classList.add('show'); }
-  clearTimeout(ovDemoTimer);
-  ovDemoTimer = setTimeout(() => { if (activePage === 'overview') ovRenderToday(); }, 4000);
-}
-$('ovToday').addEventListener('dblclick', (e) => {
-  if (e.target.closest('.fk')) ovPlayDemo();
-});
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after
 // the page's settle-enter clears it)
@@ -7989,22 +7821,47 @@ function ovOpenStock(sku, lowView) {
   }, 260);
 }
 
+// Send: the Stock page with the WFS Shipments dialog pre-filled; saving
+// there returns here, where the shipment shows as Pending
+function ovSendToWfs(sku) {
+  const r = ((ovData && ovData.wfsPlan && ovData.wfsPlan.rows) || []).find(x => x.sku === sku);
+  if (!r) return;
+  showPage('stock');
+  setTimeout(() => {
+    if (activePage !== 'stock') return;
+    openWfs({
+      lines: [{ sku: r.sku, gtin: r.gtin, qty: r.send }],
+      from: `From Overview · ${r.sku} sells ${Math.round(r.perDay * 7)}/wk at WFS and has ${r.coverDays.toFixed(1)} days there${r.flightUnits ? ' counting what is on the way' : ''} — ${r.send} brings it to ${ovData.wfsPlan.targetDays} days`,
+    });
+  }, 300);
+}
+
+$('ovCols').addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-ovsend],[data-ovignore],[data-ovunignore],[data-ovrecv],[data-ovunrecv],[data-ovsku],[data-ovlow]');
+  if (!t) return;
+  if (t.dataset.ovsend) { ovSendToWfs(t.dataset.ovsend); return; }
+  if (t.dataset.ovsku !== undefined) { if (t.dataset.ovsku) ovOpenStock(t.dataset.ovsku); return; }
+  if (t.hasAttribute('data-ovlow')) { ovOpenStock('', true); return; }
+  if (t.dataset.ovignore) {
+    const r = ovData.wfsPlan.rows.find(x => x.sku === t.dataset.ovignore);
+    await api.wfsIgnore(t.dataset.ovignore, r ? r.perDay : 0);
+  } else if (t.hasAttribute('data-ovunignore')) {
+    await api.wfsUnignore();
+  } else if (t.dataset.ovrecv) {
+    await api.wfsReceived(Number(t.dataset.ovrecv), true);
+  } else if (t.dataset.ovunrecv) {
+    await api.wfsReceived(Number(t.dataset.ovunrecv), false);
+  }
+  await ovFetch();
+});
+
 $('tabOverview').addEventListener('click', () => showPage('overview'));
-// manual refresh with a flourish (owner request 2026-08-17): the icon spins
-// while fetching; when data lands the odometer rolls up from zero and the
-// feed rows cascade back in — the same motions live orders play
 $('ovRefreshBtn').addEventListener('click', async () => {
   const b = $('ovRefreshBtn');
   if (b.classList.contains('is-spinning')) return;
   b.classList.add('is-spinning');
   const started = Date.now();
-  ovFeedMax = -1; // feed cascades on the next render
-  const t = ovData && ovData.orders.today;
-  // odometer rolls up from zero; totals preserved so no fake +1 toast fires
-  ovPrevToday = t ? { big: 0, total: t.total, byChannel: { ...t.byChannel } } : null;
-  ovChartAnim = true;
   await ovFetch();
-  if (ovChartAnim) ovDrawChart(); // unchanged series skipped the redraw — trace anyway
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
 // phone dashboard QR (owner request 2026-08-17)
@@ -8019,24 +7876,6 @@ $('ovPhoneBtn').addEventListener('click', async () => {
   $('phoneDialog').showModal();
 });
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
-$('ovRanges').addEventListener('click', (e) => {
-  const b = e.target.closest('.ov-rbtn');
-  if (!b) return;
-  ovRange = b.dataset.r;
-  ovHoverI = null;
-  document.querySelectorAll('.ov-rbtn').forEach(x => x.classList.toggle('is-on', x === b));
-  ovDrawChart();
-  ovRenderToday();
-});
-$('ovMetric').addEventListener('click', (e) => {
-  const b = e.target.closest('.ov-mbtn');
-  if (!b) return;
-  ovMetric = b.dataset.m;
-  ovHoverI = null;
-  document.querySelectorAll('.ov-mbtn').forEach(x => x.classList.toggle('is-on', x === b));
-  ovDrawChart();
-  ovRenderToday(); // the odometer rolls across the unit switch too
-});
 
 // page-width grip, same feel as the Stock sheet's: drag the right rail, the
 // centered layout grows both ways so the rail tracks the cursor at 2x
@@ -8050,18 +7889,11 @@ $('ovGrip').addEventListener('mousedown', (e) => {
   ovDrag = { startX: e.clientX, startW: $('ovWrap').offsetWidth, w: 0 };
   $('ovGrip').classList.add('is-active');
 });
-let ovSizeRaf = 0;
-function ovRedrawOnResize() {
-  cancelAnimationFrame(ovSizeRaf);
-  ovSizeRaf = requestAnimationFrame(() => { if (activePage === 'overview') ovDrawChart(); });
-}
-window.addEventListener('resize', () => { if (activePage === 'overview') ovRedrawOnResize(); });
 window.addEventListener('mousemove', (e) => {
   if (!ovDrag) return;
-  const w = Math.max(760, ovDrag.startW + (e.clientX - ovDrag.startX) * 2);
+  const w = Math.max(900, ovDrag.startW + (e.clientX - ovDrag.startX) * 2);
   ovDrag.w = w;
   $('ovWrap').style.width = `${w}px`;
-  ovRedrawOnResize(); // the chart re-renders at its new native width
 });
 window.addEventListener('mouseup', () => {
   if (!ovDrag) return;
@@ -8072,19 +7904,6 @@ window.addEventListener('mouseup', () => {
 $('ovGrip').addEventListener('dblclick', () => {
   localStorage.removeItem('overviewPageWidth');
   $('ovWrap').style.width = '';
-  ovRedrawOnResize();
-});
-$('ovCards').addEventListener('click', (e) => {
-  const c = e.target.closest('[data-ovcard]');
-  if (!c) return;
-  ovOpen = (ovOpen === c.dataset.ovcard) ? null : c.dataset.ovcard;
-  ovRenderCards();
-  ovRenderDrawer();
-});
-$('ovDrawer').addEventListener('click', (e) => {
-  const s = e.target.closest('[data-ovsku]');
-  if (s) { ovOpenStock(s.dataset.ovsku); return; }
-  if (e.target.closest('[data-ovlow]')) ovOpenStock('', true);
 });
 
 /* ==================== Temu lister tab ==================== */
