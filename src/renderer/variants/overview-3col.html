@@ -1,20 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Overview — Send to WFS · Sold Items · Running Low (pick one)</title>
+<head><meta charset="UTF-8" /><title>Overview — design C variations + WFS Send / Ignore flow</title>
 <!--
-  Owner brief 2026-09-22: the Overview page is ONLY three columns.
-    1. Send to WFS   - which items are moving + which channel SKUs to prioritise for WFS
-    2. Sold Items    - Excel-style grid of every SKU sold today (SKU, units)
-    3. Running Low   - SKUs selling that are low on stock + an order prediction from sales history
-  Round 2 (owner: "don't look native"): built INSIDE the app shell on the real
-  styles.css, reusing only existing Overview components - .ov-mcard, .ov-xgrid
-  (the "full grid" the owner picked for Latest orders), .ov-drawer-style tables,
-  .ov-pill, .ov-chcells, .ov-ranges, .view-chip. The only new CSS is column
-  layout + grid column templates (the "ov3-" block below).
-  Flip designs with the Design A/B/C toggle in the top-left.
-  Forecast rules (same in every design):
-    WFS send qty = Walmart 7d avg/day x 30d target cover - units at WFS (capped by warehouse available)
-    Reorder qty  = 30d avg/day x (14d lead time + 30d cover) - on hand, rounded up to 5
+  Owner brief 2026-09-22: the Overview page is ONLY three columns -
+  Send to WFS | Sold Items | Running Low.
+  Round 2 picked design C (today-card in the middle, ranked lists either side).
+  Round 3 (this file): three variations of C, plus the WFS action flow.
+
+  WFS row life cycle (owner ask: "Send | Ignore for each channel SKU"):
+    Suggested  -> [Send] [Ignore]
+    Send       -> jumps to Stock and opens the existing WFS Shipments dialog,
+                  pre-filled with SKU / GTIN / suggested qty. Nothing changes
+                  until "Save shipment" (the dialog already deducts the
+                  warehouse and logs the shipment - unchanged behaviour).
+    Pending    -> saved; warehouse deducted; Walmart hasn't counted any yet.
+    Receiving  -> the WFS FULFILLED level (fed by Linnworks' Walmart
+                  connection) has started to climb. received ~= (WFS level now
+                  - WFS level when saved) + WFS units sold since saving.
+    Received   -> received >= sent. Row stays 3 days as "Received", then clears.
+    Stuck      -> Pending 14+ days with nothing counted: "check Seller Center".
+    Ignore     -> hidden for 7 days (Undo right there); comes back sooner if
+                  its pace jumps. In-flight units count as already at WFS, so
+                  a SKU on its way is never suggested twice.
+  All three variations share this data + behaviour; the design toggle only
+  changes how the WFS column lays it out. Click Send / Ignore / Save to try it.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -23,53 +32,61 @@
   .ov3-pick .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
   .ov3-pick .ov-ranges { margin-left: 0; }
 
-  /* ---- new layout: three columns under the header ---- */
-  .ov3-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; align-items: start; }
-  .ov3-cols.mid-wide { grid-template-columns: 1fr 1.1fr 1fr; }
-  .ov-panel.ov3-flush { padding: 0; overflow: hidden; }
-  .ov3-cardhead { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
-  .ov3-cardhead .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-  .ov3-cardhead .k .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
-  .ov3-cardhead .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
-  .ov3-cardhead .s { font-size: 10.5px; color: var(--muted); }
-  .ov3-body { padding: 4px 6px 6px; }
-  .ov3-foot { font-size: 10.5px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
-  .ov3-foot a, .ov-more a { color: #065F46; font-weight: 600; cursor: pointer; }
-
-  /* drawer-style tables living inside a column card */
+  /* ---- three columns, the middle one a little wider ---- */
+  .ov3-cols { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 10px; align-items: start; }
   .ov3-t { border-collapse: collapse; width: 100%; font-size: 12px; }
-  .ov3-t th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 6px 8px 5px; border-bottom: 1px solid var(--border); }
-  .ov3-t th.rr, .ov3-t td.rr { text-align: right; }
-  .ov3-t td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  .ov3-t td { padding: 7px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
   .ov3-t tr:last-child td { border-bottom: none; }
   .ov3-t tbody tr:hover td { background: var(--surface-2); }
+  .ov3-t td.rr { text-align: right; white-space: nowrap; }
   .ov3-t .chsku { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); }
-  .ov3-t .runs { display: block; font-size: 10px; color: var(--muted); }
+  .ov3-t .runs { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .ov3-t .rank { width: 16px; color: var(--faint); font-family: var(--mono); font-size: 11px; }
 
-  /* the Latest-orders Excel grid, reused for SKU | Units (no bottom fade:
-     every sold SKU must stay readable) */
+  /* Send | Ignore: the app's own buttons at row size */
+  .ov3-act { display: inline-flex; gap: 4px; margin-top: 4px; }
+  .ov3-act .btn { font-size: 11.5px; padding: 2px 10px; }
+  .ov3-status .badge { font-size: 9.5px; padding: 1px 8px; }
+  .ov3-status .when { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .ov3-undo { font-size: 11px; color: var(--muted); padding: 6px 6px; border-bottom: 1px solid var(--border-soft); }
+  .ov3-undo a { color: #065F46; font-weight: 600; cursor: pointer; margin-left: 6px; }
+  .ov3-sec { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 10px 6px 4px; display: flex; }
+  .ov3-sec .n { margin-left: auto; font-family: var(--mono); }
+
+  /* urgency / progress bars */
+  .ov3-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+  .ov3-bar i { display: block; height: 100%; border-radius: 999px; }
+  .ov3-prog { height: 5px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 6px; display: flex; }
+  .ov3-prog i { display: block; height: 100%; }
+  .ov3-chips { display: flex; gap: 4px; padding: 0 0 8px; flex-wrap: wrap; }
+  .ov3-chips .view-chip .c { font-family: var(--mono); margin-left: 3px; opacity: .8; }
+
+  /* the sold Excel grid (Latest orders "full grid"), no bottom fade */
   .ov-xgrid.ov3-full { -webkit-mask-image: none; mask-image: none; }
-  .ov3-g2 .ov-xhead, .ov3-g2 .ov-feedrow { grid-template-columns: 34px 1fr 64px 60px; }
-  .ov3-g2.no-ch .ov-xhead, .ov3-g2.no-ch .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
+  .ov3-g2 .ov-xhead, .ov3-g2 .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
   .ov3-g2 .xrn { color: var(--faint); text-align: center; text-overflow: clip; background: #F4F3F0; font-family: var(--mono); font-size: 9.5px; }
   .ov3-g2 .ov-xhead span:last-child { text-align: right; }
   .ov3-g2 .ov-feedrow .xu { font-family: var(--mono); font-size: 11.5px; font-weight: 700; text-align: right; }
   .ov3-g2 .ov-feedrow .xsku { color: var(--text); font-size: 10.5px; font-family: var(--mono); }
   .ov3-g2 .ov-feedrow.tot { background: var(--surface-2); border-top: 1px solid #E0DED8; }
   .ov3-g2 .ov-feedrow.tot span { font-weight: 700; }
-  .ov3-g5 .ov-xhead, .ov3-g5 .ov-feedrow { grid-template-columns: 1fr 44px 48px 52px 56px; }
-  .ov3-g5 .ov-feedrow span.n, .ov3-g5 .ov-xhead span.n { text-align: right; font-family: var(--mono); }
-  .ov3-g5 .ov-feedrow span.n { font-size: 11px; }
-  .ov3-g5 .ov-feedrow .xsku { color: var(--badge-blue-text); font-weight: 600; font-size: 10.5px; font-family: var(--mono); }
-  .ov3-g5 .ov-feedrow .strong { font-weight: 700; color: var(--text); }
-
-  /* sold column as a "today" card: channel cells pinned to its bottom */
   .ov3-sold { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 
-  /* urgency bar under a WFS / low-stock row */
-  .ov3-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
-  .ov3-bar i { display: block; height: 100%; border-radius: 999px; }
-  .ov3-chips { display: flex; gap: 4px; padding: 0 0 8px; }
+  /* C2: one-line rows inside the xgrid for the in-flight list */
+  .ov3-flight { border: 1px solid #E0DED8; border-radius: 6px; padding: 8px 10px; margin-top: 6px; background: var(--surface); }
+  .ov3-flight + .ov3-flight { margin-top: 6px; }
+  .ov3-flight .top { display: flex; align-items: baseline; gap: 8px; }
+  .ov3-flight .top .r { margin-left: auto; }
+  .ov3-flight .meta { font-size: 10px; color: var(--muted); margin-top: 2px; display: flex; }
+  .ov3-flight .meta .r { margin-left: auto; font-family: var(--mono); }
+
+  /* the Stock page behind the WFS dialog (flow demo) */
+  .ov3-stockshell { flex: 1; padding: 0 24px 16px; display: flex; flex-direction: column; }
+  .ov3-stockshell .ov3-sheet { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .ov3-stockshell .ov3-band { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .ov3-stockshell .ov3-band .sp { margin-left: auto; }
+  .ov3-from { font-size: 11px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
+  .wfs-card .badge { font-size: 9px; padding: 0 7px; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -77,23 +94,23 @@
     <div class="brand">
       <span class="ov3-pick"><span class="lbl">Design</span>
         <span class="ov-ranges" id="pick">
-          <button class="ov-rbtn is-on" data-v="a">A</button>
-          <button class="ov-rbtn" data-v="b">B</button>
-          <button class="ov-rbtn" data-v="c">C</button>
+          <button class="ov-rbtn is-on" data-v="c1">C1</button>
+          <button class="ov-rbtn" data-v="c2">C2</button>
+          <button class="ov-rbtn" data-v="c3">C3</button>
         </span>
       </span>
     </div>
     <nav class="tabs">
-      <button class="tab is-active">Overview</button>
+      <button class="tab is-active" id="tOv">Overview</button>
       <button class="tab">Capture</button>
-      <button class="tab">Stock</button>
+      <button class="tab" id="tSt">Stock</button>
       <button class="tab">Returns <span class="tab-caret">▾</span></button>
       <button class="tab">Listings</button>
     </nav>
     <div class="topbar-right"></div>
   </header>
 
-  <section class="ov-page">
+  <section class="ov-page" id="ovPage">
     <div class="ov-sheet-row">
       <div class="ov-wrap">
         <div class="ov-head"><h1>Overview</h1><span class="ov-date">Tuesday, September 22</span>
@@ -108,6 +125,22 @@
     </div>
   </section>
 
+  <!-- flow demo: the Stock page the Send button lands on -->
+  <section class="ov3-stockshell" id="stockShell" hidden>
+    <div class="ov3-sheet">
+      <div class="ov3-band">
+        <div class="search-field stock-search" style="width:260px">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+          <input class="search-input" type="text" placeholder="Search SKU, title or barcode" />
+        </div>
+        <span class="sp"></span>
+        <button class="btn btn-ghost">Mappings</button>
+        <button class="btn btn-ghost">Refresh</button>
+        <button class="btn btn-ghost">WFS Shipments</button>
+      </div>
+    </div>
+  </section>
+
   <footer class="footbar">
     <div class="footbar-left"></div>
     <div class="footbar-right">
@@ -116,157 +149,247 @@
     </div>
   </footer>
 
+  <!-- the EXISTING WFS Shipments dialog markup, opened pre-filled by Send -->
+  <dialog id="wfsDialog" class="dlg dlg-wfs">
+    <div class="wfs-cols">
+      <div class="wfs-left">
+        <h2 class="dlg-title">WFS Shipments</h2>
+        <div class="ov3-from" id="wfsFrom"></div>
+        <div class="wfs-sheet">
+          <div class="wfs-sheet-h"><span>SKU</span><span>GTIN / Walmart ID</span><span class="wfs-h-qty">Qty</span><span></span></div>
+          <div id="wfsLines"></div>
+          <button class="wfs-add" type="button">＋ Add line</button>
+        </div>
+        <div class="wfs-noterow">
+          <span class="wfs-notelbl">Note</span>
+          <input id="wfsNote" type="text" class="input" autocomplete="off" placeholder="WFS shipment ID, carrier, anything" />
+        </div>
+        <div class="wfs-foot">
+          <span class="wfs-tot" id="wfsTot"></span>
+          <button id="wfsSave" class="btn btn-primary">Save shipment</button>
+        </div>
+      </div>
+      <div class="wfs-right">
+        <div class="wfs-right-head">
+          <span class="wfs-past-h">Past shipments</span>
+          <button id="wfsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div id="wfsPast" class="wfs-past"></div>
+      </div>
+    </div>
+  </dialog>
+
 <script>
-// ---------- shared mock data ----------
-// Send to WFS: Walmart listings moving. [inventory SKU, Walmart channel SKU, walmart 7d units, at WFS, warehouse avail]
-const WFS = [
-  ['X400-128GB-GRAY',    'WM-X400-128-GRY',  42,  6, 58],
-  ['BUDS-3-WHITE',       'WM-BUDS3-WHT',     35,  9, 40],
-  ['S24-FE-128GB-BLACK', 'WM-S24FE-128-BLK', 21,  4, 17],
-  ['X520-256GB-SILVER',  'WM-X520-256-SLV',  18, 12, 33],
-  ['SM-X133-64GB-GREY',  'WM-X133-64-GRY',   14, 11, 26],
-  ['X730-512GB-GRAY',    'WM-X730-512-GRY',  10, 14, 22],
-  ['TABA9+64GB',         'WM-TABA9-64',       8, 15, 30],
+// ---------- mock data ----------
+// suggestions: [sku, walmart channel SKU, gtin, walmart 7d units, at WFS, warehouse avail]
+const SUGG = [
+  ['X400-128GB-GRAY',    'WM-X400-128-GRY',  '195949123401', 42,  6, 58],
+  ['BUDS-3-WHITE',       'WM-BUDS3-WHT',     '195949188702', 35,  9, 40],
+  ['S24-FE-128GB-BLACK', 'WM-S24FE-128-BLK', '195949230011', 21,  4, 17],
+  ['X520-256GB-SILVER',  'WM-X520-256-SLV',  '195949155520', 18, 12, 33],
+  ['SM-X133-64GB-GREY',  'WM-X133-64-GRY',   '195949171339', 14, 11, 26],
+];
+// shipments already saved: status is derived from the WFS level climbing
+const FLIGHT = [
+  { sku: 'X620-128GB-SILVER', ch: 'WM-X620-128-SLV', sent: 40, got: 0,  date: 'Sep 20', days: 2 },
+  { sku: 'BUDS-2-GRAPHITE',   ch: 'WM-BUDS2-GPH',    sent: 30, got: 12, date: 'Sep 15', days: 7 },
+  { sku: 'X730-512GB-GRAY',   ch: 'WM-X730-512-GRY', sent: 24, got: 24, date: 'Sep 12', days: 10 },
+  { sku: 'TABA9+64GB',        ch: 'WM-TABA9-64',     sent: 20, got: 0,  date: 'Sep 5',  days: 17 },
 ];
 const SOLD = [
-  ['X400-128GB-GRAY', 9, 'walmart'], ['BUDS-3-WHITE', 7, 'walmart'], ['X520-128GB-SILVER', 5, 'ebay'],
-  ['S24-FE-128GB-BLACK', 4, 'walmart'], ['BUDS-2-GRAPHITE', 4, 'temu'], ['X230-256GB-GRAY', 3, 'ebay'],
-  ['SM-X133-64GB-GREY', 3, 'walmart'], ['X620-128GB-SILVER', 2, 'ebay'], ['X730-512GB-GRAY', 2, 'walmart'],
-  ['TABA9+64GB', 2, 'temu'], ['X400-256GB-SILVER', 1, 'ebay'], ['SGTT220GRAY', 1, 'temu'],
-  ['X520-256GB-SILVER', 1, 'walmart'], ['X400-128GB-GRAY-CASE', 1, 'ebay'],
+  ['X400-128GB-GRAY', 9], ['BUDS-3-WHITE', 7], ['X520-128GB-SILVER', 5], ['S24-FE-128GB-BLACK', 4],
+  ['BUDS-2-GRAPHITE', 4], ['X230-256GB-GRAY', 3], ['SM-X133-64GB-GREY', 3], ['X620-128GB-SILVER', 2],
+  ['X730-512GB-GRAY', 2], ['TABA9+64GB', 2], ['X400-256GB-SILVER', 1], ['SGTT220GRAY', 1],
+  ['X520-256GB-SILVER', 1], ['X400-128GB-GRAY-CASE', 1],
 ];
-// Running low: [sku, on hand, 30d units sold, lead days, recent-vs-older pace]
+const BYCH = { walmart: 26, ebay: 12, temu: 7 };
 const LOW = [
-  ['S24-FE-128GB-BLACK', 17, 96, 14, 1.3],
-  ['BUDS-2-GRAPHITE',     6, 38, 10, 1.2],
-  ['X620-128GB-SILVER',   9, 41, 14, 1.0],
-  ['X230-256GB-GRAY',    12, 45, 14, 1.2],
-  ['X520-128GB-SILVER',  21, 62, 14, 1.1],
-  ['SGTT220GRAY',         4, 11, 21, 1.0],
+  ['S24-FE-128GB-BLACK', 17, 96, 14], ['BUDS-2-GRAPHITE', 6, 38, 10], ['X620-128GB-SILVER', 9, 41, 14],
+  ['X230-256GB-GRAY', 12, 45, 14], ['X520-128GB-SILVER', 21, 62, 14], ['SGTT220GRAY', 4, 11, 21],
 ];
-const CH = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' };
 const TARGET = 30;
 
-const wfs = WFS.map(([sku, ch, u7, atWfs, wh]) => {
-  const perDay = u7 / 7, cover = atWfs / perDay;
-  return { sku, ch, u7, perDay, atWfs, wh, cover, send: Math.max(0, Math.min(wh, Math.ceil(perDay * TARGET - atWfs))) };
-}).sort((a, b) => a.cover - b.cover);
-const low = LOW.map(([sku, onHand, u30, lead, accel]) => {
-  const perDay = u30 / 30, daysLeft = onHand / perDay;
-  const out = new Date(2026, 8, 22 + Math.floor(daysLeft)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return { sku, onHand, u30, perDay, lead, daysLeft, accel, out, order: Math.max(0, Math.ceil((perDay * (lead + TARGET) - onHand) / 5) * 5) };
-}).sort((a, b) => a.daysLeft - b.daysLeft);
-const sold = [...SOLD].sort((a, b) => b[1] - a[1]);
-const soldUnits = sold.reduce((s, r) => s + r[1], 0);
-const byCh = sold.reduce((m, [, u, c]) => (m[c] = (m[c] || 0) + u, m), {});
-const wfsUnits = wfs.reduce((s, r) => s + r.send, 0);
-const orderUnits = low.reduce((s, r) => s + r.order, 0);
-
-const pill = d => d < 5 ? 'r' : d < 10 ? 'a' : 'g';
-const tone = d => d < 5 ? 'var(--neg-text)' : d < 10 ? 'var(--badge-yellow-text)' : 'var(--accent)';
 const f1 = n => n.toFixed(1);
+const tone = d => d < 5 ? 'var(--neg-text)' : d < 10 ? 'var(--badge-yellow-text)' : 'var(--accent)';
+const pill = d => d < 5 ? 'r' : d < 10 ? 'a' : 'g';
 
-// Excel grid of sold SKUs (the owner's "full grid" from Latest orders)
-function soldGrid(withChannel) {
-  const ch = (c) => withChannel ? `<span class="xch xch-${c}">${c ? CH[c] : ''}</span>` : '';
-  return `<div class="ov-xgrid ov3-full ov3-g2${withChannel ? '' : ' no-ch'}">
-    <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span>${withChannel ? '<span>Channel</span>' : ''}<span>Units</span></div>
-    ${sold.map(([s, u, c], i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span><span class="xsku" title="${s}">${s}</span>${ch(c)}<span class="xu">${u}</span></div>`).join('')}
-    <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.length} SKUs</span>${ch('')}<span class="xu">${soldUnits}</span></div>
-  </div>`;
+// state the buttons change
+let rows = SUGG.map(([sku, ch, gtin, u7, atWfs, wh]) => {
+  const perDay = u7 / 7, cover = atWfs / perDay;
+  return { sku, ch, gtin, u7, atWfs, wh, cover, send: Math.max(0, Math.min(wh, Math.ceil(perDay * TARGET - atWfs))), state: 'todo' };
+}).sort((a, b) => a.cover - b.cover);
+let flight = FLIGHT.map(f => ({ ...f }));
+let design = 'c1';
+let c3filter = 'todo';
+let sendingSku = null;
+
+function flightStatus(f) {
+  if (f.got >= f.sent) return { key: 'done', badge: 'status-synced', label: 'Received', when: `all ${f.sent} counted by Walmart` };
+  if (f.got > 0) return { key: 'recv', badge: 'badge-walmart', label: 'Receiving', when: `${f.got} of ${f.sent} counted · sent ${f.date}` };
+  if (f.days >= 14) return { key: 'stuck', badge: 'badge-parked', label: 'Check', when: `sent ${f.date}, nothing counted in ${f.days} days — check Seller Center` };
+  return { key: 'pend', badge: 'status-pending', label: 'Pending', when: `${f.sent} sent ${f.date} · waiting on Walmart` };
 }
+const statusBadge = (f) => { const s = flightStatus(f); return `<span class="badge ${s.badge}">${s.label}</span>`; };
+const todo = () => rows.filter(r => r.state === 'todo');
+const ignored = () => rows.filter(r => r.state === 'ignored');
 
-// ---------- A · Three cards: money-card header + drawer table in each column ----------
-function A() {
-  return `<div class="ov3-cols">
-    <div class="ov-panel ov3-flush">
-      <div class="ov3-cardhead"><div class="k">Send to WFS<span class="sub">most urgent first</span></div>
-        <div class="big ov-big-g">${wfsUnits} units</div><div class="s">${wfs.length} Walmart SKUs outrunning their WFS stock</div></div>
-      <div class="ov3-body"><table class="ov3-t"><thead><tr><th>SKU</th><th>Sold/wk</th><th>Covers</th><th class="rr">Send</th></tr></thead><tbody>
-      ${wfs.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch}</span></td><td class="mono">${r.u7}</td><td class="ov-dim">${f1(r.cover)} days</td><td class="rr"><span class="ov-pill ${pill(r.cover)}">+ ${r.send}</span></td></tr>`).join('')}
-      </tbody></table></div>
-      <div class="ov3-foot">7-day Walmart pace × 30 days − at WFS · <a>WFS Shipments</a></div>
-    </div>
-    <div class="ov-panel ov3-flush">
-      <div class="ov3-cardhead"><div class="k">Sold today<span class="sub">${sold.length} SKUs</span></div>
-        <div class="big">${soldUnits} units</div><div class="s">every SKU that sold today</div></div>
-      <div style="padding:10px 12px 12px">${soldGrid(true)}</div>
-    </div>
-    <div class="ov-panel ov3-flush">
-      <div class="ov3-cardhead"><div class="k">Running low<span class="sub">from 30-day sales</span></div>
-        <div class="big ov-big-a">${orderUnits} to order</div><div class="s">${low.length} SKUs run out before a reorder lands</div></div>
-      <div class="ov3-body"><table class="ov3-t"><thead><tr><th>SKU</th><th>On shelf</th><th>Runs out</th><th class="rr">Order</th></tr></thead><tbody>
-      ${low.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="runs">${f1(r.perDay)}/day${r.accel > 1.1 ? ' · <span style="color:var(--neg-text)">selling faster</span>' : ''}</span></td><td class="mono">${r.onHand}</td><td class="ov-dim">in ${Math.floor(r.daysLeft)} days</td><td class="rr"><span class="ov-pill a">${r.order}</span></td></tr>`).join('')}
-      </tbody></table></div>
-      <div class="ov3-foot">30-day avg × (lead + 30 days) − on shelf · <a>open Stock</a></div>
-    </div>
-  </div>`;
-}
-
-// ---------- B · All grids: three money cards on top, Excel grids below ----------
-function B() {
-  return `<div class="ov-cards" style="margin-bottom:10px">
-      <div class="ov-mcard"><div class="k">Send to WFS</div><div class="big ov-big-g">${wfsUnits} units</div><div class="s">${wfs.filter(r => r.cover < 10).length} Walmart SKUs under 10 days of cover</div></div>
-      <div class="ov-mcard"><div class="k">Sold today</div><div class="big">${soldUnits} units</div><div class="s">${sold.length} SKUs · Walmart ${byCh.walmart} · eBay ${byCh.ebay} · Temu ${byCh.temu}</div></div>
-      <div class="ov-mcard"><div class="k">Running low</div><div class="big ov-big-a">${low.length} SKUs</div><div class="s">order ${orderUnits} units to cover lead + 30 days</div></div>
-    </div>
-    <div class="ov3-cols">
-      <div class="ov-panel"><h4 style="color:#065F46">Send to WFS<span class="sub">sorted by days of cover</span></h4>
-        <div class="ov-xgrid ov3-full ov3-g5">
-          <div class="ov-xhead"><span>Walmart SKU</span><span class="n">/wk</span><span class="n">WFS</span><span class="n">Cover</span><span class="n">Send</span></div>
-          ${wfs.map(r => `<div class="ov-feedrow"><span class="xsku" title="${r.ch}">${r.sku}</span><span class="n">${r.u7}</span><span class="n">${r.atWfs}</span><span class="n" style="color:${tone(r.cover)};font-weight:700">${f1(r.cover)}d</span><span class="n strong">+${r.send}</span></div>`).join('')}
-        </div>
-        <div class="ov-more">7-day Walmart pace × 30 days − at WFS · <a>WFS Shipments</a></div>
+// ---------- shared middle + right columns (design C) ----------
+function soldCard() {
+  const units = SOLD.reduce((s, r) => s + r[1], 0);
+  return `<div class="ov-panel ov-today ov3-sold">
+      <div><div class="k">Units sold today</div>
+        <div class="big mono">${units}</div>
+        <div class="delta">▲ <b class="mono">+7</b> vs yesterday</div></div>
+      <div class="ov-xgrid ov3-full ov3-g2">
+        <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
+        ${SOLD.map(([s, u], i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span><span class="xsku">${s}</span><span class="xu">${u}</span></div>`).join('')}
+        <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${SOLD.length} SKUs</span><span class="xu">${units}</span></div>
       </div>
-      <div class="ov-panel"><h4>Sold items<span class="sub">today</span></h4>${soldGrid(true)}</div>
-      <div class="ov-panel"><h4 style="color:var(--badge-yellow-text)">Running low<span class="sub">30-day forecast</span></h4>
-        <div class="ov-xgrid ov3-full ov3-g5">
-          <div class="ov-xhead"><span>SKU</span><span class="n">Shelf</span><span class="n">/day</span><span class="n">Left</span><span class="n">Order</span></div>
-          ${low.map(r => `<div class="ov-feedrow"><span class="xsku">${r.sku}</span><span class="n">${r.onHand}</span><span class="n">${f1(r.perDay)}</span><span class="n" style="color:${tone(r.daysLeft)};font-weight:700">${Math.floor(r.daysLeft)}d</span><span class="n strong">${r.order}</span></div>`).join('')}
-        </div>
-        <div class="ov-more">30-day avg × (lead + 30 days) − on shelf · <a>open Stock</a></div>
-      </div>
+      <div class="ov-chcells">${[['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']].map(([k, n]) => `<div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv">${BYCH[k]}</div></div>`).join('')}</div>
     </div>`;
 }
-
-// ---------- C · Today card in the middle, ranked lists either side ----------
-function C() {
-  return `<div class="ov3-cols mid-wide">
-    <div class="ov-panel">
-      <h4 style="color:#065F46">Send to WFS · ${wfsUnits} units<span class="sub">${wfs.length} Walmart SKUs</span></h4>
-      <div class="ov3-chips"><button class="view-chip is-active">All</button><button class="view-chip">Under 5 days</button><button class="view-chip">This week</button></div>
-      <table class="ov3-t"><tbody>
-      ${wfs.map((r, i) => `<tr><td style="width:18px" class="ov-dim mono">${i + 1}</td><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch} · ${r.u7}/wk · ${r.atWfs} at WFS</span>
-        <div class="ov3-bar"><i style="width:${Math.min(100, r.cover / 14 * 100)}%;background:${tone(r.cover)}"></i></div></td>
-        <td class="rr"><span class="ov-pill ${pill(r.cover)}">+ ${r.send}</span><span class="runs" style="margin-top:3px">${f1(r.cover)}d left</span></td></tr>`).join('')}
-      </tbody></table>
-    </div>
-    <div class="ov-panel ov-today ov3-sold">
-      <div><div class="k">Units sold today</div>
-        <div class="big mono">${soldUnits}</div>
-        <div class="delta">▲ <b class="mono">+7</b> vs yesterday</div></div>
-      ${soldGrid(false)}
-      <div class="ov-chcells">${['walmart', 'ebay', 'temu'].map(k => `<div class="ov-chcell"><div class="cn cn-${k}">${CH[k]}</div><div class="cv">${byCh[k]}</div></div>`).join('')}</div>
-    </div>
-    <div class="ov-panel">
-      <h4 style="color:var(--badge-yellow-text)">Running low · order ${orderUnits}<span class="sub">30-day history</span></h4>
+function lowCard() {
+  const low = LOW.map(([sku, onHand, u30, lead]) => {
+    const perDay = u30 / 30, daysLeft = onHand / perDay;
+    const out = new Date(2026, 8, 22 + Math.floor(daysLeft)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { sku, onHand, perDay, lead, daysLeft, out, order: Math.max(0, Math.ceil((perDay * (lead + TARGET) - onHand) / 5) * 5) };
+  }).sort((a, b) => a.daysLeft - b.daysLeft);
+  return `<div class="ov-panel">
+      <h4 style="color:var(--badge-yellow-text)">Running low · order ${low.reduce((s, r) => s + r.order, 0)}<span class="sub">30-day history</span></h4>
       <table class="ov3-t"><tbody>
       ${low.map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.onHand} on shelf · ${f1(r.perDay)}/day · out ~${r.out}</span>
         <div class="ov3-bar"><i style="width:${Math.min(100, r.daysLeft / r.lead * 100)}%;background:${tone(r.daysLeft)}"></i></div></td>
-        <td class="rr"><span class="ov-pill a">${r.order}</span><span class="runs" style="margin-top:3px">${Math.floor(r.daysLeft)}d left</span></td></tr>`).join('')}
+        <td class="rr"><span class="ov-pill a">${r.order}</span><span class="runs">${Math.floor(r.daysLeft)}d left</span></td></tr>`).join('')}
       </tbody></table>
-      <div class="ov-more">Bar = days left vs. lead time · <a>open Stock</a></div>
-    </div>
+      <div class="ov-more">Order = 30-day avg × (lead + 30 days) − on shelf · <a>open Stock</a></div>
+    </div>`;
+}
+
+// one suggestion row with Send | Ignore
+function suggRow(r, i) {
+  if (r.state === 'ignored') return '';
+  return `<tr><td class="rank">${i + 1}</td>
+    <td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch} · ${r.u7}/wk · ${r.atWfs} at WFS</span>
+      <div class="ov3-bar"><i style="width:${Math.min(100, r.cover / 14 * 100)}%;background:${tone(r.cover)}"></i></div></td>
+    <td class="rr"><span class="ov-pill ${pill(r.cover)}">+ ${r.send}</span><span class="runs">${f1(r.cover)}d left</span>
+      <span class="ov3-act"><button class="btn btn-secondary" data-send="${r.sku}">Send</button><button class="btn btn-ghost" data-ignore="${r.sku}">Ignore</button></span></td></tr>`;
+}
+function flightRow(f) {
+  const s = flightStatus(f);
+  return `<tr><td class="rank"></td>
+    <td><span class="ov-sku">${f.sku}</span><span class="chsku">${f.ch}</span>
+      <div class="ov3-prog"><i style="width:${f.got / f.sent * 100}%;background:${s.key === 'done' ? 'var(--accent)' : '#2E86D9'}"></i></div></td>
+    <td class="rr ov3-status">${statusBadge(f)}<span class="when">${s.key === 'done' ? `${f.sent} / ${f.sent}` : `${f.got} / ${f.sent}`} counted</span></td></tr>`;
+}
+const undoLine = () => ignored().length
+  ? `<div class="ov3-undo">${ignored().length} ignored for 7 days (${ignored().map(r => r.sku).join(', ')})<a data-undo>Undo</a></div>` : '';
+const wfsHead = () => `<h4 style="color:#065F46">Send to WFS · ${todo().reduce((s, r) => s + r.send, 0)} units<span class="sub">${todo().length} Walmart SKUs</span></h4>`;
+
+// ---------- C1 · one list: suggestions, then the shipments on their way ----------
+function wfsC1() {
+  return `<div class="ov-panel">${wfsHead()}
+    <table class="ov3-t"><tbody>${todo().map(suggRow).join('')}</tbody></table>
+    ${undoLine()}
+    <div class="ov3-sec">On the way to WFS<span class="n">${flight.filter(f => flightStatus(f).key !== 'done').reduce((s, f) => s + f.sent - f.got, 0)} units</span></div>
+    <table class="ov3-t"><tbody>${flight.map(flightRow).join('')}</tbody></table>
   </div>`;
 }
 
-const V = { a: A, b: B, c: C };
-function show(v) {
-  document.getElementById('root').innerHTML = V[v]();
-  document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.classList.toggle('is-on', b.dataset.v === v));
+// ---------- C2 · suggestions list + shipment cards with a progress bar ----------
+function wfsC2() {
+  return `<div class="ov-panel">${wfsHead()}
+    <table class="ov3-t"><tbody>${todo().map(suggRow).join('')}</tbody></table>
+    ${undoLine()}
+  </div>
+  <div class="ov-panel" style="margin-top:10px">
+    <h4>Shipments to WFS<span class="sub">from WFS Shipments</span></h4>
+    ${flight.map(f => { const s = flightStatus(f); return `<div class="ov3-flight">
+      <div class="top"><span class="ov-sku">${f.sku}</span><span class="r ov3-status">${statusBadge(f)}</span></div>
+      <div class="ov3-prog"><i style="width:${f.got / f.sent * 100}%;background:${s.key === 'done' ? 'var(--accent)' : '#2E86D9'}"></i></div>
+      <div class="meta"><span>${s.when}</span><span class="r">${f.got}/${f.sent}</span></div>
+    </div>`; }).join('')}
+  </div>`;
 }
-document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.addEventListener('click', () => show(b.dataset.v)));
-show('a');
+
+// ---------- C3 · status chips filter one list ----------
+function wfsC3() {
+  const counts = { todo: todo().length, pend: 0, recv: 0, done: 0, stuck: 0 };
+  flight.forEach(f => counts[flightStatus(f).key]++);
+  const chip = (k, label) => `<button class="view-chip ${c3filter === k ? 'is-active' : ''}" data-c3="${k}">${label}<span class="c">${k === 'ignored' ? ignored().length : k === 'pend' ? counts.pend + counts.stuck : counts[k]}</span></button>`;
+  let body;
+  if (c3filter === 'todo') body = `<table class="ov3-t"><tbody>${todo().map(suggRow).join('')}</tbody></table>${undoLine()}`;
+  else if (c3filter === 'ignored') body = ignored().length
+    ? `<table class="ov3-t"><tbody>${ignored().map(r => `<tr><td><span class="ov-sku">${r.sku}</span><span class="chsku">${r.ch} · back in 7 days</span></td><td class="rr"><button class="btn btn-ghost" style="font-size:11.5px;padding:2px 10px" data-unignore="${r.sku}">Restore</button></td></tr>`).join('')}</tbody></table>`
+    : '<div class="ov-empty">Nothing ignored.</div>';
+  else {
+    const list = flight.filter(f => { const k = flightStatus(f).key; return c3filter === 'pend' ? (k === 'pend' || k === 'stuck') : k === c3filter; });
+    body = list.length ? `<table class="ov3-t"><tbody>${list.map(flightRow).join('')}</tbody></table>` : '<div class="ov-empty">Nothing here.</div>';
+  }
+  return `<div class="ov-panel">${wfsHead()}
+    <div class="ov3-chips">${chip('todo', 'To send')}${chip('pend', 'Pending')}${chip('recv', 'Receiving')}${chip('done', 'Received')}${chip('ignored', 'Ignored')}</div>
+    ${body}
+  </div>`;
+}
+
+const WFSV = { c1: wfsC1, c2: wfsC2, c3: wfsC3 };
+function render() {
+  document.getElementById('root').innerHTML = `<div class="ov3-cols"><div>${WFSV[design]()}</div>${soldCard()}${lowCard()}</div>`;
+  document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.classList.toggle('is-on', b.dataset.v === design));
+}
+
+// ---------- the Send flow: Stock page + pre-filled WFS Shipments dialog ----------
+function openSend(sku) {
+  const r = rows.find(x => x.sku === sku);
+  sendingSku = sku;
+  document.getElementById('ovPage').hidden = true;
+  document.getElementById('stockShell').hidden = false;
+  document.getElementById('tOv').classList.remove('is-active');
+  document.getElementById('tSt').classList.add('is-active');
+  document.getElementById('wfsFrom').textContent = `From Overview · ${r.sku} sells ${r.u7}/wk on Walmart and WFS holds ${f1(r.cover)} days — suggested ${r.send} to reach 30 days`;
+  document.getElementById('wfsLines').innerHTML = `
+    <div class="wfs-line"><input type="text" class="input mono wfs-sku" value="${r.sku}" /><input type="text" class="input mono wfs-gtin" value="${r.gtin}" /><input type="number" class="input mono wfs-qty" value="${r.send}" min="1" /><button class="wfs-remove" type="button">✕</button></div>
+    <div class="wfs-line"><input type="text" class="input mono wfs-sku" placeholder="Type a SKU…" /><input type="text" class="input mono wfs-gtin" /><input type="number" class="input mono wfs-qty" min="1" /><button class="wfs-remove" type="button">✕</button></div>`;
+  document.getElementById('wfsNote').value = '';
+  updTot();
+  document.getElementById('wfsPast').innerHTML = flight.map(f => `
+    <div class="wfs-card"><div class="wfs-card-h"><b>${f.date}</b>${statusBadge(f)}<span class="wfs-card-u">${f.sent} units</span></div>
+      <div class="wfs-card-item"><span class="mono">${f.sku}</span><span class="n">×${f.sent}</span></div></div>`).join('');
+  document.getElementById('wfsDialog').showModal();
+}
+function updTot() {
+  const lines = [...document.querySelectorAll('#wfsLines .wfs-line')].map(l => ({ sku: l.querySelector('.wfs-sku').value.trim(), qty: Number(l.querySelector('.wfs-qty').value) || 0 })).filter(l => l.sku);
+  const u = lines.reduce((a, l) => a + l.qty, 0);
+  document.getElementById('wfsTot').innerHTML = `<b>${lines.length}</b> SKU${lines.length === 1 ? '' : 's'} · <b>${u}</b> units leave the warehouse`;
+}
+function backToOverview() {
+  document.getElementById('wfsDialog').close();
+  document.getElementById('ovPage').hidden = false;
+  document.getElementById('stockShell').hidden = true;
+  document.getElementById('tOv').classList.add('is-active');
+  document.getElementById('tSt').classList.remove('is-active');
+  render();
+}
+document.getElementById('wfsLines').addEventListener('input', updTot);
+document.getElementById('wfsClose').addEventListener('click', () => { sendingSku = null; backToOverview(); });
+document.getElementById('wfsSave').addEventListener('click', () => {
+  const r = rows.find(x => x.sku === sendingSku);
+  const qty = Number(document.querySelector('#wfsLines .wfs-qty').value) || r.send;
+  rows = rows.filter(x => x !== r);
+  flight.unshift({ sku: r.sku, ch: r.ch, sent: qty, got: 0, date: 'Sep 22', days: 0 });
+  sendingSku = null;
+  backToOverview();
+});
+
+document.getElementById('root').addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.dataset.send) openSend(t.dataset.send);
+  else if (t.dataset.ignore) { rows.find(r => r.sku === t.dataset.ignore).state = 'ignored'; render(); }
+  else if (t.hasAttribute('data-undo')) { rows.forEach(r => { if (r.state === 'ignored') r.state = 'todo'; }); render(); }
+  else if (t.dataset.unignore) { rows.find(r => r.sku === t.dataset.unignore).state = 'todo'; render(); }
+  else if (t.closest('[data-c3]')) { c3filter = t.closest('[data-c3]').dataset.c3; render(); }
+});
+document.querySelectorAll('#pick .ov-rbtn').forEach(b => b.addEventListener('click', () => { design = b.dataset.v; render(); }));
+render();
 </script>
 </body>
 </html>
