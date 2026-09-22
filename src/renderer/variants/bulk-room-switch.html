@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Room selector — 4 options</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --rr:#956400; --rr-bg:#FBF3DB;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 60px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:760px; }
+  .opt { margin-bottom:34px; max-width:760px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 24px; }
+  .t { font-size:18px; font-weight:700; letter-spacing:-0.02em; margin-bottom:14px; }
+  .seg { display:inline-flex; background:var(--surface-2); border-radius:999px; padding:3px; }
+  .seg button { font-family:var(--font); font-size:13px; font-weight:600; border:none; background:none; color:var(--muted); border-radius:999px; padding:6px 16px; cursor:pointer; }
+  .seg button.on { background:var(--surface); color:var(--accent-soft-text); box-shadow:0 1px 2px rgba(47,52,55,0.10); }
+  .rowline { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+
+  /* A — labeled dropdown pill */
+  .rooma { display:inline-flex; align-items:center; gap:8px; margin-left:auto; }
+  .rooma .lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); }
+  .rooma .dd { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--rr); background:var(--rr-bg); border:none; border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .rooma .dd .car { font-size:10px; }
+
+  /* B — its own labeled line with radios */
+  .roomb { display:flex; align-items:center; gap:16px; margin-top:12px; padding:10px 14px; background:var(--surface-2); border-radius:9px; }
+  .roomb .lbl { font-size:12px; color:var(--muted); }
+  .rb { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--muted); }
+  .rb .dot { width:15px; height:15px; border-radius:50%; border:1.5px solid var(--border); display:inline-grid; place-items:center; }
+  .rb.on { color:var(--rr); }
+  .rb.on .dot { border-color:var(--rr); }
+  .rb.on .dot::after { content:''; width:7px; height:7px; border-radius:50%; background:var(--rr); }
+
+  /* C — one toggle chip */
+  .roomc { display:inline-flex; align-items:center; gap:7px; margin-left:auto; font-size:12.5px; font-weight:600; border:1px dashed var(--border); color:var(--muted); background:none; border-radius:999px; padding:5px 14px; cursor:pointer; }
+  .roomc.on { border:1px solid transparent; background:var(--rr-bg); color:var(--rr); }
+  .roomc .box { font-size:13px; }
+
+  /* D — boxed segmented, label on top */
+  .roomd { margin-left:auto; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .roomd .lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); }
+  .roomd .box { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .roomd .box button { font-family:var(--font); font-size:12px; font-weight:600; border:none; background:var(--surface); color:var(--muted); padding:6px 14px; cursor:pointer; }
+  .roomd .box button + button { border-left:1px solid var(--border); }
+  .roomd .box button.on { background:var(--rr-bg); color:var(--rr); }
+</style>
+</head>
+<body>
+
+<h1>The room selector — four looks</h1>
+<div class="sub">Same dialog header each time. The problem with v1: two identical pill groups side by side read as one confusing control. Each option below separates them differently. Amber = the returns-room identity everywhere.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>A — Labeled dropdown, far right</b><span>the mode pills stay alone; the room is a small amber dropdown pushed to the other end of the row</span></div>
+  <div class="card"><div class="t">Bulk stock import</div>
+    <div class="rowline">
+      <span class="seg"><button class="on">+ Add to stock</button><button>Set exact qty</button></span>
+      <span class="rooma"><span class="lbl">Room</span><button class="dd">📦 Returns room <span class="car">▾</span></button></span>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>B — Its own line</b><span>the room question gets a quiet labeled strip under the mode pills — nothing competes on the same row</span></div>
+  <div class="card"><div class="t">Bulk stock import</div>
+    <span class="seg"><button class="on">+ Add to stock</button><button>Set exact qty</button></span>
+    <div class="roomb">
+      <span class="lbl">Stock lands in</span>
+      <span class="rb"><span class="dot"></span>General warehouse</span>
+      <span class="rb on"><span class="dot"></span>Returns room</span>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>C — One toggle chip</b><span>general is the unspoken default; a single chip flips amber when this batch goes to the returns room — smallest possible footprint</span></div>
+  <div class="card"><div class="t">Bulk stock import</div>
+    <div class="rowline">
+      <span class="seg"><button class="on">+ Add to stock</button><button>Set exact qty</button></span>
+      <button class="roomc on"><span class="box">📦</span>Returns room</button>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>D — Boxed segmented with a label</b><span>square corners + a tiny ROOM caption make it read as a different kind of control than the round mode pills</span></div>
+  <div class="card"><div class="t">Bulk stock import</div>
+    <div class="rowline">
+      <span class="seg"><button class="on">+ Add to stock</button><button>Set exact qty</button></span>
+      <span class="roomd"><span class="lbl">Room</span><span class="box"><button>General</button><button class="on">Returns room</button></span></span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -2249,9 +2249,19 @@ function stockSeed(data) {
 }
 
 // column sort: key + direction, toggled by clicking headers
+// warehouse rooms (owner 2026-09-22): one Linnworks total, split for
+// display — Returns rm is the ledger (synced through the shared folder),
+// New room is always DERIVED (total − returns), so they add up to In stock
+let stockRooms = {}; // SKU (upper) -> units in the returns room
+function stockRoomOf(r) {
+  const raw = Number(stockRooms[String(r.sku).toUpperCase()]) || 0;
+  return Math.max(0, Math.min(raw, Number(r.l.stockLevel) || 0)); // never more than exists
+}
 const STOCK_COLS = {
   sku: { label: 'SKU', get: r => r.sku, text: true },
   stockLevel: { label: 'In stock', get: r => r.l.stockLevel },
+  newRoom: { label: 'New room', get: r => (Number(r.l.stockLevel) || 0) - stockRoomOf(r) },
+  returnsRoom: { label: 'Returns rm', get: r => stockRoomOf(r) },
   inOrders: { label: 'In orders', get: r => r.l.inOrders },
   minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
   available: { label: 'Available', get: r => r.l.available },
@@ -2266,14 +2276,17 @@ try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'
 
 // user-arranged column ORDER for the main sheet, persisted (owner request
 // 2026-08-12: drag a header to move the column)
-const STOCK_COL_DEFAULT = ['sku', 'stockLevel', 'inOrders', 'minimumLevel', 'available'];
+const STOCK_COL_DEFAULT = ['sku', 'stockLevel', 'newRoom', 'returnsRoom', 'inOrders', 'minimumLevel', 'available'];
 let stockColOrder = STOCK_COL_DEFAULT.slice();
 try {
   const saved = JSON.parse(localStorage.getItem('stockColOrder') || 'null');
-  // tolerate old saves when columns are added/removed later
+  // tolerate old saves when columns are added/removed later — a missing
+  // column slots in at its default position, not at the end
   if (Array.isArray(saved)) {
     stockColOrder = saved.filter(k => STOCK_COL_DEFAULT.includes(k));
-    for (const k of STOCK_COL_DEFAULT) if (!stockColOrder.includes(k)) stockColOrder.push(k);
+    for (const k of STOCK_COL_DEFAULT) {
+      if (!stockColOrder.includes(k)) stockColOrder.splice(STOCK_COL_DEFAULT.indexOf(k), 0, k);
+    }
   }
 } catch { /* fresh start */ }
 
@@ -2328,6 +2341,10 @@ async function loadStock() {
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
+  // room split (New room / Returns rm) — lazy like the rest
+  api.roomsGet().then((r) => {
+    if (r && r.ok) { stockRooms = r.map || {}; if (stockCache) renderStock(); }
+  }).catch(() => { /* the columns show zeros until the next load */ });
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
   const res = await api.getStock();
@@ -2525,11 +2542,18 @@ function renderStock() {
       </table>${addNewFoot}`
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
-        const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
+        const TH_EXTRA = { sku: '', stockLevel: 'num th-level', newRoom: 'num', returnsRoom: 'num', inOrders: 'num', minimumLevel: 'num', available: 'num' };
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
-            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
+            // In stock is the SUM of the rooms and reads only — you count
+            // the room you're standing in (owner 2026-09-22)
+            case 'stockLevel': return `<td class="num cell-level"><span class="stock-num-ro" title="New room + Returns rm — correct a room count, not the total">${r.l.stockLevel}</span></td>`;
+            case 'newRoom': return `<td class="num"><button class="stock-num-btn" data-roomsku="${esc(r.sku)}" data-room="new" data-cur="${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}" title="Units in the new-stock room — click to correct (the total follows)">${(Number(r.l.stockLevel) || 0) - stockRoomOf(r)}</button></td>`;
+            case 'returnsRoom': return (() => {
+              const rr = stockRoomOf(r);
+              return `<td class="num"><button class="stock-num-btn stock-rr-btn ${rr > 0 ? 'rr-has' : ''}" data-roomsku="${esc(r.sku)}" data-room="returns" data-cur="${rr}" title="Units in the returns room — click to correct (the total follows)">${rr > 0 ? rr : '—'}</button></td>`;
+            })();
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);
@@ -2900,6 +2924,66 @@ async function applyStockLevel(sku, value) {
   }
   renderStock();
   return res;
+}
+
+// count the room you're standing in — the app does the math and writes the
+// new TOTAL to Linnworks (owner 2026-09-22); same history/undo as any edit
+async function applyRoomCount(sku, room, count) {
+  const item = stockCache && stockCache.items.find(i => i.sku === sku);
+  const l = item && (item.levels || []).find(x => x.locationId === stockCache.locationId);
+  const prevLevel = l ? Number(l.stockLevel) || 0 : 0;
+  const prevReturns = item ? stockRoomOf({ sku, l: l || { stockLevel: 0 } }) : 0;
+  const res = await api.roomsSetCount({ sku, room, count, prevReturns, prevLevel });
+  if (!res.ok) throw new Error(res.error || 'Room update failed');
+  stockRooms[String(sku).toUpperCase()] = res.returnsRoom;
+  if (item && l) {
+    l.stockLevel = res.stockLevel;
+    l.inOrders = res.inOrders;
+    l.available = res.available;
+  }
+  renderStock();
+  return res;
+}
+
+function beginRoomEdit(btn) {
+  const sku = btn.dataset.roomsku;
+  const room = btn.dataset.room;
+  const current = Number(btn.dataset.cur) || 0;
+  const label = room === 'returns' ? 'returns room' : 'new room';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  input.value = String(current);
+  input.className = 'input stock-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (val === '' || Number(val) === current) { restore(); return; }
+    input.disabled = true;
+    let res;
+    try {
+      res = await applyRoomCount(sku, room, Number(val));
+    } catch (err) {
+      toast(err.message);
+      restore();
+      return;
+    }
+    pushUndo(`${sku} ${label} back to ${current}`, () => applyRoomCount(sku, room, current));
+    toast(`${sku}: ${label} set to ${Number(val)} — total ${res.stockLevel} · Ctrl+Z undoes`);
+    loadUnlisted(true);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 function beginStockEdit(btn) {
@@ -3331,6 +3415,8 @@ $('stockList').addEventListener('click', async (e) => {
     openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid);
     return;
   }
+  const roomBtn = e.target.closest('button[data-roomsku]');
+  if (roomBtn) { beginRoomEdit(roomBtn); return; }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
@@ -6220,6 +6306,12 @@ $('chsClose').addEventListener('click', () => $('chsDialog').close());
 // says what the quantities will mean
 let bulkModeVal = 'add';
 const bulkMode = () => bulkModeVal;
+// warehouse room for this batch: general (default) or the returns room
+let bulkRoomVal = 'general';
+$('bulkRoomChip').addEventListener('click', () => {
+  bulkRoomVal = bulkRoomVal === 'returns' ? 'general' : 'returns';
+  $('bulkRoomChip').classList.toggle('is-on', bulkRoomVal === 'returns');
+});
 const BULK_HINTS = {
   add: 'received units — each qty goes on top of the current count',
   set: 'a correction or recount — each qty becomes the new count',
@@ -6228,6 +6320,8 @@ function bulkSetMode(m) {
   bulkModeVal = m === 'set' ? 'set' : 'add';
   document.querySelectorAll('#bulkSeg .view-chip').forEach(b => b.classList.toggle('is-active', b.dataset.bm === bulkModeVal));
   $('bulkModeHint').textContent = BULK_HINTS[bulkModeVal];
+  // rooms only make sense for RECEIVED units — Set audits the total
+  $('bulkRoomChip').hidden = bulkModeVal === 'set';
   bulkRefresh();
 }
 $('bulkSeg').addEventListener('click', (e) => {
@@ -6327,6 +6421,8 @@ $('stockBulkBtn').addEventListener('click', () => {
   $('bulkNote').value = '';
   bulkAddRow();
   bulkSetMode('add'); // every open starts on the safe mode
+  bulkRoomVal = 'general';
+  $('bulkRoomChip').classList.remove('is-on');
   $('bulkApply').disabled = true;
   $('bulkDialog').showModal();
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
@@ -6363,7 +6459,7 @@ $('bulkApply').addEventListener('click', async () => {
   const mode = bulkMode();
   $('bulkApply').disabled = true;
   $('bulkApply').textContent = 'Importing…';
-  const res = await api.stockBulkApply({ mode, rows, file: '', note: $('bulkNote').value.trim() });
+  const res = await api.stockBulkApply({ mode, rows, file: '', note: $('bulkNote').value.trim(), room: bulkRoomVal });
   $('bulkApply').textContent = 'Import';
   if (!res.ok) { toast(res.error || 'Import failed.'); $('bulkApply').disabled = false; return; }
   // one Ctrl+Z takes the WHOLE update back — through the same revert the
@@ -6388,9 +6484,13 @@ let bulkHistEntries = []; // the revert confirm names the entry from here
 // entries — a reverted fix gave its units back, so it doesn't count
 function bulkFixMoved(id, rowIdx) {
   const undone = new Set(bulkHistEntries.filter(x => x.revertOf).map(x => x.revertOf));
-  return bulkHistEntries
-    .filter(x => x.mode === 'fix' && x.fixOf === id && Number(x.fixRow) === Number(rowIdx) && !undone.has(x.id))
-    .reduce((s, x) => s + (Number(x.fixQty) || 0), 0);
+  let sum = 0;
+  for (const x of bulkHistEntries) {
+    if (!x || undone.has(x.id) || x.fixOf !== id) continue;
+    if (x.mode === 'fix' && Number(x.fixRow) === Number(rowIdx)) sum += Number(x.fixQty) || 0;
+    if (x.mode === 'fixbatch') for (const m of x.moves || []) if (Number(m.row) === Number(rowIdx)) sum += Number(m.qty) || 0;
+  }
+  return sum;
 }
 
 async function bulkHistLoad() {
@@ -6410,7 +6510,12 @@ async function bulkHistLoad() {
       : e.mode === 'set' ? `set counts · ${nSku}`
         : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
           : e.mode === 'fix' ? `moved ${e.fixQty || ''} unit${Number(e.fixQty) === 1 ? '' : 's'} <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> → <span class="mono">${esc(rows[rows.length - 1] ? rows[rows.length - 1].sku : '')}</span>`
-            : `↩ reversed an earlier change · ${nSku}`;
+            : e.mode === 'fixbatch' ? (() => {
+              const mv = e.moves || [];
+              const first = mv[0] || {};
+              return `<b>corrected ${mv.length} line${mv.length === 1 ? '' : 's'}</b> of an earlier import · <span class="mono">${esc(first.from || '')}</span> → <span class="mono">${esc(first.to || '')}</span>${mv.length > 1 ? ` +${mv.length - 1} more` : ''}`;
+            })()
+              : `↩ reversed an earlier change · ${nSku}`;
     const fixable = !reverted.has(e.id) && (e.mode === 'add' || e.mode === 'set' || e.mode === 'edit');
     const act = reverted.has(e.id)
       ? '<span class="bulk-h-rvtd">reverted ✓</span>'
@@ -6418,12 +6523,14 @@ async function bulkHistLoad() {
     return `
     <div class="bulk-h">
       <div class="bulk-h-line" data-bh="${i}">
-        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
+        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.room === 'returns' ? ' <span class="bulk-h-room">returns room</span>' : ''}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
         ${act}<span class="bulk-h-chev">▸</span>
       </div>
       <div class="bulk-h-body" hidden>
+        ${fixable && rows.some((r, ri) => ((Number(r.after) || 0) - (Number(r.before) || 0)) - bulkFixMoved(e.id, ri) > 0)
+    ? `<button type="button" class="bulk-h-editall" data-bea="${esc(e.id)}" title="Change several lines' SKUs at once — one correction entry covers them all">✎ Edit this import</button>` : ''}
         <table class="bulk-table">
-          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
+          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' || e.mode === 'fixbatch' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
           <tbody>${rows.map((r, ri) => {
     const change = (Number(r.after) || 0) - (Number(r.before) || 0);
     const moved = fixable ? bulkFixMoved(e.id, ri) : 0;
@@ -6432,7 +6539,7 @@ async function bulkHistLoad() {
     const cell = (canFix
       ? `<button type="button" class="bulk-h-fix" title="Wrong SKU? Change it in place — the units move to the SKU you pick">✎</button>` : '')
       + (moved > 0 ? `<span class="bulk-h-moved" title="${moved} unit${moved === 1 ? '' : 's'} moved to another SKU — see the “moved” entries above">↷ ${moved} moved</span>` : '');
-    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix') && r.qty > 0)) ? `+${r.qty}` : r.qty;
+    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix' || e.mode === 'fixbatch') && r.qty > 0)) ? `+${r.qty}` : r.qty;
     return `<tr><td class="mono bulk-h-sku"${canFix ? ` data-bfx="${esc(e.id)}" data-bfr="${ri}" title="Double-click to change which SKU these units went to"` : ''}>${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${q}</td><td class="num mono">${r.after == null ? '—' : r.after}</td><td class="bulk-h-fixcell">${cell}</td></tr>`;
   }).join('')}</tbody>
         </table>
@@ -6509,7 +6616,82 @@ $('bulkHist').addEventListener('dblclick', (e) => {
   if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
 });
 
+// ✎ Edit this import (owner 2026-09-22): every ADD line flips editable at
+// once; Apply moves stock for all changed lines in ONE pass and the ledger
+// gains ONE dated correction entry with its own Revert.
+function bulkBatchOpen(btn) {
+  const entry = bulkHistEntries.find(x => x.id === btn.dataset.bea);
+  if (!entry) return;
+  const body = btn.closest('.bulk-h-body');
+  const tbody = body && body.querySelector('tbody');
+  if (!tbody || body.querySelector('.bulk-h-batchbar')) return; // already editing
+  ensureInventory(); // the SKU pickers' lookup data
+  btn.textContent = '✎ Editing — change the SKUs below';
+  btn.disabled = true;
+  const editable = [];
+  [...tbody.querySelectorAll('tr')].forEach((tr, ri) => {
+    const row = (entry.rows || [])[ri];
+    if (!row) return;
+    const change = (Number(row.after) || 0) - (Number(row.before) || 0);
+    const avail = change - bulkFixMoved(entry.id, ri);
+    if (change <= 0 || avail < 1) return;
+    const td = tr.querySelector('td.bulk-h-sku') || tr.querySelector('td');
+    if (!td) return;
+    td.innerHTML = `
+      <div class="bulk-h-fixwrap">
+        <input class="input mono bulk-h-fixsku" type="text" autocomplete="off" spellcheck="false" aria-label="Correct SKU" />
+        <input class="input mono bulk-h-fixqty" type="number" min="1" max="${avail}" step="1" value="${avail}" aria-label="Units to move" title="How many of the ${avail} unit${avail === 1 ? '' : 's'} were really this SKU" />
+        <div class="combo-list" hidden></div>
+      </div>`;
+    const skuIn = td.querySelector('.bulk-h-fixsku');
+    const qtyIn = td.querySelector('.bulk-h-fixqty');
+    skuIn.value = String(row.sku);
+    makeCombo(skuIn, td.querySelector('.combo-list'), (item) => { skuIn.value = item.sku; });
+    editable.push({ ri, from: String(row.sku).toUpperCase(), avail, skuIn, qtyIn });
+  });
+  if (!editable.length) { bulkHistLoad(); return; }
+  const bar = document.createElement('div');
+  bar.className = 'bulk-h-batchbar';
+  bar.innerHTML = `
+    <button type="button" class="btn btn-primary bulk-h-batchgo">Apply corrections</button>
+    <button type="button" class="btn btn-ghost bulk-h-batchno">Cancel</button>
+    <span class="bulk-h-batchnote">only lines whose SKU you change are touched · one entry, one Revert</span>`;
+  body.appendChild(bar);
+  bar.querySelector('.bulk-h-batchno').addEventListener('click', () => bulkHistLoad());
+  bar.querySelector('.bulk-h-batchgo').addEventListener('click', async () => {
+    const moves = [];
+    for (const ed of editable) {
+      const to = ed.skuIn.value.trim().toUpperCase();
+      const qty = Number(ed.qtyIn.value);
+      if (!to || to === ed.from) continue; // untouched line
+      if (!Number.isInteger(qty) || qty < 1 || qty > ed.avail) {
+        toast(`${ed.from}: units must be a whole number between 1 and ${ed.avail}.`);
+        ed.qtyIn.focus();
+        return;
+      }
+      moves.push({ rowIdx: ed.ri, to, qty });
+    }
+    if (!moves.length) { toast('No SKUs were changed.'); return; }
+    const go = bar.querySelector('.bulk-h-batchgo');
+    go.disabled = true;
+    go.textContent = 'Applying…';
+    const res = await api.stockBulkFixBatch(entry.id, moves);
+    if (!res.ok) {
+      go.disabled = false;
+      go.textContent = 'Apply corrections';
+      toast(res.error || 'Could not apply the corrections.');
+      return;
+    }
+    toast(`Corrected ${moves.length} line${moves.length === 1 ? '' : 's'} — one entry in the history, ↩ Revert undoes it whole`, 6000);
+    loadStock();
+    bulkHistLoad();
+  });
+}
+
 $('bulkHist').addEventListener('click', (e) => {
+  const ea = e.target.closest('.bulk-h-editall');
+  if (ea) { bulkBatchOpen(ea); return; }
+  if (e.target.closest('.bulk-h-batchbar')) return; // the editor's own buttons
   const fx = e.target.closest('.bulk-h-fix');
   if (fx) {
     const td = fx.closest('tr').querySelector('td.bulk-h-sku[data-bfx]');
