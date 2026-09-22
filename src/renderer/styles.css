@@ -2913,7 +2913,11 @@ tr.unl-dim:hover td { opacity: 1; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden; /* no bottom scrollbar; the sheet grip sets the width */
+  /* a sheet wider than the window scrolls sideways instead of CLIPPING —
+     hidden dated from the retired width-grip; the room columns proved a
+     wide sheet real (owner 2026-09-22, "I can't scroll and see the other
+     columns") */
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 0 0 var(--r-card) var(--r-card); /* the band owns the top corners */
   background: var(--surface);

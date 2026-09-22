@@ -2326,6 +2326,14 @@ let stockColAuto = {};
 // every header rebuild.
 function applyStockColWidths() {
   const ths = [...document.querySelectorAll('#stockList th[data-sort]')];
+  // the column SET changed (rooms appearing in the New view, a hide or an
+  // unhide): pins measured for the old set overflow the window — drop the
+  // session pins and let this render re-measure to fit
+  const sig = ths.map(th => th.dataset.sort).join('|');
+  if (sig !== applyStockColWidths.sig) {
+    applyStockColWidths.sig = sig;
+    stockColAuto = {};
+  }
   ths.forEach(th => {
     const key = th.dataset.sort;
     const w = stockColAuto[key] || stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
