@@ -4977,6 +4977,7 @@ function retUnlistedMark(sku) {
 
 function renderRetLog() {
   if (!retLogAll) return;
+  retMarkEditing(null); // a re-render closes any editor — the chip lifts
   const box = $('retPastBox');
   const q = $('retLogSearch').value.trim().toLowerCase();
   const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
@@ -5030,6 +5031,7 @@ function renderRetLog() {
       `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
       <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
   box.querySelector('.ret-entry-body').appendChild(retEntryRow());
+  retPaintPresence(); // chips survive the rebuild
   if (wsFocus) {
     wsFocus.focus();
     if (wsSel) { try { wsFocus.setSelectionRange(wsSel[0], wsSel[1]); } catch { /* number inputs refuse */ } }
@@ -5131,6 +5133,98 @@ for (const host of ['retPastBox', 'retDisputes']) {
 let retSyncInfo = null;   // { enabled, station, stations, folderOk, missed }
 let retSyncToasted = false;
 const retFreshGids = new Set(); // rows to wash on the next render
+
+/* ---------- live presence (LAN): avatars, row chips, busy guard ----------
+   Built to the owner-approved preview variants/ret-presence.html
+   (2026-09-22). All styling lands via CSSOM — the CSP strips inline
+   style attributes. */
+let retPresence = { station: '', online: [], editing: {} };
+let retEditingGid = null; // the row THIS station currently has open
+let retBusyBypass = null; // gid allowed through the warning ("Edit anyway")
+const RET_USER_COLORS = ['#047857', '#1F6C9F', '#7C3AED', '#9F2F2D', '#956400'];
+function retUserColor(name) {
+  let h = 0;
+  for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return RET_USER_COLORS[h % RET_USER_COLORS.length];
+}
+const retUserInitials = (name) => String(name).replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '?';
+
+api.on('presence:update', (snap) => {
+  retPresence = snap && snap.online ? snap : { station: '', online: [], editing: {} };
+  retPaintPresence();
+});
+
+function retMarkEditing(gid) {
+  const g = gid ? String(gid) : null;
+  if (retEditingGid === g) return;
+  if (retEditingGid) api.presenceEditing(retEditingGid, false).catch(() => { /* beat catches up */ });
+  retEditingGid = g;
+  if (g) api.presenceEditing(g, true).catch(() => { /* beat catches up */ });
+}
+
+// paints WITHOUT re-rendering: chips and avatars land on the existing DOM
+function retPaintPresence() {
+  const box = $('retUsers');
+  if (box) {
+    const names = retPresence.online || [];
+    box.hidden = !names.length;
+    box.textContent = '';
+    for (const n of names) {
+      const av = document.createElement('span');
+      av.className = 'ret-av';
+      av.textContent = retUserInitials(n);
+      av.title = `${n} is online`;
+      av.style.background = retUserColor(n);
+      box.appendChild(av);
+    }
+    if (names.length) {
+      const lbl = document.createElement('span');
+      lbl.className = 'ret-users-lbl';
+      lbl.textContent = `${names.length + 1} online`;
+      box.appendChild(lbl);
+    }
+  }
+  for (const el of document.querySelectorAll('.ret-user-chip')) el.remove();
+  for (const tr of document.querySelectorAll('#retPastBox tr.ret-busy')) {
+    tr.classList.remove('ret-busy');
+    tr.style.removeProperty('--busy-color');
+  }
+  for (const [gid, who] of Object.entries(retPresence.editing || {})) {
+    const tr = document.querySelector(`#retPastBox tr[data-rid="${CSS.escape(gid)}"]`);
+    if (!tr) continue;
+    tr.classList.add('ret-busy');
+    tr.style.setProperty('--busy-color', retUserColor(who));
+    const po = tr.querySelector('.ret-cell-po');
+    if (po) {
+      const chip = document.createElement('span');
+      chip.className = 'ret-user-chip';
+      chip.textContent = `${retUserInitials(who)} editing`;
+      chip.title = `${who} has this return open`;
+      chip.style.background = retUserColor(who);
+      po.appendChild(chip);
+    }
+  }
+}
+
+// opening a row someone else has open: the one-line popup first
+function retBusyGuard(entry, field) {
+  const gid = String(entry.r.id);
+  const who = (retPresence.editing || {})[gid];
+  if (!who || retBusyBypass === gid) return false;
+  $('retBusyTitle').textContent = `${who} is editing this return`;
+  const dlg = $('retBusyDialog');
+  $('retBusyEdit').onclick = () => {
+    dlg.close();
+    retBusyBypass = gid;
+    setTimeout(() => { if (retBusyBypass === gid) retBusyBypass = null; }, 30 * 1000);
+    const tr = document.querySelector(`#retPastBox tr[data-rid="${CSS.escape(gid)}"][data-ii="${entry.ii}"]`);
+    const cell = tr && tr.querySelector(`[data-edit="${field}"]`);
+    if (cell) retBeginEdit(cell, entry, field);
+  };
+  $('retBusyView').onclick = () => dlg.close();
+  dlg.showModal();
+  return true;
+}
 
 /* option A from variants/returns-stations.html (owner pick 2026-09-15):
    one people pill — stacked initials + "N desktops" + connection dot —
@@ -5405,10 +5499,12 @@ function retEditValue({ r, i, ii }, field) {
 }
 
 function retBeginEdit(td, entry, field = td.dataset.edit) {
+  if (retBusyGuard(entry, field)) return; // someone else is in this row
   // only one editor open: any other cell mid-edit falls back to display
   const other = $('retPastBox').querySelector('.ret-ein, .ret-emenu');
   if (other) renderRetLog();
   for (const stray of document.querySelectorAll('.ret-notebox, .ret-emenu-pop')) stray.remove();
+  retMarkEditing(entry.r.id); // the chip on every other desktop
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
   if (field === 'note') { retBeginNoteEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);

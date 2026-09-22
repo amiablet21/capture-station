@@ -2108,6 +2108,17 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }
 .ret-emenu-pop { position: fixed; z-index: 70; min-width: 168px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 28px rgba(47, 52, 55, 0.16); padding: 4px; transform-origin: top left; animation: condmenuin 140ms var(--ease); }
 .ret-ecell.is-econd { box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface) !important; }
+
+/* ---------- live presence (approved ret-presence.html, 2026-09-22):
+   online avatars in the bar, a colored rail + chip on rows someone has
+   open on another desktop. Colors land via CSSOM (CSP strips inline). */
+.ret-users { display: inline-flex; align-items: center; }
+.ret-av { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 700; color: #fff; border: 2px solid var(--surface); flex: 0 0 auto; }
+.ret-av + .ret-av { margin-left: -6px; }
+.ret-users-lbl { font-size: 11px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+tr.ret-busy td { background: var(--surface-2); }
+tr.ret-busy td:first-child { box-shadow: inset 3px 0 0 var(--busy-color, var(--accent)); }
+.ret-user-chip { display: inline-flex; align-items: center; font-size: 9.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #fff; vertical-align: 1px; white-space: nowrap; }
 .ret-emi {
   display: flex;
   align-items: center;

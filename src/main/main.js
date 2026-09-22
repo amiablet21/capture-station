@@ -10,6 +10,14 @@ const { runRouting } = require('./router');
 const { LinnworksClient } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
+const presence = require('./presence');
+// every local returns save already tells the shared folder (emitRow /
+// emitPutFor / emitDel) — the wrapper tells the LAN peers too, so their
+// rescan fires ahead of the cloud drive (presence pings carry no data)
+for (const fn of ['emitRow', 'emitPutFor', 'emitDel']) {
+  const orig = retsync[fn];
+  retsync[fn] = (...args) => { const r = orig(...args); try { presence.pushEdit([]); } catch { /* ping only */ } return r; };
+}
 
 let win = null;
 let clipboardTimer = null;
@@ -639,6 +647,21 @@ function startRetSync() {
     changed: (summary) => { if (win && !win.isDestroyed()) win.webContents.send('returns:syncChanged', summary); },
   });
   retsyncMissed = (res && res.missed) || 0;
+  // LAN presence rides the same folder: online avatars, who-is-in-which-row,
+  // and edit pings that poke the rescan ahead of the cloud drive. An edit
+  // ping carries no data — the peer's file may not have SYNCED yet, so the
+  // rescan retries a few times; the folder watcher covers the stragglers.
+  const sync = cfg.captureOnly ? null : cfg.returnsSync;
+  presence.configure({
+    folder: sync && sync.folder,
+    station: retsync.stationName(),
+    onUpdate: (snap) => { if (win && !win.isDestroyed()) win.webContents.send('presence:update', snap); },
+    onRemoteEdit: () => {
+      for (const delay of [400, 2500, 7000]) {
+        setTimeout(() => { try { retsync.rescan(writeReturnsCsv); } catch { /* watcher covers it */ } }, delay);
+      }
+    },
+  });
 }
 
 function writeReturnsCsv() {
@@ -3039,6 +3062,11 @@ function registerIpc() {
       }
     }
     return { ok: true, gaps: [...gaps.values()], relinked };
+  });
+
+  ipcMain.handle('presence:editing', (_e, { gid, on }) => {
+    presence.setEditing(gid, !!on);
+    return { ok: true };
   });
 
   ipcMain.handle('returns:create', async (_e, payload) => {

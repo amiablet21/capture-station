@@ -32,6 +32,7 @@ const EVENTS = [
   'ui:open-history',
   'returns:importProgress',
   'returns:syncChanged',
+  'presence:update',
   'stock:imgInherited',
   'update:available',
   'pricing:refreshed',
@@ -168,6 +169,7 @@ contextBridge.exposeInMainWorld('api', {
   temuExport: (products) => ipcRenderer.invoke('temu:export', { products }),
   claimsInfo: (po) => ipcRenderer.invoke('claims:info', { po: po || '' }),
   claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),
+  presenceEditing: (gid, on) => ipcRenderer.invoke('presence:editing', { gid, on }),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   on: (channel, cb) => {
     if (!EVENTS.includes(channel)) return;

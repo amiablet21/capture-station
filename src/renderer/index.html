@@ -236,6 +236,8 @@
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
           <!-- shared-folder sync: connection dot + one chip per station seen -->
           <span id="retSyncLine" class="ret-sync-line" hidden></span>
+          <!-- LAN presence: who has the app open RIGHT NOW (ret-presence.html) -->
+          <span id="retUsers" class="ret-users" hidden></span>
           <!-- refresh is a bare icon like Stock's (owner 2026-09-15: "make
                the refresh button a symbol"); Browser removed the same day -->
           <button id="retRefreshBtn" class="btn btn-ghost stock-refresh-ico" title="Reload the log and re-scan the listing gaps" aria-label="Refresh">
@@ -1387,6 +1389,20 @@
   </dialog>
 
   <!-- Channel SKUs linked to a stock item -->
+  <!-- someone else has this return open (LAN presence, ret-presence.html:
+       one line, two buttons — owner 2026-09-21 "no one is going to read
+       all that") -->
+  <dialog id="retBusyDialog" class="dlg">
+    <div class="dlg-body">
+      <div class="dlg-title" id="retBusyTitle"></div>
+      <p class="dlg-note">Editing it too could overwrite their changes.</p>
+      <div class="dlg-actions">
+        <button id="retBusyView" class="btn btn-ghost" type="button">View only</button>
+        <button id="retBusyEdit" class="btn btn-primary" type="button">Edit anyway</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="chsDialog" class="dlg">
     <div class="dlg-body">
       <h2 class="dlg-title" id="chsTitle">Channel SKUs</h2>
