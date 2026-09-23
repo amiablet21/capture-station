@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (X400-128GB-GRAY)</title>
+<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (R3 workshop)</title>
 <!--
-  Owner 2026-09-23: "I just want to make each line for the Send to WFS
-  section different ... isolate [the X400-128GB-GRAY row] for the design".
-  One row, at the real column width (400px), shown at 1x and enlarged.
-  Real numbers from the owner's screenshot. Built on the real styles.css:
-  "Now" is exactly what v1.28.1 renders; R1-R3 are starting points.
+  Owner 2026-09-23: redesign the Send to WFS rows line by line, starting
+  with X400-128GB-GRAY. Round 1 picked R3 (urgency strip + labelled stats).
+  Round 2 (this file): R3 as base, shown red / amber / green, plus four
+  variations that each change one or two things. Real 400px column width,
+  enlarged 1.35x, on the real styles.css.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -14,108 +14,123 @@
   .wr-page { padding: 20px 28px 40px; }
   .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
-  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
+  .wr-sec { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 22px 0 10px; }
+  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 22px 36px; }
   .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
   .wr-lbl b { color: var(--text); letter-spacing: .02em; }
-  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 400px; }
-  /* one Send-to-WFS panel, the real column width, enlarged for review */
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
   .wr-col { width: 400px; zoom: 1.35; }
-  .wr-col .ov-panel { padding: 8px 10px; }
+  .wr-col .ov-panel { padding: 4px 10px; }
 
-  /* R1 · one button carries the amount */
-  .r1 { display: flex; align-items: flex-start; gap: 10px; padding: 8px 6px; }
-  .r1 .l { flex: 1; min-width: 0; }
-  .r1 .days { font-size: 10.5px; color: var(--neg-text); margin-top: 3px; }
-  .r1 .btn-primary { font-size: 12px; padding: 5px 12px; font-family: var(--mono); font-weight: 600; }
-  .r1 .x { border: none; background: none; color: var(--faint); cursor: pointer; font-size: 12px; padding: 5px 2px; }
-  .r1 .x:hover { color: var(--neg-text); }
-
-  /* R2 · the amount is the hero, on the right */
-  .r2 { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 6px; }
-  .r2 .num { text-align: right; }
-  .r2 .num b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1; color: #065F46; }
-  .r2 .num span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-  .r2 .chip { display: inline-block; font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-top: 4px; background: var(--neg-bg); color: var(--neg-text); }
-  .r2 .ov-stack .btn { font-size: 11px; padding: 2px 10px; }
-
-  /* R3 · urgency strip + stat line */
+  /* ---- R3 base ---- */
   .r3 { display: flex; gap: 10px; padding: 9px 8px 9px 0; }
-  .r3 .strip { width: 3px; border-radius: 3px; background: var(--neg-text); }
+  .r3 + .r3 { border-top: 1px solid var(--border-soft); }
+  .r3 .strip { width: 3px; border-radius: 3px; flex: 0 0 auto; }
+  .r3 .strip.r { background: var(--neg-text); } .r3 .strip.a { background: #D9A21B; } .r3 .strip.g { background: var(--accent); }
   .r3 .l { flex: 1; min-width: 0; }
   .r3 .stats { display: flex; gap: 14px; margin-top: 6px; }
   .r3 .stats div { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-  .r3 .stats b { display: block; font-family: var(--mono); font-size: 12.5px; color: var(--text); letter-spacing: 0; }
-  .r3 .stats b.r { color: var(--neg-text); }
+  .r3 .stats b { display: block; font-family: var(--mono); font-size: 12.5px; color: var(--text); letter-spacing: 0; text-transform: none; }
+  .r3 .stats b.r { color: var(--neg-text); } .r3 .stats b.a { color: var(--badge-yellow-text); } .r3 .stats b.g { color: var(--accent); }
   .r3 .acts { display: flex; flex-direction: column; gap: 4px; align-items: stretch; justify-content: center; }
   .r3 .acts .btn { font-size: 11.5px; padding: 3px 12px; }
+
+  /* A · the send amount is the big number */
+  .va .stats b.big { font-size: 17px; color: #065F46; line-height: 1.1; }
+  .va .stats { align-items: flex-end; }
+  .va .acts .lnk { font-size: 11px; color: var(--muted); text-align: center; cursor: pointer; }
+
+  /* B · stats in a mini sheet (the app's grid look) */
+  .vb .sheet { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; margin-top: 6px; }
+  .vb .sheet div { padding: 3px 7px; border-right: 1px solid #EAE8E3; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: #F4F3F0; }
+  .vb .sheet div:nth-child(4) { border-right: none; }
+  .vb .sheet span { padding: 4px 7px; border-right: 1px solid #EAE8E3; border-top: 1px solid #E0DED8; font-family: var(--mono); font-size: 12px; font-weight: 700; background: var(--surface); }
+  .vb .sheet span:nth-child(8) { border-right: none; }
+  .vb .sheet span.r { color: var(--neg-text); }
+
+  /* C · days left leads, thicker strip, amount on the button */
+  .vc .strip { width: 5px; }
+  .vc .lead { font-size: 11px; font-weight: 700; color: var(--neg-text); margin-top: 2px; }
+  .vc .acts .btn-primary { font-family: var(--mono); font-weight: 600; }
+
+  /* D · single line of facts, tighter row */
+  .vd { padding: 7px 8px 7px 0; }
+  .vd .facts { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .vd .facts b { font-family: var(--mono); color: var(--text); }
+  .vd .facts b.r { color: var(--neg-text); }
+  .vd .acts .btn { padding: 2px 11px; font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="wr-page">
-  <h1>Send to WFS · one row</h1>
-  <div class="sub">X400-128GB-GRAY at the real column width (400px), enlarged 1.35×. "Now" is what the app renders today. Tell me what to change line by line.</div>
+  <h1>Send to WFS · R3 workshop</h1>
+  <div class="sub">X400-128GB-GRAY, real column width (400px), enlarged 1.35×. Tell me which variation to build on, or what to change line by line.</div>
+
+  <div class="wr-sec">R3 as picked — red, amber and green rows together</div>
+  <div class="wr-col"><div class="ov-panel">
+    <div class="r3"><span class="strip r"></span>
+      <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+        <div class="stats"><div>Send<b>+78</b></div><div>Sells<b>18/wk</b></div><div>At WFS<b>0</b></div><div>Left<b class="r">0 days</b></div></div></div>
+      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
+    <div class="r3"><span class="strip a"></span>
+      <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
+        <div class="stats"><div>Send<b>+62</b></div><div>Sells<b>46/wk</b></div><div>At WFS<b>32</b></div><div>Left<b class="a">4.9 days</b></div></div></div>
+      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
+    <div class="r3"><span class="strip g"></span>
+      <div class="l"><span class="ov-sku">X133-64GB-GRAY</span><span class="ov-meta">SM-X133-64GB-GREY</span>
+        <div class="stats"><div>Send<b>+96</b></div><div>Sells<b>56/wk</b></div><div>At WFS<b>100</b></div><div>Left<b class="g">12.5 days</b></div></div></div>
+      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
+  </div></div>
+
+  <div class="wr-sec">Variations — each changes one or two things</div>
   <div class="wr-grid">
 
     <div>
-      <div class="wr-lbl"><b>Now</b> · as built</div>
+      <div class="wr-lbl"><b>A</b> · the send amount is the big number</div>
       <div class="wr-col"><div class="ov-panel">
-        <table class="ov-t"><tbody><tr><td class="ov-rank">4</td>
-          <td><span class="ov-sku">X400-128GB-GRAY</span>
-            <span class="ov-sendline"><span class="ov-pill r">Send +78</span></span>
-            <span class="ov-daysleft r">0.0 days left at WFS</span>
-            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
-            <div class="ov-bar"><i class="r" data-w="2"></i></div></td>
-          <td class="ov-actcell"><span class="ov-stack"><button class="btn btn-secondary">Send</button><button class="btn btn-ghost">Ignore</button></span></td>
-        </tr></tbody></table>
+        <div class="r3 va"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="stats"><div>Send<b class="big">+78</b></div><div>Sells<b>18/wk</b></div><div>At WFS<b>0</b></div><div>Left<b class="r">0 days</b></div></div></div>
+          <span class="acts"><button class="btn btn-primary">Send</button><span class="lnk">Ignore</span></span></div>
       </div></div>
-      <div class="wr-note">Line 1 SKU · line 2 amount · line 3 days left · line 4 Walmart channel SKU + pace · line 5 urgency bar · buttons stacked right.</div>
+      <div class="wr-note">+78 is larger and green so it pops; Ignore becomes a quiet text link under Send.</div>
     </div>
 
     <div>
-      <div class="wr-lbl"><b>R1</b> · the button carries the amount</div>
+      <div class="wr-lbl"><b>B</b> · stats in a mini sheet</div>
       <div class="wr-col"><div class="ov-panel">
-        <div class="r1">
-          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span>
-            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
-            <div class="days">Out at WFS · 0 left there</div></div>
-          <button class="btn btn-primary">Send 78</button><button class="x" title="Ignore for 7 days">✕</button>
-        </div>
+        <div class="r3 vb"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="sheet"><div>Send</div><div>Sells</div><div>At WFS</div><div>Left</div><span>+78</span><span>18/wk</span><span>0</span><span class="r">0 days</span></div></div>
+          <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
       </div></div>
-      <div class="wr-note">Two lines instead of five; one green button says exactly what happens; ✕ = Ignore.</div>
+      <div class="wr-note">The four numbers sit in a small grid with borders, matching the Sold today sheet.</div>
     </div>
 
     <div>
-      <div class="wr-lbl"><b>R2</b> · the amount is the hero</div>
+      <div class="wr-lbl"><b>C</b> · days left leads, amount on the button</div>
       <div class="wr-col"><div class="ov-panel">
-        <div class="r2">
-          <div><span class="ov-sku">X400-128GB-GRAY</span>
-            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
-            <span class="chip">0 days left at WFS</span></div>
-          <div class="num"><b>+78</b><span>to send</span></div>
-          <span class="ov-stack"><button class="btn btn-secondary">Send</button><button class="btn btn-ghost">Ignore</button></span>
-        </div>
+        <div class="r3 vc"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="lead">Out at WFS</div>
+            <div class="stats"><div>Sells<b>18/wk</b></div><div>At WFS<b>0</b></div></div></div>
+          <span class="acts"><button class="btn btn-primary">Send 78</button><button class="btn btn-ghost">Ignore</button></span></div>
       </div></div>
-      <div class="wr-note">Big number you can read from across the room; days left as a red chip.</div>
+      <div class="wr-note">Thicker strip; the urgency is spelled out ("Out at WFS" / "4.9 days left"); the button says how many.</div>
     </div>
 
     <div>
-      <div class="wr-lbl"><b>R3</b> · urgency strip + stats</div>
+      <div class="wr-lbl"><b>D</b> · one line of facts, tighter</div>
       <div class="wr-col"><div class="ov-panel">
-        <div class="r3">
-          <span class="strip"></span>
-          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span>
-            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER</span></span>
-            <div class="stats"><div>Send<b>+78</b></div><div>Sells<b>18/wk</b></div><div>At WFS<b>0</b></div><div>Left<b class="r">0 days</b></div></div></div>
-          <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span>
-        </div>
+        <div class="r3 vd"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="facts">Send <b>+78</b> · sells <b>18/wk</b> · <b>0</b> at WFS · <b class="r">0 days</b> left</div></div>
+          <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
       </div></div>
-      <div class="wr-note">Colour strip on the left says how urgent; four labelled numbers in one line.</div>
+      <div class="wr-note">Same facts as a sentence instead of labelled columns — fits more rows on screen.</div>
     </div>
 
   </div>
 </div>
-<script>
-  document.querySelectorAll('.ov-bar i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
-</script>
 </body>
 </html>
