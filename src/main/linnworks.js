@@ -409,6 +409,12 @@ class LinnworksClient {
           sku: r.SKU || '',
           title: r.Title || '',
           qty: Number(r.Quantity) || 0, // listed qty on the channel
+          // the channel scan's own listing price where the feed carries one
+          // (field name varies by channel; 0 = the feed didn't say)
+          price: (() => {
+            const p = Number(r.Price ?? r.SalePrice ?? r.RetailPrice ?? r.ListPrice);
+            return Number.isFinite(p) && p > 0 ? Math.round(p * 100) / 100 : 0;
+          })(),
           wfs: !!r.WFS,
           linked: !!r.IsLinked,
           linkedItemId: r.LinkedItemId && r.LinkedItemId !== '00000000-0000-0000-0000-000000000000' ? r.LinkedItemId : '',
@@ -765,6 +771,64 @@ class LinnworksClient {
     }));
   }
 
+  /* ---------- eBay listing tools (Linnworks' configurator pipeline) ----------
+     Modeled on the official LinnworksNetSDK Listings controller. The flow is
+     Linnworks' own: fetch the account's configurators (each carries the
+     shared listing settings INCLUDING the eBay condition, category and
+     policies), build a template for an inventory item through one, overlay
+     the form's title / price / qty / specifics / description, then ask
+     Linnworks to push the template to eBay with its stored channel
+     authorization. NOT yet verified against a live account — errors from
+     Linnworks surface verbatim to the caller. */
+
+  async getEbayConfigurators() {
+    const data = await this.call('Listings/GeteBayConfigurators', {});
+    return (data || []).map(c => ({
+      id: c.pkConfigId,
+      name: c.ConfigName || '',
+      account: c.EbayAccount || '',
+      site: c.Site || '',
+      condition: (c.Condition && (c.Condition.Value != null ? c.Condition.Value : c.Condition.Key)) || '',
+      listingType: c.ListingType || '',
+    }));
+  }
+
+  // returns the raw EbayListing templates (PagedResult.Items) — callers
+  // amend fields on the raw objects and hand them back to process
+  async createEbayTemplates({ configId, subSource, inventoryItemIds }) {
+    const data = await this.call('Listings/CreateEbayTemplates', {
+      parameters: {
+        Source: 'EBAY',
+        SubSource: subSource,
+        ConfigId: configId,
+        InventoryItemIds: inventoryItemIds,
+        Token: globalThis.crypto.randomUUID(),
+        TemplatesType: 'Simple',
+      },
+    });
+    return (data && data.Items) || [];
+  }
+
+  async processEbayListings(items, action = 'Create') {
+    await this.call('Listings/ProcesseBayListings', { items, force: true, action });
+  }
+
+  async getEbayTemplates({ templateIds, subSource }) {
+    const data = await this.call('Listings/GeteBayTemplates', {
+      parameters: {
+        TemplateIds: templateIds || null,
+        Source: 'EBAY',
+        SubSource: subSource,
+        TemplatesType: 'Both',
+        OnlyWithErrors: false,
+        PageNumber: 1,
+        EntriesPerPage: 50,
+        Token: globalThis.crypto.randomUUID(),
+      },
+    });
+    return (data && data.Items) || [];
+  }
+
   // Channel prices stored in Linnworks for a stock item (Listing Descriptions:
   // one row per Source/SubSource; a row with an empty SubSource is that
   // channel's default price). These are what Linnworks pushes to channels —
@@ -776,6 +840,34 @@ class LinnworksClient {
       subSource: p.SubSource || '',
       price: Number(p.Price),
     })).filter(p => Number.isFinite(p.price));
+  }
+
+  // Set the Linnworks channel price record for one Source/SubSource — the
+  // price Linnworks pushes to that marketplace. Updates the existing row in
+  // place; with no exact row, falls back to the channel's default row (empty
+  // SubSource); with neither, creates one. The create path follows the
+  // documented AddInventoryItemPrices shape and has not been exercised live.
+  async setChannelPrice(stockItemId, source, subSource, price) {
+    const rows = await this.call(`Inventory/GetInventoryItemPrices?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }) || [];
+    const same = (a, b) => String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+    const hit = rows.find(p => same(p.Source, source) && same(p.SubSource, subSource))
+      || rows.find(p => same(p.Source, source) && !String(p.SubSource || '').trim());
+    if (hit) {
+      hit.Price = Number(price);
+      await this.call('Inventory/UpdateInventoryItemPrices', { inventoryItemPrices: [hit] });
+      return { updated: true };
+    }
+    await this.call('Inventory/AddInventoryItemPrices', {
+      inventoryItemPrices: [{
+        pkRowId: '00000000-0000-0000-0000-000000000000',
+        StockItemId: stockItemId,
+        Source: source,
+        SubSource: subSource || '',
+        Price: Number(price),
+        Tag: '',
+      }],
+    });
+    return { created: true };
   }
 
   // Adjust stock levels by a delta per SKU at one location (negative = deduct).

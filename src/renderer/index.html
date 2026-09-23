@@ -13,10 +13,23 @@
       <button id="tabOverview" class="tab" hidden>Overview</button>
       <button id="tabCapture" class="tab is-active">Capture</button>
       <button id="tabStock" class="tab">Stock</button>
+      <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
-      <button id="tabListings" class="tab" hidden>Listings</button>
+      <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
     </nav>
+    <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
+         under the tab; a <dialog> so the marketplace pane yields while open -->
+    <dialog id="returnsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="returns">Returns log</button>
+      <button class="tab-menu-item" data-page="shelf">Shelf</button>
+    </dialog>
+    <!-- Listings tab menu (eBay | Temu): same dropdown pattern — replaced
+         the floating pill row (owner picked option A, 2026-09-17) -->
+    <dialog id="listingsMenuDlg" class="tab-menu">
+      <button class="tab-menu-item" data-page="ebay">eBay lister</button>
+      <button class="tab-menu-item" data-page="temu">Temu lister</button>
+    </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
         <span id="orderCount" class="daycount-num">0</span>
@@ -86,9 +99,21 @@
     <span id="findCount" class="find-count"></span>
     <div id="channelChips" class="channel-chips" hidden></div>
     <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
-    <button id="shipImportBtn" class="btn btn-ghost" title="Upload Walmart's shipped-orders download (Manage Orders → Download) — tracking numbers fill onto matching rows automatically">Import shipped</button>
-    <button id="ordersRefreshBtn" class="btn btn-ghost" title="Fetch open orders from Linnworks now (otherwise every 5 minutes)">Refresh</button>
-    <button id="bExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the list">Browser</button>
+    <!-- the word buttons became plain icons, then lost their button chrome
+         (owner 2026-09-16: "closer... no borders, cleaner") — one quiet
+         cluster: tray = import shipped, arrow = refresh, globe = browser;
+         the titles carry the words -->
+    <div class="cap-icons">
+      <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
+      </button>
+      <button id="ordersRefreshBtn" class="cap-ico" title="Refresh — fetch open orders from Linnworks now (otherwise every 5 minutes)" aria-label="Refresh">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+      </button>
+      <button id="bExpand" class="cap-ico" hidden title="Browser — open the marketplace browser pane beside the list" aria-label="Browser">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" aria-hidden="true"><circle cx="128" cy="128" r="94"/><ellipse cx="128" cy="128" rx="42" ry="94"/><path d="M40 100h176M40 156h176"/></svg>
+      </button>
+    </div>
   </div>
   <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
@@ -130,15 +155,14 @@
           <div id="stockChips" class="stock-chips" hidden></div>
           <div class="stock-band-right">
             <p class="stock-hint" id="stockHint"><span id="stockSummary"></span></p>
-            <div id="stockGapsLine" class="stock-gaps" hidden></div>
             <div class="stock-actions">
               <!-- with a condition view active the Shelf carries the selling
                    history — a pointer, not duplicated columns (owner 2026-08-25) -->
               <button id="stockShelfLink" class="stock-shelf-link" hidden>selling history → Shelf ↗</button>
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
+              <button id="stockBulkBtn" class="btn btn-ghost" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import</button>
               <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
-              <button id="stockRefresh" class="btn btn-ghost" title="Reload from Linnworks">Refresh</button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
                    2026-08-02); the dialogs and logic behind them are untouched.
                    WFS Shipments came back 2026-09-09 (owner asked for exactly
@@ -147,12 +171,19 @@
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
               <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
+              <!-- refresh rides at the end as a plain icon, out of the row of
+                   words (owner 2026-09-14: "make it an icon, not squished") -->
+              <button id="stockRefresh" class="btn btn-ghost stock-refresh-ico" title="Reload from Linnworks" aria-label="Refresh">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+              </button>
             </div>
           </div>
         </div>
         <div id="stockList" class="stock-list"></div>
       </div>
-      <div id="sheetGrip" class="sheet-grip" title="Drag to widen or narrow the sheet · double-click to reset"></div>
+      <!-- the width grip retired (owner 2026-09-15): the stock sheet just
+           fills the window; Capture and Returns keep theirs -->
+
     </div>
   </section>
 
@@ -160,12 +191,15 @@
        sorted stalest-first, last sale beside current price (mockups signed
        off 2026-08-25: no week columns, Idle is the one tinted cell) -->
   <section id="shelfPage" class="shelf-page" hidden>
+    <div class="shelf-tiles" id="shTiles"></div>
     <div class="shelf-toolbar">
       <div class="search-field shelf-search">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
         <input id="shSearch" class="search-input" type="text" placeholder="Search SKU" autocomplete="off" spellcheck="false" />
       </div>
       <div id="shChips" class="stock-chips"></div>
+      <span class="sh-range-lbl">Sold in</span>
+      <div id="shRangeChips" class="stock-chips"></div>
       <button id="shRefresh" class="btn btn-ghost" title="Re-pull 90 days of sales and fresh stock">Refresh</button>
     </div>
     <div class="shelf-card">
@@ -200,9 +234,13 @@
           <span id="retChips" class="ret-chips"></span>
           <input id="retLogSearch" class="input ret-log-search" type="text" placeholder="Search PO, SKU, customer, condition…"
                  autocomplete="off" spellcheck="false" aria-label="Search the returns log" />
-          <button id="retImportBtn" class="btn btn-ghost" title="Upload the returns history sheet (.xlsx or .csv) — one row per received unit; duplicate PO rows collapse into unit counts">Import</button>
-          <button id="retRefreshBtn" class="btn btn-ghost" title="Reload the log and re-scan the listing gaps">Refresh</button>
-          <button id="retBExpand" class="btn btn-ghost" hidden title="Open the marketplace browser pane beside the sheet">Browser</button>
+          <!-- shared-folder sync: connection dot + one chip per station seen -->
+          <span id="retSyncLine" class="ret-sync-line" hidden></span>
+          <!-- refresh is a bare icon like Stock's (owner 2026-09-15: "make
+               the refresh button a symbol"); Browser removed the same day -->
+          <button id="retRefreshBtn" class="btn btn-ghost stock-refresh-ico" title="Reload the log and re-scan the listing gaps" aria-label="Refresh">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+          </button>
         </div>
         <div id="retPastBox" class="recv-past-box"></div>
       </div>
@@ -233,17 +271,44 @@
     </div>
   </section>
 
+  <!-- Pricing (owner 2026-09-18, design canvas 'Pricing and Overview'):
+       products × channel columns. Walmart is repricer-owned (read-only ≈
+       prices); eBay/Temu prices click-to-edit and push via Linnworks. -->
+  <section id="pricingPage" class="pricing-page" hidden>
+    <div class="pr-sheet">
+      <div class="pr-bar">
+        <input id="prSearch" class="input pr-search" type="text" placeholder="Search SKU…" autocomplete="off" spellcheck="false" />
+        <span id="prSortSet" class="pr-sortset" title="Family keeps the biggest sellers on top but pulls each product's other capacities (same model + color) directly under it">
+          <button type="button" data-prsort="stock">Stock</button><button type="button" data-prsort="family">Family</button>
+        </span>
+        <button id="prHistBtn" class="btn btn-ghost">History</button>
+        <button id="prRefresh" class="btn btn-ghost" title="Refresh listings and prices from Linnworks">Refresh</button>
+      </div>
+      <div id="prHead" class="pr-head" hidden></div>
+      <div id="prBody" class="pr-body"><p class="dlg-note pr-note">Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- Pricing: price-change history, a centered popup (owner 2026-09-18) -->
+  <dialog id="priceHistDialog" class="dlg prh-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Price history</h2>
+      <div id="prHistBody" class="prh-body"><p class="dlg-note">Nothing yet.</p></div>
+      <div class="dlg-actions">
+        <span class="prh-foot">Every change from every desktop — Revert pushes the old price back</span>
+        <button id="prHistClose" class="btn btn-ghost" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
        Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
   <section id="ebayPage" class="ebay-page" hidden>
-    <!-- one Listings tab, marketplace pills switch the page (owner 2026-08-14) -->
-    <div class="lst-switch">
-      <button class="lst-pill is-on" data-lst="ebay">eBay</button>
-      <button class="lst-pill" data-lst="temu">Temu</button>
-    </div>
+    <!-- marketplace switch moved into the Listings ▾ tab dropdown (owner
+         picked option A, 2026-09-17) -->
     <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
          "I like the previous design") -->
-    <div class="ebay-cols">
+    <div class="ebay-cols ebay-cols-pad">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on eBay
           <span class="eb-right">
@@ -251,6 +316,7 @@
             <button id="ebScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
           </span>
         </div>
+        <div id="ebQChips" class="ebay-qchips"></div>
         <div id="ebQueue" class="ebay-qlist"></div>
       </div>
 
@@ -300,7 +366,9 @@
           </div>
         </div>
         <div class="ebay-factions">
-          <button id="ebExport" class="btn btn-primary">Export eBay CSV</button>
+          <button id="ebLwList" class="btn btn-primary" title="List straight to eBay through Linnworks' stored eBay connection — no CSV, no Seller Hub trip">List on eBay</button>
+          <select id="ebLwConfig" class="input eb-lw-config" title="The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)"></select>
+          <button id="ebExport" class="btn btn-secondary">Export eBay CSV</button>
           <button id="ebUploadPage" class="ebay-addbtn" title="Seller Hub → Reports → Upload — where the exported file goes">Open eBay upload page</button>
           <span id="ebExportNote" class="ebay-fhint"></span>
         </div>
@@ -318,11 +386,7 @@
   <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
        SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
   <section id="temuPage" class="ebay-page" hidden>
-    <div class="lst-switch">
-      <button class="lst-pill" data-lst="ebay">eBay</button>
-      <button class="lst-pill is-on" data-lst="temu">Temu</button>
-    </div>
-    <div class="ebay-cols">
+    <div class="ebay-cols ebay-cols-pad">
       <div class="ebay-panel ebay-queue">
         <div class="ebay-phead">To list on Temu
           <span class="eb-right">
@@ -497,6 +561,7 @@
       <p class="dlg-note">Stock, history and channel links follow the item automatically. Marketplace listings keep their own channel SKUs — future auto-linking matches the new name.</p>
       <p class="dlg-note" id="rnErr" style="color:var(--neg-text)" hidden></p>
       <div class="dlg-actions">
+        <button id="rnDelete" class="btn btn-ghost rn-del" title="Delete this SKU from Linnworks — opens the delete confirmation with the blast radius (stock lost, linked listings left unsynced)">Delete SKU…</button>
         <button id="rnCancel" class="btn btn-ghost">Cancel</button>
         <button id="rnSave" class="btn btn-primary">Rename</button>
       </div>
@@ -604,6 +669,7 @@
     </div>
     <div class="footbar-right">
       <span id="syncStatus" class="sync-status">Never synced</span>
+      <button id="updateBtn" class="btn update-btn" hidden title="Download the new version and open its installer — no GitHub needed"></button>
       <button id="historyBtn" class="btn btn-ghost">History</button>
       <button id="settingsBtn" class="btn-icon" title="Settings" aria-label="Settings">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,76a52,52,0,1,0,52,52A52.06,52.06,0,0,0,128,76Zm0,80a28,28,0,1,1,28-28A28,28,0,0,1,128,156Zm92-27.21v-1.58l14-17.51a12,12,0,0,0,2.23-10.59A111.75,111.75,0,0,0,225,71.89,12,12,0,0,0,215.89,66L193.61,63.5l-1.11-1.11L190,40.1A12,12,0,0,0,184.11,31a111.67,111.67,0,0,0-27.23-11.27A12,12,0,0,0,146.3,22L128.79,36h-1.58L109.7,22a12,12,0,0,0-10.59-2.23A111.75,111.75,0,0,0,71.89,31.05,12,12,0,0,0,66,40.11L63.5,62.39,62.39,63.5,40.1,66A12,12,0,0,0,31,71.89,111.67,111.67,0,0,0,19.77,99.12,12,12,0,0,0,22,109.7l14,17.51v1.58L22,146.3a12,12,0,0,0-2.23,10.59,111.75,111.75,0,0,0,11.29,27.22A12,12,0,0,0,40.11,190l22.28,2.48,1.11,1.11L66,215.9A12,12,0,0,0,71.89,225a111.67,111.67,0,0,0,27.23,11.27A12,12,0,0,0,109.7,234l17.51-14h1.58l17.51,14a12,12,0,0,0,10.59,2.23A111.75,111.75,0,0,0,184.11,225a12,12,0,0,0,5.91-9.06l2.48-22.28,1.11-1.11L215.9,190a12,12,0,0,0,9.06-5.91,111.67,111.67,0,0,0,11.27-27.23A12,12,0,0,0,234,146.3Zm-24.12-4.89a70.1,70.1,0,0,1,0,8.2,12,12,0,0,0,2.61,8.22l12.84,16.05A86.47,86.47,0,0,1,207,166.86l-20.43,2.27a12,12,0,0,0-7.65,4,69,69,0,0,1-5.8,5.8,12,12,0,0,0-4,7.65L166.86,207a86.47,86.47,0,0,1-10.49,4.35l-16.05-12.85a12,12,0,0,0-7.5-2.62c-.24,0-.48,0-.72,0a70.1,70.1,0,0,1-8.2,0,12.06,12.06,0,0,0-8.22,2.6L99.63,211.33A86.47,86.47,0,0,1,89.14,207l-2.27-20.43a12,12,0,0,0-4-7.65,69,69,0,0,1-5.8-5.8,12,12,0,0,0-7.65-4L49,166.86a86.47,86.47,0,0,1-4.35-10.49l12.84-16.05a12,12,0,0,0,2.61-8.22,70.1,70.1,0,0,1,0-8.2,12,12,0,0,0-2.61-8.22L44.67,99.63A86.47,86.47,0,0,1,49,89.14l20.43-2.27a12,12,0,0,0,7.65-4,69,69,0,0,1,5.8-5.8,12,12,0,0,0,4-7.65L89.14,49a86.47,86.47,0,0,1,10.49-4.35l16.05,12.85a12.06,12.06,0,0,0,8.22,2.6,70.1,70.1,0,0,1,8.2,0,12,12,0,0,0,8.22-2.6l16.05-12.85A86.47,86.47,0,0,1,166.86,49l2.27,20.43a12,12,0,0,0,4,7.65,69,69,0,0,1,5.8,5.8,12,12,0,0,0,7.65,4L207,89.14a86.47,86.47,0,0,1,4.35,10.49l-12.84,16.05A12,12,0,0,0,195.88,123.9Z"/></svg>
@@ -689,6 +755,7 @@
       <div class="settings-row">
         <label class="check"><input id="setPageOverview" type="checkbox" /> Overview</label>
         <label class="check"><input id="setPageStock" type="checkbox" /> Stock</label>
+        <label class="check"><input id="setPagePricing" type="checkbox" /> Pricing</label>
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
         <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
         <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
@@ -709,6 +776,19 @@
         <span class="field-label">Low-stock webhook URL (optional, one alert per SKU crossing below its minimum)</span>
         <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
+
+      <h3 class="dlg-section">Shared folder</h3>
+      <div class="settings-row">
+        <span class="field-label">Shared Capture Station folder</span>
+        <span id="setRetSyncFolder" class="test-result mono"></span>
+        <button id="chooseRetSyncBtn" class="btn btn-ghost">Change folder</button>
+        <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
+      </div>
+      <label class="field">
+        <span class="field-label">This station's name (stamped on everything it logs)</span>
+        <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">
@@ -834,7 +914,6 @@
       </div>
     </div>
   </dialog>
-  <datalist id="skuOptions"></datalist>
   <!-- the entry row's ⚠ popover (no-popup receiving, owner 2026-09-10):
        anchored beside the condition pill, never a modal -->
   <div id="wsFix" class="rv-fix" hidden>
@@ -945,14 +1024,61 @@
     <div class="dlg-body">
       <h2 class="dlg-title">Delete Linnworks SKU</h2>
       <p class="dlg-note mono" id="sdelSku"></p>
+      <!-- one fact only (owner 2026-09-16, "more simple"): the connected
+           channel SKUs — the rest of the blast radius lives in the tooltip -->
       <div id="sdelFacts" class="dlg-note"></div>
-      <p class="dlg-note">This permanently deletes the item from Linnworks — its stock count, history and channel links go with it. Marketplace listings are <b>not</b> ended: they keep selling with no stock sync, so end or relink them on the marketplace too.</p>
-      <label class="check"><input id="sdelAck" type="checkbox" />
+      <label class="check" title="Deletes the item, its stock count, history and channel links from Linnworks. Marketplace listings are NOT ended — they keep selling with no stock sync until ended or relinked."><input id="sdelAck" type="checkbox" />
         <span>I understand this cannot be undone</span></label>
       <div class="dlg-actions">
         <button id="sdelCancel" class="btn btn-ghost" type="button">Cancel</button>
         <button id="sdelGo" class="btn btn-danger" type="button" disabled>Delete SKU</button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- revert confirmation (owner 2026-09-17: "before reverts, have a popup
+       saying are you sure you want to revert?") -->
+  <dialog id="bulkRevDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Are you sure you want to revert?</h2>
+      <p class="dlg-note" id="bulkRevWhat"></p>
+      <p class="dlg-note">This reverses that change — what it added is subtracted, what it removed comes back. Everything that happened since stays as it is.</p>
+      <div class="dlg-actions">
+        <button id="bulkRevCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="bulkRevGo" class="btn btn-danger" type="button">↩ Revert</button>
+      </div>
+    </div>
+  </dialog>
+
+
+  <!-- Bulk stock import (owner 2026-09-17): a SKU + Qty sheet adds to or
+       replaces the warehouse levels; every import lands in the history -->
+  <dialog id="bulkDialog" class="dlg bulk-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Bulk stock import</h2>
+      <!-- segmented toggle + live hint (owner picked version 1, 2026-09-17) -->
+      <div class="bulk-modebar">
+        <div class="chip-tray" id="bulkSeg">
+          <button type="button" class="view-chip is-active" data-bm="add">+ Add to stock</button>
+          <button type="button" class="view-chip" data-bm="set">Set exact qty</button>
+        </div>
+        <span id="bulkModeHint" class="bulk-mode-hint">received units — each qty goes on top of the current count</span>
+      </div>
+      <!-- typed two-column grid (owner: "no excel import — write the SKU on
+           the left column and on the right side the qty") -->
+      <div class="bulk-grid">
+        <div class="bulk-g-head"><span>SKU</span><span class="bulk-g-r">Qty</span><span class="bulk-g-r">Now</span><span class="bulk-g-r">After</span><span></span></div>
+        <div id="bulkGridRows"></div>
+      </div>
+      <input id="bulkNote" class="input bulk-note" type="text" maxlength="200" autocomplete="off"
+             placeholder="Note for this import (optional) — e.g. Tuesday shipment from supplier, recount after audit" />
+
+      <div class="dlg-actions">
+        <button id="bulkCancel" class="btn btn-ghost" type="button">Close</button>
+        <button id="bulkApply" class="btn btn-primary" type="button" disabled>Import</button>
+      </div>
+      <h3 class="dlg-section">History</h3>
+      <div id="bulkHist" class="bulk-hist"></div>
     </div>
   </dialog>
 
@@ -1102,11 +1228,6 @@
           <div class="rv-v"><input id="rvBy" class="rv-in rv-in-sm mono" type="text" maxlength="12" placeholder="IM" aria-label="Received by" /></div>
         </div>
         <div class="rv-row">
-          <div class="rv-k">Dispute $</div>
-          <div class="rv-v"><input id="rvSettle" class="rv-in rv-in-sm mono" type="text" inputmode="decimal" placeholder="—"
-            aria-label="Dispute settlement amount" title="What the marketplace settled the dispute for — leave empty when there is no dispute" /></div>
-        </div>
-        <div class="rv-row">
           <div class="rv-k">Notes</div>
           <div class="rv-v"><input id="rvNote" class="rv-in" type="text" placeholder="— · opening a dispute? type case: 12345" aria-label="Notes or dispute" /></div>
         </div>
@@ -1250,6 +1371,20 @@
   </dialog>
 
   <!-- Channel SKUs linked to a stock item -->
+  <!-- someone else has this return open (LAN presence, ret-presence.html:
+       one line, two buttons — owner 2026-09-21 "no one is going to read
+       all that") -->
+  <dialog id="retBusyDialog" class="dlg">
+    <div class="dlg-body">
+      <div class="dlg-title" id="retBusyTitle"></div>
+      <p class="dlg-note">Editing it too could overwrite their changes.</p>
+      <div class="dlg-actions">
+        <button id="retBusyView" class="btn btn-ghost" type="button">View only</button>
+        <button id="retBusyEdit" class="btn btn-primary" type="button">Edit anyway</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="chsDialog" class="dlg">
     <div class="dlg-body">
       <h2 class="dlg-title" id="chsTitle">Channel SKUs</h2>

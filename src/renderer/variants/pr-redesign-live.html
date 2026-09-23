@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pricing redesign — 3 live concepts</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --surface-3: #F4F3F1;
+    --border: #EAEAEA; --grid: #EFEEEC;
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --up: #047857; --up-bg: #E3F2EB;
+    --down: #B4232A; --down-bg: #FBEAEA;
+    --warn-bg: #FBF3DB; --warn-text: #956400;
+    --wm: #1F6C9F; --eb: #956400; --tm: #7C3AED;
+    --r-card: 10px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.5; background: var(--canvas); color: var(--text); padding: 30px 40px 70px; }
+  h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+  .sub { font-size: 12px; color: var(--muted); margin: 4px 0 30px; max-width: 820px; }
+  .concept { margin-bottom: 52px; max-width: 1280px; }
+  .c-head { margin-bottom: 12px; }
+  .c-head b { font-size: 14px; }
+  .c-head p { font-size: 12px; color: var(--muted); max-width: 780px; margin-top: 2px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; box-shadow: 0 1px 2px rgba(47,52,55,0.04); }
+
+  /* ============ shared bits ============ */
+  .thumb { width: 30px; height: 30px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; color: var(--faint); font-size: 13px; flex: 0 0 auto; }
+  .sku { font-family: var(--mono); font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .stockn { font-size: 11px; color: var(--muted); }
+  .delta { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 0 6px; }
+  .delta.up { color: var(--up); background: var(--up-bg); }
+  .delta.down { color: var(--down); background: var(--down-bg); }
+  .hot { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; color: var(--warn-text); background: var(--warn-bg); border-radius: 999px; padding: 0 7px; }
+  .gap { font-size: 10.5px; color: var(--faint); }
+  .gap .lnk { color: var(--accent); font-weight: 600; cursor: pointer; opacity: 0; transition: opacity 120ms; }
+
+  /* ============ 1 · TERMINAL ============ */
+  .t-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .t-search { width: 200px; font-size: 12px; color: var(--faint); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 4px 10px; background: var(--surface); }
+  .t-chip { font-family: var(--font); font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 2px 12px; cursor: pointer; }
+  .t-chip:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  .t-chip.on { background: var(--text); border-color: var(--text); color: #fff; }
+  .t-legend { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+  .t-grid { display: grid; grid-template-columns: 300px repeat(3, 1fr); }
+  .t-hd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .t-hd.num { text-align: right; }
+  .t-cell { padding: 9px 16px; border-bottom: 1px solid var(--grid); display: flex; align-items: center; min-height: 52px; }
+  .t-row-hover .t-cell { background: var(--surface-2); }
+  .t-prod { gap: 10px; }
+  .t-prodtxt { display: flex; flex-direction: column; line-height: 1.4; min-width: 0; }
+  .t-price { justify-content: flex-end; gap: 8px; }
+  .t-p { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .t-p.ro { color: var(--muted); font-weight: 500; }
+  .t-p.ed { border-bottom: 1.5px dashed transparent; cursor: pointer; }
+  .t-p.ed:hover { border-bottom-color: var(--accent); color: var(--accent-hover); }
+  .t-sub { font-size: 9.5px; color: var(--faint); text-align: right; line-height: 1.3; }
+  .t-more { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surface-3); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; cursor: pointer; }
+  .t-more:hover { color: var(--accent-soft-text); border-color: var(--accent); }
+  .t-x { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 260ms var(--ease); grid-column: 1 / -1; }
+  .t-x.open { grid-template-rows: 1fr; }
+  .t-x > div { min-height: 0; overflow: hidden; }
+  .t-xin { display: grid; grid-template-columns: 300px repeat(3, 1fr); background: var(--surface-2); }
+  .t-xin .t-cell { min-height: 40px; padding-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed var(--border); }
+  .t-cell:hover .lnk { opacity: 1; }
+
+  /* ============ 2 · FOCUS BOARD ============ */
+  .f-wrap { display: grid; grid-template-columns: 320px 1fr; min-height: 420px; }
+  .f-list { border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+  .f-lhead { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .f-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 14px; border: none; border-left: 3px solid transparent; border-bottom: 1px solid var(--grid); background: none; cursor: pointer; font-family: var(--font); }
+  .f-item:hover { background: var(--surface-2); }
+  .f-item.on { background: var(--accent-soft); border-left-color: var(--accent); }
+  .f-itxt { display: flex; flex-direction: column; line-height: 1.4; min-width: 0; flex: 1; }
+  .f-mini { display: flex; gap: 7px; font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+  .f-mini i { font-style: normal; display: inline-flex; align-items: center; gap: 3px; }
+  .f-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .f-detail { padding: 20px 24px; background: var(--surface); }
+  .f-dhead { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .f-dhead .thumb { width: 44px; height: 44px; font-size: 18px; }
+  .f-dsku { font-family: var(--mono); font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .f-dsub { font-size: 11.5px; color: var(--muted); }
+  .f-vchips { display: flex; gap: 6px; margin: 10px 0 18px; }
+  .f-vchip { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 999px; padding: 2px 10px; background: var(--surface-3); color: var(--muted); border: 1px solid var(--border); cursor: pointer; }
+  .f-vchip:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+  .f-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .f-card { border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; min-height: 168px; }
+  .f-chname { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; display: flex; align-items: center; gap: 8px; }
+  .f-chname .sold-n { margin-left: auto; }
+  .f-bigp { font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: baseline; gap: 8px; }
+  .f-bigp small { font-size: 11px; color: var(--faint); font-weight: 500; font-family: var(--font); }
+  .f-bigp.ro { color: var(--muted); font-weight: 600; }
+  .f-edit { border: none; border-bottom: 2px solid var(--border); font-family: var(--mono); font-size: 24px; font-weight: 700; width: 110px; color: var(--text); background: none; letter-spacing: -0.02em; }
+  .f-edit:focus { outline: none; border-bottom-color: var(--accent); }
+  .f-lsku { font-family: var(--mono); font-size: 10px; color: var(--faint); line-height: 1.5; }
+  .f-foot { display: flex; align-items: center; margin-top: auto; gap: 10px; }
+  .f-push { font-family: var(--font); font-size: 11px; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: var(--r-ctl); padding: 4px 12px; cursor: pointer; }
+  .f-push:hover { background: var(--accent-hover); }
+  .f-open { font-size: 12px; color: var(--muted); background: none; border: none; cursor: pointer; margin-left: auto; }
+  .f-open:hover { color: var(--accent); }
+  .f-empty { border-style: dashed; align-items: center; justify-content: center; display: flex; flex-direction: column; gap: 8px; color: var(--faint); }
+  .f-linkbtn { font-family: var(--font); font-size: 11px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: var(--r-ctl); padding: 4px 12px; cursor: pointer; }
+  .f-spark { margin-top: 2px; }
+  .f-sparknote { font-size: 9.5px; color: var(--faint); }
+
+  /* ============ 3 · CLEAN SHEET ============ */
+  .s-table { width: 100%; border-collapse: collapse; }
+  .s-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); text-align: right; padding: 9px 18px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .s-table th.l { text-align: left; }
+  .s-table td { padding: 0 18px; height: 46px; border-bottom: 1px solid var(--grid); }
+  .s-table tbody tr { transition: background 100ms; }
+  .s-table tbody tr:hover { background: var(--surface-2); }
+  .s-prod { display: flex; align-items: center; gap: 10px; }
+  .s-vcaret { font-size: 10px; color: var(--muted); background: none; border: none; cursor: pointer; width: 16px; }
+  .s-pc { text-align: right; font-family: var(--mono); font-size: 13.5px; font-weight: 600; position: relative; }
+  .s-pc .n { padding: 3px 6px; border-radius: 5px; cursor: pointer; }
+  .s-pc .n:hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .s-pc .ro { color: var(--muted); font-weight: 500; cursor: default; }
+  .s-pc .ro:hover { background: none; box-shadow: none; }
+  .s-pc sup { font-size: 9px; color: var(--faint); font-weight: 700; margin-left: 2px; }
+  .s-pc .dash { color: var(--faint); font-weight: 400; }
+  .s-heat { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+  .s-editcell { display: inline-flex; align-items: center; border: 1.5px solid var(--accent); border-radius: 6px; overflow: hidden; background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .s-editcell input { border: none; outline: none; width: 74px; padding: 3px 8px; font-family: var(--mono); font-size: 13.5px; font-weight: 600; text-align: right; }
+  .s-editcell button { border: none; background: var(--surface-2); border-left: 1px solid var(--border); width: 22px; font-size: 10px; cursor: pointer; color: var(--muted); padding: 4px 0; }
+  .s-editcell button:hover { color: var(--accent); }
+  .s-foot { display: flex; gap: 22px; padding: 9px 18px; font-size: 11px; color: var(--muted); background: var(--surface-2); border-top: 1px solid var(--border); }
+  .s-foot b { color: var(--text); }
+  .s-vrow td { background: var(--surface-2); height: 40px; }
+  .s-elb { color: var(--faint); }
+</style>
+</head>
+<body>
+
+<h1>If I designed the pricing sheet from scratch</h1>
+<div class="sub">Three real concepts, not column shuffles. The common moves: <b>one price per cell</b> (listing SKUs get out of the way until you hover or expand), <b>Walmart as the anchor</b> with each other channel showing its % above/below it, and <b>sold-through as a glanceable heat dot</b> instead of ×0 noise on every line. Everything here is clickable where it matters.</div>
+
+<!-- ================= 1 ================= -->
+<div class="concept">
+  <div class="c-head"><b>1 · Terminal</b>
+    <p>Built for scanning 150 products fast. One line per product, one price per channel, green/red delta vs Walmart. The "+1" pill expands extra listings on that channel; gaps whisper until you hover. Filter chips answer the real questions: what's mismatched, what's unlisted, what's actually selling.</p></div>
+  <div class="card">
+    <div class="t-bar">
+      <span class="t-search">Search SKU…</span>
+      <button class="t-chip on">All · 151</button>
+      <button class="t-chip">Underpriced · 7</button>
+      <button class="t-chip">Gaps · 38</button>
+      <button class="t-chip">Selling · 23</button>
+      <span class="t-legend">Δ vs Walmart (repricer anchor) · dot = sold last 60d</span>
+    </div>
+    <div class="t-grid" id="tgrid">
+      <div class="t-hd">Product</div><div class="t-hd num" style="color:var(--wm)">Walmart</div><div class="t-hd num" style="color:var(--eb)">eBay</div><div class="t-hd num" style="color:var(--tm)">Temu US</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 2 ================= -->
+<div class="concept">
+  <div class="c-head"><b>2 · Focus board</b>
+    <p>A slim product list on the left, one product in focus on the right. Each channel is a card with the price at 24px — the size it deserves — sold-through, the listing behind it, and the repricer's last 30 days as a sparkline on Walmart. Editing is just clicking the number. Click products on the left to switch (try it).</p></div>
+  <div class="card">
+    <div class="f-wrap">
+      <div class="f-list">
+        <div class="f-lhead"><span class="t-search" style="display:inline-block;width:100%">Search SKU…</span></div>
+        <div id="flist"></div>
+      </div>
+      <div class="f-detail" id="fdetail"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 3 ================= -->
+<div class="concept">
+  <div class="c-head"><b>3 · Clean sheet</b>
+    <p>The spreadsheet, decluttered. One price per channel column; a heat dot carries sold-through (grey none · amber some · red hot); a small ² marks a second listing (hover the price to see the listing SKUs). Click a price and it becomes a proper cell editor with steppers — shown live on X230's eBay price. A footer keeps the totals in view.</p></div>
+  <div class="card">
+    <table class="s-table">
+      <thead><tr>
+        <th class="l" style="width:340px">Product</th><th class="l" style="width:70px">Stock</th>
+        <th style="color:var(--wm)">Walmart</th><th style="color:var(--eb)">eBay</th><th style="color:var(--tm)">Temu US</th>
+      </tr></thead>
+      <tbody id="sbody"></tbody>
+    </table>
+    <div class="s-foot"><span><b>151</b> products</span><span><b>38</b> not listed somewhere</span><span><b>7</b> priced under Walmart</span><span>avg spread <b>+2.4%</b></span><span style="margin-left:auto">Enter pushes via Linnworks · Esc cancels</span></div>
+  </div>
+</div>
+
+<script>
+/* one dataset drives all three concepts */
+const WM = 'wm', EB = 'eb', TM = 'tm';
+const CH = { wm: { name: 'Walmart', color: 'var(--wm)' }, eb: { name: 'eBay', color: 'var(--eb)' }, tm: { name: 'Temu US', color: 'var(--tm)' } };
+const DATA = [
+  { sku: 'X133-64GB-GRAY', stock: 1974, vars: '3 variations · 205 units',
+    ch: { wm: [{ s: 'SM-X133-64GB-GREY', p: 149.99, sold: 0 }],
+          eb: [{ s: 'SM-X133-64GB-GREY', p: 154.99, sold: 0 }, { s: 'X133-64GB-GRAY', p: 152.50, sold: 0 }],
+          tm: [] },
+    spark: [152, 151, 153, 150, 149, 150, 150, 148, 150, 150] },
+  { sku: 'X210-64GB-GRAY', stock: 975, vars: '1 variation · 38 units',
+    ch: { wm: [{ s: 'X210-64GB-GRAY-1', p: 129.99, sold: 10 }], eb: [], tm: [{ s: 'X210-64GB-GRAY', p: 119.99, sold: 0 }] },
+    spark: [125, 126, 128, 127, 129, 131, 130, 130, 129, 130] },
+  { sku: 'X230-128GB-GRAY', stock: 330, vars: '1 variation · 11 units',
+    ch: { wm: [{ s: 'X230-128GB-GRAY-GLOBAL', p: 234.99, sold: 3 }, { s: 'X230-128GB-GRAY-GLOBAL-1', p: 234.99, sold: 1 }],
+          eb: [{ s: 'X230-128GB-GRAY', p: 239.99, sold: 0 }],
+          tm: [{ s: 'X230-128GB-GRAY', p: 229.99, sold: 0 }] },
+    spark: [238, 236, 237, 235, 233, 235, 234, 236, 235, 235] },
+  { sku: 'X400-128GB-GRAY', stock: 582, vars: '1 variation · 8 units',
+    ch: { wm: [{ s: 'X400-128GB-BLACK-INTL-VER', p: 189.99, sold: 0 }], eb: [{ s: 'X400-128GB-GRAY', p: 184.99, sold: 4 }], tm: [{ s: 'X400-128GB-GRAY', p: 179.99, sold: 0 }] },
+    spark: [186, 188, 189, 190, 190, 189, 190, 191, 190, 190] },
+  { sku: 'A15-64GB-BLACK', stock: 90, vars: '',
+    ch: { wm: [{ s: 'A15-64GB-BLK', p: 94.99, sold: 9 }], eb: [], tm: [] },
+    spark: [99, 98, 97, 97, 96, 95, 96, 95, 95, 95] },
+];
+const money = (n) => '$' + n.toFixed(2);
+const wmAnchor = (p) => (p.ch.wm[0] || {}).p || 0;
+const delta = (p, v) => { const a = wmAnchor(p); if (!a || !v) return ''; const d = (v - a) / a * 100;
+  return `<span class="delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '↑' : '↓'} ${Math.abs(d).toFixed(1)}%</span>`; };
+const heat = (sold) => { const c = sold >= 8 ? 'var(--down)' : sold > 0 ? 'var(--warn-text)' : 'var(--border)';
+  return `<span class="s-heat" style="background:${c}" title="${sold} sold in the last 60 days"></span>`; };
+
+/* ---- 1 · terminal ---- */
+const tg = document.getElementById('tgrid');
+DATA.forEach((p, i) => {
+  const cell = (k) => {
+    const ls = p.ch[k];
+    if (!ls.length) return `<div class="t-cell t-price gap" data-r="${i}"><span>not listed · <span class="lnk">＋ link</span></span></div>`;
+    const l = ls[0], ro = k === WM;
+    return `<div class="t-cell t-price" data-r="${i}">
+      ${l.sold ? `<span class="hot">×${l.sold}</span>` : ''}
+      ${ls.length > 1 ? `<button class="t-more" data-x="${i}">+${ls.length - 1}</button>` : ''}
+      <span style="text-align:right"><span class="t-p ${ro ? 'ro' : 'ed'}" title="${ls.map(x => x.s).join(' · ')}">${ro ? '≈ ' : ''}${money(l.p)}</span>
+      <span class="t-sub">${k === WM ? 'repricer' : delta(p, l.p)}</span></span>
+    </div>`;
+  };
+  tg.insertAdjacentHTML('beforeend', `
+    <div class="t-cell t-prod" data-r="${i}"><span class="thumb">▦</span>
+      <span class="t-prodtxt"><span class="sku">${p.sku}</span>
+      <span class="stockn">${p.stock} in stock${p.vars ? ` · <span style="color:var(--accent-soft-text);font-weight:600">${p.vars.split(' · ')[0]}</span>` : ''}</span></span>
+    </div>${cell(WM)}${cell(EB)}${cell(TM)}
+    <div class="t-x" id="tx${i}"><div><div class="t-xin">
+      ${p.ch.wm.slice(1).concat(p.ch.eb.slice(1)).map(x => `
+        <div class="t-cell" style="padding-left:56px"><span class="t-lsku mono" style="font-size:10.5px;color:var(--muted)">${x.s}</span></div>
+        <div class="t-cell t-price"><span class="t-p ro">≈ ${money(x.p)}</span></div>
+        <div class="t-cell"></div><div class="t-cell"></div>`).join('')}
+    </div></div></div>`);
+});
+tg.addEventListener('mouseover', (e) => {
+  const r = e.target.closest('[data-r]'); if (!r) return;
+  for (const el of tg.querySelectorAll('.t-row-hover')) el.classList.remove('t-row-hover');
+  for (const el of tg.querySelectorAll(`[data-r="${r.dataset.r}"]`)) el.classList.add('t-row-hover');
+});
+tg.addEventListener('click', (e) => {
+  const m = e.target.closest('.t-more');
+  if (m) document.getElementById('tx' + m.dataset.x).classList.toggle('open');
+});
+
+/* ---- 2 · focus board ---- */
+const flist = document.getElementById('flist'), fdet = document.getElementById('fdetail');
+let fsel = 0;
+const sparkSvg = (pts, w, h) => {
+  const min = Math.min(...pts), max = Math.max(...pts), rng = (max - min) || 1;
+  const xy = pts.map((v, i) => `${(i / (pts.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 3 - (v - min) / rng * (h - 8)).toFixed(1)}`);
+  return `<svg class="f-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <polyline points="${xy.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${xy[xy.length-1].split(',')[0]}" cy="${xy[xy.length-1].split(',')[1]}" r="3" fill="var(--accent)"/></svg>`;
+};
+function fRenderList() {
+  flist.innerHTML = DATA.map((p, i) => `
+    <button class="f-item ${i === fsel ? 'on' : ''}" data-f="${i}"><span class="thumb">▦</span>
+      <span class="f-itxt"><span class="sku">${p.sku}</span>
+        <span class="f-mini">${Object.keys(CH).map(k => { const l = p.ch[k][0];
+          return `<i><span class="f-dot" style="background:${l ? CH[k].color : 'var(--border)'}"></span>${l ? money(l.p).replace('$','') : '—'}</i>`; }).join('')}</span>
+      </span></button>`).join('');
+}
+function fRenderDetail() {
+  const p = DATA[fsel];
+  fdet.innerHTML = `
+    <div class="f-dhead"><span class="thumb">▦</span>
+      <div><div class="f-dsku">${p.sku}</div><div class="f-dsub">${p.stock} in stock${p.vars ? ' · ' + p.vars : ''}</div></div>
+    </div>
+    <div class="f-vchips">${p.vars ? '<span class="f-vchip">▾ Open box</span><span class="f-vchip">Used</span><span class="f-vchip">Scrap</span>' : '<span class="f-vchip">+ variation</span>'}</div>
+    <div class="f-cards">
+      ${Object.keys(CH).map(k => {
+        const ls = p.ch[k], l = ls[0];
+        if (!l) return `<div class="f-card f-empty"><span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:${CH[k].color}">${CH[k].name}</span>
+          <span style="font-size:11.5px">not listed</span><button class="f-linkbtn">＋ Link a listing</button></div>`;
+        const ro = k === WM;
+        return `<div class="f-card">
+          <div class="f-chname" style="color:${CH[k].color}">${CH[k].name}
+            <span class="sold-n ${l.sold ? 'hot' : ''}" style="${l.sold ? '' : 'color:var(--faint);font-weight:500'}">${l.sold ? '×' + l.sold + ' sold' : 'no sales 60d'}</span></div>
+          ${ro
+    ? `<div class="f-bigp ro">≈ ${money(l.p)}<small>repricer owns it</small></div>${sparkSvg(p.spark, 150, 34)}<span class="f-sparknote">last 30 days</span>`
+    : `<div class="f-bigp"><input class="f-edit" value="${l.p.toFixed(2)}" />${delta(p, l.p)}</div>`}
+          <div class="f-lsku">${ls.map(x => x.s).join('<br/>')}</div>
+          <div class="f-foot">${ro ? '' : '<button class="f-push">Push price</button>'}<button class="f-open">open ↗</button></div>
+        </div>`; }).join('')}
+    </div>`;
+}
+flist.addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { fsel = Number(b.dataset.f); fRenderList(); fRenderDetail(); } });
+fRenderList(); fRenderDetail();
+
+/* ---- 3 · clean sheet ---- */
+const sb = document.getElementById('sbody');
+sb.innerHTML = DATA.map((p, i) => {
+  const cell = (k) => {
+    const ls = p.ch[k];
+    if (!ls.length) return `<td class="s-pc"><span class="dash">—</span></td>`;
+    const l = ls[0], ro = k === WM;
+    if (i === 2 && k === EB) return `<td class="s-pc">${heat(l.sold)}<span class="s-editcell"><input value="${l.p.toFixed(2)}" /><span style="display:inline-flex;flex-direction:column"><button>▲</button><button>▼</button></span></span></td>`;
+    return `<td class="s-pc">${heat(l.sold)}<span class="n ${ro ? 'ro' : ''}" title="${ls.map(x => `${x.s} — ${money(x.p)}`).join('\n')}">${ro ? '≈ ' : ''}${money(l.p)}${ls.length > 1 ? `<sup>${ls.length}</sup>` : ''}</span></td>`;
+  };
+  return `<tr>
+    <td><span class="s-prod"><button class="s-vcaret">${p.vars ? '▸' : ''}</button><span class="thumb">▦</span>
+      <span class="sku">${p.sku}</span></span></td>
+    <td class="stockn mono">${p.stock}</td>${cell(WM)}${cell(EB)}${cell(TM)}
+  </tr>`;
+}).join('');
+</script>
+</body>
+</html>

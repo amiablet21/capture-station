@@ -44,8 +44,8 @@ if (!window.api) {
     returnsEditUnit: async () => ({ ok: false, error: 'Preview mode' }),
     returnsDeleteUnit: async () => ({ ok: false, error: 'Preview mode' }),
     stockUnlisted: async () => ({ ok: false, error: 'Preview mode' }),
+    channelSkip: async () => ({ ok: false, error: 'Preview mode' }),
     shelfGet: async () => ({ ok: false, error: 'Preview mode' }),
-    returnsMenu: async () => ({ ok: false }),
     dropshipSetPad: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipRemove: async () => ({ ok: false, error: 'Preview mode' }),
     dropshipStats: async () => ({ ok: false, error: 'Preview mode' }),
@@ -90,6 +90,7 @@ if (!window.api) {
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
+    returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
     copyText: async () => ({ ok: true }),
     on: () => {},
   };
@@ -117,6 +118,16 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// separator-blind search: "s24 fe" finds S24-FE-128GB-… (owner 2026-09-16,
+// "search without needing to add the dash") — the query splits on spaces
+// and dashes and every piece must appear somewhere in the target, so dashed
+// queries keep working exactly as before
+function skuMatch(hay, q) {
+  if (!q) return true;
+  const h = String(hay || '').toLowerCase();
+  return String(q).toLowerCase().split(/[\s-]+/).every(t => !t || h.includes(t));
 }
 
 function shorten(s, n = 12) {
@@ -262,7 +273,7 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -277,6 +288,7 @@ function render() {
   }
   $('tabOverview').hidden = !pages.stock || pages.overview === false;
   $('tabStock').hidden = !pages.stock;
+  $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
@@ -652,14 +664,17 @@ $('findInput').addEventListener('keydown', (e) => {
 
 $('findClose').addEventListener('click', closeFind);
 
+// busy states are CLASSES, never textContent — these buttons are icons now,
+// and a textContent swap would wipe the SVG and leave a word behind
+// (owner 2026-09-16: "don't have the text. The refresh can spin around tho")
 $('ordersRefreshBtn').addEventListener('click', async () => {
   const btn = $('ordersRefreshBtn');
   btn.disabled = true;
-  btn.textContent = 'Refreshing…';
+  btn.classList.add('is-spinning');
   await api.refreshOrders();
   await refresh();
   btn.disabled = false;
-  btn.textContent = 'Refresh';
+  btn.classList.remove('is-spinning');
   toast('Orders refreshed from Linnworks');
 });
 
@@ -667,10 +682,10 @@ $('ordersRefreshBtn').addEventListener('click', async () => {
 $('shipImportBtn').addEventListener('click', async () => {
   const btn = $('shipImportBtn');
   btn.disabled = true;
-  btn.textContent = 'Importing…';
+  btn.classList.add('is-busy');
   const res = await api.shipImport().catch(e => ({ ok: false, error: e.message }));
   btn.disabled = false;
-  btn.textContent = 'Import shipped';
+  btn.classList.remove('is-busy');
   if (!res || res.canceled) return;
   if (!res.ok) { toast(res.error || 'Could not read that file.'); return; }
   await refresh();
@@ -767,17 +782,11 @@ $('rowsBody').addEventListener('click', async (e) => {
       await api.reopenRow(row.id);
       await refresh();
     }
-    // pane open -> the order loads beside the list; collapsed -> external browser
-    if (!$('bDock').hidden) {
-      bShowLoading(`Opening order ${link.dataset.po}`);
-      const opened = await api.browserOpen(link.dataset.po, link.dataset.ch);
-      if (!opened.ok) {
-        bHideLoading();
-        if (opened.error) toast(opened.error);
-      }
-    } else {
-      api.openOrderPage(link.dataset.po, link.dataset.ch);
-    }
+    // the order opens in the SYSTEM browser (owner 2026-09-18: "I want to
+    // open the browser, not the side browser... like the default" — this
+    // reverses the 2026-09-16 pane routing); the pane keeps its own
+    // navigation and stays as whatever it was showing
+    api.openOrderPage(link.dataset.po, link.dataset.ch);
     return;
   }
   const btn = e.target.closest('[data-act]');
@@ -950,11 +959,15 @@ async function openSettings() {
   const pg = cfg.pages || {};
   $('setPageOverview').checked = pg.overview !== false;
   $('setPageStock').checked = pg.stock !== false;
+  $('setPagePricing').checked = !!pg.pricing; // opt-in: default off
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
+  const rsy = cfg.returnsSync || {};
+  $('setRetSyncFolder').textContent = rsy.folder || 'off — returns stay on this desktop';
+  $('setRetSyncStation').value = rsy.station || '';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
@@ -1023,6 +1036,25 @@ $('chooseRecvBtn').addEventListener('click', async () => {
   if (res.folder) $('setRecvFolder').textContent = res.folder;
 });
 
+$('chooseRetSyncBtn').addEventListener('click', async () => {
+  // the station name must exist BEFORE the folder starts syncing — it names
+  // this desktop's file. Save it from the field on the way in.
+  const st = $('setRetSyncStation').value.trim().toUpperCase();
+  if (!st) { toast('Give this station a name first — it labels every return it logs.'); $('setRetSyncStation').focus(); return; }
+  await api.setConfig({ returnsSync: { station: st } });
+  const res = await api.returnsSyncChooseFolder();
+  if (res.folder) $('setRetSyncFolder').textContent = res.folder;
+  if (res.ok) { retSyncToasted = false; loadRetPast(); }
+});
+
+$('clearRetSyncBtn').addEventListener('click', async () => {
+  await api.setConfig({ returnsSync: { folder: '' } });
+  $('setRetSyncFolder').textContent = 'off — returns stay on this desktop';
+  retSyncInfo = null;
+  renderRetSyncLine();
+  loadRetPast();
+});
+
 $('settingsSave').addEventListener('click', async () => {
   const sel = $('setLocation');
   const pinVal = $('setPin').value.trim();
@@ -1035,11 +1067,13 @@ $('settingsSave').addEventListener('click', async () => {
     pages: {
       overview: $('setPageOverview').checked,
       stock: $('setPageStock').checked,
+      pricing: $('setPagePricing').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
+    returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -1147,6 +1181,7 @@ function showPage(page) {
   $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
+  $('pricingPage').hidden = page !== 'pricing';
   $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
@@ -1154,6 +1189,7 @@ function showPage(page) {
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
+  $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
@@ -1173,11 +1209,17 @@ function showPage(page) {
     } else if (page === 'temu') {
       enterTemu();
     } else if (page === 'stock') {
-      applySheetWidth($('stockMain'), 'stockSheetWidth');
       $('stockSearch').value = '';
       $('stockSearchClear').hidden = true;
       loadStockViews();
-      loadStock().then(() => { if (activePage === 'stock') $('stockSearch').focus(); });
+      loadStock().then(() => {
+        // the load takes a beat: never yank focus from a field the user has
+        // meanwhile started typing in (a pad edit fed the search bar once)
+        const ae = document.activeElement;
+        if (activePage === 'stock' && (!ae || ae === document.body)) $('stockSearch').focus();
+      });
+    } else if (page === 'pricing') {
+      enterPricing();
     } else if (page === 'shelf') {
       enterShelf();
     } else if (page === 'returns') {
@@ -1194,32 +1236,53 @@ function showPage(page) {
 
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
+$('tabPricing').addEventListener('click', () => showPage('pricing'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
-// native menu (native because the pane layer covers HTML dropdowns)
-$('tabReturns').addEventListener('click', async (e) => {
+// in-app menu (a <dialog>, so the native marketplace pane yields while it is
+// open exactly like every other dialog — replaced the native popup, owner
+// 2026-09-12 "make it a dropdown")
+$('tabReturns').addEventListener('click', (e) => {
   const wantMenu = e.target.closest('.tab-caret') || activePage === 'returns' || activePage === 'shelf';
   if (!wantMenu) { showPage('returns'); return; }
-  const res = await api.returnsMenu(activePage === 'shelf' ? 'shelf' : 'returns').catch(() => null);
-  if (res && res.ok && res.page) showPage(res.page);
+  const dlg = $('returnsMenuDlg');
+  const shelfOn = !!(state && state.pages && state.pages.stock);
+  for (const b of dlg.querySelectorAll('.tab-menu-item')) {
+    b.hidden = b.dataset.page === 'shelf' && !shelfOn;
+    b.classList.toggle('is-current', activePage === b.dataset.page);
+  }
+  dlg.showModal();
+  // anchor under the tab, clamped so a narrow window never clips the menu
+  const r = $('tabReturns').getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+// a click on an item picks it; a click on the backdrop (the dialog itself)
+// dismisses; Esc closes natively
+$('returnsMenuDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('returnsMenuDlg').close();
+  if (item) showPage(item.dataset.page);
 });
 
-/* ---------- Shelf: the warehouse sell-through radar ---------- */
-// One row per stocked SKU, sorted stalest-first; Idle is the single tinted
-// column, Last sold keeps the exact date + what it fetched. Design locked
-// through mockups 2026-08-25 (no week columns — "simpler, then add on").
+/* ---------- Shelf: the returns sell-through radar ---------- */
+// One row per condition SKU (returns only — the owner cut All stock/New
+// 2026-09-12 along with the trend, sell-thru and money tiles), sorted
+// stalest-first; Idle is the single tinted column. Sold / Avg sold at /
+// Rate follow the Sold-in period picker, sold-out returns stay visible.
 let shData = null;
-let shView = 'cond'; // all | new | cond | openbox | used | scrap
+let shView = ''; // '' = every condition | openbox | used | scrap | soldout
+let shRange = 30; // the Sold-in period, days
+let shSort = { key: 'idle', dir: -1 }; // idle | sold | avg | rate; -1 = biggest first
 let shBusy = false;
 const SH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SH_GROUPS = [
-  ['all', 'All stock', () => true],
-  ['new', 'New', (r) => r.cond === 'new'],
-  ['cond', 'Conditions', (r) => r.cond !== 'new'],
   ['openbox', 'Open Box', (r) => r.cond === 'openbox'],
   ['used', 'Used', (r) => r.cond === 'used'],
   ['scrap', 'Scrap', (r) => r.cond === 'scrap'],
+  ['soldout', 'Sold out', (r) => !r.units],
 ];
+const SH_RANGES = [['This week', 7], ['30 days', 30], ['60 days', 60], ['90 days', 90]];
 
 function enterShelf() {
   if (shData) renderShelf(); // stale numbers instantly, fresh ones follow
@@ -1243,8 +1306,10 @@ async function loadShelf(force) {
   if (activePage === 'shelf') renderShelf();
 }
 
+// r.sales is [[ts, qty, revenue], …] newest first, the full 90-day window
+const shLastTs = (r) => (r.sales && r.sales.length ? r.sales[0][0] : 0);
 const shIdleDays = (r) => {
-  const t = r.lastTs || r.arrivedTs || 0;
+  const t = shLastTs(r) || r.arrivedTs || 0;
   return t ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : Infinity;
 };
 const shDay = (ts) => {
@@ -1253,49 +1318,119 @@ const shDay = (ts) => {
   return `${SH_MONTHS[d.getMonth()]} ${d.getDate()}${yr}`;
 };
 
+// aggregates inside the Sold-in period (newest-first lets the loop stop early)
+function shStats(r) {
+  const cut = Date.now() - shRange * 86400000;
+  let sold = 0;
+  let revenue = 0;
+  for (const [ts, qty, rev] of r.sales || []) {
+    if (ts < cut) break;
+    sold += qty;
+    revenue += rev;
+  }
+  const last = r.sales && r.sales[0];
+  return {
+    sold,
+    revenue,
+    avg: sold ? revenue / sold : 0,
+    rate: sold / (shRange / 7),
+    lastPrice: last ? (last[1] ? Math.round((last[2] / last[1]) * 100) / 100 : last[2]) : 0,
+  };
+}
+
+// one tile: how many returns sold in the period and the weekly pace
+// (the sales-$ / avg-price / dead-stock tiles were cut, owner 2026-09-12)
+function renderShTiles(rows, fn) {
+  let sold = 0;
+  for (const r of rows.filter(fn)) sold += shStats(r).sold;
+  const label = (SH_RANGES.find(x => x[1] === shRange) || SH_RANGES[1])[0].toLowerCase();
+  $('shTiles').innerHTML = `
+    <div class="sh-tile"><div class="sh-tile-l">Sold · ${label}</div><div class="sh-tile-b mono">${sold}</div><div class="sh-tile-f">${(sold / (shRange / 7)).toFixed(1)} per week</div></div>`;
+}
+
 function renderShelf() {
   if (!shData) return;
   const rows = shData.rows;
+  // chips toggle: the active one clicks off back to every condition
   $('shChips').innerHTML = '<div class="stock-tray">' + SH_GROUPS.map(([key, label, fn]) =>
     `<button class="view-chip ${shView === key ? 'is-active' : ''}" data-shview="${key}">${label} · ${rows.filter(fn).length}</button>`).join('') + '</div>';
+  $('shRangeChips').innerHTML = '<div class="stock-tray">' + SH_RANGES.map(([label, d]) =>
+    `<button class="view-chip ${shRange === d ? 'is-active' : ''}" data-shrange="${d}">${label}</button>`).join('') + '</div>';
+  const group = SH_GROUPS.find(g => g[0] === shView);
+  const fn = group ? group[2] : () => true;
+  renderShTiles(rows, fn);
   const q = $('shSearch').value.trim().toUpperCase();
-  const fn = (SH_GROUPS.find(g => g[0] === shView) || SH_GROUPS[0])[2];
+  const stats = new Map();
+  for (const r of rows) stats.set(r, shStats(r));
+  const keyOf = {
+    idle: (r) => shIdleDays(r),
+    sold: (r) => stats.get(r).sold,
+    avg: (r) => stats.get(r).avg,
+    rate: (r) => stats.get(r).rate,
+  }[shSort.key] || shIdleDays;
   const list = rows.filter(fn)
     .filter(r => !q || String(r.sku).toUpperCase().includes(q) || String(r.title).toUpperCase().includes(q))
-    .sort((a, b) => shIdleDays(b) - shIdleDays(a) || String(a.sku).localeCompare(String(b.sku)));
+    .sort((a, b) => (keyOf(b) - keyOf(a)) * -shSort.dir || String(a.sku).localeCompare(String(b.sku)));
   $('shTable').hidden = !list.length;
   $('shEmpty').hidden = !!list.length;
   if (!list.length) $('shEmpty').textContent = 'Nothing on the shelf matches.';
-  $('shTable').innerHTML = '<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th><th class="r">Idle</th><th>Last sold</th><th>Listed on</th></tr>'
+  const arr = (k) => shSort.key === k ? (shSort.dir < 0 ? ' ▼' : ' ▲') : '';
+  $('shTable').innerHTML = `<tr><th class="gut">#</th><th>SKU</th><th class="r">Units</th><th class="r">Current price</th>`
+    + `<th class="r sh-sort" data-shsort="sold" title="Units sold inside the period — click to sort">Sold${arr('sold')}</th>`
+    + `<th class="r sh-sort" data-shsort="avg" title="Average realized price inside the period — click to sort">Avg sold at${arr('avg')}</th>`
+    + `<th class="r sh-sort" data-shsort="rate" title="Units per week inside the period — click to sort">Rate${arr('rate')}</th>`
+    + `<th class="r sh-sort" data-shsort="idle" title="Days since the last sale (or since arrival) — click to sort">Idle${arr('idle')}</th>`
+    + `<th>Last sold</th></tr>`
     + list.map((r, i) => {
+      const st = stats.get(r);
+      const soldOut = !r.units;
       const idle = shIdleDays(r);
       const idleTxt = idle === Infinity ? `>${shData.windowDays}d` : `${idle}d`;
       const idleCls = idle === Infinity || idle >= 30 ? 'sh-bad' : idle >= 14 ? 'sh-warn' : '';
+      const lastTs = shLastTs(r);
       // a sale OLDER than the current stock's arrival is history, not traction
-      const ghost = r.lastTs && r.arrivedTs && r.lastTs < r.arrivedTs;
+      const ghost = lastTs && r.arrivedTs && lastTs < r.arrivedTs;
       return `<tr><td class="gut">${i + 1}</td>`
-        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}</td>`
+        + `<td class="mono" title="${esc(r.title)}">${esc(r.sku)}${soldOut ? ' <span class="sh-out">Sold out</span>' : ''}</td>`
         + `<td class="r mono">${r.units}</td>`
         + `<td class="r mono">${r.price ? `$${Number(r.price).toFixed(2)}` : '—'}</td>`
-        + `<td class="r mono ${idleCls}">${idleTxt}</td>`
-        + `<td class="mono ${r.lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
-        + (r.lastTs ? `${shDay(r.lastTs)} · $${Number(r.lastPrice).toFixed(2)}${ghost ? ' *' : ''}` : 'never') + '</td>'
-        + `<td class="mono sh-dim">${r.arrivedTs ? shDay(r.arrivedTs) : '—'}</td></tr>`;
+        + `<td class="r mono">${st.sold || '<span class="sh-dim">0</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `$${st.avg.toFixed(2)}` : '<span class="sh-dim">—</span>'}</td>`
+        + `<td class="r mono">${st.sold ? `${st.rate.toFixed(1)}<span class="sh-dim">/wk</span>` : '<span class="sh-dim">—</span>'}</td>`
+        + (soldOut ? '<td class="r mono sh-good" title="Sold through — nothing left to move">✓</td>' : `<td class="r mono ${idleCls}">${idleTxt}</td>`)
+        + `<td class="mono ${lastTs ? 'sh-dim' : 'sh-never'}"${ghost ? ' title="Sold before the current stock arrived"' : ''}>`
+        + (lastTs ? `${shDay(lastTs)} · $${Number(st.lastPrice).toFixed(2)}${ghost ? ' *' : ''}`
+          : (r.arrivedTs ? `never · listed ${shDay(r.arrivedTs)}` : 'never')) + '</td></tr>';
     }).join('');
   const units = list.reduce((s, r) => s + r.units, 0);
   const value = list.reduce((s, r) => s + r.units * (r.price || 0), 0);
-  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices`;
+  const soldHere = list.reduce((s, r) => s + stats.get(r).sold, 0);
+  $('shSum').textContent = `${list.length} SKU${list.length === 1 ? '' : 's'} · ${units.toLocaleString()} unit${units === 1 ? '' : 's'} · $${Math.round(value).toLocaleString()} at current prices · ${soldHere} sold in the last ${shRange} days`;
 }
 
 $('shChips').addEventListener('click', (e) => {
   const c = e.target.closest('[data-shview]');
   if (!c) return;
-  shView = c.dataset.shview;
+  shView = shView === c.dataset.shview ? '' : c.dataset.shview; // toggle off = all
+  renderShelf();
+});
+$('shRangeChips').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-shrange]');
+  if (!c) return;
+  shRange = Number(c.dataset.shrange);
+  renderShelf();
+});
+$('shTable').addEventListener('click', (e) => {
+  const th = e.target.closest('th.sh-sort');
+  if (!th) return;
+  const k = th.dataset.shsort;
+  if (shSort.key === k) shSort.dir = -shSort.dir;
+  else shSort = { key: k, dir: -1 };
   renderShelf();
 });
 $('shSearch').addEventListener('input', renderShelf);
 $('shRefresh').addEventListener('click', () => loadShelf(true));
-$('stockShelfLink').addEventListener('click', () => { shView = 'cond'; showPage('shelf'); });
+$('stockShelfLink').addEventListener('click', () => { shView = ''; showPage('shelf'); });
 
 // receiving lives on the Stock page now, as a dialog
 /* ---------- "shipped different item" substitution dialog ---------- */
@@ -1575,7 +1710,6 @@ function applyBrowserPane() {
   // compact columns while the sheets share the window with the pane
   document.body.classList.toggle('ret-compact', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
-  $('retBExpand').hidden = !(bReady && browserAllowed() && activePage === 'returns' && !bPane.visible);
   if (show) {
     // display-clamp only (the saved width survives): a pane remembered from a
     // wide window must never crush the sheet — the band needs room for its
@@ -1622,8 +1756,6 @@ function bExpandPane() {
   }
 }
 
-$('retBExpand').addEventListener('click', bExpandPane);
-
 /* ---------- whole-app zoom: Ctrl+scroll, persisted ---------- */
 // (the marketplace pane keeps its own separate Ctrl+wheel zoom — this one
 // scales the app's UI; the pane bounds re-sync because browserLayout scales
@@ -1645,6 +1777,13 @@ window.addEventListener('wheel', (e) => {
 // Ctrl+0 snaps back to 100%
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === '0') { e.preventDefault(); uiApplyZoom(1); }
+});
+// the app menu's zoom items (Cmd/Ctrl +, −, 0) land here so the native
+// pane's bounds re-sync — the raw Electron menu roles skipped that and the
+// marketplace pane overlapped the sheet after a menu zoom (owner 2026-09-17)
+api.on('ui:zoom', (d) => {
+  const dir = (d && d.dir) || 'reset';
+  uiApplyZoom(dir === 'reset' ? 1 : api.uiZoomGet() + (dir === 'in' ? 0.1 : -0.1));
 });
 try {
   const savedZ = Number(localStorage.getItem('uiZoom'));
@@ -1690,6 +1829,10 @@ document.addEventListener('close', (e) => {
 }, true);
 
 new ResizeObserver(() => syncBrowserBounds()).observe($('bView'));
+// belt and braces: anything that reflows the layout without tripping the
+// observers (the menu zoom roles did, 2026-09-17) self-heals within a
+// second — the native pane can never stay parked over the sheet
+setInterval(() => { if (!$('bDock').hidden) syncBrowserBounds(); }, 1000);
 window.addEventListener('resize', () => {
   // shrinking the window re-clamps the pane so the sheet side never vanishes
   if (!$('bDock').hidden) applyBrowserPane();
@@ -1860,8 +2003,8 @@ let stockWfsActive = false; // WFS view: read-only levels at the Walmart-managed
 let stockLowActive = false; // Low stock view: Available below the minimum level
 let stockDsActive = false; // DropShip program view: pads + velocity + BUY signals
 let stockUnlistedActive = false; // in-stock SKUs no marketplace can sell
-let stockMissingCh = ''; // 'walmart'|'ebay'|'temu' = in-stock items with no link on that channel
 let chLinked = null; // { walmart: Set(stockItemId), ebay: Set, temu: Set } | null
+let chSkuMap = null; // { stockItemId: [channel SKUs] } — the search box matches these too
 let chLinkedLoading = false;
 
 async function loadChLinked() {
@@ -1872,55 +2015,19 @@ async function loadChLinked() {
     if (res.ok) {
       chLinked = {};
       for (const [k, ids] of Object.entries(res.sets || {})) chLinked[k] = new Set(ids);
+      chSkuMap = {};
+      for (const [id, list] of Object.entries(res.chskus || {})) chSkuMap[id] = list.map(s => String(s));
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
+      if (activePage === 'ebay') renderEbayQueue(); // the queue reads the eBay link set
     }
   } finally {
     chLinkedLoading = false;
   }
 }
 
-// the quiet subline under the toolbar: "MISSING LISTINGS  Walmart 2 · …"
-// (owner picked this over chips, 2026-08-08); a link toggles the filter
-function renderStockGaps() {
-  const line = $('stockGapsLine');
-  if (!line) return;
-  if (!chLinked || activePage !== 'stock') { line.hidden = true; return; }
-  const parts = ['walmart', 'ebay', 'temu'].flatMap(label => {
-    if (!chLinked[label]) return [];
-    const n = stockMissingList(label).length;
-    return n ? [
-      `<a data-gap="${label}" class="${stockMissingCh === label ? 'on' : ''}" title="Show in-stock items with no ${esc(channelLabel(label))} listing linked">${esc(channelLabel(label))} ${n}</a>`,
-    ] : [];
-  });
-  line.hidden = parts.length === 0;
-  line.innerHTML = `<span class="stock-gaps-lbl">Missing listings</span>${parts.join('')}`;
-}
-
-$('stockGapsLine').addEventListener('click', (e) => {
-  const a = e.target.closest('[data-gap]');
-  if (!a) return;
-  const label = a.dataset.gap;
-  stockMissingCh = stockMissingCh === label ? '' : label;
-  stockWfsActive = false;
-  stockLowActive = false;
-  stockDsActive = false;
-  stockUnlistedActive = false;
-  stockActiveView = null;
-  renderStockChips();
-  renderStock();
-});
-
-// in-stock items (primary) missing a link on the given channel
-function stockMissingList(label) {
-  if (!chLinked || !chLinked[label] || !stockCache) return [];
-  const set = chLinked[label];
-  return stockCache.items.filter(it => {
-    if (!it.stockItemId) return false;
-    const l = it.levels.find(x => x.locationId === stockCache.locationId);
-    if (!l || (Number(l.stockLevel) <= 0 && Number(l.available) <= 0)) return false;
-    return !set.has(it.stockItemId);
-  });
-}
+// (the "MISSING LISTINGS  Walmart 2 · …" subline and its per-channel gap
+// filter were removed at the owner's request 2026-09-12 — the Unlisted
+// view with its per-row channel chips is the one listings nag now)
 let dsPads = null; // { SKU: padQty } from config
 let reorderStats = null; // per-SKU velocity / suggestions from dropship:stats
 let reorderMeta = { leadTimeDays: 7, coverDays: 21 };
@@ -2012,13 +2119,27 @@ function renderStockChips() {
   // as the amber alert pill (it flags work, it isn't a view you live in)
   // NB: NOT "stock-tray" — that class is the per-row hover action tray and
   // ships visibility:hidden (the collision blanked this whole toolbar once)
+  // Unlisted on: the condition chips slice the gap list, so each carries
+  // its own gap count and the tray highlights the active slice
+  let unlCnt = null;
+  if (stockUnlistedActive) {
+    const live = unlMissingRows().filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)));
+    const inView = (v) => live.filter(d => !v ? true : (v.plain
+      ? !views.some(x => stockViewMatch(d, x.pattern))
+      : stockViewMatch(d, v.pattern))).length;
+    unlCnt = { all: inView(null), new: inView(STOCK_VIEW_NEW), views: views.map(v => inView(v)) };
+  }
+  // counts live in the tooltips, not the labels: inline counts widened the
+  // tray whenever Unlisted toggled and shifted the whole band (owner
+  // 2026-09-15, "it keeps adjusting the container") — the summary line
+  // under the band still counts the active slice out loud
   box.innerHTML = '<div class="chip-tray">' + [
-    `<button class="view-chip ${stockActiveView || stockWfsActive || stockLowActive || stockDsActive || stockUnlistedActive || stockMissingCh ? '' : 'is-active'}" data-view="">All</button>`,
+    `<button class="view-chip ${(stockUnlistedActive ? !stockActiveView : !(stockActiveView || stockWfsActive || stockLowActive || stockDsActive)) ? 'is-active' : ''}" data-view=""${unlCnt ? ` title="Every SKU missing a listing, any condition — ${unlCnt.all}"` : ''}>All</button>`,
     ...(views.length ? [
-      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="Show only brand-new items — SKUs without a condition marker">New</button>`,
+      `<button class="view-chip ${stockActiveView === STOCK_VIEW_NEW ? 'is-active' : ''} tint-green" data-view="new" title="${unlCnt ? `Only brand-new SKUs missing a listing — ${unlCnt.new}` : 'Show only brand-new items — SKUs without a condition marker'}">New</button>`,
     ] : []),
     ...views.map((v, i) =>
-      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="Show only ${esc(v.label)} items">${esc(v.label)}</button>`),
+      `<button class="view-chip ${stockActiveView === v ? 'is-active' : ''}${v.tint ? ` tint-${esc(v.tint)}` : ''}" data-view="${i}" title="${unlCnt ? `Only ${esc(v.label)} SKUs missing a listing — ${unlCnt.views[i]}` : `Show only ${esc(v.label)} items`}">${esc(v.label)}</button>`),
     // (the Low stock chip was removed at the owner's request 2026-08-06 —
     // the low-stock ALERTS and red Available tints stay)
     ...(wfsLoc
@@ -2030,28 +2151,24 @@ function renderStockChips() {
   ].join('') + '</div>'
     // only exists while there is something to fix — in-stock SKUs no
     // marketplace can currently sell
-    + (unlistedDetail && unlistedDetail.length
-      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs with no marketplace listing linked — value sitting idle">Unlisted · ${unlistedDetail.length}</button>`
+    + ((unlistedDetail || chLinked) && unlActiveDetail().length
+      ? `<button class="view-chip chip-unlisted ${stockUnlistedActive ? 'is-active' : ''}" data-view="unl" title="In-stock SKUs missing a marketplace listing on at least one channel — New included">Unlisted · ${unlActiveDetail().length}</button>`
       : '');
   // the Shelf pointer only appears with a condition view on — selling
   // history lives there, not as extra columns here (owner 2026-08-25)
-  $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW);
-  renderStockGaps();
+  $('stockShelfLink').hidden = !(stockActiveView && stockActiveView !== STOCK_VIEW_NEW && !stockUnlistedActive);
 }
 
 $('stockChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.view-chip');
   if (!chip) return;
+  const wasUnlisted = stockUnlistedActive;
   stockDsActive = false;
   stockUnlistedActive = false;
-  stockMissingCh = '';
-  if (chip.dataset.view.startsWith('miss:')) {
-    stockMissingCh = chip.dataset.view.slice(5);
-    stockWfsActive = false;
-    stockLowActive = false;
-    stockActiveView = null;
-  } else if (chip.dataset.view === 'unl') {
-    stockUnlistedActive = true;
+  if (chip.dataset.view === 'unl') {
+    // the pill toggles: on = the gap list, off = back to the plain All view
+    // (the condition chips no longer leave Unlisted, so the pill is the exit)
+    stockUnlistedActive = !wasUnlisted;
     stockWfsActive = false;
     stockLowActive = false;
     stockActiveView = null;
@@ -2075,12 +2192,17 @@ $('stockChips').addEventListener('click', (e) => {
   } else {
     stockWfsActive = false;
     stockLowActive = false;
+    // with Unlisted on, the condition chips SLICE the unlisted list instead
+    // of leaving it — press the amber pill off to get the plain views back
+    // (owner 2026-09-15, from the approved unlisted-cond-filter mockup)
+    stockUnlistedActive = wasUnlisted;
     stockActiveView = chip.dataset.view === 'new' ? STOCK_VIEW_NEW
       : chip.dataset.view === '' ? null : (stockViews || [])[Number(chip.dataset.view)] || null;
     if (stockSort.key === 'home') stockSort = { key: 'stockLevel', dir: -1 };
   }
   renderStockChips();
   renderStock();
+  $('stockList').scrollTop = 0; // a deliberate view change starts at the top
 });
 
 // remove a SKU from the dropship program: right-click its row in the view
@@ -2108,6 +2230,21 @@ $('minApplyAll').addEventListener('click', async () => {
 
 api.on('reorder:applied', ({ summary }) => toast(summary, 7000));
 api.on('app:notice', ({ message }) => toast(message, 7000));
+
+// condition SKUs that just inherited the New listing's photo (background
+// pass in main after each stock load): patch the cached items so the grid
+// fills in the thumbnails without another refresh
+api.on('stock:imgInherited', (d) => {
+  const pairs = (d && d.pairs) || [];
+  if (!stockCache || !pairs.length) return;
+  const byUpper = new Map(pairs.map(p => [String(p.sku).toUpperCase(), p.image]));
+  let touched = false;
+  for (const it of stockCache.items || []) {
+    const img = byUpper.get(String(it.sku).toUpperCase());
+    if (img && !it.image) { it.image = img; touched = true; }
+  }
+  if (touched && activePage === 'stock') renderStock();
+});
 
 // e2e/screenshot helper: seed the stock sheet without Linnworks
 function stockSeed(data) {
@@ -2144,12 +2281,50 @@ try {
   }
 } catch { /* fresh start */ }
 
+// while the search box has text, columns hold the width they had when
+// typing began — auto table layout re-measured every keystroke and the
+// whole sheet shifted under the cursor (owner 2026-09-14)
+let stockFreezeWidths = null;
+
 function stockTh(key, extraClass = '', labelOverride = '') {
   const col = STOCK_COLS[key];
   const arrow = stockSort.key === key ? (stockSort.dir < 0 ? ' ▾' : ' ▴') : '';
-  const w = stockColWidths[key];
-  const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
-  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}"${style} title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+  return `<th class="sortable ${extraClass}" draggable="true" data-sort="${key}" title="Click to sort · drag edge to resize · drag the header to move the column">${labelOverride || col.label}${arrow}<span class="col-grip" data-grip="${key}"></span></th>`;
+}
+
+// widths the sheet settled on THIS session, per column: the first render
+// (the All view — every condition SKU included, so the widest content)
+// pins the columns the user never dragged, and chip flips / searches /
+// lazy badge loads stop re-deciding them. A fresh Linnworks load or a
+// grip double-click re-measures.
+let stockColAuto = {};
+
+// THE root cause of every "columns reset / go wide / all equal" report:
+// the page's CSP (style-src 'self') SILENTLY DROPS style="" attributes
+// that arrive via innerHTML, so widths stockTh used to inline — dragged,
+// frozen, or pinned — never applied on a re-render; under the is-frozen
+// fixed table layout that left NO widths at all and the browser split
+// the columns equally (owner 2026-09-16, "suddenly goes wide and makes
+// the length of the columns all different"). Setting th.style from JS is
+// the one styling path the CSP allows, so every width lands here, after
+// every header rebuild.
+function applyStockColWidths() {
+  const ths = [...document.querySelectorAll('#stockList th[data-sort]')];
+  ths.forEach(th => {
+    const key = th.dataset.sort;
+    const w = stockColAuto[key] || stockColWidths[key] || (stockFreezeWidths && stockFreezeWidths[key]);
+    th.style.width = w ? `${w}px` : '';
+    th.style.minWidth = w ? `${w}px` : '';
+    th.style.maxWidth = w ? `${w}px` : '';
+  });
+  // first render after a load (or a column reset): freeze the geometry the
+  // sheet ACTUALLY got. Auto layout stretches columns past their pins to
+  // fill the window, and the is-frozen fixed layout scales pins its own
+  // way — pinning the MEASURED widths is what makes browsing, searching
+  // and chip-flipping agree pixel for pixel.
+  if (ths.length && ths.some(th => !stockColAuto[th.dataset.sort])) {
+    ths.forEach(th => { stockColAuto[th.dataset.sort] = th.offsetWidth; });
+  }
 }
 
 async function loadStock() {
@@ -2165,6 +2340,7 @@ async function loadStock() {
     return;
   }
   stockCache = res;
+  stockColAuto = {}; // fresh inventory: let the columns re-measure once
   renderStockChips(); // the WFS + Low stock chips appear once data allows
   renderStock();
 }
@@ -2220,9 +2396,25 @@ async function loadStockDeltas() {
 
 function renderStock() {
   if (!stockCache) return;
-  if (stockDsActive) { renderDropshipView(); return; }
-  if (stockUnlistedActive) { renderUnlistedView(); return; }
+  // an inline pad/stock edit is open and focused: redrawing the table now
+  // would destroy it mid-type (the lazy delta/reorder/unlisted loaders all
+  // land here) — the edit's own commit re-renders when it finishes
+  const ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains('stock-edit')) return;
+  // background refreshes (deltas, reorder stats, unlisted markers, link
+  // sets) redraw this table: the sheet must stay where the user scrolled
+  // it, not snap back to the top on every arrival
+  const keepScroll = $('stockList').scrollTop;
+  if (stockDsActive) { renderDropshipView(); $('stockList').scrollTop = keepScroll; return; }
+  if (stockUnlistedActive) { renderUnlistedView(); $('stockList').scrollTop = keepScroll; return; }
   const q = $('stockSearch').value.trim().toLowerCase();
+  // the search also answers to a marketplace's OWN SKU (owner request
+  // 2026-09-16): the linked channel SKU strings ride the hourly unlisted
+  // scan, so a link made minutes ago may need a Refresh to become findable
+  const chSkuHit = (it) => {
+    if (!q || !chSkuMap || !it.stockItemId) return '';
+    return (chSkuMap[it.stockItemId] || []).find(s => skuMatch(s, q)) || '';
+  };
   // WFS view reads the Walmart-managed location; everything else reads the
   // primary warehouse. WFS numbers are Walmart's own (read-only here).
   const wfsLoc = stockWfsActive ? stockWfsLocation() : null;
@@ -2236,17 +2428,16 @@ function renderStock() {
       home: wfsLoc ? (it.levels.find(x => x.locationId === stockCache.locationId) || EMPTY_LVL) : null,
     }))
     .filter(it => !wfsLoc || it.l.stockLevel || it.l.available)
-    .filter(it => !stockMissingCh || (it.stockItemId && chLinked && chLinked[stockMissingCh]
-      && !chLinked[stockMissingCh].has(it.stockItemId) && (it.l.stockLevel > 0 || it.l.available > 0)))
     .filter(it => !stockLowActive || stockIsLow(it))
     .filter(it => !stockActiveView || (stockActiveView.plain
       ? !(stockViews || []).some(v => stockViewMatch(it, v.pattern))
       : stockViewMatch(it, stockActiveView.pattern)))
     .filter(it => !q
-      || it.sku.toLowerCase().includes(q)
-      || it.title.toLowerCase().includes(q)
-      || (it.barcode || '').toLowerCase().includes(q)
-      || (it.category || '').toLowerCase().includes(q))
+      || skuMatch(it.sku, q)
+      || skuMatch(it.title, q)
+      || skuMatch(it.barcode, q)
+      || skuMatch(it.category, q)
+      || !!chSkuHit(it))
     .sort((a, b) => {
       const col = STOCK_COLS[stockSort.key] || STOCK_COLS.stockLevel;
       const av = col.get(a);
@@ -2259,9 +2450,7 @@ function renderStock() {
   const units = rows.reduce((s, r) => s + r.l.stockLevel, 0);
   $('stockSummary').textContent = wfsLoc
     ? `${rows.length} SKUs · ${units.toLocaleString()} units at ${wfsLoc.name} — Walmart's counts; the warehouse column is yours`
-    : stockMissingCh
-      ? `${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} with no ${channelLabel(stockMissingCh)} listing linked — map them in Mappings`
-      : stockLowActive
+    : stockLowActive
         ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} below minimum · ${units.toLocaleString()} units left`
         : `${rows.length} SKUs · ${units.toLocaleString()} units${stockActiveView ? ` · ${stockActiveView.label} view` : ''}`;
   const imgCell = (r) => `<td class="cell-img"><button class="img-btn" data-imgsku="${esc(r.sku)}" data-sid="${esc(r.stockItemId || '')}" title="${r.image ? 'Click to add another image' : 'Click to add an image'}">${r.image ? `<img class="stock-img" src="${esc(r.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>`;
@@ -2296,7 +2485,15 @@ function renderStock() {
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
       ${ds}${ren}${del}</span>`;
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
+  // when the search matched a linked channel SKU and not the row's own
+  // fields, the matching channel SKU shows beside the row so the hit
+  // doesn't look like a mistake
+  const chHitHtml = (r) => {
+    if (!q || skuMatch(r.sku, q) || skuMatch(r.title, q)) return '';
+    const hit = chSkuHit(r);
+    return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
+  };
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   // dead-end searches offer the missing SKU as a one-click create; inside a
@@ -2305,10 +2502,15 @@ function renderStock() {
   const condPrefix = stockActiveView ? ({ 'open box': 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' })[String(stockActiveView.label).toLowerCase()] : '';
   const qUp = q.toUpperCase();
   const suggested = condPrefix && !qUp.startsWith(condPrefix) ? condPrefix + qUp : qUp;
+  // every search ends in an add-new option, hits or not (owner 2026-09-14:
+  // finding OPEN-BOX-S24 must not hide the way to create the plain S24)
+  const addNewFoot = q && rows.length > 0 && !state.captureOnly
+    ? `<p class="dlg-note stock-addnew"><button class="ebay-addbtn" data-quickadd="${esc(suggested)}">+ Add new listing — create ${esc(suggested)} in Linnworks</button></p>`
+    : '';
   $('stockList').innerHTML = rows.length === 0
     ? `<p class="dlg-note">No SKUs match.${q && !state.captureOnly ? ` <button class="ebay-addbtn eb-ml8" data-quickadd="${esc(suggested)}">Create ${esc(suggested)} in Linnworks</button>` : ''}</p>`
     : wfsLoc
-      ? `<table class="stock-table">
+      ? `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
@@ -2324,7 +2526,7 @@ function renderStock() {
             <td class="num cell-level"><span class="stock-num-ro" title="Walmart-managed count — corrections happen on Walmart's side">${r.l.stockLevel}</span></td>
             <td class="num ${r.home.stockLevel <= 0 ? 'stock-home-zero' : ''}"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Your warehouse count — click to correct">${r.home.stockLevel}</button></td>
           </tr>`).join('')}</tbody>
-      </table>`
+      </table>${addNewFoot}`
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
         const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
@@ -2342,7 +2544,7 @@ function renderStock() {
             default: return '<td></td>';
           }
         };
-        return `<table class="stock-table">
+        return `<table class="stock-table${stockFreezeWidths ? ' is-frozen' : ''}">
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
@@ -2354,8 +2556,9 @@ function renderStock() {
             ${imgCell(r)}
             ${stockColOrder.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table>${addNewFoot}`;
       })();
+  applyStockColWidths();
   // one-click bulk apply for every differing suggested minimum
   const applyAll = $('minApplyAll');
   if (applyAll) {
@@ -2371,54 +2574,157 @@ function renderStock() {
       applyAll.dataset.pending = JSON.stringify(pending);
     }
   }
+  $('stockList').scrollTop = keepScroll;
 }
 
-/* ---------- Unlisted view (in-stock SKUs no marketplace can sell) ---------- */
+/* ---------- Unlisted view (in-stock SKUs missing a channel listing) ---------- */
+
+// does this row's SKU/title sit in the active condition view? (New = plain:
+// matches none of the configured condition patterns)
+function stockCondOk(d) {
+  if (!stockActiveView) return true;
+  return stockActiveView.plain
+    ? !(stockViews || []).some(v => stockViewMatch(d, v.pattern))
+    : stockViewMatch(d, stockActiveView.pattern);
+}
+
+// CHANNELS column filter (owner 2026-09-17: "a small filter on the column
+// … multi select"): the ticked channels keep only rows MISSING on every
+// one of them. Persisted per desktop; the funnel glows while active.
+let unlChanSel = [];
+try { unlChanSel = JSON.parse(localStorage.getItem('unlChanSel') || '[]'); } catch { unlChanSel = []; }
+const unlChanSelOk = (d) => unlChanSel.every(ch => d.missing.includes(ch));
+
+function unlChanPopupToggle(anchor) {
+  const old = document.querySelector('.unl-fpop');
+  if (old) { old.remove(); return; }
+  const pop = document.createElement('div');
+  pop.className = 'unl-fpop';
+  pop.innerHTML = '<h5>Show SKUs missing on</h5>'
+    + unlChanKeys().map(ch => `
+      <label class="unl-fchk"><input type="checkbox" data-fch="${ch}" ${unlChanSel.includes(ch) ? 'checked' : ''} /> ${channelLabel(ch)}</label>`).join('')
+    + '<button type="button" class="unl-fclear">Clear filter</button>';
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 10, window.innerWidth - 190)))}px`;
+  pop.style.top = `${Math.round(r.bottom + 6)}px`;
+  document.body.appendChild(pop);
+  const away = (e) => {
+    if (e.target.closest('.unl-fpop') || e.target.closest('#unlChanFilterBtn')) return;
+    document.removeEventListener('mousedown', away, true);
+    pop.remove();
+  };
+  document.addEventListener('mousedown', away, true);
+  const save = () => {
+    try { localStorage.setItem('unlChanSel', JSON.stringify(unlChanSel)); } catch { /* best effort */ }
+    renderStock(); // rebuilds the sheet (and the funnel's active state)
+  };
+  pop.addEventListener('change', (e) => {
+    const c = e.target.closest('[data-fch]');
+    if (!c) return;
+    unlChanSel = c.checked ? [...new Set([...unlChanSel, c.dataset.fch])] : unlChanSel.filter(x => x !== c.dataset.fch);
+    save();
+  });
+  pop.addEventListener('click', (e) => {
+    if (!e.target.closest('.unl-fclear')) return;
+    unlChanSel = [];
+    for (const c of pop.querySelectorAll('[data-fch]')) c.checked = false;
+    save();
+  });
+}
+
+$('stockList').addEventListener('click', (e) => {
+  const f = e.target.closest('#unlChanFilterBtn');
+  if (f) unlChanPopupToggle(f);
+});
 
 function renderUnlistedView() {
   const aa = $('minApplyAll');
   if (aa) aa.hidden = true;
   const q = $('stockSearch').value.trim().toLowerCase();
-  const rows = (unlistedDetail || []).filter(d => !q
+  const matches = unlMissingRows().filter(stockCondOk).filter(unlChanSelOk).filter(d => !q
     || d.sku.toLowerCase().includes(q)
     || (d.title || '').toLowerCase().includes(q));
-  const idle = rows.reduce((s, d) => s + d.avail * d.retail, 0);
+  // rows whose every missing channel is bypassed step aside (restorable
+  // below); most gaps first, then most units — or most units first when the
+  // Avail header is toggled (owner 2026-09-14: "filter by most units")
+  const rows = matches.filter(d => d.missing.some(ch => !chanSkipKind(d.sku, ch)))
+    .sort(unlSortUnits
+      ? (a, b) => b.avail - a.avail || b.missing.length - a.missing.length || a.sku.localeCompare(b.sku)
+      : (a, b) => b.missing.length - a.missing.length || b.avail - a.avail || a.sku.localeCompare(b.sku));
+  const parked = matches.filter(d => d.missing.every(ch => chanSkipKind(d.sku, ch)));
   $('stockSummary').textContent =
-    `${rows.length} SKU${rows.length === 1 ? '' : 's'} in stock with no listing · ${fmtMoney(idle)} sitting idle`;
-  const missChips = unlistedChannels.length
-    ? unlistedChannels.map(c => `<span class="unl-chn">${esc(channelLabel(String(c).toLowerCase()) || c)} ✗</span>`).join('')
-    : '<span class="unl-chn">no channels linked</span>';
-  $('stockList').innerHTML = rows.length === 0
-    ? '<p class="dlg-note">Nothing here — every in-stock SKU has a marketplace listing. 🎉</p>'
-    : `<table class="stock-table">
+    `${rows.length} ${stockActiveView ? `${stockActiveView.label} ` : ''}SKU${rows.length === 1 ? '' : 's'} in stock missing a listing ${unlChanSel.length ? `on ${unlChanSel.map(channelLabel).join(' + ')}` : 'somewhere'}`;
+  // per-row chips, EVERY channel: filled ✓ = already listed there (owner
+  // 2026-09-14: show it, don't remove it), gold ✗ = missing (click: "I
+  // can't sell it there"), greyed — = bypassed (click restores)
+  const chnChips = (d) => unlChanKeys().map(ch => {
+    const name = channelLabel(ch);
+    if (!d.missing.includes(ch)) return `<span class="unl-chn is-listed" title="Already listed on ${name} — click the SKU to see the linked channel listings">${name} ✓</span>`;
+    const kind = chanSkipKind(d.sku, ch);
+    if (kind === 'sku') return `<button class="unl-chn is-skip" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" data-skiprm="1" title="Skipped for this SKU — click to expect a ${name} listing again">${name} —</button>`;
+    return `<button class="unl-chn" data-skipsku="${esc(d.sku)}" data-skipch="${ch}" title="No ${name} listing linked — click if you can't sell this SKU on ${name}, and it stops counting as missing there">${name} ✗</button>`;
+  }).join('');
+  // skipped and never-listed SKUs stay VISIBLE as dimmed rows at the bottom
+  // (owner 2026-09-14: "I want to see the ones I removed and the ones I
+  // skipped, so I don't forget") — never-list rows borrow their details
+  // from the stock sheet when the SKU still exists there
+  const ignoredRows = unlistedIgnored
+    .filter(s => !q || String(s).toLowerCase().includes(q))
+    .map(s => {
+      const it = ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === String(s).toUpperCase());
+      const l = it && (it.levels || []).find(x => x.locationId === stockCache.locationId);
+      return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
+    })
+    .filter(stockCondOk); // the dim rows follow the active slice too
+  const rowHtml = (d, idx, mode) => `
+        <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
+          <td class="cell-gutter">${mode ? '·' : idx}</td>
+          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
+          <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
+          <td class="num">${d.avail == null ? '—' : d.avail}</td>
+          <td>${mode === 'ignored'
+    ? `<span class="unl-dim-note">never listed</span>`
+    : chnChips(d)}</td>
+          <td class="cell-actions">${mode === 'ignored'
+    ? `<button class="ret-todo-copy" data-unign="${esc(d.sku)}" title="Start asking for listings for ${esc(d.sku)} again">↩ restore</button>`
+    : `<button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
+            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — moves it to the never-listed rows below">✕</button>`}</td>
+        </tr>`;
+  const dimCount = parked.length + ignoredRows.length;
+  $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
+    ? `<p class="dlg-note">Nothing here — every in-stock ${stockActiveView ? `${esc(stockActiveView.label)} ` : ''}SKU is listed on every channel it's expected on. 🎉</p>`
+    : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table unl-table">
       <thead><tr>
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
         <th>SKU</th>
-        <th class="num th-level">Avail</th>
-        <th>Missing on</th>
-        <th class="num">Value idle</th>
+        <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
+        <th class="th-chn">Channels
+          <button type="button" id="unlChanFilterBtn" class="unl-funnel ${unlChanSel.length ? 'is-active' : ''}"
+            title="${unlChanSel.length ? `Filtering: missing on ${esc(unlChanSel.map(channelLabel).join(' + '))} — click to change` : 'Filter by channel'}"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/></svg></button>
+        </th>
         <th class="th-actions"></th>
       </tr></thead>
-      <tbody>${rows.map((d, idx) => `
-        <tr>
-          <td class="cell-gutter">${idx + 1}</td>
-          <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
-          <td class="mono"><span title="${esc(d.title)}">${esc(d.sku)}</span></td>
-          <td class="num">${d.avail}</td>
-          <td>${missChips}</td>
-          <td class="num mono" title="available × channel listing price (highest stored)">${d.retail ? fmtMoney(d.avail * d.retail) : '—'}</td>
-          <td class="cell-actions"><button class="ret-todo-copy" data-copy="${esc(d.sku)}" title="Copy the exact SKU — create the listing with this string and Linnworks links it automatically">copy</button>
-            <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — leaves this view for good">✕</button></td>
-        </tr>`).join('')}</tbody>
+      <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
+      ${dimCount ? `<tbody class="unl-dim-body">
+        <tr class="unl-sec-tr"><td colspan="6" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
+        ${parked.map(d => rowHtml(d, 0, 'parked')).join('')}
+        ${ignoredRows.map(d => rowHtml(d, 0, 'ignored')).join('')}
+      </tbody>` : ''}
     </table>
-    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart).${
-      unlistedIgnored.length ? `<br>Never listed: ${unlistedIgnored.map(s => `<button class="unign-chip mono" data-unign="${esc(s)}" title="Start asking for listings for ${esc(s)} again">${esc(s)} ↩</button>`).join(' ')}` : ''}</p>`;
+    <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
+  // wear the main sheet's SKU width so the chip flip never shifts the
+  // columns (owner 2026-09-21, "the formatting changes"); gutter/img/level
+  // widths already match via CSS. th.style is the CSP-safe styling path.
+  const skuW = stockColAuto.sku || stockColWidths.sku || 0;
+  const skuTh = $('stockList').querySelector('.unl-table th:nth-child(3)');
+  if (skuTh && skuW) {
+    skuTh.style.width = `${skuW}px`;
+    skuTh.style.minWidth = `${skuW}px`;
+    skuTh.style.maxWidth = `${skuW}px`;
+  }
 }
 
-function fmtMoney(n) {
-  return '$' + Math.round(Number(n) || 0).toLocaleString();
-}
 
 /* ---------- DropShip program view (pads · pace · BUY signals) ---------- */
 
@@ -2535,6 +2841,71 @@ function beginPadEdit(btn) {
 }
 
 // Inline edit of the In stock number: click -> type -> Enter saves to Linnworks.
+/* ---------- global undo: Ctrl/Cmd+Z reverses the last reversible action
+   (owner 2026-09-16, "for anything — like changing the stock qty").
+   Routing: text fields keep the browser's native text undo; the eBay/Temu
+   listers keep their own history (they bind Ctrl+Z themselves); the
+   capture page routes to its undo engine; everywhere else pops this
+   stack. Deleting a SKU and listings already live on eBay stay OUT —
+   they are not reversible, which is why delete has its checkbox. */
+const undoStack = []; // { label, run: async () => {} }, newest last
+let undoBusy = false;
+
+function pushUndo(label, run) {
+  undoStack.push({ label, run });
+  if (undoStack.length > 30) undoStack.shift(); // a session's worth, not a database
+}
+
+window.addEventListener('keydown', async (e) => {
+  if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return; // native text undo wins
+  if (anyDialogOpen()) return;
+  if (activePage === 'ebay' || activePage === 'temu') return; // the lister's own Ctrl+Z history
+  e.preventDefault();
+  if (activePage === 'capture') {
+    if ($('undoBtn').disabled) toast('Nothing to undo');
+    else $('undoBtn').click();
+    return;
+  }
+  if (undoBusy) return;
+  const u = undoStack.pop();
+  if (!u) { toast('Nothing to undo'); return; }
+  undoBusy = true;
+  try {
+    await u.run();
+    toast(`Undid: ${u.label}`);
+  } catch (err) {
+    toast(`Undo failed: ${err.message}`, 7000);
+  } finally {
+    undoBusy = false;
+  }
+});
+
+// shared by the stock-count edit and its undo: write the level, fold the
+// answer into the cache, repaint
+async function applyStockLevel(sku, value) {
+  // the cache's current level rides along so the shared history records
+  // before → after for every hand edit (owner 2026-09-17: "everytime
+  // someone adds stock, I want it in the history")
+  let prev;
+  const item0 = stockCache && stockCache.items.find(i => i.sku === sku);
+  const l0 = item0 && (item0.levels || []).find(x => x.locationId === stockCache.locationId);
+  if (l0) prev = Number(l0.stockLevel) || 0;
+  const res = await api.setStockLevel(sku, value, prev);
+  if (!res.ok) throw new Error(res.error || 'Stock update failed');
+  const item = stockCache && stockCache.items.find(i => i.sku === sku);
+  if (item) {
+    let l = item.levels.find(x => x.locationId === stockCache.locationId);
+    if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
+    l.stockLevel = res.stockLevel;
+    l.inOrders = res.inOrders;
+    l.available = res.available;
+  }
+  renderStock();
+  return res;
+}
+
 function beginStockEdit(btn) {
   const sku = btn.dataset.sku;
   const current = btn.textContent.trim();
@@ -2552,22 +2923,17 @@ function beginStockEdit(btn) {
     const val = input.value.trim();
     if (val === '' || Number(val) === Number(current)) { restore(); return; }
     input.disabled = true;
-    const res = await api.setStockLevel(sku, Number(val));
-    if (!res.ok) {
-      toast(res.error || 'Stock update failed');
+    let res;
+    try {
+      res = await applyStockLevel(sku, Number(val));
+    } catch (err) {
+      toast(err.message);
       restore();
       return;
     }
-    const item = stockCache && stockCache.items.find(i => i.sku === sku);
-    if (item) {
-      let l = item.levels.find(x => x.locationId === stockCache.locationId);
-      if (!l) { l = { locationId: stockCache.locationId }; item.levels.push(l); }
-      l.stockLevel = res.stockLevel;
-      l.inOrders = res.inOrders;
-      l.available = res.available;
-    }
-    renderStock();
-    toast(`${sku}: stock set to ${res.stockLevel}`);
+    const prev = Number(current);
+    pushUndo(`${sku} count back to ${prev}`, () => applyStockLevel(sku, prev));
+    toast(`${sku}: stock set to ${res.stockLevel} — Ctrl+Z undoes`);
     // found returns raised by hand (OPEN-BOX/USED/SCRAP): re-scan so the
     // returns page's "needs listings" card hears about it right away
     loadUnlisted(true);
@@ -2616,6 +2982,18 @@ function beginStockMinEdit(btn) {
     }
     renderStockChips(); // the Low stock count follows the new minimum
     renderStock();
+    const prevMin = Number(current) || 0;
+    pushUndo(`${sku} minimum back to ${prevMin}`, async () => {
+      const r = await api.setStockMin(sid, prevMin);
+      if (!r.ok) throw new Error(r.error || 'Minimum update failed');
+      const it2 = stockCache && stockCache.items.find(i => i.sku === sku);
+      if (it2) {
+        const l2 = it2.levels.find(x => x.locationId === stockCache.locationId);
+        if (l2) l2.minimumLevel = r.minimumLevel;
+      }
+      renderStockChips();
+      renderStock();
+    });
     toast(`${sku}: minimum set to ${res.minimumLevel}`);
   };
   input.addEventListener('keydown', (e) => {
@@ -2635,7 +3013,17 @@ $('stockRefresh').addEventListener('click', () => {
 });
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
+  if (!$('stockSearch').value) {
+    stockFreezeWidths = null; // box emptied: columns breathe again
+  } else if (!stockFreezeWidths) {
+    // first keystroke: capture the columns as they stand
+    stockFreezeWidths = {};
+    for (const th of document.querySelectorAll('#stockList th[data-sort]')) {
+      stockFreezeWidths[th.dataset.sort] = th.offsetWidth;
+    }
+  }
   renderStock();
+  $('stockList').scrollTop = 0; // a fresh filter reads from the top
 });
 // the same ✕ the capture find bar has: clears and refilters in place
 $('stockSearchClear').addEventListener('click', () => {
@@ -2669,37 +3057,24 @@ function saveSheetFrac(el, key, w) {
   const room = el.parentElement ? el.parentElement.clientWidth : 0;
   if (!room) { localStorage.setItem(key, String(w)); return; } // px, converts on next read
   const frac = Math.min(1, w / room);
+  // dragged all the way to the edge = "just fill" — drop the override so
+  // the sheet rides the window from now on. The magnetic zone is the last
+  // 8px only (it was 2% of the window — ~30px on a laptop — which swallowed
+  // every small narrowing and sprang the sheet back: owner 2026-09-15,
+  // "it keeps clicking into place")
+  if (w >= room - 22) {
+    localStorage.removeItem(key);
+    el.style.width = '';
+    return;
+  }
   localStorage.setItem(key, String(frac));
   el.style.width = `${(frac * 100).toFixed(2)}%`; // % from here on: tracks window resizes
 }
 
-// whole-sheet resize: drag the handle on the right edge of the table
-let sheetDrag = null;
-
-$('sheetGrip').addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  sheetDrag = { startX: e.clientX, startW: $('stockMain').offsetWidth, w: 0 };
-  $('sheetGrip').classList.add('is-active');
-});
-
-window.addEventListener('mousemove', (e) => {
-  if (!sheetDrag) return;
-  const w = Math.max(480, sheetDrag.startW + (e.clientX - sheetDrag.startX));
-  sheetDrag.w = w;
-  $('stockMain').style.width = `${w}px`; // band + sheet resize as one
-});
-
-window.addEventListener('mouseup', () => {
-  if (!sheetDrag) return;
-  if (sheetDrag.w) saveSheetFrac($('stockMain'), 'stockSheetWidth', sheetDrag.w);
-  sheetDrag = null;
-  $('sheetGrip').classList.remove('is-active');
-});
-
-$('sheetGrip').addEventListener('dblclick', () => {
-  localStorage.removeItem('stockSheetWidth');
-  $('stockMain').style.width = '';
-});
+// the stock sheet's width grip retired (owner 2026-09-15, "remove this
+// sliding bar"): the sheet always fills the window now. Any width a past
+// drag stored is cleared so old installs snap back to full too.
+localStorage.removeItem('stockSheetWidth');
 
 // column resize: drag a header's right edge; double-click the edge to reset
 let gripDrag = null;
@@ -2715,6 +3090,7 @@ $('stockList').addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   if (!gripDrag) return;
+  if (!e.buttons) { commitGripDrag(); return; } // the mouseup landed outside the window: save, don't wander
   const w = Math.max(50, gripDrag.startW + (e.clientX - gripDrag.startX));
   gripDrag.w = w;
   gripDrag.th.style.width = `${w}px`;
@@ -2722,7 +3098,7 @@ window.addEventListener('mousemove', (e) => {
   gripDrag.th.style.maxWidth = `${w}px`;
 });
 
-window.addEventListener('mouseup', () => {
+function commitGripDrag() {
   if (!gripDrag) return;
   if (gripDrag.w) {
     if (gripDrag.storeName === 'capture') {
@@ -2734,12 +3110,15 @@ window.addEventListener('mouseup', () => {
       applyRetColsAll(); // the other returns sheet mirrors the same column
     } else {
       stockColWidths[gripDrag.key] = gripDrag.w;
+      stockColAuto[gripDrag.key] = gripDrag.w; // the session pin follows the drag
       localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
     }
     suppressSortUntil = Date.now() + 250;
   }
   gripDrag = null;
-});
+}
+
+window.addEventListener('mouseup', commitGripDrag);
 
 /* ---------- capture table column resizing ---------- */
 
@@ -2767,13 +3146,12 @@ initCaptureCols();
 // whole-list resize: drag the handle on the right edge (mirrors the Stock sheet)
 // the search/chips toolbar tracks the sheet's width so they stay aligned
 function alignCaptureToolbar() {
-  const w = $('rowsMain').offsetWidth;
-  if (!w) return;
-  $('findBar').style.width = `${w}px`;
-  // the find bar is docked INSIDE the sheet column now (owner 2026-08-17,
-  // matching the Stock band) — it rides the sheet wherever the pane puts it,
-  // so there is nothing left to align; stale margins from the old layout
-  // are cleared once in case a session upgraded in place
+  // the find bar is docked INSIDE the sheet column (owner 2026-08-17) and
+  // stretches with it natively — the old code pinned it to a PIXEL width
+  // here, and nothing re-measured after a sheet-grip drag, so the band
+  // stuck out past the sheet's edge (owner 2026-09-16, "the dragger is
+  // broken"). Clearing the stale inline sizes is all that's left to do.
+  $('findBar').style.width = '';
   $('findBar').style.marginLeft = '';
   $('findBar').style.marginRight = '';
 }
@@ -2831,6 +3209,7 @@ $('stockList').addEventListener('dblclick', (e) => {
   const grip = e.target.closest('.col-grip');
   if (!grip) return;
   delete stockColWidths[grip.dataset.grip];
+  delete stockColAuto[grip.dataset.grip]; // truly re-measure, not re-pin
   localStorage.setItem('stockColWidths', JSON.stringify(stockColWidths));
   suppressSortUntil = Date.now() + 250;
   renderStock();
@@ -2839,6 +3218,40 @@ $('stockList').addEventListener('dblclick', (e) => {
 $('stockList').addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-copy]');
   if (cp) { copyFromApp(cp.dataset.copy); return; }
+  const us = e.target.closest('th[data-unlsort]');
+  if (us) {
+    unlSortUnits = !unlSortUnits;
+    localStorage.setItem('unlSortUnits', unlSortUnits ? '1' : '0');
+    renderStock();
+    return;
+  }
+  const skip = e.target.closest('[data-skipsku]');
+  if (skip) {
+    requireOwner(async () => {
+      const res = await api.channelSkip(skip.dataset.skipsku, skip.dataset.skipch, !!skip.dataset.skiprm);
+      if (!res.ok) { toast(res.error || 'Could not update.'); return; }
+      chanSkips = res.chanSkips || {};
+      toast(skip.dataset.skiprm
+        ? `${skip.dataset.skipsku} counts as missing on ${channelLabel(skip.dataset.skipch)} again`
+        : `${skip.dataset.skipsku} skipped on ${channelLabel(skip.dataset.skipch)}`);
+      renderStockChips(); renderStock();
+    });
+    return;
+  }
+  const unskip = e.target.closest('[data-unskip]');
+  if (unskip) {
+    requireOwner(async () => {
+      const sku = unskip.dataset.unskip;
+      // clear every per-SKU skip; rule skips stay (change those in the rules)
+      for (const ch of (chanSkips[String(sku).toUpperCase()] || [])) {
+        const res = await api.channelSkip(sku, ch, true);
+        if (res.ok) chanSkips = res.chanSkips || {};
+      }
+      toast(`${sku} back on the listings list`);
+      renderStockChips(); renderStock();
+    });
+    return;
+  }
   const ign = e.target.closest('[data-ign]');
   const unign = e.target.closest('[data-unign]');
   if (ign || unign) {
@@ -2917,7 +3330,11 @@ $('stockList').addEventListener('click', async (e) => {
   const minBtn = e.target.closest('button.stock-min-btn');
   if (minBtn) { beginStockMinEdit(minBtn); return; }
   const skuLink = e.target.closest('.sku-link');
-  if (skuLink) { openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid); return; }
+  if (skuLink) {
+    if (!skuLink.dataset.chsid) { toast(`${skuLink.dataset.chsku} isn't in the loaded stock sheet — refresh Stock first.`); return; }
+    openChannelSkus(skuLink.dataset.chsku, skuLink.dataset.chsid);
+    return;
+  }
   const numBtn = e.target.closest('button.stock-num-btn');
   if (numBtn) { beginStockEdit(numBtn); return; }
   const imgBtn = e.target.closest('button.img-btn');
@@ -3039,6 +3456,11 @@ function enterReturns() {
     if (!retReceivedBy && cfg.returnsReceivedBy) retReceivedBy = cfg.returnsReceivedBy;
     // the date cell follows today only while the receiver hasn't typed one
     if (retEntryTr && wsDateAuto) wsDateFill();
+    // PO-format channel guessing for the log's open buttons
+    retPoPatterns = (cfg.orderPatterns || []).map(p => {
+      try { return { ch: p.channel, re: new RegExp(p.pattern) }; } catch { return null; }
+    }).filter(Boolean);
+    if (retLogAll) renderRetLog(); // buttons on rows rendered before the patterns arrived
   });
 }
 
@@ -3106,7 +3528,7 @@ function rvFeedback(msg, ok = false) {
 function retOpenRecv(po = '', seed = null) {
   rv = rvBlank();
   rvLastLookup = '';
-  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice', 'rvSettle']) $(id).value = '';
+  for (const id of ['rvPo', 'rvCust', 'rvTrk', 'rvSku', 'rvNote', 'rvPick', 'rvPrice']) $(id).value = '';
   $('rvQty').value = '1';
   $('rvBy').value = retReceivedBy;
   $('rvThumb').hidden = true;
@@ -3118,7 +3540,6 @@ function retOpenRecv(po = '', seed = null) {
   if (s.units) $('rvQty').value = s.units;
   if (s.price) $('rvPrice').value = s.price;
   if (s.by) $('rvBy').value = s.by;
-  if (s.settle) $('rvSettle').value = s.settle;
   if (s.note) $('rvNote').value = s.note;
   rvRenderCond();
   rvRenderOrder();
@@ -3227,17 +3648,12 @@ function rvLoadItem(it) {
     $('rvSku').value = it.sku;
     $('rvQty').value = String(it.quantity || 1);
     $('rvPrice').value = Number(it.price) ? Number(it.price).toFixed(2) : '';
-    // Dispute Settlement autofills from the SAME order line the price came
-    // from — what the customer paid is the amount at stake; clear it when
-    // there is no dispute
-    $('rvSettle').value = $('rvPrice').value;
   } else {
     rv.itemIdx = -1;
     rv.sku = ''; rv.title = ''; rv.price = 0; rv.targets = null;
     $('rvSku').value = '';
     $('rvQty').value = '1';
     $('rvPrice').value = '';
-    $('rvSettle').value = '';
   }
   rv.condition = 'new';
   rv.pick = '';
@@ -3436,7 +3852,6 @@ async function rvCommit() {
     items: sku ? [{
       sku, condition: rv.condition, targetSku: target, qty,
       price: retMoney($('rvPrice').value) || rv.price,
-      settle: retMoney($('rvSettle').value),
       note: $('rvNote').value.trim(),
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -3457,7 +3872,7 @@ $('rvSave').addEventListener('click', async () => {
   const next = rv.items.findIndex((_, i) => !rv.received[i]);
   if (next < 0) { $('retRecvDialog').close(); return; }
   $('rvNote').value = '';
-  rvLoadItemAt(next); // refills price + settle from the next line
+  rvLoadItemAt(next); // refills price from the next line
   $('rvQty').focus();
 });
 
@@ -3498,7 +3913,7 @@ makeCombo($('rvPick'), document.querySelector('.rv-pick-combo .combo-list'), (it
 // rebuilt) across renders so half-typed values survive every refresh.
 
 let retEntryTr = null;
-let wsEls = null; // { po, cust, trk, date, sku, units, price, by, settle, note }
+let wsEls = null; // { po, cust, trk, date, sku, units, price, by, note }
 let ws = null;    // inline receive state (mirrors the old popup's rv)
 let wsLookupApi = (po) => api.returnsLookup(po); // seam: e2e stubs the lookup
 
@@ -3511,7 +3926,6 @@ const WS_FIELDS = [
   ['units', '', 'mono ws-num', 'Units'],
   ['price', '', 'mono ws-num', 'Price'],
   ['by', '', '', 'Received by'],
-  ['settle', '', 'mono ws-num', 'Dispute settlement'],
   ['note', '', '', 'Notes'],
 ];
 
@@ -3567,12 +3981,11 @@ function retEntryRow() {
     <td class="ws-cell">${wsInput('cust')}</td>
     <td class="ws-cell">${wsInput('trk')}</td>
     <td class="ws-cell">${wsInput('date')}</td>
-    <td class="ws-cell">${wsInput('sku')}</td>
+    <td class="ws-cell">${wsInput('sku')}<div class="combo-list ws-skulist" hidden></div></td>
     <td class="ws-cell ws-cond-cell" id="wsCondCell"></td>
     <td class="ws-cell">${wsInput('units')}</td>
     <td class="ws-cell">${wsInput('price')}</td>
     <td class="ws-cell">${wsInput('by')}</td>
-    <td class="ws-cell">${wsInput('settle')}</td>
     <td class="ws-cell">${wsInput('note')}</td>
     <td class="cell-actions"></td>`;
   retEntryTr = tr;
@@ -3581,8 +3994,13 @@ function retEntryRow() {
   wsDateFill();
   wsEls.date.addEventListener('input', () => { wsDateAuto = false; });
   wsRenderCond();
+  // the SKU dropdown's own keys win while it shows options: Enter picks,
+  // Esc closes the list — neither saves nor clears the row
+  const skuList = tr.querySelector('.ws-skulist');
+  const skuListLive = () => !skuList.hidden && !!skuList.querySelector('.combo-opt');
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
+      if (key === 'sku' && skuListLive() && (e.key === 'Enter' || e.key === 'Escape')) return;
       if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -3592,11 +4010,24 @@ function retEntryRow() {
       else wsSave();
     });
   }
+  // suggestions while typing a SKU, like every other picker in the app
+  // (owner 2026-09-18: "why am I not seeing suggestions?") — SKU only,
+  // no title line; picking resolves the condition targets and moves on
+  makeCombo(wsEls.sku, skuList, (item) => {
+    wsEls.sku.value = item.sku;
+    ws.targets = null;
+    ws.pick = '';
+    ws.itemIdx = -1;
+    wsResolveTargets();
+    wsEls.units.focus();
+    wsEls.units.select();
+  }, { noTitle: true });
   // editing the PO after a match voids the match (a stale orderId must
   // never ride along); a re-typed SKU is no longer "that order line"
   wsEls.po.addEventListener('input', () => {
     ws.orderId = null; ws.source = ''; ws.unmatched = true;
     ws.items = []; ws.looked = '';
+    wsSetPhase('idle'); // the edited PO is a new draft, not the loaded order
   });
   wsEls.sku.addEventListener('input', () => {
     ws.targets = null; ws.pick = '';
@@ -3752,21 +4183,46 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
   wsRenderCond();
 });
 
+// the entry row's phase, worn where the eye already is (approved demo
+// pending-entry.html, owner 2026-09-14): while the lookup runs the +
+// becomes a loading circle (just the circle — no gray wash); a loaded,
+// not-yet-saved row tints green and the gutter turns into a ✓, so the
+// draft never reads as an already-saved row
+function wsSetPhase(p) {
+  if (!retEntryTr) return;
+  retEntryTr.classList.toggle('is-ready', p === 'ready');
+  const plus = retEntryTr.querySelector('#wsPlus');
+  if (!plus) return;
+  if (p === 'pending') {
+    plus.innerHTML = '<span class="ws-spin" aria-label="Looking the order up"></span>';
+    plus.title = 'Looking the order up…';
+  } else if (p === 'ready') {
+    plus.textContent = '✓';
+    plus.title = 'Order loaded — Enter (or click here) saves this return';
+  } else {
+    plus.textContent = '+';
+    plus.title = 'Save this return';
+  }
+}
+
 // PO# + Enter: the matched order LOADS OVER the row (owner 2026-09-10,
 // "as soon as you enter a PO# it will load and overwrite everything") —
 // the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
   ws.busy = true;
+  wsSetPhase('pending');
   const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
   ws.busy = false;
   ws.looked = po;
   if (!res || !res.ok) {
+    wsSetPhase('idle');
     ws.unmatched = true; ws.orderId = null; ws.source = '';
     toast(`${(res && res.error) || 'Not found.'} — enter the details by hand.`);
     wsEls.cust.focus();
     return;
   }
+  wsSetPhase('ready');
   const o = res.order;
   ws.unmatched = false;
   ws.orderId = o.orderId;
@@ -3794,9 +4250,6 @@ function wsUseLine(line) {
   ws.pick = '';
   wsEls.units.value = String(line.quantity || 1);
   wsEls.price.value = Number(line.price) ? Number(line.price).toFixed(2) : '';
-  // Dispute Settlement mirrors the price line — what the customer paid is
-  // the amount at stake (cleared by hand when there is no dispute)
-  wsEls.settle.value = wsEls.price.value;
   wsRenderCond();
 }
 
@@ -3838,6 +4291,7 @@ function wsReset() {
   for (const [key] of WS_FIELDS) wsEls[key].value = '';
   wsDateFill();
   ws = wsBlank();
+  wsSetPhase('idle');
   wsFixClose();
   const menu = document.querySelector('.ws-emenu');
   if (menu) menu.remove();
@@ -3915,7 +4369,6 @@ async function wsSave() {
       received: sku ? received : '',
       condition: ws.condition, targetSku: target, qty,
       price: retMoney(v.price),
-      settle: retMoney(v.settle),
       note: v.note,
     }] : [],
   }).catch(e => ({ ok: false, error: e.message }));
@@ -3939,8 +4392,19 @@ function retChannel(source) {
   return hasLink ? key : '';
 }
 
+// an unmatched row has no source, but the PO's FORMAT usually gives the
+// marketplace away (owner 2026-09-18: "always have a link to the PO#") —
+// the same Settings patterns that classify scanned order numbers decide
+let retPoPatterns = null; // [{ch, re}] compiled once per returns visit
+function retPoGuess(po) {
+  for (const p of retPoPatterns || []) {
+    if (p.re.test(po)) return retChannel(p.ch);
+  }
+  return '';
+}
+
 function retPoOpenBtn(po, source) {
-  const ch = po ? retChannel(source) : '';
+  const ch = po ? (retChannel(source) || retPoGuess(String(po).trim())) : '';
   if (!ch) return '';
   return `<button class="btn-icon ret-po-open" data-po="${esc(po)}" data-ch="${ch}"
     title="Open the ${esc(channelLabel(ch))} return for ${esc(po)}">${ICONS.arrowOut}</button>`;
@@ -3975,10 +4439,60 @@ let retLogAll = null; // [{ r: record, i: item line, ii: item index (-1 = PO-onl
 // condition SKUs holding returned stock with NO marketplace listing linked
 // yet — surfaced as "not listed" markers so the employee knows what to make
 let unlistedSkus = null; // Set of UPPERCASE SKUs | null = not loaded
-let unlistedDetail = null; // [{sku,title,image,avail,retail}] sorted by idle value
+let unlistedDetail = null; // [{sku,title,image,avail}] most units first
 let unlistedChannels = []; // sources seen across the inventory ("missing on")
 let unlistedIgnored = []; // never-list SKUs (claim bins, fakes)
 let unlistedLoading = false;
+// channel bypass ("I can't sell this there" — owner 2026-09-12): click a
+// channel chip on an Unlisted row to grey it out; the SKU stops counting
+// as missing there (per-SKU only — the owner passed on condition rules)
+let chanSkips = {}; // { 'SKU': ['walmart', …] }
+// Avail header toggle: most units first instead of most gaps first
+let unlSortUnits = localStorage.getItem('unlSortUnits') === '1';
+
+// is this channel bypassed for this SKU? ('' = expected, 'sku' = skipped)
+function chanSkipKind(sku, ch) {
+  return (chanSkips[String(sku).toUpperCase()] || []).includes(ch) ? 'sku' : '';
+}
+// the channels the Unlisted view judges against, normalized to the three
+// marketplace keys (raw sources arrive as 'EBAY', 'TEMU US', 'WALMART'…)
+function unlChanKeys() {
+  const keys = [];
+  for (const c of unlistedChannels) {
+    const k = /walmart/i.test(c) ? 'walmart' : /ebay/i.test(c) ? 'ebay' : /temu/i.test(c) ? 'temu' : '';
+    if (k && !keys.includes(k)) keys.push(k);
+  }
+  return keys.length ? keys.sort() : ['ebay', 'temu', 'walmart'];
+}
+// Every in-stock SKU missing a listing on AT LEAST ONE channel — New
+// included (owner 2026-09-14: "it should show every listing, new or open
+// box or used"). Computed from the loaded stock sheet + the truthful link
+// sets, zero extra API calls; each row carries its own missing-channel
+// list so partially-listed items show only the gaps. Until the link sets
+// land, the zero-listing scan stands in (those rows miss everywhere).
+function unlMissingRows() {
+  const chans = unlChanKeys();
+  if (stockCache && chLinked && chans.some(ch => chLinked[ch])) {
+    const ignored = new Set(unlistedIgnored.map(s => String(s).toUpperCase()));
+    const out = [];
+    for (const it of stockCache.items) {
+      if (!it.stockItemId || ignored.has(String(it.sku).toUpperCase())) continue;
+      const l = it.levels.find(x => x.locationId === stockCache.locationId);
+      const avail = l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : 0;
+      if (avail <= 0) continue;
+      const missing = chans.filter(ch => chLinked[ch] && !chLinked[ch].has(it.stockItemId));
+      if (!missing.length) continue;
+      out.push({ sku: it.sku, title: it.title || '', image: it.image || '', stockItemId: it.stockItemId, avail, missing });
+    }
+    return out;
+  }
+  return (unlistedDetail || []).map(d => ({ ...d, missing: chans.slice() }));
+}
+
+// rows still worth nagging about: at least one missing channel not bypassed
+function unlActiveDetail() {
+  return unlMissingRows().filter(r => r.missing.some(ch => !chanSkipKind(r.sku, ch)));
+}
 
 // a background rescan finished in main: swap the fresh sets in wherever shown
 api.on('unlisted:refreshed', () => {
@@ -3998,6 +4512,7 @@ async function loadUnlisted(force) {
       unlistedDetail = res.detail || [];
       unlistedChannels = res.channels || [];
       unlistedIgnored = res.ignored || [];
+      chanSkips = res.chanSkips || {};
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
       if (activePage === 'ebay') renderEbayQueue();
@@ -4087,8 +4602,7 @@ function renderChmap() {
     if (chmap.hasQty && !w.linked && !(w.qty > 0)) return false;
     if (!q1) return true;
     const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || '';
-    return w.sku.toLowerCase().includes(q1) || w.title.toLowerCase().includes(q1)
-      || linkedSku.toLowerCase().includes(q1);
+    return skuMatch(w.sku, q1) || skuMatch(w.title, q1) || skuMatch(linkedSku, q1);
   });
   const unlinked = chmap.items.filter(w => !w.linked).length;
   $('chmapWmCount').textContent = chmap.busy ? '' : `${unlinked} unlinked / ${chmap.items.length}`;
@@ -4098,9 +4612,9 @@ function renderChmap() {
       const linkedSku = w.linkedSkuOverride || byId.get(w.linkedItemId) || (w.linked ? '(linked)' : '');
       return `
       <tr class="${chmap.sel === w.sku ? 'sel' : ''}" data-wm="${esc(w.sku)}">
-        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''} · listed qty ${w.qty || 0}">${esc(w.sku)}${w.qty > 0 ? ` <span class="chmap-qty">×${w.qty}</span>` : ''}</td>
+        <td class="mono" title="${esc(w.title)}${w.wfs ? ' · Walmart-fulfilled (WFS) listing' : ''} · listed qty ${w.qty || 0}"><span class="chmap-copy" data-copy="${esc(w.sku)}" title="Click to copy ${esc(w.sku)}">${esc(w.sku)}</span>${w.qty > 0 ? ` <span class="chmap-qty">×${w.qty}</span>` : ''}</td>
         <td>${w.linked
-          ? `<span class="mono chmap-grn">${esc(linkedSku)}</span>`
+          ? `<span class="mono chmap-grn${linkedSku && linkedSku !== '(linked)' ? ' chmap-copy' : ''}"${linkedSku && linkedSku !== '(linked)' ? ` data-copy="${esc(linkedSku)}" title="Click to copy ${esc(linkedSku)}"` : ''}>${esc(linkedSku)}</span>`
           : '<span class="chmap-lk">not linked</span>'}</td>
         <td class="chmap-act">${w.linked && w.rowId ? '<button class="pillbtn chmap-unlink" type="button">Unlink</button>' : ''}</td>
       </tr>`;
@@ -4109,8 +4623,8 @@ function renderChmap() {
 
   const q2 = $('chmapLwQ').value.trim().toLowerCase();
   let inv = recvItems ? recvItems.filter(l => !q2
-    || String(l.sku || '').toLowerCase().includes(q2)
-    || String(l.title || '').toLowerCase().includes(q2)) : [];
+    || skuMatch(l.sku, q2)
+    || skuMatch(l.title, q2)) : [];
   if (chmap.fresh) {
     const i = inv.findIndex(l => l.sku === chmap.fresh);
     if (i > 0) inv.unshift(inv.splice(i, 1)[0]);
@@ -4121,7 +4635,7 @@ function renderChmap() {
       <tr data-lw="${esc(l.sku)}" class="${l.sku === chmap.fresh ? 'chmap-fresh' : ''}">
         <td class="chmap-act2"><button class="pillbtn chmap-link" type="button" ${chmap.sel ? '' : 'disabled'}
           title="${chmap.sel ? `Link ${esc(chmap.sel)} → ${esc(l.sku)}` : 'Select a listing on the left first'}"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48,128.05l24-24a56,56,0,0,1,76.81-2.28,8,8,0,1,1-10.64,11.95A40,40,0,0,0,83.35,115.4l-24,24a40,40,0,0,0,56.57,56.56l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.57,56.56l-24,24a40,40,0,0,1-54.85,1.6A8,8,0,1,0,106.8,153.8a56,56,0,0,0,76.81-2.26l24-24A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Link</button></td>
-        <td class="mono" title="${esc(l.title || '')}">${esc(l.sku)}${l.sku === chmap.fresh ? ' <span class="chmap-new">new</span>' : ''}</td>
+        <td class="mono" title="${esc(l.title || '')}"><span class="chmap-copy" data-copy="${esc(l.sku)}" title="Click to copy ${esc(l.sku)}">${esc(l.sku)}</span>${l.sku === chmap.fresh ? ' <span class="chmap-new">new</span>' : ''}</td>
       </tr>`).join('')
       || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
 }
@@ -4164,6 +4678,10 @@ document.addEventListener('mousedown', (e) => {
 });
 
 $('chmapWmBody').addEventListener('click', async (e) => {
+  // clicking a SKU string copies it (owner 2026-09-16); the row still
+  // selects/deselects underneath, so linking flows exactly as before
+  const cp = e.target.closest('.chmap-copy');
+  if (cp) copyFromApp(cp.dataset.copy);
   const tr = e.target.closest('tr[data-wm]');
   if (!tr) return;
   const item = chmap.items.find(x => x.sku === tr.dataset.wm);
@@ -4177,12 +4695,25 @@ $('chmapWmBody').addEventListener('click', async (e) => {
     }
     const res = await api.mappingUnlink(item.rowId);
     if (!res.ok) { toast(res.error || 'Could not unlink.'); return; }
-    // mirror of the link path: the sets forget the id at once
+    // mirror of the link path — but the item may hold ANOTHER link on the
+    // same channel (a WFS listing, a second SKU), so the chip only flips to
+    // unlisted when the remaining link records say the channel is really
+    // empty (owner 2026-09-17: unlinking one of two Walmart SKUs wrongly
+    // reverted the Walmart chip)
     if (item.linkedItemId && chLinked) {
       const label = chmapChanLabel(chmap.chan).toLowerCase();
-      if (chLinked[label]) chLinked[label].delete(item.linkedItemId);
-      renderStockChips();
-      if (activePage === 'stock' && stockCache) renderStock();
+      const id = item.linkedItemId;
+      api.getChannelSkus(id).then((r) => {
+        const still = !!(r && r.ok && (r.channels || []).some((c) => {
+          const src = String(c.source || '');
+          const l = /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : '';
+          return l === label;
+        }));
+        if (still || !chLinked || !chLinked[label]) return;
+        chLinked[label].delete(id);
+        renderStockChips();
+        if (activePage === 'stock' && stockCache) renderStock();
+      }).catch(() => { /* chip stays; the next full scan settles it */ });
     }
     item.linked = false;
     item.linkedItemId = '';
@@ -4198,6 +4729,8 @@ $('chmapWmBody').addEventListener('click', async (e) => {
 });
 
 $('chmapLwBody').addEventListener('click', async (e) => {
+  const cp = e.target.closest('.chmap-copy');
+  if (cp) { copyFromApp(cp.dataset.copy); return; } // the Link pill keeps its own click
   const btn = e.target.closest('.chmap-link');
   if (!btn || btn.disabled || !chmap.sel) return;
   const target = e.target.closest('tr[data-lw]').dataset.lw;
@@ -4308,9 +4841,9 @@ let retDispCount = 0;
 function renderRetChips() {
   const box = $('retChips');
   if (!box) return;
+  // the "⚠ N need listings" chip left this bar (owner 2026-09-17: "it gets
+  // too crowded") — the Stock tab's Unlisted view is the one listings nag
   box.innerHTML = [
-    retTodoCount ? `<button type="button" class="ret-chip is-warn ${retCardOpen.todo ? 'is-on' : ''}" data-chip="todo"
-      title="${retCardOpen.todo ? 'Hide' : 'Show'} the SKUs still needing marketplace listings">⚠ ${retTodoCount} need${retTodoCount === 1 ? 's' : ''} listings</button>` : '',
     retDispCount ? `<button type="button" class="ret-chip is-disp ${retCardOpen.disp ? 'is-on' : ''}" data-chip="disp"
       title="${retCardOpen.disp ? 'Hide' : 'Show'} the open disputes">${retDispCount} dispute${retDispCount === 1 ? '' : 's'} open</button>` : '',
   ].join('');
@@ -4327,31 +4860,12 @@ $('retChips').addEventListener('click', (e) => {
 });
 
 function renderRetTodo() {
+  // the chip and its card left the Returns page (owner 2026-09-17: "it gets
+  // too crowded") — the Stock tab's Unlisted view carries the listings nag;
+  // callers stay wired so re-enabling is a matter of restoring this body
   const box = $('retTodo');
-  if (!box) return;
-  retTodoCount = unlistedSkus ? unlistedSkus.size : 0;
-  renderRetChips();
-  if (!retTodoCount) { box.hidden = true; return; }
-  const rows = [...unlistedSkus].map(sku => {
-    const it = recvBySku && recvBySku.get(sku.toLowerCase());
-    const lvl = it && (it.levels || []).find(l => l.locationId === recvLocationId);
-    return { sku, units: lvl ? Number(lvl.stockLevel) || 0 : null };
-  }).sort((a, b) => (b.units || 0) - (a.units || 0));
-  box.hidden = !retCardOpen.todo;
-  // plain always-visible card (owner reverted the task-row redesign
-  // 2026-08-13); kept: SKU click -> eBay lister, >4 rows defaults collapsed
-  const stored = localStorage.getItem('retTodoCol');
-  const col = stored === null ? rows.length > 4 : stored === '1';
-  box.classList.toggle('is-collapsed', col);
-  box.innerHTML = `
-    <h4 class="ret-card-h" title="Click to ${col ? 'expand' : 'collapse'}"><span class="ret-chev">${col ? '▸' : '▾'}</span>${rows.length} in-stock SKU${rows.length === 1 ? '' : 's'} still need${rows.length === 1 ? 's' : ''} marketplace listings</h4>
-    ${rows.map(r => `<div class="ret-todo-row">
-      <button class="ret-todo-sku mono" data-goto="${esc(r.sku)}" title="Build this listing in the eBay tab">${esc(r.sku)}</button>
-      <button class="ret-todo-copy" data-copy="${esc(r.sku)}" title="Copy the exact SKU for Seller Center / eBay">copy</button>
-      <span class="ret-todo-units">${r.units === null ? '' : `${r.units} unit${r.units === 1 ? '' : 's'} waiting`}</span>
-      <button class="ret-todo-ign" data-ign="${esc(r.sku)}" title="Never list this SKU (claim bins, fakes) — remove it from this card and the Unlisted view for good">✕</button>
-    </div>`).join('')}
-    <div class="ret-todo-note">Click a SKU to build its eBay listing — Linnworks links it automatically once it goes live.</div>`;
+  if (box) box.hidden = true;
+  retTodoCount = 0;
 }
 
 $('retTodo').addEventListener('click', async (e) => {
@@ -4392,12 +4906,35 @@ function retMoneyText(v) {
   return Number(v) ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 }
 
-// a "case: 12345" note renders as a small blue chip + the rest of the text
-function retNoteHtml(note) {
+// a "case: 12345" note renders as a small blue chip + the rest of the text.
+// The chip is a button: click opens the marketplace's case screen directly
+// (owner 2026-09-15, from the Walmart disputes URL), right-click copies.
+function retNoteHtml(note, source) {
   const m = String(note || '').match(DISPUTE_RE);
   if (!m) return esc(note || '');
   const rest = String(note).replace(m[0], '').replace(/^[\s—·,:-]+|[\s—·,:-]+$/g, '');
-  return `<span class="ret-note-case mono">case ${esc(m[1])}</span>${esc(rest)}`;
+  const ch = String(source || '').toLowerCase();
+  return `<button type="button" class="ret-note-case mono ret-case-open" data-caseno="${esc(m[1])}" data-ch="${esc(ch)}"
+    title="Open case ${esc(m[1])} on ${esc(channelLabel(ch))} · right-click to copy the number">case ${esc(m[1])}</button>${esc(rest)}`;
+}
+
+// open the marketplace's dispute case screen; a channel with no case URL
+// template (or a failed open) falls back to copying the number
+function retOpenCase(caseNo, ch) {
+  const after = (res) => {
+    if (res && res.ok) return;
+    copyFromApp(caseNo);
+    toast(`No case page set for ${channelLabel(ch)} — case ${caseNo} copied instead`, 4000);
+  };
+  if (!$('bDock').hidden) {
+    bShowLoading(`Opening case ${caseNo}`);
+    api.browserOpen(caseNo, ch, 'case').then((res) => {
+      if (!res.ok) bHideLoading();
+      after(res);
+    });
+  } else {
+    api.openOrderPage(caseNo, ch, 'case').then(after);
+  }
 }
 
 // every column edits IN PLACE (owner 2026-09-07, retiring the edit popup):
@@ -4406,7 +4943,7 @@ function retLogRowHtml(r, i, ii, un, num) {
   const day = String(r.created_at).slice(0, 10);
   const note = i.note || r.note || '';
   return `
-    <tr class="ret-past-tr" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
+    <tr class="ret-past-tr${retFreshGids.has(String(r.id)) ? ' is-fresh' : ''}" data-rid="${r.id}" data-ii="${ii}" data-un="${un}">
       <td class="cell-gutter ${r.unmatched ? 'st-failed' : 'st-captured'}" title="${r.unmatched ? 'Not matched to a Linnworks order' : 'Matched processed order'}">${num}</td>
       <td class="mono ret-cell-po ret-ecell" data-edit="po" title="${esc(r.order_number)}${r.unmatched ? ' — not matched to a Linnworks order' : ''}">${r.order_number ? esc(r.order_number) : '<span class="cell-missing">—</span>'}${retPoOpenBtn(r.order_number, r.source)}</td>
       <td class="ret-cell-cust ret-ecell" data-edit="customer" title="${esc(r.customer || '')}">${r.customer ? esc(r.customer) : '<span class="cell-missing">—</span>'}</td>
@@ -4417,14 +4954,15 @@ function retLogRowHtml(r, i, ii, un, num) {
     ? `<div class="ret-cell-target" title="${i.targetSku ? `What came back — stock landed on ${esc(i.targetSku)}` : 'What came back — not a listing, no stock moved'}">→ ${esc(i.received || i.targetSku)}${i.targetSku ? retUnlistedMark(i.targetSku) : ''}</div>`
     : (i.targetSku && i.targetSku !== i.sku ? `<div class="ret-cell-target" title="Stock landed on ${esc(i.targetSku)}">→ ${esc(i.targetSku)}${retUnlistedMark(i.targetSku)}</div>` : (i.sku && i.targetSku === i.sku ? retUnlistedMark(i.sku) : ''))}
       </td>
-      <td class="ret-cell-cond ret-ecell" data-edit="condition">
-        ${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
+      <td class="ret-cell-cond ret-ecell" data-edit="condition">${i.sku ? `<span class="ret-cond-ro is-${esc(i.condition)}"><span class="ret-dd-dot is-${esc(i.condition)}"></span>${esc(retCondLabel(i.condition))}</span>` : '<span class="cell-missing">—</span>'}
       </td>
       <td class="ret-cell-units mono ret-ecell" data-edit="units">${Number(i.qty) || 1}</td>
       <td class="ret-cell-price mono ret-ecell" data-edit="price">${Number(i.price) ? retMoneyText(i.price) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}</td>
-      <td class="ret-cell-settle mono ret-ecell" data-edit="settle" title="Dispute settlement amount">${Number(i.settle) ? retMoneyText(i.settle) : '<span class="cell-missing">—</span>'}</td>
-      <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note)}</td>
+      <td class="ret-cell-by ret-ro-by ret-ecell" data-edit="receivedBy" title="Received by">${esc(r.received_by || '')}${
+        r._st ? (r._actor && r._actor !== r._st
+          ? `<span class="ret-by-sub is-edit" title="Last edited at ${esc(r._actor)}">✎ ${esc(r._actor)}</span>`
+          : `<span class="ret-by-sub" title="Graded at ${esc(r._st)}">${esc(retSyncInfo && r._st === retSyncInfo.station ? 'this station' : r._st)}</span>`) : ''}</td>
+      <td class="ret-cell-note ret-ro-note ret-ecell" data-edit="note" title="${esc(note)}">${retNoteHtml(note, r.source)}</td>
       <td class="cell-actions"><span class="ret-log-act">
         ${r.order_number ? `<button class="btn-icon ret-log-cam" data-campo="${esc(r.order_number)}" title="Upload photos for this PO — the QR opens locked to it">${ICONS.camera}</button>` : ''}
         <button class="btn-icon is-danger ret-log-del-btn" title="Delete this return">${ICONS.trash}</button>
@@ -4442,6 +4980,7 @@ function retUnlistedMark(sku) {
 
 function renderRetLog() {
   if (!retLogAll) return;
+  retMarkEditing(null); // a re-render closes any editor — the chip lifts
   const box = $('retPastBox');
   const q = $('retLogSearch').value.trim().toLowerCase();
   const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
@@ -4460,7 +4999,7 @@ function renderRetLog() {
   const compact = document.body.classList.contains('ret-compact');
   const noneMsg = retLogAll.length
     ? `Nothing matches “${esc(q)}”.`
-    : 'No returns yet — type a PO# in the green row above to receive the first one.';
+    : 'No returns yet — type a PO# in the entry row above to receive the first one.';
   // the entry row survives the innerHTML swap: remember where focus was,
   // rebuild the sheet, move the SAME <tr> back in, put focus back
   const af = document.activeElement;
@@ -4482,20 +5021,20 @@ function renderRetLog() {
           <th class="th-units">Units</th>
           <th class="th-price">Price</th>
           <th class="th-by">Received By</th>
-          <th class="th-settle">Dispute Settlement</th>
           <th class="th-note">Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
       <tbody class="ret-entry-body"></tbody>
       <tbody>${pageRows.map(({ r, i, ii, un }, idx) => retLogRowHtml(r, i, ii, un, retLogPage * RET_PAGE + idx + 1)).join('')
-        || `<tr><td colspan="${compact ? 6 : 13}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
+        || `<tr><td colspan="${compact ? 6 : 12}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
     ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
       `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
       <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
   box.querySelector('.ret-entry-body').appendChild(retEntryRow());
+  retPaintPresence(); // chips survive the rebuild
   if (wsFocus) {
     wsFocus.focus();
     if (wsSel) { try { wsFocus.setSelectionRange(wsSel[0], wsSel[1]); } catch { /* number inputs refuse */ } }
@@ -4537,9 +5076,10 @@ function renderRetDisputes() {
       return `<div class="ret-todo-row">
         <span class="mono">${esc(r.order_number)}</span>${retPoOpenBtn(r.order_number, r.source)}
         <span class="mono ret-disp-sku">${esc((i && i.sku) || '')}</span>
-        <button class="ret-todo-copy" data-copy="${esc(caseNo)}" title="Copy the case number">case ${esc(caseNo)}</button>
+        <button class="ret-todo-copy ret-case-open" data-caseno="${esc(caseNo)}" data-ch="${esc(String(r.source || '').toLowerCase())}"
+          title="Open case ${esc(caseNo)} on ${esc(channelLabel(String(r.source || '').toLowerCase()))} · right-click to copy the number">case ${esc(caseNo)}</button>
         <span class="ret-todo-units ${age >= 7 ? 'ret-disp-old' : ''}">${age === 0 ? 'today' : `${age} day${age === 1 ? '' : 's'} open`}</span>
-        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}:${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
+        ${ii >= 0 ? `<button class="ret-disp-done" data-dispdone="${r.id}|${ii}" title="Mark resolved — appends “resolved” to the note so it leaves this card (the log keeps everything)">✓ resolved</button>` : ''}
       </div>`;
     }).join('')}
     <div class="ret-todo-note">A return joins this card when its note contains <span class="mono">case: 12345</span>. Mark it ✓ when the marketplace closes the dispute.</div>`;
@@ -4551,14 +5091,18 @@ $('retDisputes').addEventListener('click', async (e) => {
     renderRetDisputes();
     return;
   }
+  const cs = e.target.closest('.ret-case-open');
+  if (cs) { retOpenCase(cs.dataset.caseno, cs.dataset.ch); return; }
   const c = e.target.closest('[data-copy]');
   if (c) { copyFromApp(c.dataset.copy); return; }
   const open = e.target.closest('.ret-po-open');
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
   const done = e.target.closest('[data-dispdone]');
   if (!done) return;
-  const [rid, ii] = done.dataset.dispdone.split(':').map(Number);
-  const entry = (retLogAll || []).find(x => x.r.id === rid && x.ii === ii);
+  const cut = done.dataset.dispdone.lastIndexOf('|');
+  const rid = done.dataset.dispdone.slice(0, cut);
+  const ii = Number(done.dataset.dispdone.slice(cut + 1));
+  const entry = (retLogAll || []).find(x => String(x.r.id) === rid && x.ii === ii);
   if (!entry) return;
   const { r, i } = entry;
   const res = await api.returnsEditUnit({
@@ -4574,8 +5118,251 @@ $('retDisputes').addEventListener('click', async (e) => {
   loadRetPast();
 });
 
+// right-click a case chip (log note or disputes card) = copy the number
+for (const host of ['retPastBox', 'retDisputes']) {
+  $(host).addEventListener('contextmenu', (e) => {
+    const cs = e.target.closest('.ret-case-open');
+    if (!cs) return;
+    e.preventDefault();
+    copyFromApp(cs.dataset.caseno);
+  });
+}
+
+/* shared returns folder (Google Drive / OneDrive / network share): every
+   desktop pointed at the same folder shows ONE returns log. The sheet keeps
+   its columns — sync shows as the station chips in the log bar, a station
+   subline under Received By, and a green wash on rows arriving from other
+   desktops (design signed off from the mockup, owner 2026-09-14). */
+let retSyncInfo = null;   // { enabled, station, stations, folderOk, missed }
+let retSyncToasted = false;
+const retFreshGids = new Set(); // rows to wash on the next render
+
+/* ---------- live presence (LAN): avatars, row chips, busy guard ----------
+   Built to the owner-approved preview variants/ret-presence.html
+   (2026-09-22). All styling lands via CSSOM — the CSP strips inline
+   style attributes. */
+let retPresence = { station: '', online: [], editing: {} };
+let retEditingGid = null; // the row THIS station currently has open
+let retBusyBypass = null; // gid allowed through the warning ("Edit anyway")
+const RET_USER_COLORS = ['#047857', '#1F6C9F', '#7C3AED', '#9F2F2D', '#956400'];
+function retUserColor(name) {
+  let h = 0;
+  for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return RET_USER_COLORS[h % RET_USER_COLORS.length];
+}
+const retUserInitials = (name) => String(name).replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '?';
+
+api.on('presence:update', (snap) => {
+  retPresence = snap && snap.online ? snap : { station: '', online: [], editing: {} };
+  retPaintPresence();
+});
+
+function retMarkEditing(gid) {
+  const g = gid ? String(gid) : null;
+  if (retEditingGid === g) return;
+  if (retEditingGid) api.presenceEditing(retEditingGid, false).catch(() => { /* beat catches up */ });
+  retEditingGid = g;
+  if (g) api.presenceEditing(g, true).catch(() => { /* beat catches up */ });
+}
+
+// paints WITHOUT re-rendering: chips land on the existing DOM. The bar's
+// own Users pill already shows who's around — no second avatar cluster
+// (owner 2026-09-22: "the right side is not necessary")
+function retPaintPresence() {
+  for (const el of document.querySelectorAll('.ret-user-chip')) el.remove();
+  for (const tr of document.querySelectorAll('#retPastBox tr.ret-busy')) {
+    tr.classList.remove('ret-busy');
+    tr.style.removeProperty('--busy-color');
+  }
+  for (const [gid, who] of Object.entries(retPresence.editing || {})) {
+    const tr = document.querySelector(`#retPastBox tr[data-rid="${CSS.escape(gid)}"]`);
+    if (!tr) continue;
+    tr.classList.add('ret-busy');
+    tr.style.setProperty('--busy-color', retUserColor(who));
+    const po = tr.querySelector('.ret-cell-po');
+    if (po) {
+      const chip = document.createElement('span');
+      chip.className = 'ret-user-chip';
+      chip.textContent = `${retUserInitials(who)} editing`;
+      chip.title = `${who} has this return open`;
+      chip.style.background = retUserColor(who);
+      po.appendChild(chip);
+    }
+  }
+}
+
+// opening a row someone else has open: the one-line popup first
+function retBusyGuard(entry, field) {
+  const gid = String(entry.r.id);
+  const who = (retPresence.editing || {})[gid];
+  if (!who || retBusyBypass === gid) return false;
+  $('retBusyTitle').textContent = `${who} is editing this return`;
+  const dlg = $('retBusyDialog');
+  $('retBusyEdit').onclick = () => {
+    dlg.close();
+    retBusyBypass = gid;
+    setTimeout(() => { if (retBusyBypass === gid) retBusyBypass = null; }, 30 * 1000);
+    const tr = document.querySelector(`#retPastBox tr[data-rid="${CSS.escape(gid)}"][data-ii="${entry.ii}"]`);
+    const cell = tr && tr.querySelector(`[data-edit="${field}"]`);
+    if (cell) retBeginEdit(cell, entry, field);
+  };
+  $('retBusyView').onclick = () => dlg.close();
+  dlg.showModal();
+  return true;
+}
+
+/* option A from variants/returns-stations.html (owner pick 2026-09-15):
+   one people pill — stacked initials + "N desktops" + connection dot —
+   with a click-open popover naming every desktop and when it was last
+   active. The name row of chips it replaces got long fast. */
+const RET_ST_IDLE_MS = 24 * 3600e3; // no file write in a day = gray avatar
+
+function retStInitials(name) {
+  const parts = String(name || '').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return ((parts[0][0] || '') + (parts[1] ? parts[1][0] : (parts[0][1] || ''))).toUpperCase();
+}
+
+// mtime of a station's file, spoken like a person would
+function retStAgo(ts) {
+  if (!ts) return '';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  if (s < 172800) return 'yesterday';
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+// every desktop wears its own color, identical on every machine: the name
+// hashes to a palette slot (.ret-av.c0…c4 in styles.css). This desktop
+// stays the solid emerald; a quiet-for-a-day desktop just dims.
+function retStColor(name) {
+  let h = 0;
+  for (const ch of String(name)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+  return `c${h % 5}`;
+}
+
+function retAvClass(st) {
+  if (st.name === retSyncInfo.station) return 'is-you';
+  return retStColor(st.name) + (Date.now() - (st.lastTs || 0) > RET_ST_IDLE_MS ? ' is-idle' : '');
+}
+
+function renderRetSyncLine() {
+  const el = $('retSyncLine');
+  if (!el) return;
+  if (!retSyncInfo || !retSyncInfo.enabled) { el.hidden = true; retSyncPopClose(); return; }
+  el.hidden = false;
+  const sts = retSyncInfo.stations || [];
+  el.innerHTML = `<button id="retSyncPill" type="button" class="ret-sync-pill" title="${retSyncInfo.folderOk
+    ? 'Shared returns folder connected — click for the desktops'
+    : 'Shared returns folder unreachable — check the path in Settings'}">
+    <span class="ret-avstack">${sts.slice(0, 4).map(st => `<span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>`).join('')}</span>
+    <b>Users</b>
+    <span class="ret-sync-dot${retSyncInfo.folderOk ? '' : ' is-bad'}"></span></button>`;
+  retSyncPopRefresh(); // an open popover follows fresh data
+}
+
+let retSyncPop = null;
+
+function retSyncPopClose() {
+  if (retSyncPop) { retSyncPop.remove(); retSyncPop = null; }
+}
+
+// quiet rows (owner 2026-09-15): a green dot marks the live desktop instead
+// of an "active now" label, and every other desktop can be removed with the
+// ✕ that shows on hover — first click arms it, the second deletes that
+// station's file from the shared folder (its returns come back if that
+// computer ever syncs again under the same name)
+function retSyncPopHtml() {
+  // this desktop speaks only through its solid emerald avatar — no YOU tag,
+  // no dot (owner 2026-09-15: the highlight already says it)
+  const rows = (retSyncInfo.stations || []).map(st => {
+    const you = st.name === retSyncInfo.station;
+    return `<div class="ret-pop-row"${you ? ' title="This desktop"' : ''}>
+      <span class="ret-av ${retAvClass(st)}">${esc(retStInitials(st.name))}</span>
+      <span class="ret-pop-name"><b>${esc(st.name)}</b></span>
+      ${you ? '' : `
+        <span class="ret-pop-when">${retStAgo(st.lastTs) || '—'}</span>
+        <button type="button" class="ret-pop-x" data-strm="${esc(st.name)}"
+          title="Remove ${esc(st.name)} from the shared log — its returns leave every desktop, and come back if that computer syncs again">✕</button>`}
+    </div>`;
+  }).join('');
+  const foot = retSyncInfo.folderOk
+    ? '<div class="ret-pop-foot"><span class="ret-sync-dot"></span>Shared folder connected</div>'
+    : '<div class="ret-pop-foot is-bad"><span class="ret-sync-dot is-bad"></span>Shared folder unreachable — check the path in Settings</div>';
+  return rows + foot;
+}
+
+function retSyncPopRefresh() {
+  if (!retSyncPop) return;
+  if (!retSyncInfo || !retSyncInfo.enabled) { retSyncPopClose(); return; }
+  retSyncPop.innerHTML = retSyncPopHtml();
+}
+
+$('retSyncLine').addEventListener('click', (e) => {
+  if (!e.target.closest('#retSyncPill')) return;
+  if (retSyncPop) { retSyncPopClose(); return; }
+  const pill = $('retSyncPill');
+  retSyncPop = document.createElement('div');
+  retSyncPop.className = 'ret-sync-pop';
+  retSyncPop.innerHTML = retSyncPopHtml();
+  // ✕ = two-step: first click arms ("remove?"), the second deletes the
+  // station's file from the shared folder and the log refreshes
+  retSyncPop.addEventListener('click', async (ev) => {
+    const x = ev.target.closest('.ret-pop-x');
+    if (!x) return;
+    if (!x.classList.contains('is-armed')) {
+      x.classList.add('is-armed');
+      x.textContent = 'remove?';
+      return;
+    }
+    const name = x.dataset.strm;
+    const res = await api.returnsSyncRemoveStation(name).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { toast((res && res.error) || `Could not remove ${name}.`); return; }
+    toast(`${name} removed from the shared log`);
+    loadRetPast(); // fresh fold: the chip, the popover and the sheet all follow
+  });
+  document.body.appendChild(retSyncPop);
+  const r = pill.getBoundingClientRect();
+  const w = retSyncPop.offsetWidth || 300; // right-aligned to the pill, kept on screen
+  retSyncPop.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+  retSyncPop.style.top = `${r.bottom + 8}px`;
+  const away = (ev) => {
+    if (ev.target.closest('.ret-sync-pop') || ev.target.closest('#retSyncPill')) return;
+    document.removeEventListener('mousedown', away, true);
+    retSyncPopClose();
+  };
+  setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') retSyncPopClose();
+});
+
+// a peer's file synced in: refresh, wash the moved rows, say who did what
+api.on('returns:syncChanged', (d) => {
+  const changes = (d && d.changes) || [];
+  if (!changes.length) return;
+  for (const c of changes) retFreshGids.add(String(c.gid));
+  if (activePage !== 'returns') return; // the next page open reloads anyway
+  loadRetPast();
+  const news = changes.filter(c => c.op === 'put' && c.kind === 'new').length;
+  const edits = changes.length - news;
+  const who = [...new Set(changes.map(c => c.actor))].join(', ');
+  toast(`${who}: ${[news ? `${news} new return${news === 1 ? '' : 's'}` : '', edits ? `${edits} change${edits === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}`, 3500);
+});
+
 async function loadRetPast() {
-  const returns = await api.returnsList();
+  // shared-folder sync on: { rows, sync }; off: the legacy bare array
+  const res = await api.returnsList();
+  const returns = Array.isArray(res) ? res : (res && res.rows) || [];
+  retSyncInfo = Array.isArray(res) ? null : (res && res.sync) || null;
+  renderRetSyncLine();
+  if (retSyncInfo && retSyncInfo.missed > 0 && !retSyncToasted) {
+    retSyncToasted = true;
+    toast(`Caught up from the shared folder — ${retSyncInfo.missed} change${retSyncInfo.missed === 1 ? '' : 's'} from other stations while this one was closed`, 5000);
+  }
   retLogAll = [];
   for (const r of returns) {
     // a PO-only return has no item lines but still shows as one row (ii -1)
@@ -4589,6 +5376,7 @@ async function loadRetPast() {
   }
   renderRetLog();
   renderRetDisputes();
+  retFreshGids.clear(); // washed once; later re-renders stay calm
 }
 
 let retLogPage = 0;
@@ -4603,12 +5391,14 @@ let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
 $('retPastBox').addEventListener('click', (e) => {
   const open = e.target.closest('.ret-po-open');
   if (open) { retOpenPo(open.dataset.po, open.dataset.ch); return; }
+  const cs = e.target.closest('.ret-case-open');
+  if (cs) { retOpenCase(cs.dataset.caseno, cs.dataset.ch); return; }
   const cam = e.target.closest('.ret-log-cam');
   if (cam) { openClaimsPop(cam.dataset.campo); return; }
   const tr = e.target.closest('tr[data-rid]');
   if (!tr) return;
   if (e.target.closest('.ret-log-del-btn')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (!entry) return;
     const qty = Number(entry.i.qty) || 1;
     retDelCtx = { rid: entry.r.id, ii: entry.ii, target: entry.i.targetSku || '' };
@@ -4624,7 +5414,7 @@ $('retPastBox').addEventListener('click', (e) => {
   // retired: "each column would be editable")
   const td = e.target.closest('td[data-edit]');
   if (td && !e.target.closest('button') && !td.querySelector('.ret-ein, .ret-emenu')) {
-    const entry = (retLogAll || []).find(x => x.r.id === Number(tr.dataset.rid) && x.ii === Number(tr.dataset.ii));
+    const entry = (retLogAll || []).find(x => String(x.r.id) === tr.dataset.rid && x.ii === Number(tr.dataset.ii));
     if (entry) retBeginEdit(td, entry);
   }
 });
@@ -4658,7 +5448,7 @@ async function retSaveEdit(entry, field, value) {
     const m = String(value).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!m) { toast('Date must look like 09/05/2026.'); renderRetLog(); return; }
     payload.day = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-  } else if (field === 'price' || field === 'settle') {
+  } else if (field === 'price') {
     payload[field] = retMoney(value);
   } else if (field === 'units') {
     payload.units = String(value).trim();
@@ -4688,20 +5478,24 @@ function retEditValue({ r, i, ii }, field) {
     case 'units': return String(Number(i.qty) || 1);
     case 'price': return Number(i.price) ? Number(i.price).toFixed(2) : '';
     case 'receivedBy': return r.received_by || '';
-    case 'settle': return Number(i.settle) ? Number(i.settle).toFixed(2) : '';
     case 'note': return ii >= 0 ? (i.note || '') : (r.note || '');
     default: return '';
   }
 }
 
 function retBeginEdit(td, entry, field = td.dataset.edit) {
+  if (retBusyGuard(entry, field)) return; // someone else is in this row
   // only one editor open: any other cell mid-edit falls back to display
   const other = $('retPastBox').querySelector('.ret-ein, .ret-emenu');
   if (other) renderRetLog();
+  for (const stray of document.querySelectorAll('.ret-notebox, .ret-emenu-pop')) stray.remove();
+  retMarkEditing(entry.r.id); // the chip on every other desktop
   if (field === 'condition') { retBeginCondEdit(td, entry); return; }
+  if (field === 'note') { retBeginNoteEdit(td, entry); return; }
   const startVal = retEditValue(entry, field);
-  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy', 'settle'].includes(field);
-  td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />`;
+  const mono = ['po', 'tracking', 'day', 'sku', 'units', 'price', 'receivedBy'].includes(field);
+  const isSku = field === 'sku';
+  td.innerHTML = `<input class="ret-ein${mono ? ' mono' : ''}" type="text" autocomplete="off" spellcheck="false" />${isSku ? '<div class="combo-list" hidden></div>' : ''}`;
   const input = td.querySelector('input');
   input.value = startVal;
   input.focus();
@@ -4714,8 +5508,53 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
     if (save && val.trim() !== startVal.trim()) retSaveEdit(entry, field, val);
     else renderRetLog();
   };
+  // the SKU cell queries the inventory like every other picker — a PO
+  // that arrived without its product still gets a searched, real SKU
+  // (owner 2026-09-18). The combo's Enter picks; the fallback below
+  // saves typed text when the lookup has nothing (offline, new SKU).
+  if (isSku) {
+    ensureInventory();
+    // SKU only, no title line in the list (owner 2026-09-18) — titles
+    // still match while typing, they just don't render
+    makeCombo(input, td.querySelector('.combo-list'), (item) => { input.value = item.sku; finish(true); }, { noTitle: true });
+  }
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => { if (isSku) setTimeout(() => finish(true), 150); else finish(true); });
+}
+
+// the note edits in a floating box over the cell — the column is too
+// narrow to read what you type (owner 2026-09-18). Enter saves,
+// Shift+Enter makes a new line, Esc cancels.
+function retBeginNoteEdit(td, entry) {
+  const startVal = retEditValue(entry, 'note');
+  const r = td.getBoundingClientRect();
+  td.innerHTML = '<input class="ret-ein" type="text" hidden />'; // keeps the cell's edit ring on
+  const box = document.createElement('div');
+  box.className = 'ret-notebox';
+  box.innerHTML = '<textarea class="ret-notein" rows="3" spellcheck="false"></textarea><div class="ret-notehint">Enter saves · Esc cancels</div>';
+  document.body.appendChild(box);
+  const w = Math.max(340, Math.min(r.width + 60, 480));
+  box.style.width = `${w}px`;
+  box.style.left = `${Math.max(8, Math.min(r.left - 6, window.innerWidth - w - 8))}px`;
+  box.style.top = `${Math.max(8, Math.min(r.top - 8, window.innerHeight - 132))}px`;
+  const input = box.querySelector('textarea');
+  input.value = startVal;
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    box.remove();
+    const val = input.value;
+    if (save && val.trim() !== startVal.trim()) retSaveEdit(entry, 'note', val);
+    else renderRetLog();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
   input.addEventListener('blur', () => finish(true));
@@ -4724,19 +5563,44 @@ function retBeginEdit(td, entry, field = td.dataset.edit) {
 // the condition cell edits through a small menu of the four pills
 function retBeginCondEdit(td, entry) {
   if (!entry.i.sku) return; // a PO-only row has no line to grade
-  td.innerHTML = `<div class="ret-emenu">${RET_CONDS.map(c => `
+  // the menu FLOATS over the table (owner-picked pop-over, 2026-09-21) —
+  // packed into the cell it stretched the whole row open
+  const r = td.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'ret-emenu ret-emenu-pop';
+  menu.innerHTML = RET_CONDS.map(c => `
     <button type="button" class="ret-emi ${entry.i.condition === c.key ? 'is-sel' : ''}" data-cond="${c.key}">
-      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('')}</div>`;
-  const menu = td.querySelector('.ret-emenu');
-  const away = (e) => {
-    if (e.target.closest('.ret-emenu')) return;
+      <span class="ret-dd-dot is-${c.key}"></span>${c.label}</button>`).join('');
+  document.body.appendChild(menu);
+  const place = () => {
+    const rr = td.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(rr.left - 4, window.innerWidth - menu.offsetWidth - 8))}px`;
+    const below = rr.bottom + 4;
+    menu.style.top = `${below + menu.offsetHeight + 8 > window.innerHeight ? Math.max(8, rr.top - menu.offsetHeight - 4) : below}px`;
+  };
+  place();
+  td.classList.add('is-econd'); // the cell keeps its edit ring while the menu floats
+  // the menu follows its cell while anything scrolls (same drift the SKU
+  // combo had, owner 2026-09-21)
+  const follow = () => { if (document.contains(td)) place(); else cleanup(); };
+  window.addEventListener('scroll', follow, true);
+  window.addEventListener('resize', follow);
+  const cleanup = () => {
+    menu.remove();
+    td.classList.remove('is-econd');
     document.removeEventListener('mousedown', away, true);
+    window.removeEventListener('scroll', follow, true);
+    window.removeEventListener('resize', follow);
+  };
+  const away = (e) => {
+    if (e.target.closest('.ret-emenu-pop')) return;
+    cleanup();
     renderRetLog();
   };
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cond]');
     if (!b) return;
-    document.removeEventListener('mousedown', away, true);
+    cleanup();
     if (b.dataset.cond === entry.i.condition) { renderRetLog(); return; }
     retCondEdit(entry, b.dataset.cond);
   });
@@ -4975,7 +5839,7 @@ $('retGrip').addEventListener('dblclick', () => {
 let retColWidths = {};
 try { retColWidths = JSON.parse(localStorage.getItem('retColWidths') || '{}'); } catch { /* fresh start */ }
 
-const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'settle', 11: 'note' };
+const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'cond', 7: 'units', 8: 'price', 9: 'by', 10: 'note' };
 
 function applyRetCols(table) {
   if (!table) return;
@@ -5205,26 +6069,22 @@ async function openStockDelete(sku, sid) {
   $('sdelAck').checked = false;
   $('sdelGo').disabled = true;
   $('sdelGo').textContent = 'Delete SKU';
-  // the blast radius: units on hand, dropship pad, linked listings
-  const it = stockCache && stockCache.items.find(x => x.stockItemId === sid);
-  const lvl = it && it.levels.find(l => l.locationId === stockCache.locationId);
-  const units = lvl ? Number(lvl.stockLevel) || 0 : 0;
-  const pad = dsPads && dsPads[String(sku).toUpperCase()];
-  const facts = [
-    `${units} unit${units === 1 ? '' : 's'} in stock at the warehouse${units > 0 ? ' — these counts are lost' : ''}`,
-    pad ? `enrolled in the DropShip program (pad ${pad}) — enrollment is removed` : '',
-    'checking linked listings…',
-  ].filter(Boolean);
-  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+  // one fact only (owner 2026-09-16, "just show if there are connected
+  // channel SKUs"): the live channel links, each named, or the all-clear
+  $('sdelFacts').innerHTML = 'Checking connected channel SKUs…';
   $('stockDelDialog').showModal();
   const res = await api.getChannelSkus(sid);
   if (!sdelCtx || sdelCtx.sid !== sid) return; // dialog moved on
-  facts.pop();
-  const n = res.ok ? res.channels.length : -1;
-  facts.push(n === -1 ? 'could not check linked listings'
-    : n === 0 ? 'no marketplace listings linked'
-      : `${n} marketplace listing${n === 1 ? '' : 's'} linked (${res.channels.map(c => channelLabel((c.source || '').toLowerCase())).join(', ')}) — they keep selling WITHOUT stock sync until ended or relinked`);
-  $('sdelFacts').innerHTML = facts.map(f => `• ${esc(f)}`).join('<br>');
+  const list = res.ok ? res.channels : null;
+  $('sdelFacts').innerHTML = !list
+    ? '<div class="sdel-links">Could not check connected channel SKUs.</div>'
+    : list.length === 0
+      ? '<div class="sdel-links is-clear">No channel SKUs connected.</div>'
+      : `<div class="sdel-links is-warn">
+          <div class="sdel-links-h">${list.length} connected channel SKU${list.length === 1 ? '' : 's'}</div>
+          <div class="sdel-links-sub">The listing${list.length === 1 ? '' : 's'} will keep selling without stock sync.</div>
+          ${list.map(c => `<div class="sdel-link-row"><span class="mono">${esc(c.sku || '')}</span><span class="sdel-link-ch">${esc(channelLabel((c.source || '').toLowerCase()) || c.source || '')}</span></div>`).join('')}
+        </div>`;
 }
 
 $('sdelAck').addEventListener('change', () => { $('sdelGo').disabled = !$('sdelAck').checked; });
@@ -5256,6 +6116,8 @@ $('sdelGo').addEventListener('click', async () => {
 
 /* ---------- linked channel SKUs per stock item ---------- */
 
+let chsSweep = 0; // invalidates a stale background sweep after a re-open
+
 async function openChannelSkus(sku, stockItemId) {
   $('chsTitle').textContent = `Channel SKUs linked to ${sku}`;
   $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
@@ -5268,7 +6130,7 @@ async function openChannelSkus(sku, stockItemId) {
   $('chsList').innerHTML = res.channels.length === 0
     ? '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>'
     : res.channels.map(c => `
-      <div class="chs-row">
+      <div class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}">
         <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
         <span class="chs-sub">${esc(c.subSource)}</span>
         <button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
@@ -5281,6 +6143,27 @@ async function openChannelSkus(sku, stockItemId) {
           : '<span class="chs-price chs-price-none" title="No price stored in Linnworks for this listing">—</span>'}
         ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
       </div>`).join('');
+  // A SKU renamed or ended ON the channel leaves its old link record behind
+  // in Linnworks (owner 2026-09-16). Sweep sync-off rows against the
+  // channel's current catalog in the background and drop the ones that are
+  // truly gone. Only sync-off rows: the catalog scan lags, and a listing
+  // created minutes ago must not blink out of the popup.
+  const staleCandidates = res.channels
+    .filter(c => c.ignoreSync && c.sku)
+    .map(c => ({ sku: c.sku, source: c.source, subSource: c.subSource }));
+  if (!staleCandidates.length) return;
+  const my = ++chsSweep;
+  api.channelSkusGone(staleCandidates).then((v) => {
+    if (my !== chsSweep || !v || !v.ok || !v.gone || !v.gone.length) return;
+    for (const g of v.gone) {
+      for (const row of document.querySelectorAll('#chsList .chs-row')) {
+        if (row.dataset.sku === g.sku && row.dataset.src === g.source && row.dataset.sub === g.subSource) row.remove();
+      }
+    }
+    if (!document.querySelector('#chsList .chs-row')) {
+      $('chsList').innerHTML = '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>';
+    }
+  }).catch(() => { /* the sweep is a cleanup, never an error */ });
 }
 
 // click a channel SKU -> that listing opens on its marketplace (pane if
@@ -5309,6 +6192,923 @@ $('chsList').addEventListener('contextmenu', (e) => {
 });
 
 $('chsClose').addEventListener('click', () => $('chsDialog').close());
+
+/* ---------- bulk stock update (owner 2026-09-17, reworked same day:
+   "no excel import — I just want to write the SKU on the left column and
+   on the right side the qty") ---------- */
+// A typed two-column grid: SKU left, qty right, a fresh empty line appears
+// as you go. Add mode piles received units on top; Set mode replaces the
+// count. Every apply writes a history entry that syncs through the shared
+// folder with the station name.
+
+// segmented toggle (owner picked version 1): the pill switch + a hint that
+// says what the quantities will mean
+let bulkModeVal = 'add';
+const bulkMode = () => bulkModeVal;
+const BULK_HINTS = {
+  add: 'received units — each qty goes on top of the current count',
+  set: 'a correction or recount — each qty becomes the new count',
+};
+function bulkSetMode(m) {
+  bulkModeVal = m === 'set' ? 'set' : 'add';
+  document.querySelectorAll('#bulkSeg .view-chip').forEach(b => b.classList.toggle('is-active', b.dataset.bm === bulkModeVal));
+  $('bulkModeHint').textContent = BULK_HINTS[bulkModeVal];
+  bulkRefresh();
+}
+$('bulkSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bm]');
+  if (b) bulkSetMode(b.dataset.bm);
+});
+
+// the stock sheet answers "Now" live while typing; unknown SKUs go amber
+function bulkStockOf(sku) {
+  if (!stockCache || !sku) return null;
+  const it = (stockCache.items || []).find(i => String(i.sku).toUpperCase() === sku);
+  if (!it) return null;
+  const l = (it.levels || []).find(x => x.locationId === stockCache.locationId);
+  return { level: l ? Number(l.stockLevel) || 0 : 0 };
+}
+
+function bulkAddRow(sku, qty) {
+  const row = document.createElement('div');
+  row.className = 'bulk-g-row';
+  row.innerHTML = `
+    <span class="bulk-g-skuwrap">
+      <input class="input mono bulk-g-sku" data-bf="sku" placeholder="SKU" autocomplete="off" spellcheck="false" />
+      <div class="combo-list" hidden></div>
+    </span>
+    <input class="input mono bulk-g-qty" data-bf="qty" placeholder="0" autocomplete="off" inputmode="numeric" />
+    <span class="bulk-g-now mono">—</span>
+    <span class="bulk-g-after mono">—</span>
+    <button type="button" class="bulk-g-x" title="Remove this line" tabindex="-1">✕</button>`;
+  const skuIn = row.querySelector('[data-bf="sku"]');
+  const qtyIn = row.querySelector('[data-bf="qty"]');
+  skuIn.value = sku || '';
+  qtyIn.value = qty || '';
+  // the same SKU/title/barcode picker the returns sheets use (owner
+  // 2026-09-17: "why does it not prefill or show me options")
+  makeCombo(skuIn, row.querySelector('.combo-list'), (item) => {
+    skuIn.value = item.sku;
+    bulkRefresh();
+    qtyIn.focus();
+    qtyIn.select();
+  }, {
+    // dead-end search → the New SKU popup, prefilled; on create the row
+    // fills and the fresh item flows into the grid's Now column
+    addNew: (text) => openNewSkuDialog({ sku: text }, () => {
+      skuIn.value = text;
+      loadStock().then(() => bulkRefresh()).catch(() => bulkRefresh());
+      qtyIn.focus();
+    }),
+  });
+  $('bulkGridRows').appendChild(row);
+  bulkRowCalc(row);
+  return row;
+}
+
+function bulkRowCalc(row) {
+  const skuIn = row.querySelector('[data-bf="sku"]');
+  const sku = skuIn.value.trim().toUpperCase();
+  const qs = row.querySelector('[data-bf="qty"]').value.trim();
+  const qty = /^\d+$/.test(qs) ? Number(qs) : NaN;
+  const hit = bulkStockOf(sku);
+  skuIn.classList.toggle('bulk-g-bad', !!sku && !!stockCache && !hit);
+  row.querySelector('.bulk-g-now').textContent = hit ? hit.level : '—';
+  const afterEl = row.querySelector('.bulk-g-after');
+  if (hit && Number.isInteger(qty)) {
+    const after = bulkMode() === 'add' ? hit.level + qty : qty;
+    afterEl.innerHTML = `<b>${after}</b>`;
+    afterEl.classList.toggle('bulk-up', after > hit.level);
+    afterEl.classList.toggle('bulk-down', after < hit.level);
+  } else {
+    afterEl.textContent = '—';
+    afterEl.classList.remove('bulk-up', 'bulk-down');
+  }
+}
+
+function bulkValidRows() {
+  const out = [];
+  for (const row of document.querySelectorAll('#bulkGridRows .bulk-g-row')) {
+    const sku = row.querySelector('[data-bf="sku"]').value.trim().toUpperCase();
+    const qs = row.querySelector('[data-bf="qty"]').value.trim();
+    if (!sku || !/^\d+$/.test(qs)) continue;
+    if (stockCache && !bulkStockOf(sku)) continue; // amber rows never apply
+    out.push({ sku, qty: Number(qs) });
+  }
+  return out;
+}
+
+function bulkRefresh() {
+  for (const row of document.querySelectorAll('#bulkGridRows .bulk-g-row')) bulkRowCalc(row);
+  const rows = $('bulkGridRows');
+  const last = rows.lastElementChild;
+  if (!last || last.querySelector('[data-bf="sku"]').value.trim() || last.querySelector('[data-bf="qty"]').value.trim()) bulkAddRow();
+  $('bulkApply').disabled = !bulkValidRows().length;
+}
+
+$('stockBulkBtn').addEventListener('click', () => {
+  ensureInventory(); // the SKU picker's lookup data
+  $('bulkGridRows').innerHTML = '';
+  $('bulkNote').value = '';
+  bulkAddRow();
+  bulkSetMode('add'); // every open starts on the safe mode
+  $('bulkApply').disabled = true;
+  $('bulkDialog').showModal();
+  const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
+  if (first) first.focus();
+  if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
+  bulkHistLoad();
+});
+$('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
+
+$('bulkGridRows').addEventListener('input', () => bulkRefresh());
+$('bulkGridRows').addEventListener('click', (e) => {
+  const x = e.target.closest('.bulk-g-x');
+  if (!x) return;
+  x.closest('.bulk-g-row').remove();
+  bulkRefresh();
+});
+// pasting two spreadsheet columns still fills the grid, one row per line
+$('bulkGridRows').addEventListener('paste', (e) => {
+  const text = e.clipboardData ? e.clipboardData.getData('text') : '';
+  if (!text || (!text.includes('\n') && !text.includes('\t'))) return; // plain text pastes normally
+  e.preventDefault();
+  const startRow = e.target.closest('.bulk-g-row');
+  if (startRow && !startRow.querySelector('[data-bf="sku"]').value.trim()) startRow.remove();
+  for (const ln of text.split(/\r?\n/)) {
+    const parts = ln.split(/[\t,]+/).map(s => s.trim()).filter(Boolean);
+    if (parts.length) bulkAddRow(String(parts[0]).toUpperCase(), parts[1] || '');
+  }
+  bulkRefresh();
+});
+
+$('bulkApply').addEventListener('click', async () => {
+  const rows = bulkValidRows();
+  if (!rows.length) return;
+  const mode = bulkMode();
+  $('bulkApply').disabled = true;
+  $('bulkApply').textContent = 'Importing…';
+  const res = await api.stockBulkApply({ mode, rows, file: '', note: $('bulkNote').value.trim() });
+  $('bulkApply').textContent = 'Import';
+  if (!res.ok) { toast(res.error || 'Import failed.'); $('bulkApply').disabled = false; return; }
+  // one Ctrl+Z takes the WHOLE update back — through the same revert the
+  // history buttons use, so the undo shows up in the history too
+  pushUndo(`bulk import of ${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'}`, async () => {
+    const r = await api.stockBulkRevert(res.entry.id);
+    if (!r.ok) throw new Error(r.error || 'Revert failed');
+    loadStock();
+    bulkHistLoad();
+  });
+  toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the typed counts'} · Ctrl+Z reverses the whole import`, 7000);
+  $('bulkGridRows').innerHTML = '';
+  bulkAddRow();
+  $('bulkNote').value = '';
+  loadStock();
+  bulkHistLoad();
+});
+
+let bulkHistEntries = []; // the revert confirm names the entry from here
+
+// units of entry `id`, line `rowIdx`, already moved to another SKU by fix
+// entries — a reverted fix gave its units back, so it doesn't count
+function bulkFixMoved(id, rowIdx) {
+  const undone = new Set(bulkHistEntries.filter(x => x.revertOf).map(x => x.revertOf));
+  return bulkHistEntries
+    .filter(x => x.mode === 'fix' && x.fixOf === id && Number(x.fixRow) === Number(rowIdx) && !undone.has(x.id))
+    .reduce((s, x) => s + (Number(x.fixQty) || 0), 0);
+}
+
+async function bulkHistLoad() {
+  const box = $('bulkHist');
+  const res = await api.stockBulkHistory().catch(() => null);
+  bulkHistEntries = (res && res.ok && res.entries) || [];
+  if (!bulkHistEntries.length) {
+    box.innerHTML = '<p class="dlg-note">Nothing yet.</p>';
+    return;
+  }
+  const reverted = new Set(bulkHistEntries.filter(e => e.revertOf).map(e => e.revertOf));
+  box.innerHTML = bulkHistEntries.map((e, i) => {
+    const rows = e.rows || [];
+    const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
+    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
+    const what = e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} · ${nSku}`
+      : e.mode === 'set' ? `set counts · ${nSku}`
+        : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
+          : e.mode === 'fix' ? `moved ${e.fixQty || ''} unit${Number(e.fixQty) === 1 ? '' : 's'} <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> → <span class="mono">${esc(rows[rows.length - 1] ? rows[rows.length - 1].sku : '')}</span>`
+            : `↩ reversed an earlier change · ${nSku}`;
+    const fixable = !reverted.has(e.id) && (e.mode === 'add' || e.mode === 'set' || e.mode === 'edit');
+    const act = reverted.has(e.id)
+      ? '<span class="bulk-h-rvtd">reverted ✓</span>'
+      : `<button type="button" class="bulk-h-revert" data-brv="${esc(e.id)}" title="Reverse this change — subtracts what it added (or restores what it removed), leaving everything since alone">↩ Revert</button>`;
+    return `
+    <div class="bulk-h">
+      <div class="bulk-h-line" data-bh="${i}">
+        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
+        ${act}<span class="bulk-h-chev">▸</span>
+      </div>
+      <div class="bulk-h-body" hidden>
+        <table class="bulk-table">
+          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
+          <tbody>${rows.map((r, ri) => {
+    const change = (Number(r.after) || 0) - (Number(r.before) || 0);
+    const moved = fixable ? bulkFixMoved(e.id, ri) : 0;
+    const avail = change - moved;
+    const canFix = fixable && change > 0 && avail > 0;
+    const cell = (canFix
+      ? `<button type="button" class="bulk-h-fix" title="Wrong SKU? Change it in place — the units move to the SKU you pick">✎</button>` : '')
+      + (moved > 0 ? `<span class="bulk-h-moved" title="${moved} unit${moved === 1 ? '' : 's'} moved to another SKU — see the “moved” entries above">↷ ${moved} moved</span>` : '');
+    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix') && r.qty > 0)) ? `+${r.qty}` : r.qty;
+    return `<tr><td class="mono bulk-h-sku"${canFix ? ` data-bfx="${esc(e.id)}" data-bfr="${ri}" title="Double-click to change which SKU these units went to"` : ''}>${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${q}</td><td class="num mono">${r.after == null ? '—' : r.after}</td><td class="bulk-h-fixcell">${cell}</td></tr>`;
+  }).join('')}</tbody>
+        </table>
+        ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let bulkRevPending = ''; // entry id awaiting the confirm popup
+
+// In-place SKU correction (owner 2026-09-17: "double click within the
+// history and just change it really quickly"): the SKU cell swaps into an
+// input with suggestions + a small units box (prefilled with everything
+// still movable). Enter applies the move, Esc cancels.
+let bulkFixClose = null; // open editor's cleanup, one at a time
+
+function bulkFixInlineOpen(td) {
+  if (bulkFixClose) bulkFixClose();
+  const entry = bulkHistEntries.find(x => x.id === td.dataset.bfx);
+  const ri = Number(td.dataset.bfr);
+  const row = entry && (entry.rows || [])[ri];
+  if (!row) return;
+  const change = (Number(row.after) || 0) - (Number(row.before) || 0);
+  const avail = change - bulkFixMoved(entry.id, ri);
+  if (avail < 1) { toast('Those units were already moved.'); return; }
+  ensureInventory(); // the SKU picker's lookup data
+  const orig = td.innerHTML;
+  td.innerHTML = `
+    <div class="bulk-h-fixwrap">
+      <input class="input mono bulk-h-fixsku" type="text" autocomplete="off" spellcheck="false" aria-label="Correct SKU" />
+      <input class="input mono bulk-h-fixqty" type="number" min="1" max="${avail}" step="1" value="${avail}" aria-label="Units to move" title="How many of the ${avail} unit${avail === 1 ? '' : 's'} to move" />
+      <div class="combo-list" hidden></div>
+    </div>`;
+  const skuIn = td.querySelector('.bulk-h-fixsku');
+  const qtyIn = td.querySelector('.bulk-h-fixqty');
+  const listEl = td.querySelector('.combo-list');
+  skuIn.value = String(row.sku);
+  const close = () => {
+    document.removeEventListener('mousedown', away, true);
+    td.innerHTML = orig;
+    bulkFixClose = null;
+  };
+  const away = (ev) => { if (!td.contains(ev.target) && !listEl.contains(ev.target)) close(); };
+  const apply = async () => {
+    const to = skuIn.value.trim().toUpperCase();
+    const m = Number(qtyIn.value);
+    if (!to || to === String(row.sku).toUpperCase()) { close(); return; } // unchanged — never mind
+    if (!Number.isInteger(m) || m < 1 || m > avail) { toast(`Units must be a whole number between 1 and ${avail}.`); qtyIn.focus(); return; }
+    skuIn.disabled = true; qtyIn.disabled = true;
+    const res = await api.stockBulkFix(entry.id, ri, to, m);
+    if (!res.ok) { skuIn.disabled = false; qtyIn.disabled = false; toast(res.error || 'Could not move the units.'); return; }
+    close();
+    toast(`Moved ${m} × ${row.sku} → ${to}`);
+    loadStock();
+    bulkHistLoad();
+  };
+  makeCombo(skuIn, listEl, (item) => { skuIn.value = item.sku; qtyIn.focus(); });
+  const onKey = (ev) => {
+    // preventDefault on Esc also keeps the bulk dialog itself open
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+  };
+  skuIn.addEventListener('keydown', onKey);
+  qtyIn.addEventListener('keydown', onKey);
+  document.addEventListener('mousedown', away, true);
+  bulkFixClose = close;
+  skuIn.focus();
+  skuIn.select();
+}
+
+$('bulkHist').addEventListener('dblclick', (e) => {
+  const td = e.target.closest('td.bulk-h-sku[data-bfx]');
+  if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
+});
+
+$('bulkHist').addEventListener('click', (e) => {
+  const fx = e.target.closest('.bulk-h-fix');
+  if (fx) {
+    const td = fx.closest('tr').querySelector('td.bulk-h-sku[data-bfx]');
+    if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
+    return;
+  }
+  const rv = e.target.closest('.bulk-h-revert');
+  if (rv) {
+    bulkRevPending = rv.dataset.brv;
+    const entry = bulkHistEntries.find(x => x.id === bulkRevPending);
+    const rows = (entry && entry.rows) || [];
+    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
+    $('bulkRevWhat').textContent = entry
+      ? `${new Date(entry.ts).toLocaleString()} · ${entry.station || ''} · ${entry.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} across` : entry.mode === 'set' ? 'set counts on' : entry.mode === 'edit' ? 'edited' : 'reversed a change on'} ${rows.length === 1 ? rows[0].sku : `${rows.length} SKUs`}${entry.note ? ` · “${entry.note}”` : ''}`
+      : '';
+    $('bulkRevGo').disabled = false;
+    $('bulkRevDialog').showModal();
+    return;
+  }
+  const line = e.target.closest('.bulk-h-line');
+  if (!line) return;
+  const body = line.parentElement.querySelector('.bulk-h-body');
+  body.hidden = !body.hidden;
+  line.querySelector('.bulk-h-chev').textContent = body.hidden ? '▸' : '▾';
+});
+
+$('bulkRevCancel').addEventListener('click', () => $('bulkRevDialog').close());
+$('bulkRevGo').addEventListener('click', async () => {
+  if (!bulkRevPending) return;
+  $('bulkRevGo').disabled = true;
+  const res = await api.stockBulkRevert(bulkRevPending);
+  $('bulkRevDialog').close();
+  if (!res.ok) { toast(res.error || 'Could not revert.'); return; }
+  toast('Reversed — the history keeps both entries.');
+  loadStock();
+  bulkHistLoad();
+});
+
+/* ---------- Pricing tab (owner 2026-09-18, design 'Pricing and Overview'):
+   products × auto-generated channel columns. Walmart (repricer-owned)
+   prices are display-only (grey); other channels click-to-edit. ---------- */
+
+let prData = null;
+let prQ = '';
+const prExpanded = new Set(); // parent SKUs (upper) with the variations open
+// Stock (server order) or Family — capacity siblings pulled together
+// (owner-picked Option A of pr-family-variants.html, 2026-09-21)
+let prSort = 'stock';
+try { prSort = localStorage.getItem('prSort') === 'family' ? 'family' : 'stock'; } catch { /* default */ }
+// the family = the SKU with its capacity token wildcarded, so
+// X400-128GB-GRAY and X400-256GB-GRAY meet at X400-*-GRAY
+const prFamKey = (sku) => {
+  const s = String(sku).toUpperCase();
+  const m = s.match(/\d+\s*[GT]B/);
+  return m ? s.replace(m[0], '*') : s;
+};
+const prCapBadge = (sku) => {
+  const m = String(sku).toUpperCase().match(/\d+\s*[GT]B/);
+  return m ? `<span class="pr-capbadge">${m[0]}</span>` : '';
+};
+const PR_COLORS = ['#1F6C9F', '#956400', '#6A2E9E', '#9F2F2D', '#346538'];
+// drag a channel header to rearrange the columns (owner 2026-09-21,
+// "allow me to drag around and arrange the viewing"); order sticks per
+// desktop. Colors follow the CHANNEL, not the column position.
+let prChanOrder = [];
+try { prChanOrder = JSON.parse(localStorage.getItem('prChanOrder') || '[]'); } catch { /* server order */ }
+function prCols() {
+  const base = (prData && prData.channels) || [];
+  if (!Array.isArray(prChanOrder) || !prChanOrder.length) return base;
+  const byKey = new Map(base.map(c => [c.key, c]));
+  const out = [];
+  for (const k of prChanOrder) { const c = byKey.get(k); if (c) { out.push(c); byKey.delete(k); } }
+  for (const c of base) if (byKey.has(c.key)) out.push(c);
+  return out;
+}
+function prChanColor(c) {
+  const base = (prData && prData.channels) || [];
+  return PR_COLORS[Math.max(0, base.findIndex(x => x.key === c.key)) % PR_COLORS.length];
+}
+const prMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '—');
+
+async function enterPricing(force) {
+  if (!prData) $('prBody').innerHTML = '<p class="dlg-note pr-note">Loading listings and prices…</p>';
+  const res = await api.pricingList(!!force).catch(e => ({ ok: false, error: e.message }));
+  if (activePage !== 'pricing') return;
+  if (!res || !res.ok) {
+    $('prBody').innerHTML = `<p class="dlg-note pr-note">${esc((res && res.error) || 'Could not load prices.')}</p>`;
+    return;
+  }
+  prData = res;
+  prRender();
+}
+
+function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channels || []).length}, minmax(240px, 1.15fr))`; }
+
+// one product's channel cells — shared by parent and variation rows, each
+// with its own top-seller highlight (module-level so the variations toggle
+// can build ONE group without re-rendering the whole table)
+function prChCells(p) {
+  const cols = prCols();
+  const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
+  return cols.map((c, ci) => {
+    const lines = p.channels[c.key] || [];
+    const inner = lines.map(l => `
+        <div class="pr-line">
+          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
+          ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
+          ${c.fluctuates
+    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
+    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
+          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
+        </div>`).join('');
+    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+        <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
+      </div>`;
+  }).join('');
+}
+
+// the inside of one variation group (the rows + the footer), without the
+// curtain wrapper — prRender and the toggle share it
+function prGroupInner(p) {
+  const parts = [];
+  for (const v of p.variations || []) {
+    parts.push(`
+    <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
+      <div class="pr-cell pr-num pr-velbow">└</div>
+      <div class="pr-cell pr-prod">
+        ${v.image ? `<img class="pr-thumb" src="${esc(v.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(v.sku)}</span>
+          <span class="pr-pstock">${v.stock} in stock</span>
+        </div>
+        <button type="button" class="pr-vx" data-vx="${esc(v.sku)}" title="Detach — ${esc(v.sku)} goes back to its own row">✕</button>
+      </div>
+      ${prChCells(v)}
+    </div>`);
+  }
+  parts.push(`
+    <div class="pr-vfoot">
+      <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
+    </div>`);
+  return parts.join('');
+}
+
+function prRender() {
+  if (!prData) return;
+  const cols = prCols();
+  const head = $('prHead');
+  head.hidden = false;
+  head.innerHTML = '<div class="pr-hc">#</div><div class="pr-hc">PRODUCT</div>'
+    + cols.map((c, i) => `<div class="pr-hc pr-hch" draggable="true" data-ci="${i}" data-key="${esc(c.key)}" title="Drag to rearrange the channel columns">${esc(c.source.toUpperCase())}</div>`).join('');
+  head.style.gridTemplateColumns = prGridCols();
+  for (const el of head.querySelectorAll('.pr-hch')) el.style.color = prChanColor(cols[Number(el.dataset.ci)]);
+
+  const q = prQ.trim();
+  const matchOne = (p) => !q || skuMatch(p.sku, q)
+    || cols.some(c => (p.channels[c.key] || []).some(l => skuMatch(l.csku, q)));
+  const match = (p) => matchOne(p) || (p.variations || []).some(matchOne);
+  const rows = (prData.products || []).filter(match);
+  if (!rows.length) {
+    $('prBody').innerHTML = `<p class="dlg-note pr-note">${q ? 'No SKUs match.' : 'No linked listings yet — link channel SKUs in Mappings and refresh.'}</p>`;
+    return;
+  }
+
+  // one quiet chip on the row; the details live in a popover (owner picked
+  // this over the stacked lines, 2026-09-20)
+  const sugChip = (p) => {
+    const n = (p.suggest || []).length;
+    return n ? `<button type="button" class="pr-vschip" data-vsp="${esc(p.sku)}" title="Condition SKUs that look like ${esc(p.sku)} — click to review">✦ ${n} possible variation${n === 1 ? '' : 's'}</button>` : '';
+  };
+
+  // family sort: the leaders keep the biggest-stock order, but capacity
+  // siblings (same model + color, different GB) ride directly under the
+  // biggest one, marked with the emerald rail and a capacity badge
+  const view = [];
+  if (prSort === 'family') {
+    const fams = new Map(); // key -> members, stock order preserved
+    for (const p of rows) {
+      const k = prFamKey(p.sku);
+      if (!fams.has(k)) fams.set(k, []);
+      fams.get(k).push(p);
+    }
+    let num = 0;
+    for (const fam of fams.values()) {
+      num++;
+      fam.forEach((p, i) => view.push({
+        p,
+        num: i === 0 ? num : 0,
+        fam: fam.length > 1 ? `pr-fam${i === 0 ? ' pr-fam-first' : ''}${i === fam.length - 1 ? ' pr-fam-last' : ''}` : '',
+      }));
+    }
+  } else {
+    rows.forEach((p, i) => view.push({ p, num: i + 1, fam: '' }));
+  }
+
+  $('prBody').innerHTML = view.map(({ p, num, fam }) => {
+    const vars = p.variations || [];
+    const vunits = vars.reduce((a, v) => a + (Number(v.stock) || 0), 0);
+    const pU = String(p.sku).toUpperCase();
+    // searching a condition SKU opens its group so the hit is visible
+    const open = vars.length > 0 && (prExpanded.has(pU) || (q && !matchOne(p) && vars.some(matchOne)));
+    const parts = [`
+    <div class="pr-row ${fam}" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
+      <div class="pr-cell pr-num">${num || ''}</div>
+      <div class="pr-cell pr-prod">
+        ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
+        <div class="pr-prodtxt">
+          <span class="mono pr-psku">${esc(p.sku)}${fam ? prCapBadge(p.sku) : ''}</span>
+          <span class="pr-pstock">${p.stock} in stock</span>
+          ${vars.length
+    ? `<button type="button" class="pr-vartog" data-vt="${esc(p.sku)}">${open ? '▾' : '▸'} ${vars.length} variation${vars.length === 1 ? '' : 's'} · ${vunits} unit${vunits === 1 ? '' : 's'}</button>`
+    : `<button type="button" class="pr-varadd" data-va="${esc(p.sku)}" title="Group a condition SKU (open box / used / …) under this product">+ variation</button>`}
+          ${sugChip(p)}
+        </div>
+      </div>
+      ${prChCells(p)}
+    </div>`];
+    if (open) {
+      // groups render open with no motion here — the curtain only plays on
+      // a toggle click, which splices the one group in place (lag fix
+      // 2026-09-20: a full re-render before the animation stuttered)
+      parts.push(`<div class="pr-vgroup open${fam ? ' pr-fam' : ''}" data-vg="${esc(pU)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
+    }
+    return parts.join('');
+  }).join('');
+  for (const el of $('prBody').querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
+}
+
+$('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
+$('prRefresh').addEventListener('click', () => enterPricing(true));
+const prSortPaint = () => {
+  for (const b of document.querySelectorAll('#prSortSet button')) b.classList.toggle('is-on', b.dataset.prsort === prSort);
+};
+prSortPaint();
+$('prSortSet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-prsort]');
+  if (!b || b.dataset.prsort === prSort) return;
+  prSort = b.dataset.prsort;
+  try { localStorage.setItem('prSort', prSort); } catch { /* remembered next time instead */ }
+  prSortPaint();
+  prRender();
+});
+// dragging a channel header drops it in front of the header it lands on
+let prDragKey = null;
+$('prHead').addEventListener('dragstart', (e) => {
+  const h = e.target.closest('.pr-hch');
+  if (!h) return;
+  prDragKey = h.dataset.key;
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('prHead').addEventListener('dragover', (e) => {
+  if (prDragKey && e.target.closest('.pr-hch')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+});
+$('prHead').addEventListener('drop', (e) => {
+  const h = e.target.closest('.pr-hch');
+  const from = prDragKey;
+  prDragKey = null;
+  if (!h || !from || h.dataset.key === from) return;
+  e.preventDefault();
+  const order = prCols().map(c => c.key);
+  order.splice(order.indexOf(h.dataset.key), 0, ...order.splice(order.indexOf(from), 1));
+  prChanOrder = order;
+  try { localStorage.setItem('prChanOrder', JSON.stringify(order)); } catch { /* this session only */ }
+  prRender();
+});
+
+// click a price -> inline editor; Enter pushes via Linnworks
+function prEditPrice(btn) {
+  const row = btn.closest('.pr-row');
+  const c = prCols()[Number(btn.dataset.ci)];
+  if (!row || !c) return;
+  const old = Number(btn.dataset.old) || 0;
+  const wrap = document.createElement('span');
+  wrap.className = 'pr-editwrap';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '0.01';
+  input.min = '0.01';
+  input.className = 'input mono pr-editin';
+  input.value = old ? old.toFixed(2) : '';
+  wrap.appendChild(input);
+  btn.replaceWith(wrap);
+  const cancel = () => { wrap.replaceWith(btn); };
+  const apply = async () => {
+    const p = Number(input.value);
+    if (!Number.isFinite(p) || p <= 0) { toast('Enter a price above zero.'); input.focus(); return; }
+    if (Math.abs(p - old) < 0.005) { cancel(); return; }
+    input.disabled = true;
+    const res = await api.pricingSet({
+      stockItemId: row.dataset.pid, stockSku: row.dataset.psku,
+      source: c.source, subSource: c.subSource,
+      channelSku: btn.dataset.csku, price: p, old,
+    });
+    if (!res.ok) { input.disabled = false; toast(res.error || 'Could not change the price.'); return; }
+    toast(`${btn.dataset.csku} → $${p.toFixed(2)} — saved to Linnworks (goes live on ${c.source} when its price sync is on)`);
+    enterPricing(true);
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); cancel(); }
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+  });
+  input.addEventListener('blur', () => { if (!input.disabled) setTimeout(() => { if (wrap.isConnected && !input.disabled) cancel(); }, 150); });
+  input.focus();
+  input.select();
+}
+
+// + channel SKU: an anchored picker of that channel's UNLINKED listings;
+// picking one creates the real Linnworks mapping (mapping:link)
+let prPickEl = null;
+function prPickClose() {
+  if (prPickEl) { prPickEl.remove(); prPickEl = null; }
+  document.removeEventListener('mousedown', prPickAway, true);
+}
+function prPickAway(e) { if (prPickEl && !prPickEl.contains(e.target)) prPickClose(); }
+
+async function prPickOpen(btn) {
+  prPickClose();
+  const row = btn.closest('.pr-row');
+  const c = prCols()[Number(btn.dataset.ci)];
+  if (!row || !c) return;
+  const psku = row.dataset.psku;
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Link a <b>${esc(c.source)}</b> SKU to <span class="mono">${esc(psku)}</span></div>
+    <input class="input mono prpick-in" type="text" placeholder="Search unlinked listings…" autocomplete="off" spellcheck="false" />
+    <div class="prpick-list"><p class="dlg-note">Loading the ${esc(c.source)} catalog…</p></div>
+    <div class="prpick-foot">Only listings not linked to anything yet · picking one maps it in Linnworks</div>`;
+  document.body.appendChild(pop);
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + 340 > window.innerHeight ? `${Math.max(8, r.top - 346)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const input = pop.querySelector('.prpick-in');
+  const listEl = pop.querySelector('.prpick-list');
+  input.focus();
+  const res = await api.mappingItems(c.id, c.source, c.subSource, false).catch(e => ({ ok: false, error: e.message }));
+  if (!prPickEl) return;
+  if (!res.ok) { listEl.innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the catalog.')}</p>`; return; }
+  const unlinked = (res.items || []).filter(i => !i.linked && i.sku);
+  const renderList = () => {
+    const q = input.value.trim();
+    const hits = unlinked.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
+    // SKUs only, one per line (owner 2026-09-21) — the title still matches
+    // the search and waits in the hover tooltip
+    listEl.innerHTML = hits.length
+      ? hits.map(i => `
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" data-ref="${esc(i.channelRefId || '')}" title="${esc(i.title || '')}${i.price ? ` — $${Number(i.price).toFixed(2)}` : ''}">
+          <span class="mono">${esc(i.sku)}</span>
+        </button>`).join('')
+      : `<p class="dlg-note">${q ? 'Nothing unlinked matches.' : `No unlinked ${esc(c.source)} listings.`}</p>`;
+  };
+  renderList();
+  input.addEventListener('input', renderList);
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); prPickClose(); } });
+  listEl.addEventListener('click', async (ev) => {
+    const opt = ev.target.closest('.prpick-opt');
+    if (!opt) return;
+    const csku = opt.dataset.sku;
+    opt.disabled = true;
+    const link = await api.mappingLink(csku, c.source, c.subSource, psku, opt.dataset.ref);
+    if (!link.ok) { opt.disabled = false; toast(link.error || 'Could not link.'); return; }
+    prPickClose();
+    const ord = link.orders;
+    if (ord && ord.pending > 0) {
+      toast(`${csku} → ${psku} linked — ${ord.pending} open order${ord.pending === 1 ? '' : 's'} did NOT pick up the link. If they ship that way, deduct ${ord.units} unit${ord.units === 1 ? '' : 's'} by hand.`, 9000);
+    } else {
+      toast(`${csku} → ${psku} linked in Linnworks`);
+    }
+    enterPricing(true);
+  });
+}
+
+$('prBody').addEventListener('click', (e) => {
+  const price = e.target.closest('.pr-price');
+  if (price) { prEditPrice(price); return; }
+  const open = e.target.closest('.pr-open');
+  if (open) {
+    const c = prCols()[Number(open.dataset.ci)];
+    // system browser, like the PO# links (owner 2026-09-18)
+    api.listingOpen(open.dataset.csku, c ? c.source.toLowerCase() : '', true, open.dataset.ref)
+      .then(r => { if (!r.ok && r.error) toast(r.error); });
+    return;
+  }
+  const vt = e.target.closest('.pr-vartog');
+  if (vt) {
+    // the curtain splices ONE group in or out — never a full re-render,
+    // which made the animation stutter on big tables (owner 2026-09-20)
+    const k = vt.dataset.vt.toUpperCase();
+    const parentRow = vt.closest('.pr-row');
+    if (prExpanded.has(k)) {
+      prExpanded.delete(k);
+      const vg = $('prBody').querySelector(`.pr-vgroup[data-vg="${CSS.escape(k)}"]`);
+      if (!vg) { prRender(); return; }
+      vt.innerHTML = vt.innerHTML.replace('▾', '▸'); // caret answers instantly
+      vg.classList.remove('open');
+      vg.addEventListener('transitionend', () => vg.remove(), { once: true });
+      setTimeout(() => vg.remove(), 420); // in case transitionend never fires
+    } else {
+      const p = ((prData && prData.products) || []).find(x => String(x.sku).toUpperCase() === k);
+      if (!p || !parentRow) return;
+      prExpanded.add(k);
+      vt.innerHTML = vt.innerHTML.replace('▸', '▾');
+      parentRow.insertAdjacentHTML('afterend',
+        `<div class="pr-vgroup${parentRow.classList.contains('pr-fam') ? ' pr-fam' : ''}" data-vg="${esc(k)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
+      const vg = parentRow.nextElementSibling;
+      for (const el of vg.querySelectorAll('.pr-row')) el.style.gridTemplateColumns = prGridCols();
+      // double rAF: the folded 0fr state paints first, then the unroll plays
+      requestAnimationFrame(() => requestAnimationFrame(() => vg.classList.add('open')));
+    }
+    return;
+  }
+  const vx = e.target.closest('.pr-vx');
+  if (vx) {
+    api.pricingGroupRemove(vx.dataset.vx).then(r => {
+      if (!r.ok) { toast(r.error || 'Could not detach.'); return; }
+      toast(`${vx.dataset.vx} is back on its own row`);
+      enterPricing();
+    });
+    return;
+  }
+  const va = e.target.closest('.pr-varadd');
+  if (va) { prVarPickOpen(va); return; }
+  const vsc = e.target.closest('.pr-vschip');
+  if (vsc) { prSugPopOpen(vsc); return; }
+  const add = e.target.closest('.pr-add');
+  if (add) prPickOpen(add);
+});
+
+// the ✦ chip: an anchored popover over the naming suggestions — Add groups
+// that SKU, ✕ mutes the pairing, the footer link mutes all of them at once
+function prSugPopOpen(btn) {
+  prPickClose();
+  const parent = btn.dataset.vsp;
+  const p = ((prData && prData.products) || []).find(x => String(x.sku) === parent);
+  const sugs = (p && p.suggest) || [];
+  if (!sugs.length) return;
+  const condBadge = (s) => {
+    if (/^OPEN.?BOX/i.test(s)) return '<span class="prsug-cond prsug-ob">Open box</span>';
+    if (/^USED/i.test(s)) return '<span class="prsug-cond prsug-used">Used</span>';
+    if (/^SCRAP/i.test(s)) return '<span class="prsug-cond prsug-scrap">Scrap</span>';
+    return '';
+  };
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Condition SKUs that look like <span class="mono">${esc(parent)}</span></div>
+    ${sugs.map(s => `
+    <div class="prsug-row" data-s="${esc(s)}">
+      ${condBadge(s)}
+      <span class="mono prsug-sku">${esc(s)}</span>
+      <button type="button" class="prsug-add" title="Group ${esc(s)} under ${esc(parent)}">Add</button>
+      <button type="button" class="prsug-x" title="Stop suggesting this pairing">✕</button>
+    </div>`).join('')}
+    <div class="prpick-foot prsug-foot"><button type="button" class="prsug-never">never suggest for this product</button></div>`;
+  document.body.appendChild(pop);
+  const h = pop.offsetHeight || 200;
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + h + 12 > window.innerHeight ? `${Math.max(8, r.top - h - 6)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const gone = (row) => { row.remove(); if (!pop.querySelector('.prsug-row')) prPickClose(); };
+  pop.addEventListener('click', async (ev) => {
+    if (ev.target.closest('.prsug-never')) {
+      ev.target.closest('.prsug-never').disabled = true;
+      for (const el of pop.querySelectorAll('.prsug-row')) {
+        await api.pricingGroupIgnore(parent, el.dataset.s).catch(() => { /* best effort */ });
+      }
+      prPickClose();
+      enterPricing();
+      return;
+    }
+    const row = ev.target.closest('.prsug-row');
+    if (!row) return;
+    const addBtn = ev.target.closest('.prsug-add');
+    if (addBtn) {
+      addBtn.disabled = true;
+      const res = await api.pricingGroupAdd(parent, row.dataset.s);
+      if (!res.ok) { addBtn.disabled = false; toast(res.error || 'Could not group.'); return; }
+      prExpanded.add(parent.toUpperCase());
+      toast(`${row.dataset.s} grouped under ${parent} — synced to every desktop`);
+      gone(row);
+      enterPricing();
+    } else if (ev.target.closest('.prsug-x')) {
+      const res = await api.pricingGroupIgnore(parent, row.dataset.s);
+      if (!res.ok) { toast(res.error || 'Could not save that.'); return; }
+      gone(row);
+      enterPricing();
+    }
+  });
+}
+
+// + variation: an anchored picker over the FULL inventory (any SKU can be
+// a variation — the naming convention only suggests, never restricts)
+async function prVarPickOpen(btn) {
+  prPickClose();
+  const parent = btn.dataset.va;
+  if (!parent || !prData) return;
+  const grouped = new Set();
+  for (const p of prData.products || []) {
+    for (const v of p.variations || []) grouped.add(String(v.sku).toUpperCase());
+  }
+  const r = btn.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick';
+  pop.innerHTML = `
+    <div class="prpick-head">Group a variation under <span class="mono">${esc(parent)}</span></div>
+    <input class="input mono prpick-in" type="text" placeholder="Search inventory SKUs…" autocomplete="off" spellcheck="false" />
+    <div class="prpick-list"><p class="dlg-note">Loading the inventory…</p></div>
+    <div class="prpick-foot">Any inventory SKU can attach · ✕ on its row detaches it again</div>`;
+  document.body.appendChild(pop);
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + 340 > window.innerHeight ? `${Math.max(8, r.top - 346)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
+  const input = pop.querySelector('.prpick-in');
+  const listEl = pop.querySelector('.prpick-list');
+  input.focus();
+  await ensureInventory();
+  if (!prPickEl) return;
+  const parentU = parent.toUpperCase();
+  const pool = (recvItems || []).filter(i => i.sku
+    && String(i.sku).toUpperCase() !== parentU
+    && !grouped.has(String(i.sku).toUpperCase()));
+  const renderList = () => {
+    const q = input.value.trim();
+    const hits = pool.filter(i => !q || skuMatch(i.sku, q) || skuMatch(i.title || '', q)).slice(0, 30);
+    listEl.innerHTML = hits.length
+      ? hits.map(i => `
+        <button type="button" class="prpick-opt" data-sku="${esc(i.sku)}" title="${esc(i.title || '')}">
+          <span class="mono">${esc(i.sku)}</span>
+        </button>`).join('')
+      : `<p class="dlg-note">${q ? 'No inventory SKU matches.' : 'Nothing to attach.'}</p>`;
+  };
+  renderList();
+  input.addEventListener('input', renderList);
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); prPickClose(); } });
+  listEl.addEventListener('click', async (ev) => {
+    const opt = ev.target.closest('.prpick-opt');
+    if (!opt) return;
+    opt.disabled = true;
+    const res = await api.pricingGroupAdd(parent, opt.dataset.sku);
+    if (!res.ok) { opt.disabled = false; toast(res.error || 'Could not group.'); return; }
+    prPickClose();
+    prExpanded.add(parentU);
+    toast(`${opt.dataset.sku} grouped under ${parent} — synced to every desktop`);
+    enterPricing();
+  });
+}
+
+// the background stored-price fill finished a batch — repaint quietly
+api.on('pricing:refreshed', () => { if (activePage === 'pricing') enterPricing(); });
+
+/* price history: the centered popup */
+async function prHistLoad() {
+  const res = await api.pricingHistory().catch(() => null);
+  const list = (res && res.ok && res.entries) || [];
+  if (!list.length) { $('prHistBody').innerHTML = '<p class="dlg-note">Nothing yet.</p>'; return; }
+  const reverted = new Set(list.filter(e => e.revertOf).map(e => e.revertOf));
+  $('prHistBody').innerHTML = list.map(e => {
+    const auto = e.mode === 'auto';
+    const who = auto ? esc(e.source || 'channel') : esc(e.by || '—');
+    const sub = auto ? 'repricer · seen on refresh' : esc(e.station || '');
+    const act = auto ? '<span class="prh-auto">automatic</span>'
+      : reverted.has(e.id) ? '<span class="prh-rvtd">reverted ✓</span>'
+        : `<button type="button" class="prh-revert" data-prv="${esc(e.id)}" title="Push $${(Number(e.oldPrice) || 0).toFixed(2)} back to ${esc(e.source)}">↩ Revert</button>`;
+    return `
+    <div class="prh-row">
+      <span class="mono prh-when">${esc(new Date(e.ts).toLocaleString())}</span>
+      <span class="prh-who"><b>${who}</b><span>${sub}</span></span>
+      <span class="mono prh-sku" title="${esc(e.stockSku || '')}">${esc(e.channelSku || '')}</span>
+      <span class="mono prh-move">${Number(e.oldPrice) > 0 ? `<s>$${Number(e.oldPrice).toFixed(2)}</s>` : '—'} → <b>$${(Number(e.newPrice) || 0).toFixed(2)}</b></span>
+      <span class="prh-act">${act}</span>
+    </div>`;
+  }).join('');
+}
+
+/* in-app updater: a new release lights the footer button; one click
+   downloads the right installer and opens it (owner 2026-09-18) */
+api.on('update:available', (d) => {
+  const b = $('updateBtn');
+  b.textContent = `Update to v${(d && d.version) || 'latest'}`;
+  b.hidden = false;
+});
+$('updateBtn').addEventListener('click', async () => {
+  const b = $('updateBtn');
+  if (b.disabled) return;
+  b.disabled = true;
+  b.textContent = 'Downloading…';
+  const res = await api.updateInstall();
+  if (!res.ok) {
+    b.disabled = false;
+    b.textContent = 'Update — retry';
+    toast(res.error || 'Could not download the update.');
+    return;
+  }
+  b.textContent = 'Installer opened';
+  toast(`Installer opened — run it through and the app comes back updated (saved to Downloads as ${res.file})`, 9000);
+});
+
+$('prHistBtn').addEventListener('click', () => { prHistLoad(); $('priceHistDialog').showModal(); });
+$('prHistClose').addEventListener('click', () => $('priceHistDialog').close());
+$('prHistBody').addEventListener('click', async (e) => {
+  const rv = e.target.closest('.prh-revert');
+  if (!rv) return;
+  rv.disabled = true;
+  const res = await api.pricingRevert(rv.dataset.prv);
+  if (!res.ok) { rv.disabled = false; toast(res.error || 'Could not revert.'); return; }
+  toast('Old price pushed back — the history keeps both entries.');
+  prHistLoad();
+  enterPricing(true);
+});
 
 /* ---------- product image dialog (idle / loading / success / error) ---------- */
 
@@ -5554,15 +7354,48 @@ $('imgDialog').addEventListener('close', () => {
 function wfsLineHtml() {
   return `
     <div class="wfs-line">
-      <input type="text" class="input mono wfs-sku" list="skuOptions" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" />
+      <div class="wfs-combo">
+        <input type="text" class="input mono wfs-sku" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" />
+        <div class="combo-list" hidden></div>
+      </div>
       <input type="text" class="input mono wfs-gtin" autocomplete="off" spellcheck="false" />
       <input type="number" class="input mono wfs-qty" min="1" step="1" />
       <button class="wfs-remove" title="Remove line" type="button">✕</button>
     </div>`;
 }
 
+// case-insensitive inventory lookup: the shared combo list first, the stock
+// sheet's cache as backstop (same items, whichever loaded first)
+function wfsFindSku(q) {
+  const k = String(q || '').trim().toLowerCase();
+  if (!k) return null;
+  if (recvBySku && recvBySku.has(k)) return recvBySku.get(k);
+  return stockCache ? stockCache.items.find(i => i.sku.toLowerCase() === k) || null : null;
+}
+
 function wfsAddLine() {
   $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
+  // each line gets the app's searchable combobox (SKU / title / barcode,
+  // same as the receiving worksheet) — the bare <datalist> matched SKU text
+  // only and wore the OS's own styling (owner 2026-09-12, "not good")
+  const line = $('wfsLines').lastElementChild;
+  const input = line.querySelector('.wfs-sku');
+  makeCombo(input, line.querySelector('.combo-list'), (item) => {
+    input.value = item.sku;
+    const gtin = line.querySelector('.wfs-gtin');
+    if (!gtin.value.trim()) gtin.value = item.barcode || '';
+    wfsGrow();
+    wfsTotals();
+    line.querySelector('.wfs-qty').focus();
+  });
+}
+
+// a fresh entry row appears only when the LAST row holds a real SKU (picked
+// or typed in full) — growing whenever every row had any text duplicated
+// the row at the first letter typed (owner report 2026-09-12)
+function wfsGrow() {
+  const last = $('wfsLines').lastElementChild;
+  if (last && wfsFindSku(last.querySelector('.wfs-sku').value)) wfsAddLine();
 }
 
 // the footer total says exactly what Save will deduct, live
@@ -5580,10 +7413,9 @@ function wfsTotals() {
 // prefill (from the Overview's Send button): { lines: [{sku, gtin, qty}], from }
 let wfsFromOverview = false;
 async function openWfs(prefill) {
-  // SKU suggestions + GTIN autofill come from the loaded stock sheet
-  if (stockCache) {
-    $('skuOptions').innerHTML = stockCache.items.map(i => `<option value="${esc(i.sku)}"></option>`).join('');
-  }
+  // SKU suggestions ride the shared inventory list (combo shows "Loading…"
+  // until it lands); GTIN autofill comes from the same items
+  ensureInventory();
   wfsFromOverview = !!(prefill && prefill.lines);
   $('wfsFromOv').hidden = !wfsFromOverview;
   $('wfsFromOv').textContent = wfsFromOverview ? prefill.from || '' : '';
@@ -5602,7 +7434,8 @@ async function openWfs(prefill) {
   wfsTotals();
   await renderWfsPast();
   $('wfsDialog').showModal();
-  const first = $('wfsLines').querySelector('input');
+  // a pre-filled send is ready to save; focusing its SKU would pop the combo
+  const first = wfsFromOverview ? $('wfsSave') : $('wfsLines').querySelector('input');
   if (first) first.focus();
 }
 
@@ -5623,7 +7456,8 @@ async function renderWfsPast() {
       <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
-          ${wfsStatusBadge(s)}
+          ${s.station ? `<span class="wfs-card-st${s.mine ? ' is-me' : ''}" title="${s.mine ? 'Logged on this desktop' : `Logged on ${esc(s.station)}`}">${esc(s.station)}</span>` : ''}
+          ${s.mine === false ? '' : wfsStatusBadge(s)}
           <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
@@ -5647,19 +7481,18 @@ $('wfsLines').addEventListener('click', (e) => {
   wfsTotals();
 });
 
-// picking a known SKU pre-fills the GTIN from the item's barcode; filling
-// the last row grows a fresh one under it (spreadsheet feel)
+// typing a full known SKU (without picking from the list) still pre-fills
+// the GTIN and grows the sheet, exactly like a pick
 $('wfsLines').addEventListener('input', (e) => {
   const skuInput = e.target.closest('.wfs-sku');
-  if (skuInput && stockCache) {
-    const item = stockCache.items.find(i => i.sku === skuInput.value.trim());
+  if (skuInput) {
+    const item = wfsFindSku(skuInput.value);
     if (item) {
       const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
       if (!gtin.value.trim()) gtin.value = item.barcode || '';
+      wfsGrow();
     }
   }
-  const lines = [...$('wfsLines').querySelectorAll('.wfs-line')];
-  if (lines.every(l => l.querySelector('.wfs-sku').value.trim())) wfsAddLine();
   wfsTotals();
 });
 
@@ -5676,8 +7509,14 @@ $('wfsSave').addEventListener('click', async () => {
     out.classList.add('is-fail');
     return;
   }
-  if (stockCache) {
-    const unknown = items.filter(i => !stockCache.items.some(s => s.sku === i.sku));
+  if (stockCache || recvBySku) {
+    // canonicalize casing so a hand-typed sku deducts the real item
+    const unknown = [];
+    for (const i of items) {
+      const known = wfsFindSku(i.sku);
+      if (known) i.sku = known.sku;
+      else unknown.push(i);
+    }
     if (unknown.length) {
       out.textContent = `Unknown SKU: ${unknown.map(u => u.sku).join(', ')}`;
       out.classList.add('is-fail');
@@ -5817,8 +7656,9 @@ function makeCombo(input, listEl, onPick, opts) {
   // while a list is open made the whole page shift (owner report 2026-08-06)
   const positionList = () => {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
-    // returns log AND the receive popup's sheet anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet')) return;
+    // returns log, the receive popup's sheet AND the WFS shipment sheet
+    // anchor to the viewport
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
@@ -5826,11 +7666,31 @@ function makeCombo(input, listEl, onPick, opts) {
     const below = r.bottom + 4;
     listEl.style.top = `${below + 260 > window.innerHeight ? Math.max(8, r.top - 264) : below}px`;
   };
+  // fixed-position lists FOLLOW their input while anything scrolls — the
+  // position was computed once at open, so the list stayed put while the
+  // row moved (owner 2026-09-21, "I have to scroll down for the bar to
+  // match"). Self-cleans once the input leaves the page.
+  const follow = () => {
+    if (!document.contains(input)) {
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+      return;
+    }
+    if (!listEl.hidden) positionList();
+  };
+  window.addEventListener('scroll', follow, true);
+  window.addEventListener('resize', follow);
   const render = () => {
     if (recvLookup === 'loading') {
       listEl.innerHTML = '<div class="combo-note">Loading Linnworks SKUs…</div>';
     } else if (!matches.length) {
-      listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`;
+      // a dead-end search can end in "create it" (owner 2026-09-17) —
+      // only where the caller opted in via opts.addNew
+      const q = input.value.trim().toUpperCase();
+      listEl.innerHTML = `<div class="combo-note">${recvLookup === 'ready' ? 'No SKU or title matches.' : 'SKU list unavailable - type the full SKU.'}</div>`
+        + (opts && opts.addNew && q && recvLookup === 'ready'
+          ? `<button class="combo-opt combo-addnew"><span class="mono">+ Create ${esc(q)}</span><span class="combo-opt-title">new SKU in Linnworks</span></button>`
+          : '');
     } else {
       listEl.innerHTML = matches.map((it, i) => {
         const a = invAvailAtPrimary(it);
@@ -5841,7 +7701,7 @@ function makeCombo(input, listEl, onPick, opts) {
         <button class="combo-opt ${i === hl ? 'is-hl' : ''} ${blocked ? 'is-blocked' : ''}" data-i="${i}"
                 title="${blocked ? 'Every unit is already promised as a substitute on another order — process that one first' : `${esc(it.sku)} — ${esc(it.title)}`}">
           <span class="mono">${esc(it.sku)}</span>
-          <span class="combo-opt-title">${esc(it.title || '')}</span>
+          ${opts && opts.noTitle ? '' : `<span class="combo-opt-title">${esc(it.title || '')}</span>`}
           ${availTxt ? `<span class="combo-avail ${a > 0 && !blocked ? '' : 'is-zero'}">${availTxt}</span>` : ''}
         </button>`;
       }).join('');
@@ -5875,12 +7735,21 @@ function makeCombo(input, listEl, onPick, opts) {
     const exact = recvLookupExact(input.value.trim());
     if (exact && !blockedOf(exact)) { close(); onPick(exact); return; }
     if (exact) return; // blocked: leave the list open, the tooltip says why
-    if (isOpen && hl >= 0 && matches[hl] && !blockedOf(matches[hl])) { close(); onPick(matches[hl]); }
+    // grab the match BEFORE close() — close() empties the matches array,
+    // so reading it afterwards handed onPick undefined (Enter on a
+    // highlighted, non-exact hit crashed every combo)
+    if (isOpen && hl >= 0 && matches[hl] && !blockedOf(matches[hl])) { const it = matches[hl]; close(); onPick(it); }
   });
   listEl.addEventListener('mousedown', (e) => {
     const opt = e.target.closest('.combo-opt');
     if (!opt) return;
     e.preventDefault();
+    if (opt.classList.contains('combo-addnew')) {
+      const q = input.value.trim().toUpperCase();
+      close();
+      if (opts && opts.addNew && q) opts.addNew(q);
+      return;
+    }
     const item = matches[Number(opt.dataset.i)];
     if (item && blockedOf(item)) return; // unclickable by design
     close();
@@ -5982,17 +7851,27 @@ let comboHl = -1;
 function comboFilter(q) {
   if (!recvItems) return [];
   q = q.trim().toLowerCase();
-  const out = [];
+  if (!q) return recvItems.slice(0, 50);
+  // ranked, closest first (owner 2026-09-21: typing the exact SKU listed it
+  // LAST): exact SKU > SKU prefix > SKU contains > separator-blind SKU
+  // ("x133 64gb gray" finds SM-X133-64GB-GRAY, owner 2026-09-17) > title/
+  // barcode. Shorter SKUs win ties so the plain SKU beats its -CASE cousin.
+  const scored = [];
   for (const it of recvItems) {
-    if (!q
-      || it.sku.toLowerCase().includes(q)
-      || (it.title || '').toLowerCase().includes(q)
-      || (it.barcode || '').toLowerCase().includes(q)) {
-      out.push(it);
-      if (out.length >= 50) break;
-    }
+    const sku = it.sku.toLowerCase();
+    let rank;
+    if (sku === q) rank = 0;
+    else if (sku.startsWith(q)) rank = 1;
+    else if (sku.includes(q)) rank = 2;
+    else if (skuMatch(it.sku, q)) rank = 3;
+    else if ((it.title || '').toLowerCase().includes(q)
+      || (it.barcode || '').toLowerCase().includes(q)
+      || skuMatch(it.title || '', q)) rank = 4;
+    else continue;
+    scored.push({ it, rank });
   }
-  return out;
+  scored.sort((a, b) => a.rank - b.rank || a.it.sku.length - b.it.sku.length || a.it.sku.localeCompare(b.it.sku));
+  return scored.slice(0, 50).map(s => s.it);
 }
 
 function openCombo() {
@@ -6678,21 +8557,49 @@ function ebClaim(skus) {
 function ebQueueRows() {
   const rows = [];
   const cutoff = Date.now() - 14 * 86400000;
-  for (const d of unlistedDetail || []) {
+  // EVERY in-stock SKU with no eBay listing, New included (owner 2026-09-17:
+  // "the listings page will show all listings not listed on eBay or Temu").
+  // Needs the stock sheet + the truthful link sets; until they load, the
+  // zero-listing scan stands in (those SKUs are missing everywhere anyway).
+  const src = (stockCache && chLinked && chLinked.ebay)
+    ? unlMissingRows().filter(d => d.missing.includes('ebay') && !chanSkipKind(d.sku, 'ebay'))
+    : (unlistedDetail || []);
+  for (const d of src) {
     const p = ebParseSku(d.sku);
-    if (!p.cond) continue;
     const claim = ebClaimed[String(d.sku).toUpperCase()];
     if (claim && claim > cutoff) continue; // exported — off the to-do list
-    rows.push({ sku: d.sku, cond: p.cond, qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
+    rows.push({ sku: d.sku, cond: p.cond || "new", qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
   }
   return rows;
 }
 
+// condition chips over the queue (owner 2026-09-17: "just a filter for the
+// conditions" — the sheet redesign was passed on, the one-column queue
+// stays). Session-only; All on every open.
+let ebQFilter = '';
+
 function renderEbayQueue() {
   const box = $("ebQueue");
-  const rows = ebQueueRows();
+  const all = ebQueueRows();
+  const chips = $("ebQChips");
+  if (chips) {
+    const counts = { new: 0, openbox: 0, used: 0, scrap: 0 };
+    for (const r of all) if (counts[r.cond] != null) counts[r.cond] += 1;
+    if (ebQFilter && !counts[ebQFilter]) ebQFilter = ''; // the filtered slice emptied out
+    const chip = (key, label, n) => `<button type="button" class="eb-qchip ${ebQFilter === key ? 'is-on' : ''}" data-qcond="${key}">${label} · ${n}</button>`;
+    chips.innerHTML = all.length ? [
+      chip('', 'All', all.length),
+      counts.new ? chip('new', 'New', counts.new) : '',
+      counts.openbox ? chip('openbox', 'Open Box', counts.openbox) : '',
+      counts.used ? chip('used', 'Used', counts.used) : '',
+      counts.scrap ? chip('scrap', 'Parts', counts.scrap) : '',
+    ].join('') : '';
+  }
+  const rows = ebQFilter ? all.filter(r => r.cond === ebQFilter) : all;
   if (!rows.length) {
-    box.innerHTML = `<div class="ebay-qempty">No returned condition SKUs waiting — receive a return, or press New listing to start from scratch.</div>`;
+    box.innerHTML = `<div class="ebay-qempty">${all.length
+      ? 'Nothing in this condition — pick another chip.'
+      : 'Nothing waiting — every in-stock SKU has an eBay listing. Press New listing to start one from scratch.'}</div>`;
     return;
   }
   box.innerHTML = rows.map(r => `
@@ -6722,7 +8629,9 @@ async function ebSelect(sku, scratch) {
   }
   ebCur = {
     sku, scratch: !!scratch,
-    cond: p.cond || "openbox",
+    // queue rows carry their real condition (a base SKU is New); a scratch
+    // SKU typed by hand keeps the old open-box default until parsed
+    cond: (q && q.cond) || p.cond || (scratch ? "openbox" : "new"),
     stockItemId: (q && q.stockItemId) || "",
     title: "", price: "", qty: q ? q.qty : 1,
     specs: {}, vars: [], photos: [],
@@ -6810,7 +8719,7 @@ function ebVarSku(v) {
 function ebAutoSiblings() {
   if (!ebCur || !ebCur.sku) return;
   const p = ebParseSku(ebCur.sku);
-  if (!p.cond || !p.model) return;
+  if (!p.model) return; // New SKUs pair too (cond '' matches cond '')
   for (const r of ebQueueRows()) {
     if (r.sku === ebCur.sku) continue;
     const ps = ebParseSku(r.sku);
@@ -6831,8 +8740,9 @@ function ebAutoSiblings() {
 function ebLiveFamily() {
   if (!ebCur || !ebCur.sku || !recvItems || !chLinked || !chLinked.ebay) return [];
   const p = ebParseSku(ebCur.sku);
-  if (!p.cond || !p.model) return [];
-  const prefix = `${EB_PREFIX[p.cond || ebCur.cond]}-${p.model}-`;
+  if (!p.model) return [];
+  const pre = EB_PREFIX[p.cond || ebCur.cond]; // New has no prefix
+  const prefix = pre ? `${pre}-${p.model}-` : `${p.model}-`;
   const inListing = new Set([ebCur.sku, ...ebCur.vars.map(v => ebVarSku(v))]);
   const out = [];
   for (const it of recvItems) {
@@ -6900,7 +8810,7 @@ function renderEbayForm() {
   // the app CSP strips style attributes from injected HTML — thumbnails are
   // painted via CSSOM right after render (owner hit blank thumbs 2026-08-13)
   $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button></span>`).join("")
+    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button><button class="cp" data-shotc="${i}" title="Copy this photo (with its edits) — then paste with Ctrl+V straight into eBay's photo box">⧉</button></span>`).join("")
     + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
     + `<button class="ebay-addbtn eb-m0" id="ebShotAdd">add photos</button>`
     + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint eb-fullrow">✎ edits bake into the exported photos</span>` : "");
@@ -6920,6 +8830,8 @@ function renderEbayForm() {
   if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
   $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
   $("ebExport").disabled = !has;
+  $("ebLwList").disabled = !has;
+  if (!ebLw.configs) ebLwLoadConfigs(); else ebLwFillSelect(); // tracks the condition toggles
   ebHistPush();  // every rendered state is one undo step
   ebSaveDraft(); // and the draft survives restarts / tab switches
 }
@@ -6999,6 +8911,9 @@ function enterEbay() {
   if (!unlistedDetail) loadUnlisted();
   ensureInventory(); // ghost cards need sku -> stockItemId
   loadChLinked();    // ...and the eBay link set
+  // the queue is now "everything missing an eBay listing", which reads the
+  // stock sheet — load it here too, then swap the fuller queue in
+  if (!stockCache) loadStock().then(() => { if (activePage === 'ebay') renderEbayQueue(); }).catch(() => {});
   renderEbayQueue();
   renderEbayForm();
 }
@@ -7006,6 +8921,12 @@ function enterEbay() {
 $("ebQueue").addEventListener("click", (e) => {
   const r = e.target.closest(".ebay-qrow");
   if (r) ebSelect(r.dataset.sku, false);
+});
+$("ebQChips").addEventListener("click", (e) => {
+  const c = e.target.closest("[data-qcond]");
+  if (!c) return;
+  ebQFilter = c.dataset.qcond;
+  renderEbayQueue();
 });
 $("ebScratch").addEventListener("click", () => {
   ebSelect("", true);
@@ -7081,14 +9002,29 @@ $("ebShots").addEventListener("click", async (e) => {
   if (e.target.closest("#ebShotQr") && ebCur) { ebOpenQr(); return; }
   const x = e.target.closest("[data-shotx]");
   if (x && ebCur) { e.stopPropagation(); ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); return; }
+  // copy one photo (edits baked) onto the clipboard — pasting with Ctrl+V
+  // into eBay's photo box uploads it without exporting files (owner
+  // 2026-09-18). Clipboards hold one image, so it goes photo by photo.
+  const cp = e.target.closest("[data-shotc]");
+  if (cp && ebCur) {
+    e.stopPropagation();
+    const p = ebCur.photos[Number(cp.dataset.shotc)];
+    if (!p) return;
+    try {
+      const baked = (await ebBakePhotos([p]))[0];
+      const res = await api.copyImage(typeof baked === "string" ? { path: baked } : { dataUrl: baked.dataUrl });
+      toast(res && res.ok ? "Photo copied — paste it into eBay's photo box with Ctrl+V (⌘V on the Mac)" : (res && res.error) || "Could not copy the photo.");
+    } catch (err) {
+      toast(`Could not copy the photo: ${err.message}`);
+    }
+    return;
+  }
   const th = e.target.closest("[data-shoti]");
   if (th && ebCur) ebEditOpen(Number(th.dataset.shoti));
 });
-$("ebExport").addEventListener("click", async () => {
-  if (!ebCur || ebBusy) return;
-  if (!ebCur.sku) { toast("Type a SKU first."); return; }
-  ebBusy = true;
-  $("ebExport").textContent = "Exporting…";
+// the form's state as the payload the export AND the Linnworks publish
+// both send — one assembly, no drift between the two paths
+function ebBuildListingPayload() {
   const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
     sku: ebVarSku(v),
     details: `Storage=${v.storage};Color=${v.color}`,
@@ -7113,6 +9049,15 @@ $("ebExport").addEventListener("click", async () => {
     price: ebCur.price, qty: Number(ebCur.qty) || 1,
     variations: vars,
   };
+  return { vars, listing };
+}
+
+$("ebExport").addEventListener("click", async () => {
+  if (!ebCur || ebBusy) return;
+  if (!ebCur.sku) { toast("Type a SKU first."); return; }
+  ebBusy = true;
+  $("ebExport").textContent = "Exporting…";
+  const { vars, listing } = ebBuildListingPayload();
   let photos;
   try {
     photos = await ebBakePhotos(ebCur.photos); // edited pixels, not originals
@@ -7141,6 +9086,76 @@ $("ebExport").addEventListener("click", async () => {
 });
 // where the exported file gets uploaded: Seller Hub -> Reports -> Upload
 $("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/sh/reports/uploads"));
+
+/* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
+   "List on eBay" hands the SAME payload the CSV export builds to Linnworks'
+   configurator pipeline: template from the condition's configurator, the
+   form's fields overlaid, pushed through Linnworks' stored eBay connection.
+   Variations still ride the CSV path. Configurator picks persist per
+   condition (they carry the eBay condition, so one per condition). */
+let ebLw = { configs: null, byCond: {}, subSource: '' };
+
+async function ebLwLoadConfigs() {
+  if (ebLw.configs || (state && state.captureOnly)) { ebLwFillSelect(); return; }
+  ebLw.configs = []; // one load per session; a failure leaves the select disabled
+  const res = await api.ebayLwConfigs().catch(() => null);
+  if (res && res.ok) {
+    ebLw.configs = res.configs || [];
+    ebLw.byCond = (res.saved && res.saved.byCond) || {};
+    ebLw.subSource = (res.saved && res.saved.subSource) || '';
+  }
+  ebLwFillSelect();
+}
+
+function ebLwFillSelect() {
+  const sel = $('ebLwConfig');
+  const cond = ebCur ? ebCur.cond : 'new';
+  const list = ebLw.configs || [];
+  sel.innerHTML = `<option value="">configurator for ${esc(cond)}…</option>` + list.map(c =>
+    `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
+  sel.disabled = !list.length;
+}
+
+$('ebLwConfig').addEventListener('change', async () => {
+  const cond = ebCur ? ebCur.cond : 'new';
+  ebLw.byCond[cond] = $('ebLwConfig').value;
+  const chosen = (ebLw.configs || []).find(c => c.id === $('ebLwConfig').value);
+  if (chosen && chosen.account) ebLw.subSource = chosen.account;
+  await api.setConfig({ ebayLw: { subSource: ebLw.subSource, byCond: ebLw.byCond } }).catch(() => { /* re-picked next session */ });
+});
+
+$('ebLwList').addEventListener('click', async () => {
+  if (!ebCur || ebBusy) return;
+  if (!ebCur.sku) { toast('Type a SKU first.'); return; }
+  const configId = ebLw.byCond[ebCur.cond];
+  if (!configId) { toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`); return; }
+  const { vars, listing } = ebBuildListingPayload();
+  if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
+  ebBusy = true;
+  $('ebLwList').textContent = 'Listing…';
+  const done = (msg, ms) => { ebBusy = false; $('ebLwList').textContent = 'List on eBay'; if (msg) toast(msg, ms || 8000); };
+  let photos;
+  try {
+    photos = await ebBakePhotos(ebCur.photos);
+  } catch (err) { done(`Could not process a photo: ${err.message}`); return; }
+  const res = await api.ebayLwPublish(listing, photos, configId, ebLw.subSource).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { done((res && res.error) || 'Linnworks refused the listing.', 9000); return; }
+  // give Linnworks a beat to talk to eBay, then read the verdict
+  await new Promise(r => setTimeout(r, 4000));
+  const st = await api.ebayLwStatus(res.templateId, res.subSource).catch(() => null);
+  if (st && st.ok && st.error) { done(`Linnworks: ${st.error}`, 9000); return; }
+  const sku = ebCur.sku;
+  ebClaim([sku]);
+  delete ebDrafts[sku];
+  try { localStorage.setItem('ebayDrafts', JSON.stringify(ebDrafts)); } catch { /* best effort */ }
+  const status = st && st.ok ? st.status : '';
+  done(status === 'OK'
+    ? `${sku} is live on eBay${st.listingIds && st.listingIds.length ? ` · #${st.listingIds[0]}` : ''}`
+    : `${sku} handed to Linnworks (${status || 'listing'}) — eBay usually confirms within a minute`);
+  ebCur = null;
+  renderEbayQueue();
+  renderEbayForm();
+});
 $("ebGear").addEventListener("click", async () => {
   const cfg = await ebLoadCfg();
   const p = cfg.ebayProfiles || {};
@@ -7165,15 +9180,30 @@ $("ebgSave").addEventListener("click", async () => {
   $("ebGearDialog").close();
   toast("eBay listing settings saved");
 });
-// one Listings tab covers every marketplace lister; the pills inside switch
-$("tabListings").addEventListener("click", () => {
-  let ch = "ebay";
-  try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
-  showPage(ch);
+// Listings is a dropdown (eBay lister | Temu lister), the same pattern as
+// Returns ▾ (owner picked option A, 2026-09-17 — the floating pill row is
+// gone): first click lands on the last-used lister; the caret — or a click
+// while already on either lister — opens the menu
+$("tabListings").addEventListener("click", (e) => {
+  const wantMenu = e.target.closest(".tab-caret") || activePage === "ebay" || activePage === "temu";
+  if (!wantMenu) {
+    let ch = "ebay";
+    try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
+    showPage(ch);
+    return;
+  }
+  const dlg = $("listingsMenuDlg");
+  for (const b of dlg.querySelectorAll(".tab-menu-item")) b.classList.toggle("is-current", activePage === b.dataset.page);
+  dlg.showModal();
+  const r = $("tabListings").getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
 });
-document.querySelectorAll(".lst-pill").forEach(b => b.addEventListener("click", () => {
-  if (!b.disabled && b.dataset.lst !== activePage) showPage(b.dataset.lst);
-}));
+$("listingsMenuDlg").addEventListener("click", (e) => {
+  const item = e.target.closest(".tab-menu-item");
+  $("listingsMenuDlg").close();
+  if (item) showPage(item.dataset.page);
+});
 
 /* ---------- eBay lister: photo objects, QR capture, editor ---------- */
 // Approved designs: variants/ebay-photos-qr.html (phone = capture only) and
@@ -7370,7 +9400,12 @@ async function ebBakePhotos(photos) {
 let stockDragKey = null;
 $("stockList").addEventListener("dragstart", (e) => {
   const th = e.target.closest("th.sortable");
-  if (!th || !stockColOrder.includes(th.dataset.sort) || e.target.closest(".col-grip")) { e.preventDefault(); return; }
+  // dragstart targets the draggable TH even when the pointer sits on the
+  // grip, so asking the event where the drag began never detected a resize:
+  // mid-resize the native drag took over, ate the mouseup that saves the
+  // width, and could reorder columns by accident. The grip's mousedown sets
+  // gripDrag before any dragstart can fire — that is the real signal.
+  if (gripDrag || !th || !stockColOrder.includes(th.dataset.sort)) { e.preventDefault(); return; }
   stockDragKey = th.dataset.sort;
   e.dataTransfer.effectAllowed = "move";
   try { e.dataTransfer.setData("text/plain", stockDragKey); } catch { /* some drivers need it */ }
@@ -7418,6 +9453,14 @@ function openRenameDialog(sku, stockItemId) {
   $("rnNew").select();
 }
 $("rnCancel").addEventListener("click", () => $("renameDialog").close());
+// delete lives here too (owner 2026-09-16) — it hands off to the existing
+// guarded delete dialog, which live-checks linked listings and warns
+$("rnDelete").addEventListener("click", () => {
+  if (!rnCtx) return;
+  const { sku, stockItemId } = rnCtx;
+  $("renameDialog").close();
+  openStockDelete(sku, stockItemId);
+});
 $("rnNew").addEventListener("input", () => { $("rnNew").value = $("rnNew").value.toUpperCase(); });
 $("rnNew").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
 $("rnSave").addEventListener("click", async () => {
@@ -7443,7 +9486,14 @@ $("rnSave").addEventListener("click", async () => {
     recvBySku.set(res.sku.toLowerCase(), it);
   }
   $("renameDialog").close();
-  toast(`${rnCtx.sku} renamed to ${res.sku} — links and history followed`);
+  const oldSku = rnCtx.sku;
+  const sid = rnCtx.stockItemId;
+  pushUndo(`rename ${res.sku} back to ${oldSku}`, async () => {
+    const r = await api.stockRenameSku(sid, res.sku, oldSku);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
+    loadStock();
+  });
+  toast(`${oldSku} renamed to ${res.sku} — links and history followed`);
   rnCtx = null;
   loadStock();
 });
@@ -7470,7 +9520,10 @@ function retImpStatHtml(parse, resolve) {
   return h;
 }
 
-$('retImportBtn').addEventListener('click', async () => {
+// the Import button is retired (owner 2026-09-14, history already in) —
+// the whole flow stays wired so it can come back with one button
+const retImportBtn = $('retImportBtn');
+if (retImportBtn) retImportBtn.addEventListener('click', async () => {
   const picked = await retImpPick().catch(e => ({ ok: false, error: e.message }));
   if (!picked || picked.canceled) return;
   if (!picked.ok) { toast(picked.error || 'Could not read that file.'); return; }

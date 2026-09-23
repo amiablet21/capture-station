@@ -1,0 +1,41 @@
+# Flips a draft GitHub Release to published, without rebuilding anything.
+#
+# Exists because GitHub's release service sometimes drops the final
+# "publish" call after a clean build + upload (v1.27.85 on 2026-09-17 was
+# left as an invisible draft with both installers attached). The build
+# workflows now publish explicitly as their last step; this is the manual
+# rescue for a draft that is already sitting there.
+
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag of the draft release to publish (e.g. v1.27.85)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          echo "before:"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
+            -q '"  draft=\(.isDraft) assets=\([.assets[].name] | join(", "))"'
+          for i in 1 2 3 4; do
+            [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = "true" ] || { echo "published"; exit 0; }
+            echo "attempt $i: publishing draft $TAG"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false && { echo "published"; exit 0; }
+            sleep 20
+          done
+          echo "::error::release $TAG is still a draft after 4 attempts"
+          exit 1
