@@ -7456,9 +7456,11 @@ async function renderWfsPast() {
       <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+        </div>
+        <div class="wfs-card-tags">
           ${s.station ? `<span class="wfs-card-st${s.mine ? ' is-me' : ''}" title="${s.mine ? 'Logged on this desktop' : `Logged on ${esc(s.station)}`}">${esc(s.station)}</span>` : ''}
           ${s.mine === false ? '' : wfsStatusBadge(s)}
-          <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
         ${s.items.map(i => `
@@ -9785,9 +9787,10 @@ function ovRenderWfs() {
       ? `<span class="ov-meta ov-chs">${chs.map(c => `<span title="Walmart channel SKU · ${c.weekly}/wk at WFS">${esc(c.sku)} <b>${c.weekly}/wk</b></span>`).join('')}</span>`
       : '';
     return `<tr><td class="ov-rank">${i + 1}</td>
-      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}" title="${weekly}/wk at WFS · ${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}">${esc(r.sku)}</span>${chHtml}
+      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}" title="${weekly}/wk at WFS · ${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}">${esc(r.sku)}</span>
+        <span class="ov-sendline"><span class="ov-pill ${ovTone(r.coverDays)}">Send +${r.send}</span></span>
+        <span class="ov-daysleft ${ovTone(r.coverDays)}">${r.coverDays.toFixed(1)} days left at WFS</span>${chHtml}
         <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
-      <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">Send +${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span></td>
       <td class="ov-actcell"><span class="ov-stack"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
   }).join('');
   const undo = plan.ignored.length
