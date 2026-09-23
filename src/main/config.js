@@ -143,6 +143,9 @@ const DEFAULTS = {
   // "Received by" initials on the Returns worksheet: last-used value becomes
   // the default for the next return.
   returnsReceivedBy: '',
+  // Stock history "who": a friendly name for this computer (blank = the
+  // machine's own hostname)
+  stationName: '',
   // DropShip program: SKUs the supplier can fulfil, each with a pad — the
   // level the app keeps topped up at the DropShip location so the listing
   // stays live with zero warehouse stock. Pad 0 = listing dark (supplier

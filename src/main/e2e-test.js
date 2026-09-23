@@ -1093,6 +1093,44 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
     check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
+    // 35b. stock history (owner 2026-09-23): every level write the app makes
+    // lands in stock_log with who / which computer; the grid's tray clock
+    // and count tooltip read today's summary
+    db.logStockChanges([
+      { sku: 'sh-test-sku', locationId: 'loc-1', delta: 2, levelAfter: 5, reason: 'return', changeSource: 'Capture Station return', ref: 'PO-77', note: 'new', computer: 'Front desk', by: 'RS' },
+      { sku: 'SH-TEST-SKU', locationId: 'loc-1', delta: null, levelAfter: 4, reason: 'set', changeSource: 'Capture Station stock page', note: 'set to 4', computer: 'Office' },
+    ]);
+    const shRows = db.stockHistory('sh-test-sku');
+    check('stock_log: two rows for the SKU, newest first, SKU upper-cased, delta null on a hand-set count',
+      shRows.length === 2 && shRows[0].sku === 'SH-TEST-SKU' && shRows[0].reason === 'set' && shRows[0].delta === null
+        && shRows[0].level_after === 4 && shRows[1].delta === 2 && shRows[1].ref === 'PO-77' && shRows[1].computer === 'Front desk' && shRows[1].by === 'RS',
+      shRows);
+    const shToday = db.stockHistoryToday();
+    check('stock_log today summary: count 2, last = the hand-set row',
+      shToday['SH-TEST-SKU'] && shToday['SH-TEST-SKU'].count === 2 && shToday['SH-TEST-SKU'].lastReason === 'set' && shToday['SH-TEST-SKU'].lastComputer === 'Office',
+      shToday['SH-TEST-SKU']);
+    res = await exec(`api.stockHistory('sh-test-sku')`);
+    check('stock:history IPC returns the rows', res && res.ok === true && res.rows.length === 2 && res.rows[0].sku === 'SH-TEST-SKU', res);
+    res = await exec(`api.stockHistoryToday()`);
+    check('stock:historyToday IPC returns the per-SKU summary', res && res.ok === true && res.bySku['SH-TEST-SKU'].count === 2, res);
+    res = await exec(`[stockHistTip(null), stockHistTip({ count: 2, lastAt: new Date().toISOString(), lastDelta: null, lastAfter: 4, lastReason: 'set', lastComputer: 'Office', lastBy: '' }), stockHistTip({ count: 1, lastAt: new Date().toISOString(), lastDelta: 2, lastReason: 'return', lastComputer: 'Front desk', lastBy: 'RS' }, true)]`);
+    check('stockHistTip: quiet day / hand-set today / count tooltip keeps its click hint',
+      /nothing moved today/.test(res[0]) && /2 changes today · last = 4 at \d\d:\d\d · set by hand · Office/.test(res[1])
+        && /1 change today · last \+2 at \d\d:\d\d · return received · Front desk \(RS\)\nClick to correct the count/.test(res[2]),
+      res);
+    await exec(`openStockHistory('sh-test-sku')`);
+    await new Promise(r => setTimeout(r, 200));
+    res = await exec(`({ open: $('stockHistDialog').open, sku: $('stockHistSku').textContent, items: document.querySelectorAll('#stockHistBody .sh-item').length,
+      reasons: [...document.querySelectorAll('#stockHistBody .history-status')].map(e => e.textContent), who: [...document.querySelectorAll('#stockHistBody .sh-who')].map(e => e.textContent.trim()),
+      deltas: [...document.querySelectorAll('#stockHistBody .sh-delta')].map(e => e.textContent) })`);
+    check('stock history dialog: opens on the SKU, one line per change with reason, delta and computer',
+      res && res.open === true && res.sku === 'sh-test-sku' && res.items === 2
+        && res.reasons[0] === 'Set by hand' && res.reasons[1] === 'Return received'
+        && res.deltas[0] === '= 4' && res.deltas[1] === '+2'
+        && res.who[0] === 'Office' && res.who[1] === 'Front deskRS',
+      res);
+    await exec(`$('stockHistDialog').close()`);
+
     // 36. returns resize: whole-width grip + per-column grips on the log
     // (the worksheet left with design C, 2026-08-07 — the log is the sheet)
     const retGrips = await exec(`[

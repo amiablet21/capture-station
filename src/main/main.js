@@ -7,7 +7,7 @@ const config = require('./config');
 const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
-const { LinnworksClient } = require('./linnworks');
+const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 
 let win = null;
@@ -2406,7 +2406,9 @@ function registerIpc() {
         await client.changeStockLevels(
           stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
           cfg.linnworks.locationId,
-          'Capture Station return'
+          'Capture Station return',
+          { ref: String(payload.orderNumber || '').trim(), by: String(payload.receivedBy || '').trim().slice(0, 60),
+            note: stockItems.map(i => `${i.condition}${i.targetSku !== i.sku ? ` · ordered ${i.sku}` : ''}`).join('; ').slice(0, 300) }
         );
       }
       // remember non-new mappings so the next return of this SKU is one click
@@ -3390,7 +3392,8 @@ function registerIpc() {
           }
           if (deltas.length) {
             const client = new LinnworksClient(cfg.linnworks);
-            await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit');
+            await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station return edit',
+              { ref: newPo, by: String(receivedBy || rec.received_by || '').trim().slice(0, 60), note: `${it.condition} → ${newCond}${newSku !== it.sku ? ` · ${it.sku} → ${newSku}` : ''}${newQty !== oldQty ? ` · ${oldQty} → ${newQty} units` : ''}` });
           }
         }
         items[ii] = {
@@ -3435,7 +3438,8 @@ function registerIpc() {
           const client = new LinnworksClient(cfg.linnworks);
           await client.changeStockLevels(
             [{ sku: it.targetSku, delta: -qty }],
-            cfg.linnworks.locationId, 'Capture Station return delete'
+            cfg.linnworks.locationId, 'Capture Station return delete',
+            { ref: rec.order_number, by: rec.received_by, note: `${it.condition} line removed` }
           );
           stockNote = `stock corrected: -${qty} ${it.targetSku}`;
         }
@@ -3552,7 +3556,8 @@ function registerIpc() {
       await client.changeStockLevels(
         items.map(i => ({ sku: i.sku, delta: -i.qty })),
         cfg.linnworks.locationId,
-        'Capture Station WFS shipment'
+        'Capture Station WFS shipment',
+        { note: note.slice(0, 120) }
       );
       const id = db.createWfsShipment({ note, items });
       writeWfsCsv();
@@ -3585,7 +3590,7 @@ function registerIpc() {
       }
       const { stockItemId } = await client.createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice });
       if (qty > 0) {
-        await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU');
+        await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU', { note: 'listing created with opening stock' });
       }
       skuImageCache = { at: 0, map: null, skus: null, promise: null }; // inventory changed
       return { ok: true, sku, stockItemId };
@@ -3907,6 +3912,13 @@ function registerIpc() {
     }
   }
   ipcMain.handle('stock:set', (_e, { sku, level }) => stockSetLevel(sku, level));
+  // Stock history: one SKU's log (newest first) and today's per-SKU summary
+  ipcMain.handle('stock:history', (_e, { sku } = {}) => {
+    try { return { ok: true, rows: db.stockHistory(String(sku || ''), 500) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('stock:historyToday', () => {
+    try { return { ok: true, bySku: db.stockHistoryToday() }; } catch (e) { return { ok: false, error: e.message }; }
+  });
   // Minimum (reorder alert) level for one SKU at the primary warehouse.
   ipcMain.handle('stock:setMin', async (_e, { stockItemId, level }) => {
     const cfg = config.load();
@@ -4148,6 +4160,40 @@ function buildMenu() {
 // Startup integrity gate: if the live db fails its health check, offer the
 // newest healthy backup instead of limping along corrupt. The damaged file
 // is quarantined beside the db either way; declining keeps the status quo.
+// Stock history recorder: the Linnworks client raises one event per level
+// write (deltas or a hand-set count); this turns it into stock_log rows.
+// The reason comes from the caller's meta when given, else from the
+// changeSource string every call site already passes to Linnworks.
+function stockLogReason(changeSource, meta) {
+  if (meta && meta.reason) return meta.reason;
+  const cs = String(changeSource || '').toLowerCase();
+  if (cs.includes('dropship pad')) return 'dropship';
+  if (cs.includes('substitution')) return 'substitution';
+  if (cs.includes('wfs')) return 'wfs';
+  if (cs.includes('new sku')) return 'new-sku';
+  if (cs.includes('return delete')) return 'return-delete';
+  if (cs.includes('return edit')) return 'return-edit';
+  if (cs.includes('return')) return 'return';
+  if (cs.includes('stock page')) return 'set';
+  return 'other';
+}
+function installStockLog() {
+  setStockLogHook((ev) => {
+    const cfg = config.load();
+    const computer = String(cfg.stationName || '').trim() || os.hostname();
+    const meta = ev.meta || {};
+    const reason = stockLogReason(ev.changeSource, meta);
+    db.logStockChanges(ev.entries.map(e => ({
+      sku: e.sku, locationId: ev.locationId,
+      delta: ev.kind === 'set' ? null : e.delta,
+      levelAfter: e.after,
+      reason, changeSource: ev.changeSource,
+      ref: meta.ref || '', note: ev.kind === 'set' ? `set to ${e.set}${meta.note ? ` · ${meta.note}` : ''}` : (meta.note || ''),
+      computer, by: meta.by || '',
+    })));
+  });
+}
+
 function checkDbHealth() {
   const health = db.quickCheck();
   if (health.ok) return;
@@ -4194,6 +4240,7 @@ app.whenReady().then(() => {
   config.save({}); // re-persist so plaintext credentials migrate to encrypted storage
   checkDbHealth(); // corrupt db -> offer the newest healthy backup BEFORE anything reads it
   db.open();
+  installStockLog(); // every level write from here on lands in stock_log
   // one-time sweep: duplicate order rows minted while the db was damaged
   try {
     const dd = db.dedupeOrderRows();

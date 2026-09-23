@@ -711,6 +711,10 @@
         <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
       </div>
       <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone. A returns-only station: tick Returns, untick the rest, set a Settings PIN so it stays that way.</p>
+      <label class="field">
+        <span class="field-label">This computer's name in Stock history (blank = the machine name)</span>
+        <input id="setStationName" type="text" class="input" placeholder="Front desk" autocomplete="off" spellcheck="false" maxlength="40" />
+      </label>
 
       <h3 class="dlg-section">Receiving</h3>
       <div class="settings-row">
@@ -1261,6 +1265,22 @@
       <div id="salesBody"></div>
       <div class="dlg-actions">
         <button id="salesClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Stock history for one SKU: every level change the app made, newest
+       first, with who did it and from which computer (owner 2026-09-23) -->
+  <dialog id="stockHistDialog" class="dlg dlg-sales">
+    <div class="dlg-body">
+      <div class="sales-head">
+        <h2 class="dlg-title">Stock history</h2>
+        <span id="stockHistSku" class="mono sales-sku"></span>
+      </div>
+      <div id="stockHistSub" class="sales-sub"></div>
+      <div id="stockHistBody"></div>
+      <div class="dlg-actions">
+        <button id="stockHistClose" class="btn btn-primary">Close</button>
       </div>
     </div>
   </dialog>

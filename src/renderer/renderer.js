@@ -68,6 +68,8 @@ if (!window.api) {
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
     setStockMin: async () => ({ ok: false, error: 'Preview mode' }),
     salesQuery: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistory: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryToday: async () => ({ ok: false, error: 'Preview mode' }),
     getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     createSku: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
@@ -160,6 +162,8 @@ const ICONS = {
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
+  clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
+  monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
 };
 
 /* ---------- rendering ---------- */
@@ -949,6 +953,7 @@ async function openSettings() {
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
+  $('setStationName').value = cfg.stationName || '';
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
@@ -1035,6 +1040,7 @@ $('settingsSave').addEventListener('click', async () => {
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
     },
+    stationName: $('setStationName').value.trim().slice(0, 40),
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
     linnworks: {
@@ -2152,6 +2158,7 @@ async function loadStock() {
   $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
+  loadStockHistToday(); // stock-history dots on the tray clocks, same lazy pattern
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
@@ -2288,9 +2295,13 @@ function renderStock() {
     const del = (state && !state.captureOnly && r.stockItemId)
       ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
       : '';
+    // stock history (owner 2026-09-23): the clock opens this SKU's log; a
+    // dot on it means the SKU moved today
+    const today = stockHistToday && stockHistToday[String(r.sku).toUpperCase()];
+    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.clock}</button>`;
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
-      ${ds}${ren}${del}</span>`;
+      ${hist}${ds}${ren}${del}</span>`;
   };
   const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
@@ -2327,7 +2338,7 @@ function renderStock() {
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
-            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
+            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);
@@ -2874,6 +2885,8 @@ $('stockList').addEventListener('click', async (e) => {
   }
   const salesBtn = e.target.closest('button.stock-sales-btn');
   if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
+  const histBtn = e.target.closest('button.stock-hist-btn');
+  if (histBtn) { openStockHistory(histBtn.dataset.histsku); return; }
   const padBtn = e.target.closest('button.ds-pad-btn');
   if (padBtn) { beginPadEdit(padBtn); return; }
   const dsRemove = e.target.closest('button.ds-remove-btn');
@@ -5022,6 +5035,115 @@ const SALES_CHANNELS = [
 ];
 
 const SALES_RANGES = [7, 14, 30, 60, 90];
+
+/* ---------- stock history (owner 2026-09-23) ----------
+   every level change the app made, per SKU: the tray clock opens the log,
+   today's summary feeds the dot on the clock and the count's tooltip */
+
+let stockHistToday = null; // { SKU: { count, lastAt, lastDelta, lastReason, lastComputer, lastBy } } | null
+let stockHistTodayBusy = false;
+
+const STOCK_HIST_REASON = {
+  'return': 'Return received', 'return-edit': 'Return edited', 'return-delete': 'Return removed',
+  'set': 'Set by hand', 'wfs': 'WFS shipment', 'dropship': 'Dropship pad', 'new-sku': 'New listing',
+  'substitution': 'Substitution', 'other': 'Stock change',
+};
+function stockHistReason(r) { return STOCK_HIST_REASON[r] || STOCK_HIST_REASON.other; }
+
+// the tray clock's / count's title: last change today, or a plain label
+function stockHistTip(today, forCount) {
+  const base = forCount ? 'Click to correct the count' : 'Stock history';
+  if (!today) return forCount ? base : `${base} — nothing moved today`;
+  const d = today.lastDelta === null || today.lastDelta === undefined ? `= ${today.lastAfter}` : `${today.lastDelta > 0 ? '+' : ''}${today.lastDelta}`;
+  const who = `${today.lastComputer || '?'}${today.lastBy ? ` (${today.lastBy})` : ''}`;
+  const line = `${today.count} change${today.count === 1 ? '' : 's'} today · last ${d} at ${fmtTime(today.lastAt)} · ${stockHistReason(today.lastReason).toLowerCase()} · ${who}`;
+  return forCount ? `${line}\n${base}` : `${base} · ${line}`;
+}
+
+async function loadStockHistToday() {
+  if (stockHistTodayBusy) return;
+  stockHistTodayBusy = true;
+  try {
+    const res = await api.stockHistoryToday();
+    if (!res || !res.ok) return;
+    stockHistToday = res.bySku || {};
+    if (activePage === 'stock' && stockCache) renderStock();
+  } finally {
+    stockHistTodayBusy = false;
+  }
+}
+
+async function openStockHistory(sku) {
+  $('stockHistSku').textContent = sku;
+  $('stockHistSub').textContent = '';
+  $('stockHistBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('stockHistDialog').showModal();
+  const res = await api.stockHistory(sku);
+  if (!$('stockHistDialog').open || $('stockHistSku').textContent !== sku) return;
+  if (!res.ok) {
+    $('stockHistBody').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`;
+    return;
+  }
+  renderStockHistory(sku, res.rows || []);
+}
+
+function renderStockHistory(sku, rows) {
+  const item = stockCache && (stockCache.items || []).find(i => String(i.sku).toUpperCase() === String(sku).toUpperCase());
+  const lvl = item && (item.levels || []).find(l => l.locationId === stockCache.locationId);
+  const weekAgo = Date.now() - 7 * 86400000;
+  let inWeek = 0, outWeek = 0;
+  for (const r of rows) {
+    if (new Date(r.created_at).getTime() < weekAgo || r.delta === null) continue;
+    if (r.delta > 0) inWeek += r.delta; else outWeek += -r.delta;
+  }
+  const last = rows[0];
+  $('stockHistSub').textContent = rows.length
+    ? `${rows.length} change${rows.length === 1 ? '' : 's'} logged by Capture Station · ${retDateUS(rows[rows.length - 1].day)} – ${retDateUS(rows[0].day)}`
+    : 'Nothing logged yet — history starts with the first change made through Capture Station.';
+  const strip = `<div class="sales-strip sh-strip">
+      <div class="sales-stat"><div class="l">In stock</div><div class="v">${lvl ? lvl.stockLevel : '—'}</div><div class="s">${lvl ? `${lvl.available} available · ${lvl.inOrders} in orders` : 'not in the loaded grid'}</div></div>
+      <div class="sales-stat"><div class="l">In · 7 days</div><div class="v is-pos">+${inWeek}</div><div class="s">units added</div></div>
+      <div class="sales-stat"><div class="l">Out · 7 days</div><div class="v is-neg">−${outWeek}</div><div class="s">units removed</div></div>
+      <div class="sales-stat"><div class="l">Last touched</div><div class="v is-name">${last ? esc(last.computer || '—') + (last.by ? ` · ${esc(last.by)}` : '') : '—'}</div><div class="s">${last ? `${retDateUS(last.day)} ${fmtTime(last.created_at)}` : ''}</div></div>
+    </div>`;
+  const byDay = new Map();
+  for (const r of rows) {
+    if (!byDay.has(r.day)) byDay.set(r.day, []);
+    byDay.get(r.day).push(r);
+  }
+  const today = salesDayKey(new Date().toISOString());
+  const yesterday = salesDayKey(new Date(Date.now() - 86400000).toISOString());
+  const dayLabel = (d) => d === today ? `Today · ${retDateUS(d)}` : d === yesterday ? `Yesterday · ${retDateUS(d)}` : retDateUS(d);
+  const list = rows.length ? `<div class="history-list sh-list">${[...byDay.entries()].map(([d, lst]) => {
+    const net = lst.reduce((a, r) => a + (r.delta === null ? 0 : r.delta), 0);
+    return `<div class="history-day">
+        <div class="history-day-head">${dayLabel(d)} &middot; ${lst.length} change${lst.length === 1 ? '' : 's'}<span class="sh-net">net ${net >= 0 ? '+' : ''}${net}</span></div>
+        ${lst.map(r => {
+          const isSet = r.delta === null || r.delta === undefined;
+          const delta = isSet
+            ? `<span class="sh-delta is-set">= ${r.level_after ?? '?'}</span>`
+            : `<span class="sh-delta ${r.delta >= 0 ? 'is-pos' : 'is-neg'}">${r.delta >= 0 ? '+' : '−'}${Math.abs(r.delta)}</span>`;
+          const before = r.level_after === null || r.level_after === undefined || isSet ? null : r.level_after - r.delta;
+          const lvlHtml = r.level_after === null || r.level_after === undefined
+            ? '<span class="sh-lvl"></span>'
+            : `<span class="sh-lvl">${before === null ? '' : `<b>${before}</b><i>→</i>`}<b>${r.level_after}</b></span>`;
+          return `<div class="history-item sh-item">
+            <span class="history-time mono">${fmtTime(r.created_at)}</span>
+            ${delta}${lvlHtml}
+            <span class="sh-why"><span class="history-status st-${esc(r.reason)}">${esc(stockHistReason(r.reason))}</span>${r.ref ? `<span class="mono sh-ref copyable" data-copy="${esc(r.ref)}" title="Click to copy ${esc(r.ref)}">${esc(r.ref)}</span>` : ''}${r.note ? `<span class="sh-note" title="${esc(r.note)}">${esc(r.note)}</span>` : ''}</span>
+            <span class="sh-who" title="${esc(`Computer: ${r.computer || 'unknown'}${r.by ? ` · by ${r.by}` : ''}`)}">${ICONS.monitor}${esc(r.computer || '—')}${r.by ? `<span class="ini">${esc(r.by)}</span>` : ''}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }).join('')}</div>` : '';
+  $('stockHistBody').innerHTML = strip + list;
+}
+
+$('stockHistClose').addEventListener('click', () => $('stockHistDialog').close());
+$('stockHistBody').addEventListener('click', (e) => {
+  const copyEl = e.target.closest('[data-copy]');
+  if (copyEl) copyFromApp(copyEl.dataset.copy);
+});
 
 let salesDlg = null; // { sku, avail, range, seq, days, channels, on, table }
 

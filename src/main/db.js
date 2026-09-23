@@ -68,6 +68,23 @@ function open() {
     );
     CREATE INDEX IF NOT EXISTS idx_serials_serial ON serials(serial);
     CREATE INDEX IF NOT EXISTS idx_serials_row ON serials(row_id);
+    CREATE TABLE IF NOT EXISTS stock_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      day TEXT NOT NULL,
+      sku TEXT NOT NULL,
+      location_id TEXT NOT NULL DEFAULT '',
+      delta INTEGER,
+      level_after INTEGER,
+      reason TEXT NOT NULL DEFAULT '',
+      change_source TEXT NOT NULL DEFAULT '',
+      ref TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      computer TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_log_sku ON stock_log(sku, id);
+    CREATE INDEX IF NOT EXISTS idx_stock_log_day ON stock_log(day);
   `);
   // migration: free-text notes per row (serial tracking retired 2026-07-30)
   const cols = db.prepare(`SELECT name FROM pragma_table_info('rows')`).all().map(c => c.name);
@@ -523,6 +540,55 @@ function resolveConditionTargets(baseSku, inventorySkus) {
 // min }], prevBelow = { sku: true } (the persisted latch). A SKU alerts once
 // per crossing; recovering to >= min drops it from `below`, re-arming it.
 // min <= 0 means "no minimum set" and never alerts.
+/* ---------- stock history ---------- */
+// One row per SKU per level write the app made (owner 2026-09-23: "whenever
+// someone changes stock, receives a return… I can see what happened, and
+// which computer did it"). Logging starts the day this ships; earlier moves
+// live only in Linnworks' own audit.
+// null / '' / non-numbers stay null (Number(null) is 0, which once turned a
+// hand-set count into a "+0" line)
+function intOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+function logStockChanges(rows) {
+  const d = open();
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const day = localDay(now);
+  const ins = d.prepare(`INSERT INTO stock_log (created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const r of rows) {
+    if (!r || !r.sku) continue;
+    ins.run(createdAt, day, String(r.sku).toUpperCase(), String(r.locationId || ''),
+      intOrNull(r.delta), // null = a hand-set count, not a move
+      intOrNull(r.levelAfter),
+      String(r.reason || ''), String(r.changeSource || '').slice(0, 120),
+      String(r.ref || '').slice(0, 80), String(r.note || '').slice(0, 300),
+      String(r.computer || '').slice(0, 80), String(r.by || '').slice(0, 60));
+  }
+}
+
+function stockHistory(sku, limit = 500) {
+  return open().prepare(`SELECT * FROM stock_log WHERE sku = ? ORDER BY id DESC LIMIT ?`)
+    .all(String(sku || '').toUpperCase(), limit);
+}
+
+// today's activity per SKU, for the grid's tray dot and count tooltip:
+// { SKU: { count, lastAt, lastDelta, lastReason, lastComputer, lastBy } }
+function stockHistoryToday(day = localDay()) {
+  const rows = open().prepare(`SELECT sku, created_at, delta, level_after, reason, computer, by FROM stock_log WHERE day = ? ORDER BY id ASC`).all(day);
+  const out = {};
+  for (const r of rows) {
+    const m = out[r.sku] || (out[r.sku] = { count: 0 });
+    m.count += 1;
+    m.lastAt = r.created_at; m.lastDelta = r.delta; m.lastAfter = r.level_after;
+    m.lastReason = r.reason; m.lastComputer = r.computer; m.lastBy = r.by;
+  }
+  return out;
+}
+
 function lowStockCrossings(items, prevBelow) {
   const below = {};
   const crossed = [];
@@ -611,6 +677,6 @@ module.exports = {
   rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
-  lowStockCrossings,
+  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

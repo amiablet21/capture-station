@@ -4236,3 +4236,39 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ov-drawer { max-height: 380px; overflow-y: auto; }
 
 
+
+/* ---------- stock history (owner 2026-09-23) ---------- */
+/* tray button: the clock wears a dot on days the SKU moved */
+.stock-hist-btn.has-today { position: relative; }
+.stock-hist-btn.has-today::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+
+.sh-strip { grid-template-columns: repeat(4, 1fr); }
+.sh-strip .v.is-pos { color: var(--pos-text); }
+.sh-strip .v.is-neg { color: var(--neg-text); }
+.sh-strip .v.is-name { font-size: 14px; }
+
+.sh-list { height: auto; max-height: 56vh; }
+.sh-item { align-items: center; min-width: 0; }
+.sh-item .history-time { width: 40px; flex: 0 0 auto; }
+.sh-delta { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; min-width: 34px; text-align: right; flex: 0 0 auto; }
+.sh-delta.is-pos { color: var(--pos-text); }
+.sh-delta.is-neg { color: var(--neg-text); }
+.sh-delta.is-set { color: var(--badge-blue-text); }
+.sh-lvl { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); flex: 0 0 auto; width: 76px; white-space: nowrap; }
+.sh-lvl b { color: var(--text); font-weight: 600; }
+.sh-lvl i { font-style: normal; color: var(--faint); margin: 0 4px; }
+.sh-why { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; overflow: hidden; }
+.sh-why .history-status { margin-left: 0; }
+.sh-ref { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
+.sh-ref.copyable { cursor: pointer; }
+.sh-ref.copyable:hover { color: var(--accent); }
+.sh-note { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sh-who { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); white-space: nowrap; }
+.sh-who svg { width: 13px; height: 13px; color: var(--faint); }
+.sh-who .ini { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); padding: 0 6px; border-radius: 999px; line-height: 17px; }
+.history-status.st-return, .history-status.st-new-sku { background: var(--pos-bg); color: var(--pos-text); }
+.history-status.st-return-edit, .history-status.st-return-delete { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.history-status.st-set, .history-status.st-wfs { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.history-status.st-dropship { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+.history-status.st-substitution, .history-status.st-other { background: var(--surface-2); color: var(--muted); }
+.history-day-head .sh-net { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; margin-left: 6px; }
