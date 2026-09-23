@@ -2442,7 +2442,10 @@ function applyStockColWidths() {
   }
 }
 
+let stockLoading = false; // a reload in flight: lazy badge loads wait for it
+
 async function loadStock() {
+  stockLoading = true;
   $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
@@ -2451,12 +2454,17 @@ async function loadStock() {
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
   const res = await api.getStock();
+  stockLoading = false;
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
     return;
   }
   stockCache = res;
-  stockColAuto = {}; // fresh inventory: let the columns re-measure once
+  // the column pins survive a reload (owner 2026-09-23: "it keeps shifting
+  // whenever I go in and out of the tab") — every tab entry reloads the
+  // grid, and re-measuring each time froze whatever badges had happened to
+  // arrive by then. Pins now last the session; a grip double-click or a
+  // new column re-measures.
   renderStockChips(); // the WFS + Low stock chips appear once data allows
   renderStock();
 }
@@ -2504,7 +2512,7 @@ async function loadStockDeltas() {
       m[d === today ? 'today' : 'yesterday'] += Number(l.qty) || 0;
     }
     stockDeltas = map;
-    if (activePage === 'stock' && stockCache) renderStock(); // fill in lazily
+    if (activePage === 'stock' && stockCache && !stockLoading) renderStock(); // fill in lazily
   } finally {
     stockDeltasBusy = false;
   }
@@ -4834,7 +4842,7 @@ $('chmapWmBody').addEventListener('click', async (e) => {
         if (still || !chLinked || !chLinked[label]) return;
         chLinked[label].delete(id);
         renderStockChips();
-        if (activePage === 'stock' && stockCache) renderStock();
+        if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
       }).catch(() => { /* chip stays; the next full scan settles it */ });
     }
     item.linked = false;
@@ -4888,7 +4896,7 @@ $('chmapLwBody').addEventListener('click', async (e) => {
       const label = chmapChanLabel(chmap.chan).toLowerCase();
       if (chLinked[label]) chLinked[label].add(linkedStockId);
       renderStockChips();
-      if (activePage === 'stock' && stockCache) renderStock();
+      if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
     }
     chmapLoadItems(true); // silent re-pull picks up the new rowId for Unlink
     loadUnlisted();
@@ -6123,7 +6131,7 @@ async function loadStockHistToday() {
     const res = await api.stockHistoryToday();
     if (!res || !res.ok) return;
     stockHistToday = res.bySku || {};
-    if (activePage === 'stock' && stockCache) renderStock();
+    if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
   } finally {
     stockHistTodayBusy = false;
   }
@@ -7723,7 +7731,7 @@ function imgPatchGrid(dataUrl) {
     const u = unlistedDetail.find(x => x.sku === String(sku).toUpperCase());
     if (u) u.image = dataUrl;
   }
-  if (activePage === 'stock' && stockCache) renderStock();
+  if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
 }
 
 function openImgDialog(sku, sid, url) {
