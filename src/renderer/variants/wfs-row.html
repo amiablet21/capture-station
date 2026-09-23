@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (X400-128GB-GRAY)</title>
+<!--
+  Owner 2026-09-23: "I just want to make each line for the Send to WFS
+  section different ... isolate [the X400-128GB-GRAY row] for the design".
+  One row, at the real column width (400px), shown at 1x and enlarged.
+  Real numbers from the owner's screenshot. Built on the real styles.css:
+  "Now" is exactly what v1.28.1 renders; R1-R3 are starting points.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
+  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 400px; }
+  /* one Send-to-WFS panel, the real column width, enlarged for review */
+  .wr-col { width: 400px; zoom: 1.35; }
+  .wr-col .ov-panel { padding: 8px 10px; }
+
+  /* R1 · one button carries the amount */
+  .r1 { display: flex; align-items: flex-start; gap: 10px; padding: 8px 6px; }
+  .r1 .l { flex: 1; min-width: 0; }
+  .r1 .days { font-size: 10.5px; color: var(--neg-text); margin-top: 3px; }
+  .r1 .btn-primary { font-size: 12px; padding: 5px 12px; font-family: var(--mono); font-weight: 600; }
+  .r1 .x { border: none; background: none; color: var(--faint); cursor: pointer; font-size: 12px; padding: 5px 2px; }
+  .r1 .x:hover { color: var(--neg-text); }
+
+  /* R2 · the amount is the hero, on the right */
+  .r2 { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 6px; }
+  .r2 .num { text-align: right; }
+  .r2 .num b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1; color: #065F46; }
+  .r2 .num span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .r2 .chip { display: inline-block; font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-top: 4px; background: var(--neg-bg); color: var(--neg-text); }
+  .r2 .ov-stack .btn { font-size: 11px; padding: 2px 10px; }
+
+  /* R3 · urgency strip + stat line */
+  .r3 { display: flex; gap: 10px; padding: 9px 8px 9px 0; }
+  .r3 .strip { width: 3px; border-radius: 3px; background: var(--neg-text); }
+  .r3 .l { flex: 1; min-width: 0; }
+  .r3 .stats { display: flex; gap: 14px; margin-top: 6px; }
+  .r3 .stats div { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .r3 .stats b { display: block; font-family: var(--mono); font-size: 12.5px; color: var(--text); letter-spacing: 0; }
+  .r3 .stats b.r { color: var(--neg-text); }
+  .r3 .acts { display: flex; flex-direction: column; gap: 4px; align-items: stretch; justify-content: center; }
+  .r3 .acts .btn { font-size: 11.5px; padding: 3px 12px; }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Send to WFS · one row</h1>
+  <div class="sub">X400-128GB-GRAY at the real column width (400px), enlarged 1.35×. "Now" is what the app renders today. Tell me what to change line by line.</div>
+  <div class="wr-grid">
+
+    <div>
+      <div class="wr-lbl"><b>Now</b> · as built</div>
+      <div class="wr-col"><div class="ov-panel">
+        <table class="ov-t"><tbody><tr><td class="ov-rank">4</td>
+          <td><span class="ov-sku">X400-128GB-GRAY</span>
+            <span class="ov-sendline"><span class="ov-pill r">Send +78</span></span>
+            <span class="ov-daysleft r">0.0 days left at WFS</span>
+            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
+            <div class="ov-bar"><i class="r" data-w="2"></i></div></td>
+          <td class="ov-actcell"><span class="ov-stack"><button class="btn btn-secondary">Send</button><button class="btn btn-ghost">Ignore</button></span></td>
+        </tr></tbody></table>
+      </div></div>
+      <div class="wr-note">Line 1 SKU · line 2 amount · line 3 days left · line 4 Walmart channel SKU + pace · line 5 urgency bar · buttons stacked right.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>R1</b> · the button carries the amount</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="r1">
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span>
+            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
+            <div class="days">Out at WFS · 0 left there</div></div>
+          <button class="btn btn-primary">Send 78</button><button class="x" title="Ignore for 7 days">✕</button>
+        </div>
+      </div></div>
+      <div class="wr-note">Two lines instead of five; one green button says exactly what happens; ✕ = Ignore.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>R2</b> · the amount is the hero</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="r2">
+          <div><span class="ov-sku">X400-128GB-GRAY</span>
+            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER <b>18/wk</b></span></span>
+            <span class="chip">0 days left at WFS</span></div>
+          <div class="num"><b>+78</b><span>to send</span></div>
+          <span class="ov-stack"><button class="btn btn-secondary">Send</button><button class="btn btn-ghost">Ignore</button></span>
+        </div>
+      </div></div>
+      <div class="wr-note">Big number you can read from across the room; days left as a red chip.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>R3</b> · urgency strip + stats</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="r3">
+          <span class="strip"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span>
+            <span class="ov-meta ov-chs"><span>X400-128GB-BLACK-INTL-VER</span></span>
+            <div class="stats"><div>Send<b>+78</b></div><div>Sells<b>18/wk</b></div><div>At WFS<b>0</b></div><div>Left<b class="r">0 days</b></div></div></div>
+          <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span>
+        </div>
+      </div></div>
+      <div class="wr-note">Colour strip on the left says how urgent; four labelled numbers in one line.</div>
+    </div>
+
+  </div>
+</div>
+<script>
+  document.querySelectorAll('.ov-bar i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+</script>
+</body>
+</html>
