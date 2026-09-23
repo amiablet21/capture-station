@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Condition dropdown — 3 animations</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --c-new:#346538; --c-ob:#1F6C9F; --c-used:#956400; --c-scrap:#9F2F2D; --c-diff:#787774;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace;
+    --ease:cubic-bezier(0.16,1,0.3,1); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 220px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:24px; max-width:800px; }
+  .opt { margin-bottom:38px; max-width:760px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+  .row { display:grid; grid-template-columns:110px 1fr 190px 60px; align-items:center; border-bottom:1px solid var(--grid); }
+  .row:last-child { border-bottom:none; }
+  .row > div { padding:10px 14px; }
+  .date { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .sku { font-family:var(--mono); font-size:12.5px; }
+  .units { font-family:var(--mono); text-align:right; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:0.5px; }
+  .condbtn { font-family:var(--font); font-size:12.5px; font-weight:600; background:none; border:none; cursor:pointer; padding:2px 4px; }
+  .condbtn:hover { text-decoration:underline; }
+  .condcell { position:relative; }
+
+  .menu { position:absolute; top:calc(100% - 6px); left:8px; z-index:10; min-width:170px;
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    box-shadow:0 12px 28px rgba(47,52,55,0.16); overflow:hidden; padding:4px; }
+  .menu button { display:flex; align-items:center; width:100%; text-align:left; font-family:var(--font); font-size:12.5px; font-weight:500; padding:6px 10px; border:none; border-radius:6px; background:none; cursor:pointer; }
+  .menu button:hover { background:var(--surface-2); }
+  .menu button.cur { background:var(--accent-soft); font-weight:600; }
+
+  /* A — pop: scale+fade from the label */
+  .m-pop { transform-origin:top left; animation:pop 140ms var(--ease); }
+  @keyframes pop { from { opacity:0; transform:scale(0.92) translateY(-4px); } to { opacity:1; transform:none; } }
+
+  /* B — curtain: unrolls downward */
+  .m-curtain { display:grid; grid-template-rows:0fr; padding:0 4px; transition:grid-template-rows 200ms var(--ease), padding 200ms var(--ease); }
+  .m-curtain.open { grid-template-rows:1fr; padding:4px; }
+  .m-curtain > div { min-height:0; overflow:hidden; }
+
+  /* C — pills: the cell itself flips to a one-line pill strip */
+  .pillstrip { display:inline-flex; gap:5px; }
+  .pill { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:2px solid transparent; background:var(--surface-2); cursor:pointer; padding:0; opacity:0; transform:scale(0.6); transition:opacity 160ms var(--ease), transform 160ms var(--ease), border-color 120ms; }
+  .pillstrip.open .pill { opacity:1; transform:none; }
+  .pill i { width:10px; height:10px; border-radius:50%; display:block; }
+  .pill:hover { border-color:currentColor; }
+  .pill span { position:absolute; transform:translateY(-22px); font-size:9.5px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 100ms; white-space:nowrap; }
+  .pill:hover span { opacity:1; }
+  .pillstrip.open .pill:nth-child(1){transition-delay:0ms} .pillstrip.open .pill:nth-child(2){transition-delay:30ms}
+  .pillstrip.open .pill:nth-child(3){transition-delay:60ms} .pillstrip.open .pill:nth-child(4){transition-delay:90ms}
+  .pillstrip.open .pill:nth-child(5){transition-delay:120ms}
+</style>
+</head>
+<body>
+
+<h1>Condition dropdown — three ways that never stretch the row</h1>
+<div class="sub">The fix all three share: the menu <b>floats over the table</b> (or stays inside one line) instead of being packed into the cell — so the row keeps its height no matter what. Click the condition in each example to try it; click a choice or anywhere else to close.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>A — Pop-over</b><span>the menu floats above the rows and pops from the label — quick scale + fade, 140ms · the quiet default</span></div>
+  <div class="card">
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">S25-256GB-SILVERSHADOW</div><div class="condcell"><button class="condbtn" style="color:var(--c-ob)" data-var="a"><span class="dot" style="background:var(--c-ob)"></span>Open box</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">A15-128GB-BLACK-US</div><div class="condcell" id="cellA"><button class="condbtn" style="color:var(--c-new)" data-var="a"><span class="dot" style="background:var(--c-new)"></span>New</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">OPEN-BOX-X210-128GB-GRAY</div><div class="condcell"><button class="condbtn" style="color:var(--c-used)" data-var="a"><span class="dot" style="background:var(--c-used)"></span>Used</button></div><div class="units">1</div></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>B — Curtain</b><span>same floating menu, but it unrolls downward — the same motion your Pricing variations use, 200ms</span></div>
+  <div class="card">
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">S25-256GB-SILVERSHADOW</div><div class="condcell"><button class="condbtn" style="color:var(--c-ob)" data-var="b"><span class="dot" style="background:var(--c-ob)"></span>Open box</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">A15-128GB-BLACK-US</div><div class="condcell"><button class="condbtn" style="color:var(--c-new)" data-var="b"><span class="dot" style="background:var(--c-new)"></span>New</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">OPEN-BOX-X210-128GB-GRAY</div><div class="condcell"><button class="condbtn" style="color:var(--c-used)" data-var="b"><span class="dot" style="background:var(--c-used)"></span>Used</button></div><div class="units">1</div></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>C — Color pills, no menu at all</b><span>the cell itself flips into five color dots on one line — hover names them, click picks, nothing ever overlaps the other rows</span></div>
+  <div class="card">
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">S25-256GB-SILVERSHADOW</div><div class="condcell"><button class="condbtn" style="color:var(--c-ob)" data-var="c"><span class="dot" style="background:var(--c-ob)"></span>Open box</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">A15-128GB-BLACK-US</div><div class="condcell"><button class="condbtn" style="color:var(--c-new)" data-var="c"><span class="dot" style="background:var(--c-new)"></span>New</button></div><div class="units">1</div></div>
+    <div class="row"><div class="date">09/21/2026</div><div class="sku">OPEN-BOX-X210-128GB-GRAY</div><div class="condcell"><button class="condbtn" style="color:var(--c-used)" data-var="c"><span class="dot" style="background:var(--c-used)"></span>Used</button></div><div class="units">1</div></div>
+  </div>
+</div>
+
+<script>
+const CONDS = [
+  { label:'New', color:'var(--c-new)' },
+  { label:'Open box', color:'var(--c-ob)' },
+  { label:'Used', color:'var(--c-used)' },
+  { label:'Scrap', color:'var(--c-scrap)' },
+  { label:'Different return', color:'var(--c-diff)' },
+];
+let openEl = null, restore = null;
+function closeMenu() {
+  if (restore) { restore(); restore = null; }
+  if (openEl) { openEl.remove(); openEl = null; }
+}
+document.addEventListener('mousedown', (e) => {
+  if (openEl && !openEl.contains(e.target) && !e.target.closest('.condbtn')) closeMenu();
+});
+function pick(btn, cond) {
+  btn.style.color = cond.color;
+  btn.innerHTML = `<span class="dot" style="background:${cond.color}"></span>${cond.label}`;
+  closeMenu();
+}
+function itemsHtml(current) {
+  return CONDS.map(c => `<button class="${c.label === current ? 'cur' : ''}" data-c="${c.label}"><span class="dot" style="background:${c.color}"></span>${c.label}</button>`).join('');
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.condbtn');
+  if (!btn) {
+    const it = e.target.closest('.menu button, .pill');
+    if (it && openEl) {
+      const cond = CONDS.find(c => c.label === it.dataset.c);
+      if (cond) pick(openEl.dataset ? openEl.ownerBtn : null, cond);
+    }
+    return;
+  }
+  const wasOpen = openEl && openEl.parentElement === btn.parentElement;
+  closeMenu();
+  if (wasOpen) return;
+  const cur = btn.textContent.trim();
+  const cell = btn.parentElement;
+  const kind = btn.dataset.var;
+  const el = document.createElement('div');
+  el.ownerBtn = btn;
+  if (kind === 'a') {
+    el.className = 'menu m-pop';
+    el.innerHTML = itemsHtml(cur);
+  } else if (kind === 'b') {
+    el.className = 'menu m-curtain';
+    el.innerHTML = `<div>${itemsHtml(cur)}</div>`;
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('open')));
+  } else {
+    el.className = 'pillstrip';
+    el.style.position = 'absolute'; el.style.inset = '0'; el.style.display = 'flex';
+    el.style.alignItems = 'center'; el.style.padding = '0 14px'; el.style.background = 'var(--surface)';
+    el.innerHTML = CONDS.map(c => `<button class="pill" style="color:${c.color}" data-c="${c.label}"><i style="background:${c.color}"></i><span>${c.label}</span></button>`).join('');
+    btn.style.visibility = 'hidden';
+    restore = () => { btn.style.visibility = ''; };
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('open')));
+  }
+  cell.appendChild(el);
+  openEl = el;
+});
+</script>
+</body>
+</html>

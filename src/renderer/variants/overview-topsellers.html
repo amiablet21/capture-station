@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview — Top sellers table, three mockups (awaiting owner's pick)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-deep: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --amber-soft: #FBF3DB; --amber-text: #956400;
+    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .review { max-width: 1160px; margin: 0 auto; padding: 20px 22px 40px; }
+  .review > h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+  .review > p.note { font-size: 11.5px; color: var(--muted); margin: 0 0 22px; }
+  .vhead { display: flex; align-items: baseline; gap: 10px; margin: 34px 0 10px; }
+  .vhead .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700; background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 999px; padding: 2px 10px; }
+  .vhead h3 { font-size: 13px; font-weight: 600; margin: 0; }
+  .vhead .why { font-size: 11px; color: var(--muted); }
+
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+  .panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+
+  .ranges { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .rbtn.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .ranges.mini .rbtn { padding: 3px 10px; font-size: 10.5px; }
+
+  .customrow { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .customrow input { font-family: var(--mono); font-size: 11px; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; background: #fff; }
+  .customrow .go { font-size: 11px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; padding: 5px 12px; font-family: inherit; cursor: pointer; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-2); }
+  td.rank { width: 26px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: right; padding-right: 2px; }
+  td.sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #1F6C9F; }
+  td.qty { font-family: var(--mono); font-size: 12px; font-weight: 700; text-align: right; width: 60px; }
+  td.barcell { width: 34%; }
+  .bar { height: 7px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .medal { font-size: 11px; }
+
+  /* variant B: two side-by-side context (today panel stub) */
+  .gridB { display: grid; grid-template-columns: 340px 1fr; gap: 10px; }
+  .stub { display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 11px; border-style: dashed; min-height: 120px; }
+
+  /* variant C: two columns of the same list */
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; }
+</style>
+</head>
+<body>
+<div class="review">
+  <h2>Overview — Top sellers</h2>
+  <p class="note">Top 10–15 SKUs by units sold, filterable by Day / Month / Year / Custom range. Three placements below — same data, different feel. All sit on the Overview page below the money cards. Numbers are sample data.</p>
+
+  <!-- ============================================================ A ============================================================ -->
+  <div class="vhead"><span class="tag">A</span><h3>Rides the page filter, with quantity bars</h3>
+    <span class="why">no new controls to learn — the Day/Month/Year pills the chart already has gain a “Custom” option and drive this table too</span></div>
+  <div class="panel">
+    <h4>Top sellers
+      <span class="ranges mini">
+        <button class="rbtn">Day</button><button class="rbtn on">Month</button><button class="rbtn">Year</button><button class="rbtn">Custom</button>
+      </span>
+      <span class="sub">September · units sold</span>
+    </h4>
+    <table>
+      <thead><tr><th></th><th>SKU</th><th></th><th class="rr">Qty</th></tr></thead>
+      <tbody>
+        <tr><td class="rank">1</td><td class="sku">S25-FE-256GB-ICEBLUE</td><td class="barcell"><div class="bar"><span style="width:100%"></span></div></td><td class="qty">86</td></tr>
+        <tr><td class="rank">2</td><td class="sku">S24-128GB-ONYXBLACK</td><td class="barcell"><div class="bar"><span style="width:81%"></span></div></td><td class="qty">70</td></tr>
+        <tr><td class="rank">3</td><td class="sku">IP15-128GB-BLUE</td><td class="barcell"><div class="bar"><span style="width:66%"></span></div></td><td class="qty">57</td></tr>
+        <tr><td class="rank">4</td><td class="sku">PIX8A-128GB-OBSIDIAN</td><td class="barcell"><div class="bar"><span style="width:58%"></span></div></td><td class="qty">50</td></tr>
+        <tr><td class="rank">5</td><td class="sku">S23-FE-128GB-MINT</td><td class="barcell"><div class="bar"><span style="width:50%"></span></div></td><td class="qty">43</td></tr>
+        <tr><td class="rank">6</td><td class="sku">IP14-128GB-MIDNIGHT</td><td class="barcell"><div class="bar"><span style="width:44%"></span></div></td><td class="qty">38</td></tr>
+        <tr><td class="rank">7</td><td class="sku">MOTO-G84-256GB-BLUE</td><td class="barcell"><div class="bar"><span style="width:36%"></span></div></td><td class="qty">31</td></tr>
+        <tr><td class="rank">8</td><td class="sku">S25-256GB-NAVY</td><td class="barcell"><div class="bar"><span style="width:31%"></span></div></td><td class="qty">27</td></tr>
+        <tr><td class="rank">9</td><td class="sku">IP13-128GB-STARLIGHT</td><td class="barcell"><div class="bar"><span style="width:26%"></span></div></td><td class="qty">22</td></tr>
+        <tr><td class="rank">10</td><td class="sku">PIX7A-128GB-SEA</td><td class="barcell"><div class="bar"><span style="width:21%"></span></div></td><td class="qty">18</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============================================================ B ============================================================ -->
+  <div class="vhead"><span class="tag">B</span><h3>Own mini filter with visible custom dates</h3>
+    <span class="why">independent of the chart — you can watch the year curve while reading last week’s top sellers; Custom shows two date boxes right in the header row</span></div>
+  <div class="panel">
+    <h4>Top sellers
+      <span class="ranges mini">
+        <button class="rbtn">Day</button><button class="rbtn">Month</button><button class="rbtn">Year</button><button class="rbtn on">Custom</button>
+      </span>
+      <span class="sub customrow">
+        <input type="text" value="2026-09-01" size="9" /> <span>→</span> <input type="text" value="2026-09-18" size="9" />
+        <button class="go">Apply</button>
+      </span>
+    </h4>
+    <table>
+      <thead><tr><th style="width:26px"></th><th>SKU</th><th class="rr">Qty</th></tr></thead>
+      <tbody>
+        <tr><td class="rank medal">🥇</td><td class="sku">S25-FE-256GB-ICEBLUE</td><td class="qty">54</td></tr>
+        <tr><td class="rank medal">🥈</td><td class="sku">S24-128GB-ONYXBLACK</td><td class="qty">46</td></tr>
+        <tr><td class="rank medal">🥉</td><td class="sku">IP15-128GB-BLUE</td><td class="qty">39</td></tr>
+        <tr><td class="rank">4</td><td class="sku">PIX8A-128GB-OBSIDIAN</td><td class="qty">33</td></tr>
+        <tr><td class="rank">5</td><td class="sku">S23-FE-128GB-MINT</td><td class="qty">29</td></tr>
+        <tr><td class="rank">6</td><td class="sku">IP14-128GB-MIDNIGHT</td><td class="qty">24</td></tr>
+        <tr><td class="rank">7</td><td class="sku">MOTO-G84-256GB-BLUE</td><td class="qty">20</td></tr>
+        <tr><td class="rank">8</td><td class="sku">S25-256GB-NAVY</td><td class="qty">17</td></tr>
+        <tr><td class="rank">9</td><td class="sku">IP13-128GB-STARLIGHT</td><td class="qty">14</td></tr>
+        <tr><td class="rank">10</td><td class="sku">PIX7A-128GB-SEA</td><td class="qty">11</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============================================================ C ============================================================ -->
+  <div class="vhead"><span class="tag">C</span><h3>Quiet spreadsheet, fifteen rows in two columns</h3>
+    <span class="why">most items visible at once with no scrolling and no decoration — pure SKU + Qty, split 1–8 / 9–15, same shared filter as variant A</span></div>
+  <div class="panel">
+    <h4>Top sellers
+      <span class="ranges mini">
+        <button class="rbtn on">Day</button><button class="rbtn">Month</button><button class="rbtn">Year</button><button class="rbtn">Custom</button>
+      </span>
+      <span class="sub">Friday, September 18 · units sold</span>
+    </h4>
+    <div class="twocol">
+      <table>
+        <thead><tr><th style="width:26px"></th><th>SKU</th><th class="rr">Qty</th></tr></thead>
+        <tbody>
+          <tr><td class="rank">1</td><td class="sku">S25-FE-256GB-ICEBLUE</td><td class="qty">9</td></tr>
+          <tr><td class="rank">2</td><td class="sku">S24-128GB-ONYXBLACK</td><td class="qty">7</td></tr>
+          <tr><td class="rank">3</td><td class="sku">IP15-128GB-BLUE</td><td class="qty">6</td></tr>
+          <tr><td class="rank">4</td><td class="sku">PIX8A-128GB-OBSIDIAN</td><td class="qty">5</td></tr>
+          <tr><td class="rank">5</td><td class="sku">S23-FE-128GB-MINT</td><td class="qty">4</td></tr>
+          <tr><td class="rank">6</td><td class="sku">IP14-128GB-MIDNIGHT</td><td class="qty">4</td></tr>
+          <tr><td class="rank">7</td><td class="sku">MOTO-G84-256GB-BLUE</td><td class="qty">3</td></tr>
+          <tr><td class="rank">8</td><td class="sku">S25-256GB-NAVY</td><td class="qty">3</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th style="width:26px"></th><th>SKU</th><th class="rr">Qty</th></tr></thead>
+        <tbody>
+          <tr><td class="rank">9</td><td class="sku">IP13-128GB-STARLIGHT</td><td class="qty">2</td></tr>
+          <tr><td class="rank">10</td><td class="sku">PIX7A-128GB-SEA</td><td class="qty">2</td></tr>
+          <tr><td class="rank">11</td><td class="sku">S22-128GB-PINKGOLD</td><td class="qty">2</td></tr>
+          <tr><td class="rank">12</td><td class="sku">IP12-64GB-BLACK</td><td class="qty">1</td></tr>
+          <tr><td class="rank">13</td><td class="sku">MOTO-EDGE50-256GB</td><td class="qty">1</td></tr>
+          <tr><td class="rank">14</td><td class="sku">PIX9-128GB-PORCELAIN</td><td class="qty">1</td></tr>
+          <tr><td class="rank">15</td><td class="sku">S21-FE-128GB-GRAPHITE</td><td class="qty">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>

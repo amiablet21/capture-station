@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>v1.27.104 before and after</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --warn:#956400;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; background:var(--canvas); color:var(--text); padding:30px 40px; }
+  h1 { font-size:15px; font-weight:600; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:24px; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:900px; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .panel h2 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); margin-bottom:12px; }
+  .line { display:flex; align-items:center; gap:6px; padding:5px 0; }
+  .csku { font-family:var(--mono); font-size:10.5px; color:var(--muted); flex:1; }
+  .sold { font-family:var(--mono); font-size:10px; color:var(--faint); min-width:34px; text-align:right; }
+  .hot { color:var(--warn); font-weight:700; }
+  .ro { font-family:var(--mono); font-size:12.5px; font-weight:600; min-width:76px; text-align:right; }
+  .ro2 { font-family:var(--mono); font-size:12.5px; font-weight:500; color:var(--muted); min-width:76px; text-align:right; }
+  .ed { font-family:var(--mono); font-size:12.5px; font-weight:600; border:1px solid var(--border); border-radius:6px; background:var(--surface); padding:3px 9px; min-width:76px; text-align:right; }
+  .op { color:var(--faint); font-size:12px; }
+  .note { font-size:10.5px; color:var(--faint); margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<h1>What v1.27.104 changed — one Walmart cell, one eBay cell</h1>
+<div class="sub">Three edits: the ≈ prefix is gone (grey now means "repricer's price, read-only"), ×0 badges no longer print, and everything else is untouched. Stock never moved — it was already on the product side.</div>
+<div class="pair">
+  <div class="panel">
+    <h2>Before (v1.27.103)</h2>
+    <div class="line"><span class="csku">SM-X133-64GB-GREY</span><span class="sold">×0</span><span class="ro">≈ $149.99</span><span class="op">↗</span></div>
+    <div class="line"><span class="csku">X210-64GB-GRAY-1</span><span class="sold hot">×10</span><span class="ro">≈ $129.99</span><span class="op">↗</span></div>
+    <div class="line"><span class="csku">X133-64GB-GRAY</span><span class="sold">×0</span><span class="ed">$154.99</span><span class="op">↗</span></div>
+    <div class="note">≈ on every Walmart price · ×0 printed even with no sales</div>
+  </div>
+  <div class="panel">
+    <h2>After (v1.27.104 — installed now)</h2>
+    <div class="line"><span class="csku">SM-X133-64GB-GREY</span><span class="ro2">$149.99</span><span class="op">↗</span></div>
+    <div class="line"><span class="csku">X210-64GB-GRAY-1</span><span class="sold hot">×10</span><span class="ro2">$129.99</span><span class="op">↗</span></div>
+    <div class="line"><span class="csku">X133-64GB-GRAY</span><span class="ed">$154.99</span><span class="op">↗</span></div>
+    <div class="note">grey price = Walmart repricer's (hover explains) · boxed price = click to edit · sold badge only when something sold</div>
+  </div>
+</div>
+</body>
+</html>

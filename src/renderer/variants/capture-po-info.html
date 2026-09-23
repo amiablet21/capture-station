@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PO info popover — preview</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 200px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:24px; max-width:780px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; max-width:1180px; overflow:visible; }
+  .bar { display:flex; align-items:center; gap:14px; padding:12px 16px; }
+  .search { width:250px; font-size:12.5px; color:var(--faint); border:1px solid var(--border); border-radius:999px; padding:6px 14px; font-family:var(--mono); }
+  .chips { display:inline-flex; gap:2px; background:var(--surface-2); border-radius:999px; padding:3px; }
+  .chip { font-size:12px; font-weight:500; color:var(--muted); border:none; background:none; border-radius:999px; padding:4px 14px; }
+  .chip.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(47,52,55,0.08); }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:left; padding:8px 16px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  table { border-collapse:collapse; width:100%; }
+  td { padding:12px 16px; border-bottom:1px solid var(--grid); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .gut { color:var(--faint); font-size:12px; width:40px; }
+  .po { font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap; }
+  .sku { font-family:var(--mono); font-size:12.5px; }
+  .thumb { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:5px; background:var(--surface-2); border:1px solid var(--border); font-size:11px; color:var(--faint); margin-right:8px; vertical-align:-6px; }
+  .addtrk { font-size:12px; font-weight:600; color:var(--accent-soft-text); border:1px dashed var(--border); background:none; border-radius:8px; padding:4px 12px; }
+  .info { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; border:1px solid var(--border); color:var(--faint); font-size:9.5px; font-weight:700; font-style:italic; font-family:Georgia,serif; margin-left:7px; vertical-align:1px; cursor:pointer; background:var(--surface); }
+  .info:hover, .info.on { border-color:var(--accent); color:var(--accent-soft-text); background:var(--accent-soft); }
+  .pocell { position:relative; }
+
+  .pop { position:absolute; top:calc(100% - 6px); left:40px; z-index:5; width:330px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 12px 32px rgba(47,52,55,0.16); padding:13px 16px; }
+  .pop .who { font-size:13.5px; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:7px; }
+  .pop .addrrow { display:flex; align-items:flex-start; gap:7px; }
+  .cpyico { display:inline-grid; place-items:center; width:20px; height:20px; border:none; background:none; border-radius:5px; color:var(--faint); cursor:pointer; padding:0; flex:0 0 auto; }
+  .cpyico:hover { background:var(--surface-2); color:var(--text); }
+  .cpyico svg { width:13px; height:13px; }
+  .pop .addr { font-size:12.5px; color:var(--muted); line-height:1.55; }
+</style>
+</head>
+<body>
+
+<h1>PO# info — customer name and address on the ⓘ</h1>
+<div class="sub">Same ⓘ affordance the Items column already has, on the PO#. Click (or hover) and the popover shows who the order ships to, pulled from the Linnworks order. A small copy icon sits beside the name and beside the address — one click copies that piece.</div>
+
+<div class="card">
+  <div class="bar">
+    <span class="search">Search PO#, SKU or tracking</span>
+    <span class="chips"><span class="chip">All · 27</span><span class="chip">Walmart · 13</span><span class="chip">eBay · 11</span><span class="chip on">Temu · 3</span></span>
+  </div>
+  <table>
+    <thead><tr><th class="gut">#</th><th>Order #</th><th>Items</th><th>Tracking</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="gut">3</td>
+        <td class="pocell"><span class="po">PO-211-07126085991032676</span><button class="info on">i</button>
+          <div class="pop">
+            <div class="who">Hakan Swenson <button class="cpyico" title="Copy the name"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg></button></div>
+            <div class="addrrow"><span class="addr">2314 Maple Avenue, Apt 4B<br />Fairfield, NJ 07004<br />United States</span><button class="cpyico" title="Copy the address"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg></button></div>
+          </div>
+        </td>
+        <td><span class="thumb">▦</span><span class="sku">X230-128GB-SILVER</span><button class="info">i</button></td>
+        <td><button class="addtrk">+ Add tracking</button></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td class="gut">2</td>
+        <td class="pocell"><span class="po">PO-211-06927514993273797</span><button class="info">i</button></td>
+        <td><span class="thumb">▦</span><span class="sku">X133-128GB-GRAY</span><button class="info">i</button></td>
+        <td><button class="addtrk">+ Add tracking</button></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td class="gut">1</td>
+        <td class="pocell"><span class="po">PO-211-01721798001271928</span><button class="info">i</button></td>
+        <td><span class="thumb">▦</span><span class="sku">X230-128GB-GRAY</span><button class="info">i</button></td>
+        <td><button class="addtrk">+ Add tracking</button></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Channel mapping — 3 redesigns</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --warn-bg:#FBF3DB; --warn-text:#956400;
+    --r-card:10px; --r-ctl:6px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:28px 36px 64px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:800px; }
+  .opt { margin-bottom:44px; max-width:1060px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .dlg { background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:0 12px 32px rgba(47,52,55,0.10); overflow:hidden; }
+  .dlg-top { display:flex; align-items:center; gap:12px; padding:14px 18px 10px; }
+  .dlg-top h2 { font-size:15px; font-weight:600; }
+  .chanpill { font-size:12px; font-weight:600; color:var(--accent-soft-text); background:var(--accent-soft); border-radius:999px; padding:3px 14px; }
+  .chansub { font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .x { margin-left:auto; color:var(--faint); font-size:15px; }
+  .search { font-size:12px; color:var(--faint); border:1px solid var(--border); border-radius:999px; padding:5px 12px; background:var(--surface); }
+  .chip { font-size:11px; font-weight:600; border:1px solid var(--border); border-radius:999px; padding:2px 11px; background:var(--surface); color:var(--muted); }
+  .chip.on { background:var(--warn-bg); border-color:transparent; color:var(--warn-text); }
+  .qty { font-size:10px; font-weight:700; color:var(--warn-text); }
+  .lnksku { color:var(--accent-hover); font-weight:600; }
+  .unl { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color:var(--warn-text); font-weight:600; }
+  .unl::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--warn-text); }
+  .btn { font-family:var(--font); font-size:11px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:var(--r-ctl); padding:3px 12px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  .btn-go { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-go:hover { background:var(--accent-hover); color:#fff; }
+
+  /* A — one sheet */
+  table { border-collapse:collapse; width:100%; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:left; padding:7px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+  td { padding:7px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .a-arrow { color:var(--faint); text-align:center; width:30px; }
+  .a-combo { display:inline-flex; align-items:center; gap:8px; border:1px dashed var(--border); border-radius:var(--r-ctl); padding:3px 11px; color:var(--faint); font-size:11px; cursor:pointer; }
+  .a-combo:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  .a-combo-open { position:relative; border:1.5px solid var(--accent); border-radius:var(--r-ctl); padding:3px 11px; background:var(--surface); box-shadow:0 0 0 3px var(--accent-soft); font-size:12px; display:inline-flex; flex-direction:column; }
+  .a-drop { position:absolute; top:calc(100% + 6px); left:-1px; width:300px; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 10px 26px rgba(47,52,55,0.14); overflow:hidden; z-index:3; }
+  .a-drop button { display:block; width:100%; text-align:left; font-family:var(--mono); font-size:11.5px; padding:7px 12px; border:none; border-top:1px dashed var(--border); background:none; cursor:pointer; }
+  .a-drop button:first-child { border-top:none; }
+  .a-drop button:hover { background:var(--accent-soft); }
+  .a-unlink { color:var(--faint); font-size:12px; border:none; background:none; cursor:pointer; }
+  .a-unlink:hover { color:#9F2F2D; }
+
+  /* B — two titled panes */
+  .b-wrap { display:grid; grid-template-columns:1fr 1fr; }
+  .b-pane { min-height:300px; }
+  .b-pane + .b-pane { border-left:1px solid var(--border); }
+  .b-ph { display:flex; align-items:center; gap:8px; padding:10px 14px 8px; }
+  .b-ph b { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); }
+  .b-ph .n { font-size:10.5px; color:var(--faint); }
+  .b-row { display:flex; align-items:center; gap:10px; padding:8px 14px; border-top:1px solid var(--border); font-family:var(--mono); font-size:12px; }
+  .b-row:hover { background:var(--surface-2); }
+  .b-row.sel { background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+  .b-sub { font-family:var(--font); font-size:10.5px; color:var(--faint); margin-left:auto; }
+  .b-linkbar { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--accent-soft); border-top:1px solid var(--border); font-size:12px; color:var(--accent-soft-text); }
+
+  /* C — current layout, tidied */
+  .c-wrap { display:grid; grid-template-columns:1.15fr 1fr; }
+  .c-pane + .c-pane { border-left:1px solid var(--border); }
+  .c-row { display:grid; grid-template-columns:1fr 1fr 60px; align-items:center; padding:7px 14px; border-top:1px solid var(--border); }
+  .c-row:hover { background:var(--surface-2); }
+  .c-rrow { display:flex; align-items:center; gap:10px; padding:7px 14px; border-top:1px solid var(--border); }
+  .c-rrow:hover { background:var(--surface-2); }
+  .c-rrow .btn { opacity:0; }
+  .c-rrow:hover .btn { opacity:1; }
+</style>
+</head>
+<body>
+
+<h1>Channel mapping — three cleaner designs</h1>
+<div class="sub">Same data as your screenshots. The current dialog's confusion: two identical searches, a floating "Link" column that belongs to neither side, and no visible relationship between the panes. Each option fixes that differently.</div>
+
+<!-- A -->
+<div class="opt">
+  <div class="opt-label"><b>A — One sheet, map in place</b><span>no second pane at all: every Walmart listing is a row, and the Linnworks side is a cell you click and type into (shown open on row 2) — mapping feels like filling a spreadsheet</span></div>
+  <div class="dlg">
+    <div class="dlg-top"><h2>Channel mapping</h2><span class="chanpill">Walmart ▾</span><span class="chansub">10001467995</span><span class="x">✕</span></div>
+    <div class="dlg-top" style="padding-top:0"><span class="search">Search listing or Linnworks SKU…</span><span class="chip on">Unlinked first</span><span class="chip">With qty</span><span class="chansub" style="margin-left:auto">243 unlinked · 422 listings</span></div>
+    <table>
+      <thead><tr><th>Walmart listing</th><th class="a-arrow"></th><th>Linnworks SKU</th><th style="width:50px"></th></tr></thead>
+      <tbody>
+        <tr><td class="mono">OPEN-BOX-X133-64GB-SILVER <span class="qty">×5</span></td><td class="a-arrow">→</td><td class="mono lnksku">OPEN-BOX-X133-64GB-SILVER</td><td><button class="a-unlink" title="Unlink">✕</button></td></tr>
+        <tr>
+          <td class="mono">X13364GBSILVER-INTL</td><td class="a-arrow">→</td>
+          <td><span class="a-combo-open"><span class="mono">x133-64<span style="color:var(--faint)">|</span></span>
+            <span class="a-drop">
+              <button>X133-64GB-SILVER</button>
+              <button>OPEN-BOX-X133-64GB-SILVER</button>
+              <button>USED-X133-64GB-SILVER</button>
+            </span></span></td>
+          <td></td>
+        </tr>
+        <tr><td class="mono">SM-X133-64GB-GREY <span class="qty">×220</span></td><td class="a-arrow">→</td><td class="mono lnksku">X133-64GB-GRAY</td><td><button class="a-unlink" title="Unlink">✕</button></td></tr>
+        <tr><td class="mono">X133-128GB-GRAY</td><td class="a-arrow">→</td><td class="mono lnksku">X133-128GB-GRAY</td><td><button class="a-unlink" title="Unlink">✕</button></td></tr>
+        <tr><td class="mono">WMT-A15-BLACK-64</td><td class="a-arrow">→</td><td><span class="a-combo">＋ map to a Linnworks SKU…</span></td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- B -->
+<div class="opt">
+  <div class="opt-label"><b>B — Two titled panes, pick then link</b><span>each side finally says what it is; click a listing on the left and a green bar names exactly what you're about to link — the Link buttons only appear then</span></div>
+  <div class="dlg">
+    <div class="dlg-top"><h2>Channel mapping</h2><span class="chanpill">Walmart ▾</span><span class="chansub">10001467995</span><span class="x">✕</span></div>
+    <div class="b-wrap">
+      <div class="b-pane">
+        <div class="b-ph"><b>Walmart listings</b><span class="n">243 unlinked · 422</span><span class="chip on" style="margin-left:auto">Unlinked</span><span class="chip">All</span></div>
+        <div class="b-ph" style="padding-top:0"><span class="search" style="width:100%">Search Walmart SKU…</span></div>
+        <div class="b-row sel">X13364GBSILVER-INTL<span class="b-sub">unlinked</span></div>
+        <div class="b-row">WMT-A15-BLACK-64<span class="b-sub">unlinked</span></div>
+        <div class="b-row" style="color:var(--muted)">SM-X133-64GB-GREY<span class="b-sub">→ X133-64GB-GRAY</span></div>
+        <div class="b-linkbar">Linking <b class="mono">X13364GBSILVER-INTL</b> — pick its Linnworks SKU →</div>
+      </div>
+      <div class="b-pane">
+        <div class="b-ph"><b>Your inventory</b><span class="n">183 items</span></div>
+        <div class="b-ph" style="padding-top:0"><span class="search" style="width:100%">X133-64GB-SILVER</span></div>
+        <div class="b-row">X133-64GB-SILVER<button class="btn btn-go" style="margin-left:auto">Link</button></div>
+        <div class="b-row">USED-X133-64GB-SILVER<button class="btn" style="margin-left:auto">Link</button></div>
+        <div class="b-row">OPEN-BOX-X133-64GB-SILVER<button class="btn" style="margin-left:auto">Link</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- C -->
+<div class="opt">
+  <div class="opt-label"><b>C — Today's layout, tidied</b><span>keeps the two-pane flow you know: panes get titles, the searches get labels, the qty rides the SKU, and Link buttons live inside the inventory rows (hover) instead of floating between the panes</span></div>
+  <div class="dlg">
+    <div class="dlg-top"><h2>Channel mapping</h2><span class="chanpill">Walmart ▾</span><span class="chansub">10001467995</span><span class="x">✕</span></div>
+    <div class="c-wrap">
+      <div class="c-pane">
+        <div class="b-ph"><b>Walmart listings</b><span class="n">243 unlinked · 422</span><span class="chip on" style="margin-left:auto">Unlinked only</span><span class="chip">With qty</span></div>
+        <div class="b-ph" style="padding-top:0"><span class="search" style="width:100%">Search Walmart SKU or title…</span></div>
+        <div class="c-row"><span class="mono">OPEN-BOX-X133-64GB-SILVER <span class="qty">×5</span></span><span class="mono lnksku">OPEN-BOX-X133-64GB-SILVER</span><button class="btn">Unlink</button></div>
+        <div class="c-row"><span class="mono">X13364GBSILVER-INTL</span><span class="unl">unlinked</span><span></span></div>
+        <div class="c-row"><span class="mono">SM-X133-64GB-GREY <span class="qty">×220</span></span><span class="mono lnksku">X133-64GB-GRAY</span><button class="btn">Unlink</button></div>
+      </div>
+      <div class="c-pane">
+        <div class="b-ph"><b>Your inventory</b><span class="n">pick a row to link the selected listing</span><span class="chip" style="margin-left:auto">＋ New SKU</span></div>
+        <div class="b-ph" style="padding-top:0"><span class="search" style="width:100%">X133-64GB-SILVER</span></div>
+        <div class="c-rrow"><span class="mono">X133-64GB-SILVER</span><button class="btn btn-go" style="margin-left:auto">⚭ Link</button></div>
+        <div class="c-rrow"><span class="mono">USED-X133-64GB-SILVER</span><button class="btn" style="margin-left:auto">⚭ Link</button></div>
+        <div class="c-rrow"><span class="mono">OPEN-BOX-X133-64GB-SILVER</span><button class="btn" style="margin-left:auto">⚭ Link</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

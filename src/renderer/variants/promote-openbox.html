@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Promote open box to new — sketches</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --warn-bg:#FBF3DB; --warn-text:#956400; --ob:#1F6C9F;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 60px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:800px; }
+  .opt { margin-bottom:40px; max-width:900px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:visible; }
+  .row { display:flex; align-items:center; gap:12px; padding:9px 14px; border-bottom:1px solid var(--grid); }
+  .row:last-child { border-bottom:none; }
+  .gut { color:var(--faint); font-size:12px; width:26px; }
+  .sku { font-family:var(--mono); font-size:12.5px; font-weight:600; }
+  .lvl { font-family:var(--mono); margin-left:auto; }
+  .tray { display:flex; gap:6px; }
+  .tbtn { font-family:var(--font); font-size:11px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:6px; padding:2px 10px; cursor:pointer; }
+  .tbtn:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  .tbtn.hot { background:var(--accent-soft); color:var(--accent-soft-text); border-color:transparent; }
+  .obchip { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; background:#E1F3FE; color:var(--ob); border-radius:999px; padding:1px 9px; }
+
+  .dlg { width:min(440px,92vw); border-radius:12px; background:var(--surface); box-shadow:0 16px 48px rgba(47,52,55,0.15); margin:14px auto; border:1px solid var(--border); }
+  .dlg-body { padding:20px; }
+  .dlg-title { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:14px; }
+  .dlg-note { font-size:12px; color:var(--muted); margin:6px 0; }
+  .dlg-actions { display:flex; gap:8px; justify-content:flex-end; background:var(--surface-2); border-top:1px solid var(--border); margin:16px -20px -20px; padding:12px 20px; border-radius:0 0 12px 12px; }
+  .btn { font-family:var(--font); font-size:13px; font-weight:500; padding:7px 14px; border-radius:6px; border:1px solid transparent; cursor:pointer; }
+  .btn-ghost { background:transparent; color:var(--muted); border-color:var(--border); }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .qty { display:inline-flex; align-items:center; gap:10px; margin:8px 0 12px; }
+  .qty input { width:74px; text-align:right; font-family:var(--mono); font-size:15px; font-weight:600; padding:5px 10px; border:1.5px solid var(--accent); border-radius:6px; outline:none; box-shadow:0 0 0 3px var(--accent-soft); }
+  .flow { display:grid; grid-template-columns:1fr 26px 1fr; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; margin-top:6px; }
+  .flow .arr { text-align:center; color:var(--accent); font-weight:700; }
+  .flow .fsku { font-family:var(--mono); font-size:11.5px; }
+  .flow .fdelta { font-size:11px; color:var(--muted); }
+  .flow .neg { color:#9F2F2D; font-weight:700; } .flow .pos { color:var(--accent-soft-text); font-weight:700; }
+
+  .nudge { display:flex; align-items:center; gap:10px; border:1px solid var(--border); border-left:3px solid var(--warn-text); border-radius:8px; background:var(--surface); padding:10px 14px; max-width:640px; }
+  .nudge b { font-size:12.5px; }
+  .nudge p { font-size:11.5px; color:var(--muted); }
+  .nbtn { margin-left:auto; font-family:var(--font); font-size:11.5px; font-weight:600; background:var(--accent-soft); color:var(--accent-soft-text); border:none; border-radius:6px; padding:5px 14px; cursor:pointer; white-space:nowrap; }
+  .nbtn:hover { background:#D5EBDF; }
+
+  .hist { font-size:12px; padding:8px 14px; border-bottom:1px solid var(--grid); display:flex; gap:10px; align-items:center; }
+  .hist .when { font-family:var(--mono); font-size:11px; color:var(--faint); width:96px; }
+  .hist .who { font-weight:700; font-size:11px; width:30px; }
+</style>
+</head>
+<body>
+
+<h1>"This open box is actually brand new" — systematized</h1>
+<div class="sub">Today that's two hand-edited stock levels and no trace. Three pieces that make it one click, safe, and remembered — they work together, not as alternatives.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1 · Promote from the Stock row</b><span>every condition SKU's hover tray gains a ⇧ New button; it opens the small popup below — quantity, live preview of both levels, done</span></div>
+  <div class="card">
+    <div class="row"><span class="gut">7</span><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="obchip">Open box</span>
+      <span class="tray"><button class="tbtn hot">⇧ New</button><button class="tbtn">DS</button><button class="tbtn">✎</button></span>
+      <span class="lvl">194</span></div>
+    <div class="row"><span class="gut">8</span><span class="sku">OPEN-BOX-X210-128GB-GRAY</span><span class="obchip">Open box</span><span class="lvl">16</span></div>
+  </div>
+
+  <div class="dlg"><div class="dlg-body">
+    <div class="dlg-title">Promote to Brand New</div>
+    <p class="dlg-note">Inspected and sealed-fresh — these units leave the open-box listing and sell as new.</p>
+    <div class="qty"><span style="font-size:12px;color:var(--muted)">Units</span><input value="3" /></div>
+    <div class="flow">
+      <span><span class="fsku">OPEN-BOX-X133-64GB-GRAY</span><br /><span class="fdelta"><span class="neg">−3</span> · 194 → 191</span></span>
+      <span class="arr">→</span>
+      <span><span class="fsku">X133-64GB-GRAY</span><br /><span class="fdelta"><span class="pos">+3</span> · 1974 → 1977</span></span>
+    </div>
+    <div class="dlg-actions"><button class="btn btn-ghost">Cancel</button><button class="btn btn-primary">Promote 3 units</button></div>
+  </div></div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>2 · The nudge</b><span>when the NEW listing runs dry while open-box units sit on the shelf, a quiet strip on the Stock page points at the promotion — click opens the same popup</span></div>
+  <div class="nudge">
+    <span>💡</span>
+    <span><b>X620-128GB-GRAY is out of stock as New</b><p>11 open-box units on the shelf — promote inspected ones to keep the New listing selling.</p></span>
+    <button class="nbtn">⇧ Promote…</button>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>3 · The paper trail</b><span>every promotion lands in the stock history you already have — who, when, how many, both SKUs — so counts always reconcile</span></div>
+  <div class="card">
+    <div class="hist"><span class="when">09/21 14:32</span><span class="who">MA</span><span>promoted <b class="mono">3</b> units <span class="mono">OPEN-BOX-X133-64GB-GRAY → X133-64GB-GRAY</span></span></div>
+    <div class="hist"><span class="when">09/21 11:07</span><span class="who">RR</span><span>promoted <b class="mono">1</b> unit <span class="mono">OPEN-BOX-X620-128GB-GRAY → X620-128GB-GRAY</span></span></div>
+    <div class="hist"><span class="when">09/20 16:44</span><span class="who">MA</span><span>stock set 194 → 190 <span class="mono">OPEN-BOX-X133-64GB-GRAY</span></span></div>
+  </div>
+</div>
+
+</body>
+</html>

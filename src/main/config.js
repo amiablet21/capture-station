@@ -73,7 +73,8 @@ const DEFAULTS = {
   // Per-install page flags. Capture is always on; capture-only mode overrides
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
-  pages: { stock: true, history: true, returns: false },
+  // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
+  pages: { stock: true, history: true, returns: false, pricing: false },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -87,6 +88,9 @@ const DEFAULTS = {
   // excludeLocationNames: orders at these stock locations never enter the
   // queue (WFS = fulfilled by Walmart, no label to make here).
   orderImport: { enabled: true, excludeLocationNames: ['WFS FULFILLED'] },
+  // shared returns across desktops: a file-synced folder (Google Drive /
+  // OneDrive / network share) + this station's name. Both empty = sync off.
+  returnsSync: { folder: '', station: '' },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -105,10 +109,24 @@ const DEFAULTS = {
     ebay: 'https://www.ebay.com/mesh/ord/details?orderid={po}',
     temu: '', // no return seen yet — falls back to the order page
   },
+  // And for DISPUTE CASES: a "case: 16160042" chip on the Returns page
+  // opens the marketplace's case screen directly. {case} is replaced.
+  // Empty template = clicking the chip copies the case number instead.
+  caseUrlTemplates: {
+    walmart: 'https://seller.walmart.com/orders/disputes?status=ALL&viewCase={case}',
+    ebay: '',
+    temu: '',
+  },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
+  // Walmart: the legacy manage-items URL now redirects into the new Catalog
+  // page, which restores the PREVIOUS session's search text on top of the
+  // redirect (owner-seen 2026-09-20: stale searchQuery + new SKU mixed).
+  // Deep-link the new page directly, exactly as its own SKU search writes
+  // the URL: blank searchQuery (kills the restored text) + a double-encoded
+  // productOfferId filter carrying the SKU.
   listingUrlTemplates: {
-    walmart: 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}',
+    walmart: 'https://seller.walmart.com/catalog/list-items?searchQuery=&filters=%257B%2522productOfferId%2522%253A%2522{sku}%2522%257D',
     ebay: 'https://www.ebay.com/sh/lst/active?keyword={sku}&source=filterbar&action=search',
     temu: '', // Temu seller search URL unknown yet — clicking copies the SKU
   },
@@ -118,6 +136,10 @@ const DEFAULTS = {
   // eBay lister: per-model spec cards (copied once from a live NEW listing or
   // typed once by hand) + the business-policy names the CSV references
   ebayModelCards: {},
+
+  // Linnworks-native eBay publishing: which configurator lists each
+  // condition (configurators carry the eBay condition), + the account
+  ebayLw: { subSource: '', byCond: {} }, // byCond: { new|openbox|used|scrap: configId }
   // owner's live policy names (renamed on eBay 2026-08-12) — the CSV
   // references business policies by exact name
   ebayProfiles: {
@@ -158,6 +180,10 @@ const DEFAULTS = {
   // buy quantity ≈ perDay × (coverDays + leadTimeDays). suggest shows them
   // in the Min column; auto applies them nightly (only when ±20% off).
   reorder: { suggest: true, auto: false, leadTimeDays: 7, coverDays: 21 },
+  // Overview "Send to WFS": suggest a top-up when WFS stock (plus units on
+  // the way) covers fewer than triggerDays of WFS sales; send enough to
+  // reach targetDays. Ignore hides a suggestion for ignoreDays.
+  wfs: { targetDays: 30, triggerDays: 14, ignoreDays: 7 },
   // one-per-crossing latch for dropship BUY alerts (like lowStockBelow)
   dropshipAlerted: {},
   // Embedded marketplace browser pane on the Capture page (sync mode only):
@@ -199,6 +225,13 @@ function load() {
       && stored.listingUrlTemplates.ebay === 'https://www.ebay.com/sh/lst/active?q={sku}') {
     stored.listingUrlTemplates.ebay = DEFAULTS.listingUrlTemplates.ebay;
   }
+  // migration: Walmart's manage-items redirect started resurrecting the
+  // previous search over the SKU the app passed — saved configs still on
+  // the legacy URL move to the direct Catalog deep link (2026-09-20)
+  if (stored.listingUrlTemplates
+      && stored.listingUrlTemplates.walmart === 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}') {
+    stored.listingUrlTemplates.walmart = DEFAULTS.listingUrlTemplates.walmart;
+  }
   // migration: eBay lister profiles saved before the real policy names were
   // set on eBay hold empty strings — empty means "never configured", so the
   // owner's live policy names take over
@@ -225,8 +258,17 @@ function load() {
   return cached;
 }
 
+// maps whose keys must be able to LEAVE: deepMerge only adds and overwrites,
+// so a SKU deleted from these would silently resurrect on save (dropship
+// removal looked like it "didn't work" for exactly this reason). Every
+// caller passes the complete map, which replaces wholesale here.
+const REPLACE_KEYS = ['dropshipPads', 'dropshipAlerted'];
+
 function save(patch) {
   const cfg = deepMerge(load(), patch || {});
+  for (const k of REPLACE_KEYS) {
+    if (patch && patch[k] && typeof patch[k] === 'object') cfg[k] = patch[k];
+  }
   cached = cfg;
   const persisted = structuredClone(cfg);
   const enc = encryptCreds(cfg.linnworks);

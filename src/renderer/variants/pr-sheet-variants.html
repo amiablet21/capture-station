@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pricing as a sheet — 4 options</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --grid: #E3E2DE;
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --badge-yellow-bg: #FBF3DB; --badge-yellow-text: #956400;
+    --wm: #1F6C9F; --eb: #956400; --tm: #7C3AED;
+    --r-card: 8px; --r-ctl: 6px;
+    --font: 'Geist', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 13px; line-height: 1.5; background: var(--canvas); color: var(--text); padding: 28px 36px 64px; }
+  h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: var(--muted); margin-bottom: 28px; max-width: 780px; }
+  .opt { margin-bottom: 44px; max-width: 1240px; }
+  .opt-label { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .opt-label b { font-size: 13px; }
+  .opt-label span { font-size: 11.5px; color: var(--muted); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+  table { border-collapse: collapse; width: 100%; }
+  th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--surface); white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .gut { color: var(--faint); font-size: 11px; width: 34px; text-align: center; }
+  .sku { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .csku { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .stockn { color: var(--muted); font-size: 11.5px; }
+  .dash { color: var(--faint); }
+  .price { font-family: var(--mono); font-size: 12.5px; font-weight: 600; text-align: right; }
+  .price-ed { display: inline-block; min-width: 74px; padding: 2px 8px; border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+  .price-ed:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .price-ro { color: var(--muted); font-weight: 500; }
+  .approx { color: var(--faint); font-weight: 400; }
+  .sold { font-size: 10px; font-weight: 700; color: var(--badge-yellow-text); }
+  .vtog { font-family: var(--font); font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: none; border: none; padding: 0; cursor: pointer; }
+  .elb { color: var(--faint); }
+  .vrow td { background: var(--surface-2); }
+  .thumb { width: 26px; height: 26px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--border); display: inline-grid; place-items: center; color: var(--faint); font-size: 12px; vertical-align: middle; margin-right: 8px; }
+
+  .ch-wm { color: var(--wm); } .ch-eb { color: var(--eb); } .ch-tm { color: var(--tm); }
+
+  /* B matrix */
+  .mx td.pcell { text-align: right; }
+  .mx .csku-sm { display: block; font-size: 9.5px; color: var(--faint); font-family: var(--mono); line-height: 1.3; }
+
+  /* C ledger */
+  .lg td { border-bottom: 1px dashed var(--border); }
+  .lg tr.first td { border-top: 1px solid var(--border); }
+  .lg .chip { display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 7px; border-radius: 999px; }
+  .lg .chip.wm { background: #E1F3FE; color: var(--wm); }
+  .lg .chip.eb { background: var(--badge-yellow-bg); color: var(--eb); }
+  .lg .chip.tm { background: #F0EAFD; color: var(--tm); }
+
+  /* D excel */
+  .xl th, .xl td { border: 1px solid var(--grid); }
+  .xl th { background: var(--surface-2); text-align: center; }
+  .xl thead tr:first-child th { border-bottom: none; padding: 4px 10px; }
+  .xl tbody tr:nth-child(even) td { background: #FCFCFB; }
+  .xl .vrow td { background: var(--surface-2); }
+  .xl td:first-child, .xl th:first-child { border-left: none; }
+  .xl td:last-child, .xl th:last-child { border-right: none; }
+  .xl .sel { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft) !important; }
+</style>
+</head>
+<body>
+
+<h1>Pricing as a sheet — price columns per channel</h1>
+<div class="sub">Same data as today (X133-64GB-GRAY and friends). Prices get their own columns instead of hiding inside the channel cells. Walmart stays read-only (repricer, shown grey with ≈ when approximate); other channels' prices are click-to-edit (green hover). "—" = not listed. ×N = sold last 60 days.</div>
+
+<!-- A -->
+<div class="opt">
+  <div class="opt-label"><b>A — Split columns</b><span>each channel gets a listing column and a price column · variations nest exactly like today</span></div>
+  <div class="card"><table>
+    <thead><tr>
+      <th class="gut">#</th><th>Product</th><th class="num">Stock</th>
+      <th class="ch-wm">Walmart listing</th><th class="num ch-wm">WM $</th>
+      <th class="ch-eb">eBay listing</th><th class="num ch-eb">eBay $</th>
+      <th class="ch-tm">Temu listing</th><th class="num ch-tm">Temu $</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="gut">1</td>
+        <td><span class="thumb">▦</span><span class="sku">X133-64GB-GRAY</span><br /><button class="vtog" style="margin-left:34px">▾ 3 variations · 205 units</button></td>
+        <td class="num stockn">1974</td>
+        <td><span class="csku">SM-X133-64GB-GREY</span> <span class="sold">×0</span></td>
+        <td class="price price-ro">≈ $149.99</td>
+        <td><span class="csku">SM-X133-64GB-GREY</span> <span class="sold">×0</span><br /><span class="csku">X133-64GB-GRAY</span> <span class="sold">×0</span></td>
+        <td class="price"><span class="price-ed">$154.99</span><br /><span class="price-ed">$152.50</span></td>
+        <td class="dash">—</td><td class="price dash">—</td>
+      </tr>
+      <tr class="vrow">
+        <td class="gut elb">└</td>
+        <td><span class="thumb">▦</span><span class="sku">OPEN-BOX-X133-64GB-GRAY</span></td>
+        <td class="num stockn">194</td>
+        <td><span class="csku">OPEN-BOX-X133-64GB-GRAY</span> <span class="sold">×3</span></td>
+        <td class="price price-ro approx">≈ —</td>
+        <td><span class="csku">OPEN-BOX-X133-64GB-GRAY</span> <span class="sold">×3</span></td>
+        <td class="price"><span class="price-ed">$129.99</span></td>
+        <td class="dash">—</td><td class="price dash">—</td>
+      </tr>
+      <tr class="vrow">
+        <td class="gut elb">└</td>
+        <td><span class="thumb">▦</span><span class="sku">USED-X133-64GB-GRAY</span></td>
+        <td class="num stockn">10</td>
+        <td class="dash">—</td><td class="price dash">—</td>
+        <td><span class="csku">USED-X133-64GB-GRAY</span> <span class="sold">×1</span></td>
+        <td class="price"><span class="price-ed">$99.99</span></td>
+        <td class="dash">—</td><td class="price dash">—</td>
+      </tr>
+      <tr>
+        <td class="gut">2</td>
+        <td><span class="thumb">▦</span><span class="sku">X210-64GB-GRAY</span></td>
+        <td class="num stockn">975</td>
+        <td><span class="csku">X210-64GB-GRAY-1</span> <span class="sold">×10</span></td>
+        <td class="price price-ro approx">≈ —</td>
+        <td class="dash">—</td><td class="price dash">—</td>
+        <td><span class="csku">X210-64GB-GRAY</span> <span class="sold">×0</span></td>
+        <td class="price"><span class="price-ed">$119.99</span></td>
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+
+<!-- B -->
+<div class="opt">
+  <div class="opt-label"><b>B — Price matrix</b><span>the price IS the cell, big and scannable down each channel column; the channel SKU shrinks to a small grey line under it</span></div>
+  <div class="card"><table class="mx">
+    <thead><tr>
+      <th class="gut">#</th><th>Product</th><th class="num">Stock</th>
+      <th class="num ch-wm">Walmart</th><th class="num ch-eb">eBay</th><th class="num ch-tm">Temu US</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="gut">1</td>
+        <td><span class="thumb">▦</span><span class="sku">X133-64GB-GRAY</span><br /><button class="vtog" style="margin-left:34px">▾ 3 variations · 205 units</button></td>
+        <td class="num stockn">1974</td>
+        <td class="pcell"><span class="price price-ro">≈ $149.99</span><span class="csku-sm">SM-X133-64GB-GREY ×0</span></td>
+        <td class="pcell"><span class="price"><span class="price-ed">$154.99</span></span><span class="csku-sm">SM-X133-64GB-GREY ×0</span><span class="price"><span class="price-ed">$152.50</span></span><span class="csku-sm">X133-64GB-GRAY ×0</span></td>
+        <td class="pcell dash">—</td>
+      </tr>
+      <tr class="vrow">
+        <td class="gut elb">└</td>
+        <td><span class="thumb">▦</span><span class="sku">OPEN-BOX-X133-64GB-GRAY</span></td>
+        <td class="num stockn">194</td>
+        <td class="pcell"><span class="price price-ro approx">≈ —</span><span class="csku-sm">OPEN-BOX-X133-64GB-GRAY ×3</span></td>
+        <td class="pcell"><span class="price"><span class="price-ed">$129.99</span></span><span class="csku-sm">OPEN-BOX-X133-64GB-GRAY ×3</span></td>
+        <td class="pcell dash">—</td>
+      </tr>
+      <tr>
+        <td class="gut">2</td>
+        <td><span class="thumb">▦</span><span class="sku">X210-64GB-GRAY</span></td>
+        <td class="num stockn">975</td>
+        <td class="pcell"><span class="price price-ro approx">≈ —</span><span class="csku-sm">X210-64GB-GRAY-1 ×10</span></td>
+        <td class="pcell dash">—</td>
+        <td class="pcell"><span class="price"><span class="price-ed">$119.99</span></span><span class="csku-sm">X210-64GB-GRAY ×0</span></td>
+      </tr>
+      <tr>
+        <td class="gut">3</td>
+        <td><span class="thumb">▦</span><span class="sku">X230-128GB-GRAY</span></td>
+        <td class="num stockn">330</td>
+        <td class="pcell"><span class="price price-ro">≈ $234.99</span><span class="csku-sm">X230-128GB-GRAY-GLOBAL ×3</span><span class="price price-ro">≈ $234.99</span><span class="csku-sm">X230-128GB-GRAY-GLOBAL-1 ×1</span></td>
+        <td class="pcell"><span class="price"><span class="price-ed">$239.99</span></span><span class="csku-sm">X230-128GB-GRAY ×0</span></td>
+        <td class="pcell"><span class="price"><span class="price-ed">$229.99</span></span><span class="csku-sm">X230-128GB-GRAY ×0</span></td>
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+
+<!-- C -->
+<div class="opt">
+  <div class="opt-label"><b>C — Flat ledger</b><span>one row per listing, like an export: product · channel chip · listing SKU · sold · price — sortable by any column, nothing stacked inside cells</span></div>
+  <div class="card"><table class="lg">
+    <thead><tr>
+      <th class="gut">#</th><th>Product</th><th class="num">Stock</th><th>Channel</th><th>Listing SKU</th><th class="num">Sold 60d</th><th class="num">Price</th>
+    </tr></thead>
+    <tbody>
+      <tr class="first">
+        <td class="gut">1</td>
+        <td><span class="thumb">▦</span><span class="sku">X133-64GB-GRAY</span></td>
+        <td class="num stockn">1974</td>
+        <td><span class="chip wm">Walmart</span></td>
+        <td><span class="csku">SM-X133-64GB-GREY</span></td>
+        <td class="num sold">0</td>
+        <td class="price price-ro">≈ $149.99</td>
+      </tr>
+      <tr>
+        <td class="gut"></td><td></td><td></td>
+        <td><span class="chip eb">eBay</span></td>
+        <td><span class="csku">SM-X133-64GB-GREY</span></td>
+        <td class="num sold">0</td>
+        <td class="price"><span class="price-ed">$154.99</span></td>
+      </tr>
+      <tr>
+        <td class="gut"></td><td></td><td></td>
+        <td><span class="chip eb">eBay</span></td>
+        <td><span class="csku">X133-64GB-GRAY</span></td>
+        <td class="num sold">0</td>
+        <td class="price"><span class="price-ed">$152.50</span></td>
+      </tr>
+      <tr class="first">
+        <td class="gut">2</td>
+        <td><span class="thumb">▦</span><span class="sku">X210-64GB-GRAY</span></td>
+        <td class="num stockn">975</td>
+        <td><span class="chip wm">Walmart</span></td>
+        <td><span class="csku">X210-64GB-GRAY-1</span></td>
+        <td class="num sold">10</td>
+        <td class="price price-ro approx">≈ —</td>
+      </tr>
+      <tr>
+        <td class="gut"></td><td></td><td></td>
+        <td><span class="chip tm">Temu</span></td>
+        <td><span class="csku">X210-64GB-GRAY</span></td>
+        <td class="num sold">0</td>
+        <td class="price"><span class="price-ed">$119.99</span></td>
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+
+<!-- D -->
+<div class="opt">
+  <div class="opt-label"><b>D — Full Excel</b><span>gridlines everywhere, banded rows, channel header groups spanning SKU · sold · $, and a selected-cell look on the price you're editing</span></div>
+  <div class="card"><table class="xl">
+    <thead>
+      <tr>
+        <th class="gut" rowspan="2">#</th><th rowspan="2" style="text-align:left">Product</th><th class="num" rowspan="2">Stock</th>
+        <th colspan="2" class="ch-wm">Walmart</th>
+        <th colspan="2" class="ch-eb">eBay</th>
+        <th colspan="2" class="ch-tm">Temu US</th>
+      </tr>
+      <tr>
+        <th style="text-align:left">Listing · sold</th><th class="num">$</th>
+        <th style="text-align:left">Listing · sold</th><th class="num">$</th>
+        <th style="text-align:left">Listing · sold</th><th class="num">$</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="gut">1</td>
+        <td><span class="thumb">▦</span><span class="sku">X133-64GB-GRAY</span> <button class="vtog">▸ 3 vars</button></td>
+        <td class="num stockn">1974</td>
+        <td><span class="csku">SM-X133-64GB-GREY</span> <span class="sold">×0</span></td>
+        <td class="price price-ro">≈ 149.99</td>
+        <td><span class="csku">SM-X133-64GB-GREY</span> <span class="sold">×0</span><br /><span class="csku">X133-64GB-GRAY</span> <span class="sold">×0</span></td>
+        <td class="price"><span class="sel price-ed">154.99</span><br /><span class="price-ed">152.50</span></td>
+        <td class="dash">—</td><td class="price dash">—</td>
+      </tr>
+      <tr>
+        <td class="gut">2</td>
+        <td><span class="thumb">▦</span><span class="sku">X210-64GB-GRAY</span></td>
+        <td class="num stockn">975</td>
+        <td><span class="csku">X210-64GB-GRAY-1</span> <span class="sold">×10</span></td>
+        <td class="price price-ro approx">≈ —</td>
+        <td class="dash">—</td><td class="price dash">—</td>
+        <td><span class="csku">X210-64GB-GRAY</span> <span class="sold">×0</span></td>
+        <td class="price"><span class="price-ed">119.99</span></td>
+      </tr>
+      <tr>
+        <td class="gut">3</td>
+        <td><span class="thumb">▦</span><span class="sku">X230-128GB-GRAY</span> <button class="vtog">▸ 1 var</button></td>
+        <td class="num stockn">330</td>
+        <td><span class="csku">X230-128GB-GRAY-GLOBAL</span> <span class="sold">×3</span><br /><span class="csku">X230-128GB-GRAY-GLOBAL-1</span> <span class="sold">×1</span></td>
+        <td class="price price-ro">≈ 234.99<br />≈ 234.99</td>
+        <td><span class="csku">X230-128GB-GRAY</span> <span class="sold">×0</span></td>
+        <td class="price"><span class="price-ed">239.99</span></td>
+        <td class="dash">—</td><td class="price dash">—</td>
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+
+</body>
+</html>

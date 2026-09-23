@@ -455,12 +455,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(400);
     const looked = await exec(`[
       $('ws_cust').value, $('ws_trk').value, $('ws_sku').value,
-      $('ws_price').value, $('ws_settle').value,
+      $('ws_price').value,
       !!document.querySelector('#retRecvDialog[open]'),
     ]`);
-    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price, settle',
+    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price',
       looked[0] === 'Cara Cross' && looked[1] === 'TRK-9' && looked[2] === 'S25-128GB-NAVY'
-        && looked[3] === '149.99' && looked[4] === '149.99' && looked[5] === false,
+        && looked[3] === '149.99' && looked[4] === false,
       looked);
     // the second Enter saves the matched receive
     await exec(`$('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
@@ -558,7 +558,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
       rv.received = [false];
       rvLoadItemAt(0);
-      $('rvPrice').value = '150'; $('rvSettle').value = '45.50'; $('rvBy').value = 'IM';
+      $('rvPrice').value = '150'; $('rvBy').value = 'IM';
       $('rvSave').click(); 0;`);
     // commit -> close is async: poll instead of a fixed sleep (flaked at
     // fixed sleeps under load, 2026-08-14)
@@ -567,9 +567,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
     }
     const rvGot = await exec(`window.__rvGot`);
-    check('Receive commits price + dispute settlement through returns:create',
+    check('Receive commits the price through returns:create',
       rvGot && rvGot.orderNumber === '119999000000001' && rvGot.items.length === 1
-        && rvGot.items[0].price === 150 && rvGot.items[0].settle === 45.5
+        && rvGot.items[0].price === 150
         && rvGot.items[0].targetSku === 'S25-128GB-NAVY',
       rvGot);
     const rvClosed = await exec(`[!document.querySelector('#retRecvDialog[open]'), String(window.__err || '')]`);
@@ -674,36 +674,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
         ents.length === 3 && a && a.units === 2 && a.tracking === '528846386026'
           && a.note === 'case open' && ents.find(e => !e.po).customer === 'Cara C', ents);
     }
-    // the dialog flow, ipc stubbed through the seams
-    await exec(`
-      window.__impOrig = [retImpPick, retImpResolve, retImpCommit];
-      window.__impCommitGot = null;
-      retImpPick = async () => ({ ok: true, entries: [
-        { po: '119000000000001', customer: 'Ann A', tracking: '', sku: 'SM-X133-64GB-GREY', units: 2, price: 127.49, settle: 0, note: 'case open' },
-      ], stats: { rows: 2, entries: 1, units: 2, skippedDup: 0, noPo: 0 } });
-      retImpResolve = async (entries) => ({ ok: true,
-        entries: entries.map(e => ({ ...e, matched: true, source: 'WALMART', sku: 'S25-128GB-NAVY' })),
-        stats: { orders: 1, found: 1, skuFromOrder: 1, skuKnown: 0, skuUnknown: 0, trackingFilled: 1 } });
-      retImpCommit = async (entries) => { window.__impCommitGot = entries; return { ok: true, made: 1, units: 2 }; };
-      $('retImportBtn').click(); 0;`);
-    await sleep(400);
-    const impBits = await exec(`[
-      !!document.querySelector('#retImpDialog[open]'),
-      $('retImpStats').textContent,
-      $('retImpGo').disabled,
-    ]`);
-    check('import dialog: parse stats shown, Import armed once resolved',
-      impBits[0] === true && impBits[1].includes('entries') && impBits[1].includes('orders matched')
-        && impBits[2] === false, impBits);
-    await exec(`$('retImpGo').click(); 0;`);
-    await sleep(400);
-    const impDone = await exec(`[
-      window.__impCommitGot && window.__impCommitGot[0].sku,
-      !document.querySelector('#retImpDialog[open]'),
-    ]`);
-    check('Import commits the RESOLVED entries and closes',
-      impDone[0] === 'S25-128GB-NAVY' && impDone[1] === true, impDone);
-    await exec(`retImpPick = window.__impOrig[0]; retImpResolve = window.__impOrig[1]; retImpCommit = window.__impOrig[2]; 0;`);
+    // the Import button is retired (owner 2026-09-14) — the parse/collapse
+    // engine above keeps its checks; the dialog has no UI entry point now
+    check('Import button retired from the returns bar',
+      (await exec(`!$('retImportBtn')`)) === true);
 
     // 24h. the missing-listings slider: one gap at a time, affix-stripped
     // create suggestions, Skip advances, the tally closes it out
@@ -1578,13 +1552,23 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { up1, up2 });
       check('claims: upload events carried the running day count',
         uploads.length === 2 && uploads[1].todayCount === 2, uploads);
-      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (owner
-      // wants uniform PNGs); the fake-JPEG uploads above cannot decode, so
-      // they keep .jpg — which doubles as the fallback-path check
+      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (Walmart
+      // wants case images as PNGs); the fake-JPEG uploads above cannot
+      // decode, so they keep .jpg — which doubles as the fallback-path check
       const realJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
       const up3 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: realJpeg })).json();
       check('claims: real photos re-encode to PNG',
         up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, up3.name)), up3);
+      // Walmart caps a case's images at 25 MB combined: a PO whose folder
+      // already fills the budget refuses the next photo with a clear error
+      const fullPo = '119990000000099';
+      const claimsBudget = require('./claims.js')._test.CASE_BUDGET;
+      fs.writeFileSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`), Buffer.alloc(claimsBudget));
+      const upFull = await fetch(`${cbase}/photo?t=${crun.token}&po=${fullPo}`, { method: 'POST', body: realJpeg });
+      const upFullBody = await upFull.json();
+      check('claims: Walmart 25 MB combined case budget refuses the overflow photo',
+        upFull.status === 413 && /25 MB/.test(upFullBody.error || ''), { status: upFull.status, upFullBody });
+      fs.unlinkSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`));
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);

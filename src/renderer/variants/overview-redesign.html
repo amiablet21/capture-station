@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview redesign — three concepts (flip 1/2/3, awaiting owner's pick)</title>
+<style>
+  :root {
+    color-scheme: only light;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-hover: #065F46; --accent-soft: #E3F2EB; --accent-soft-text: #065F46;
+    --pos-bg: #EDF3EC; --pos-text: #346538;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --amber-bg: #FBF3DB; --amber-text: #956400;
+    --blue-bg: #E1F3FE; --blue-text: #1F6C9F;
+    --wm: #2E86D9; --eb: #047857; --tm: #C97B12;
+    --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'Cascadia Mono', Consolas, monospace;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); font-size: 13px; color: var(--text); margin: 0; background: var(--canvas); line-height: 1.6; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* mockup-only picker strip */
+  .pickstrip { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; background: #2F3437; color: #fff; padding: 8px 22px; font-size: 11.5px; }
+  .pickstrip b { font-weight: 700; }
+  .pickstrip .pbtn { font-family: inherit; font-size: 11px; font-weight: 600; color: #D5D3CE; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  .pickstrip .pbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
+  .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 14px 24px 28px; animation: rise .22s var(--ease); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .head h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+  .head .d { font-size: 11.5px; color: var(--faint); }
+
+  .ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
+  .rbtn { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 14px; border-radius: 8px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .rbtn.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .ranges.mini .rbtn { padding: 3px 10px; font-size: 10.5px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .panel h4 { margin: 0 0 8px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+  .panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  th.rr, td.rr { text-align: right; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--border-soft); }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.rank { width: 24px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: right; padding-right: 2px; }
+  td.sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--blue-text); }
+  td.num { font-family: var(--mono); font-size: 12px; font-weight: 600; text-align: right; }
+  .pill { display: inline-block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-radius: 999px; padding: 1px 9px; }
+  .pill.r { background: var(--neg-bg); color: var(--neg-text); }
+  .pill.a { background: var(--amber-bg); color: var(--amber-text); }
+  .pill.g { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .pill.b { background: var(--blue-bg); color: var(--blue-text); }
+  .bar { height: 6px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .chartbox svg { display: block; width: 100%; }
+  .chartbox text { font-family: var(--mono); }
+  .hovslice { cursor: crosshair; }
+  .tt { animation: ttPop .18s var(--ease); }
+  @keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+
+  /* ---------- concept 1: command cockpit ---------- */
+  .c1-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+  .c1-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .c1-kpi .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .c1-kpi .v { font-family: var(--mono); font-size: 21px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+  .c1-kpi .s { font-size: 10.5px; color: var(--muted); }
+  .c1-kpi .s .up { color: var(--pos-text); font-weight: 600; }
+  .c1-kpi .s .dn { color: var(--neg-text); font-weight: 600; }
+  .c1-mid { display: grid; grid-template-columns: 1fr 330px; gap: 10px; margin-bottom: 10px; }
+  .c1-feed { display: flex; flex-direction: column; gap: 0; max-height: 264px; overflow: hidden; }
+  .c1-frow { display: grid; grid-template-columns: 42px 10px 1fr auto; gap: 8px; align-items: center; padding: 5px 2px; border-bottom: 1px solid var(--border-soft); font-size: 11.5px; }
+  .c1-frow:last-child { border-bottom: none; }
+  .c1-frow .tm { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .c1-frow .sk { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c1-frow .pr { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+  .c1-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .c1-atabs { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 3px; }
+  .c1-atab { font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 3px 10px; border-radius: 6px; border: none; background: transparent; font-family: inherit; cursor: pointer; }
+  .c1-atab.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+
+  /* ---------- concept 2: morning brief ---------- */
+  .c2-grid { display: grid; grid-template-columns: 350px 1fr; gap: 10px; }
+  .c2-left { display: flex; flex-direction: column; gap: 10px; }
+  .c2-hero { padding: 18px 18px 14px; }
+  .c2-hero .greet { font-size: 13.5px; font-weight: 600; }
+  .c2-hero .gsub { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .c2-hero .big { font-family: var(--mono); font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; }
+  .c2-hero .bigl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .c2-hero .money { font-family: var(--mono); font-size: 21px; font-weight: 600; color: var(--accent-hover); margin: 2px 0 12px; }
+  .c2-ch { display: grid; grid-template-columns: 14px 1fr auto auto; gap: 8px; align-items: center; padding: 4px 0; }
+  .c2-ch .n { font-size: 12px; font-weight: 600; }
+  .c2-ch .q { font-family: var(--mono); font-size: 13px; font-weight: 600; text-align: right; }
+  .c2-ch .m { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; width: 64px; }
+  .c2-brieflines { display: flex; flex-direction: column; gap: 9px; }
+  .c2-line { display: flex; gap: 9px; font-size: 12.5px; align-items: baseline; }
+  .c2-line .ic { flex: none; width: 7px; height: 7px; border-radius: 999px; margin-top: 5px; }
+  .c2-line b { font-family: var(--mono); font-weight: 600; }
+  .c2-line a { color: var(--accent-hover); font-weight: 600; text-decoration: none; }
+  .c2-right { display: flex; flex-direction: column; gap: 10px; }
+  .c2-half { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ---------- concept 3: one-screen spreadsheet ---------- */
+  .c3-strip { display: flex; align-items: baseline; gap: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 16px; margin-bottom: 10px; overflow-x: auto; }
+  .c3-stat { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+  .c3-stat .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .c3-stat .v { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+  .c3-stat .v.pos { color: var(--pos-text); } .c3-stat .v.neg { color: var(--neg-text); } .c3-stat .v.amb { color: var(--amber-text); }
+  .c3-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 10px; }
+  .c3-col { display: flex; flex-direction: column; gap: 10px; }
+  .c3-spark { display: grid; grid-template-columns: 14px 70px 1fr auto; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border-soft); }
+  .c3-spark:last-child { border-bottom: none; }
+  .c3-spark .n { font-size: 12px; font-weight: 600; }
+  .c3-spark svg { display: block; width: 100%; height: 22px; }
+  .c3-spark .q { font-family: var(--mono); font-size: 12.5px; font-weight: 600; text-align: right; }
+</style>
+</head>
+<body>
+<div class="pickstrip"><b>Overview redesign — pick a concept:</b>
+  <button class="pbtn on" data-v="1">1 · Command cockpit</button>
+  <button class="pbtn" data-v="2">2 · Morning brief</button>
+  <button class="pbtn" data-v="3">3 · One-screen spreadsheet</button>
+  <span style="margin-left:auto;color:#A5A29C">sample numbers · filters and tabs are clickable</span>
+</div>
+
+<div class="topbar"><div class="tabs">
+  <button class="tab on">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Pricing</button><button class="tab">Returns</button><button class="tab">Listings</button>
+</div></div>
+
+<!-- ================================================================ 1 · COMMAND COCKPIT ================================================================
+     KPI strip on top (the five numbers that matter, at a glance), big chart
+     with a live order feed beside it, then Needs attention (tabbed) next to
+     Top sellers. Densest information hierarchy: numbers, then trend, then work. -->
+<div class="wrap" id="v1">
+  <div class="head"><h1>Overview</h1><span class="d">Friday, September 18</span>
+    <span class="ranges" data-ranges></span>
+  </div>
+  <div class="c1-kpis">
+    <div class="c1-kpi"><div class="k">Orders today</div><div class="v">47</div><div class="s"><span class="up">▲ +9</span> vs yesterday</div></div>
+    <div class="c1-kpi"><div class="k">Gross today</div><div class="v">$6,930</div><div class="s"><span class="up">▲ +$1,240</span> vs yesterday</div></div>
+    <div class="c1-kpi"><div class="k">Missed sales</div><div class="v" style="color:var(--neg-text)">$10,010</div><div class="s">4 SKUs at zero were selling</div></div>
+    <div class="c1-kpi"><div class="k">Buy soon</div><div class="v" style="color:var(--amber-text)">9</div><div class="s">run out inside 10-day lead</div></div>
+    <div class="c1-kpi"><div class="k">Send to WFS</div><div class="v" style="color:var(--accent-hover)">520</div><div class="s">units · 6 fast sellers</div></div>
+  </div>
+  <div class="c1-mid">
+    <div class="panel">
+      <h4>Sales<span class="sub" data-chartsub></span></h4>
+      <div class="chartbox" data-chart></div>
+    </div>
+    <div class="panel">
+      <h4>Live orders<span class="sub">newest first</span></h4>
+      <div class="c1-feed" id="c1feed"></div>
+    </div>
+  </div>
+  <div class="c1-bottom">
+    <div class="panel">
+      <h4>Needs attention
+        <span class="c1-atabs" id="c1atabs">
+          <button class="c1-atab on" data-a="missed">Missed $10,010</button>
+          <button class="c1-atab" data-a="buy">Buy soon 9</button>
+          <button class="c1-atab" data-a="wfs">WFS 520</button>
+        </span>
+      </h4>
+      <div id="c1attn"></div>
+    </div>
+    <div class="panel">
+      <h4>Top sellers<span class="sub" data-topsub></span></h4>
+      <div data-topsellers data-top-n="10" data-top-bars="1"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ 2 · MORNING BRIEF ================================================================
+     Calm editorial read. Left: today's numbers plus the whole story in plain
+     sentences (every line opens the matching view). Right: the trend large,
+     then Top sellers beside Needs attention. Least chrome, most narrative. -->
+<div class="wrap" id="v2" hidden>
+  <div class="head"><h1>Overview</h1><span class="d">Friday, September 18</span>
+    <span class="ranges" data-ranges></span>
+  </div>
+  <div class="c2-grid">
+    <div class="c2-left">
+      <div class="panel c2-hero">
+        <div class="greet">Good morning, Imran</div>
+        <div class="gsub">here's where the shop stands</div>
+        <div class="bigl">Orders today</div>
+        <div class="big">47</div>
+        <div class="money">$6,930 gross</div>
+        <div class="c2-ch"><span class="dot" style="background:var(--wm)"></span><span class="n">Walmart</span><span class="q">31</span><span class="m">$4,570</span></div>
+        <div class="c2-ch"><span class="dot" style="background:var(--eb)"></span><span class="n">eBay</span><span class="q">11</span><span class="m">$1,640</span></div>
+        <div class="c2-ch"><span class="dot" style="background:var(--tm)"></span><span class="n">Temu</span><span class="q">5</span><span class="m">$720</span></div>
+      </div>
+      <div class="panel">
+        <h4>The brief</h4>
+        <div class="c2-brieflines">
+          <div class="c2-line"><span class="ic" style="background:var(--pos-text)"></span><span>Orders are running <b>+9</b> ahead of yesterday at this hour.</span></div>
+          <div class="c2-line"><span class="ic" style="background:var(--neg-text)"></span><span><b>4 SKUs</b> at zero were still selling — about <b>$10,010</b> missed this month. <a href="#">Review</a></span></div>
+          <div class="c2-line"><span class="ic" style="background:var(--amber-text)"></span><span><b>9 SKUs</b> run out inside the 10-day lead time. <a href="#">Order list</a></span></div>
+          <div class="c2-line"><span class="ic" style="background:var(--accent)"></span><span><b>520 units</b> across 6 fast sellers are ready to send to WFS. <a href="#">Pick list</a></span></div>
+          <div class="c2-line"><span class="ic" style="background:var(--blue-text)"></span><span><b>S25-FE-256GB-ICEBLUE</b> is the month's top seller at <b>86</b> units.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="c2-right">
+      <div class="panel">
+        <h4>Sales<span class="sub" data-chartsub></span></h4>
+        <div class="chartbox" data-chart></div>
+      </div>
+      <div class="c2-half">
+        <div class="panel">
+          <h4>Top sellers<span class="sub" data-topsub></span></h4>
+          <div data-topsellers data-top-n="10"></div>
+        </div>
+        <div class="panel">
+          <h4>Needs attention<span class="sub">worst first</span></h4>
+          <table>
+            <thead><tr><th>SKU</th><th>Why</th><th class="rr">Act</th></tr></thead>
+            <tbody>
+              <tr><td class="sku">X730-512GB-GRAY</td><td style="color:var(--muted)">zero since Sep 6 · 9/wk</td><td class="rr"><span class="pill r">$4,970</span></td></tr>
+              <tr><td class="sku">X620-128GB-SILVER</td><td style="color:var(--muted)">zero since Sep 9 · 7/wk</td><td class="rr"><span class="pill r">$3,190</span></td></tr>
+              <tr><td class="sku">TABA9+64GB</td><td style="color:var(--muted)">runs out in 6 days</td><td class="rr"><span class="pill a">buy 90</span></td></tr>
+              <tr><td class="sku">X230-256GB-GRAY</td><td style="color:var(--muted)">runs out in 7 days</td><td class="rr"><span class="pill a">buy 60</span></td></tr>
+              <tr><td class="sku">SM-X133-64GB-GREY</td><td style="color:var(--muted)">outrunning WFS shelf</td><td class="rr"><span class="pill g">send 120</span></td></tr>
+              <tr><td class="sku">TABA9+64GB</td><td style="color:var(--muted)">outrunning WFS shelf</td><td class="rr"><span class="pill g">send 124</span></td></tr>
+              <tr><td class="sku">X520-128GB-SILVER</td><td style="color:var(--muted)">runs out in 9 days</td><td class="rr"><span class="pill a">buy 76</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ 3 · ONE-SCREEN SPREADSHEET ================================================================
+     Density 7. A single thin stat strip, then two working tables side by
+     side: everything that needs a decision on the left (merged, badged,
+     sorted by urgency), top sellers + per-channel sparklines on the right.
+     No hero numbers, no cards — the page IS the worklist. -->
+<div class="wrap" id="v3" hidden>
+  <div class="head"><h1>Overview</h1><span class="d">Friday, September 18</span>
+    <span class="ranges" data-ranges></span>
+  </div>
+  <div class="c3-strip">
+    <span class="c3-stat"><span class="k">Orders</span><span class="v">47</span></span>
+    <span class="c3-stat"><span class="k">Gross</span><span class="v">$6,930</span></span>
+    <span class="c3-stat"><span class="k">vs yday</span><span class="v pos">+9</span></span>
+    <span class="c3-stat"><span class="k">Walmart</span><span class="v">31</span></span>
+    <span class="c3-stat"><span class="k">eBay</span><span class="v">11</span></span>
+    <span class="c3-stat"><span class="k">Temu</span><span class="v">5</span></span>
+    <span class="c3-stat"><span class="k">Missed</span><span class="v neg">$10,010</span></span>
+    <span class="c3-stat"><span class="k">Buy soon</span><span class="v amb">9</span></span>
+    <span class="c3-stat"><span class="k">To WFS</span><span class="v" style="color:var(--accent-hover)">520</span></span>
+  </div>
+  <div class="c3-grid">
+    <div class="c3-col">
+      <div class="panel">
+        <h4>Work list<span class="sub">every SKU that needs a decision · worst first</span></h4>
+        <table>
+          <thead><tr><th></th><th>SKU</th><th>Situation</th><th class="rr">Do</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill r">missed</span></td><td class="sku">X730-512GB-GRAY</td><td style="color:var(--muted)">zero since Sep 6, was 9/wk on Walmart</td><td class="num" style="color:var(--neg-text)">$4,970</td></tr>
+            <tr><td><span class="pill r">missed</span></td><td class="sku">X620-128GB-SILVER</td><td style="color:var(--muted)">zero since Sep 9, was 7/wk on Walmart + eBay</td><td class="num" style="color:var(--neg-text)">$3,190</td></tr>
+            <tr><td><span class="pill a">buy</span></td><td class="sku">TABA9+64GB</td><td style="color:var(--muted)">27 on shelf, runs out in 6 days</td><td class="num">order 90</td></tr>
+            <tr><td><span class="pill a">buy</span></td><td class="sku">X230-256GB-GRAY</td><td style="color:var(--muted)">24 on shelf, runs out in 7 days</td><td class="num">order 60</td></tr>
+            <tr><td><span class="pill r">missed</span></td><td class="sku">X400-256GB-SILVER</td><td style="color:var(--muted)">zero since Sep 2, was 4/wk on eBay</td><td class="num" style="color:var(--neg-text)">$1,610</td></tr>
+            <tr><td><span class="pill a">buy</span></td><td class="sku">SM-X133-64GB-GREY</td><td style="color:var(--muted)">49 on shelf, runs out in 9 days</td><td class="num">order 120</td></tr>
+            <tr><td><span class="pill g">wfs</span></td><td class="sku">SM-X133-64GB-GREY</td><td style="color:var(--muted)">38/wk, WFS shelf covers 9 days</td><td class="num">send 120</td></tr>
+            <tr><td><span class="pill g">wfs</span></td><td class="sku">TABA9+64GB</td><td style="color:var(--muted)">31/wk, WFS shelf covers 11 days</td><td class="num">send 124</td></tr>
+            <tr><td><span class="pill a">buy</span></td><td class="sku">X520-128GB-SILVER</td><td style="color:var(--muted)">26 on shelf, runs out in 9 days</td><td class="num">order 76</td></tr>
+            <tr><td><span class="pill g">wfs</span></td><td class="sku">X230-256GB-GRAY</td><td style="color:var(--muted)">24/wk, WFS shelf covers 12 days</td><td class="num">send 96</td></tr>
+            <tr><td><span class="pill r">missed</span></td><td class="sku">BUDS-3-WHITE</td><td style="color:var(--muted)">zero since Sep 7, was 2/wk on Temu</td><td class="num" style="color:var(--neg-text)">$240</td></tr>
+            <tr><td><span class="pill a">buy</span></td><td class="sku">BUDS-2-GRAPHITE</td><td style="color:var(--muted)">14 on shelf, runs out in 10 days</td><td class="num">order 40</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="c3-col">
+      <div class="panel">
+        <h4>Channels · last 14 days</h4>
+        <div class="c3-spark"><span class="dot" style="background:var(--wm)"></span><span class="n">Walmart</span><svg viewBox="0 0 120 22" preserveAspectRatio="none"><path d="M0,14 L9,11 L18,15 L27,9 L36,12 L45,7 L54,10 L63,6 L72,9 L81,5 L90,8 L99,4 L108,7 L120,3" fill="none" stroke="var(--wm)" stroke-width="1.6"/></svg><span class="q">31/day</span></div>
+        <div class="c3-spark"><span class="dot" style="background:var(--eb)"></span><span class="n">eBay</span><svg viewBox="0 0 120 22" preserveAspectRatio="none"><path d="M0,16 L9,14 L18,15 L27,12 L36,14 L45,11 L54,13 L63,10 L72,12 L81,9 L90,11 L99,10 L108,9 L120,8" fill="none" stroke="var(--eb)" stroke-width="1.6"/></svg><span class="q">11/day</span></div>
+        <div class="c3-spark"><span class="dot" style="background:var(--tm)"></span><span class="n">Temu</span><svg viewBox="0 0 120 22" preserveAspectRatio="none"><path d="M0,18 L9,17 L18,18 L27,16 L36,17 L45,15 L54,16 L63,17 L72,15 L81,16 L90,14 L99,15 L108,14 L120,13" fill="none" stroke="var(--tm)" stroke-width="1.6"/></svg><span class="q">5/day</span></div>
+      </div>
+      <div class="panel">
+        <h4>Top sellers<span class="sub" data-topsub></span></h4>
+        <div data-topsellers data-top-n="12" data-top-bars="1"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- shared sample data ---------------- */
+const monthVals = [31,35,29,38,33,41,37,44,39,36,43,47,41,45,40,48,44,38,46,49,43,47,45,41,48,44,46,43,45,47];
+const monthTips = monthVals.map((_, i) => { if (i === 29) return 'Today'; const day = 20 + i; return day <= 31 ? 'Aug ' + day : 'Sep ' + (day - 31); });
+const monthLabels = monthVals.map((_, i) => i===0?'Aug 20':i===7?'Aug 27':i===14?'Sep 3':i===21?'Sep 10':i===29?'Today':'');
+const DATA = {
+  Day:   { vals: [2,5,9,14,20,26,31,36,41,45,47], labels: ['8a','','10a','','12p','','2p','','4p','','now'], tips: ['8 am','9 am','10 am','11 am','12 pm','1 pm','2 pm','3 pm','4 pm','5 pm','now'], sub: 'today · orders as they come in' },
+  Month: { vals: monthVals, labels: monthLabels, tips: monthTips, sub: 'last 30 days · orders per day' },
+  Year:  { vals: [520,610,580,700,760,820,905,880,940,1010,970,1180], labels: ['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'], tips: ["Oct '25","Nov '25","Dec '25","Jan '26","Feb '26","Mar '26","Apr '26","May '26","Jun '26","Jul '26","Aug '26","Sep '26"], sub: 'last 12 months · orders per month' },
+  Custom:{ vals: [38,46,49,43,47,45,41,48,44,46,43,45,47,44,42,46,48,45], labels: ['Sep 1','','','','','','','Sep 8','','','','','','','Sep 15','','','Sep 18'], tips: Array.from({length:18},(_,i)=>'Sep '+(i+1)), sub: 'Sep 1 – Sep 18 · orders per day' }
+};
+const SKUS = ['S25-FE-256GB-ICEBLUE','S24-128GB-ONYXBLACK','IP15-128GB-BLUE','PIX8A-128GB-OBSIDIAN','S23-FE-128GB-MINT','IP14-128GB-MIDNIGHT','MOTO-G84-256GB-BLUE','S25-256GB-NAVY','IP13-128GB-STARLIGHT','PIX7A-128GB-SEA','S22-128GB-PINKGOLD','IP12-64GB-BLACK','MOTO-EDGE50-256GB','PIX9-128GB-PORCELAIN','S21-FE-128GB-GRAPHITE'];
+const TOPQ = { Day: [9,7,6,5,4,4,3,3,2,2,2,1,1,1,1], Month: [86,70,57,50,43,38,31,27,22,18,15,12,10,8,6], Year: [612,540,498,431,380,342,296,255,214,186,150,121,98,77,60], Custom: [54,46,39,33,29,24,20,17,14,11,9,7,5,4,3] };
+const SUBTXT = { Day: 'today · units', Month: 'September · units', Year: '12 months · units', Custom: 'Sep 1–18 · units' };
+const FEED = [
+  ['5:41p','wm','S25-FE-256GB-ICEBLUE','$189'],['5:33p','eb','IP14-128GB-MIDNIGHT','$212'],
+  ['5:20p','wm','S24-128GB-ONYXBLACK','$164'],['5:08p','wm','PIX8A-128GB-OBSIDIAN','$139'],
+  ['4:56p','tm','BUDS-3-WHITE','$24'],['4:41p','wm','S25-FE-256GB-ICEBLUE','$189'],
+  ['4:30p','eb','S23-FE-128GB-MINT','$148'],['4:17p','wm','MOTO-G84-256GB-BLUE','$117'],
+  ['4:02p','wm','IP15-128GB-BLUE','$246']
+];
+const ATTN = {
+  missed: { cols: ['SKU','Zero since','Was selling','Missed'], rows: [
+    ['X730-512GB-GRAY','Sep 6','9/wk on Walmart','$4,970','r'],
+    ['X620-128GB-SILVER','Sep 9','7/wk on Walmart + eBay','$3,190','r'],
+    ['X400-256GB-SILVER','Sep 2','4/wk on eBay','$1,610','r'],
+    ['BUDS-3-WHITE','Sep 7','2/wk on Temu','$240','r']] },
+  buy: { cols: ['SKU','On shelf','Runs out','Order'], rows: [
+    ['TABA9+64GB','27','in 6 days','90','a'],
+    ['X230-256GB-GRAY','24','in 7 days','60','a'],
+    ['SM-X133-64GB-GREY','49','in 9 days','120','a'],
+    ['X520-128GB-SILVER','26','in 9 days','76','a'],
+    ['BUDS-2-GRAPHITE','14','in 10 days','40','a']] },
+  wfs: { cols: ['SKU','Sold/wk','Shelf covers','Send'], rows: [
+    ['SM-X133-64GB-GREY','38','9 days','120','g'],
+    ['TABA9+64GB','31','11 days','124','g'],
+    ['X230-256GB-GRAY','24','12 days','96','g'],
+    ['X520-128GB-SILVER','19','13 days','76','g']] }
+};
+
+let range = 'Month', hoverI = null, variant = '1', attn = 'missed';
+
+/* ---------------- shared renderers ---------------- */
+function smoothPath(pts) {
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    d += ` C ${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+function drawChart() {
+  const box = document.querySelector(`#v${variant} [data-chart]`);
+  if (!box) return;
+  const { vals, labels, tips, sub } = DATA[range];
+  const subEl = document.querySelector(`#v${variant} [data-chartsub]`);
+  if (subEl) subEl.textContent = sub;
+  const W = 680, H = variant === '2' ? 210 : 240, padL = 36, padR = 48, padT = 14, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const rawMax = Math.max(...vals);
+  const unit = Math.pow(10, Math.floor(Math.log10(rawMax))) / 2;
+  const max = Math.ceil(rawMax / unit) * unit;
+  const X = i => padL + (i / (vals.length - 1)) * iw;
+  const Y = v => padT + ih - (v / max) * ih;
+  const pts = vals.map((v, i) => [Math.round(X(i)), Math.round(Y(v))]);
+  const line = smoothPath(pts);
+  const area = line + ` L ${pts[pts.length-1][0]},${padT+ih} L ${pts[0][0]},${padT+ih} Z`;
+  let out = `<defs><linearGradient id="g${variant}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#047857" stop-opacity=".16"/><stop offset="100%" stop-color="#047857" stop-opacity="0"/></linearGradient></defs>`;
+  [0,.5,1].forEach(f => { const v = Math.round(max*f), y = Y(v);
+    out += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#F0EFEC"/><text x="${padL-7}" y="${y+3}" font-size="9" fill="#A5A29C" text-anchor="end">${v}</text>`; });
+  labels.forEach((l, i) => { if (l) out += `<text x="${X(i)}" y="${H-6}" font-size="8.5" fill="#A5A29C" text-anchor="middle">${l}</text>`; });
+  out += `<path d="${area}" fill="url(#g${variant})"/><path d="${line}" fill="none" stroke="#047857" stroke-width="2.5" stroke-linecap="round"/>`;
+  const last = pts[pts.length-1];
+  out += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="#047857"/><text x="${last[0]+8}" y="${last[1]+3}" font-size="10" font-weight="700" fill="#047857">${vals[vals.length-1]}</text>`;
+  if (hoverI != null && hoverI < vals.length) {
+    const hx = pts[hoverI][0], hy = pts[hoverI][1];
+    const txt = `${tips[hoverI]} · ${vals[hoverI].toLocaleString()} orders`;
+    const tw = txt.length * 5.9 + 18;
+    const tx = Math.min(Math.max(hx, padL + tw/2), W - padR + 40 - tw/2);
+    const ty = Math.max(hy - 38, 2);
+    out += `<line x1="${hx}" y1="${padT}" x2="${hx}" y2="${padT+ih}" stroke="#D8D6D0" stroke-dasharray="3 3"/>`
+        + `<circle cx="${hx}" cy="${hy}" r="4.5" fill="#047857" stroke="#fff" stroke-width="2"/>`
+        + `<g class="tt"><rect x="${tx-tw/2}" y="${ty}" width="${tw}" height="21" rx="6" fill="#2F3437"/><text x="${tx}" y="${ty+14}" font-size="10" fill="#fff" text-anchor="middle" font-weight="600">${txt}</text></g>`;
+  }
+  const slice = iw / (vals.length - 1);
+  vals.forEach((v, i) => { out += `<rect class="hovslice" data-i="${i}" x="${X(i)-slice/2}" y="0" width="${slice}" height="${H}" fill="transparent"/>`; });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+  box.querySelectorAll('.hovslice').forEach(r => r.addEventListener('mouseenter', () => { hoverI = +r.dataset.i; drawChart(); }));
+  box.querySelector('svg').addEventListener('mouseleave', () => { hoverI = null; drawChart(); });
+}
+function drawTopSellers() {
+  document.querySelectorAll(`#v${variant} [data-topsellers]`).forEach(box => {
+    const n = +box.dataset.topN || 10, bars = !!box.dataset.topBars;
+    const qs = TOPQ[range], max = qs[0];
+    const sub = document.querySelector(`#v${variant} [data-topsub]`);
+    if (sub) sub.textContent = SUBTXT[range];
+    box.innerHTML = `<table><thead><tr><th></th><th>SKU</th>${bars ? '<th></th>' : ''}<th class="rr">Qty</th></tr></thead><tbody>`
+      + SKUS.slice(0, n).map((sku, i) =>
+        `<tr><td class="rank">${i+1}</td><td class="sku">${sku}</td>`
+        + (bars ? `<td style="width:30%"><div class="bar"><span style="width:${Math.round(qs[i]/max*100)}%"></span></div></td>` : '')
+        + `<td class="num">${qs[i]}</td></tr>`).join('')
+      + `</tbody></table>`;
+  });
+}
+function drawRanges() {
+  document.querySelectorAll('[data-ranges]').forEach(el => {
+    el.innerHTML = ['Day','Month','Year','Custom'].map(r =>
+      `<button class="rbtn${r===range?' on':''}" data-r="${r}">${r}</button>`).join('');
+  });
+}
+function drawAttn() {
+  const box = document.getElementById('c1attn');
+  if (!box) return;
+  const { cols, rows } = ATTN[attn];
+  box.innerHTML = `<table><thead><tr>${cols.map((c,i) => `<th${i===cols.length-1?' class="rr"':''}>${c}</th>`).join('')}</tr></thead><tbody>`
+    + rows.map(r => `<tr><td class="sku">${r[0]}</td><td class="mono" style="font-size:11px">${r[1]}</td><td style="color:var(--muted)">${r[2]}</td><td class="rr"><span class="pill ${r[4]}">${r[3]}</span></td></tr>`).join('')
+    + `</tbody></table>`;
+}
+function drawFeed() {
+  const box = document.getElementById('c1feed');
+  if (!box) return;
+  const col = { wm: 'var(--wm)', eb: 'var(--eb)', tm: 'var(--tm)' };
+  box.innerHTML = FEED.map(f =>
+    `<div class="c1-frow"><span class="tm">${f[0]}</span><span class="dot" style="background:${col[f[1]]}"></span><span class="sk">${f[2]}</span><span class="pr">${f[3]}</span></div>`).join('');
+}
+function drawAll() { drawRanges(); drawChart(); drawTopSellers(); drawAttn(); drawFeed(); }
+
+document.addEventListener('click', e => {
+  const p = e.target.closest('.pbtn');
+  if (p) {
+    variant = p.dataset.v;
+    document.querySelectorAll('.pbtn').forEach(x => x.classList.toggle('on', x === p));
+    ['1','2','3'].forEach(v => { document.getElementById('v' + v).hidden = (v !== variant); });
+    drawAll();
+    return;
+  }
+  const r = e.target.closest('[data-r]');
+  if (r) { range = r.dataset.r; hoverI = null; drawAll(); return; }
+  const a = e.target.closest('.c1-atab');
+  if (a) {
+    attn = a.dataset.a;
+    document.querySelectorAll('.c1-atab').forEach(x => x.classList.toggle('on', x === a));
+    drawAttn();
+  }
+});
+drawAll();
+</script>
+</body>
+</html>
