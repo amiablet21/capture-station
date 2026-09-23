@@ -143,6 +143,16 @@ function open() {
     db.exec(`UPDATE stock_log SET gid = 'legacy:' || '${host.replace(/'/g, '')}' || ':' || id WHERE gid = ''`);
   }
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_log_gid ON stock_log(gid)`);
+  // migration (2026-09-23): corrections. A line is never rewritten — an edit
+  // or a delete is a NEW line that points at the original (link_kind +
+  // link_gid) and carries what it changed / applied as JSON (data).
+  const slCols2 = db.prepare(`SELECT name FROM pragma_table_info('stock_log')`).all().map(c => c.name);
+  if (!slCols2.includes('link_kind')) {
+    db.exec(`ALTER TABLE stock_log ADD COLUMN link_kind TEXT NOT NULL DEFAULT ''`);
+    db.exec(`ALTER TABLE stock_log ADD COLUMN link_gid TEXT NOT NULL DEFAULT ''`);
+    db.exec(`ALTER TABLE stock_log ADD COLUMN data TEXT NOT NULL DEFAULT ''`);
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_log_link ON stock_log(link_gid)`);
   // migration: WFS shipments carry a received date (Overview marks them
   // received by hand until a Walmart connection can say so itself)
   const wfsCols = db.prepare(`SELECT name FROM pragma_table_info('wfs_shipments')`).all().map(c => c.name);
@@ -619,8 +629,8 @@ function intOrNull(v) {
 // inserted, in the exact shape the shared-folder file carries.
 function logStockChanges(rows) {
   const d = open();
-  const ins = d.prepare(`INSERT OR IGNORE INTO stock_log (gid, created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = d.prepare(`INSERT OR IGNORE INTO stock_log (gid, created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by, link_kind, link_gid, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const inserted = [];
   for (const r of rows) {
     if (!r || !r.sku) continue;
@@ -634,9 +644,11 @@ function logStockChanges(rows) {
       reason: String(r.reason || ''), change_source: String(r.changeSource || r.change_source || '').slice(0, 120),
       ref: String(r.ref || '').slice(0, 80), note: String(r.note || '').slice(0, 300),
       computer: String(r.computer || '').slice(0, 80), by: String(r.by || '').slice(0, 60),
+      link_kind: String(r.link_kind || r.linkKind || ''), link_gid: String(r.link_gid || r.linkGid || ''),
+      data: typeof r.data === 'string' ? r.data : (r.data ? JSON.stringify(r.data) : ''),
     };
     const res = ins.run(row.gid, row.created_at, row.day, row.sku, row.location_id, row.delta, row.level_after,
-      row.reason, row.change_source, row.ref, row.note, row.computer, row.by);
+      row.reason, row.change_source, row.ref, row.note, row.computer, row.by, row.link_kind, row.link_gid, row.data);
     if (res.changes > 0) inserted.push(row);
   }
   return inserted;
@@ -684,6 +696,158 @@ function stockLogOwnRows(computers) {
 function stockHistory(sku, limit = 500) {
   return open().prepare(`SELECT * FROM stock_log WHERE sku = ? ORDER BY id DESC LIMIT ?`)
     .all(String(sku || '').toUpperCase(), limit);
+}
+
+/* ---------- corrections: edit / delete a history line ---------- */
+
+function stockLogGet(gid) {
+  return open().prepare(`SELECT * FROM stock_log WHERE gid = ?`).get(String(gid || '')) || null;
+}
+
+// every correction line, keyed by the line it points at (children) — the
+// whole set is small, and it is what turns "corrected" / "deleted" marks on
+function stockLogLinkMap() {
+  const map = new Map();
+  for (const r of open().prepare(`SELECT * FROM stock_log WHERE link_gid != '' ORDER BY id ASC`).all()) {
+    if (!map.has(r.link_gid)) map.set(r.link_gid, []);
+    map.get(r.link_gid).push(r);
+  }
+  return map;
+}
+
+function parseData(r) { try { return r && r.data ? JSON.parse(r.data) : {}; } catch { return {}; } }
+
+// The line as it stands after its corrections: sku / qty (units, or the
+// count for a hand-set line) / deleted. A correction that was itself
+// deleted no longer counts.
+function stockLogEffective(original, linkMap) {
+  const isSet = original.delta === null || original.delta === undefined;
+  const eff = { sku: original.sku, qty: isSet ? Number(original.level_after) : Math.abs(Number(original.delta) || 0), sign: isSet ? 0 : (Number(original.delta) >= 0 ? 1 : -1), isSet, deleted: false, corrected: false };
+  for (const l of (linkMap.get(original.gid) || [])) {
+    if ((linkMap.get(l.gid) || []).some(x => x.link_kind === 'delete')) continue; // that correction was undone
+    if (l.link_kind === 'delete') { eff.deleted = true; continue; }
+    if (l.link_kind === 'edit') {
+      const d = parseData(l);
+      if (d.toSku) eff.sku = String(d.toSku).toUpperCase();
+      if (Number.isFinite(Number(d.toQty))) eff.qty = Number(d.toQty);
+      eff.corrected = true;
+    }
+  }
+  return eff;
+}
+
+// rows for the renderer: each original carries its live marks, each
+// correction carries a pointer back to what it changed
+function annotateStockRows(rows) {
+  const linkMap = stockLogLinkMap();
+  const byGid = new Map();
+  const need = new Set(rows.filter(r => r.link_gid).map(r => r.link_gid));
+  for (const g of need) if (!byGid.has(g)) byGid.set(g, stockLogGet(g));
+  return rows.map(r => {
+    const eff = stockLogEffective(r, linkMap);
+    const out = { ...r, dataObj: parseData(r), eff };
+    if (r.link_gid) {
+      const t = byGid.get(r.link_gid);
+      out.target = t ? { gid: t.gid, day: t.day, computer: t.computer, sku: t.sku, reason: t.reason } : null;
+    }
+    const kids = (linkMap.get(r.gid) || []).filter(l => !(linkMap.get(l.gid) || []).some(x => x.link_kind === 'delete'));
+    out.marks = kids.map(l => ({ gid: l.gid, kind: l.link_kind, day: l.day, computer: l.computer, created_at: l.created_at }));
+    return out;
+  });
+}
+
+// rule 1 (owner 2026-09-23): a hand-set count after the line makes the
+// count authoritative — a later correction of that line fixes the record
+// only, never the stock
+function stockLogLaterSet(sku, afterIso) {
+  const linkMap = stockLogLinkMap();
+  const rows = open().prepare(`SELECT * FROM stock_log WHERE sku = ? AND delta IS NULL AND link_kind = '' AND created_at > ? ORDER BY id ASC`)
+    .all(String(sku || '').toUpperCase(), String(afterIso || ''));
+  return rows.find(r => !stockLogEffective(r, linkMap).deleted) || null;
+}
+
+// lines the app made that a person may correct here; returns / shipments /
+// sales are corrected where they live
+const STOCK_LOG_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
+const STOCK_LOG_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
+
+// Pure: what a correction would do. original = the line, linkMap = every
+// correction line, change = { del: true } | { qty, sku }, levelOf(sku) =
+// the live count or null, laterSet(sku, afterIso) = the hand-set line that
+// makes the count authoritative, or null. Never touches anything.
+function planStockCorrection({ original, linkMap, change, levelOf, laterSet }) {
+  if (!original) return { ok: false, error: 'That history line no longer exists.' };
+  const isLink = STOCK_LOG_LINK_REASONS.has(original.reason) || !!original.link_gid;
+  if (!isLink && !STOCK_LOG_EDITABLE.has(original.reason)) {
+    const where = original.reason === 'return' || original.reason === 'return-edit' || original.reason === 'return-delete' ? 'Returns'
+      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
+    return { ok: false, error: `This line is corrected in ${where}, not here.` };
+  }
+  const eff = stockLogEffective(original, linkMap);
+  if (eff.deleted) return { ok: false, error: 'This line was already deleted.' };
+  const del = !!(change && change.del);
+  const want = [];
+  const data = { kind: del ? 'delete' : 'edit', fromSku: eff.sku, fromQty: eff.qty };
+  if (isLink) {
+    // a correction line: only deletable, and deleting it reverses exactly what it applied
+    if (!del) return { ok: false, error: 'A correction can be deleted, which undoes it — not edited.' };
+    for (const a of (parseData(original).applied || [])) want.push({ sku: String(a.sku).toUpperCase(), delta: -(Number(a.delta) || 0) });
+  } else if (eff.isSet) {
+    // a hand-set count: qty = the count. Deleting needs the count it replaced.
+    if (del) {
+      const was = /was (\d+)/.exec(original.note || '');
+      if (!was) return { ok: false, error: 'This count has no record of what it replaced — set the count by hand instead.' };
+      want.push({ sku: eff.sku, delta: Number(was[1]) - eff.qty });
+    } else {
+      const newQty = Number(change.qty);
+      if (!Number.isInteger(newQty) || newQty < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+      if (change.sku && String(change.sku).toUpperCase() !== eff.sku) return { ok: false, error: 'A hand-set count keeps its SKU — delete it and set the other SKU instead.' };
+      if (newQty === eff.qty) return { ok: false, error: 'No change.' };
+      data.toSku = eff.sku; data.toQty = newQty;
+      want.push({ sku: eff.sku, delta: newQty - eff.qty });
+    }
+  } else {
+    const D = eff.sign * eff.qty;
+    if (del) {
+      want.push({ sku: eff.sku, delta: -D });
+    } else {
+      const newQty = Number(change.qty);
+      const newSku = String(change.sku || eff.sku).trim().toUpperCase();
+      if (!Number.isInteger(newQty) || newQty < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+      if (!newSku) return { ok: false, error: 'Pick a SKU.' };
+      if (levelOf(newSku) === null && newSku !== eff.sku) return { ok: false, error: `${newSku} is not in Linnworks — pick a listing that exists.` };
+      if (newQty === eff.qty && newSku === eff.sku) return { ok: false, error: 'No change.' };
+      data.toSku = newSku; data.toQty = newQty;
+      if (newSku === eff.sku) want.push({ sku: eff.sku, delta: eff.sign * (newQty - eff.qty) });
+      else { want.push({ sku: eff.sku, delta: -D }); want.push({ sku: newSku, delta: eff.sign * newQty }); }
+    }
+  }
+  // rule 1, then the floor at zero — per SKU
+  const applies = [];
+  const notes = [];
+  for (const w of want) {
+    if (!w.delta) continue;
+    const later = laterSet(w.sku, original.created_at);
+    if (later) {
+      applies.push({ sku: w.sku, delta: w.delta, applied: 0, skipped: 'later-set', laterDay: later.day });
+      notes.push(`${w.sku}: count was set by hand on ${later.day.slice(5, 7)}/${later.day.slice(8, 10)}, record only`);
+      continue;
+    }
+    const level = levelOf(w.sku);
+    let applied = w.delta;
+    if (w.delta < 0 && level !== null && level + w.delta < 0) {
+      applied = -Math.max(0, level);
+      notes.push(`${w.sku}: removed ${Math.abs(applied)} of ${Math.abs(w.delta)}, only ${Math.max(0, level)} on hand`);
+    }
+    applies.push({ sku: w.sku, delta: w.delta, applied, level });
+  }
+  data.applied = applies.filter(a => a.applied).map(a => ({ sku: a.sku, delta: a.applied }));
+  const recordOnly = applies.length > 0 && applies.every(a => !a.applied);
+  const text = applies.length === 0 ? 'No stock change'
+    : applies.map(a => a.applied
+      ? `${a.applied > 0 ? '+' : '−'}${Math.abs(a.applied)} on ${a.sku}${a.level !== null && a.level !== undefined ? ` (${a.level} → ${a.level + a.applied})` : ''}`
+      : `${a.sku}: record only`).join(' · ');
+  return { ok: true, del, eff, data, applies, recordOnly, notes, text };
 }
 
 // every SKU's changes between two local days (inclusive), newest first —
@@ -796,5 +960,6 @@ module.exports = {
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, stockRowsFromBulkEntry, stockLogOwnRows,
+  stockLogGet, stockLogLinkMap, stockLogEffective, annotateStockRows, stockLogLaterSet, planStockCorrection, STOCK_LOG_EDITABLE,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

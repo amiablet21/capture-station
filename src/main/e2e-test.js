@@ -1169,13 +1169,73 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`[...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent).join(',') + '|' + [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()).join(',')`);
     check('bulk-derived rows render as REMOVED (revert) then ADDED, by IMRAN-MACBOOK-PRO', res === 'REMOVED,ADDED|IMRAN-MACBOOK-PRO,IMRAN-MACBOOK-PRO', res);
     await exec(`$('stockHistDialog').close()`);
-    // the bulk popup shows a See more that opens the full Stock history
-    await exec(`bulkHistLoad()`);
-    await new Promise(r => setTimeout(r, 200));
-    res = await exec(`(() => { const b = $('bulkHistMore'); if (!b) return false; b.click(); return true; })()`);
-    await new Promise(r => setTimeout(r, 400)); // openHistory loads its captures before showing
-    res = res && await exec(`({ historyOpen: $('historyDialog').open, stockTab: !$('historyStockView').hidden, bulkClosed: !$('bulkDialog').open })`);
-    check('bulk popup: See more closes the popup and opens the History dialog on the Stock tab', res && res.historyOpen === true && res.stockTab === true && res.bulkClosed === true, res);
+    // the bulk popup no longer carries its own history (it all lives in the Stock tab)
+    res = await exec(`({ hist: !!document.getElementById('bulkHist'), rev: !!document.getElementById('bulkRevDialog') })`);
+    check('bulk popup: its history list and revert dialog are gone', res && res.hist === false && res.rev === false, res);
+
+    // 35d. corrections (owner 2026-09-23): edit / delete a history line
+    // through a NEW linked line, never by rewriting the old one
+    const lm = () => db.stockLogLinkMap();
+    const lvl = (m) => (k) => (k in m ? m[k] : null);
+    const noLater = () => null;
+    db.logStockChanges([{ gid: 'e2e:orig-add', sku: 'S26-256GB-VIOLET', delta: 16, levelAfter: 16, reason: 'bulk-add', computer: 'Stock room', createdAt: '2026-09-21T21:30:00.000Z' }]);
+    const origAdd = db.stockLogGet('e2e:orig-add');
+    let plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 15, sku: 'S26-256GB-VIOLET' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16 }), laterSet: noLater });
+    check('planner: 16 → 15 on the same SKU applies −1', plan.ok && plan.applies.length === 1 && plan.applies[0].applied === -1 && plan.data.toQty === 15 && /−1 on S26-256GB-VIOLET \(16 → 15\)/.test(plan.text), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 16, sku: 'S26-256GB-BLUE' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16, 'S26-256GB-BLUE': 3 }), laterSet: noLater });
+    check('planner: a SKU change moves the units: −16 off the old listing, +16 onto the new', plan.ok && plan.applies.length === 2 && plan.applies[0].applied === -16 && plan.applies[1].sku === 'S26-256GB-BLUE' && plan.applies[1].applied === 16, plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 16, sku: 'NOT-A-LISTING' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16 }), laterSet: noLater });
+    check('planner: a SKU that is not in Linnworks is refused', plan.ok === false && /not in Linnworks/.test(plan.error), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 2 }), laterSet: noLater });
+    check('planner: deleting a +16 line with only 2 on hand removes 2 and says so (floor at zero)', plan.ok && plan.applies[0].delta === -16 && plan.applies[0].applied === -2 && /removed 2 of 16, only 2 on hand/.test(plan.notes.join(' ')), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 20 }), laterSet: () => ({ day: '2026-09-22' }) });
+    check('planner rule 1: a later hand-set count makes the delete record-only', plan.ok && plan.recordOnly === true && plan.applies[0].applied === 0 && plan.applies[0].skipped === 'later-set' && /set by hand on 09\/22, record only/.test(plan.notes[0]), plan);
+    db.logStockChanges([{ gid: 'e2e:orig-ret', sku: 'S26-256GB-VIOLET', delta: 1, levelAfter: 17, reason: 'return', computer: 'Front desk', ref: 'PO-1' }]);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:orig-ret'), linkMap: lm(), change: { del: true }, levelOf: lvl({}), laterSet: noLater });
+    check('planner: a return line points to Returns instead', plan.ok === false && /corrected in Returns/.test(plan.error), plan);
+    // record the 16 → 15 correction the way stock:historyApply does, then the line's effective state + marks follow the link
+    db.logStockChanges([{ gid: 'e2e:fix-1', sku: 'S26-256GB-VIOLET', delta: -1, reason: 'edit-qty', computer: 'Office', note: '16 → 15 units · corrects the entry from 09/21', linkKind: 'edit', linkGid: 'e2e:orig-add', data: { kind: 'edit', fromSku: 'S26-256GB-VIOLET', fromQty: 16, toSku: 'S26-256GB-VIOLET', toQty: 15, applied: [{ sku: 'S26-256GB-VIOLET', delta: -1 }] } }]);
+    let eff = db.stockLogEffective(db.stockLogGet('e2e:orig-add'), lm());
+    check('effective state after a correction: 15 units, corrected, not deleted', eff.qty === 15 && eff.corrected === true && eff.deleted === false, eff);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:orig-add'), linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 40 }), laterSet: noLater });
+    check('planner: deleting a corrected line takes out its corrected quantity (15, not 16)', plan.ok && plan.applies[0].applied === -15, plan);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:fix-1'), linkMap: lm(), change: { qty: 3 }, levelOf: lvl({}), laterSet: noLater });
+    check('planner: a correction line cannot be edited, only deleted', plan.ok === false && /can be deleted/.test(plan.error), plan);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:fix-1'), linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 40 }), laterSet: noLater });
+    check('planner: deleting the correction reverses exactly what it applied (+1)', plan.ok && plan.applies.length === 1 && plan.applies[0].applied === 1, plan);
+    db.logStockChanges([{ gid: 'e2e:del-fix-1', sku: 'S26-256GB-VIOLET', delta: 1, reason: 'deleted', computer: 'Office', note: 'deleted the entry from 09/23', linkKind: 'delete', linkGid: 'e2e:fix-1', data: { kind: 'delete', applied: [{ sku: 'S26-256GB-VIOLET', delta: 1 }] } }]);
+    eff = db.stockLogEffective(db.stockLogGet('e2e:orig-add'), lm());
+    check('deleting the correction restores the original: 16 units, no longer corrected', eff.qty === 16 && eff.corrected === false, eff);
+    const ann = db.annotateStockRows(db.stockHistory('S26-256GB-VIOLET'));
+    const annOrig = ann.find(r => r.gid === 'e2e:orig-add'), annFix = ann.find(r => r.gid === 'e2e:fix-1');
+    check('annotated rows: the original has no live marks left, the undone correction carries its own deleted mark and points at the original',
+      annOrig && annOrig.marks.length === 0 && annFix && annFix.marks.length === 1 && annFix.marks[0].kind === 'delete' && annFix.target && annFix.target.gid === 'e2e:orig-add' && annFix.eff.deleted === true, { annOrig: annOrig && annOrig.marks, annFix: annFix && { marks: annFix.marks, target: annFix.target } });
+    // a fresh delete on the original, for the on-screen marks
+    db.logStockChanges([{ gid: 'e2e:del-orig', sku: 'S26-256GB-VIOLET', delta: -16, reason: 'deleted', computer: 'Office', note: 'deleted the entry from 09/21', linkKind: 'delete', linkGid: 'e2e:orig-add', data: { kind: 'delete', fromSku: 'S26-256GB-VIOLET', fromQty: 16, applied: [{ sku: 'S26-256GB-VIOLET', delta: -16 }] } }]);
+    await exec(`openStockHistory('S26-256GB-VIOLET')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`(() => { const L = [...document.querySelectorAll('#stockHistBody .sh-line')]; const g = (gid) => L.find(l => l.dataset.gid === gid); return {
+      acts: L.map(l => l.querySelector('.sh-act').textContent),
+      origDeleted: g('e2e:orig-add').classList.contains('is-deleted'), origMark: g('e2e:orig-add').querySelector('.sh-mark') ? g('e2e:orig-add').querySelector('.sh-mark').textContent : '',
+      origTools: !!g('e2e:orig-add').querySelector('.sh-edit-btn'), delBack: (g('e2e:del-orig').querySelector('.sh-goto') || {}).textContent || '',
+      retTools: (g('e2e:orig-ret').querySelector('.sh-tools') || {}).textContent || '', fixUndone: g('e2e:fix-1').classList.contains('is-deleted') }; })()`);
+    check('stock history rows: DELETED pill, the original struck through with a clickable "deleted" mark and no tools, the DELETED line pointing back, the return line pointing to Returns',
+      res && res.acts.includes('DELETED') && res.origDeleted === true && res.origMark === 'deleted' && res.origTools === false
+        && /deleted the entry from 9\/21 by STOCK ROOM/.test(res.delBack) && /edit in Returns/.test(res.retTools) && res.fixUndone === true,
+      res);
+    // the jump: clicking the DELETED line's pointer flashes the original
+    res = await exec(`(() => { document.querySelector('#stockHistBody .sh-line[data-gid="e2e:del-orig"] .sh-goto').click(); return document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add"]').classList.contains('is-flash'); })()`);
+    check('stock history rows: the pointer jumps to and flashes the original line', res === true, res);
+    // the editor opens in place on an editable line and asks the planner (refused in capture-only, shown inline, never thrown)
+    db.logStockChanges([{ gid: 'e2e:orig-add-2', sku: 'S26-256GB-VIOLET', delta: 5, levelAfter: 5, reason: 'bulk-add', computer: 'Stock room' }]);
+    await exec(`openStockHistory('S26-256GB-VIOLET')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`(() => { document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"] .sh-edit-btn').click(); const l = document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"]'); return { editing: l.classList.contains('sh-editing'), qty: l.querySelector('.sh-edit-qty').value, sku: l.querySelector('.sh-edit-sku').value, save: l.querySelector('.sh-edit-save').disabled }; })()`);
+    await new Promise(r => setTimeout(r, 300));
+    res.preview = await exec(`document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"] .sh-edit-preview').textContent`);
+    check('stock history editor: opens in place with the line\'s qty and SKU, Save disabled until the plan answers, capture-only refusal shown inline',
+      res && res.editing === true && res.qty === '5' && res.sku === 'S26-256GB-VIOLET' && res.save === true && /Capture-only/.test(res.preview), res);
+    await exec(`$('stockHistDialog').close()`);
     await exec(`$('historyDialog').close()`);
 
     // 36. returns resize: whole-width grip + per-column grips on the log

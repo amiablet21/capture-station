@@ -71,6 +71,8 @@ if (!window.api) {
     stockHistory: async () => ({ ok: false, error: 'Preview mode' }),
     stockHistoryToday: async () => ({ ok: false, error: 'Preview mode' }),
     stockHistoryRange: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryPlan: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryApply: async () => ({ ok: false, error: 'Preview mode' }),
     getHistoryRange: async () => [],
     getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     createSku: async () => ({ ok: false, error: 'Preview mode' }),
@@ -6041,13 +6043,15 @@ const SH_ACT = {
   shipped: { word: 'SHIPPED', cls: 'act-shipped' },
   set: { word: 'SET', cls: 'act-set' },
   edited: { word: 'EDITED', cls: 'act-edited' },
+  deleted: { word: 'DELETED', cls: 'act-deleted' },
 };
-const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'set', 'edited'];
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'set', 'edited', 'deleted'];
 function shActionOf(e) {
   switch (e.reason) {
     case 'sale': return 'sold';
     case 'return': return 'returned';
-    case 'return-edit': case 'return-delete': case 'correction': return 'edited';
+    case 'return-edit': case 'return-delete': case 'correction': case 'edit-qty': case 'edit-sku': return 'edited';
+    case 'deleted': return 'deleted';
     case 'set': case 'bulk-set': return 'set';
     case 'wfs': case 'dropship': case 'substitution': return 'shipped';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
@@ -6069,8 +6073,27 @@ function shSaleEvent(l) {
 
 // the "what" of a row: count × SKU, the arrow when a return landed on a
 // graded listing, the PO / order in grey
+const SH_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
+const SH_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
+function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slice(8, 10)}` : ''; }
+
 function shWhat(e, withSku) {
   const n = Math.abs(Number(e.delta) || 0);
+  const skuEl0 = (v) => withSku
+    ? `<span class="mono sh-sku" data-sku="${esc(v)}" title="Click to see only ${esc(v)}">${esc(v)}</span>`
+    : `<span class="mono">${esc(v)}</span>`;
+  if (SH_LINK_REASONS.has(e.reason) || e.link_gid) {
+    // a correction: what it changed, then the pointer back to the line it corrects
+    const d = e.dataObj || {};
+    const back = e.target
+      ? `<button type="button" class="sh-goto" data-goto="${esc(e.target.gid)}" title="Jump to that line">↳ ${e.reason === 'deleted' ? 'deleted' : 'corrects'} the entry from ${shDayShort(e.target.day)}${e.target.computer ? ` by ${esc(String(e.target.computer).toUpperCase())}` : ''}</button>`
+      : '';
+    const extra = /·\s*(.+?: (?:removed|count was).*)$/.exec(e.note || '');
+    const tail = extra ? ` <span class="sh-dim">(${esc(extra[1])})</span>` : '';
+    if (e.reason === 'deleted') return `${d.fromQty ?? n} × ${skuEl0(d.fromSku || e.sku)}${tail} ${back}`;
+    if (d.toSku && d.fromSku && d.toSku !== d.fromSku) return `${d.toQty ?? n} × ${skuEl0(d.fromSku)} <span class="sh-arrow">→</span> ${skuEl0(d.toSku)}${tail} ${back}`;
+    return `${skuEl0(d.toSku || e.sku)} <span class="sh-dim">${d.fromQty} → ${d.toQty} units</span>${tail} ${back}`;
+  }
   const skuEl = (v) => withSku
     ? `<span class="mono sh-sku" data-sku="${esc(v)}" title="Click to see only ${esc(v)}">${esc(v)}</span>`
     : `<span class="mono">${esc(v)}</span>`;
@@ -6097,7 +6120,16 @@ function shWhat(e, withSku) {
     : e.reason === 'bulk-add' ? ' <span class="sh-dim">received</span>'
     : e.reason === 'new-sku' ? ' <span class="sh-dim">new listing</span>'
     : '';
-  return `${units}${withSku ? skuEl(e.sku) : ''}${tail}${ref}`;
+  return `${units}${withSku ? skuEl(e.sku) : ''}${tail}${ref}${shMarks(e)}`;
+}
+
+// "corrected → 15 ×" / "deleted" on a line that has corrections; each mark
+// jumps to the correction line
+function shMarks(e) {
+  if (!e.marks || !e.marks.length) return '';
+  return e.marks.map(m => m.kind === 'delete'
+    ? ` <button type="button" class="sh-mark is-rev sh-goto" data-goto="${esc(m.gid)}" title="Deleted on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())} — click to see">deleted</button>`
+    : ` <button type="button" class="sh-mark is-fix sh-goto" data-goto="${esc(m.gid)}" title="Corrected on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())} — click to see">corrected → ${e.eff ? `${e.eff.qty} ×${e.eff.sku !== e.sku ? ` ${esc(e.eff.sku)}` : ''}` : ''}</button>`).join('');
 }
 
 function shRowHtml(e, withSku, clickable) {
@@ -6105,12 +6137,106 @@ function shRowHtml(e, withSku, clickable) {
   const isSale = e.reason === 'sale';
   const who = isSale ? (e.market || 'SALE') : String(e.computer || '—').toUpperCase();
   const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
-  return `<div class="history-item sh-line" title="${esc(title)}">
+  const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
+  const deleted = e.eff && e.eff.deleted;
+  const canFix = !isSale && !deleted && (SH_EDITABLE.has(e.reason) || isLink);
+  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : '';
+  const tools = canFix
+    ? `<span class="sh-tools">${isLink ? '' : `<button type="button" class="btn-icon sh-edit-btn" title="Edit this line — change the quantity or the SKU">${ICONS.pencil}</button>`}<button type="button" class="btn-icon is-danger sh-del-btn" title="${isLink ? 'Delete this correction — undoes it' : 'Delete this line — takes its stock back out'}">${ICONS.trash}</button></span>`
+    : where ? `<span class="sh-tools is-link" title="This line is corrected in ${where}">edit in ${where}</span>` : '';
+  return `<div class="history-item sh-line ${isLink ? 'is-linked' : ''} ${deleted ? 'is-deleted' : ''}" data-gid="${esc(e.gid || '')}" title="${esc(title)}">
     <button type="button" class="sh-act ${A.cls} ${clickable ? '' : 'is-static'}" data-act="${act}" title="${clickable ? `Show only ${A.word.toLowerCase()}` : A.word}">${A.word}</button>
-    <span class="sh-text">${shWhat(e, withSku)}</span>
+    <span class="sh-text">${shWhat(e, withSku)}</span>${tools}
     <span class="sh-when mono">${retDateUS(e.day)} <span class="sh-dim">${fmtTime(e.created_at)}</span></span>
     <span class="sh-pc ${isSale ? 'is-ext' : ''}" title="${esc(isSale ? `Sold on ${who}` : `Computer: ${e.computer || 'unknown'}${e.by ? ` · by ${e.by}` : ''}`)}">${isSale ? ICON_CART : ICONS.monitor}${esc(who)}${e.by ? ` <span class="sh-ini">${esc(e.by)}</span>` : ''}</span>
   </div>`;
+}
+
+/* --- correcting a line in place (owner 2026-09-23) --- */
+
+let shEditSeq = 0;
+function shSkuDatalist() {
+  const dl = $('shSkuList');
+  if (!dl || dl.childElementCount || !stockCache) return;
+  dl.innerHTML = (stockCache.items || []).slice(0, 4000).map(i => `<option value="${esc(i.sku)}"></option>`).join('');
+}
+
+// turns a row into the editor (del = the delete confirm); `reload` redraws
+// the list once a correction landed
+function shOpenEditor(line, e, del, reload) {
+  const seq = ++shEditSeq;
+  shSkuDatalist();
+  const eff = e.eff || { sku: e.sku, qty: Math.abs(Number(e.delta) || 0), isSet: e.delta === null };
+  const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
+  line.classList.add('sh-editing');
+  line.innerHTML = `
+    <span class="sh-act ${SH_ACT[shActionOf(e)].cls} is-static">${SH_ACT[shActionOf(e)].word}</span>
+    <span class="sh-text sh-edit-form">
+      ${del
+        ? `<span class="sh-edit-q">${isLink ? 'Delete this correction and undo it?' : `Delete ${eff.isSet ? 'this count' : `${eff.qty} × ${esc(eff.sku)}`}?`}</span>`
+        : `<label>Qty <input class="input mono sh-edit-qty" type="number" min="0" step="1" value="${eff.qty}"></label>
+           ${eff.isSet ? `<span class="mono">${esc(eff.sku)}</span>` : `<label>× SKU <input class="input mono sh-edit-sku" type="text" value="${esc(eff.sku)}" list="shSkuList" autocomplete="off" spellcheck="false"></label>`}`}
+      <span class="sh-edit-preview">Checking…</span>
+      <button type="button" class="btn ${del ? 'btn-danger' : 'btn-primary'} sh-edit-save" disabled>${del ? 'Delete' : 'Save correction'}</button>
+      <button type="button" class="btn btn-ghost sh-edit-cancel">Cancel</button>
+    </span>`;
+  const qty = line.querySelector('.sh-edit-qty'), skuIn = line.querySelector('.sh-edit-sku');
+  const prev = line.querySelector('.sh-edit-preview'), save = line.querySelector('.sh-edit-save');
+  const args = () => ({ gid: e.gid, del, qty: qty ? Number(qty.value) : undefined, sku: skuIn ? skuIn.value.trim().toUpperCase() : undefined });
+  let timer = null;
+  const plan = async () => {
+    save.disabled = true;
+    prev.textContent = 'Checking…';
+    const res = await api.stockHistoryPlan(args()).catch(err => ({ ok: false, error: err.message }));
+    if (seq !== shEditSeq) return;
+    if (!res.ok) { prev.textContent = res.error || 'Cannot do that.'; prev.classList.add('is-err'); return; }
+    prev.classList.remove('is-err');
+    prev.innerHTML = `Linnworks will get <b>${esc(res.text)}</b>${res.notes && res.notes.length ? ` <span class="sh-dim">· ${esc(res.notes.join(' · '))}</span>` : ''}`;
+    save.disabled = false;
+  };
+  const replan = () => { clearTimeout(timer); timer = setTimeout(plan, 350); };
+  if (qty) qty.addEventListener('input', replan);
+  if (skuIn) skuIn.addEventListener('input', replan);
+  line.querySelector('.sh-edit-cancel').addEventListener('click', () => { shEditSeq++; reload(); });
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    const res = await api.stockHistoryApply(args()).catch(err => ({ ok: false, error: err.message }));
+    if (!res.ok) { prev.textContent = res.error || 'Could not save.'; prev.classList.add('is-err'); save.disabled = false; return; }
+    toast(del ? `Deleted — ${res.text}` : `Corrected — ${res.text}`);
+    stockHistToday = null;
+    loadStockHistToday();
+    if (activePage === 'stock') loadStock();
+    reload();
+  });
+  const first = qty || save;
+  if (first) first.focus();
+  plan();
+}
+
+// clicks shared by the per-SKU dialog and the History dialog's Stock tab:
+// pills filter, marks and pointers jump, the tools open the editor
+function shBindTools(box, rowsOf, reload, onAct, onSku) {
+  box.addEventListener('click', (ev) => {
+    const goto = ev.target.closest('.sh-goto');
+    if (goto) {
+      const t = box.querySelector(`.sh-line[data-gid="${CSS.escape(goto.dataset.goto)}"]`);
+      if (t) { t.scrollIntoView({ block: 'center' }); t.classList.remove('is-flash'); void t.offsetWidth; t.classList.add('is-flash'); }
+      else toast('That line is outside the current filters or date range.');
+      return;
+    }
+    const tool = ev.target.closest('.sh-edit-btn, .sh-del-btn');
+    if (tool) {
+      const line = tool.closest('.sh-line');
+      const e = rowsOf().find(r => r.gid === line.dataset.gid);
+      if (e) shOpenEditor(line, e, tool.classList.contains('sh-del-btn'), reload);
+      return;
+    }
+    if (ev.target.closest('.sh-editing')) return; // the editor's own controls
+    const act = ev.target.closest('.sh-act');
+    if (act && !act.classList.contains('is-static')) { onAct(act.dataset.act); return; }
+    const sku = ev.target.closest('.sh-sku');
+    if (sku && onSku) onSku(sku.dataset.sku);
+  });
 }
 
 // the tray clock's / count's title: last change today, or a plain label
@@ -6311,13 +6437,9 @@ function renderStockHistory() {
 shDdWire('shPcDd', shDlg.pcs, renderStockHistory);
 shDdWire('shActDd', shDlg.acts, renderStockHistory);
 $('stockHistClose').addEventListener('click', () => $('stockHistDialog').close());
-$('stockHistBody').addEventListener('click', (e) => {
-  const act = e.target.closest('.sh-act');
-  if (act) {
-    if (shDlg.acts.has(act.dataset.act)) shDlg.acts.delete(act.dataset.act);
-    else { shDlg.acts.clear(); shDlg.acts.add(act.dataset.act); }
-    renderStockHistory();
-  }
+shBindTools($('stockHistBody'), () => shDlg.rows, () => openStockHistory(shDlg.sku), (a) => {
+  if (shDlg.acts.has(a)) shDlg.acts.delete(a); else { shDlg.acts.clear(); shDlg.acts.add(a); }
+  renderStockHistory();
 });
 
 /* --- every SKU: the History dialog's Stock tab --- */
@@ -6355,17 +6477,10 @@ shDdWire('hsPcDd', hs.pcs, renderHistoryStock);
 shDdWire('hsActDd', hs.acts, renderHistoryStock);
 shRangeWire('hsRangeDd', hs.range, loadHistoryStock);
 $('hsSearch').addEventListener('input', () => { hs.text = $('hsSearch').value.trim(); renderHistoryStock(); });
-$('hsList').addEventListener('click', (e) => {
-  const act = e.target.closest('.sh-act');
-  if (act) {
-    if (hs.acts.has(act.dataset.act)) hs.acts.delete(act.dataset.act);
-    else { hs.acts.clear(); hs.acts.add(act.dataset.act); }
-    renderHistoryStock();
-    return;
-  }
-  const sku = e.target.closest('.sh-sku');
-  if (sku) { $('hsSearch').value = sku.dataset.sku; hs.text = sku.dataset.sku; renderHistoryStock(); }
-});
+shBindTools($('hsList'), () => hs.rows, loadHistoryStock, (a) => {
+  if (hs.acts.has(a)) hs.acts.delete(a); else { hs.acts.clear(); hs.acts.add(a); }
+  renderHistoryStock();
+}, (sku) => { $('hsSearch').value = sku; hs.text = sku; renderHistoryStock(); });
 
 function showHistoryTab(tab) {
   $('historyTabs').querySelectorAll('.view-chip').forEach(b => b.classList.toggle('is-active', b.dataset.htab === tab));
@@ -6805,7 +6920,6 @@ $('stockBulkBtn').addEventListener('click', () => {
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
   if (first) first.focus();
   if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
-  bulkHistLoad();
 });
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
@@ -6845,193 +6959,17 @@ $('bulkApply').addEventListener('click', async () => {
     const r = await api.stockBulkRevert(res.entry.id);
     if (!r.ok) throw new Error(r.error || 'Revert failed');
     loadStock();
-    bulkHistLoad();
   });
   toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the typed counts'} · Ctrl+Z reverses the whole import`, 7000);
   $('bulkGridRows').innerHTML = '';
   bulkAddRow();
   $('bulkNote').value = '';
   loadStock();
-  bulkHistLoad();
 });
 
-let bulkHistEntries = []; // the revert confirm names the entry from here
-
-// units of entry `id`, line `rowIdx`, already moved to another SKU by fix
-// entries — a reverted fix gave its units back, so it doesn't count
-function bulkFixMoved(id, rowIdx) {
-  const undone = new Set(bulkHistEntries.filter(x => x.revertOf).map(x => x.revertOf));
-  return bulkHistEntries
-    .filter(x => x.mode === 'fix' && x.fixOf === id && Number(x.fixRow) === Number(rowIdx) && !undone.has(x.id))
-    .reduce((s, x) => s + (Number(x.fixQty) || 0), 0);
-}
-
-async function bulkHistLoad() {
-  const box = $('bulkHist');
-  const res = await api.stockBulkHistory().catch(() => null);
-  bulkHistEntries = (res && res.ok && res.entries) || [];
-  if (!bulkHistEntries.length) {
-    box.innerHTML = '<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See the full stock history →</button><p class="dlg-note">Nothing yet.</p>';
-    return;
-  }
-  const reverted = new Set(bulkHistEntries.filter(e => e.revertOf).map(e => e.revertOf));
-  // the popup shows the latest few; the full record of everything (bulk
-  // imports included) is the History dialog's Stock tab (owner 2026-09-23)
-  const BULK_HIST_SHOW = 5;
-  const more = bulkHistEntries.length > BULK_HIST_SHOW
-    ? `<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See more → full stock history (${bulkHistEntries.length} entries)</button>`
-    : `<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See the full stock history →</button>`;
-  box.innerHTML = more + bulkHistEntries.slice(0, BULK_HIST_SHOW).map((e, i) => {
-    const rows = e.rows || [];
-    const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
-    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
-    const what = e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} · ${nSku}`
-      : e.mode === 'set' ? `set counts · ${nSku}`
-        : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
-          : e.mode === 'fix' ? `moved ${e.fixQty || ''} unit${Number(e.fixQty) === 1 ? '' : 's'} <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> → <span class="mono">${esc(rows[rows.length - 1] ? rows[rows.length - 1].sku : '')}</span>`
-            : `↩ reversed an earlier change · ${nSku}`;
-    const fixable = !reverted.has(e.id) && (e.mode === 'add' || e.mode === 'set' || e.mode === 'edit');
-    const act = reverted.has(e.id)
-      ? '<span class="bulk-h-rvtd">reverted ✓</span>'
-      : `<button type="button" class="bulk-h-revert" data-brv="${esc(e.id)}" title="Reverse this change — subtracts what it added (or restores what it removed), leaving everything since alone">↩ Revert</button>`;
-    return `
-    <div class="bulk-h">
-      <div class="bulk-h-line" data-bh="${i}">
-        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
-        ${act}<span class="bulk-h-chev">▸</span>
-      </div>
-      <div class="bulk-h-body" hidden>
-        <table class="bulk-table">
-          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
-          <tbody>${rows.map((r, ri) => {
-    const change = (Number(r.after) || 0) - (Number(r.before) || 0);
-    const moved = fixable ? bulkFixMoved(e.id, ri) : 0;
-    const avail = change - moved;
-    const canFix = fixable && change > 0 && avail > 0;
-    const cell = (canFix
-      ? `<button type="button" class="bulk-h-fix" title="Wrong SKU? Change it in place — the units move to the SKU you pick">✎</button>` : '')
-      + (moved > 0 ? `<span class="bulk-h-moved" title="${moved} unit${moved === 1 ? '' : 's'} moved to another SKU — see the “moved” entries above">↷ ${moved} moved</span>` : '');
-    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix') && r.qty > 0)) ? `+${r.qty}` : r.qty;
-    return `<tr><td class="mono bulk-h-sku"${canFix ? ` data-bfx="${esc(e.id)}" data-bfr="${ri}" title="Double-click to change which SKU these units went to"` : ''}>${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${q}</td><td class="num mono">${r.after == null ? '—' : r.after}</td><td class="bulk-h-fixcell">${cell}</td></tr>`;
-  }).join('')}</tbody>
-        </table>
-        ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-$('bulkHist').addEventListener('click', (e) => {
-  if (!e.target.closest('#bulkHistMore')) return;
-  $('bulkDialog').close();
-  openHistory('stock');
-});
-
-let bulkRevPending = ''; // entry id awaiting the confirm popup
-
-// In-place SKU correction (owner 2026-09-17: "double click within the
-// history and just change it really quickly"): the SKU cell swaps into an
-// input with suggestions + a small units box (prefilled with everything
-// still movable). Enter applies the move, Esc cancels.
-let bulkFixClose = null; // open editor's cleanup, one at a time
-
-function bulkFixInlineOpen(td) {
-  if (bulkFixClose) bulkFixClose();
-  const entry = bulkHistEntries.find(x => x.id === td.dataset.bfx);
-  const ri = Number(td.dataset.bfr);
-  const row = entry && (entry.rows || [])[ri];
-  if (!row) return;
-  const change = (Number(row.after) || 0) - (Number(row.before) || 0);
-  const avail = change - bulkFixMoved(entry.id, ri);
-  if (avail < 1) { toast('Those units were already moved.'); return; }
-  ensureInventory(); // the SKU picker's lookup data
-  const orig = td.innerHTML;
-  td.innerHTML = `
-    <div class="bulk-h-fixwrap">
-      <input class="input mono bulk-h-fixsku" type="text" autocomplete="off" spellcheck="false" aria-label="Correct SKU" />
-      <input class="input mono bulk-h-fixqty" type="number" min="1" max="${avail}" step="1" value="${avail}" aria-label="Units to move" title="How many of the ${avail} unit${avail === 1 ? '' : 's'} to move" />
-      <div class="combo-list" hidden></div>
-    </div>`;
-  const skuIn = td.querySelector('.bulk-h-fixsku');
-  const qtyIn = td.querySelector('.bulk-h-fixqty');
-  const listEl = td.querySelector('.combo-list');
-  skuIn.value = String(row.sku);
-  const close = () => {
-    document.removeEventListener('mousedown', away, true);
-    td.innerHTML = orig;
-    bulkFixClose = null;
-  };
-  const away = (ev) => { if (!td.contains(ev.target) && !listEl.contains(ev.target)) close(); };
-  const apply = async () => {
-    const to = skuIn.value.trim().toUpperCase();
-    const m = Number(qtyIn.value);
-    if (!to || to === String(row.sku).toUpperCase()) { close(); return; } // unchanged — never mind
-    if (!Number.isInteger(m) || m < 1 || m > avail) { toast(`Units must be a whole number between 1 and ${avail}.`); qtyIn.focus(); return; }
-    skuIn.disabled = true; qtyIn.disabled = true;
-    const res = await api.stockBulkFix(entry.id, ri, to, m);
-    if (!res.ok) { skuIn.disabled = false; qtyIn.disabled = false; toast(res.error || 'Could not move the units.'); return; }
-    close();
-    toast(`Moved ${m} × ${row.sku} → ${to}`);
-    loadStock();
-    bulkHistLoad();
-  };
-  makeCombo(skuIn, listEl, (item) => { skuIn.value = item.sku; qtyIn.focus(); });
-  const onKey = (ev) => {
-    // preventDefault on Esc also keeps the bulk dialog itself open
-    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }
-    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
-  };
-  skuIn.addEventListener('keydown', onKey);
-  qtyIn.addEventListener('keydown', onKey);
-  document.addEventListener('mousedown', away, true);
-  bulkFixClose = close;
-  skuIn.focus();
-  skuIn.select();
-}
-
-$('bulkHist').addEventListener('dblclick', (e) => {
-  const td = e.target.closest('td.bulk-h-sku[data-bfx]');
-  if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
-});
-
-$('bulkHist').addEventListener('click', (e) => {
-  const fx = e.target.closest('.bulk-h-fix');
-  if (fx) {
-    const td = fx.closest('tr').querySelector('td.bulk-h-sku[data-bfx]');
-    if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
-    return;
-  }
-  const rv = e.target.closest('.bulk-h-revert');
-  if (rv) {
-    bulkRevPending = rv.dataset.brv;
-    const entry = bulkHistEntries.find(x => x.id === bulkRevPending);
-    const rows = (entry && entry.rows) || [];
-    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
-    $('bulkRevWhat').textContent = entry
-      ? `${new Date(entry.ts).toLocaleString()} · ${entry.station || ''} · ${entry.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} across` : entry.mode === 'set' ? 'set counts on' : entry.mode === 'edit' ? 'edited' : 'reversed a change on'} ${rows.length === 1 ? rows[0].sku : `${rows.length} SKUs`}${entry.note ? ` · “${entry.note}”` : ''}`
-      : '';
-    $('bulkRevGo').disabled = false;
-    $('bulkRevDialog').showModal();
-    return;
-  }
-  const line = e.target.closest('.bulk-h-line');
-  if (!line) return;
-  const body = line.parentElement.querySelector('.bulk-h-body');
-  body.hidden = !body.hidden;
-  line.querySelector('.bulk-h-chev').textContent = body.hidden ? '▸' : '▾';
-});
-
-$('bulkRevCancel').addEventListener('click', () => $('bulkRevDialog').close());
-$('bulkRevGo').addEventListener('click', async () => {
-  if (!bulkRevPending) return;
-  $('bulkRevGo').disabled = true;
-  const res = await api.stockBulkRevert(bulkRevPending);
-  $('bulkRevDialog').close();
-  if (!res.ok) { toast(res.error || 'Could not revert.'); return; }
-  toast('Reversed — the history keeps both entries.');
-  loadStock();
-  bulkHistLoad();
-});
+// (the popup's own history list left 2026-09-23: every import, edit,
+// revert and fix now shows in the History dialog's Stock tab, where a line
+// can be edited or deleted in place)
 
 /* ---------- Pricing tab (owner 2026-09-18, design 'Pricing and Overview'):
    products × auto-generated channel columns. Walmart (repricer-owned)

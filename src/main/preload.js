@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld('api', {
   stockHistory: (sku) => ipcRenderer.invoke('stock:history', { sku }),
   stockHistoryToday: () => ipcRenderer.invoke('stock:historyToday'),
   stockHistoryRange: (from, to) => ipcRenderer.invoke('stock:historyRange', { from, to }),
+  stockHistoryPlan: (args) => ipcRenderer.invoke('stock:historyPlan', args),
+  stockHistoryApply: (args) => ipcRenderer.invoke('stock:historyApply', args),
   getChannelSkus: (stockItemId) => ipcRenderer.invoke('stock:channelSkus', { stockItemId }),
   channelSkusGone: (records) => ipcRenderer.invoke('stock:channelSkusGone', { records }),
   stockUnlisted: (force) => ipcRenderer.invoke('stock:unlisted', { force: !!force }),

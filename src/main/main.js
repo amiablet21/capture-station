@@ -5091,10 +5091,80 @@ function registerIpc() {
   // every read merges the shared folder + bulk history first (insert-if-
   // absent, so a read can never double a row)
   ipcMain.handle('stock:history', (_e, { sku } = {}) => {
-    try { syncStockLog(); return { ok: true, rows: db.stockHistory(String(sku || ''), 500) }; } catch (e) { return { ok: false, error: e.message }; }
+    try { syncStockLog(); return { ok: true, rows: db.annotateStockRows(db.stockHistory(String(sku || ''), 500)) }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('stock:historyRange', (_e, { from, to } = {}) => {
-    try { syncStockLog(); return { ok: true, rows: db.stockHistoryRange(from, to) }; } catch (e) { return { ok: false, error: e.message }; }
+    try { syncStockLog(); return { ok: true, rows: db.annotateStockRows(db.stockHistoryRange(from, to)) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // Correct a history line (owner 2026-09-23): a plan says exactly what
+  // Linnworks would get; apply re-plans against the live counts, sends only
+  // that difference, and records the correction as a NEW line pointing at
+  // the original — the original is never rewritten, so the shared folder
+  // and the other desktops stay consistent.
+  async function stockCorrectionPlan(cfg, { gid, del, qty, sku }) {
+    syncStockLog();
+    const original = db.stockLogGet(gid);
+    if (!original) return { ok: false, error: 'That history line no longer exists.' };
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const levels = new Map();
+    for (const it of items) {
+      const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+      levels.set(String(it.sku).toUpperCase(), { level: l ? Number(l.stockLevel) || 0 : 0, sku: it.sku });
+    }
+    const plan = db.planStockCorrection({
+      original, linkMap: db.stockLogLinkMap(), change: { del: !!del, qty, sku },
+      levelOf: (k) => levels.has(String(k).toUpperCase()) ? levels.get(String(k).toUpperCase()).level : null,
+      laterSet: (k, after) => db.stockLogLaterSet(k, after),
+    });
+    return { ...plan, original, client, levels };
+  }
+  ipcMain.handle('stock:historyPlan', async (_e, args = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const p = await stockCorrectionPlan(cfg, args);
+      if (!p.ok) return { ok: false, error: p.error };
+      return { ok: true, text: p.text, notes: p.notes, recordOnly: p.recordOnly, applies: p.applies, eff: p.eff };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('stock:historyApply', async (_e, args = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const p = await stockCorrectionPlan(cfg, args);
+      if (!p.ok) return { ok: false, error: p.error };
+      const { original, client, levels, data } = p;
+      const deltas = data.applied.map(a => ({ sku: (levels.get(a.sku) || {}).sku || a.sku, delta: a.delta }));
+      if (deltas.length) {
+        await client.changeStockLevels(deltas, cfg.linnworks.locationId,
+          p.del ? 'Capture Station history delete' : 'Capture Station history edit', { skipLog: true });
+      }
+      const eff = p.eff;
+      const dayOf = (d) => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
+      const note = p.del
+        ? `deleted the entry from ${dayOf(original.day)}${p.notes.length ? ` · ${p.notes.join(' · ')}` : ''}`
+        : (data.toSku !== data.fromSku
+          ? `${data.fromSku} → ${data.toSku}${data.toQty !== data.fromQty ? ` · ${data.fromQty} → ${data.toQty}` : ''}`
+          : `${data.fromQty} → ${data.toQty} units`) + ` · corrects the entry from ${dayOf(original.day)}${p.notes.length ? ` · ${p.notes.join(' · ')}` : ''}`;
+      const netOnMain = data.applied.filter(a => a.sku === (data.toSku || eff.sku)).reduce((s, a) => s + a.delta, 0);
+      const [row] = recordStockRows([{
+        sku: data.toSku || eff.sku, locationId: cfg.linnworks.locationId,
+        delta: p.del ? (data.applied.find(a => a.sku === eff.sku) || { delta: 0 }).delta : netOnMain,
+        levelAfter: null,
+        reason: p.del ? 'deleted' : (data.toSku && data.toSku !== data.fromSku ? 'edit-sku' : 'edit-qty'),
+        changeSource: p.del ? 'Capture Station history delete' : 'Capture Station history edit',
+        ref: original.ref || '', note, computer: stockLogComputer(), by: '',
+        linkKind: p.del ? 'delete' : 'edit', linkGid: original.gid, data,
+      }]);
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, row, text: p.text, recordOnly: p.recordOnly };
+    } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('stock:historyToday', () => {
     try { syncStockLog(); return { ok: true, bySku: db.stockHistoryToday() }; } catch (e) { return { ok: false, error: e.message }; }
@@ -5567,6 +5637,8 @@ function stockLogReason(changeSource, meta) {
   if (cs.includes('bulk import')) return 'bulk-set';
   if (cs.includes('revert')) return 'revert';
   if (cs.includes('history correction')) return 'correction';
+  if (cs.includes('history delete')) return 'deleted';
+  if (cs.includes('history edit')) return 'edit-qty';
   return 'other';
 }
 // one door for every stock_log write: local db (insert-if-absent by gid),

@@ -1061,17 +1061,6 @@
 
   <!-- revert confirmation (owner 2026-09-17: "before reverts, have a popup
        saying are you sure you want to revert?") -->
-  <dialog id="bulkRevDialog" class="dlg">
-    <div class="dlg-body">
-      <h2 class="dlg-title">Are you sure you want to revert?</h2>
-      <p class="dlg-note" id="bulkRevWhat"></p>
-      <p class="dlg-note">This reverses that change — what it added is subtracted, what it removed comes back. Everything that happened since stays as it is.</p>
-      <div class="dlg-actions">
-        <button id="bulkRevCancel" class="btn btn-ghost" type="button">Cancel</button>
-        <button id="bulkRevGo" class="btn btn-danger" type="button">↩ Revert</button>
-      </div>
-    </div>
-  </dialog>
 
 
   <!-- Bulk stock import (owner 2026-09-17): a SKU + Qty sheet adds to or
@@ -1100,8 +1089,6 @@
         <button id="bulkCancel" class="btn btn-ghost" type="button">Close</button>
         <button id="bulkApply" class="btn btn-primary" type="button" disabled>Import</button>
       </div>
-      <h3 class="dlg-section">History</h3>
-      <div id="bulkHist" class="bulk-hist"></div>
     </div>
   </dialog>
 
@@ -1395,6 +1382,7 @@
 
   <!-- Stock history for one SKU: every level change the app made, newest
        first, with who did it and from which computer (owner 2026-09-23) -->
+  <datalist id="shSkuList"></datalist>
   <dialog id="stockHistDialog" class="dlg dlg-sales dlg-sh">
     <div class="dlg-body">
       <div class="sales-head">
