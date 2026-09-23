@@ -1139,6 +1139,44 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`(() => { setCapHist(false); return { on: capHist.on, back: $('capHistBack').hidden, importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
     check('Capture history mode: Back to today restores the live list', res && res.on === false && res.back === true && res.importShown === true && res.hist === 0, res);
     db.deleteRow(histRowId);
+    // 35c. one history, no doubles (owner 2026-09-23: "I don't want any data
+    // errors"): every log row has a unique gid and inserts are insert-if-
+    // absent, so the same change can never land twice
+    const shBefore = db.stockHistory('sh-test-sku').length;
+    const ins1 = db.logStockChanges([{ gid: 'e2e:fixed-1', sku: 'sh-test-sku', delta: 1, levelAfter: 6, reason: 'return', computer: 'Office' }]);
+    const ins2 = db.logStockChanges([{ gid: 'e2e:fixed-1', sku: 'sh-test-sku', delta: 1, levelAfter: 6, reason: 'return', computer: 'Office' }]);
+    check('stock_log: the same gid inserted twice lands once', ins1.length === 1 && ins2.length === 0 && db.stockHistory('sh-test-sku').length === shBefore + 1, { ins1, ins2 });
+    check('stock_log: rows logged without a gid got one (unique, non-empty)',
+      db.stockHistory('sh-test-sku').every(r => r.gid && r.gid.length > 8) && new Set(db.stockHistory('sh-test-sku').map(r => r.gid)).size === db.stockHistory('sh-test-sku').length,
+      db.stockHistory('sh-test-sku').map(r => r.gid));
+    // the bulk-import history folds in as SET / ADDED / REMOVED rows, idempotently
+    const bulkEntry = { id: 'bulk-e2e-1', ts: '2026-09-22T18:32:03.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'edit', note: '', rows: [{ sku: 'OPEN-BOX-E2E-BLACK', before: 22, qty: 19, after: 19 }] };
+    const bulkAdd = { id: 'bulk-e2e-2', ts: '2026-09-22T19:00:00.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'add', note: 'Tuesday shipment', rows: [{ sku: 'X610-E2E-BLACK', before: 42, qty: 3, after: 45 }, { sku: 'X611-E2E-BLACK', before: 0, qty: 2, after: 2 }] };
+    const bulkRevert = { id: 'bulk-e2e-3', ts: '2026-09-22T19:30:00.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'revert', revertOf: 'bulk-e2e-2', rows: [{ sku: 'X610-E2E-BLACK', before: 45, qty: -3, after: 42 }] };
+    const conv = [bulkEntry, bulkAdd, bulkRevert].flatMap(db.stockRowsFromBulkEntry);
+    check('bulk history → stock rows: edit = SET to 19 (was 22), add = +3 / +2 received, revert = −3; gids bulk:<id>:<line>',
+      conv.length === 4 && conv[0].gid === 'bulk:bulk-e2e-1:0' && conv[0].delta === null && conv[0].levelAfter === 19 && conv[0].reason === 'set' && conv[0].note === 'was 22'
+        && conv[1].delta === 3 && conv[1].reason === 'bulk-add' && conv[1].note === 'Tuesday shipment' && conv[2].gid === 'bulk:bulk-e2e-2:1' && conv[2].delta === 2
+        && conv[3].delta === -3 && conv[3].reason === 'revert' && conv.every(r => r.computer === 'IMRAN-MACBOOK-PRO'),
+      conv);
+    const bulkIns1 = db.logStockChanges(conv), bulkIns2 = db.logStockChanges(conv);
+    check('bulk history import is idempotent: 4 rows the first time, 0 the second, dated by the entry timestamp',
+      bulkIns1.length === 4 && bulkIns2.length === 0 && db.stockHistory('X610-E2E-BLACK').length === 2 && db.stockHistory('OPEN-BOX-E2E-BLACK')[0].day === '2026-09-22',
+      { bulkIns1: bulkIns1.length, bulkIns2: bulkIns2.length });
+    // the rows read back through the dialog as the pill words the owner asked for
+    await exec(`openStockHistory('X610-E2E-BLACK')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`[...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent).join(',') + '|' + [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()).join(',')`);
+    check('bulk-derived rows render as REMOVED (revert) then ADDED, by IMRAN-MACBOOK-PRO', res === 'REMOVED,ADDED|IMRAN-MACBOOK-PRO,IMRAN-MACBOOK-PRO', res);
+    await exec(`$('stockHistDialog').close()`);
+    // the bulk popup shows a See more that opens the full Stock history
+    await exec(`bulkHistLoad()`);
+    await new Promise(r => setTimeout(r, 200));
+    res = await exec(`(() => { const b = $('bulkHistMore'); if (!b) return false; b.click(); return true; })()`);
+    await new Promise(r => setTimeout(r, 400)); // openHistory loads its captures before showing
+    res = res && await exec(`({ historyOpen: $('historyDialog').open, stockTab: !$('historyStockView').hidden, bulkClosed: !$('bulkDialog').open })`);
+    check('bulk popup: See more closes the popup and opens the History dialog on the Stock tab', res && res.historyOpen === true && res.stockTab === true && res.bulkClosed === true, res);
+    await exec(`$('historyDialog').close()`);
 
     // 36. returns resize: whole-width grip + per-column grips on the log
     // (the worksheet left with design C, 2026-08-07 — the log is the sheet)

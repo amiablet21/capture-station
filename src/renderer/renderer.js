@@ -6864,11 +6864,17 @@ async function bulkHistLoad() {
   const res = await api.stockBulkHistory().catch(() => null);
   bulkHistEntries = (res && res.ok && res.entries) || [];
   if (!bulkHistEntries.length) {
-    box.innerHTML = '<p class="dlg-note">Nothing yet.</p>';
+    box.innerHTML = '<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See the full stock history →</button><p class="dlg-note">Nothing yet.</p>';
     return;
   }
   const reverted = new Set(bulkHistEntries.filter(e => e.revertOf).map(e => e.revertOf));
-  box.innerHTML = bulkHistEntries.map((e, i) => {
+  // the popup shows the latest few; the full record of everything (bulk
+  // imports included) is the History dialog's Stock tab (owner 2026-09-23)
+  const BULK_HIST_SHOW = 5;
+  const more = bulkHistEntries.length > BULK_HIST_SHOW
+    ? `<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See more → full stock history (${bulkHistEntries.length} entries)</button>`
+    : `<button type="button" class="btn btn-ghost bulk-h-more" id="bulkHistMore">See the full stock history →</button>`;
+  box.innerHTML = more + bulkHistEntries.slice(0, BULK_HIST_SHOW).map((e, i) => {
     const rows = e.rows || [];
     const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
     const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
@@ -6907,6 +6913,12 @@ async function bulkHistLoad() {
     </div>`;
   }).join('');
 }
+
+$('bulkHist').addEventListener('click', (e) => {
+  if (!e.target.closest('#bulkHistMore')) return;
+  $('bulkDialog').close();
+  openHistory('stock');
+});
 
 let bulkRevPending = ''; // entry id awaiting the confirm popup
 

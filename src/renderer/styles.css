@@ -4776,3 +4776,5 @@ tr.unl-dim:hover td { opacity: 1; }
 .cap-day td .sh-dim { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }
 .cap-when { color: var(--faint); font-size: 11.5px; margin-left: 8px; font-family: var(--mono); }
 .cap-ico.is-on { color: var(--accent); background: var(--accent-soft); }
+.bulk-h-more { display: block; width: 100%; text-align: left; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
+.bulk-h-more:hover { background: var(--accent-soft); color: var(--accent-soft-text); }

@@ -2,7 +2,9 @@
 // SQLite storage via Electron's built-in node:sqlite (synchronous, like better-sqlite3).
 const { app } = require('electron');
 const { DatabaseSync } = require('node:sqlite');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 let db = null;
@@ -131,6 +133,16 @@ function open() {
   if (!cols.includes('lw_order_id')) {
     db.exec(`ALTER TABLE rows ADD COLUMN lw_order_id TEXT NOT NULL DEFAULT ''`);
   }
+  // migration (2026-09-23): every stock_log row carries a unique gid so
+  // merges from the shared folder and the bulk-import history are
+  // insert-if-absent — the same change can never land twice
+  const slCols = db.prepare(`SELECT name FROM pragma_table_info('stock_log')`).all().map(c => c.name);
+  if (!slCols.includes('gid')) {
+    db.exec(`ALTER TABLE stock_log ADD COLUMN gid TEXT NOT NULL DEFAULT ''`);
+    const host = String(os.hostname() || 'local').toUpperCase();
+    db.exec(`UPDATE stock_log SET gid = 'legacy:' || '${host.replace(/'/g, '')}' || ':' || id WHERE gid = ''`);
+  }
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_log_gid ON stock_log(gid)`);
   // migration: WFS shipments carry a received date (Overview marks them
   // received by hand until a Walmart connection can say so itself)
   const wfsCols = db.prepare(`SELECT name FROM pragma_table_info('wfs_shipments')`).all().map(c => c.name);
@@ -602,22 +614,71 @@ function intOrNull(v) {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n) : null;
 }
+// Inserts one row per change. Every row carries a unique gid; a row whose
+// gid already exists is skipped (never doubled). Returns the rows actually
+// inserted, in the exact shape the shared-folder file carries.
 function logStockChanges(rows) {
   const d = open();
-  const now = new Date();
-  const createdAt = now.toISOString();
-  const day = localDay(now);
-  const ins = d.prepare(`INSERT INTO stock_log (created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = d.prepare(`INSERT OR IGNORE INTO stock_log (gid, created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const inserted = [];
   for (const r of rows) {
     if (!r || !r.sku) continue;
-    ins.run(createdAt, day, String(r.sku).toUpperCase(), String(r.locationId || ''),
-      intOrNull(r.delta), // null = a hand-set count, not a move
-      intOrNull(r.levelAfter),
-      String(r.reason || ''), String(r.changeSource || '').slice(0, 120),
-      String(r.ref || '').slice(0, 80), String(r.note || '').slice(0, 300),
-      String(r.computer || '').slice(0, 80), String(r.by || '').slice(0, 60));
+    const at = r.createdAt && !Number.isNaN(Date.parse(r.createdAt)) ? new Date(r.createdAt) : new Date();
+    const row = {
+      gid: String(r.gid || '').trim() || `${String(os.hostname() || 'local').toUpperCase()}:${crypto.randomUUID()}`,
+      created_at: at.toISOString(), day: localDay(at), sku: String(r.sku).toUpperCase(),
+      location_id: String(r.locationId || r.location_id || ''),
+      delta: intOrNull(r.delta), // null = a hand-set count, not a move
+      level_after: intOrNull(r.levelAfter ?? r.level_after),
+      reason: String(r.reason || ''), change_source: String(r.changeSource || r.change_source || '').slice(0, 120),
+      ref: String(r.ref || '').slice(0, 80), note: String(r.note || '').slice(0, 300),
+      computer: String(r.computer || '').slice(0, 80), by: String(r.by || '').slice(0, 60),
+    };
+    const res = ins.run(row.gid, row.created_at, row.day, row.sku, row.location_id, row.delta, row.level_after,
+      row.reason, row.change_source, row.ref, row.note, row.computer, row.by);
+    if (res.changes > 0) inserted.push(row);
   }
+  return inserted;
+}
+
+// The bulk-import dialog's history entries (add / set / edit / revert /
+// fix), as stock_log rows. Pure: the gid is bulk:<entry id>:<line>, so
+// importing the same entry twice, on any computer, yields one row.
+function stockRowsFromBulkEntry(e) {
+  if (!e || !e.id || !Array.isArray(e.rows)) return [];
+  const out = [];
+  e.rows.forEach((r, i) => {
+    if (!r || !r.sku) return;
+    const before = r.before == null ? null : Number(r.before);
+    const after = r.after == null ? null : Number(r.after);
+    const base = { gid: `bulk:${e.id}:${i}`, createdAt: e.ts, sku: r.sku, computer: e.station || '', note: String(e.note || '') };
+    if (e.mode === 'add') {
+      const qty = Number(r.qty) || (after !== null && before !== null ? after - before : 0);
+      out.push({ ...base, delta: qty, levelAfter: after, reason: 'bulk-add', changeSource: 'Capture Station bulk import (received)' });
+    } else if (e.mode === 'set' || e.mode === 'edit') {
+      if (after === null) return;
+      out.push({ ...base, delta: null, levelAfter: after, reason: e.mode === 'edit' ? 'set' : 'bulk-set',
+        changeSource: e.mode === 'edit' ? 'Capture Station stock page' : 'Capture Station bulk import (correction)',
+        note: [before === null ? '' : `was ${before}`, base.note].filter(Boolean).join(' · ') });
+    } else if (e.mode === 'revert' || e.mode === 'fix') {
+      const delta = Number(r.qty);
+      if (!Number.isFinite(delta) || delta === 0) return;
+      out.push({ ...base, delta, levelAfter: after, reason: e.mode === 'revert' ? 'revert' : 'correction',
+        changeSource: e.mode === 'revert' ? 'Capture Station revert' : 'Capture Station history correction (wrong SKU)',
+        note: e.mode === 'fix' ? 'moved to the right SKU' : 'reverted an earlier change' });
+    }
+  });
+  return out;
+}
+
+// rows already in the local log that this computer made (for seeding its
+// shared-folder file); bulk-derived rows stay out — every computer derives
+// those itself from the bulk history that already syncs
+function stockLogOwnRows(computers) {
+  const names = new Set((computers || []).map(c => String(c || '').toUpperCase()).filter(Boolean));
+  return open().prepare(`SELECT * FROM stock_log WHERE gid NOT LIKE 'bulk:%' ORDER BY id ASC`).all()
+    .filter(r => names.has(String(r.computer || '').toUpperCase()));
 }
 
 function stockHistory(sku, limit = 500) {
@@ -734,6 +795,6 @@ module.exports = {
   rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
-  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange,
+  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, stockRowsFromBulkEntry, stockLogOwnRows,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

@@ -5060,7 +5060,9 @@ function registerIpc() {
     if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // the bulk history entry below is this change's one record in the
+      // stock history too (skipLog keeps the Linnworks-side recorder quiet)
+      const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n, { skipLog: true });
       // every hand edit joins the shared history the bulk imports use
       const before = Number.isFinite(Number(prev)) ? Number(prev) : null;
       if (before !== n) {
@@ -5086,14 +5088,16 @@ function registerIpc() {
   ipcMain.handle('stock:set', (_e, { sku, level, prev }) => stockSetLevel(sku, level, prev));
   // Stock history: one SKU's log (newest first), every SKU's log for a day
   // range (the History dialog's Stock tab) and today's per-SKU summary
+  // every read merges the shared folder + bulk history first (insert-if-
+  // absent, so a read can never double a row)
   ipcMain.handle('stock:history', (_e, { sku } = {}) => {
-    try { return { ok: true, rows: db.stockHistory(String(sku || ''), 500) }; } catch (e) { return { ok: false, error: e.message }; }
+    try { syncStockLog(); return { ok: true, rows: db.stockHistory(String(sku || ''), 500) }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('stock:historyRange', (_e, { from, to } = {}) => {
-    try { return { ok: true, rows: db.stockHistoryRange(from, to) }; } catch (e) { return { ok: false, error: e.message }; }
+    try { syncStockLog(); return { ok: true, rows: db.stockHistoryRange(from, to) }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('stock:historyToday', () => {
-    try { return { ok: true, bySku: db.stockHistoryToday() }; } catch (e) { return { ok: false, error: e.message }; }
+    try { syncStockLog(); return { ok: true, bySku: db.stockHistoryToday() }; } catch (e) { return { ok: false, error: e.message }; }
   });
 
   /* ---- bulk stock entry (owner 2026-09-17, reworked same day: "no excel
@@ -5116,6 +5120,10 @@ function registerIpc() {
     };
     try { fs.writeFileSync(bulkHistPath(), JSON.stringify([entry, ...loadBulkHist()].slice(0, 200))); } catch { /* best effort */ }
     retsync.appendAux('stockimports', entry);
+    // the same change reaches the stock history exactly once: the Linnworks
+    // write above was told skipLog, this is the one recording (insert-if-
+    // absent by bulk:<id>:<line>, so a later sync pass is a no-op)
+    recordStockRows(db.stockRowsFromBulkEntry(entry), { share: false });
     return entry;
   }
   ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note }) => {
@@ -5146,7 +5154,7 @@ function registerIpc() {
       if (!entryRows.length) return { ok: false, error: 'None of those SKUs exist in Linnworks.' };
       if (deltas.length) {
         await client.changeStockLevels(deltas, cfg.linnworks.locationId,
-          mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
+          mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)', { skipLog: true });
       }
       const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped });
       // same after-care as a single stock correction: fresh unlisted scan,
@@ -5199,7 +5207,7 @@ function registerIpc() {
         deltas.push({ sku: it.sku, delta });
       }
       if (!deltas.length) return { ok: false, error: 'Nothing to reverse — the change was zero, already gone, or the SKUs no longer exist.' };
-      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert');
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert', { skipLog: true });
       const rec = bulkLogEntry({ mode: 'revert', revertOf: id, file: '', rows, skipped: [] });
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       (async () => {
@@ -5256,7 +5264,7 @@ function registerIpc() {
       const dFrom = fromIt ? Math.max(-fromCur, -m) : 0; // never below zero
       const deltas = [{ sku: toIt.sku, delta: m }];
       if (dFrom) deltas.push({ sku: fromIt.sku, delta: dFrom });
-      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)');
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)', { skipLog: true });
       const rec = bulkLogEntry({
         mode: 'fix', fixOf: id, fixRow: Number(rowIdx), fixQty: m, file: '',
         rows: [
@@ -5561,13 +5569,24 @@ function stockLogReason(changeSource, meta) {
   if (cs.includes('history correction')) return 'correction';
   return 'other';
 }
+// one door for every stock_log write: local db (insert-if-absent by gid),
+// then the shared folder so the other desktops pick the rows up
+function recordStockRows(rows, { share = true } = {}) {
+  const inserted = db.logStockChanges(rows);
+  if (share) for (const r of inserted) retsync.appendAux('stocklog', r);
+  return inserted;
+}
+function stockLogComputer() {
+  const cfg = config.load();
+  return String((cfg.returnsSync || {}).station || '').trim() || os.hostname();
+}
 function installStockLog() {
   setStockLogHook((ev) => {
-    const cfg = config.load();
-    const computer = String((cfg.returnsSync || {}).station || '').trim() || os.hostname();
     const meta = ev.meta || {};
+    if (meta.skipLog) return; // the caller logs this change itself (bulk import, hand edits, reverts, fixes)
+    const computer = stockLogComputer();
     const reason = stockLogReason(ev.changeSource, meta);
-    db.logStockChanges(ev.entries.map(e => ({
+    recordStockRows(ev.entries.map(e => ({
       sku: e.sku, locationId: ev.locationId,
       delta: ev.kind === 'set' ? null : e.delta,
       levelAfter: e.after,
@@ -5576,6 +5595,40 @@ function installStockLog() {
       computer, by: meta.by || '',
     })));
   });
+}
+// Merge the two other places stock changes live into the log — safe to run
+// any number of times, since every row's gid makes the insert a no-op the
+// second time: (1) the bulk-import history (this desktop's file + every
+// station's shared file), (2) the other desktops' shared stock_log files.
+// Then seed this desktop's own shared file once, so its pre-sync rows
+// reach the others.
+let stockLogSyncBusy = false;
+function syncStockLog() {
+  if (stockLogSyncBusy) return { imported: 0 };
+  stockLogSyncBusy = true;
+  let imported = 0;
+  try {
+    const seen = new Set();
+    const bulk = [];
+    for (const e of [...retsync.readAux('stockimports'), ...loadBulkHistFile()]) {
+      if (!e || !e.id || seen.has(e.id)) continue;
+      seen.add(e.id);
+      bulk.push(...db.stockRowsFromBulkEntry(e));
+    }
+    imported += recordStockRows(bulk, { share: false }).length;
+    const remote = retsync.readAux('stocklog').filter(r => r && r.gid && r.sku);
+    imported += recordStockRows(remote, { share: false }).length;
+    if (retsync.enabled()) {
+      retsync.auxBackfill('stocklog', db.stockLogOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
+    }
+  } catch { /* the folder was unreachable: the local log stands alone until the next pass */ }
+  stockLogSyncBusy = false;
+  return { imported };
+}
+
+function loadBulkHistFile() {
+  try { const j = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'stock-imports.json'), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
 }
 
 function checkDbHealth() {
@@ -5638,6 +5691,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   startRetSync();
+  syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();
