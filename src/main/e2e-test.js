@@ -1127,17 +1127,17 @@ module.exports = async function run({ app, win, db, clipboard }) {
     db.markSynced(histRowId);
     await exec(`showPage('capture'); setCapHist(true)`);
     await new Promise(r => setTimeout(r, 400));
-    res = await exec(`({ on: capHist.on, back: !$('capHistBack').hidden, range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
+    res = await exec(`({ on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
       dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
       gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
       trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim() })`);
-    check('Capture history mode: the table shows processed orders by day with a green gutter, items and tracking; the band swaps to range + Back',
-      res && res.on === true && res.back === true && res.range === true && res.importHidden === true
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items and tracking; the band swaps to the range and the History icon lights up',
+      res && res.on === true && res.lit === true && res.range === true && res.importHidden === true
         && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
         && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST',
       res);
-    res = await exec(`(() => { setCapHist(false); return { on: capHist.on, back: $('capHistBack').hidden, importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
-    check('Capture history mode: Back to today restores the live list', res && res.on === false && res.back === true && res.importShown === true && res.hist === 0, res);
+    res = await exec(`(() => { $('capHistBtn').click(); return { on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
+    check('Capture history mode: clicking the History icon again restores the live list', res && res.on === false && res.lit === false && res.importShown === true && res.hist === 0, res);
     db.deleteRow(histRowId);
     // 35c. one history, no doubles (owner 2026-09-23: "I don't want any data
     // errors"): every log row has a unique gid and inserts are insert-if-

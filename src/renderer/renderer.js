@@ -646,7 +646,8 @@ document.addEventListener('keydown', (e) => {
 /* ---------- Capture history mode (owner 2026-09-23) ----------
    the History icon flips the capture table to every processed order, in
    the same columns, grouped by day, newest first; the band keeps its
-   search + channel chips and swaps its icons for a date range + Back */
+   search + channel chips and swaps its icons for a date range; the lit
+   History icon toggles back to the live list */
 
 const capHist = { on: false, rows: [], busy: false, seq: 0, range: { kind: '7', from: '', to: '' } };
 
@@ -665,7 +666,6 @@ async function loadCapHist() {
 function setCapHist(on) {
   capHist.on = on;
   $('capHistBtn').classList.toggle('is-on', on);
-  $('capHistBack').hidden = !on;
   $('capHistRange').hidden = !on;
   $('shipImportBtn').hidden = on;
   $('ordersRefreshBtn').hidden = on;
@@ -746,7 +746,6 @@ function renderCapHist() {
 }
 
 $('capHistBtn').addEventListener('click', () => setCapHist(!capHist.on));
-$('capHistBack').addEventListener('click', () => setCapHist(false));
 shRangeWire('capHistRange', capHist.range, loadCapHist);
 
 /* ---------- Ctrl+F row finder ---------- */
