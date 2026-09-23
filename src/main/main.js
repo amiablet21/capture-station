@@ -3473,11 +3473,11 @@ function registerIpc() {
   /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
 
   // Order series come straight from SQLite (cheap, always fresh); the three
-  // money cards ride the velocity engine — 28 days of processed lines + one
+  // money cards ride the velocity engine — 30 days of processed lines + one
   // inventory read — and cache for 10 minutes.
   const OVERVIEW_TTL_MS = 10 * 60 * 1000;
   let overviewCache = { at: 0, money: null, promise: null };
-  // first computation walks 28 days of processed orders (minutes) — persist
+  // first computation walks 30 days of processed orders (minutes) — persist
   // it so a fresh boot answers instantly with the last run while a refresh
   // happens behind it, and warm it shortly after launch
   const overviewCachePath = () => path.join(app.getPath('userData'), 'overview-cache.json');
@@ -3726,7 +3726,10 @@ function registerIpc() {
   async function computeOverviewMoney(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const to = new Date();
-    const from = new Date(to.getTime() - 28 * 86400000);
+    // 30 days of sales (owner 2026-09-23: "make the data pull from the last
+    // 30 days") — pace, running low and the WFS channel SKUs all use it
+    const WINDOW_DAYS = 30;
+    const from = new Date(to.getTime() - WINDOW_DAYS * 86400000);
     const sales = await querySales(
       `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`,
       `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`
@@ -3747,18 +3750,22 @@ function registerIpc() {
     for (const l of sales.lines) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
-      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfs28: 0, wfs7: 0, chSku: '' };
+      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {} };
       s.qty += l.qty;
       s.revenue += l.revenue;
       const ts = Date.parse(l.processedOn) || 0;
       if (ts > s.last) s.last = ts;
       if (l.source) s.channels.add(label(l.source));
-      // pace trend: last 14 days vs the 14 before
+      // pace trend: last 14 days vs the rest of the window
       if (nowTs - ts <= 14 * 86400000) s.recent += l.qty; else s.prior += l.qty;
       if (wfsLocId && String(l.locationId || '').toLowerCase() === wfsLocId) {
-        s.wfs28 += l.qty;
+        s.wfsQty += l.qty;
         if (nowTs - ts <= 7 * 86400000) s.wfs7 += l.qty;
-        if (l.channelSku) s.chSku = l.channelSku;
+        // which Walmart listing sold it: one Linnworks item can sit behind
+        // several WFS channel SKUs, and those are what gets sent (owner
+        // 2026-09-23: "it is showing the Linnworks SKU to send")
+        const ch = String(l.channelSku || '').trim();
+        if (ch) s.wfsCh[ch] = (s.wfsCh[ch] || 0) + l.qty;
       }
     }
     const pads = {};
@@ -3776,7 +3783,7 @@ function registerIpc() {
       const k = String(it.sku).toUpperCase();
       const s = stats[k];
       if (!s || s.qty < 2) continue; // no meaningful pace, no card
-      const weekly = s.qty / 4;
+      const weekly = s.qty / WINDOW_DAYS * 7;
       const perDay = weekly / 7;
       const avgPrice = s.qty ? s.revenue / s.qty : 0;
       const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
@@ -3821,7 +3828,7 @@ function registerIpc() {
 
     // 3-column Overview (owner 2026-09-22). Send-to-WFS candidates: SKUs
     // WFS actually sells, paced by WFS-despatched sales (the faster of the
-    // 28- and 7-day rates, so a SKU that sat empty at WFS isn't undercounted).
+    // 30- and 7-day rates, so a SKU that sat empty at WFS isn't undercounted).
     // Shipments in flight and ignores are local state, applied per request.
     const cover = Number((cfg.reorder || {}).coverDays) || 21;
     const wfsCand = [];
@@ -3834,15 +3841,18 @@ function registerIpc() {
       const avail = Math.max(0, Number(home.available) || 0);
       const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
       const atWfs = wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0;
-      if (wfsLvl && s.wfs28 >= 2) {
-        const perDay = Math.max(s.wfs28 / 28, s.wfs7 / 7);
-        wfsCand.push({ sku: it.sku, chSku: s.chSku, gtin: it.barcode || '', perDay: Math.round(perDay * 100) / 100, atWfs, avail });
+      if (wfsLvl && s.wfsQty >= 2) {
+        const perDay = Math.max(s.wfsQty / WINDOW_DAYS, s.wfs7 / 7);
+        const chSkus = Object.entries(s.wfsCh)
+          .map(([ch, q]) => ({ sku: ch, weekly: Math.round(q / WINDOW_DAYS * 7 * 10) / 10 }))
+          .sort((a, b) => b.weekly - a.weekly);
+        wfsCand.push({ sku: it.sku, chSkus, gtin: it.barcode || '', perDay: Math.round(perDay * 100) / 100, atWfs, avail });
       }
       // Running low: everything we hold (shelf + WFS) against all-channel
       // pace; flagged when it runs out inside the lead time. Order covers
       // lead + cover days, per the reorder settings, rounded up to 5.
       if (!pads[k] && s.qty >= 2) {
-        const perDay = s.qty / 28;
+        const perDay = s.qty / WINDOW_DAYS;
         const onHand = avail + atWfs;
         const daysLeft = onHand / perDay;
         if (daysLeft <= lead) {
@@ -3851,7 +3861,8 @@ function registerIpc() {
             daysLeft: Math.floor(daysLeft),
             outOn: fmtDay(nowTs + Math.floor(daysLeft) * 86400000),
             order: Math.max(5, Math.ceil((perDay * (lead + cover) - onHand) / 5) * 5),
-            faster: s.recent > s.prior * 1.2 && s.recent - s.prior >= 2,
+            // daily rate, last 14 days vs the 16 before them
+            faster: s.recent / 14 > (s.prior / (WINDOW_DAYS - 14)) * 1.2 && s.recent >= 3,
           });
         }
       }
@@ -3868,7 +3879,7 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 2, // v2: + wfsCand / low for the 3-column Overview
+      v: 3, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item
       wfsCand,
       low: low.slice(0, 40),
       lowCount: low.length,
@@ -3914,11 +3925,11 @@ function registerIpc() {
     };
     const sold = live ? live.sold : null;
     let money = overviewCache.money;
-    if (!money || money.v !== 2 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    if (!money || money.v !== 3 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
       const p = refreshOverviewMoney(cfg);
       // stale view answers instantly while a refresh runs; first call (or a
       // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 2) {
+      if (!money || money.v !== 3) {
         try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
       } else {
         p.catch(() => { /* stale money stands */ });

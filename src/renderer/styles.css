@@ -4562,6 +4562,8 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-meta { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 1px; }
 .ov-t td.rr .ov-meta { font-family: var(--font); color: var(--muted); margin-top: 3px; }
 .ov-faster { color: var(--neg-text); }
+.ov-chs { display: flex; flex-wrap: wrap; gap: 0 10px; color: var(--muted); }
+.ov-chs b { font-weight: 600; color: var(--faint); }
 .ov-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
 .ov-bar i { display: block; height: 100%; border-radius: 999px; }
 .ov-bar i.r { background: var(--neg-text); }

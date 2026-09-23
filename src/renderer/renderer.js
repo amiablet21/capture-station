@@ -7428,7 +7428,7 @@ async function openWfs(prefill) {
     row.querySelector('.wfs-qty').value = l.qty;
   }
   wfsAddLine();
-  $('wfsNote').value = '';
+  $('wfsNote').value = wfsFromOverview ? prefill.note || '' : '';
   $('wfsResult').textContent = '';
   $('wfsResult').className = 'dlg-note test-result wfs-result';
   wfsTotals();
@@ -9779,10 +9779,15 @@ function ovRenderWfs() {
   const units = plan.rows.reduce((a, r) => a + r.send, 0);
   const rowsHtml = plan.rows.map((r, i) => {
     const weekly = Math.round(r.perDay * 7);
-    const meta = [r.chSku && r.chSku.toUpperCase() !== r.sku.toUpperCase() ? esc(r.chSku) : '', `${weekly}/wk`, `${r.atWfs} at WFS`,
-      r.flightUnits ? `${r.flightUnits} on the way` : ''].filter(Boolean).join(' · ');
+    const meta = [`${weekly}/wk`, `${r.atWfs} at WFS`, r.flightUnits ? `${r.flightUnits} on the way` : ''].filter(Boolean).join(' · ');
+    // every Walmart WFS listing that sold this item in the last 30 days, with
+    // its own pace; listings with no sales in the window never show
+    const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
+    const chHtml = chs.length
+      ? `<span class="ov-meta ov-chs">${chs.map(c => `<span title="Walmart channel SKU · ${c.weekly}/wk at WFS">${esc(c.sku)} <b>${c.weekly}/wk</b></span>`).join('')}</span>`
+      : '';
     return `<tr><td class="ov-rank">${i + 1}</td>
-      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="ov-meta">${meta}</span>
+      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span>${chHtml}<span class="ov-meta">${meta}</span>
         <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
       <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">+ ${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span>
         <span class="ov-act"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
@@ -9884,6 +9889,7 @@ function ovSendToWfs(sku) {
     if (activePage !== 'stock') return;
     openWfs({
       lines: [{ sku: r.sku, gtin: r.gtin, qty: r.send }],
+      note: (r.chSkus || []).length ? `WFS: ${r.chSkus.map(c => c.sku).join(', ')}` : '',
       from: `From Overview · ${r.sku} sells ${Math.round(r.perDay * 7)}/wk at WFS and has ${r.coverDays.toFixed(1)} days there${r.flightUnits ? ' counting what is on the way' : ''} — ${r.send} brings it to ${ovData.wfsPlan.targetDays} days`,
     });
   }, 300);
