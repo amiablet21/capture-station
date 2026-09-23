@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Returns Room — final visuals</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --rr:#956400; --rr-bg:#FBF3DB;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 60px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:800px; }
+  .opt { margin-bottom:38px; max-width:980px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* ---- the bulk dialog, faithful to the app ---- */
+  .dlg { width:min(760px,94vw); border-radius:14px; background:var(--surface); box-shadow:0 16px 48px rgba(47,52,55,0.14); border:1px solid var(--border); overflow:hidden; }
+  .dlg-body { padding:22px 24px 0; }
+  .dlg-title { font-size:19px; font-weight:700; letter-spacing:-0.02em; margin-bottom:14px; }
+  .segwrap { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+  .seg { display:inline-flex; background:var(--surface-2); border-radius:999px; padding:3px; }
+  .seg button { font-family:var(--font); font-size:13px; font-weight:600; border:none; background:none; color:var(--muted); border-radius:999px; padding:6px 16px; cursor:pointer; }
+  .seg button.on { background:var(--surface); color:var(--accent-soft-text); box-shadow:0 1px 2px rgba(47,52,55,0.10); }
+  .seg.rooms button.on { color:var(--rr); }
+  .hint { font-size:13px; color:var(--faint); }
+  .cols { display:grid; grid-template-columns:1fr 110px 70px 70px 24px; gap:10px; align-items:center; }
+  .colh { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); }
+  .colh.r, .cell.r { text-align:right; }
+  .in { border:1.5px solid var(--accent); border-radius:8px; padding:9px 12px; font-size:14px; color:var(--faint); box-shadow:0 0 0 3px var(--accent-soft); }
+  .in2 { border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-family:var(--mono); font-size:14px; text-align:right; color:var(--text); }
+  .cell { font-family:var(--mono); color:var(--faint); }
+  .note { border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13px; color:var(--faint); margin:12px 0 0; }
+  .dlg-actions { display:flex; gap:10px; justify-content:flex-end; padding:16px 24px; }
+  .btn { font-family:var(--font); font-size:14px; font-weight:600; padding:9px 22px; border-radius:9px; border:1px solid transparent; cursor:pointer; }
+  .btn-ghost { background:var(--surface); color:var(--text); border-color:var(--border); }
+  .btn-primary { background:var(--accent); color:#fff; opacity:0.55; }
+  .hist { border-top:1px solid var(--border); padding:14px 24px 18px; }
+  .hist h4 { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); margin-bottom:10px; }
+  .hrow { display:flex; align-items:baseline; gap:6px; font-size:13px; padding:7px 0; border-bottom:1px solid var(--grid); flex-wrap:wrap; }
+  .hrow b { font-weight:700; }
+  .hrow .mono { font-size:12.5px; }
+  .roomtag { font-size:10px; font-weight:700; background:var(--rr-bg); color:var(--rr); border-radius:999px; padding:1px 8px; }
+
+  /* ---- stock sheet slice ---- */
+  table { border-collapse:collapse; width:100%; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:right; padding:8px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  th.l { text-align:left; }
+  td { padding:9px 16px; border-bottom:1px solid var(--grid); text-align:right; font-family:var(--mono); font-size:13px; }
+  td.l { text-align:left; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .rrn { color:var(--rr); font-weight:700; }
+  .dim { color:var(--faint); font-weight:400; }
+  .rredit { display:inline-flex; }
+  .rredit input { width:64px; text-align:right; font-family:var(--mono); font-size:13px; font-weight:600; padding:3px 8px; border:1.5px solid var(--accent); border-radius:6px; outline:none; box-shadow:0 0 0 3px var(--accent-soft); }
+  .cap { font-size:11px; color:var(--faint); margin-top:8px; }
+</style>
+</head>
+<body>
+
+<h1>Returns Room — the exact visuals</h1>
+<div class="sub">Two changes only: the room switch inside the Bulk import you already have, and one column on the Stock sheet. Nothing else moves.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1 · Bulk stock import with the room switch</b><span>your dialog, one new switch — shown with Returns room selected; in "Set exact qty" mode the switch hides</span></div>
+  <div class="dlg">
+    <div class="dlg-body">
+      <div class="dlg-title">Bulk stock import</div>
+      <div class="segwrap">
+        <span class="seg"><button class="on">+ Add to stock</button><button>Set exact qty</button></span>
+        <span class="seg rooms"><button>General warehouse</button><button class="on">Returns room</button></span>
+        <span class="hint">received units — each qty goes on top of the current count</span>
+      </div>
+      <div class="cols">
+        <span class="colh">SKU</span><span class="colh r">Qty</span><span class="colh r">Now</span><span class="colh r">After</span><span></span>
+        <span class="in">SKU</span><span class="in2">0</span><span class="cell r">–</span><span class="cell r">–</span><span class="cell">✕</span>
+      </div>
+      <div class="note">Note for this import (optional) — e.g. Tuesday shipment from supplier, recount after audit</div>
+    </div>
+    <div class="dlg-actions"><button class="btn btn-ghost">Close</button><button class="btn btn-primary">Import</button></div>
+    <div class="hist">
+      <h4>History</h4>
+      <div class="hrow"><b>9/22/2026, 10:41:12 AM</b><span>· STOCK-ROOM · added 46 units · 3 SKUs</span><span class="roomtag">returns room</span><span>· <i>“graded-new returns batch”</i></span></div>
+      <div class="hrow"><b>9/22/2026, 10:23:28 AM</b><span>· IMRAN-MACBOOK-PRO · edited</span><span class="mono">X133-128GB-GRAY 1 → 8</span></div>
+      <div class="hrow"><b>9/21/2026, 5:30:42 PM</b><span>· STOCK-ROOM · added 281 units · 8 SKUs · <i>“9/21/2026 new pallet”</i></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>2 · The Stock sheet column</b><span>Returns Rm sits beside In stock — amber number or a dash; row 7 shows the click-to-edit state (type, Enter saves — same as editing Min)</span></div>
+  <div class="card">
+    <table>
+      <thead><tr><th class="l">SKU</th><th>In stock</th><th>Returns rm</th><th>In orders</th><th>Min</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr><td class="l">X133-64GB-GRAY</td><td>1974</td><td class="rrn">12</td><td>12</td><td>400</td><td>1962</td></tr>
+        <tr><td class="l">X210-64GB-GRAY</td><td>960</td><td class="dim">—</td><td>0</td><td>400</td><td>960</td></tr>
+        <tr><td class="l">X210-128GB-GRAY</td><td>736</td><td class="dim">—</td><td>0</td><td>0</td><td>736</td></tr>
+        <tr><td class="l">X133-64GB-SILVER</td><td>634</td><td class="rrn">2</td><td>0</td><td>50</td><td>634</td></tr>
+        <tr><td class="l">X400-128GB-GRAY</td><td>582</td><td class="dim">—</td><td>0</td><td>4</td><td>582</td></tr>
+        <tr><td class="l">A15-64GB-BLACK</td><td>314</td><td class="rrn">1</td><td>0</td><td>0</td><td>314</td></tr>
+        <tr><td class="l">X230-128GB-GRAY</td><td>325</td><td><span class="rredit"><input value="3" /></span></td><td>1</td><td>50</td><td>324</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cap">Amber = units physically in the returns room · dash = everything's on the main shelves · the number never exceeds In stock · General warehouse is simply In stock − Returns rm, so nothing is double-counted and Linnworks is never touched.</div>
+</div>
+
+</body>
+</html>

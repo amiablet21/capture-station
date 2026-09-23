@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Batch-correct an import — sketch</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 60px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:24px; max-width:820px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; max-width:860px; padding:16px 20px; margin-bottom:26px; }
+  .hline { display:flex; align-items:baseline; gap:6px; font-size:13px; flex-wrap:wrap; margin-bottom:10px; }
+  .hline b { font-weight:700; }
+  .editbtn { font-family:var(--font); font-size:11.5px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--muted); border-radius:8px; padding:4px 12px; cursor:pointer; margin-left:auto; }
+  .editbtn:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  table { border-collapse:collapse; width:100%; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:right; padding:6px 10px; border-bottom:1px solid var(--border); }
+  th.l { text-align:left; }
+  td { padding:6px 10px; border-bottom:1px solid var(--grid); text-align:right; font-family:var(--mono); font-size:12.5px; }
+  td.l { text-align:left; }
+  tr:last-child td { border-bottom:none; }
+  .skuin { width:100%; max-width:320px; font-family:var(--mono); font-size:12.5px; padding:5px 10px; border:1.5px solid var(--accent); border-radius:7px; outline:none; }
+  .changed { background:var(--accent-soft); }
+  .foot { display:flex; align-items:center; gap:12px; margin-top:12px; }
+  .applybtn { font-family:var(--font); font-size:13px; font-weight:600; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 18px; cursor:pointer; }
+  .cancel { font-family:var(--font); font-size:13px; border:1px solid var(--border); background:none; color:var(--muted); border-radius:8px; padding:8px 16px; cursor:pointer; }
+  .foot .n { font-size:11.5px; color:var(--muted); }
+  .after { border-top:1px dashed var(--border); margin-top:18px; padding-top:14px; }
+  .after h4 { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); margin-bottom:8px; }
+  .hrow { font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--grid); }
+  .movedtag { font-size:10px; font-weight:700; color:var(--faint); }
+</style>
+</head>
+<body>
+
+<h1>Fixing a whole import at once</h1>
+<div class="sub">Expand the entry → <b>✎ Edit this import</b> flips every line into an editor. Change as many SKUs (and unit counts) as you need, press <b>Apply corrections</b> once. The stock moves for all lines in one go, and the ledger gets ONE new dated entry naming everything — the original entry stays (it's shared with the other desktops and can't be rewritten) but its lines get "moved" tags so it can't be double-fixed.</div>
+
+<div class="card">
+  <div class="hline"><b>9/17/2026, 4:12:03 PM</b> · IMRAN-MACBOOK-PRO · added 8 units · 8 SKUs · <i>“AUDIT”</i><button class="editbtn">✎ Editing — change the SKUs below</button></div>
+  <table>
+    <thead><tr><th class="l">SKU — these units actually are…</th><th>Before</th><th>Added</th><th>After</th></tr></thead>
+    <tbody>
+      <tr class="changed"><td class="l"><input class="skuin" value="OPEN-BOX-X400-128GB-GRAY" /></td><td>581</td><td>+1</td><td>582</td></tr>
+      <tr class="changed"><td class="l"><input class="skuin" value="OPEN-BOX-X400-128GB-SILVER" /></td><td>151</td><td>+1</td><td>152</td></tr>
+      <tr class="changed"><td class="l"><input class="skuin" value="OPEN-BOX-X520-128GB-SILVER" /></td><td>173</td><td>+1</td><td>174</td></tr>
+      <tr><td class="l"><input class="skuin" value="X620-128GB-GRAY" style="border-color:var(--border);box-shadow:none" /></td><td>26</td><td>+1</td><td>27</td></tr>
+      <tr class="changed"><td class="l"><input class="skuin" value="OPEN-BOX-X520-128GB-GRAY" /></td><td>86</td><td>+1</td><td>87</td></tr>
+    </tbody>
+  </table>
+  <div class="foot">
+    <button class="applybtn">Apply corrections · 4 SKUs</button>
+    <button class="cancel">Cancel</button>
+    <span class="n">−1 from each wrong SKU · +1 to each corrected one · one entry, one Revert</span>
+  </div>
+  <div class="after">
+    <h4>What the history shows afterwards</h4>
+    <div class="hrow"><b>9/22/2026, 11:04 AM</b> · IMRAN-MACBOOK-PRO · <b>corrected 4 SKUs</b> of the 9/17 “AUDIT” import · X400-128GB-GRAY → OPEN-BOX-X400-128GB-GRAY, +3 more · <u>↩ Revert</u></div>
+    <div class="hrow" style="color:var(--muted)">9/17/2026, 4:12 PM · IMRAN-MACBOOK-PRO · added 8 units · 8 SKUs · “AUDIT” <span class="movedtag">· 4 lines corrected ↷</span></div>
+  </div>
+</div>
+
+</body>
+</html>

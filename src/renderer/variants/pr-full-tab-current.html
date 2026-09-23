@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pricing tab — as of v1.27.104</title>
+<style>
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --warn:#956400; --wm:#1F6C9F; --eb:#956400; --tm:#7C3AED;
+    --r-card:8px; --r-ctl:6px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:14px 18px 40px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  .tabs { display:flex; justify-content:center; margin-bottom:14px; }
+  .tabset { display:inline-flex; gap:2px; background:#ECEBE8; border-radius:999px; padding:3px; }
+  .tab { font-size:12.5px; font-weight:500; color:var(--muted); border:none; background:none; border-radius:999px; padding:4px 16px; cursor:pointer; }
+  .tab.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(47,52,55,0.08); }
+
+  .wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; }
+  .bar { display:flex; align-items:center; gap:16px; padding:12px 16px; }
+  .search { width:220px; font-size:12.5px; color:var(--faint); border:1px solid var(--border); border-radius:999px; padding:6px 14px; }
+  .hint { font-size:11.5px; color:var(--muted); }
+  .btn { font-family:var(--font); font-size:12.5px; font-weight:500; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-ctl); padding:6px 14px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); }
+  .right { margin-left:auto; display:flex; gap:8px; }
+
+  .grid { display:grid; grid-template-columns:44px minmax(230px,1fr) repeat(3,minmax(240px,1.15fr)); }
+  .hc { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); padding:8px 12px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .row { display:grid; grid-template-columns:subgrid; grid-column:1/-1; border-bottom:1px solid var(--border); }
+  .cell { padding:10px 12px; display:flex; flex-direction:column; justify-content:flex-start; }
+  .num { color:var(--faint); font-size:12px; padding-top:14px; }
+  .prod { flex-direction:row; gap:10px; align-items:flex-start; }
+  .thumb { width:38px; height:38px; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); flex:0 0 auto; display:grid; place-items:center; color:var(--faint); font-size:15px; }
+  .prodtxt { display:flex; flex-direction:column; line-height:1.45; min-width:0; }
+  .psku { font-family:var(--mono); font-size:12.5px; font-weight:600; }
+  .pstock { font-size:11px; color:var(--faint); }
+  .vartog { font-family:var(--font); font-size:11px; font-weight:600; color:var(--accent-soft-text); background:none; border:none; padding:0; cursor:pointer; text-align:left; }
+  .vartog:hover { text-decoration:underline; }
+  .varadd { border:1px dashed var(--border); border-radius:var(--r-ctl); background:none; color:var(--faint); font-size:10.5px; padding:2px 8px; cursor:pointer; width:fit-content; margin-top:2px; }
+  .varadd:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  .vschip { font-size:10px; font-weight:600; display:inline-flex; align-items:center; gap:4px; width:fit-content; margin-top:2px; border:none; border-radius:999px; padding:1px 9px; background:var(--accent-soft); color:var(--accent-soft-text); cursor:pointer; }
+  .vschip:hover { box-shadow:inset 0 0 0 1px var(--accent); }
+
+  .ch { gap:6px; }
+  .line { display:flex; align-items:center; gap:6px; }
+  .csku { font-family:var(--mono); font-size:10.5px; color:var(--muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sold { font-family:var(--mono); font-size:10px; color:var(--faint); min-width:34px; text-align:right; }
+  .hot { color:var(--warn); font-weight:700; }
+  .price { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12.5px; font-weight:600; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface); padding:3px 9px; min-width:76px; text-align:right; cursor:pointer; }
+  .price:hover { border-color:var(--accent); }
+  .ro { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12.5px; font-weight:500; color:var(--muted); min-width:76px; text-align:right; padding:3px 0; }
+  .op { border:none; background:none; color:var(--faint); font-size:12px; cursor:pointer; padding:0 2px; }
+  .op:hover { color:var(--accent); }
+  .add { border:1px dashed var(--border); border-radius:var(--r-ctl); background:none; color:var(--faint); font-size:10.5px; padding:2px 8px; cursor:pointer; align-self:flex-start; }
+  .add:hover { border-color:var(--accent); color:var(--accent-soft-text); }
+  .none { font-size:11.5px; color:var(--faint); font-style:italic; }
+
+  .vrow { background:var(--surface-2); }
+  .velbow { color:var(--faint); text-align:right; padding-top:14px; }
+  .vfoot { display:flex; grid-column:1/-1; padding:6px 16px 8px 72px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+</style>
+</head>
+<body>
+
+<div class="tabs"><span class="tabset">
+  <button class="tab">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button>
+  <button class="tab on">Pricing</button><button class="tab">Returns ·</button><button class="tab">Listings ·</button>
+</span></div>
+
+<div class="wrap">
+  <div class="bar">
+    <span class="search">Search SKU…</span>
+    <span class="hint">Walmart prices fluctuate (repricer) — shown, never written · other channels: click a price, Enter pushes it</span>
+    <span class="right"><button class="btn">History</button><button class="btn">Refresh</button></span>
+  </div>
+  <div class="grid">
+    <div class="hc">#</div><div class="hc">Product</div>
+    <div class="hc" style="color:var(--wm)">Walmart</div><div class="hc" style="color:var(--eb)">eBay</div><div class="hc" style="color:var(--tm)">Temu US</div>
+
+    <!-- 1 · X133 with variations expanded -->
+    <div class="row">
+      <div class="cell num">1</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">X133-64GB-GRAY</span><span class="pstock">1974 in stock</span>
+          <button class="vartog">▾ 3 variations · 205 units</button></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">SM-X133-64GB-GREY</span><span class="ro">$149.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">SM-X133-64GB-GREY</span><button class="price">$154.99</button><button class="op">↗</button></div>
+        <div class="line"><span class="csku">X133-64GB-GRAY</span><button class="price">$152.50</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+    </div>
+    <div class="row vrow">
+      <div class="cell velbow">└</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">OPEN-BOX-X133-64GB-GRAY</span><span class="pstock">194 in stock</span></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">OPEN-BOX-X133-64GB-GRAY</span><span class="sold hot">×3</span><span class="ro">$134.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">OPEN-BOX-X133-64GB-GRAY</span><span class="sold hot">×3</span><button class="price">$129.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+    </div>
+    <div class="row vrow">
+      <div class="cell velbow">└</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">USED-X133-64GB-GRAY</span><span class="pstock">10 in stock</span></span></div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">USED-X133-64GB-GRAY</span><span class="sold">×1</span><button class="price">$99.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+    </div>
+    <div class="row vrow">
+      <div class="cell velbow">└</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">SCRAP-X133-64GB-GRAY</span><span class="pstock">1 in stock</span></span></div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+    </div>
+    <div class="vfoot"><button class="varadd">+ variation</button></div>
+
+    <!-- 2 -->
+    <div class="row">
+      <div class="cell num">2</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">X210-64GB-GRAY</span><span class="pstock">975 in stock</span>
+          <button class="vartog">▸ 1 variation · 38 units</button></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X210-64GB-GRAY-1</span><span class="sold hot">×10</span><span class="ro">$129.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X210-64GB-GRAY</span><button class="price">$119.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+    </div>
+
+    <!-- 3 with suggestion chip -->
+    <div class="row">
+      <div class="cell num">3</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">X210-128GB-GRAY</span><span class="pstock">737 in stock</span>
+          <button class="varadd">+ variation</button>
+          <button class="vschip">✦ 2 possible variations</button></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X210-128GB-GRAY-1</span><span class="sold">×1</span><span class="ro">$189.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+      <div class="cell ch"><span class="none">not listed</span><button class="add">+ channel SKU</button></div>
+    </div>
+
+    <!-- 4 -->
+    <div class="row">
+      <div class="cell num">4</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">X400-128GB-GRAY</span><span class="pstock">582 in stock</span>
+          <button class="vartog">▸ 1 variation · 8 units</button></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X400-128GB-BLACK-INTL-VER</span><span class="ro">$189.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X400-128GB-GRAY</span><span class="sold hot">×4</span><button class="price">$184.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X400-128GB-GRAY</span><button class="price">$179.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="row">
+      <div class="cell num">5</div>
+      <div class="cell prod"><span class="thumb">▦</span>
+        <span class="prodtxt"><span class="psku">X230-128GB-GRAY</span><span class="pstock">330 in stock</span>
+          <button class="vartog">▸ 1 variation · 11 units</button></span></div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X230-128GB-GRAY-GLOBAL</span><span class="sold hot">×3</span><span class="ro">$234.99</span><button class="op">↗</button></div>
+        <div class="line"><span class="csku">X230-128GB-GRAY-GLOBAL-1</span><span class="sold">×1</span><span class="ro">$234.99</span><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X230-128GB-GRAY</span><button class="price">$239.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+      <div class="cell ch">
+        <div class="line"><span class="csku">X230-128GB-GRAY</span><button class="price">$229.99</button><button class="op">↗</button></div>
+        <button class="add">+ channel SKU</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

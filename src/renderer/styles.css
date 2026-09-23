@@ -347,15 +347,40 @@ body {
   display: flex;
   align-items: center;
   gap: 8px 12px;
-  flex-wrap: wrap;
+  /* one line, always (owner 2026-09-16): a compressed sheet used to push
+     the trailing buttons out past the edge (words too wide to shrink,
+     wrap not wanted) — the buttons are icons now, the search field gives
+     ground first, and nothing leaves the row */
+  flex-wrap: nowrap;
+  min-width: 0;
   padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
-.cap-band .search-field { flex: 0 1 260px; min-width: 170px; }
-.cap-band #ordersRefreshBtn { margin-left: auto; }
+.cap-band .search-field { flex: 0 1 260px; min-width: 140px; }
+/* import · refresh · browser: one quiet icon cluster at the right edge —
+   tight gap, no button chrome, a soft wash on hover (owner 2026-09-16:
+   "closer... no borders, cleaner") */
+.cap-icons { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.cap-ico {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 5px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.cap-ico:hover { background: var(--surface-2); color: var(--text); }
+.cap-ico[hidden] { display: none; }
+.cap-ico svg { width: 15px; height: 15px; }
+/* busy = motion or a dim, never words: the refresh arrow spins while
+   fetching, the import tray dims while the file dialog / parse runs */
+.cap-ico.is-spinning svg { animation: ovSpin 700ms linear infinite; }
+.cap-ico.is-busy { opacity: 0.45; }
 .cap-band[hidden] + .rows { border-radius: var(--r-card); } /* band away: the sheet keeps its own corners */
 
 .rows {
@@ -438,7 +463,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .toast { animation: none; }
+  .rows-table tr.is-new, .warn-banner.is-danger, .dlg[open], .tab-menu[open], .toast, tr.ret-past-tr.is-fresh td, .ret-sync-dot.is-bad, .ws-spin { animation: none; }
   * { transition: none !important; }
 }
 
@@ -972,6 +997,8 @@ body.ret-compact .ret-sheet { min-width: 0; }
    escaping every clipping container without changing the sheet's overflow —
    toggling overflow while typing made the whole page shift */
 .combo-list.is-fixed { position: fixed; }
+/* dead-end search → create the typed SKU (owner 2026-09-17) */
+.combo-addnew .mono { color: var(--accent-soft-text); font-weight: 600; }
 
 /* fixed layout: columns hold their widths, Customer + Notes flex with the
    window; below 1100px the sheet scrolls sideways instead of crushing */
@@ -983,9 +1010,7 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-sheet th.th-cond { width: 170px; }
 .ret-sheet th.th-price { width: 78px; text-align: right; }
 .ret-sheet th.th-by { width: 100px; }
-.ret-sheet th.th-settle { width: 150px; text-align: right; }
-.ret-cell-price, .ret-cell-settle { text-align: right; font-size: 12px; }
-.ret-cell-settle { color: var(--pos-text); font-weight: 600; }
+.ret-cell-price { text-align: right; font-size: 12px; }
 
 .ret-sheet td { font-size: 12.5px; }
 .ret-cell-po, .ret-cell-trk, .ret-cell-sku .mono { font-size: 12px; }
@@ -1183,6 +1208,52 @@ body.ret-compact .ret-sheet { min-width: 0; }
 .ret-log-bar { display: flex; align-items: center; gap: 12px; }
 .ret-log-count { color: var(--muted); font-weight: 400; }
 .ret-log-search { margin-left: auto; width: 280px; font-size: 12.5px; padding: 5px 10px; }
+
+/* shared returns folder: the log bar's sync dot + station chips, the
+   Received-By station subline, and the arrival wash (owner 2026-09-14) */
+.ret-sync-line { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ret-sync-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--badge-green-text); flex: 0 0 auto; }
+.ret-sync-dot.is-bad { background: var(--neg-text); animation: retsyncpulse 1s ease infinite; }
+@keyframes retsyncpulse { 50% { opacity: 0.3; } }
+/* option A (variants/returns-stations.html, owner pick 2026-09-15):
+   the people pill and its popover replace the row of name chips */
+.ret-sync-pill { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font); font-size: 12px; color: var(--text); border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 3px 10px 3px 5px; cursor: pointer; white-space: nowrap; }
+.ret-sync-pill:hover { border-color: var(--accent); }
+.ret-sync-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ret-sync-pill b { font-weight: 600; }
+.ret-avstack { display: inline-flex; }
+.ret-av { width: 20px; height: 20px; border-radius: 999px; display: inline-grid; place-items: center; font: 700 9px var(--font); letter-spacing: 0.02em; color: var(--accent-soft-text); background: var(--accent-soft); border: 2px solid var(--surface); flex: 0 0 auto; }
+.ret-avstack .ret-av + .ret-av { margin-left: -6px; }
+.ret-av.is-you { background: var(--accent); color: #fff; }
+/* each desktop's own color — the name hashes to a slot (renderer
+   retStColor), so every machine paints the same desktop the same way;
+   soft washes in the app's badge register, none louder than the accent */
+.ret-av.c0 { background: #E7F0F7; color: #1F6C9F; }
+.ret-av.c1 { background: #FBF3DB; color: #956400; }
+.ret-av.c2 { background: #EFEBF7; color: #6B5CA5; }
+.ret-av.c3 { background: #E5F2F1; color: #2B7A78; }
+.ret-av.c4 { background: #F9EBEF; color: #A5586E; }
+.ret-av.is-idle { opacity: 0.45; } /* quiet for a day: same color, dimmed */
+.ret-sync-pop { position: fixed; z-index: 70; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(47, 52, 55, 0.13); overflow: hidden; transform-origin: top right; }
+@media (prefers-reduced-motion: no-preference) { .ret-sync-pop { animation: condmenuin 160ms var(--ease); } }
+.ret-pop-row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; }
+.ret-pop-row + .ret-pop-row { border-top: 1px solid var(--border-soft); }
+.ret-pop-row .ret-av { width: 22px; height: 22px; font-size: 9.5px; border: none; }
+.ret-pop-name { min-width: 0; overflow: hidden; }
+.ret-pop-name b { display: block; font: 500 11.5px var(--mono); color: var(--text); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ret-pop-when { margin-left: auto; font-size: 10.5px; color: var(--faint); white-space: nowrap; flex: 0 0 auto; padding-left: 8px; }
+/* ✕ shows on row hover; first click arms it as "remove?" */
+.ret-pop-x { border: none; background: none; color: var(--faint); font: 600 10.5px var(--font); padding: 2px 4px; border-radius: 4px; cursor: pointer; opacity: 0; flex: 0 0 auto; }
+.ret-pop-row:hover .ret-pop-x, .ret-pop-x:focus-visible, .ret-pop-x.is-armed { opacity: 1; }
+.ret-pop-x:hover { color: var(--neg-text); }
+.ret-pop-x.is-armed { color: var(--neg-text); background: var(--neg-bg); }
+.ret-pop-foot { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border-top: 1px solid var(--border); padding: 7px 12px; font-size: 10.5px; color: var(--muted); }
+.ret-pop-foot.is-bad { color: var(--neg-text); }
+.ret-cell-by .ret-by-sub { display: block; font: 500 10px var(--mono); color: var(--faint); line-height: 1.2; text-transform: none; }
+.ret-cell-by .ret-by-sub.is-edit { color: var(--badge-yellow-text); }
+tr.ret-past-tr.is-fresh td { animation: retfreshin 1.8s ease; }
+@keyframes retfreshin { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+
 
 /* design C (2026-08-07): the log owns the page height; the sheet scrolls
    inside its card instead of the page ending where the rows do */
@@ -1397,6 +1468,219 @@ body.ret-compact .ret-sheet { min-width: 0; }
 td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .chmap-grn { color: var(--badge-green-text); }
 .chmap-qty { font-size: 10.5px; color: var(--faint); }
+
+/* the delete dialog's one fact: connected channel SKUs, plain and quiet —
+   no tint (owner 2026-09-16, "the soft red panel is not necessary") */
+.sdel-links { margin: 10px 0 14px; font-size: 12.5px; color: var(--muted); }
+.sdel-links-h { font-weight: 600; color: var(--text); }
+.sdel-links-sub { font-size: 11.5px; color: var(--muted); margin: 1px 0 6px; }
+.sdel-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+.sdel-link-ch { color: var(--muted); font-size: 11.5px; }
+
+/* the rename dialog's delete escape hatch: quiet, red, far from Rename */
+.rn-del { margin-right: auto; color: var(--neg-text); }
+.rn-del:hover { border-color: var(--neg-text); }
+
+/* bulk stock update dialog (owner 2026-09-17): typed SKU|Qty grid → history */
+.bulk-dlg { width: 580px; max-width: 92vw; }
+.bulk-modebar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.bulk-mode-hint { font-size: 11px; color: var(--faint); }
+#bulkSeg [data-bm="add"].is-active { color: var(--accent-soft-text); }
+.bulk-grid { max-height: 300px; overflow-y: auto; padding-right: 2px; }
+.bulk-g-head, .bulk-g-row { display: grid; grid-template-columns: 1fr 84px 64px 64px 24px; gap: 6px; align-items: center; }
+.bulk-g-head { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 0 2px 4px; position: sticky; top: 0; background: var(--surface); }
+.bulk-g-row { margin-bottom: 5px; }
+.bulk-g-r, .bulk-g-qty, .bulk-g-now, .bulk-g-after { text-align: right; }
+.bulk-g-sku, .bulk-g-qty { font-size: 12.5px; padding: 7px 9px; }
+/* SKU cells carry the shared inventory picker; the grid scrolls, so its
+   dropdown anchors to the viewport (combo-list.is-fixed) */
+.bulk-g-skuwrap { position: relative; display: flex; min-width: 0; }
+.bulk-g-skuwrap .bulk-g-sku { width: 100%; }
+.bulk-g-skuwrap .combo-list { left: 0; width: min(440px, 70vw); }
+.bulk-g-sku.bulk-g-bad { border-color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+.bulk-g-now { font-size: 12.5px; color: var(--muted); }
+.bulk-g-after { font-size: 12.5px; }
+.bulk-g-x { border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; padding: 2px; }
+.bulk-g-x:hover { color: var(--neg-text); }
+.bulk-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.bulk-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+.bulk-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft); }
+.bulk-table .num { text-align: right; }
+.bulk-up { color: var(--accent); }
+.bulk-down { color: var(--neg-text); }
+.bulk-warn { color: var(--badge-yellow-text); }
+.bulk-hist { max-height: 240px; overflow-y: auto; }
+.bulk-h-line { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 12px; color: var(--muted); text-align: left; padding: 8px 4px; border: none; border-top: 1px solid var(--border-soft); background: none; cursor: pointer; flex-wrap: wrap; }
+.bulk-h-line b { color: var(--text); font-weight: 600; }
+.bulk-h-line:hover { background: var(--surface-2); }
+.bulk-h-chev { color: var(--faint); }
+.bulk-h-body { padding: 2px 4px 10px; }
+.bulk-note { margin: 8px 0 2px; font-size: 12.5px; width: 100%; }
+.bulk-h-note { font-style: italic; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+.bulk-h-revert { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 2px 9px; margin-left: auto; cursor: pointer; white-space: nowrap; }
+.bulk-h-revert:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+.bulk-h-rvtd { font-size: 10.5px; color: var(--faint); margin-left: auto; white-space: nowrap; }
+
+/* per-line correction: dblclick the SKU (or its ✎) edits it in place */
+.bulk-h-fixcell { text-align: right; white-space: nowrap; width: 1%; }
+.bulk-h-fix { font: inherit; font-size: 11px; color: var(--muted); border: none; background: none; padding: 0 4px; cursor: pointer; }
+.bulk-h-fix:hover { color: var(--accent-soft-text); }
+.bulk-h-moved { font-size: 10px; color: var(--faint); margin-left: 4px; white-space: nowrap; }
+td.bulk-h-sku[data-bfx] { cursor: text; }
+.bulk-h-fixwrap { display: flex; gap: 6px; align-items: center; }
+.bulk-h-fixsku { flex: 1 1 auto; min-width: 200px; font-size: 12px; padding: 3px 8px; }
+.bulk-h-fixqty { flex: 0 0 62px; text-align: right; font-size: 12px; padding: 3px 6px; }
+.bulk-h-fixwrap .combo-list { min-width: 280px; }
+
+/* in-app updater button: quiet until a release is newer than this build */
+.update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+.update-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+
+/* ---------- Pricing tab (owner 2026-09-18) ---------- */
+
+.pricing-page { flex: 1 1 auto; min-height: 0; display: flex; padding: 12px 24px 20px; }
+.pr-sheet { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); display: flex; flex-direction: column; overflow: hidden; }
+.pr-bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.pr-search { flex: 0 0 280px; border-radius: 999px; }
+/* the explainer sentence left the bar (owner: unnecessary, 2026-09-21);
+   the spacer keeps History/Refresh on the right edge */
+.pr-bar #prHistBtn { margin-left: auto; }
+.pr-head { display: grid; gap: 0; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
+.pr-fluct { font-weight: 400; letter-spacing: 0; color: var(--faint); }
+.pr-body { flex: 1; min-height: 0; overflow: auto; }
+.pr-note { padding: 18px; }
+.pr-row { display: grid; gap: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); align-items: start; }
+.pr-cell { min-width: 0; padding-right: 18px; }
+.pr-num { color: var(--faint); font-size: 12px; }
+.pr-prod { display: flex; gap: 10px; align-items: flex-start; }
+.pr-thumb { width: 42px; height: 42px; border-radius: 6px; border: 1px solid var(--border); object-fit: contain; background: var(--surface-2); flex-shrink: 0; }
+.pr-thumb-empty { background: var(--surface-2); }
+.pr-prodtxt { display: flex; flex-direction: column; min-width: 0; }
+.pr-psku { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-pstock { font-size: 11px; color: var(--faint); }
+.pr-ch { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.pr-line { display: flex; align-items: center; gap: 6px; }
+.pr-csku { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
+.pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
+.pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }
+.pr-price:hover { border-color: var(--accent); }
+/* read-only (repricer-owned): grey carries the meaning — the ≈ prefix
+   confused the owner and was dropped 2026-09-21 */
+.pr-price-ro { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 500; color: var(--muted); min-width: 76px; text-align: right; padding: 3px 0; }
+.pr-open { border: none; background: none; color: var(--faint); font-size: 12px; cursor: pointer; padding: 0 2px; }
+.pr-open:hover { color: var(--accent); }
+.pr-add { border: 1px dashed var(--border); border-radius: var(--r-ctl); background: none; color: var(--faint); font-size: 10.5px; padding: 2px 8px; cursor: pointer; align-self: flex-start; }
+.pr-add:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+.pr-none { font-size: 11.5px; color: var(--faint); font-style: italic; }
+.pr-editwrap { display: inline-flex; }
+.pr-editin { width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-color: var(--accent); appearance: textfield; }
+/* no spinner arrows on the price editor (owner 2026-09-21, "unnecessary") */
+.pr-editin::-webkit-inner-spin-button, .pr-editin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* variations (owner 2026-09-18): condition SKUs nested under the New row.
+   No condition chips — the SKU name already says it. */
+.pr-vartog { border: none; background: none; font: inherit; font-size: 11px; font-weight: 600; color: var(--accent-soft-text); padding: 2px 0 0; cursor: pointer; text-align: left; align-self: flex-start; white-space: nowrap; }
+.pr-vartog:hover { text-decoration: underline dotted; }
+.pr-varadd { border: none; background: none; font: inherit; font-size: 10.5px; color: var(--faint); padding: 2px 0 0; cursor: pointer; text-align: left; align-self: flex-start; opacity: 0; transition: opacity 0.12s; white-space: nowrap; }
+.pr-row:hover .pr-varadd, .pr-varadd-foot { opacity: 1; }
+.pr-varadd:hover { color: var(--accent-soft-text); }
+.pr-varadd-foot { border: 1px dashed var(--border); border-radius: var(--r-ctl); padding: 2px 8px; }
+.pr-varadd-foot:hover { border-color: var(--accent); }
+.pr-vrow { background: var(--surface-2); }
+.pr-vrow .pr-prod { position: relative; padding-left: 14px; }
+.pr-velbow { color: var(--faint); font-family: var(--mono); padding-left: 14px; }
+.pr-vrow .pr-thumb { width: 34px; height: 34px; }
+.pr-vx { position: absolute; top: 2px; right: 10px; border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0; transition: opacity 0.12s; }
+.pr-vrow:hover .pr-vx { opacity: 1; }
+.pr-vx:hover { color: var(--neg-text); }
+.pr-vfoot { display: flex; align-items: flex-start; gap: 14px; padding: 6px 16px 8px 72px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+/* the variation group curtains open and closed (owner-picked animation B
+   of pr-var-dropdown.html, 2026-09-20) */
+.pr-vgroup { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 340ms var(--ease); }
+.pr-vgroup.open { grid-template-rows: 1fr; }
+.pr-vclip { min-height: 0; overflow: hidden; }
+/* Stock ↔ Family sort + the family rail (owner-picked Option A of
+   pr-family-variants.html, 2026-09-21): capacity siblings sit under the
+   biggest one, marked emerald with a GB badge */
+/* channel headers drag to rearrange (owner 2026-09-21) */
+.pr-hch { cursor: grab; user-select: none; }
+.pr-hch:active { cursor: grabbing; }
+.pr-sortset { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: 0 0 auto; }
+.pr-sortset button { font: inherit; font-size: 11px; font-weight: 600; padding: 3px 13px; border: none; background: none; color: var(--muted); cursor: pointer; }
+.pr-sortset button:hover { color: var(--text); }
+.pr-sortset button.is-on { background: var(--text); color: #fff; }
+.pr-row.pr-fam, .pr-vgroup.pr-fam { position: relative; }
+.pr-row.pr-fam::before, .pr-vgroup.pr-fam::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: 0.55; }
+.pr-fam-first::before { border-top-right-radius: 3px; }
+.pr-fam-last::before { border-bottom-right-radius: 3px; }
+.pr-capbadge { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; padding: 0 7px; border-radius: 999px; background: var(--badge-blue-bg); color: var(--badge-blue-text); margin-left: 8px; vertical-align: 1px; }
+/* ✦ suggestions: one quiet chip on the row + a popover (owner-approved
+   Option A of pr-suggest-variants.html, 2026-09-20 — no "Add both") */
+.pr-vschip { font: inherit; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; border: none; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; }
+.pr-vschip:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.prsug-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px dashed var(--border); }
+.prsug-sku { flex: 1; font-size: 12px; }
+.prsug-cond { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.prsug-ob { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.prsug-used { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.prsug-scrap { background: var(--neg-bg); color: var(--neg-text); }
+.prsug-add { font: inherit; font-size: 11px; font-weight: 600; border: none; border-radius: var(--r-ctl); padding: 3px 12px; background: var(--accent); color: #fff; cursor: pointer; }
+.prsug-add:hover { background: var(--accent-hover); }
+.prsug-add:disabled { opacity: 0.5; cursor: default; }
+.prsug-x { font: inherit; font-size: 12px; border: none; background: none; color: var(--faint); cursor: pointer; padding: 2px 4px; }
+.prsug-x:hover { color: var(--neg-text); }
+.prsug-foot { display: flex; justify-content: flex-end; padding: 6px 14px; }
+.prsug-never { font: inherit; font-size: 10.5px; border: none; background: none; color: var(--faint); cursor: pointer; }
+.prsug-never:hover { color: var(--muted); text-decoration: underline; }
+
+/* + channel SKU picker (anchored popover) */
+.prpick { position: fixed; width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16); z-index: 60; overflow: hidden; display: flex; flex-direction: column; }
+.prpick-head { font-size: 12px; color: var(--muted); padding: 10px 14px 8px; }
+.prpick-in { margin: 0 12px 8px; }
+.prpick-list { max-height: 240px; overflow: auto; }
+/* empty/loading notes align with the picker's 14px gutter (owner
+   2026-09-21, "the spacing looks weird") */
+.prpick-list .dlg-note { margin: 2px 0 10px; padding: 0 14px; }
+.prpick-opt { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; padding: 7px 14px; border: none; border-top: 1px dashed var(--border); background: none; cursor: pointer; font-family: var(--font); }
+.prpick-opt:hover { background: var(--accent-soft); }
+.prpick-opt .mono { font-size: 12px; font-weight: 600; }
+.prpick-title { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prpick-foot { font-size: 10.5px; color: var(--faint); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
+
+/* price history popup */
+.prh-dlg { width: 780px; max-width: 92vw; }
+.prh-body { max-height: 50vh; overflow: auto; margin: 6px 0 4px; }
+.prh-row { display: flex; align-items: center; gap: 12px; padding: 8px 2px; border-top: 1px dashed var(--border); font-size: 12px; }
+.prh-when { font-size: 11px; color: var(--muted); flex: 0 0 138px; }
+.prh-who { display: flex; flex-direction: column; line-height: 1.25; flex: 0 0 158px; min-width: 0; }
+.prh-who b { font-size: 12px; }
+.prh-who span { font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prh-sku { font-size: 11px; flex: 0 0 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prh-move { font-size: 12px; white-space: nowrap; }
+.prh-move s { color: var(--faint); font-weight: 400; }
+.prh-act { margin-left: auto; }
+.prh-auto { font-size: 10.5px; color: var(--faint); font-style: italic; }
+.prh-rvtd { font-size: 10.5px; color: var(--faint); }
+.prh-revert { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--border); border-radius: 6px; background: var(--surface); padding: 2px 9px; cursor: pointer; white-space: nowrap; }
+.prh-revert:hover { border-color: var(--accent); color: var(--accent-soft-text); }
+.prh-foot { font-size: 10.5px; color: var(--faint); margin-right: auto; }
+
+/* the Linnworks configurator picker beside List on eBay */
+.eb-lw-config { flex: 0 1 250px; max-width: 250px; min-width: 140px; font-size: 12px; }
+
+/* any SKU string in the mapping dialog copies on click (owner 2026-09-16) */
+.chmap-copy { cursor: copy; }
+.chmap-copy:hover { text-decoration: underline dotted; }
 .chmap-lk {
   font-size: 9px;
   font-weight: 700;
@@ -1422,34 +1706,6 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .chmap-nfin { border-radius: 999px; }
 
-/* the quiet listing-gaps subline under the stock toolbar */
-.stock-gaps {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 26px 0;
-}
-.stock-gaps-lbl {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--faint);
-}
-.stock-gaps a {
-  color: var(--badge-yellow-text);
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 1px dotted var(--badge-yellow-text);
-}
-.stock-gaps a.on {
-  background: var(--badge-yellow-bg);
-  border-radius: 4px;
-  padding: 1px 7px;
-  border-bottom: none;
-}
 
 /* stock row actions: a floating tray on the right of the SKU cell, shown
    on hover (design B, 2026-08-08) — chart · DS enroll · delete */
@@ -1663,48 +1919,44 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 .ret-cell-units input::-webkit-inner-spin-button,
 .ret-cell-units input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-/* ---- RETURNS-2 sheet, V1 polish (approved variants/returns-sheet-v2.html,
-   2026-09-05): softer green band, zebra rows, neutral gutter, condition as
-   a pastel pill, money without $ signs ---- */
-.recv-sheet-table.ret-log-table th {
-  background: #1f9d5b;
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border-right: 1px solid rgba(255, 255, 255, 0.22);
-  border-bottom: 1px solid #17854c;
-}
-.recv-sheet-table.ret-log-table th.th-gutter { background: #17854c; border-right: 1px solid rgba(255, 255, 255, 0.22); }
-.recv-sheet-table.ret-log-table th .col-grip { opacity: 0.9; }
-
-/* zebra on the LOG rows only (the entry tbody stays tinted) */
-.ret-log-table tbody:not(.ret-entry-body) tr:nth-child(even) td:not(.cell-gutter) { background: var(--surface-2); }
+/* ---- RETURNS sheet, sync-demo look (approved returns-sync mockup,
+   2026-09-14 "I like the design you had created"): the green skin is gone —
+   headers wear the app's own light sheet style (surface-2, uppercase faint
+   letters, hairlines), conditions are a colored dot + colored text ---- */
 
 /* the gutter goes quiet: plain numbers, red only for unmatched returns */
 .ret-log-table td.cell-gutter.st-captured { background: transparent; color: var(--muted); font-weight: 500; }
 .ret-log-table td.cell-gutter.st-failed { background: transparent; color: var(--neg-text); font-weight: 700; }
 
-/* condition as a pastel pill (the dot keeps its per-condition color) */
-.ret-log-table .ret-cond-ro { border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: 11.5px; }
-.ret-log-table .ret-cond-ro.is-new { background: var(--pos-bg); color: var(--pos-text); }
-.ret-log-table .ret-cond-ro.is-openbox { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.ret-log-table .ret-cond-ro.is-used { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.ret-log-table .ret-cond-ro.is-scrap { background: var(--neg-bg); color: var(--neg-text); }
-.ret-log-table .ret-cond-ro.is-different { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+/* condition: per-condition dot + colored text, no pill */
+/* the log rows' condition lines up with the entry row's pill (its 6px
+   padding + 1px border) — adjacent rows sat a few px apart (owner
+   2026-09-22, "why is this not aligned") */
+.ret-log-table .ret-cond-ro { font-weight: 600; font-size: 12px; }
+.ret-log-table .ret-cell-cond .ret-cond-ro { margin-left: 7px; }
+.ret-log-table .ret-cond-ro.is-new { color: var(--pos-text); }
+.ret-log-table .ret-cond-ro.is-openbox { color: var(--badge-blue-text); }
+.ret-log-table .ret-cond-ro.is-used { color: var(--badge-yellow-text); }
+.ret-log-table .ret-cond-ro.is-scrap { color: var(--neg-text); }
+.ret-log-table .ret-cond-ro.is-different { color: var(--muted); }
 
-/* money columns: price muted, settlement bold green (set further up) */
 .ret-cell-price { color: var(--muted); }
 
 /* "case: 12345" in a note renders as a small blue chip */
+/* now a button: click opens the marketplace's case screen (Walmart's
+   disputes page ships as the default template), right-click copies */
 .ret-note-case {
   font-size: 10.5px;
   background: var(--badge-blue-bg);
   color: var(--badge-blue-text);
+  border: none;
   border-radius: 4px;
   padding: 1px 6px;
   margin-right: 6px;
+  cursor: pointer;
 }
+.ret-note-case:hover { text-decoration: underline; text-underline-offset: 2px; }
+.ret-note-case:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* the bar chips holding the two collapsed cards */
 .ret-chips { display: inline-flex; gap: 6px; }
@@ -1724,18 +1976,47 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    (owner 2026-09-05, "popup instead of on the line"; 2026-09-09, every
    column takes typing) — a tinted band of bare inputs, closed by the
    green rule ---- */
-.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid #1f9d5b; }
+.ret-log-table tbody.ret-entry-body { border-bottom: 2px solid var(--border); }
 .ret-log-table tr.ws-row td {
-  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+  background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
 }
+/* the empty entry row reads as an invitation, not data (demo look) */
+.ret-log-table tr.ws-row .ws-in::placeholder { font-style: italic; }
+.ret-log-table tr.ws-row td.ws-gutter { background: var(--surface-2); }
+.ret-log-table tr.ws-row td.ws-gutter:hover { background: var(--accent-soft); }
 .ret-log-table tr.ws-row td.ws-cell:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 2px;
 }
-.ws-gutter { color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; cursor: pointer; }
-.ws-gutter:hover { background: var(--accent-soft); }
+.ws-gutter { color: var(--muted); font-weight: 600; font-size: 15px; text-align: center; cursor: pointer; }
+.ws-gutter:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* entry-row phases (approved demo pending-entry.html, 2026-09-14):
+   pending = just the loading circle where the + was; ready = the loaded,
+   not-yet-saved draft tints green and the gutter becomes a save ✓ */
+.ws-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: ws-rot 0.7s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes ws-rot { to { transform: rotate(360deg); } }
+.ret-log-table tr.ws-row.is-ready td {
+  background: #f0f8f4;
+  box-shadow: inset 0 -2px 0 rgba(4, 120, 87, 0.35);
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter {
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+.ret-log-table tr.ws-row.is-ready td.ws-gutter:hover { background: var(--accent-soft-text); }
 .ws-in {
   width: 100%;
   border: none;
@@ -1748,7 +2029,7 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
 }
 .ws-in.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
 .ws-in::placeholder { color: var(--faint); }
-.ws-in.ws-num { text-align: right; } /* units / price / settle line up with their columns */
+.ws-in.ws-num { text-align: right; } /* units / price line up with their columns */
 
 /* no-popup receiving (owner 2026-09-10): the condition pill lives in the
    row, its menu and the ⚠ popover anchor to the viewport — never modal */
@@ -1757,7 +2038,15 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
    log's arrow line under the SKU */
 .ws-in.ws-recv { display: block; width: 100%; margin-top: 2px; font-size: 10.5px; color: var(--accent-soft-text); }
 .ws-in.ws-recv::placeholder { color: var(--faint); font-family: var(--mono); }
-.ws-cond-cell .ret-cond-ro { border: none; font-family: var(--font); cursor: pointer; }
+.ws-cond-cell .ret-cond-ro {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.ws-cond-cell .ret-cond-ro:hover { border-color: var(--border); background: var(--surface-2); }
 .ws-cond-cell .rv-warn { margin-left: 6px; vertical-align: middle; }
 .ws-emenu {
   position: fixed;
@@ -1768,6 +2057,28 @@ td.chmap-act, td.chmap-act2 { text-overflow: clip; text-align: center; }
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(47, 52, 55, 0.16);
   padding: 4px;
+  transform-origin: top left;
+}
+
+/* the condition menu drops out of its anchor, its rows settling in a
+   quick cascade (owner 2026-09-15: "the dropdown with an animation").
+   Guarded by no-preference so reduced-motion never sees it — the global
+   reduced-motion block sits earlier in the file and would lose the cascade. */
+@media (prefers-reduced-motion: no-preference) {
+  .ws-emenu { animation: condmenuin 160ms var(--ease); }
+  .ws-emenu .ret-emi, .ret-emenu-pop .ret-emi { animation: condmiin 180ms var(--ease) backwards; }
+  .ws-emenu .ret-emi:nth-child(2), .ret-emenu-pop .ret-emi:nth-child(2) { animation-delay: 22ms; }
+  .ws-emenu .ret-emi:nth-child(3), .ret-emenu-pop .ret-emi:nth-child(3) { animation-delay: 44ms; }
+  .ws-emenu .ret-emi:nth-child(4), .ret-emenu-pop .ret-emi:nth-child(4) { animation-delay: 66ms; }
+  .ws-emenu .ret-emi:nth-child(5), .ret-emenu-pop .ret-emi:nth-child(5) { animation-delay: 88ms; }
+}
+@keyframes condmenuin {
+  from { opacity: 0; transform: translateY(-5px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes condmiin {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: none; }
 }
 #wsFix { z-index: 70; }
 #wsFix .combo-list { left: 0; width: 310px; }
@@ -1789,10 +2100,29 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   padding: 0;
 }
 .ret-ein.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
-.ret-cell-units .ret-ein, .ret-cell-price .ret-ein, .ret-cell-settle .ret-ein { text-align: right; }
+.ret-cell-units .ret-ein, .ret-cell-price .ret-ein { text-align: right; }
+/* the note edits in a floating box — the column squishes a plain input
+   (owner 2026-09-18) */
+.ret-notebox { position: fixed; z-index: 70; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 28px rgba(47, 52, 55, 0.18); padding: 8px 10px 5px; display: flex; flex-direction: column; gap: 3px; }
+.ret-notein { border: none; outline: none; background: transparent; resize: none; font-family: var(--font); font-size: 12.5px; color: var(--text); line-height: 1.45; min-height: 56px; }
+.ret-notehint { font-size: 10px; color: var(--faint); text-align: right; }
 /* the condition cell edits through a compact 4-pill menu, right in the cell */
-.ret-ecell:has(.ret-emenu) { white-space: normal; overflow: visible; }
+/* the condition menu floats over the table (owner-picked pop-over,
+   2026-09-21) — in the cell it stretched the row */
 .ret-emenu { display: flex; flex-direction: column; gap: 2px; }
+.ret-emenu-pop { position: fixed; z-index: 70; min-width: 168px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 28px rgba(47, 52, 55, 0.16); padding: 4px; transform-origin: top left; animation: condmenuin 140ms var(--ease); }
+.ret-ecell.is-econd { box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface) !important; }
+
+/* ---------- live presence (approved ret-presence.html, 2026-09-22):
+   online avatars in the bar, a colored rail + chip on rows someone has
+   open on another desktop. Colors land via CSSOM (CSP strips inline). */
+.ret-users { display: inline-flex; align-items: center; }
+.ret-av { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 700; color: #fff; border: 2px solid var(--surface); flex: 0 0 auto; }
+.ret-av + .ret-av { margin-left: -6px; }
+.ret-users-lbl { font-size: 11px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+tr.ret-busy td { background: var(--surface-2); }
+tr.ret-busy td:first-child { box-shadow: inset 3px 0 0 var(--busy-color, var(--accent)); }
+.ret-user-chip { display: inline-flex; align-items: center; font-size: 9.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: #fff; vertical-align: 1px; white-space: nowrap; }
 .ret-emi {
   display: flex;
   align-items: center;
@@ -1832,6 +2162,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   color: var(--surface);
 }
 .unl-chn {
+  font-family: var(--font);
+  background: none;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 600;
   color: var(--badge-yellow-text);
@@ -1841,6 +2174,55 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   margin-right: 4px;
   white-space: nowrap;
 }
+.unl-chn:hover { background: var(--badge-yellow-bg); }
+.unl-chn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* bypassed channel ("can't sell it there"): quiet, still clickable to undo */
+.unl-chn.is-skip { color: var(--faint); border-color: var(--border); }
+.unl-chn.is-skip:hover { background: var(--surface-2); color: var(--muted); }
+/* already listed there: filled and settled, nothing to click */
+.unl-chn.is-listed {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  border: 1px solid transparent;
+  cursor: default;
+  display: inline-block;
+}
+/* the Avail header doubles as the units-first sort toggle */
+th.unl-sort-th { cursor: pointer; user-select: none; }
+th.unl-sort-th:hover { color: var(--accent); }
+
+/* skipped / never-listed SKUs stay visible as a dimmed section at the
+   bottom of the Unlisted sheet — a memory, not a nag */
+.unl-sec {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  background: var(--surface-2);
+  padding: 5px 10px;
+}
+tr.unl-dim td { opacity: 0.55; }
+tr.unl-dim:hover td { opacity: 1; }
+.unl-dim-note { font-size: 10.5px; color: var(--faint); font-style: italic; }
+
+/* CHANNELS column filter (owner 2026-09-17): funnel in the header, popup
+   with a channel multi-select — ticked = show rows missing on all of them */
+.unl-funnel { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; vertical-align: -5px; padding: 0; }
+.unl-funnel svg { width: 11px; height: 11px; stroke: var(--muted); fill: none; stroke-width: 2.4; }
+.unl-funnel:hover { border-color: var(--accent); }
+.unl-funnel.is-active { border-color: var(--accent); background: var(--accent-soft); }
+.unl-funnel.is-active svg { stroke: var(--accent); }
+.unl-fpop { position: fixed; z-index: 80; width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 28px rgba(47, 52, 55, 0.16); padding: 12px 14px; }
+.unl-fpop h5 { margin: 0 0 8px; font-size: 10.5px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.unl-fchk { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; cursor: pointer; }
+.unl-fchk input { accent-color: var(--accent); }
+.unl-fclear { font: inherit; font-size: 11px; color: var(--muted); background: none; border: none; padding: 6px 0 0; cursor: pointer; text-decoration: underline dotted; }
+.unl-fclear:hover { color: var(--text); }
+
+/* every stock search ends in an add-new option under the results */
+.stock-addnew { padding: 8px 12px 2px; }
+.stock-addnew .ebay-addbtn { margin-left: 0; }
 
 /* the Returns page to-do card: created-but-unlisted condition SKUs */
 .ret-todo {
@@ -2364,23 +2746,40 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
    moderate widths (owner: "the spacing is weird", 2026-08-17) */
 /* the toolbar is a header band docked onto the sheet (owner pick 2026-08-17,
    mockup B): one bordered strip the table grows straight out of */
-.stock-main { display: flex; flex-direction: column; min-height: 0; max-width: calc(100% - 14px); }
+/* width: 100% matters — without it the sheet shrink-wraps its table and
+   re-snaps to content width on every render (owner 2026-09-14, "it auto
+   fixes itself and smushes"); cap-main and ret-main already carry it */
+/* the width grip is gone (owner 2026-09-15) — the sheet owns the full row */
+.stock-main { display: flex; flex-direction: column; min-height: 0; width: 100%; min-width: 0; max-width: 100%; }
 .stock-band {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px 10px; /* tight row-gap: a wrapped action row hugs the chips row */
+  /* nowrap makes the "one line for everything" note below actually hold:
+     with wrap, flex line-breaking used the chips' UNSHRUNK width, so on a
+     narrow window the whole actions block dropped to a second row before
+     the chips ever compressed (owner 2026-09-16, "why is Mappings and WFS
+     squished on the bottom"). nowrap keeps search · chips · actions on one
+     line and lets the elastic chips strip wrap INSIDE its slot instead */
+  flex-wrap: nowrap;
   padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--r-card) var(--r-card) 0 0;
 }
-.stock-band .stock-search { flex: 0 1 220px; min-width: 150px; }
+.stock-band .stock-search { flex: 0 1 220px; min-width: 130px; }
+/* one line for everything (owner 2026-09-14, "why can't we have them all on
+   the same line?"): search · chips · actions share the row; the chips strip
+   is the only elastic part, so on a narrow window the CHIPS flow onto a
+   second line inside their slot while search and the buttons stay put */
+.stock-band .stock-chips { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
 .stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
-.stock-band .stock-gaps { padding: 0; gap: 8px; }
-.stock-band .stock-actions { display: flex; gap: 6px; }
+.stock-band .stock-actions { display: flex; align-items: center; gap: 6px; }
+/* refresh as a bare icon at the end of the band (owner 2026-09-14) */
+.stock-refresh-ico { display: inline-flex; align-items: center; padding: 5px 7px; }
+.stock-refresh-ico svg { width: 14px; height: 14px; }
 
 /* condition view chips (All / Open Box / …), config-driven */
 
@@ -2436,14 +2835,13 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .chip-tray .view-chip.is-active.tint-red { color: var(--badge-red-text); }
 .chip-tray .view-chip.is-active.tint-green { color: var(--badge-green-text); }
 
-/* right-aligned action group, separated from search + chips by a hairline */
+/* right-aligned action group (the hairline separator left with the
+   missing-listings subline — it floated mid-air on wrapped rows) */
 .stock-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
 }
 
 .stock-hint {
@@ -2481,8 +2879,16 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   flex: 1;
   min-height: 0;
   max-width: 100%;
+  /* the row spans the page instead of shrink-wrapping the sheet: v1.27.57's
+     "sheet always fills the window" gave .stock-main width:100%, but 100%
+     of a row that itself hugs the sheet's content is circular — the row
+     re-hugged whatever each render produced, so the sheet width jumped the
+     moment a search or chip changed the table (owner 2026-09-16, "suddenly
+     goes wide"). Stretched, 100% means the actual window, every render */
+  align-self: stretch;
   display: flex;
   align-items: stretch;
+  justify-content: center;
 }
 
 .stock-list {
@@ -2510,13 +2916,42 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .stock-loading { min-width: 480px; }
 
 
+/* the gutter and image columns hold a constant width in every stock view
+   (auto layout let them breathe with content, one more source of the
+   sheet shifting under the cursor) */
+.stock-table .th-gutter { width: 36px; }
+/* while the search box has text the whole table goes table-layout: fixed —
+   the frozen header widths become law, so no keystroke can re-lay a single
+   column (auto layout still let long cell content push past the frozen
+   widths: owner 2026-09-15, "still broken") */
+.stock-table.is-frozen { table-layout: fixed; min-width: 0; }
+.stock-table.is-frozen td { overflow: hidden; text-overflow: ellipsis; }
+
+/* the unlisted sheet holds its shape: fixed columns, so typing a search
+   or slicing by condition never re-lays the table (owner 2026-09-15,
+   "it keeps adjusting the container") — the SKU column absorbs the rest */
+/* the Unlisted sheet wears the main sheet's geometry — same gutter, image
+   and level widths (and the SKU pin lands from JS) so the chip flip never
+   shifts the columns (owner 2026-09-21, "the formatting changes") */
+.unl-table { table-layout: fixed; width: 100%; min-width: 720px; }
+.unl-table .th-gutter { width: 36px; }
+.unl-table .th-img { width: 50px; } /* 34px image + 16px padding, like the main sheet */
+.unl-table .th-level { width: 96px; }
+.unl-table .th-chn { width: 330px; }
+.unl-table .th-actions { width: 130px; }
+.unl-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .stock-table th.sortable { cursor: pointer; user-select: none; }
 .stock-table th.sortable:hover { color: var(--text); }
 
 .rows-table th.th-sort { cursor: pointer; user-select: none; }
 .rows-table th.th-sort:hover { color: var(--text); }
 
-.stock-table .th-img, .stock-table .cell-img { width: 44px; padding: 3px 6px 3px 10px; }
+/* 50px = the 34px image + 16px of cell padding: under table-layout: fixed
+   (search freeze, Unlisted) the declared width is absolute, and the old
+   44px squished the image box (owner 2026-09-15) — auto layout was quietly
+   stretching it to ~50px all along */
+.stock-table .th-img, .stock-table .cell-img { width: 50px; padding: 3px 6px 3px 10px; }
 
 .stock-img {
   display: block;
@@ -2856,6 +3291,10 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
   min-width: 0;
 }
 .wfs-line:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+/* the SKU cell wraps its input so a combo suggestion list can hang off it
+   (the list itself goes position:fixed — the sheet clips absolute children) */
+.wfs-combo { position: relative; display: flex; min-width: 0; }
+.wfs-combo .wfs-sku { flex: 1 1 auto; }
 .wfs-line .wfs-qty { text-align: right; -moz-appearance: textfield; appearance: textfield; }
 .wfs-line .wfs-qty::-webkit-outer-spin-button, .wfs-line .wfs-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .wfs-remove { border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; }
@@ -2910,6 +3349,20 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .wfs-card-h { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
 .wfs-card-h b { font-weight: 600; }
 .wfs-card-u { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; }
+
+/* which desktop logged the shipment — emerald when it was this one,
+   matching the Returns people-pill's color language */
+.wfs-card-st {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wfs-card-st.is-me { background: #E7F3EC; color: #17854C; }
 .wfs-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 3px; }
 .wfs-card-item .mono { font-size: 11.5px; }
@@ -3008,6 +3461,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .stock-table .stock-avail.is-low { color: var(--neg-text); }
 
 /* tiny day-over-day sales delta beside the SKU (units today vs yesterday) */
+/* the channel SKU a search matched, shown beside the Linnworks SKU */
+.stock-chhit { margin-left: 8px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
 .stock-delta { margin-left: 8px; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stock-delta.is-pos { color: var(--pos-text); }
 .stock-delta.is-neg { color: var(--neg-text); }
@@ -3720,6 +4176,12 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 
 /* queue */
 .ebay-queue { flex: 0 1 270px; min-width: 200px; }
+/* condition filter chips over the queue (owner 2026-09-17) */
+.ebay-qchips { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); }
+.ebay-qchips:empty { display: none; }
+.eb-qchip { font: inherit; font-size: 10.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.eb-qchip:hover { border-color: var(--accent); }
+.eb-qchip.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
 .ebay-qlist { max-height: calc(100vh - 190px); overflow-y: auto; }
 .ebay-qrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
 .ebay-qrow:hover, .ebay-qrow.is-on { background: var(--accent-soft); }
@@ -3761,7 +4223,16 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ebay-shot { position: relative; width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); background-size: cover; background-position: center; background-color: var(--surface-2); }
 .ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
 .ebay-shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
-.ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); }
+/* copy the photo to the clipboard for pasting into eBay (owner 2026-09-18) */
+.ebay-shot .cp { position: absolute; top: -6px; left: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 9px; border: 1px solid var(--border); cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.12s; }
+.ebay-shot:hover .cp { opacity: 1; }
+.ebay-shot .cp:hover { color: var(--accent-soft-text); border-color: var(--accent); }
+.ebay-factions { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: var(--surface-2); border-top: 1px solid var(--border); flex-wrap: wrap; }
+/* buttons never fold mid-word — a row too narrow wraps whole buttons
+   instead (owner 2026-09-17: the upload button collapsed into a sliver
+   poking out of the panel) */
+.ebay-factions .btn, .ebay-factions .ebay-addbtn { white-space: nowrap; }
+.ebay-factions #ebUploadPage { margin-left: 0; }
 
 /* buyer preview: renders the WirelessTechnoStore template */
 .ebay-out { flex: 1 1 420px; min-width: 340px; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
@@ -4042,11 +4513,9 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
 /* one Listings tab: marketplace pills switch between the lister pages */
-.lst-switch { display: flex; gap: 10px; justify-content: center; padding: 14px 0 16px; }
-.lst-pill { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 16px; background: var(--surface); cursor: pointer; }
-.lst-pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-soft-text); }
-.lst-pill.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
-.lst-pill:disabled { opacity: 0.45; cursor: default; }
+/* the eBay/Temu pill row became the Listings ▾ tab dropdown (owner picked
+   option A, 2026-09-17); the panels keep its breathing room */
+.ebay-cols-pad { padding-top: 14px; }
 
 /* ---------- Overview tab (approved design: variants/overview-v2.html) ---------- */
 .ov-page { flex: 1; overflow-y: auto; }
@@ -4072,20 +4541,49 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .phone-note { font-size: 11px; color: var(--faint); max-width: 300px; margin: 0 auto 14px; line-height: 1.5; }
 .ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .ov-date { font-size: 11.5px; color: var(--faint); }
-/* ranges sit in the chart header now, sized to match the metric toggle */
-.ov-ranges { margin-left: auto; display: flex; background: #EFEEEA; border-radius: 8px; padding: 2px; gap: 2px; }
-.ov-rbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 10px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
-.ov-rbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
-.ov-grid { display: grid; grid-template-columns: 420px 1fr; gap: 10px; margin-bottom: 10px; } /* wide enough for full SKUs in the feed */
-.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+
+/* three columns (owner 2026-09-22, variants/overview-3col.html C1):
+   Sold today | Send to WFS | Running low - sold moved to the left the same
+   day; the WFS column (widest, it carries the buttons) sits in the middle */
+.ov-cols { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: start; }
+.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
 .ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
-.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 12px; }
+.ov-panel h4.ov-h-g { color: #065F46; }
+.ov-panel h4.ov-h-a { color: var(--badge-yellow-text); }
+
+/* ranked rows in the side columns */
+.ov-t { border-collapse: collapse; width: 100%; font-size: 12px; }
+.ov-t td { padding: 7px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+.ov-t tr:last-child td { border-bottom: none; }
+.ov-t tbody tr:hover td { background: var(--surface-2); }
+.ov-t td.rr { text-align: right; white-space: nowrap; }
+.ov-rank { width: 16px; color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.ov-meta { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 1px; }
+.ov-t td.rr .ov-meta { font-family: var(--font); color: var(--muted); margin-top: 3px; }
+.ov-faster { color: var(--neg-text); }
+.ov-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+.ov-bar i { display: block; height: 100%; border-radius: 999px; }
+.ov-bar i.r { background: var(--neg-text); }
+.ov-bar i.a { background: var(--badge-yellow-text); }
+.ov-bar i.g { background: var(--accent); }
+/* Send | Ignore | Mark received: the app's own buttons at row size */
+.ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
+.ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
+.ov-badge { font-size: 9.5px; padding: 1px 8px; }
+.ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.ov-link:hover { color: var(--text); }
+.ov-undo { font-size: 11px; color: var(--muted); padding: 6px; border-bottom: 1px solid var(--border-soft); }
+.ov-undo a { color: #065F46; font-weight: 600; cursor: pointer; margin-left: 6px; }
+.ov-sec { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 12px 6px 4px; display: flex; }
+.ov-sec .n { margin-left: auto; font-family: var(--mono); }
+
+/* left column: the today card - big number, the sold grid, channel
+   cells pinned to the bottom edge */
+.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; margin: 4px 0 6px; }
-.ov-today .delta { font-size: 10.5px; color: var(--accent-soft-text); min-height: 14px; }
-.ov-today .delta.neg { color: var(--neg-text); }
-/* channel cells pinned to the card's bottom edge (owner mockup 2026-08-17) */
+.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; margin: 4px 0 6px; }
+.ov-today .delta { font-size: 10.5px; color: var(--muted); min-height: 14px; }
 .ov-chcells { margin: auto -16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
 .ov-chcell { padding: 9px 8px 12px; text-align: center; }
 .ov-chcell + .ov-chcell { border-left: 1px solid var(--border); }
@@ -4093,79 +4591,26 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .cn-walmart { color: #2E86D9; }
 .cn-ebay { color: #047857; }
 .cn-temu { color: #C97B12; }
-.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; border-radius: 5px; }
-/* the orders-today number rolls like a mechanical counter when it rises
-   (owner pick: "odometer roll") — the marketplace row flashes its +1 and a
-   soft chip names the channel */
-.ov-odo { display: inline-flex; overflow: hidden; }
-.ov-odo .dcol { position: relative; height: 1.1em; overflow: hidden; display: inline-block; }
-.ov-odo .dstack { display: flex; flex-direction: column; transition: transform 500ms var(--ease); }
-.ov-odo .dstack i { font-style: normal; height: 1.1em; line-height: 1.1em; display: block; }
-.dsep { display: inline-block; height: 1.1em; line-height: 1.1em; } /* static $ and commas between rolling digits */
-.ov-chcell .cv.ov-hit { animation: ovHit 800ms var(--ease); }
-/* the latest-orders feed (owner pick 2026-08-17: "full grid"): an Excel-style
-   table — shaded header row, cell borders both ways — whose new arrivals
-   slide in from the top with a soft emerald flash */
-.ov-feed { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.ov-feed .fk { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 5px; }
-/* continuous feed (owner 2026-08-17): the table runs long and dissolves at
-   the bottom instead of stopping at a frame edge */
-.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); }
-.ov-xhead { display: grid; grid-template-columns: 100px 1fr 60px 52px; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
+.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; }
+
+/* the "full grid" (owner pick 2026-08-17): Excel-style, shaded header row,
+   cell borders both ways - here SKU | Units with row numbers and a total */
+.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; }
+.ov-xhead { display: grid; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
 .ov-xhead span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 8px; border-right: 1px solid #E0DED8; }
 .ov-xhead span:last-child { border-right: none; text-align: right; }
-.ov-feedrow { display: grid; grid-template-columns: 100px 1fr 60px 52px; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
+.ov-feedrow { display: grid; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
 .ov-feedrow:last-child { border-bottom: none; }
 .ov-feedrow span { padding: 5px 8px; border-right: 1px solid #EAE8E3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-feedrow span:last-child { border-right: none; }
-.ov-feedrow .xpo { font-size: 10.5px; font-weight: 600; }
-.ov-feedrow .xsku { font-size: 10px; color: var(--muted); }
-.ov-feedrow .xch { font-size: 10px; font-weight: 600; }
-.xch-walmart { color: #2E86D9; }
-.xch-ebay { color: #047857; }
-.xch-temu { color: #C97B12; }
-.ov-feedrow .xtm { font-family: var(--mono); font-size: 10px; color: var(--faint); text-align: right; }
-@keyframes ovFeedIn { 0% { opacity: 0; transform: translateY(-9px); } 40% { background: var(--accent-soft); } 100% { opacity: 1; transform: none; } }
-.ov-feedrow.is-new { animation: ovFeedIn 700ms var(--ease) both; }
-@keyframes ovHit { 0% { background: var(--accent-soft); color: var(--accent-soft-text); } 100% { background: transparent; } }
-.ov-toast { height: 18px; text-align: center; }
-.ov-toast span { display: inline-block; font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 10px; opacity: 0; }
-.ov-toast span.show { animation: ovToast 1.8s var(--ease); }
-@keyframes ovToast { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+.ov-soldgrid .ov-xhead, .ov-soldgrid .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
+.ov-soldgrid .xrn { color: var(--faint); text-align: center; text-overflow: clip; background: #F4F3F0; font-family: var(--mono); font-size: 9.5px; }
+.ov-soldgrid .xsku { font-family: var(--mono); font-size: 10.5px; cursor: pointer; }
+.ov-soldgrid .xsku:hover { color: var(--badge-blue-text); }
+.ov-soldgrid .xu { font-family: var(--mono); font-size: 11.5px; font-weight: 700; text-align: right; }
+.ov-soldgrid .tot { background: var(--surface-2); border-top: 1px solid #E0DED8; }
+.ov-soldgrid .tot span { font-weight: 700; }
 
-.ov-mtoggle { display: flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; margin-left: 10px; }
-.ov-mbtn { font-size: 10px; font-weight: 600; color: var(--muted); padding: 2px 9px; border-radius: 6px; border: none; background: transparent; font-family: var(--font); cursor: pointer; text-transform: none; letter-spacing: 0; }
-.ov-mbtn.is-on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(47, 52, 55, 0.08); }
-.ov-chartpanel { display: flex; flex-direction: column; } /* the chart fills whatever height the card column sets */
-/* trace-in flourish on Refresh / page entry (owner pick A, 2026-08-17) */
-.ov-anim-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ovTrace 850ms var(--ease) forwards; }
-.ov-anim-late { animation: ovFadeLate 950ms both; }
-.ov-anim-dot { animation: ovDotPop 320ms var(--ease) 620ms both; transform-box: fill-box; transform-origin: center; }
-@keyframes ovTrace { to { stroke-dashoffset: 0; } }
-@keyframes ovFadeLate { 0% { opacity: 0; } 55% { opacity: 0; } 100% { opacity: 1; } }
-@keyframes ovDotPop { 0% { opacity: 0; transform: scale(.3); } 70% { transform: scale(1.25); } 100% { opacity: 1; transform: scale(1); } }
-.ov-chartbox { flex: 1; min-height: 190px; }
-.ov-chartbox svg { display: block; width: 100%; }
-.ov-chartbox text { font-family: var(--mono); }
-.ov-hovslice { cursor: crosshair; }
-.ov-tt { animation: ttPop .18s var(--ease); }
-@keyframes ttPop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-.ov-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.ov-mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: background 120ms var(--ease); }
-.ov-mcard:hover { background: var(--surface-2); }
-.ov-mcard .k { display: flex; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-mcard .chev { margin-left: auto; font-size: 10px; }
-.ov-mcard .big { font-family: var(--mono); font-size: 27px; font-weight: 700; margin: 3px 0 1px; }
-.ov-mcard .s { font-size: 10.5px; color: var(--muted); }
-.ov-big-r { color: var(--neg-text); } .ov-big-a { color: var(--badge-yellow-text); } .ov-big-g { color: #065F46; }
-.ov-drawer { margin-top: 10px; animation: ttPop .18s var(--ease); }
-.ov-drawer h4.r { color: var(--neg-text); } .ov-drawer h4.a { color: var(--badge-yellow-text); } .ov-drawer h4.g { color: #065F46; }
-.ov-drawer table { border-collapse: collapse; width: 100%; font-size: 12px; }
-.ov-drawer th { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); background: none; }
-.ov-drawer th.rr, .ov-drawer td.rr { text-align: right; }
-.ov-drawer td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
-.ov-drawer tr:last-child td { border-bottom: none; }
-.ov-drawer tr:hover td { background: var(--surface-2); }
 .ov-sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--badge-blue-text); cursor: pointer; }
 .ov-dim { color: var(--muted); }
 .ov-pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
@@ -4175,6 +4620,11 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .ov-more { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .ov-more a { color: #065F46; font-weight: 600; text-decoration: none; cursor: pointer; }
 .ov-empty { padding: 14px 4px; font-size: 11.5px; color: var(--faint); }
+
+/* WFS Shipments: where an Overview Send came from, and each past
+   shipment's status */
+.wfs-from { font-size: 11px; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin: -4px 0 12px; }
+.wfs-badge { font-size: 9px; padding: 0 7px; }
 
 /* ---------- Temu lister (reuses the eBay three-panel skeleton) ---------- */
 /* centered columns clip their LEFT side unreachably when they overflow the
@@ -4221,10 +4671,34 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .sh-table td.sh-warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-weight: 600; }
 .sh-dim { color: var(--muted); font-size: 11.5px; }
 .sh-never { color: var(--neg-text); font-size: 11.5px; }
+/* sales-rate upgrade (owner 2026-09-12, built from the approved demo;
+   trimmed same day to the one Sold tile and no trend/sell-thru columns) */
+.shelf-tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.sh-tile { flex: 0 1 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 11px 14px 10px; }
+.sh-tile-l { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.sh-tile-b { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin-top: 1px; }
+.sh-tile-f { font-size: 11.5px; color: var(--muted); }
+.sh-tile.is-alarm .sh-tile-b { color: var(--neg-text); }
+.sh-range-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); margin: 0 -4px 0 4px; }
+.sh-table th.sh-sort { cursor: pointer; user-select: none; }
+.sh-table th.sh-sort:hover { color: var(--text); }
+.sh-table td.sh-good { color: var(--pos-text); font-weight: 600; }
+.sh-out { font-size: 10px; font-weight: 600; font-family: var(--font); background: var(--pos-bg); color: var(--pos-text); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
 .shelf-empty { padding: 26px 16px; font-size: 12px; color: var(--faint); text-align: center; }
 .shelf-sum { font-size: 11.5px; color: var(--muted); margin: 10px 2px 0; flex: 0 0 auto; }
 .tab-caret { font-size: 9px; margin-left: 2px; color: var(--faint); }
 .tab.is-active .tab-caret { color: var(--muted); }
+/* Returns tab dropdown: in-app menu that replaced the native popup so it
+   wears the app's own styling (owner 2026-09-12) */
+.tab-menu { position: fixed; margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 10px 28px rgba(47, 52, 55, 0.16); min-width: 210px; }
+.tab-menu::backdrop { background: transparent; }
+.tab-menu[open] { animation: dlgin 140ms var(--ease); }
+.tab-menu-item { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 12px 7px 8px; border: none; background: none; border-radius: 7px; font-family: inherit; font-size: 13px; color: var(--text); cursor: pointer; text-align: left; }
+.tab-menu-item:hover { background: var(--accent-soft); }
+.tab-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* the check column is always reserved so labels never shift */
+.tab-menu-item::before { content: '✓'; width: 13px; flex: 0 0 auto; font-size: 11px; color: transparent; }
+.tab-menu-item.is-current::before { color: var(--text); }
 .stock-shelf-link { font-family: inherit; font-size: 11.5px; font-weight: 500; border: none; background: none; color: var(--accent-soft-text); cursor: pointer; padding: 6px 4px; }
 .stock-shelf-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* hidden = invisible, NOT gone: if the link left the layout, the flexible
@@ -4232,8 +4706,6 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
    condition click (owner 2026-09-09, "it shifts the whole tab") */
 .stock-shelf-link[hidden] { display: inline-block !important; visibility: hidden; }
 
-/* Overview drawers hold 25 rows now — they scroll instead of stretching */
-.ov-drawer { max-height: 380px; overflow-y: auto; }
 
 
 
@@ -4242,33 +4714,65 @@ td:focus-within.ret-ecell, .ret-ecell:has(.ret-ein) { box-shadow: inset 0 0 0 2p
 .stock-hist-btn.has-today { position: relative; }
 .stock-hist-btn.has-today::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
 
+.dlg-sh { width: 860px; max-width: 94vw; }
+.dlg-wide.is-stock { width: min(920px, 94vw); }
 .sh-strip { grid-template-columns: repeat(4, 1fr); }
 .sh-strip .v.is-pos { color: var(--pos-text); }
 .sh-strip .v.is-neg { color: var(--neg-text); }
 .sh-strip .v.is-name { font-size: 14px; }
 
+/* one line per change: pill · what · when · who */
 .sh-list { height: auto; max-height: 56vh; }
-.sh-item { align-items: center; min-width: 0; }
-.sh-item .history-time { width: 40px; flex: 0 0 auto; }
-.sh-delta { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; min-width: 34px; text-align: right; flex: 0 0 auto; }
-.sh-delta.is-pos { color: var(--pos-text); }
-.sh-delta.is-neg { color: var(--neg-text); }
-.sh-delta.is-set { color: var(--badge-blue-text); }
-.sh-lvl { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); flex: 0 0 auto; width: 76px; white-space: nowrap; }
-.sh-lvl b { color: var(--text); font-weight: 600; }
-.sh-lvl i { font-style: normal; color: var(--faint); margin: 0 4px; }
-.sh-why { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; overflow: hidden; }
-.sh-why .history-status { margin-left: 0; }
-.sh-ref { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
-.sh-ref.copyable { cursor: pointer; }
-.sh-ref.copyable:hover { color: var(--accent); }
-.sh-note { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sh-who { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); white-space: nowrap; }
-.sh-who svg { width: 13px; height: 13px; color: var(--faint); }
-.sh-who .ini { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); padding: 0 6px; border-radius: 999px; line-height: 17px; }
-.history-status.st-return, .history-status.st-new-sku { background: var(--pos-bg); color: var(--pos-text); }
-.history-status.st-return-edit, .history-status.st-return-delete { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.history-status.st-set, .history-status.st-wfs { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.history-status.st-dropship { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
-.history-status.st-substitution, .history-status.st-other { background: var(--surface-2); color: var(--muted); }
-.history-day-head .sh-net { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; margin-left: 6px; }
+#hsList { height: 56vh; }
+.sh-line { align-items: center; gap: 14px; padding: 9px 14px; line-height: 1.4; font-size: 13px; min-width: 0; }
+.sh-act { width: 92px; flex: 0 0 auto; display: inline-flex; justify-content: center; font-family: var(--font); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; border: none; padding: 3px 0; border-radius: 999px; cursor: pointer; color: var(--muted); background: var(--surface-2); line-height: 1.3; }
+.sh-act:hover { filter: brightness(0.96); }
+.sh-act.is-static { cursor: default; }
+.act-sold, .act-removed { color: var(--neg-text); background: var(--neg-bg); }
+.act-returned { color: var(--pos-text); background: var(--pos-bg); }
+.act-added { color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+.act-shipped { color: var(--badge-purple-text); background: var(--badge-purple-bg); }
+.act-set, .act-edited { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+.sh-act-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; flex: 0 0 auto; }
+.sh-act-dot.act-sold, .sh-act-dot.act-removed { background: var(--neg-text); }
+.sh-act-dot.act-returned { background: var(--pos-text); }
+.sh-act-dot.act-added { background: var(--badge-blue-text); }
+.sh-act-dot.act-shipped { background: var(--badge-purple-text); }
+.sh-act-dot.act-set, .sh-act-dot.act-edited { background: var(--badge-yellow-text); }
+.sh-line .sh-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-line .sh-sku { cursor: pointer; font-size: 12.5px; font-weight: 600; }
+.sh-line .sh-sku:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; }
+.sh-line .sh-arrow { color: var(--faint); margin: 0 2px; }
+.sh-line .sh-dim { color: var(--muted); }
+.sh-line .sh-when { flex: 0 0 auto; width: 138px; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sh-line .sh-pc { flex: 0 0 auto; width: 150px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.sh-line .sh-pc svg { width: 14px; height: 14px; color: var(--faint); flex: 0 0 auto; }
+.sh-line .sh-pc.is-ext { color: var(--muted); }
+.sh-line .sh-ini { font-weight: 500; color: var(--muted); letter-spacing: 0; }
+
+/* filters: search + multi-select dropdowns in the condition-button style */
+.sh-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.sh-filters .search-field { flex: 0 1 240px; min-width: 160px; }
+.sh-tabs { margin-bottom: 12px; width: max-content; }
+.sh-dd { position: relative; }
+.sh-dd-btn { padding: 6px 10px 6px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; min-width: 0; gap: 8px; }
+.sh-dd-btn .ret-dd-caret { margin-left: 2px; }
+.sh-dd-btn.has-sel { border-color: var(--accent); color: var(--accent-soft-text); background: var(--accent-soft); font-weight: 600; }
+.sh-dd-btn.has-sel .ret-dd-caret { color: var(--accent-soft-text); }
+.sh-dd-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; z-index: 70; }
+.sh-dd-menu .ret-dd-mi { padding: 7px 12px; font-size: 12.5px; user-select: none; }
+.sh-dd-menu .ret-dd-mi input { width: 14px; height: 14px; accent-color: var(--accent); margin: 0; }
+.sh-dd-menu .ret-dd-mi:has(input:checked) { background: var(--accent-soft); font-weight: 600; }
+.sh-dd-menu .ret-dd-tgt { margin-left: auto; color: var(--faint); }
+.sh-custom { border-top: 1px solid var(--border-soft); background: var(--surface-2); }
+.sh-custom .ret-dd-edit-input { width: 100%; padding: 5px 8px; font-size: 12px; }
+.sh-custom-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.sh-custom-actions .btn { padding: 5px 12px; font-size: 12px; }
+
+/* Capture page history mode: the same table, processed orders by day */
+.is-hist-on { color: var(--accent-soft-text); background: var(--accent-soft); }
+.cap-band #capHistBack { margin-left: auto; }
+.cap-day td { background: var(--surface-2) !important; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 6px 12px; border-right: none !important; }
+.cap-day td .sh-dim { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }
+.cap-when { color: var(--faint); font-size: 11.5px; margin-left: 8px; font-family: var(--mono); }
+.cap-ico.is-on { color: var(--accent); background: var(--accent-soft); }

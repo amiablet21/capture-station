@@ -131,6 +131,21 @@ function open() {
   if (!cols.includes('lw_order_id')) {
     db.exec(`ALTER TABLE rows ADD COLUMN lw_order_id TEXT NOT NULL DEFAULT ''`);
   }
+  // migration: WFS shipments carry a received date (Overview marks them
+  // received by hand until a Walmart connection can say so itself)
+  const wfsCols = db.prepare(`SELECT name FROM pragma_table_info('wfs_shipments')`).all().map(c => c.name);
+  if (!wfsCols.includes('received_at')) {
+    db.exec(`ALTER TABLE wfs_shipments ADD COLUMN received_at TEXT NOT NULL DEFAULT ''`);
+  }
+  // Overview "Ignore" on a Send-to-WFS suggestion: hidden until `until`,
+  // or sooner if the SKU's WFS pace outgrows the pace it was ignored at
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wfs_ignores (
+      sku TEXT PRIMARY KEY,
+      until TEXT NOT NULL,
+      pace REAL NOT NULL DEFAULT 0
+    );
+  `);
   return db;
 }
 
@@ -331,6 +346,13 @@ function historyRows(limit = 1000) {
     .all(limit).map(parseRow);
 }
 
+// processed orders captured between two local days (inclusive), newest
+// first — the Capture page's History view
+function historyRowsRange(from, to, limit = 3000) {
+  return open().prepare("SELECT * FROM rows WHERE status = 'synced' AND day >= ? AND day <= ? ORDER BY id DESC LIMIT ?")
+    .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit).map(parseRow);
+}
+
 function findByOrderNumber(orderNumber) {
   return parseRow(open().prepare('SELECT * FROM rows WHERE order_number = ? ORDER BY id DESC').get(orderNumber));
 }
@@ -435,6 +457,29 @@ function listWfsShipments(limit = 200) {
     .map(s => ({ ...s, items: JSON.parse(s.items) }));
 }
 
+function markWfsReceived(id, received) {
+  open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?')
+    .run(received ? new Date().toISOString() : '', id);
+}
+
+function setWfsIgnore(sku, days, pace) {
+  const until = new Date(Date.now() + days * 86400000).toISOString();
+  open().prepare('INSERT INTO wfs_ignores (sku, until, pace) VALUES (?, ?, ?) ON CONFLICT(sku) DO UPDATE SET until = excluded.until, pace = excluded.pace')
+    .run(String(sku).toUpperCase(), until, Number(pace) || 0);
+}
+
+// sku omitted = restore every ignored suggestion
+function clearWfsIgnore(sku) {
+  if (sku) open().prepare('DELETE FROM wfs_ignores WHERE sku = ?').run(String(sku).toUpperCase());
+  else open().prepare('DELETE FROM wfs_ignores').run();
+}
+
+function listWfsIgnores() {
+  const now = new Date().toISOString();
+  open().prepare('DELETE FROM wfs_ignores WHERE until <= ?').run(now);
+  return open().prepare('SELECT * FROM wfs_ignores').all();
+}
+
 // Graded customer returns. items: [{ sku, condition, targetSku, qty, price, note }]
 // unmatched = physically arrived without a Linnworks order behind it
 // (pre-Linnworks sale, WFS removal shipment, missing PO#).
@@ -523,11 +568,16 @@ function resolveConditionTargets(baseSku, inventorySkus) {
   const own = conditionOfSku(baseSku);
   const core = own ? own.core : baseSku;
   const savedCore = own ? (getConditionMap()[core] || {}) : {};
+  // a saved mapping whose target left the inventory (renamed / deleted) is
+  // DEAD — trusting it 400s every stock move (owner-hit 2026-09-21). When
+  // the inventory list is at hand, a dead mapping falls through to the
+  // name-derived listings; with no list (lookup offline) it stands as-is.
+  const alive = (t) => t && (!bySkuUpper.size || bySkuUpper.has(String(t).toUpperCase())) ? t : '';
   const targets = { new: baseSku };
   for (const cond of Object.keys(CONDITION_SUFFIX)) {
-    targets[cond] = saved[cond]
+    targets[cond] = alive(saved[cond])
       || (own && cond === own.cond ? baseSku : '')
-      || savedCore[cond]
+      || alive(savedCore[cond])
       || bySkuUpper.get(`${CONDITION_PREFIX[cond]}${core}`.toUpperCase())
       || bySkuUpper.get(`${core}${CONDITION_SUFFIX[cond]}`.toUpperCase())
       || '';
@@ -573,6 +623,13 @@ function logStockChanges(rows) {
 function stockHistory(sku, limit = 500) {
   return open().prepare(`SELECT * FROM stock_log WHERE sku = ? ORDER BY id DESC LIMIT ?`)
     .all(String(sku || '').toUpperCase(), limit);
+}
+
+// every SKU's changes between two local days (inclusive), newest first —
+// the History dialog's Stock tab
+function stockHistoryRange(from, to, limit = 3000) {
+  return open().prepare(`SELECT * FROM stock_log WHERE day >= ? AND day <= ? ORDER BY id DESC LIMIT ?`)
+    .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit);
 }
 
 // today's activity per SKU, for the grid's tray dot and count tooltip:
@@ -674,9 +731,9 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
-  deleteConditionMapping, resolveConditionTargets, CONDITION_SUFFIX,
-  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday,
+  deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
+  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

@@ -455,12 +455,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
     await sleep(400);
     const looked = await exec(`[
       $('ws_cust').value, $('ws_trk').value, $('ws_sku').value,
-      $('ws_price').value, $('ws_settle').value,
+      $('ws_price').value,
       !!document.querySelector('#retRecvDialog[open]'),
     ]`);
-    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price, settle',
+    check('PO Enter loads the order OVER the row — customer, tracking, SKU, price',
       looked[0] === 'Cara Cross' && looked[1] === 'TRK-9' && looked[2] === 'S25-128GB-NAVY'
-        && looked[3] === '149.99' && looked[4] === '149.99' && looked[5] === false,
+        && looked[3] === '149.99' && looked[4] === false,
       looked);
     // the second Enter saves the matched receive
     await exec(`$('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
@@ -558,7 +558,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
       rv.items = [{ sku: 'S25-128GB-NAVY', title: '', price: 1, quantity: 1, targets: null }];
       rv.received = [false];
       rvLoadItemAt(0);
-      $('rvPrice').value = '150'; $('rvSettle').value = '45.50'; $('rvBy').value = 'IM';
+      $('rvPrice').value = '150'; $('rvBy').value = 'IM';
       $('rvSave').click(); 0;`);
     // commit -> close is async: poll instead of a fixed sleep (flaked at
     // fixed sleeps under load, 2026-08-14)
@@ -567,9 +567,9 @@ module.exports = async function run({ app, win, db, clipboard }) {
       if (await exec(`!document.querySelector('#retRecvDialog[open]')`)) break;
     }
     const rvGot = await exec(`window.__rvGot`);
-    check('Receive commits price + dispute settlement through returns:create',
+    check('Receive commits the price through returns:create',
       rvGot && rvGot.orderNumber === '119999000000001' && rvGot.items.length === 1
-        && rvGot.items[0].price === 150 && rvGot.items[0].settle === 45.5
+        && rvGot.items[0].price === 150
         && rvGot.items[0].targetSku === 'S25-128GB-NAVY',
       rvGot);
     const rvClosed = await exec(`[!document.querySelector('#retRecvDialog[open]'), String(window.__err || '')]`);
@@ -674,36 +674,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
         ents.length === 3 && a && a.units === 2 && a.tracking === '528846386026'
           && a.note === 'case open' && ents.find(e => !e.po).customer === 'Cara C', ents);
     }
-    // the dialog flow, ipc stubbed through the seams
-    await exec(`
-      window.__impOrig = [retImpPick, retImpResolve, retImpCommit];
-      window.__impCommitGot = null;
-      retImpPick = async () => ({ ok: true, entries: [
-        { po: '119000000000001', customer: 'Ann A', tracking: '', sku: 'SM-X133-64GB-GREY', units: 2, price: 127.49, settle: 0, note: 'case open' },
-      ], stats: { rows: 2, entries: 1, units: 2, skippedDup: 0, noPo: 0 } });
-      retImpResolve = async (entries) => ({ ok: true,
-        entries: entries.map(e => ({ ...e, matched: true, source: 'WALMART', sku: 'S25-128GB-NAVY' })),
-        stats: { orders: 1, found: 1, skuFromOrder: 1, skuKnown: 0, skuUnknown: 0, trackingFilled: 1 } });
-      retImpCommit = async (entries) => { window.__impCommitGot = entries; return { ok: true, made: 1, units: 2 }; };
-      $('retImportBtn').click(); 0;`);
-    await sleep(400);
-    const impBits = await exec(`[
-      !!document.querySelector('#retImpDialog[open]'),
-      $('retImpStats').textContent,
-      $('retImpGo').disabled,
-    ]`);
-    check('import dialog: parse stats shown, Import armed once resolved',
-      impBits[0] === true && impBits[1].includes('entries') && impBits[1].includes('orders matched')
-        && impBits[2] === false, impBits);
-    await exec(`$('retImpGo').click(); 0;`);
-    await sleep(400);
-    const impDone = await exec(`[
-      window.__impCommitGot && window.__impCommitGot[0].sku,
-      !document.querySelector('#retImpDialog[open]'),
-    ]`);
-    check('Import commits the RESOLVED entries and closes',
-      impDone[0] === 'S25-128GB-NAVY' && impDone[1] === true, impDone);
-    await exec(`retImpPick = window.__impOrig[0]; retImpResolve = window.__impOrig[1]; retImpCommit = window.__impOrig[2]; 0;`);
+    // the Import button is retired (owner 2026-09-14) — the parse/collapse
+    // engine above keeps its checks; the dialog has no UI entry point now
+    check('Import button retired from the returns bar',
+      (await exec(`!$('retImportBtn')`)) === true);
 
     // 24h. the missing-listings slider: one gap at a time, affix-stripped
     // create suggestions, Skip advances, the tally closes it out
@@ -1115,21 +1089,56 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('stock:historyToday IPC returns the per-SKU summary', res && res.ok === true && res.bySku['SH-TEST-SKU'].count === 2, res);
     res = await exec(`[stockHistTip(null), stockHistTip({ count: 2, lastAt: new Date().toISOString(), lastDelta: null, lastAfter: 4, lastReason: 'set', lastComputer: 'Office', lastBy: '' }), stockHistTip({ count: 1, lastAt: new Date().toISOString(), lastDelta: 2, lastReason: 'return', lastComputer: 'Front desk', lastBy: 'RS' }, true)]`);
     check('stockHistTip: quiet day / hand-set today / count tooltip keeps its click hint',
-      /nothing moved today/.test(res[0]) && /2 changes today · last = 4 at \d\d:\d\d · set by hand · Office/.test(res[1])
-        && /1 change today · last \+2 at \d\d:\d\d · return received · Front desk \(RS\)\nClick to correct the count/.test(res[2]),
+      /nothing moved today/.test(res[0]) && /2 changes today · last = 4 at \d\d:\d\d · set · Office/.test(res[1])
+        && /1 change today · last \+2 at \d\d:\d\d · returned · Front desk \(RS\)\nClick to correct the count/.test(res[2]),
       res);
     await exec(`openStockHistory('sh-test-sku')`);
-    await new Promise(r => setTimeout(r, 200));
-    res = await exec(`({ open: $('stockHistDialog').open, sku: $('stockHistSku').textContent, items: document.querySelectorAll('#stockHistBody .sh-item').length,
-      reasons: [...document.querySelectorAll('#stockHistBody .history-status')].map(e => e.textContent), who: [...document.querySelectorAll('#stockHistBody .sh-who')].map(e => e.textContent.trim()),
-      deltas: [...document.querySelectorAll('#stockHistBody .sh-delta')].map(e => e.textContent) })`);
-    check('stock history dialog: opens on the SKU, one line per change with reason, delta and computer',
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`({ open: $('stockHistDialog').open, sku: $('stockHistSku').textContent, items: document.querySelectorAll('#stockHistBody .sh-line').length,
+      acts: [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent), who: [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()),
+      text: [...document.querySelectorAll('#stockHistBody .sh-text')].map(e => e.textContent.replace(/\\s+/g, ' ').trim()),
+      pcs: [...document.querySelectorAll('#shPcMenu input')].map(i => i.value) })`);
+    check('stock history dialog: opens on the SKU, one pill row per change (SET / RETURNED), the computer on the right, computers in the filter',
       res && res.open === true && res.sku === 'sh-test-sku' && res.items === 2
-        && res.reasons[0] === 'Set by hand' && res.reasons[1] === 'Return received'
-        && res.deltas[0] === '= 4' && res.deltas[1] === '+2'
-        && res.who[0] === 'Office' && res.who[1] === 'Front deskRS',
+        && res.acts[0] === 'SET' && res.acts[1] === 'RETURNED'
+        && /^to 4/.test(res.text[0]) && /^2 units \(PO#: PO-77\)/.test(res.text[1])
+        && res.who[0] === 'OFFICE' && res.who[1] === 'FRONT DESK RS'
+        && res.pcs.join(',') === 'Office,Front desk',
       res);
+    // the action filter: tick RETURNED, only that row stays
+    res = await exec(`(() => { shDlg.acts.add('returned'); renderStockHistory(); return [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent); })()`);
+    check('stock history dialog: action filter narrows to RETURNED', res && res.length === 1 && res[0] === 'RETURNED', res);
     await exec(`$('stockHistDialog').close()`);
+    // the History dialog's Stock tab: every SKU, the same pill rows, filters + range
+    await exec(`openHistory('stock')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`({ open: $('historyDialog').open, stockShown: !$('historyStockView').hidden, capHidden: $('historyCapView').hidden,
+      rows: document.querySelectorAll('#hsList .sh-line').length, skus: [...document.querySelectorAll('#hsList .sh-sku')].map(e => e.textContent),
+      range: $('hsRangeDd').querySelector('.sh-dd-label').textContent })`);
+    check('History dialog: Stock tab lists every SKU\'s changes with the SKU on the row, last 7 days by default',
+      res && res.open === true && res.stockShown === true && res.capHidden === true && res.rows === 2 && res.skus[0] === 'SH-TEST-SKU' && res.range === 'Last 7 days', res);
+    res = await exec(`(() => { $('hsSearch').value = 'PO-77'; hs.text = 'PO-77'; renderHistoryStock(); return document.querySelectorAll('#hsList .sh-line').length; })()`);
+    check('History dialog: Stock tab search narrows by PO#', res === 1, res);
+    await exec(`$('historyDialog').close()`);
+    // Capture page History mode: processed orders in the capture table
+    const histRowId = db.createRow({ channel: 'walmart', orderNumber: 'HIST-ORDER-1', origin: '' }).id;
+    db.setTracking(histRowId, '1Z999HIST', 'UPS');
+    db.setRowItems(histRowId, [{ sku: 'SH-TEST-SKU', qty: 2 }]);
+    db.markSynced(histRowId);
+    await exec(`showPage('capture'); setCapHist(true)`);
+    await new Promise(r => setTimeout(r, 400));
+    res = await exec(`({ on: capHist.on, back: !$('capHistBack').hidden, range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
+      dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
+      gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
+      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim() })`);
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items and tracking; the band swaps to range + Back',
+      res && res.on === true && res.back === true && res.range === true && res.importHidden === true
+        && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
+        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST',
+      res);
+    res = await exec(`(() => { setCapHist(false); return { on: capHist.on, back: $('capHistBack').hidden, importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
+    check('Capture history mode: Back to today restores the live list', res && res.on === false && res.back === true && res.importShown === true && res.hist === 0, res);
+    db.deleteRow(histRowId);
 
     // 36. returns resize: whole-width grip + per-column grips on the log
     // (the worksheet left with design C, 2026-08-07 — the log is the sheet)
@@ -1616,13 +1625,23 @@ module.exports = async function run({ app, win, db, clipboard }) {
         { up1, up2 });
       check('claims: upload events carried the running day count',
         uploads.length === 2 && uploads[1].todayCount === 2, uploads);
-      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (owner
-      // wants uniform PNGs); the fake-JPEG uploads above cannot decode, so
-      // they keep .jpg — which doubles as the fallback-path check
+      // a REAL (decodable) JPEG is re-encoded to PNG on arrival (Walmart
+      // wants case images as PNGs); the fake-JPEG uploads above cannot
+      // decode, so they keep .jpg — which doubles as the fallback-path check
       const realJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
       const up3 = await (await fetch(`${cbase}/photo?t=${crun.token}&po=119990000000042`, { method: 'POST', body: realJpeg })).json();
       check('claims: real photos re-encode to PNG',
         up3.ok && /_3\.png$/.test(up3.name) && fs.existsSync(cpath.join(cdir, up3.name)), up3);
+      // Walmart caps a case's images at 25 MB combined: a PO whose folder
+      // already fills the budget refuses the next photo with a clear error
+      const fullPo = '119990000000099';
+      const claimsBudget = require('./claims.js')._test.CASE_BUDGET;
+      fs.writeFileSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`), Buffer.alloc(claimsBudget));
+      const upFull = await fetch(`${cbase}/photo?t=${crun.token}&po=${fullPo}`, { method: 'POST', body: realJpeg });
+      const upFullBody = await upFull.json();
+      check('claims: Walmart 25 MB combined case budget refuses the overflow photo',
+        upFull.status === 413 && /25 MB/.test(upFullBody.error || ''), { status: upFull.status, upFullBody });
+      fs.unlinkSync(cpath.join(cdir, `${fullPo}_0101-0900_1.png`));
       const cpage = await (await fetch(`${cbase}/up?t=${crun.token}`)).text();
       check('claims: phone page lists today\'s returns as tap chips',
         cpage.includes('Upload Photos') && cpage.includes('119990000000042') && cpage.includes('TEST-SKU'), cpage.length);
