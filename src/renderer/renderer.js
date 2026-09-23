@@ -9776,10 +9776,8 @@ function ovRenderWfs() {
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  const units = plan.rows.reduce((a, r) => a + r.send, 0);
   const rowsHtml = plan.rows.map((r, i) => {
     const weekly = Math.round(r.perDay * 7);
-    const meta = [`${weekly}/wk`, `${r.atWfs} at WFS`, r.flightUnits ? `${r.flightUnits} on the way` : ''].filter(Boolean).join(' · ');
     // every Walmart WFS listing that sold this item in the last 30 days, with
     // its own pace; listings with no sales in the window never show
     const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
@@ -9787,10 +9785,10 @@ function ovRenderWfs() {
       ? `<span class="ov-meta ov-chs">${chs.map(c => `<span title="Walmart channel SKU · ${c.weekly}/wk at WFS">${esc(c.sku)} <b>${c.weekly}/wk</b></span>`).join('')}</span>`
       : '';
     return `<tr><td class="ov-rank">${i + 1}</td>
-      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span>${chHtml}<span class="ov-meta">${meta}</span>
+      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}" title="${weekly}/wk at WFS · ${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}">${esc(r.sku)}</span>${chHtml}
         <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
-      <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">+ ${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span>
-        <span class="ov-act"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
+      <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">Send +${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span></td>
+      <td class="ov-actcell"><span class="ov-stack"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
@@ -9807,7 +9805,7 @@ function ovRenderWfs() {
       <td class="rr"><span class="badge ov-badge ${cls}">${label}</span>
         ${f.status === 'received' ? `<a class="ov-link" data-ovunrecv="${f.id}">Undo</a>` : `<span class="ov-act"><button class="btn btn-ghost" data-ovrecv="${f.id}">Mark received</button></span>`}</td></tr>`;
   }).join('');
-  box.innerHTML = `<h4 class="ov-h-g">Send to WFS · ${units.toLocaleString()} units<span class="sub">${plan.rows.length} SKU${plan.rows.length === 1 ? '' : 's'} under ${plan.triggerDays} days</span></h4>
+  box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>
     ${plan.rows.length ? `<table class="ov-t"><tbody>${rowsHtml}</tbody></table>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
     ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><table class="ov-t"><tbody>${flightHtml}</tbody></table>` : ''}
