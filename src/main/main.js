@@ -3846,7 +3846,7 @@ function registerIpc() {
         const chSkus = Object.entries(s.wfsCh)
           .map(([ch, q]) => ({ sku: ch, weekly: Math.round(q / WINDOW_DAYS * 7 * 10) / 10 }))
           .sort((a, b) => b.weekly - a.weekly);
-        wfsCand.push({ sku: it.sku, chSkus, gtin: it.barcode || '', perDay: Math.round(perDay * 100) / 100, atWfs, avail });
+        wfsCand.push({ sku: it.sku, chSkus, gtin: it.barcode || '', perDay: Math.round(perDay * 100) / 100, sold30: s.wfsQty, atWfs, avail });
       }
       // Running low: everything we hold (shelf + WFS) against all-channel
       // pace; flagged when it runs out inside the lead time. Order covers
@@ -3879,7 +3879,7 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 3, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item
+      v: 4, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units
       wfsCand,
       low: low.slice(0, 40),
       lowCount: low.length,
@@ -3925,11 +3925,11 @@ function registerIpc() {
     };
     const sold = live ? live.sold : null;
     let money = overviewCache.money;
-    if (!money || money.v !== 3 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    if (!money || money.v !== 4 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
       const p = refreshOverviewMoney(cfg);
       // stale view answers instantly while a refresh runs; first call (or a
       // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 3) {
+      if (!money || money.v !== 4) {
         try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
       } else {
         p.catch(() => { /* stale money stands */ });

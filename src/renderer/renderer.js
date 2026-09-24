@@ -9778,20 +9778,25 @@ function ovRenderWfs() {
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  const rowsHtml = plan.rows.map((r, i) => {
-    const weekly = Math.round(r.perDay * 7);
-    // every Walmart WFS listing that sold this item in the last 30 days, with
-    // its own pace; listings with no sales in the window never show
+  // one console-style block per SKU (owner design 2026-09-24, variants/
+  // wfs-row.html): urgency strip | SKU line + mini sheet | SEND over IGNORE.
+  // The SKU line is the Walmart channel SKU that sold most in the last 30
+  // days (the Linnworks SKU when they match); more listings show as +N.
+  const rowsHtml = plan.rows.map((r) => {
+    const t = ovTone(r.coverDays);
     const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
-    const chHtml = chs.length
-      ? `<span class="ov-meta ov-chs">${chs.map(c => `<span title="Walmart channel SKU · ${c.weekly}/wk at WFS">${esc(c.sku)} <b>${c.weekly}/wk</b></span>`).join('')}</span>`
-      : '';
-    return `<tr><td class="ov-rank">${i + 1}</td>
-      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}" title="${weekly}/wk at WFS · ${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}">${esc(r.sku)}</span>
-        <span class="ov-sendline"><span class="ov-pill ${ovTone(r.coverDays)}">Send +${r.send}</span></span>
-        <span class="ov-daysleft ${ovTone(r.coverDays)}">${r.coverDays.toFixed(1)} days left at WFS</span>${chHtml}
-        <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
-      <td class="ov-actcell"><span class="ov-stack"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
+    const head = chs.length ? chs[0].sku : r.sku;
+    const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
+      `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
+    const left = r.coverDays < 0.05 ? '0 days' : `${r.coverDays.toFixed(1)} days`;
+    return `<div class="ov-wrow ${t}"><span class="ov-wstrip"></span>
+      <div class="ov-wmain">
+        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
+        <div class="ov-wcells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+          <span>+${r.send}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${r.atWfs}</span><span class="${t}">${left}</span></div>
+      </div>
+      <div class="ov-wkeys"><button class="ov-wsend" data-ovsend="${esc(r.sku)}">Send</button><button class="ov-wign" data-ovignore="${esc(r.sku)}">Ignore</button></div>
+    </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
@@ -9809,7 +9814,7 @@ function ovRenderWfs() {
         ${f.status === 'received' ? `<a class="ov-link" data-ovunrecv="${f.id}">Undo</a>` : `<span class="ov-act"><button class="btn btn-ghost" data-ovrecv="${f.id}">Mark received</button></span>`}</td></tr>`;
   }).join('');
   box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>
-    ${plan.rows.length ? `<table class="ov-t"><tbody>${rowsHtml}</tbody></table>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
+    ${plan.rows.length ? `<div class="ov-wlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
     ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><table class="ov-t"><tbody>${flightHtml}</tbody></table>` : ''}
     <div class="ov-more">Send = WFS pace × ${plan.targetDays} days − at WFS − on the way</div>`;

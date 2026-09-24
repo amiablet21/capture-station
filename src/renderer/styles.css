@@ -4579,6 +4579,28 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
 .ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
 .ov-badge { font-size: 9.5px; padding: 1px 8px; }
+/* Send to WFS rows as console blocks (owner design 2026-09-24,
+   variants/wfs-row.html T1): strip | SKU + mini sheet | SEND over IGNORE */
+.ov-wlist { display: flex; flex-direction: column; gap: 8px; }
+.ov-wrow { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+.ov-wstrip { background: var(--accent); }
+.ov-wrow.r .ov-wstrip { background: var(--neg-text); }
+.ov-wrow.a .ov-wstrip { background: #D9A21B; }
+.ov-wmain { min-width: 0; }
+.ov-wid { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
+.ov-wsku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-wmore { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.ov-wcells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
+.ov-wcells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-wcells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
+.ov-wcells div:nth-child(4), .ov-wcells span:nth-child(8) { border-right: none; }
+.ov-wcells .r { color: var(--neg-text); } .ov-wcells .a { color: var(--badge-yellow-text); }
+.ov-wkeys { display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
+.ov-wkeys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.ov-wsend { background: var(--accent); color: #fff; border-bottom: 1px solid #D6D3CC !important; }
+.ov-wsend:hover { background: var(--accent-hover); }
+.ov-wign { background: var(--surface-2); color: var(--muted); }
+.ov-wign:hover { background: #EFEEEA; color: var(--text); }
 /* under each SKU: the send amount, then the days WFS has left */
 .ov-sendline { display: block; margin-top: 4px; }
 .ov-daysleft { display: block; font-size: 10.5px; margin-top: 3px; color: var(--muted); }
