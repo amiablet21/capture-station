@@ -1169,6 +1169,28 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`[...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent).join(',') + '|' + [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()).join(',')`);
     check('bulk-derived rows render as REMOVED (revert) then ADDED, by IMRAN-MACBOOK-PRO', res === 'REMOVED,ADDED|IMRAN-MACBOOK-PRO,IMRAN-MACBOOK-PRO', res);
     await exec(`$('stockHistDialog').close()`);
+    // 35e. the customer card on a PO (owner 2026-09-24): an "i" after the PO#
+    // opens (on click, never hover) the buyer, ship-to and phone with copy buttons
+    const custRowId = db.createRow({ channel: 'walmart', orderNumber: 'CUST-ORDER-1', origin: '' }).id;
+    await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); state.orderMeta['CUST-ORDER-1'] = { source: 'WALMART', despatchBy: '', items: [{ sku: 'X133-64GB-GRAY', qty: 1 }],
+      customer: { name: 'Maria Delgado', company: '', address: ['2841 Palmetto Ave, Apt 4B', 'Hialeah, FL 33012', 'United States'], phone: '(305) 555-0142' } }; render(); })()`);
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr')].find(t => t.textContent.includes('CUST-ORDER-1')); const b = tr && tr.querySelector('button.cust-info'); if (!b) return { btn: false };
+      const before = !!document.querySelector('.cust-card'); b.click();
+      const card = document.querySelector('.cust-card'); return { btn: true, before, open: !!card, isOpen: b.classList.contains('is-open'),
+        labels: [...card.querySelectorAll('.cust-l')].map(e => e.textContent), name: card.querySelector('.cust-v').textContent,
+        copies: [...card.querySelectorAll('.cust-copy')].map(e => e.dataset.copy), foot: card.querySelector('.cust-foot').textContent }; })()`);
+    check('customer card: the "i" renders when the order carries a buyer, opens on click with name / ship-to / phone and a copy value each',
+      res && res.btn === true && res.before === false && res.open === true && res.isOpen === true
+        && res.labels.join(',') === 'Customer,Ship to,Phone' && res.name === 'Maria Delgado'
+        && res.copies[0] === 'Maria Delgado' && res.copies[1] === '2841 Palmetto Ave, Apt 4B\nHialeah, FL 33012\nUnited States' && res.copies[2] === '(305) 555-0142'
+        && /Walmart · captured/.test(res.foot),
+      res);
+    res = await exec(`(() => { const b = document.querySelector('#rowsBody button.cust-info.is-open'); if (!b) return null; b.click(); const closed = !document.querySelector('.cust-card'); b.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return { closed, escClosed: !document.querySelector('.cust-card') }; })()`);
+    check('customer card: a second click closes it, and so does Escape', res && res.closed === true && res.escClosed === true, res);
+    res = await exec(`(() => { delete state.orderMeta['CUST-ORDER-1']; render(); const tr2 = [...document.querySelectorAll('#rowsBody tr')].find(t => t.textContent.includes('CUST-ORDER-1')); return !!tr2 && !tr2.querySelector('button.cust-info'); })()`);
+    check('customer card: no "i" when the order has no buyer on record', res === true, res);
+    db.deleteRow(custRowId);
+
     // the bulk popup no longer carries its own history (it all lives in the Stock tab)
     res = await exec(`({ hist: !!document.getElementById('bulkHist'), rev: !!document.getElementById('bulkRevDialog') })`);
     check('bulk popup: its history list and revert dialog are gone', res && res.hist === false && res.rev === false, res);

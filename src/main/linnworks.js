@@ -267,6 +267,21 @@ class LinnworksClient {
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
           totalCharge: Number(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge)) || 0,
           despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
+          // the buyer and the ship-to (owner 2026-09-24: the "i" on the PO)
+          customer: (() => {
+            const ci = o.CustomerInfo || {};
+            const a = ci.Address || {};
+            const lines = [a.Address1, a.Address2, a.Address3].map(x => String(x || '').trim()).filter(Boolean);
+            const cityLine = [String(a.Town || '').trim(), [String(a.Region || '').trim(), String(a.PostCode || '').trim()].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+            if (cityLine) lines.push(cityLine);
+            if (a.Country) lines.push(String(a.Country).trim());
+            return {
+              name: String(a.FullName || ci.ChannelBuyerName || '').trim(),
+              company: String(a.Company || '').trim(),
+              address: lines,
+              phone: String(a.PhoneNumber || '').trim(),
+            };
+          })(),
           // ALL lines are returned, flagged: unlinked lines still reserve stock
           // (they carry a SKU and count in InOrders), so the Stock page's
           // per-SKU order list must see them. Consumers that need a live stock

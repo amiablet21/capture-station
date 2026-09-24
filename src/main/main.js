@@ -1171,6 +1171,7 @@ async function runOrderImport() {
           dropship: !!fallbackId && o.locationId === fallbackId,
           parked: routerRefusedRefs.has(ref),
           despatchBy: o.despatchBy || '',
+          customer: o.customer && (o.customer.name || o.customer.address.length) ? o.customer : null,
           split: isSplit ? { part: pi + 1, of: parts.length } : null,
           items: (o.items || []).filter(it => !it.isService).map(it => {
             const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;

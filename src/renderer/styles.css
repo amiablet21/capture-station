@@ -4804,3 +4804,15 @@ tr.unl-dim:hover td { opacity: 1; }
 .cap-ico.is-on { color: var(--accent); background: var(--accent-soft); }
 .bulk-h-more { display: block; width: 100%; text-align: left; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
 .bulk-h-more:hover { background: var(--accent-soft); color: var(--accent-soft-text); }
+
+/* ---------- the customer card on a PO (owner 2026-09-24) ---------- */
+.cust-info { margin-left: 8px; cursor: pointer; font: inherit; }
+.cust-info.is-open, .cust-info:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.cust-card { position: fixed; z-index: 80; min-width: 300px; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 8px 24px rgba(47, 52, 55, 0.12); padding: 6px 4px; font-family: var(--font); font-weight: 400; }
+.cust-row { display: grid; grid-template-columns: 62px 1fr 26px; gap: 8px; align-items: start; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); }
+.cust-row:last-of-type { border-bottom: none; }
+.cust-l { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding-top: 2px; }
+.cust-v { font-size: 13px; line-height: 1.45; color: var(--text); word-break: break-word; }
+.cust-copy { width: 24px; height: 24px; margin-top: -2px; }
+.cust-copy svg { width: 13px; height: 13px; }
+.cust-foot { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; border-top: 1px solid var(--border-soft); }

@@ -183,6 +183,7 @@ const ICONS = {
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
   clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
   monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
+  copy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></svg>',
 };
 
 /* ---------- rendering ---------- */
@@ -451,6 +452,7 @@ function render() {
   // renumber by final display order: whatever sits on top gets the biggest
   // number (newest-first aesthetic), regardless of due sorting or filters
   visible = visible.map((v, i) => ({ ...v, num: visible.length - i }));
+  closeCustCard(); // the tbody is rebuilt: a card would point at a dead button
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = metaFor(row);
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
@@ -497,6 +499,7 @@ function render() {
         ${meta && meta.split ? `<span class="badge badge-split" title="Linnworks split this order across locations — this row is part ${meta.split.part} of ${meta.split.of} and ships separately (its own tracking, its own process)">${meta.split.part}/${meta.split.of}</span>` : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
+        meta && meta.customer ? `<button type="button" class="item-info cust-info" data-act="customer" title="Customer and ship-to address — click to open">i</button>` : ''}${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
       <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
@@ -874,7 +877,65 @@ $('clearFailedBtn').addEventListener('click', async () => {
   focusScan();
 });
 
+/* ---------- the customer card on a PO (owner 2026-09-24) ----------
+   click the "i" after the PO#: a card with the buyer's name, ship-to and
+   phone, each with a copy button. Click the "i" again, click away, or
+   press Esc to close. Click, not hover, so it never opens by accident. */
+
+let custCard = null; // { el, btn }
+
+function closeCustCard() {
+  if (!custCard) return;
+  custCard.el.remove();
+  custCard.btn.classList.remove('is-open');
+  custCard = null;
+}
+
+function openCustCard(btn, row, meta) {
+  if (custCard && custCard.btn === btn) { closeCustCard(); return; }
+  closeCustCard();
+  const c = meta.customer;
+  const rows = [];
+  if (c.name) rows.push(['Customer', esc(c.name), c.name]);
+  if (c.company) rows.push(['Company', esc(c.company), c.company]);
+  if (c.address && c.address.length) rows.push(['Ship to', c.address.map(esc).join('<br>'), c.address.join('\n')]);
+  if (c.phone) rows.push(['Phone', `<span class="mono">${esc(c.phone)}</span>`, c.phone]);
+  const el = document.createElement('div');
+  el.className = 'cust-card';
+  el.innerHTML = rows.map(([l, html, raw]) => `<div class="cust-row"><span class="cust-l">${l}</span><span class="cust-v">${html}</span><button type="button" class="btn-icon cust-copy" data-copy="${esc(raw)}" title="Copy the ${l.toLowerCase()}">${ICONS.copy}</button></div>`).join('')
+    + `<div class="cust-foot">${esc(channelLabel(row.channel))} · captured ${fmtTime(row.created_at)}</div>`;
+  document.body.appendChild(el);
+  const r = btn.getBoundingClientRect();
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let left = r.left, top = r.bottom + 6;
+  if (left + w > window.innerWidth - 12) left = Math.max(12, window.innerWidth - 12 - w);
+  if (top + h > window.innerHeight - 12) top = Math.max(12, r.top - 6 - h);
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  btn.classList.add('is-open');
+  custCard = { el, btn };
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (!custCard) return;
+  if (e.target.closest('.cust-card') || e.target === custCard.btn) return;
+  closeCustCard();
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && custCard) closeCustCard(); }, true);
+document.addEventListener('click', (e) => {
+  const cp = e.target.closest('.cust-card .cust-copy');
+  if (cp) copyFromApp(cp.dataset.copy);
+});
+
 $('rowsBody').addEventListener('click', async (e) => {
+  const custBtn = e.target.closest('button.cust-info');
+  if (custBtn) {
+    const tr = custBtn.closest('tr');
+    const row = state.rows.find(r => String(r.id) === tr.dataset.id);
+    const meta = row && metaFor(row);
+    if (row && meta && meta.customer) openCustCard(custBtn, row, meta);
+    return;
+  }
   // PARKED chip: one click clears the parked tag + lock in Linnworks
   const unpark = e.target.closest('[data-unpark]');
   if (unpark) {
