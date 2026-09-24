@@ -1553,7 +1553,7 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-search { flex: 0 0 280px; border-radius: 999px; }
 /* the explainer sentence left the bar (owner: unnecessary, 2026-09-21);
    the spacer keeps History/Refresh on the right edge */
-.pr-bar #prHistBtn { margin-left: auto; }
+.pr-bar .cap-icons { margin-left: auto; }
 .pr-head { display: grid; gap: 0; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
 .pr-fluct { font-weight: 400; letter-spacing: 0; color: var(--faint); }
 .pr-body { flex: 1; min-height: 0; overflow: auto; }

@@ -7082,6 +7082,7 @@ async function enterPricing(force) {
   }
   prData = res;
   prRender();
+  return !!res.rescanning;
 }
 
 function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channels || []).length}, minmax(240px, 1.15fr))`; }
@@ -7220,7 +7221,15 @@ function prRender() {
 }
 
 $('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
-$('prRefresh').addEventListener('click', () => enterPricing(true));
+$('prRefresh').addEventListener('click', async () => {
+  const btn = $('prRefresh');
+  btn.disabled = true;
+  btn.classList.add('is-spinning');
+  const rescanning = await enterPricing(true);
+  btn.disabled = false;
+  // a link rescan is still running: keep spinning until 'pricing:refreshed'
+  if (!rescanning) btn.classList.remove('is-spinning');
+});
 const prSortPaint = () => {
   for (const b of document.querySelectorAll('#prSortSet button')) b.classList.toggle('is-on', b.dataset.prsort === prSort);
 };
@@ -7544,7 +7553,7 @@ async function prVarPickOpen(btn) {
 }
 
 // the background stored-price fill finished a batch — repaint quietly
-api.on('pricing:refreshed', () => { if (activePage === 'pricing') enterPricing(); });
+api.on('pricing:refreshed', () => { $('prRefresh').classList.remove('is-spinning'); if (activePage === 'pricing') enterPricing(); });
 
 /* price history: the centered popup */
 async function prHistLoad() {

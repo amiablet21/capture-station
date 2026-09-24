@@ -1176,6 +1176,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`[...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent).join(',') + '|' + [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()).join(',')`);
     check('bulk-derived rows render as REMOVED (revert) then ADDED, by IMRAN-MACBOOK-PRO', res === 'REMOVED,ADDED|IMRAN-MACBOOK-PRO,IMRAN-MACBOOK-PRO', res);
     await exec(`$('stockHistDialog').close()`);
+    // 35d2. the Pricing bar wears the Capture band's icon cluster (owner 2026-09-24)
+    res = await exec(`({ hist: $('prHistBtn').className, refresh: $('prRefresh').className, inCluster: !!$('prRefresh').closest('.pr-bar .cap-icons'), words: ($('prHistBtn').textContent + $('prRefresh').textContent).trim() })`);
+    check('Pricing bar: History and Refresh are icon buttons in one cluster, no words', res && /cap-ico/.test(res.hist) && /cap-ico/.test(res.refresh) && res.inCluster === true && res.words === '', res);
+
     // 35e. the customer card on a PO (owner 2026-09-24): an "i" after the PO#
     // opens (on click, never hover) the buyer, ship-to and phone with copy buttons
     const custRowId = db.createRow({ channel: 'walmart', orderNumber: 'CUST-ORDER-1', origin: '' }).id;

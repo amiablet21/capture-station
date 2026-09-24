@@ -2258,7 +2258,23 @@ function registerIpc() {
         return { ok: true, stale: true, ...snap };
       }
     }
-    return buildPricingData(force);
+    // Refresh (owner 2026-09-24: "I still see the old SKU even though I
+    // deleted it from the channel SKUs"): the extra lines the grid draws
+    // for link records come from the hourly link scan, so a stale record
+    // outlived an unlink for up to an hour. A forced refresh drops that
+    // cache and starts a full rescan in the background; the grid paints
+    // now from the feed, and 'pricing:refreshed' repaints it once the
+    // scan lands (the Refresh icon keeps spinning until then).
+    let rescanning = false;
+    if (force && !unlistedScanRunning) {
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      runUnlistedScan(cfg).catch(() => { /* the next hourly pass retries */ });
+      rescanning = true;
+    } else if (force && unlistedScanRunning) {
+      rescanning = true;
+    }
+    const built = await buildPricingData(force);
+    return built && built.ok ? { ...built, rescanning } : built;
   });
 
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {

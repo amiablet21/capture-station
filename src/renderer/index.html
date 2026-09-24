@@ -304,8 +304,15 @@
         <span id="prSortSet" class="pr-sortset" title="Family keeps the biggest sellers on top but pulls each product's other capacities (same model + color) directly under it">
           <button type="button" data-prsort="stock">Stock</button><button type="button" data-prsort="family">Family</button>
         </span>
-        <button id="prHistBtn" class="btn btn-ghost">History</button>
-        <button id="prRefresh" class="btn btn-ghost" title="Refresh listings and prices from Linnworks">Refresh</button>
+        <!-- the same quiet icon cluster the Capture band uses (owner 2026-09-24) -->
+        <div class="cap-icons">
+          <button id="prHistBtn" class="cap-ico" title="Price history — every price change made here" aria-label="Price history">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
+          </button>
+          <button id="prRefresh" class="cap-ico" title="Refresh — re-read listings, links and prices from Linnworks" aria-label="Refresh">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+          </button>
+        </div>
       </div>
       <div id="prHead" class="pr-head" hidden></div>
       <div id="prBody" class="pr-body"><p class="dlg-note pr-note">Loading…</p></div>
