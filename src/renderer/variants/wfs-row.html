@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (button workshop)</title>
+<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (terminal workshop)</title>
 <!--
   Owner 2026-09-24: redesign the Send to WFS rows line by line.
-  Picked so far: R3 strip + B mini sheet + "30-Day Sales" column.
-  Round 4 (this file): the Send / Ignore buttons looked "weird in the
-  middle" - three placements with bigger pill buttons. Real 400px column
-  width, enlarged 1.35x, on the real styles.css.
+  Picked so far: urgency strip + mini sheet + "30-Day Sales". Buttons:
+  "stacked on the right ... it should almost look like a terminal".
+  Round 5 (this file): two readings - T1 a light console grid where
+  Send / Ignore are the sheet's last column; T2 a dark terminal row.
+  Real 400px column width, enlarged 1.35x, on the real styles.css.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -19,100 +20,83 @@
   .wr-lbl b { color: var(--text); letter-spacing: .02em; }
   .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
   .wr-col { width: 400px; zoom: 1.35; }
-  .wr-col .ov-panel { padding: 4px 10px; }
+  .wr-col .ov-panel { padding: 8px 10px; }
 
-  .row { display: flex; gap: 10px; padding: 10px 8px 10px 0; }
-  .row + .row { border-top: 1px solid var(--border-soft); }
-  .row .strip { width: 3px; border-radius: 3px; flex: 0 0 auto; }
-  .row .strip.r { background: var(--neg-text); } .row .strip.a { background: #D9A21B; } .row .strip.g { background: var(--accent); }
-  .row .l { flex: 1; min-width: 0; }
+  /* ---- T1 · console grid: the whole row is one bordered block ---- */
+  .t1 { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+  .t1 + .t1 { margin-top: 8px; }
+  .t1 .strip.r { background: var(--neg-text); } .t1 .strip.a { background: #D9A21B; } .t1 .strip.g { background: var(--accent); }
+  .t1 .id { padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; }
+  .t1 .id .sku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); }
+  .t1 .id .ch { display: block; font-size: 10px; color: var(--faint); }
+  .t1 .cells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
+  .t1 .cells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; }
+  .t1 .cells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .t1 .cells div:nth-child(4), .t1 .cells span:nth-child(8) { border-right: none; }
+  .t1 .cells .r { color: var(--neg-text); } .t1 .cells .a { color: var(--badge-yellow-text); }
+  .t1 .main { grid-column: 2; }
+  .t1 .keys { grid-column: 3; display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
+  .t1 .keys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+  .t1 .keys .send { background: var(--accent); color: #fff; border-bottom: 1px solid #D6D3CC; }
+  .t1 .keys .send:hover { background: var(--accent-hover); }
+  .t1 .keys .ign { background: var(--surface-2); color: var(--muted); }
+  .t1 .keys .ign:hover { background: #EFEEEA; color: var(--text); }
 
-  .sheet { display: grid; grid-template-columns: 0.85fr 1.35fr 0.9fr 1.25fr; border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; margin-top: 6px; }
-  .sheet div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 7px; border-right: 1px solid #EAE8E3; font-size: 8.5px; line-height: 1.25; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: #F4F3F0; }
-  .sheet div:nth-child(4) { border-right: none; }
-  .sheet span { white-space: nowrap; padding: 4px 7px; border-right: 1px solid #EAE8E3; border-top: 1px solid #E0DED8; font-family: var(--mono); font-size: 12px; font-weight: 700; background: var(--surface); }
-  .sheet span:nth-child(8) { border-right: none; }
-  .sheet span.r { color: var(--neg-text); } .sheet span.a { color: var(--badge-yellow-text); } .sheet span.g { color: var(--accent); }
-
-  /* pill buttons */
-  .pill-btn { font-family: var(--font); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 18px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
-  .pill-send { background: var(--accent); color: #fff; }
-  .pill-send:hover { background: var(--accent-hover); }
-  .pill-ign { background: var(--surface); color: var(--muted); border-color: var(--border); }
-  .pill-ign:hover { color: var(--text); background: var(--surface-2); }
-
-  /* P1 · tall stacked pills filling the row height */
-  .p1 .acts { display: flex; flex-direction: column; justify-content: space-between; width: 84px; }
-  .p1 .acts .pill-btn { padding: 6px 0; }
-
-  /* P2 · side-by-side pills on the SKU line, sheet full width below */
-  .p2 .top { display: flex; align-items: flex-start; gap: 8px; }
-  .p2 .top .ids { flex: 1; min-width: 0; }
-  .p2 .top .acts { display: flex; gap: 6px; }
-  .p2 .top .pill-btn { padding: 5px 14px; font-size: 12px; }
-
-  /* P3 · one wide Send pill under the sheet, Ignore as a small ghost pill */
-  .p3 .foot { display: flex; gap: 6px; margin-top: 8px; }
-  .p3 .foot .pill-send { flex: 1; font-family: var(--mono); }
+  /* ---- T2 · dark terminal ---- */
+  .t2wrap { background: #0E1512; border-radius: 10px; padding: 8px; }
+  .t2 { display: grid; grid-template-columns: 1fr 86px; gap: 0 10px; padding: 8px 8px 8px 10px; border-left: 3px solid; font-family: var(--mono); color: #CFE8DA; }
+  .t2 + .t2 { border-top: 1px dashed rgba(255,255,255,.08); }
+  .t2.r { border-left-color: #E5534B; } .t2.a { border-left-color: #E3B341; } .t2.g { border-left-color: #3FB950; }
+  .t2 .info { min-width: 0; }
+  .t2 .sku { display: block; font-size: 11.5px; font-weight: 700; color: #7EE2A8; }
+  .t2 .sku::before { content: '> '; color: #4C6B5B; }
+  .t2 .ch { display: block; font-size: 10px; color: #6E8A7C; margin-left: 14px; }
+  .t2 .vals { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 0 14px; margin: 6px 0 0 14px; }
+  .t2 .vals i { font-style: normal; font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: #5E7A6C; }
+  .t2 .vals b { font-size: 12px; color: #E6F2EA; }
+  .t2 .vals b.r { color: #FF7B72; } .t2 .vals b.a { color: #E3B341; }
+  .t2 .keys { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+  .t2 .keys button { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 6px 0; border-radius: 3px; cursor: pointer; }
+  .t2 .keys .send { background: #238636; color: #fff; border: 1px solid #2EA043; }
+  .t2 .keys .send:hover { background: #2EA043; }
+  .t2 .keys .ign { background: transparent; color: #8B9E94; border: 1px solid #30463B; }
+  .t2 .keys .ign:hover { color: #CFE8DA; border-color: #4C6B5B; }
 </style>
 </head>
 <body>
 <div class="wr-page">
-  <h1>Send to WFS · buttons workshop</h1>
-  <div class="sub">30-Day Sales version, three ways to place bigger pill buttons. Real column width (400px), enlarged 1.35×.</div>
+  <h1>Send to WFS · terminal workshop</h1>
+  <div class="sub">Send / Ignore stacked on the right. Two readings of "terminal". Real column width (400px), enlarged 1.35×.</div>
   <div class="wr-grid">
 
     <div>
-      <div class="wr-lbl"><b>P1</b> · tall stacked pills</div>
+      <div class="wr-lbl"><b>T1</b> · console grid (light, matches the app)</div>
       <div class="wr-col"><div class="ov-panel">
-        <div class="row p1"><span class="strip r"></span>
-          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+        <div class="t1"><span class="strip r"></span>
+          <div class="main"><div class="id"><span class="sku">X400-128GB-GRAY</span><span class="ch">X400-128GB-BLACK-INTL-VER</span></div>
+            <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
               <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
-          <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
-        <div class="row p1"><span class="strip a"></span>
-          <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+          <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
+        <div class="t1"><span class="strip a"></span>
+          <div class="main"><div class="id"><span class="sku">X135-64GB-GRAY</span><span class="ch">X135-64GB-GRAY-LTE</span></div>
+            <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
               <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div>
-          <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
+          <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
       </div></div>
-      <div class="wr-note">Same place, bigger pills: Send lines up with the SKU, Ignore with the bottom of the sheet. The sheet gets narrower, so "30-Day Sales" gets cut off.</div>
+      <div class="wr-note">Each row is one bordered block. Send / Ignore are square keys stacked in the last column, running the full height of the row.</div>
     </div>
 
     <div>
-      <div class="wr-lbl"><b>P2</b> · pills beside the SKU, sheet full width</div>
-      <div class="wr-col"><div class="ov-panel">
-        <div class="row p2"><span class="strip r"></span>
-          <div class="l">
-            <div class="top"><div class="ids"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span></div>
-              <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-              <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div></div>
-        <div class="row p2"><span class="strip a"></span>
-          <div class="l">
-            <div class="top"><div class="ids"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span></div>
-              <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-              <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div></div>
+      <div class="wr-lbl"><b>T2</b> · dark terminal</div>
+      <div class="wr-col"><div class="t2wrap">
+        <div class="t2 r"><div class="info"><span class="sku">X400-128GB-GRAY</span><span class="ch">X400-128GB-BLACK-INTL-VER</span>
+          <div class="vals"><i>send</i><i>30-day sales</i><i>at wfs</i><i>left</i><b>+78</b><b>77</b><b>0</b><b class="r">0 days</b></div></div>
+          <div class="keys"><button class="send">[ SEND ]</button><button class="ign">[ IGNORE ]</button></div></div>
+        <div class="t2 a"><div class="info"><span class="sku">X135-64GB-GRAY</span><span class="ch">X135-64GB-GRAY-LTE</span>
+          <div class="vals"><i>send</i><i>30-day sales</i><i>at wfs</i><i>left</i><b>+62</b><b>197</b><b>32</b><b class="a">4.9 days</b></div></div>
+          <div class="keys"><button class="send">[ SEND ]</button><button class="ign">[ IGNORE ]</button></div></div>
       </div></div>
-      <div class="wr-note">Buttons sit on the SKU line, top right; the sheet gets the whole width underneath so the numbers breathe.</div>
-    </div>
-
-    <div>
-      <div class="wr-lbl"><b>P3</b> · one wide Send pill under the sheet</div>
-      <div class="wr-col"><div class="ov-panel">
-        <div class="row p3"><span class="strip r"></span>
-          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-              <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div>
-            <div class="foot"><button class="pill-btn pill-send">Send 78 to WFS</button><button class="pill-btn pill-ign">Ignore</button></div></div></div>
-        <div class="row p3"><span class="strip a"></span>
-          <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
-            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-              <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div>
-            <div class="foot"><button class="pill-btn pill-send">Send 62 to WFS</button><button class="pill-btn pill-ign">Ignore</button></div></div></div>
-      </div></div>
-      <div class="wr-note">A big green pill across the bottom that says exactly what happens; Ignore beside it. Tallest rows of the three.</div>
+      <div class="wr-note">A dark console look: green monospace, a "&gt;" prompt before each SKU, [ SEND ] / [ IGNORE ] keys stacked on the right. Stands out from the rest of the (light) app.</div>
     </div>
 
   </div>
