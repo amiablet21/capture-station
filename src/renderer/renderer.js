@@ -6161,7 +6161,9 @@ function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slic
 function shPcKey(name) {
   return String(name || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
-const shPcOf = (e) => (e.reason === 'sale' ? e.market : shPcKey(e.computer));
+// sales fold too, so a Linnworks source spelled like a station ("Stock Room")
+// can't sit next to it as a second entry
+const shPcOf = (e) => shPcKey(e.reason === 'sale' ? e.market : e.computer);
 
 function shWhat(e, withSku) {
   const n = Math.abs(Number(e.delta) || 0);
@@ -6221,7 +6223,7 @@ function shMarks(e) {
 function shRowHtml(e, withSku, clickable) {
   const act = shActionOf(e), A = SH_ACT[act];
   const isSale = e.reason === 'sale';
-  const who = isSale ? (e.market || 'SALE') : (shPcKey(e.computer) || '—');
+  const who = isSale ? (shPcKey(e.market) || 'SALE') : (shPcKey(e.computer) || '—');
   const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
