@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Pricing — console-block ideas (pick one)</title>
+<!--
+  Owner 2026-09-24: "make the pricing page design like the overview WFS
+  section". Every idea reuses the Send-to-WFS block: strip | SKU line + mini
+  sheet | keys. Sample numbers (same as the sold-price preview).
+    P1 - one block per product, one sheet row per listing (channel, SKU,
+         60-day sold, last sold, price); EDIT / HISTORY keys
+    P2 - today's channel columns kept, each cell becomes its own small block
+    P3 - compare-first: the Walmart reference sheet on top, eBay / Temu
+         rows show the gap to Walmart's 30-day average
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; max-width: 1180px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 26px 0 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 760px; }
+
+  /* the shipped block, reused */
+  .blk { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+  .blk.nokeys { grid-template-columns: 3px 1fr; }
+  .blk + .blk { margin-top: 8px; }
+  .strip { background: var(--accent); }
+  .blk.r .strip { background: var(--neg-text); } .blk.a .strip { background: #D9A21B; }
+  .main { min-width: 0; }
+  .id { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px 5px; border-bottom: 1px solid #E0DED8; }
+  .sku { font-size: 12px; font-weight: 700; color: var(--badge-blue-text); }
+  .stk { font-size: 10.5px; color: var(--muted); font-family: var(--font); }
+  .ref { margin-left: auto; font-size: 10.5px; color: var(--muted); font-family: var(--font); }
+  .ref b { font-family: var(--mono); color: var(--text); }
+  .sheet { display: grid; }
+  .sheet > div { padding: 3px 10px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-bottom: 1px solid #E0DED8; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .sheet > span { padding: 5px 10px; font-size: 11.5px; border-bottom: 1px solid #EEECE7; border-right: 1px solid #EEECE7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet > .end { border-right: none; }
+  .sheet > span.last-row { border-bottom: none; }
+  .ch { font-weight: 700; font-size: 10px; letter-spacing: .06em; }
+  .ch.w { color: #1F6C9F; } .ch.e { color: #956400; } .ch.t { color: #6A2E9E; }
+  .num { text-align: right; }
+  .dim { color: var(--faint); }
+  .hot { color: var(--badge-yellow-text); font-weight: 700; }
+  .ro { color: var(--muted); }
+  .ed { font-weight: 700; color: var(--text); text-decoration: underline dotted var(--faint); text-underline-offset: 3px; cursor: text; }
+  .up { color: var(--accent); font-weight: 700; } .dn { color: var(--neg-text); font-weight: 700; }
+  .keys { display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
+  .keys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+  .keys .pri { background: var(--accent); color: #fff; }
+  .keys .pri + button { border-top: 1px solid #D6D3CC; }
+  .keys .sec { background: var(--surface-2); color: var(--muted); }
+
+  /* P1 */
+  .p1 .sheet { grid-template-columns: 78px 1.6fr 0.6fr 1.2fr 0.8fr 0.8fr; }
+  /* P2 */
+  .p2row { display: grid; grid-template-columns: 210px repeat(3, 1fr); gap: 8px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .p2prod .sku { display: block; }
+  .p2prod .stk { display: block; margin-top: 2px; }
+  .p2 .blk { grid-template-columns: 3px 1fr; }
+  .p2 .strip.w { background: #1F6C9F; } .p2 .strip.e { background: #956400; } .p2 .strip.t { background: #6A2E9E; }
+  .p2 .sheet { grid-template-columns: 1.7fr 0.5fr 0.8fr; }
+  .p2 .foot { padding: 4px 10px; font-size: 10px; color: var(--muted); font-family: var(--font); border-top: 1px dashed #E0DED8; }
+  .p2 .foot b { font-family: var(--mono); color: var(--text); }
+  .p2 .none { padding: 8px 10px; font-size: 10.5px; color: var(--faint); font-style: italic; font-family: var(--font); }
+  .p2head { display: grid; grid-template-columns: 210px repeat(3, 1fr); gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--muted); padding-bottom: 4px; border-bottom: 1px solid var(--border); font-family: var(--font); }
+  /* P3 */
+  .p3 .refsheet { grid-template-columns: 1fr 1fr 1fr 1fr; background: #F7FAFC; }
+  .p3 .refsheet > span { font-weight: 700; }
+  .p3 .sheet.list { grid-template-columns: 78px 1.6fr 0.9fr 1fr 0.9fr; }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Pricing · in the Send to WFS block style</h1>
+  <div class="sub">Three ways to build the Pricing page from the same blocks as Send to WFS and Running low. Sample numbers from the sold-price preview. Strip colour = stock (green in stock, amber low, red out).</div>
+
+  <!-- ============ P1 ============ -->
+  <div class="wr-lbl"><b>P1</b> · one block per product, one row per listing</div>
+  <div class="p1">
+    <div class="blk"><span class="strip"></span><div class="main">
+      <div class="id"><span class="sku">X400-128GB-GRAY</span><span class="stk">42 in stock</span><span class="ref">Walmart 30-day avg <b>$147.62</b> · 77 sold</span></div>
+      <div class="sheet">
+        <div>Channel</div><div>Channel SKU</div><div class="num">Sold</div><div>Last sold</div><div class="num">Avg</div><div class="num end">Price</div>
+        <span class="ch w">WALMART</span><span>X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span>$149.99 <span class="dim">9/24</span></span><span class="num">$146.80</span><span class="num ro end">$149.99</span>
+        <span class="ch w">WALMART</span><span>X400-128GB-GRAY</span><span class="num">×26</span><span>$151.00 <span class="dim">9/22</span></span><span class="num">$149.25</span><span class="num ro end">$152.49</span>
+        <span class="ch e">EBAY</span><span>X400-128GB-GRAY-EB</span><span class="num">×4</span><span>$155.00 <span class="dim">9/19</span></span><span class="num">$152.00</span><span class="num ed end">$159.99</span>
+        <span class="ch t last-row">TEMU US</span><span class="last-row">X400128GRAY</span><span class="num dim last-row">—</span><span class="dim last-row">—</span><span class="num dim last-row">—</span><span class="num ed end last-row">$164.99</span>
+      </div></div>
+      <div class="keys"><button class="pri">+ SKU</button><button class="sec">History</button></div></div>
+    <div class="blk a"><span class="strip"></span><div class="main">
+      <div class="id"><span class="sku">X135-64GB-GRAY</span><span class="stk">31 in stock</span><span class="ref">Walmart 30-day avg <b>$89.10</b> · 197 sold</span></div>
+      <div class="sheet">
+        <div>Channel</div><div>Channel SKU</div><div class="num">Sold</div><div>Last sold</div><div class="num">Avg</div><div class="num end">Price</div>
+        <span class="ch w">WALMART</span><span>X135-64GB-GRAY-LTE</span><span class="num hot">×150</span><span>$88.49 <span class="dim">9/24</span></span><span class="num">$89.20</span><span class="num ro end">$89.99</span>
+        <span class="ch w">WALMART</span><span>X135-64GB-GRAY-WFS2</span><span class="num">×47</span><span>$87.99 <span class="dim">9/23</span></span><span class="num">$87.99</span><span class="num ro end">$87.99</span>
+        <span class="ch e last-row">EBAY</span><span class="last-row">X135-64GB-GRAY</span><span class="num dim last-row">—</span><span class="dim last-row">—</span><span class="num dim last-row">—</span><span class="num ed end last-row">$94.99</span>
+      </div></div>
+      <div class="keys"><button class="pri">+ SKU</button><button class="sec">History</button></div></div>
+  </div>
+  <div class="wr-note">Reads like one small spreadsheet per product. Walmart prices grey (repricer's), eBay / Temu prices dotted-underlined = click to edit. The Walmart average sits on the SKU line as the reference. Columns disappear from the page — channels are rows instead, so a new marketplace never widens the sheet.</div>
+
+  <!-- ============ P2 ============ -->
+  <div class="wr-lbl"><b>P2</b> · keep the channel columns, each cell is a block</div>
+  <div class="p2">
+    <div class="p2head"><span>PRODUCT</span><span style="color:#1F6C9F">WALMART</span><span style="color:#956400">EBAY</span><span style="color:#6A2E9E">TEMU US</span></div>
+    <div class="p2row">
+      <div class="p2prod"><span class="sku mono">X400-128GB-GRAY</span><span class="stk">42 in stock</span></div>
+      <div class="blk"><span class="strip w"></span><div class="main"><div class="sheet">
+        <div>Channel SKU</div><div class="num">Sold</div><div class="num end">Price</div>
+        <span>X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span class="num ro end">$149.99</span>
+        <span class="last-row">X400-128GB-GRAY</span><span class="num last-row">×26</span><span class="num ro end last-row">$152.49</span>
+      </div><div class="foot">last <b>$149.99</b> 9/24 · 30-day avg <b>$147.62</b></div></div></div>
+      <div class="blk"><span class="strip e"></span><div class="main"><div class="sheet">
+        <div>Channel SKU</div><div class="num">Sold</div><div class="num end">Price</div>
+        <span class="last-row">X400-128GB-GRAY-EB</span><span class="num last-row">×4</span><span class="num ed end last-row">$159.99</span>
+      </div><div class="foot">last <b>$155.00</b> 9/19 · avg <b>$152.00</b></div></div></div>
+      <div class="blk"><span class="strip t"></span><div class="main"><div class="sheet">
+        <div>Channel SKU</div><div class="num">Sold</div><div class="num end">Price</div>
+        <span class="last-row">X400128GRAY</span><span class="num dim last-row">—</span><span class="num ed end last-row">$164.99</span>
+      </div><div class="foot">no sales in 30 days</div></div></div>
+    </div>
+    <div class="p2row">
+      <div class="p2prod"><span class="sku mono">X135-64GB-GRAY</span><span class="stk">31 in stock</span></div>
+      <div class="blk"><span class="strip w"></span><div class="main"><div class="sheet">
+        <div>Channel SKU</div><div class="num">Sold</div><div class="num end">Price</div>
+        <span>X135-64GB-GRAY-LTE</span><span class="num hot">×150</span><span class="num ro end">$89.99</span>
+        <span class="last-row">X135-64GB-GRAY-WFS2</span><span class="num last-row">×47</span><span class="num ro end last-row">$87.99</span>
+      </div><div class="foot">last <b>$88.49</b> 9/24 · 30-day avg <b>$89.10</b></div></div></div>
+      <div class="blk"><span class="strip e"></span><div class="main"><div class="sheet">
+        <div>Channel SKU</div><div class="num">Sold</div><div class="num end">Price</div>
+        <span class="last-row">X135-64GB-GRAY</span><span class="num dim last-row">—</span><span class="num ed end last-row">$94.99</span>
+      </div><div class="foot">no sales in 30 days</div></div></div>
+      <div class="blk"><span class="strip t"></span><div class="main"><div class="none">not listed · + channel SKU</div></div></div>
+    </div>
+  </div>
+  <div class="wr-note">Closest to today's page — same columns, same drag-to-reorder — but every cell becomes a mini console block with its channel's colour strip and a footer holding last sold + 30-day average.</div>
+
+  <!-- ============ P3 ============ -->
+  <div class="wr-lbl"><b>P3</b> · compare to Walmart first</div>
+  <div class="p3">
+    <div class="blk"><span class="strip"></span><div class="main">
+      <div class="id"><span class="sku">X400-128GB-GRAY</span><span class="stk">42 in stock · 2 Walmart listings</span></div>
+      <div class="sheet refsheet">
+        <div>Walmart avg · 30d</div><div>Last sold</div><div>Units · 30d</div><div class="end">Walmart price now</div>
+        <span class="last-row">$147.62</span><span class="last-row">$149.99 <span class="dim">9/24</span></span><span class="last-row">77</span><span class="end last-row ro">$149.99–$152.49</span>
+      </div>
+      <div class="sheet list">
+        <div>Channel</div><div>Channel SKU</div><div class="num">Price</div><div class="num">vs Walmart avg</div><div class="num end">Last sold</div>
+        <span class="ch e">EBAY</span><span>X400-128GB-GRAY-EB</span><span class="num ed">$159.99</span><span class="num up">+$12.37 · 8%</span><span class="num end">$155.00 <span class="dim">9/19</span></span>
+        <span class="ch t last-row">TEMU US</span><span class="last-row">X400128GRAY</span><span class="num ed last-row">$164.99</span><span class="num up last-row">+$17.37 · 12%</span><span class="num end dim last-row">—</span>
+      </div></div>
+      <div class="keys"><button class="pri">Edit</button><button class="sec">History</button></div></div>
+    <div class="blk a"><span class="strip"></span><div class="main">
+      <div class="id"><span class="sku">X135-64GB-GRAY</span><span class="stk">31 in stock · 2 Walmart listings</span></div>
+      <div class="sheet refsheet">
+        <div>Walmart avg · 30d</div><div>Last sold</div><div>Units · 30d</div><div class="end">Walmart price now</div>
+        <span class="last-row">$89.10</span><span class="last-row">$88.49 <span class="dim">9/24</span></span><span class="last-row">197</span><span class="end last-row ro">$87.99–$89.99</span>
+      </div>
+      <div class="sheet list">
+        <div>Channel</div><div>Channel SKU</div><div class="num">Price</div><div class="num">vs Walmart avg</div><div class="num end">Last sold</div>
+        <span class="ch e">EBAY</span><span>X135-64GB-GRAY</span><span class="num ed">$94.99</span><span class="num up">+$5.89 · 7%</span><span class="num end dim">—</span>
+        <span class="ch t last-row">TEMU US</span><span class="last-row dim">not listed</span><span class="num dim last-row">—</span><span class="num dim last-row">—</span><span class="num end dim last-row">—</span>
+      </div></div>
+      <div class="keys"><button class="pri">Edit</button><button class="sec">History</button></div></div>
+  </div>
+  <div class="wr-note">Built for the question you asked: Walmart is the reference sheet at the top (it's not edited here, so its listings collapse into one summary), and every eBay / Temu listing shows how far it sits above or below Walmart's average — green above, red below.</div>
+
+</div>
+</body>
+</html>
