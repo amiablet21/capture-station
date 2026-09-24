@@ -22,6 +22,28 @@ class LinnworksError extends Error {
   }
 }
 
+// Stock history (owner 2026-09-23): every level change the app makes goes
+// through changeStockLevels / setStockLevel below, so one hook here sees
+// them all. main.js installs the recorder; the client stays free of the db.
+let stockLogHook = null;
+function setStockLogHook(fn) { stockLogHook = typeof fn === 'function' ? fn : null; }
+function emitStockLog(event) {
+  if (!stockLogHook) return;
+  try { stockLogHook(event); } catch { /* history is a bonus, never a blocker */ }
+}
+// Linnworks answers a level write with the new StockItemLevel rows; pick the
+// post-change level per SKU out of whatever shape it returns
+function levelsBySku(res) {
+  const map = new Map();
+  const rows = Array.isArray(res) ? res : (res && Array.isArray(res.Items)) ? res.Items : [];
+  for (const r of rows) {
+    if (!r || !r.SKU) continue;
+    const lvl = Number(r.StockLevel ?? r.Level);
+    if (Number.isFinite(lvl)) map.set(String(r.SKU).toUpperCase(), lvl);
+  }
+  return map;
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -245,6 +267,21 @@ class LinnworksClient {
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
           totalCharge: Number(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge)) || 0,
           despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
+          // the buyer and the ship-to (owner 2026-09-24: the "i" on the PO)
+          customer: (() => {
+            const ci = o.CustomerInfo || {};
+            const a = ci.Address || {};
+            const lines = [a.Address1, a.Address2, a.Address3].map(x => String(x || '').trim()).filter(Boolean);
+            const cityLine = [String(a.Town || '').trim(), [String(a.Region || '').trim(), String(a.PostCode || '').trim()].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+            if (cityLine) lines.push(cityLine);
+            if (a.Country) lines.push(String(a.Country).trim());
+            return {
+              name: String(a.FullName || ci.ChannelBuyerName || '').trim(),
+              company: String(a.Company || '').trim(),
+              address: lines,
+              phone: String(a.PhoneNumber || '').trim(),
+            };
+          })(),
           // ALL lines are returned, flagged: unlinked lines still reserve stock
           // (they carry a SKU and count in InOrders), so the Stock page's
           // per-SKU order list must see them. Consumers that need a live stock
@@ -495,12 +532,16 @@ class LinnworksClient {
 
   // Set an absolute stock level for one SKU at one location.
   // Returns { stockLevel, inOrders, available } from Linnworks' response.
-  async setStockLevel(sku, locationId, level) {
+  async setStockLevel(sku, locationId, level, meta) {
     const res = await this.call('Stock/SetStockLevel', {
       stockLevels: [{ SKU: sku, LocationId: locationId, Level: level }],
       changeSource: 'Capture Station stock page',
     });
     const row = (res || [])[0] || {};
+    emitStockLog({
+      kind: 'set', locationId, changeSource: 'Capture Station stock page', meta: meta || {},
+      entries: [{ sku, delta: null, after: Number.isFinite(Number(row.StockLevel)) ? Number(row.StockLevel) : level, set: level }],
+    });
     return {
       stockLevel: row.StockLevel ?? level,
       inOrders: row.InOrders ?? 0,
@@ -665,6 +706,7 @@ class LinnworksClient {
           orderId: o.pkOrderID,
           source: o.Source || '',
           processedOn: o.dProcessedOn || '',
+          reference: o.cReferenceNum || o.ReferenceNum || '', // marketplace order number (stock history's SOLD rows)
         });
       }
       if (!hits.length || page >= (po.TotalPages || 1)) break;
@@ -698,6 +740,7 @@ class LinnworksClient {
             source,
             locationId,
             processedOn: head.processedOn || '',
+            reference: head.reference || (order.GeneralInfo && order.GeneralInfo.ReferenceNum) || '',
             sku: it.SKU || it.ItemNumber || '',
             channelSku: it.ChannelSKU || '',
             title: it.Title || '',
@@ -871,11 +914,17 @@ class LinnworksClient {
   }
 
   // Adjust stock levels by a delta per SKU at one location (negative = deduct).
-  async changeStockLevels(entries, locationId, changeSource) {
-    return this.call('Stock/UpdateStockLevelsBySKU', {
+  async changeStockLevels(entries, locationId, changeSource, meta) {
+    const res = await this.call('Stock/UpdateStockLevelsBySKU', {
       stockLevels: entries.map(e => ({ SKU: e.sku, LocationId: locationId, Level: e.delta })),
       changeSource: changeSource || 'Capture Station',
     });
+    const after = levelsBySku(res);
+    emitStockLog({
+      kind: 'delta', locationId, changeSource: changeSource || 'Capture Station', meta: meta || {},
+      entries: entries.map(e => ({ sku: e.sku, delta: Number(e.delta) || 0, after: after.has(String(e.sku).toUpperCase()) ? after.get(String(e.sku).toUpperCase()) : null })),
+    });
+    return res;
   }
 
   // Unpark orders: parked status is order tag 7; a null tag clears it.
@@ -931,4 +980,4 @@ function trim(s) {
   return String(s || '').replace(/\s+/g, ' ').slice(0, 300);
 }
 
-module.exports = { LinnworksClient, LinnworksError, serialType };
+module.exports = { LinnworksClient, LinnworksError, serialType, setStockLogHook };

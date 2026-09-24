@@ -1067,6 +1067,210 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`api.salesQuery('2026-08-01', '2026-08-03')`);
     check('sales:query refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
 
+    // 35b. stock history (owner 2026-09-23): every level write the app makes
+    // lands in stock_log with who / which computer; the grid's tray clock
+    // and count tooltip read today's summary
+    db.logStockChanges([
+      { sku: 'sh-test-sku', locationId: 'loc-1', delta: 2, levelAfter: 5, reason: 'return', changeSource: 'Capture Station return', ref: 'PO-77', note: 'new', computer: 'Front desk', by: 'RS' },
+      { sku: 'SH-TEST-SKU', locationId: 'loc-1', delta: null, levelAfter: 4, reason: 'set', changeSource: 'Capture Station stock page', note: 'set to 4', computer: 'Office' },
+    ]);
+    const shRows = db.stockHistory('sh-test-sku');
+    check('stock_log: two rows for the SKU, newest first, SKU upper-cased, delta null on a hand-set count',
+      shRows.length === 2 && shRows[0].sku === 'SH-TEST-SKU' && shRows[0].reason === 'set' && shRows[0].delta === null
+        && shRows[0].level_after === 4 && shRows[1].delta === 2 && shRows[1].ref === 'PO-77' && shRows[1].computer === 'Front desk' && shRows[1].by === 'RS',
+      shRows);
+    const shToday = db.stockHistoryToday();
+    check('stock_log today summary: count 2, last = the hand-set row',
+      shToday['SH-TEST-SKU'] && shToday['SH-TEST-SKU'].count === 2 && shToday['SH-TEST-SKU'].lastReason === 'set' && shToday['SH-TEST-SKU'].lastComputer === 'Office',
+      shToday['SH-TEST-SKU']);
+    res = await exec(`api.stockHistory('sh-test-sku')`);
+    check('stock:history IPC returns the rows', res && res.ok === true && res.rows.length === 2 && res.rows[0].sku === 'SH-TEST-SKU', res);
+    res = await exec(`api.stockHistoryToday()`);
+    check('stock:historyToday IPC returns the per-SKU summary', res && res.ok === true && res.bySku['SH-TEST-SKU'].count === 2, res);
+    res = await exec(`[stockHistTip(null), stockHistTip({ count: 2, lastAt: new Date().toISOString(), lastDelta: null, lastAfter: 4, lastReason: 'set', lastComputer: 'Office', lastBy: '' }), stockHistTip({ count: 1, lastAt: new Date().toISOString(), lastDelta: 2, lastReason: 'return', lastComputer: 'Front desk', lastBy: 'RS' }, true)]`);
+    check('stockHistTip: quiet day / hand-set today / count tooltip keeps its click hint',
+      /nothing moved today/.test(res[0]) && /2 changes today · last = 4 at \d\d:\d\d · set · Office/.test(res[1])
+        && /1 change today · last \+2 at \d\d:\d\d · returned · Front desk \(RS\)\nClick to correct the count/.test(res[2]),
+      res);
+    await exec(`openStockHistory('sh-test-sku')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`({ open: $('stockHistDialog').open, sku: $('stockHistSku').textContent, items: document.querySelectorAll('#stockHistBody .sh-line').length,
+      acts: [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent), who: [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()),
+      text: [...document.querySelectorAll('#stockHistBody .sh-text')].map(e => e.textContent.replace(/\\s+/g, ' ').trim()),
+      pcs: [...document.querySelectorAll('#shPcMenu input')].map(i => i.value) })`);
+    check('stock history dialog: opens on the SKU, one pill row per change (SET / RETURNED), the computer on the right, computers in the filter',
+      res && res.open === true && res.sku === 'sh-test-sku' && res.items === 2
+        && res.acts[0] === 'SET' && res.acts[1] === 'RETURNED'
+        && /^to 4/.test(res.text[0]) && /^2 units \(PO#: PO-77\)/.test(res.text[1])
+        && res.who[0] === 'OFFICE' && res.who[1] === 'FRONT DESK RS'
+        && res.pcs.join(',') === 'Office,Front desk',
+      res);
+    // the action filter: tick RETURNED, only that row stays
+    res = await exec(`(() => { shDlg.acts.add('returned'); renderStockHistory(); return [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent); })()`);
+    check('stock history dialog: action filter narrows to RETURNED', res && res.length === 1 && res[0] === 'RETURNED', res);
+    await exec(`$('stockHistDialog').close()`);
+    // the History dialog IS the stock history now: every SKU, the same pill rows, filters + range
+    await exec(`openHistory()`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`({ open: $('historyDialog').open, stockShown: !$('historyStockView').hidden, capHidden: !document.getElementById('historyCapView'),
+      rows: document.querySelectorAll('#hsList .sh-line').length, skus: [...document.querySelectorAll('#hsList .sh-sku')].map(e => e.textContent),
+      range: $('hsRangeDd').querySelector('.sh-dd-label').textContent })`);
+    check('History dialog: opens straight on the stock history, every SKU with the SKU on the row, last 7 days by default, no captures tab',
+      res && res.open === true && res.stockShown === true && res.capHidden === true && res.rows === 2 && res.skus[0] === 'SH-TEST-SKU' && res.range === 'Last 7 days', res);
+    res = await exec(`(() => { $('hsSearch').value = 'PO-77'; hs.text = 'PO-77'; renderHistoryStock(); return document.querySelectorAll('#hsList .sh-line').length; })()`);
+    check('History dialog: Stock tab search narrows by PO#', res === 1, res);
+    await exec(`$('historyDialog').close()`);
+    // Capture page History mode: processed orders in the capture table
+    const histRowId = db.createRow({ channel: 'walmart', orderNumber: 'HIST-ORDER-1', origin: '' }).id;
+    db.setTracking(histRowId, '1Z999HIST', 'UPS');
+    db.setRowItems(histRowId, [{ sku: 'SH-TEST-SKU', qty: 2 }]);
+    db.markSynced(histRowId);
+    await exec(`showPage('capture'); setCapHist(true)`);
+    await new Promise(r => setTimeout(r, 400));
+    res = await exec(`({ on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
+      dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
+      gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
+      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cell-notes').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order').textContent.trim() })`);
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time in Notes; the band swaps to the range and the History icon lights up',
+      res && res.on === true && res.lit === true && res.range === true && res.importHidden === true
+        && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
+        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /^Processed \d\d:\d\d/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
+      res);
+    // the note on a history row is still editable, through the same dialog, onto the same row
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); const b = tr.querySelector('[data-act="note"]'); if (!b) return { btn: false }; b.click(); return { btn: true, open: $('notesDialog').open, title: $('notesTitle').textContent }; })()`);
+    check('Capture history mode: the note control renders and opens the notes dialog for that order', res && res.btn === true && res.open === true && /HIST-ORDER-1/.test(res.title), res);
+    await exec(`$('notesText').value = 'left at side door'; $('notesForm').requestSubmit();`);
+    await new Promise(r => setTimeout(r, 500));
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); return { saved: (tr.querySelector('.note-text') || {}).textContent || '', pill: (tr.querySelector('.history-status') || {}).textContent || '' }; })()`);
+    check('Capture history mode: the saved note shows on the history row and the Processed pill is untouched', res && res.saved === 'left at side door' && /^Processed \d\d:\d\d$/.test(res.pill) && db.getRow(histRowId).notes === 'left at side door', res);
+    res = await exec(`(() => { $('capHistBtn').click(); return { on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
+    check('Capture history mode: clicking the History icon again restores the live list', res && res.on === false && res.lit === false && res.importShown === true && res.hist === 0, res);
+    db.deleteRow(histRowId);
+    // 35c. one history, no doubles (owner 2026-09-23: "I don't want any data
+    // errors"): every log row has a unique gid and inserts are insert-if-
+    // absent, so the same change can never land twice
+    const shBefore = db.stockHistory('sh-test-sku').length;
+    const ins1 = db.logStockChanges([{ gid: 'e2e:fixed-1', sku: 'sh-test-sku', delta: 1, levelAfter: 6, reason: 'return', computer: 'Office' }]);
+    const ins2 = db.logStockChanges([{ gid: 'e2e:fixed-1', sku: 'sh-test-sku', delta: 1, levelAfter: 6, reason: 'return', computer: 'Office' }]);
+    check('stock_log: the same gid inserted twice lands once', ins1.length === 1 && ins2.length === 0 && db.stockHistory('sh-test-sku').length === shBefore + 1, { ins1, ins2 });
+    check('stock_log: rows logged without a gid got one (unique, non-empty)',
+      db.stockHistory('sh-test-sku').every(r => r.gid && r.gid.length > 8) && new Set(db.stockHistory('sh-test-sku').map(r => r.gid)).size === db.stockHistory('sh-test-sku').length,
+      db.stockHistory('sh-test-sku').map(r => r.gid));
+    // the bulk-import history folds in as SET / ADDED / REMOVED rows, idempotently
+    const bulkEntry = { id: 'bulk-e2e-1', ts: '2026-09-22T18:32:03.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'edit', note: '', rows: [{ sku: 'OPEN-BOX-E2E-BLACK', before: 22, qty: 19, after: 19 }] };
+    const bulkAdd = { id: 'bulk-e2e-2', ts: '2026-09-22T19:00:00.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'add', note: 'Tuesday shipment', rows: [{ sku: 'X610-E2E-BLACK', before: 42, qty: 3, after: 45 }, { sku: 'X611-E2E-BLACK', before: 0, qty: 2, after: 2 }] };
+    const bulkRevert = { id: 'bulk-e2e-3', ts: '2026-09-22T19:30:00.000Z', station: 'IMRAN-MACBOOK-PRO', mode: 'revert', revertOf: 'bulk-e2e-2', rows: [{ sku: 'X610-E2E-BLACK', before: 45, qty: -3, after: 42 }] };
+    const conv = [bulkEntry, bulkAdd, bulkRevert].flatMap(db.stockRowsFromBulkEntry);
+    check('bulk history → stock rows: edit = SET to 19 (was 22), add = +3 / +2 received, revert = −3; gids bulk:<id>:<line>',
+      conv.length === 4 && conv[0].gid === 'bulk:bulk-e2e-1:0' && conv[0].delta === null && conv[0].levelAfter === 19 && conv[0].reason === 'set' && conv[0].note === 'was 22'
+        && conv[1].delta === 3 && conv[1].reason === 'bulk-add' && conv[1].note === 'Tuesday shipment' && conv[2].gid === 'bulk:bulk-e2e-2:1' && conv[2].delta === 2
+        && conv[3].delta === -3 && conv[3].reason === 'revert' && conv.every(r => r.computer === 'IMRAN-MACBOOK-PRO'),
+      conv);
+    const bulkIns1 = db.logStockChanges(conv), bulkIns2 = db.logStockChanges(conv);
+    check('bulk history import is idempotent: 4 rows the first time, 0 the second, dated by the entry timestamp',
+      bulkIns1.length === 4 && bulkIns2.length === 0 && db.stockHistory('X610-E2E-BLACK').length === 2 && db.stockHistory('OPEN-BOX-E2E-BLACK')[0].day === '2026-09-22',
+      { bulkIns1: bulkIns1.length, bulkIns2: bulkIns2.length });
+    // the rows read back through the dialog as the pill words the owner asked for
+    await exec(`openStockHistory('X610-E2E-BLACK')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`[...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent).join(',') + '|' + [...document.querySelectorAll('#stockHistBody .sh-pc')].map(e => e.textContent.trim()).join(',')`);
+    check('bulk-derived rows render as REMOVED (revert) then ADDED, by IMRAN-MACBOOK-PRO', res === 'REMOVED,ADDED|IMRAN-MACBOOK-PRO,IMRAN-MACBOOK-PRO', res);
+    await exec(`$('stockHistDialog').close()`);
+    // 35d2. the Pricing bar wears the Capture band's icon cluster (owner 2026-09-24)
+    res = await exec(`({ hist: $('prHistBtn').className, refresh: $('prRefresh').className, inCluster: !!$('prRefresh').closest('.pr-bar .cap-icons'), words: ($('prHistBtn').textContent + $('prRefresh').textContent).trim() })`);
+    check('Pricing bar: History and Refresh are icon buttons in one cluster, no words', res && /cap-ico/.test(res.hist) && /cap-ico/.test(res.refresh) && res.inCluster === true && res.words === '', res);
+
+    // 35e. the customer card on a PO (owner 2026-09-24): an "i" after the PO#
+    // opens (on click, never hover) the buyer, ship-to and phone with copy buttons
+    const custRowId = db.createRow({ channel: 'walmart', orderNumber: 'CUST-ORDER-1', origin: '' }).id;
+    await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); state.orderMeta['CUST-ORDER-1'] = { source: 'WALMART', despatchBy: '', items: [{ sku: 'X133-64GB-GRAY', qty: 1 }],
+      customer: { name: 'Maria Delgado', company: '', address: ['2841 Palmetto Ave, Apt 4B', 'Hialeah, FL 33012', 'United States'], phone: '(305) 555-0142' } }; render(); })()`);
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr')].find(t => t.textContent.includes('CUST-ORDER-1')); const b = tr && tr.querySelector('button.cust-info'); if (!b) return { btn: false };
+      const before = !!document.querySelector('.cust-card'); b.click();
+      const card = document.querySelector('.cust-card'); return { btn: true, before, open: !!card, isOpen: b.classList.contains('is-open'),
+        labels: [...card.querySelectorAll('.cust-l')].map(e => e.textContent), name: card.querySelector('.cust-v').textContent,
+        copies: [...card.querySelectorAll('.cust-copy')].map(e => e.dataset.copy), foot: card.querySelector('.cust-foot').textContent }; })()`);
+    check('customer card: the "i" renders when the order carries a buyer, opens on click with name / ship-to / phone and a copy value each',
+      res && res.btn === true && res.before === false && res.open === true && res.isOpen === true
+        && res.labels.join(',') === 'Customer,Ship to,Phone' && res.name === 'Maria Delgado'
+        && res.copies[0] === 'Maria Delgado' && res.copies[1] === '2841 Palmetto Ave, Apt 4B\nHialeah, FL 33012\nUnited States' && res.copies[2] === '(305) 555-0142'
+        && /Walmart · captured/.test(res.foot),
+      res);
+    res = await exec(`(() => { const b = document.querySelector('#rowsBody button.cust-info.is-open'); if (!b) return null; b.click(); const closed = !document.querySelector('.cust-card'); b.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return { closed, escClosed: !document.querySelector('.cust-card') }; })()`);
+    check('customer card: a second click closes it, and so does Escape', res && res.closed === true && res.escClosed === true, res);
+    res = await exec(`(() => { delete state.orderMeta['CUST-ORDER-1']; render(); const tr2 = [...document.querySelectorAll('#rowsBody tr')].find(t => t.textContent.includes('CUST-ORDER-1')); return !!tr2 && !tr2.querySelector('button.cust-info'); })()`);
+    check('customer card: no "i" when the order has no buyer on record', res === true, res);
+    db.deleteRow(custRowId);
+
+    // the bulk popup no longer carries its own history (it all lives in the Stock tab)
+    res = await exec(`({ hist: !!document.getElementById('bulkHist'), rev: !!document.getElementById('bulkRevDialog') })`);
+    check('bulk popup: its history list and revert dialog are gone', res && res.hist === false && res.rev === false, res);
+
+    // 35d. corrections (owner 2026-09-23): edit / delete a history line
+    // through a NEW linked line, never by rewriting the old one
+    const lm = () => db.stockLogLinkMap();
+    const lvl = (m) => (k) => (k in m ? m[k] : null);
+    const noLater = () => null;
+    db.logStockChanges([{ gid: 'e2e:orig-add', sku: 'S26-256GB-VIOLET', delta: 16, levelAfter: 16, reason: 'bulk-add', computer: 'Stock room', createdAt: '2026-09-21T21:30:00.000Z' }]);
+    const origAdd = db.stockLogGet('e2e:orig-add');
+    let plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 15, sku: 'S26-256GB-VIOLET' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16 }), laterSet: noLater });
+    check('planner: 16 → 15 on the same SKU applies −1', plan.ok && plan.applies.length === 1 && plan.applies[0].applied === -1 && plan.data.toQty === 15 && /−1 on S26-256GB-VIOLET \(16 → 15\)/.test(plan.text), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 16, sku: 'S26-256GB-BLUE' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16, 'S26-256GB-BLUE': 3 }), laterSet: noLater });
+    check('planner: a SKU change moves the units: −16 off the old listing, +16 onto the new', plan.ok && plan.applies.length === 2 && plan.applies[0].applied === -16 && plan.applies[1].sku === 'S26-256GB-BLUE' && plan.applies[1].applied === 16, plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { qty: 16, sku: 'NOT-A-LISTING' }, levelOf: lvl({ 'S26-256GB-VIOLET': 16 }), laterSet: noLater });
+    check('planner: a SKU that is not in Linnworks is refused', plan.ok === false && /not in Linnworks/.test(plan.error), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 2 }), laterSet: noLater });
+    check('planner: deleting a +16 line with only 2 on hand removes 2 and says so (floor at zero)', plan.ok && plan.applies[0].delta === -16 && plan.applies[0].applied === -2 && /removed 2 of 16, only 2 on hand/.test(plan.notes.join(' ')), plan);
+    plan = db.planStockCorrection({ original: origAdd, linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 20 }), laterSet: () => ({ day: '2026-09-22' }) });
+    check('planner rule 1: a later hand-set count makes the delete record-only', plan.ok && plan.recordOnly === true && plan.applies[0].applied === 0 && plan.applies[0].skipped === 'later-set' && /set by hand on 09\/22, record only/.test(plan.notes[0]), plan);
+    db.logStockChanges([{ gid: 'e2e:orig-ret', sku: 'S26-256GB-VIOLET', delta: 1, levelAfter: 17, reason: 'return', computer: 'Front desk', ref: 'PO-1' }]);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:orig-ret'), linkMap: lm(), change: { del: true }, levelOf: lvl({}), laterSet: noLater });
+    check('planner: a return line points to Returns instead', plan.ok === false && /corrected in Returns/.test(plan.error), plan);
+    // record the 16 → 15 correction the way stock:historyApply does, then the line's effective state + marks follow the link
+    db.logStockChanges([{ gid: 'e2e:fix-1', sku: 'S26-256GB-VIOLET', delta: -1, reason: 'edit-qty', computer: 'Office', note: '16 → 15 units · corrects the entry from 09/21', linkKind: 'edit', linkGid: 'e2e:orig-add', data: { kind: 'edit', fromSku: 'S26-256GB-VIOLET', fromQty: 16, toSku: 'S26-256GB-VIOLET', toQty: 15, applied: [{ sku: 'S26-256GB-VIOLET', delta: -1 }] } }]);
+    let eff = db.stockLogEffective(db.stockLogGet('e2e:orig-add'), lm());
+    check('effective state after a correction: 15 units, corrected, not deleted', eff.qty === 15 && eff.corrected === true && eff.deleted === false, eff);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:orig-add'), linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 40 }), laterSet: noLater });
+    check('planner: deleting a corrected line takes out its corrected quantity (15, not 16)', plan.ok && plan.applies[0].applied === -15, plan);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:fix-1'), linkMap: lm(), change: { qty: 3 }, levelOf: lvl({}), laterSet: noLater });
+    check('planner: a correction line cannot be edited, only deleted', plan.ok === false && /can be deleted/.test(plan.error), plan);
+    plan = db.planStockCorrection({ original: db.stockLogGet('e2e:fix-1'), linkMap: lm(), change: { del: true }, levelOf: lvl({ 'S26-256GB-VIOLET': 40 }), laterSet: noLater });
+    check('planner: deleting the correction reverses exactly what it applied (+1)', plan.ok && plan.applies.length === 1 && plan.applies[0].applied === 1, plan);
+    db.logStockChanges([{ gid: 'e2e:del-fix-1', sku: 'S26-256GB-VIOLET', delta: 1, reason: 'deleted', computer: 'Office', note: 'deleted the entry from 09/23', linkKind: 'delete', linkGid: 'e2e:fix-1', data: { kind: 'delete', applied: [{ sku: 'S26-256GB-VIOLET', delta: 1 }] } }]);
+    eff = db.stockLogEffective(db.stockLogGet('e2e:orig-add'), lm());
+    check('deleting the correction restores the original: 16 units, no longer corrected', eff.qty === 16 && eff.corrected === false, eff);
+    const ann = db.annotateStockRows(db.stockHistory('S26-256GB-VIOLET'));
+    const annOrig = ann.find(r => r.gid === 'e2e:orig-add'), annFix = ann.find(r => r.gid === 'e2e:fix-1');
+    check('annotated rows: the original has no live marks left, the undone correction carries its own deleted mark and points at the original',
+      annOrig && annOrig.marks.length === 0 && annFix && annFix.marks.length === 1 && annFix.marks[0].kind === 'delete' && annFix.target && annFix.target.gid === 'e2e:orig-add' && annFix.eff.deleted === true, { annOrig: annOrig && annOrig.marks, annFix: annFix && { marks: annFix.marks, target: annFix.target } });
+    // a fresh delete on the original, for the on-screen marks
+    db.logStockChanges([{ gid: 'e2e:del-orig', sku: 'S26-256GB-VIOLET', delta: -16, reason: 'deleted', computer: 'Office', note: 'deleted the entry from 09/21', linkKind: 'delete', linkGid: 'e2e:orig-add', data: { kind: 'delete', fromSku: 'S26-256GB-VIOLET', fromQty: 16, applied: [{ sku: 'S26-256GB-VIOLET', delta: -16 }] } }]);
+    await exec(`openStockHistory('S26-256GB-VIOLET')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`(() => { const L = [...document.querySelectorAll('#stockHistBody .sh-line')]; const g = (gid) => L.find(l => l.dataset.gid === gid); return {
+      acts: L.map(l => l.querySelector('.sh-act').textContent),
+      origDeleted: g('e2e:orig-add').classList.contains('is-deleted'), origMark: g('e2e:orig-add').querySelector('.sh-mark') ? g('e2e:orig-add').querySelector('.sh-mark').textContent : '',
+      origTools: !!g('e2e:orig-add').querySelector('.sh-edit-btn'), delBack: (g('e2e:del-orig').querySelector('.sh-goto') || {}).textContent || '',
+      retTools: (g('e2e:orig-ret').querySelector('.sh-tools') || {}).textContent || '', fixUndone: g('e2e:fix-1').classList.contains('is-deleted') }; })()`);
+    check('stock history rows: DELETED pill, the original struck through with a clickable "deleted" mark and no tools, the DELETED line pointing back, the return line pointing to Returns',
+      res && res.acts.includes('DELETED') && res.origDeleted === true && res.origMark === 'deleted' && res.origTools === false
+        && /deleted the entry from 9\/21 by STOCK ROOM/.test(res.delBack) && /edit in Returns/.test(res.retTools) && res.fixUndone === true,
+      res);
+    // the jump: clicking the DELETED line's pointer flashes the original
+    res = await exec(`(() => { document.querySelector('#stockHistBody .sh-line[data-gid="e2e:del-orig"] .sh-goto').click(); return document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add"]').classList.contains('is-flash'); })()`);
+    check('stock history rows: the pointer jumps to and flashes the original line', res === true, res);
+    // the editor opens in place on an editable line and asks the planner (refused in capture-only, shown inline, never thrown)
+    db.logStockChanges([{ gid: 'e2e:orig-add-2', sku: 'S26-256GB-VIOLET', delta: 5, levelAfter: 5, reason: 'bulk-add', computer: 'Stock room' }]);
+    await exec(`openStockHistory('S26-256GB-VIOLET')`);
+    await new Promise(r => setTimeout(r, 300));
+    res = await exec(`(() => { document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"] .sh-edit-btn').click(); const l = document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"]'); return { editing: l.classList.contains('sh-editing'), qty: l.querySelector('.sh-edit-qty').value, sku: l.querySelector('.sh-edit-sku').value, save: l.querySelector('.sh-edit-save').disabled }; })()`);
+    await new Promise(r => setTimeout(r, 300));
+    res.preview = await exec(`document.querySelector('#stockHistBody .sh-line[data-gid="e2e:orig-add-2"] .sh-edit-preview').textContent`);
+    check('stock history editor: opens in place with the line\'s qty and SKU, Save disabled until the plan answers, capture-only refusal shown inline',
+      res && res.editing === true && res.qty === '5' && res.sku === 'S26-256GB-VIOLET' && res.save === true && /Capture-only/.test(res.preview), res);
+    await exec(`$('stockHistDialog').close()`);
+    await exec(`$('historyDialog').close()`);
+
     // 36. returns resize: whole-width grip + per-column grips on the log
     // (the worksheet left with design C, 2026-08-07 — the log is the sheet)
     const retGrips = await exec(`[

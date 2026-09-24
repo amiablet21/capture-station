@@ -2,7 +2,9 @@
 // SQLite storage via Electron's built-in node:sqlite (synchronous, like better-sqlite3).
 const { app } = require('electron');
 const { DatabaseSync } = require('node:sqlite');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 let db = null;
@@ -68,6 +70,23 @@ function open() {
     );
     CREATE INDEX IF NOT EXISTS idx_serials_serial ON serials(serial);
     CREATE INDEX IF NOT EXISTS idx_serials_row ON serials(row_id);
+    CREATE TABLE IF NOT EXISTS stock_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      day TEXT NOT NULL,
+      sku TEXT NOT NULL,
+      location_id TEXT NOT NULL DEFAULT '',
+      delta INTEGER,
+      level_after INTEGER,
+      reason TEXT NOT NULL DEFAULT '',
+      change_source TEXT NOT NULL DEFAULT '',
+      ref TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      computer TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_log_sku ON stock_log(sku, id);
+    CREATE INDEX IF NOT EXISTS idx_stock_log_day ON stock_log(day);
   `);
   // migration: free-text notes per row (serial tracking retired 2026-07-30)
   const cols = db.prepare(`SELECT name FROM pragma_table_info('rows')`).all().map(c => c.name);
@@ -114,6 +133,26 @@ function open() {
   if (!cols.includes('lw_order_id')) {
     db.exec(`ALTER TABLE rows ADD COLUMN lw_order_id TEXT NOT NULL DEFAULT ''`);
   }
+  // migration (2026-09-23): every stock_log row carries a unique gid so
+  // merges from the shared folder and the bulk-import history are
+  // insert-if-absent — the same change can never land twice
+  const slCols = db.prepare(`SELECT name FROM pragma_table_info('stock_log')`).all().map(c => c.name);
+  if (!slCols.includes('gid')) {
+    db.exec(`ALTER TABLE stock_log ADD COLUMN gid TEXT NOT NULL DEFAULT ''`);
+    const host = String(os.hostname() || 'local').toUpperCase();
+    db.exec(`UPDATE stock_log SET gid = 'legacy:' || '${host.replace(/'/g, '')}' || ':' || id WHERE gid = ''`);
+  }
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_log_gid ON stock_log(gid)`);
+  // migration (2026-09-23): corrections. A line is never rewritten — an edit
+  // or a delete is a NEW line that points at the original (link_kind +
+  // link_gid) and carries what it changed / applied as JSON (data).
+  const slCols2 = db.prepare(`SELECT name FROM pragma_table_info('stock_log')`).all().map(c => c.name);
+  if (!slCols2.includes('link_kind')) {
+    db.exec(`ALTER TABLE stock_log ADD COLUMN link_kind TEXT NOT NULL DEFAULT ''`);
+    db.exec(`ALTER TABLE stock_log ADD COLUMN link_gid TEXT NOT NULL DEFAULT ''`);
+    db.exec(`ALTER TABLE stock_log ADD COLUMN data TEXT NOT NULL DEFAULT ''`);
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_log_link ON stock_log(link_gid)`);
   // migration: WFS shipments carry a received date (Overview marks them
   // received by hand until a Walmart connection can say so itself)
   const wfsCols = db.prepare(`SELECT name FROM pragma_table_info('wfs_shipments')`).all().map(c => c.name);
@@ -327,6 +366,13 @@ function activeRows() {
 function historyRows(limit = 1000) {
   return open().prepare("SELECT * FROM rows WHERE status = 'synced' ORDER BY id DESC LIMIT ?")
     .all(limit).map(parseRow);
+}
+
+// processed orders captured between two local days (inclusive), newest
+// first — the Capture page's History view
+function historyRowsRange(from, to, limit = 3000) {
+  return open().prepare("SELECT * FROM rows WHERE status = 'synced' AND day >= ? AND day <= ? ORDER BY id DESC LIMIT ?")
+    .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit).map(parseRow);
 }
 
 function findByOrderNumber(orderNumber) {
@@ -566,6 +612,265 @@ function resolveConditionTargets(baseSku, inventorySkus) {
 // min }], prevBelow = { sku: true } (the persisted latch). A SKU alerts once
 // per crossing; recovering to >= min drops it from `below`, re-arming it.
 // min <= 0 means "no minimum set" and never alerts.
+/* ---------- stock history ---------- */
+// One row per SKU per level write the app made (owner 2026-09-23: "whenever
+// someone changes stock, receives a return… I can see what happened, and
+// which computer did it"). Logging starts the day this ships; earlier moves
+// live only in Linnworks' own audit.
+// null / '' / non-numbers stay null (Number(null) is 0, which once turned a
+// hand-set count into a "+0" line)
+function intOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+// Inserts one row per change. Every row carries a unique gid; a row whose
+// gid already exists is skipped (never doubled). Returns the rows actually
+// inserted, in the exact shape the shared-folder file carries.
+function logStockChanges(rows) {
+  const d = open();
+  const ins = d.prepare(`INSERT OR IGNORE INTO stock_log (gid, created_at, day, sku, location_id, delta, level_after, reason, change_source, ref, note, computer, by, link_kind, link_gid, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const inserted = [];
+  for (const r of rows) {
+    if (!r || !r.sku) continue;
+    const at = r.createdAt && !Number.isNaN(Date.parse(r.createdAt)) ? new Date(r.createdAt) : new Date();
+    const row = {
+      gid: String(r.gid || '').trim() || `${String(os.hostname() || 'local').toUpperCase()}:${crypto.randomUUID()}`,
+      created_at: at.toISOString(), day: localDay(at), sku: String(r.sku).toUpperCase(),
+      location_id: String(r.locationId || r.location_id || ''),
+      delta: intOrNull(r.delta), // null = a hand-set count, not a move
+      level_after: intOrNull(r.levelAfter ?? r.level_after),
+      reason: String(r.reason || ''), change_source: String(r.changeSource || r.change_source || '').slice(0, 120),
+      ref: String(r.ref || '').slice(0, 80), note: String(r.note || '').slice(0, 300),
+      computer: String(r.computer || '').slice(0, 80), by: String(r.by || '').slice(0, 60),
+      link_kind: String(r.link_kind || r.linkKind || ''), link_gid: String(r.link_gid || r.linkGid || ''),
+      data: typeof r.data === 'string' ? r.data : (r.data ? JSON.stringify(r.data) : ''),
+    };
+    const res = ins.run(row.gid, row.created_at, row.day, row.sku, row.location_id, row.delta, row.level_after,
+      row.reason, row.change_source, row.ref, row.note, row.computer, row.by, row.link_kind, row.link_gid, row.data);
+    if (res.changes > 0) inserted.push(row);
+  }
+  return inserted;
+}
+
+// The bulk-import dialog's history entries (add / set / edit / revert /
+// fix), as stock_log rows. Pure: the gid is bulk:<entry id>:<line>, so
+// importing the same entry twice, on any computer, yields one row.
+function stockRowsFromBulkEntry(e) {
+  if (!e || !e.id || !Array.isArray(e.rows)) return [];
+  const out = [];
+  e.rows.forEach((r, i) => {
+    if (!r || !r.sku) return;
+    const before = r.before == null ? null : Number(r.before);
+    const after = r.after == null ? null : Number(r.after);
+    const base = { gid: `bulk:${e.id}:${i}`, createdAt: e.ts, sku: r.sku, computer: e.station || '', note: String(e.note || '') };
+    if (e.mode === 'add') {
+      const qty = Number(r.qty) || (after !== null && before !== null ? after - before : 0);
+      out.push({ ...base, delta: qty, levelAfter: after, reason: 'bulk-add', changeSource: 'Capture Station bulk import (received)' });
+    } else if (e.mode === 'set' || e.mode === 'edit') {
+      if (after === null) return;
+      out.push({ ...base, delta: null, levelAfter: after, reason: e.mode === 'edit' ? 'set' : 'bulk-set',
+        changeSource: e.mode === 'edit' ? 'Capture Station stock page' : 'Capture Station bulk import (correction)',
+        note: [before === null ? '' : `was ${before}`, base.note].filter(Boolean).join(' · ') });
+    } else if (e.mode === 'revert' || e.mode === 'fix') {
+      const delta = Number(r.qty);
+      if (!Number.isFinite(delta) || delta === 0) return;
+      out.push({ ...base, delta, levelAfter: after, reason: e.mode === 'revert' ? 'revert' : 'correction',
+        changeSource: e.mode === 'revert' ? 'Capture Station revert' : 'Capture Station history correction (wrong SKU)',
+        note: e.mode === 'fix' ? 'moved to the right SKU' : 'reverted an earlier change' });
+    }
+  });
+  return out;
+}
+
+// rows already in the local log that this computer made (for seeding its
+// shared-folder file); bulk-derived rows stay out — every computer derives
+// those itself from the bulk history that already syncs
+function stockLogOwnRows(computers) {
+  const names = new Set((computers || []).map(c => String(c || '').toUpperCase()).filter(Boolean));
+  return open().prepare(`SELECT * FROM stock_log WHERE gid NOT LIKE 'bulk:%' ORDER BY id ASC`).all()
+    .filter(r => names.has(String(r.computer || '').toUpperCase()));
+}
+
+function stockHistory(sku, limit = 500) {
+  return open().prepare(`SELECT * FROM stock_log WHERE sku = ? ORDER BY id DESC LIMIT ?`)
+    .all(String(sku || '').toUpperCase(), limit);
+}
+
+/* ---------- corrections: edit / delete a history line ---------- */
+
+function stockLogGet(gid) {
+  return open().prepare(`SELECT * FROM stock_log WHERE gid = ?`).get(String(gid || '')) || null;
+}
+
+// every correction line, keyed by the line it points at (children) — the
+// whole set is small, and it is what turns "corrected" / "deleted" marks on
+function stockLogLinkMap() {
+  const map = new Map();
+  for (const r of open().prepare(`SELECT * FROM stock_log WHERE link_gid != '' ORDER BY id ASC`).all()) {
+    if (!map.has(r.link_gid)) map.set(r.link_gid, []);
+    map.get(r.link_gid).push(r);
+  }
+  return map;
+}
+
+function parseData(r) { try { return r && r.data ? JSON.parse(r.data) : {}; } catch { return {}; } }
+
+// The line as it stands after its corrections: sku / qty (units, or the
+// count for a hand-set line) / deleted. A correction that was itself
+// deleted no longer counts.
+function stockLogEffective(original, linkMap) {
+  const isSet = original.delta === null || original.delta === undefined;
+  const eff = { sku: original.sku, qty: isSet ? Number(original.level_after) : Math.abs(Number(original.delta) || 0), sign: isSet ? 0 : (Number(original.delta) >= 0 ? 1 : -1), isSet, deleted: false, corrected: false };
+  for (const l of (linkMap.get(original.gid) || [])) {
+    if ((linkMap.get(l.gid) || []).some(x => x.link_kind === 'delete')) continue; // that correction was undone
+    if (l.link_kind === 'delete') { eff.deleted = true; continue; }
+    if (l.link_kind === 'edit') {
+      const d = parseData(l);
+      if (d.toSku) eff.sku = String(d.toSku).toUpperCase();
+      if (Number.isFinite(Number(d.toQty))) eff.qty = Number(d.toQty);
+      eff.corrected = true;
+    }
+  }
+  return eff;
+}
+
+// rows for the renderer: each original carries its live marks, each
+// correction carries a pointer back to what it changed
+function annotateStockRows(rows) {
+  const linkMap = stockLogLinkMap();
+  const byGid = new Map();
+  const need = new Set(rows.filter(r => r.link_gid).map(r => r.link_gid));
+  for (const g of need) if (!byGid.has(g)) byGid.set(g, stockLogGet(g));
+  return rows.map(r => {
+    const eff = stockLogEffective(r, linkMap);
+    const out = { ...r, dataObj: parseData(r), eff };
+    if (r.link_gid) {
+      const t = byGid.get(r.link_gid);
+      out.target = t ? { gid: t.gid, day: t.day, computer: t.computer, sku: t.sku, reason: t.reason } : null;
+    }
+    const kids = (linkMap.get(r.gid) || []).filter(l => !(linkMap.get(l.gid) || []).some(x => x.link_kind === 'delete'));
+    out.marks = kids.map(l => ({ gid: l.gid, kind: l.link_kind, day: l.day, computer: l.computer, created_at: l.created_at }));
+    return out;
+  });
+}
+
+// rule 1 (owner 2026-09-23): a hand-set count after the line makes the
+// count authoritative — a later correction of that line fixes the record
+// only, never the stock
+function stockLogLaterSet(sku, afterIso) {
+  const linkMap = stockLogLinkMap();
+  const rows = open().prepare(`SELECT * FROM stock_log WHERE sku = ? AND delta IS NULL AND link_kind = '' AND created_at > ? ORDER BY id ASC`)
+    .all(String(sku || '').toUpperCase(), String(afterIso || ''));
+  return rows.find(r => !stockLogEffective(r, linkMap).deleted) || null;
+}
+
+// lines the app made that a person may correct here; returns / shipments /
+// sales are corrected where they live
+const STOCK_LOG_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
+const STOCK_LOG_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
+
+// Pure: what a correction would do. original = the line, linkMap = every
+// correction line, change = { del: true } | { qty, sku }, levelOf(sku) =
+// the live count or null, laterSet(sku, afterIso) = the hand-set line that
+// makes the count authoritative, or null. Never touches anything.
+function planStockCorrection({ original, linkMap, change, levelOf, laterSet }) {
+  if (!original) return { ok: false, error: 'That history line no longer exists.' };
+  const isLink = STOCK_LOG_LINK_REASONS.has(original.reason) || !!original.link_gid;
+  if (!isLink && !STOCK_LOG_EDITABLE.has(original.reason)) {
+    const where = original.reason === 'return' || original.reason === 'return-edit' || original.reason === 'return-delete' ? 'Returns'
+      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
+    return { ok: false, error: `This line is corrected in ${where}, not here.` };
+  }
+  const eff = stockLogEffective(original, linkMap);
+  if (eff.deleted) return { ok: false, error: 'This line was already deleted.' };
+  const del = !!(change && change.del);
+  const want = [];
+  const data = { kind: del ? 'delete' : 'edit', fromSku: eff.sku, fromQty: eff.qty };
+  if (isLink) {
+    // a correction line: only deletable, and deleting it reverses exactly what it applied
+    if (!del) return { ok: false, error: 'A correction can be deleted, which undoes it — not edited.' };
+    for (const a of (parseData(original).applied || [])) want.push({ sku: String(a.sku).toUpperCase(), delta: -(Number(a.delta) || 0) });
+  } else if (eff.isSet) {
+    // a hand-set count: qty = the count. Deleting needs the count it replaced.
+    if (del) {
+      const was = /was (\d+)/.exec(original.note || '');
+      if (!was) return { ok: false, error: 'This count has no record of what it replaced — set the count by hand instead.' };
+      want.push({ sku: eff.sku, delta: Number(was[1]) - eff.qty });
+    } else {
+      const newQty = Number(change.qty);
+      if (!Number.isInteger(newQty) || newQty < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+      if (change.sku && String(change.sku).toUpperCase() !== eff.sku) return { ok: false, error: 'A hand-set count keeps its SKU — delete it and set the other SKU instead.' };
+      if (newQty === eff.qty) return { ok: false, error: 'No change.' };
+      data.toSku = eff.sku; data.toQty = newQty;
+      want.push({ sku: eff.sku, delta: newQty - eff.qty });
+    }
+  } else {
+    const D = eff.sign * eff.qty;
+    if (del) {
+      want.push({ sku: eff.sku, delta: -D });
+    } else {
+      const newQty = Number(change.qty);
+      const newSku = String(change.sku || eff.sku).trim().toUpperCase();
+      if (!Number.isInteger(newQty) || newQty < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
+      if (!newSku) return { ok: false, error: 'Pick a SKU.' };
+      if (levelOf(newSku) === null && newSku !== eff.sku) return { ok: false, error: `${newSku} is not in Linnworks — pick a listing that exists.` };
+      if (newQty === eff.qty && newSku === eff.sku) return { ok: false, error: 'No change.' };
+      data.toSku = newSku; data.toQty = newQty;
+      if (newSku === eff.sku) want.push({ sku: eff.sku, delta: eff.sign * (newQty - eff.qty) });
+      else { want.push({ sku: eff.sku, delta: -D }); want.push({ sku: newSku, delta: eff.sign * newQty }); }
+    }
+  }
+  // rule 1, then the floor at zero — per SKU
+  const applies = [];
+  const notes = [];
+  for (const w of want) {
+    if (!w.delta) continue;
+    const later = laterSet(w.sku, original.created_at);
+    if (later) {
+      applies.push({ sku: w.sku, delta: w.delta, applied: 0, skipped: 'later-set', laterDay: later.day });
+      notes.push(`${w.sku}: count was set by hand on ${later.day.slice(5, 7)}/${later.day.slice(8, 10)}, record only`);
+      continue;
+    }
+    const level = levelOf(w.sku);
+    let applied = w.delta;
+    if (w.delta < 0 && level !== null && level + w.delta < 0) {
+      applied = -Math.max(0, level);
+      notes.push(`${w.sku}: removed ${Math.abs(applied)} of ${Math.abs(w.delta)}, only ${Math.max(0, level)} on hand`);
+    }
+    applies.push({ sku: w.sku, delta: w.delta, applied, level });
+  }
+  data.applied = applies.filter(a => a.applied).map(a => ({ sku: a.sku, delta: a.applied }));
+  const recordOnly = applies.length > 0 && applies.every(a => !a.applied);
+  const text = applies.length === 0 ? 'No stock change'
+    : applies.map(a => a.applied
+      ? `${a.applied > 0 ? '+' : '−'}${Math.abs(a.applied)} on ${a.sku}${a.level !== null && a.level !== undefined ? ` (${a.level} → ${a.level + a.applied})` : ''}`
+      : `${a.sku}: record only`).join(' · ');
+  return { ok: true, del, eff, data, applies, recordOnly, notes, text };
+}
+
+// every SKU's changes between two local days (inclusive), newest first —
+// the History dialog's Stock tab
+function stockHistoryRange(from, to, limit = 3000) {
+  return open().prepare(`SELECT * FROM stock_log WHERE day >= ? AND day <= ? ORDER BY id DESC LIMIT ?`)
+    .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit);
+}
+
+// today's activity per SKU, for the grid's tray dot and count tooltip:
+// { SKU: { count, lastAt, lastDelta, lastReason, lastComputer, lastBy } }
+function stockHistoryToday(day = localDay()) {
+  const rows = open().prepare(`SELECT sku, created_at, delta, level_after, reason, computer, by FROM stock_log WHERE day = ? ORDER BY id ASC`).all(day);
+  const out = {};
+  for (const r of rows) {
+    const m = out[r.sku] || (out[r.sku] = { count: 0 });
+    m.count += 1;
+    m.lastAt = r.created_at; m.lastDelta = r.delta; m.lastAfter = r.level_after;
+    m.lastReason = r.reason; m.lastComputer = r.computer; m.lastBy = r.by;
+  }
+  return out;
+}
+
 function lowStockCrossings(items, prevBelow) {
   const below = {};
   const crossed = [];
@@ -654,6 +959,7 @@ module.exports = {
   rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
-  lowStockCrossings,
+  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, stockRowsFromBulkEntry, stockLogOwnRows,
+  stockLogGet, stockLogLinkMap, stockLogEffective, annotateStockRows, stockLogLaterSet, planStockCorrection, STOCK_LOG_EDITABLE,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };

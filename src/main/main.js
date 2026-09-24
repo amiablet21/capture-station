@@ -7,7 +7,7 @@ const config = require('./config');
 const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
-const { LinnworksClient } = require('./linnworks');
+const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const presence = require('./presence');
@@ -1171,6 +1171,7 @@ async function runOrderImport() {
           dropship: !!fallbackId && o.locationId === fallbackId,
           parked: routerRefusedRefs.has(ref),
           despatchBy: o.despatchBy || '',
+          customer: o.customer && (o.customer.name || o.customer.address.length) ? o.customer : null,
           split: isSplit ? { part: pi + 1, of: parts.length } : null,
           items: (o.items || []).filter(it => !it.isService).map(it => {
             const linked = it.stockItemId && it.stockItemId !== ZERO_GUID;
@@ -2257,7 +2258,23 @@ function registerIpc() {
         return { ok: true, stale: true, ...snap };
       }
     }
-    return buildPricingData(force);
+    // Refresh (owner 2026-09-24: "I still see the old SKU even though I
+    // deleted it from the channel SKUs"): the extra lines the grid draws
+    // for link records come from the hourly link scan, so a stale record
+    // outlived an unlink for up to an hour. A forced refresh drops that
+    // cache and starts a full rescan in the background; the grid paints
+    // now from the feed, and 'pricing:refreshed' repaints it once the
+    // scan lands (the Refresh icon keeps spinning until then).
+    let rescanning = false;
+    if (force && !unlistedScanRunning) {
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      runUnlistedScan(cfg).catch(() => { /* the next hourly pass retries */ });
+      rescanning = true;
+    } else if (force && unlistedScanRunning) {
+      rescanning = true;
+    }
+    const built = await buildPricingData(force);
+    return built && built.ok ? { ...built, rescanning } : built;
   });
 
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
@@ -2645,6 +2662,7 @@ function registerIpc() {
   });
   ipcMain.handle('debug:get', () => ignoredLog.slice().reverse());
   ipcMain.handle('history:get', () => db.historyRows());
+  ipcMain.handle('history:range', (_e, { from, to } = {}) => db.historyRowsRange(from, to));
   // Condition SKUs inherit the New listing's photo (owner 2026-09-15):
   // whenever the stock loads, any OPEN-BOX-/USED-/SCRAP- Linnworks item with
   // NO image whose base SKU (the name after the prefix, exact match) has one
@@ -3145,7 +3163,9 @@ function registerIpc() {
             await client.changeStockLevels(
               stockItems.map(i => ({ sku: i.targetSku, delta: i.qty })),
               cfg.linnworks.locationId,
-              'Capture Station return'
+              'Capture Station return',
+              { ref: String(payload.orderNumber || '').trim(), by: receivedBy,
+                note: stockItems.map(i => `${i.condition}${i.targetSku !== i.sku ? ` · ordered ${i.sku}` : ''}`).join('; ').slice(0, 300) }
             );
             lastErr = '';
             break;
@@ -4294,11 +4314,11 @@ function registerIpc() {
   // SKUs and old log lines keep the old string (hit live 2026-09-21:
   // "No item found for SKU A15-128GB-BLACK-US"). A failed PLUS still throws:
   // stock that should land somewhere must never silently vanish.
-  async function applyReturnDeltas(client, cfg, deltas, source) {
+  async function applyReturnDeltas(client, cfg, deltas, source, meta) {
     const skipped = [];
     for (const d of deltas) {
       try {
-        await client.changeStockLevels([d], cfg.linnworks.locationId, source);
+        await client.changeStockLevels([d], cfg.linnworks.locationId, source, meta);
       } catch (e) {
         if (d.delta < 0 && /No item found for SKU/i.test(e.message || '')) {
           skipped.push(`${d.sku} no longer exists (renamed?) — nothing to remove there`);
@@ -4394,7 +4414,8 @@ function registerIpc() {
         }
         if (deltas.length) {
           const client = new LinnworksClient(cfg.linnworks);
-          const skipped = await applyReturnDeltas(client, cfg, deltas, 'Capture Station return edit');
+          const skipped = await applyReturnDeltas(client, cfg, deltas, 'Capture Station return edit',
+            { ref: newPo, by: String(receivedBy || rec.received_by || '').trim().slice(0, 60), note: `${it.condition} → ${newCond}${newSku !== it.sku ? ` · ${it.sku} → ${newSku}` : ''}${newQty !== oldQty ? ` · ${oldQty} → ${newQty} units` : ''}` });
           if (skipped.length) stockNote = `${stockNote}${stockNote ? ' · ' : ''}${skipped.join(' · ')}`;
         }
         items[ii] = {
@@ -4417,7 +4438,8 @@ function registerIpc() {
           else target = (db.resolveConditionTargets(newSku, skus) || {})[newCond] || '';
           if (target) {
             const client = new LinnworksClient(cfg.linnworks);
-            await client.changeStockLevels([{ sku: target, delta: newQty }], cfg.linnworks.locationId, 'Capture Station return edit');
+            await client.changeStockLevels([{ sku: target, delta: newQty }], cfg.linnworks.locationId, 'Capture Station return edit',
+              { ref: newPo, by: String(receivedBy || rec.received_by || '').trim().slice(0, 60), note: `${newCond} line added${target !== newSku ? ` · ordered ${newSku}` : ''}` });
             stockNote = `+${newQty} ${target} restocked`;
           }
           items.push({ sku: newSku, condition: newCond, targetSku: target, qty: newQty, price: newPrice || 0, settle: newSettle || 0, note: '' });
@@ -4494,7 +4516,8 @@ function registerIpc() {
         if (removeStock && it.targetSku) {
           const client = new LinnworksClient(cfg.linnworks);
           const skipped = await applyReturnDeltas(client, cfg,
-            [{ sku: it.targetSku, delta: -qty }], 'Capture Station return delete');
+            [{ sku: it.targetSku, delta: -qty }], 'Capture Station return delete',
+            { ref: rec.order_number, by: rec.received_by, note: `${it.condition} line removed` });
           stockNote = skipped.length ? skipped.join(' · ') : `stock corrected: -${qty} ${it.targetSku}`;
         }
         const items = rec.items.slice();
@@ -4632,7 +4655,8 @@ function registerIpc() {
       await client.changeStockLevels(
         items.map(i => ({ sku: i.sku, delta: -i.qty })),
         cfg.linnworks.locationId,
-        'Capture Station WFS shipment'
+        'Capture Station WFS shipment',
+        { note: note.slice(0, 120) }
       );
       const id = db.createWfsShipment({ note, items });
       // the shared folder hears about it at once (append-only aux log)
@@ -4667,7 +4691,7 @@ function registerIpc() {
       }
       const { stockItemId } = await client.createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice });
       if (qty > 0) {
-        await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU');
+        await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU', { note: 'listing created with opening stock' });
       }
       skuImageCache = { at: 0, map: null, skus: null, promise: null }; // inventory changed
       return { ok: true, sku, stockItemId };
@@ -5064,7 +5088,9 @@ function registerIpc() {
     if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n);
+      // the bulk history entry below is this change's one record in the
+      // stock history too (skipLog keeps the Linnworks-side recorder quiet)
+      const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n, { skipLog: true });
       // every hand edit joins the shared history the bulk imports use
       const before = Number.isFinite(Number(prev)) ? Number(prev) : null;
       if (before !== n) {
@@ -5088,6 +5114,89 @@ function registerIpc() {
     }
   }
   ipcMain.handle('stock:set', (_e, { sku, level, prev }) => stockSetLevel(sku, level, prev));
+  // Stock history: one SKU's log (newest first), every SKU's log for a day
+  // range (the History dialog's Stock tab) and today's per-SKU summary
+  // every read merges the shared folder + bulk history first (insert-if-
+  // absent, so a read can never double a row)
+  ipcMain.handle('stock:history', (_e, { sku } = {}) => {
+    try { syncStockLog(); return { ok: true, rows: db.annotateStockRows(db.stockHistory(String(sku || ''), 500)) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('stock:historyRange', (_e, { from, to } = {}) => {
+    try { syncStockLog(); return { ok: true, rows: db.annotateStockRows(db.stockHistoryRange(from, to)) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // Correct a history line (owner 2026-09-23): a plan says exactly what
+  // Linnworks would get; apply re-plans against the live counts, sends only
+  // that difference, and records the correction as a NEW line pointing at
+  // the original — the original is never rewritten, so the shared folder
+  // and the other desktops stay consistent.
+  async function stockCorrectionPlan(cfg, { gid, del, qty, sku }) {
+    syncStockLog();
+    const original = db.stockLogGet(gid);
+    if (!original) return { ok: false, error: 'That history line no longer exists.' };
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const levels = new Map();
+    for (const it of items) {
+      const l = (it.levels || []).find(x => x.locationId === cfg.linnworks.locationId);
+      levels.set(String(it.sku).toUpperCase(), { level: l ? Number(l.stockLevel) || 0 : 0, sku: it.sku });
+    }
+    const plan = db.planStockCorrection({
+      original, linkMap: db.stockLogLinkMap(), change: { del: !!del, qty, sku },
+      levelOf: (k) => levels.has(String(k).toUpperCase()) ? levels.get(String(k).toUpperCase()).level : null,
+      laterSet: (k, after) => db.stockLogLaterSet(k, after),
+    });
+    return { ...plan, original, client, levels };
+  }
+  ipcMain.handle('stock:historyPlan', async (_e, args = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const p = await stockCorrectionPlan(cfg, args);
+      if (!p.ok) return { ok: false, error: p.error };
+      return { ok: true, text: p.text, notes: p.notes, recordOnly: p.recordOnly, applies: p.applies, eff: p.eff };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('stock:historyApply', async (_e, args = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    try {
+      const p = await stockCorrectionPlan(cfg, args);
+      if (!p.ok) return { ok: false, error: p.error };
+      const { original, client, levels, data } = p;
+      const deltas = data.applied.map(a => ({ sku: (levels.get(a.sku) || {}).sku || a.sku, delta: a.delta }));
+      if (deltas.length) {
+        await client.changeStockLevels(deltas, cfg.linnworks.locationId,
+          p.del ? 'Capture Station history delete' : 'Capture Station history edit', { skipLog: true });
+      }
+      const eff = p.eff;
+      const dayOf = (d) => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
+      const note = p.del
+        ? `deleted the entry from ${dayOf(original.day)}${p.notes.length ? ` · ${p.notes.join(' · ')}` : ''}`
+        : (data.toSku !== data.fromSku
+          ? `${data.fromSku} → ${data.toSku}${data.toQty !== data.fromQty ? ` · ${data.fromQty} → ${data.toQty}` : ''}`
+          : `${data.fromQty} → ${data.toQty} units`) + ` · corrects the entry from ${dayOf(original.day)}${p.notes.length ? ` · ${p.notes.join(' · ')}` : ''}`;
+      const netOnMain = data.applied.filter(a => a.sku === (data.toSku || eff.sku)).reduce((s, a) => s + a.delta, 0);
+      const [row] = recordStockRows([{
+        sku: data.toSku || eff.sku, locationId: cfg.linnworks.locationId,
+        delta: p.del ? (data.applied.find(a => a.sku === eff.sku) || { delta: 0 }).delta : netOnMain,
+        levelAfter: null,
+        reason: p.del ? 'deleted' : (data.toSku && data.toSku !== data.fromSku ? 'edit-sku' : 'edit-qty'),
+        changeSource: p.del ? 'Capture Station history delete' : 'Capture Station history edit',
+        ref: original.ref || '', note, computer: stockLogComputer(), by: '',
+        linkKind: p.del ? 'delete' : 'edit', linkGid: original.gid, data,
+      }]);
+      unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      (async () => {
+        await runRouting();
+        openOrdersCache = { at: 0, data: null, promise: null };
+        await runOrderImport();
+      })().catch(() => { /* the scheduled passes will catch up */ });
+      return { ok: true, row, text: p.text, recordOnly: p.recordOnly };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('stock:historyToday', () => {
+    try { syncStockLog(); return { ok: true, bySku: db.stockHistoryToday() }; } catch (e) { return { ok: false, error: e.message }; }
+  });
 
   /* ---- bulk stock entry (owner 2026-09-17, reworked same day: "no excel
      import — I just want to write the SKU on the left column and the qty
@@ -5109,6 +5218,10 @@ function registerIpc() {
     };
     try { fs.writeFileSync(bulkHistPath(), JSON.stringify([entry, ...loadBulkHist()].slice(0, 200))); } catch { /* best effort */ }
     retsync.appendAux('stockimports', entry);
+    // the same change reaches the stock history exactly once: the Linnworks
+    // write above was told skipLog, this is the one recording (insert-if-
+    // absent by bulk:<id>:<line>, so a later sync pass is a no-op)
+    recordStockRows(db.stockRowsFromBulkEntry(entry), { share: false });
     return entry;
   }
   ipcMain.handle('stock:bulkApply', async (_e, { mode, rows, file, note }) => {
@@ -5139,7 +5252,7 @@ function registerIpc() {
       if (!entryRows.length) return { ok: false, error: 'None of those SKUs exist in Linnworks.' };
       if (deltas.length) {
         await client.changeStockLevels(deltas, cfg.linnworks.locationId,
-          mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)');
+          mode === 'add' ? 'Capture Station bulk import (received)' : 'Capture Station bulk import (correction)', { skipLog: true });
       }
       const entry = bulkLogEntry({ mode, file: String(file || ''), note: String(note || '').trim().slice(0, 200), rows: entryRows, skipped });
       // same after-care as a single stock correction: fresh unlisted scan,
@@ -5192,7 +5305,7 @@ function registerIpc() {
         deltas.push({ sku: it.sku, delta });
       }
       if (!deltas.length) return { ok: false, error: 'Nothing to reverse — the change was zero, already gone, or the SKUs no longer exist.' };
-      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert');
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station revert', { skipLog: true });
       const rec = bulkLogEntry({ mode: 'revert', revertOf: id, file: '', rows, skipped: [] });
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       (async () => {
@@ -5249,7 +5362,7 @@ function registerIpc() {
       const dFrom = fromIt ? Math.max(-fromCur, -m) : 0; // never below zero
       const deltas = [{ sku: toIt.sku, delta: m }];
       if (dFrom) deltas.push({ sku: fromIt.sku, delta: dFrom });
-      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)');
+      await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station history correction (wrong SKU)', { skipLog: true });
       const rec = bulkLogEntry({
         mode: 'fix', fixOf: id, fixRow: Number(rowIdx), fixQty: m, file: '',
         rows: [
@@ -5533,6 +5646,91 @@ function buildMenu() {
 // Startup integrity gate: if the live db fails its health check, offer the
 // newest healthy backup instead of limping along corrupt. The damaged file
 // is quarantined beside the db either way; declining keeps the status quo.
+// Stock history recorder: the Linnworks client raises one event per level
+// write (deltas or a hand-set count); this turns it into stock_log rows.
+// The reason comes from the caller's meta when given, else from the
+// changeSource string every call site already passes to Linnworks.
+function stockLogReason(changeSource, meta) {
+  if (meta && meta.reason) return meta.reason;
+  const cs = String(changeSource || '').toLowerCase();
+  if (cs.includes('dropship pad')) return 'dropship';
+  if (cs.includes('substitution')) return 'substitution';
+  if (cs.includes('wfs')) return 'wfs';
+  if (cs.includes('new sku')) return 'new-sku';
+  if (cs.includes('return delete')) return 'return-delete';
+  if (cs.includes('return edit')) return 'return-edit';
+  if (cs.includes('return')) return 'return';
+  if (cs.includes('stock page')) return 'set';
+  if (cs.includes('bulk import (received)')) return 'bulk-add';
+  if (cs.includes('bulk import')) return 'bulk-set';
+  if (cs.includes('revert')) return 'revert';
+  if (cs.includes('history correction')) return 'correction';
+  if (cs.includes('history delete')) return 'deleted';
+  if (cs.includes('history edit')) return 'edit-qty';
+  return 'other';
+}
+// one door for every stock_log write: local db (insert-if-absent by gid),
+// then the shared folder so the other desktops pick the rows up
+function recordStockRows(rows, { share = true } = {}) {
+  const inserted = db.logStockChanges(rows);
+  if (share) for (const r of inserted) retsync.appendAux('stocklog', r);
+  return inserted;
+}
+function stockLogComputer() {
+  const cfg = config.load();
+  return String((cfg.returnsSync || {}).station || '').trim() || os.hostname();
+}
+function installStockLog() {
+  setStockLogHook((ev) => {
+    const meta = ev.meta || {};
+    if (meta.skipLog) return; // the caller logs this change itself (bulk import, hand edits, reverts, fixes)
+    const computer = stockLogComputer();
+    const reason = stockLogReason(ev.changeSource, meta);
+    recordStockRows(ev.entries.map(e => ({
+      sku: e.sku, locationId: ev.locationId,
+      delta: ev.kind === 'set' ? null : e.delta,
+      levelAfter: e.after,
+      reason, changeSource: ev.changeSource,
+      ref: meta.ref || '', note: ev.kind === 'set' ? `set to ${e.set}${meta.note ? ` · ${meta.note}` : ''}` : (meta.note || ''),
+      computer, by: meta.by || '',
+    })));
+  });
+}
+// Merge the two other places stock changes live into the log — safe to run
+// any number of times, since every row's gid makes the insert a no-op the
+// second time: (1) the bulk-import history (this desktop's file + every
+// station's shared file), (2) the other desktops' shared stock_log files.
+// Then seed this desktop's own shared file once, so its pre-sync rows
+// reach the others.
+let stockLogSyncBusy = false;
+function syncStockLog() {
+  if (stockLogSyncBusy) return { imported: 0 };
+  stockLogSyncBusy = true;
+  let imported = 0;
+  try {
+    const seen = new Set();
+    const bulk = [];
+    for (const e of [...retsync.readAux('stockimports'), ...loadBulkHistFile()]) {
+      if (!e || !e.id || seen.has(e.id)) continue;
+      seen.add(e.id);
+      bulk.push(...db.stockRowsFromBulkEntry(e));
+    }
+    imported += recordStockRows(bulk, { share: false }).length;
+    const remote = retsync.readAux('stocklog').filter(r => r && r.gid && r.sku);
+    imported += recordStockRows(remote, { share: false }).length;
+    if (retsync.enabled()) {
+      retsync.auxBackfill('stocklog', db.stockLogOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
+    }
+  } catch { /* the folder was unreachable: the local log stands alone until the next pass */ }
+  stockLogSyncBusy = false;
+  return { imported };
+}
+
+function loadBulkHistFile() {
+  try { const j = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'stock-imports.json'), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+
 function checkDbHealth() {
   const health = db.quickCheck();
   if (health.ok) return;
@@ -5579,6 +5777,7 @@ app.whenReady().then(() => {
   config.save({}); // re-persist so plaintext credentials migrate to encrypted storage
   checkDbHealth(); // corrupt db -> offer the newest healthy backup BEFORE anything reads it
   db.open();
+  installStockLog(); // every level write from here on lands in stock_log
   // one-time sweep: duplicate order rows minted while the db was damaged
   try {
     const dd = db.dedupeOrderRows();
@@ -5592,6 +5791,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   startRetSync();
+  syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();
   startStockRouter();
   startOrderImporter();

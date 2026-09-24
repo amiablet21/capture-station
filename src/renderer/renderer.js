@@ -68,6 +68,12 @@ if (!window.api) {
     setStockLevel: async () => ({ ok: false, error: 'Preview mode' }),
     setStockMin: async () => ({ ok: false, error: 'Preview mode' }),
     salesQuery: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistory: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryToday: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryRange: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryPlan: async () => ({ ok: false, error: 'Preview mode' }),
+    stockHistoryApply: async () => ({ ok: false, error: 'Preview mode' }),
+    getHistoryRange: async () => [],
     getChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     createSku: async () => ({ ok: false, error: 'Preview mode' }),
     addStockImage: async () => ({ ok: false, error: 'Preview mode' }),
@@ -175,6 +181,9 @@ const ICONS = {
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
+  clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
+  monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
+  copy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></svg>',
 };
 
 /* ---------- rendering ---------- */
@@ -405,6 +414,7 @@ function render() {
   // search bar: always available on the capture list, matches PO#, tracking,
   // notes, and the order's item SKUs / channel SKUs / titles
   $('findBar').hidden = activePage !== 'capture' || state.captureOnly && !state.rows.length;
+  if (capHist.on && activePage === 'capture') { renderCapHist(); return; }
   if (findQuery) {
     const q = findQuery.toLowerCase();
     const itemMatch = (row) => {
@@ -434,12 +444,15 @@ function render() {
   const empty = visible.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty || !!findQuery; // finder shows "no matches" itself
+  $('rowsEmpty').querySelector('.rows-empty-title').textContent = 'No captures yet today';
+  $('rowsEmpty').querySelector('.rows-empty-hint').textContent = 'Highlight the order number on the marketplace page and press Ctrl+C. It appears here automatically.';
   // a half-typed scan must survive re-renders (state pushes rebuild the tbody)
   const prevInp = activeScanInput();
   const prevScan = prevInp ? { value: prevInp.value, focused: document.activeElement === prevInp } : null;
   // renumber by final display order: whatever sits on top gets the biggest
   // number (newest-first aesthetic), regardless of due sorting or filters
   visible = visible.map((v, i) => ({ ...v, num: visible.length - i }));
+  closeCustCard(); // the tbody is rebuilt: a card would point at a dead button
   $('rowsBody').innerHTML = visible.map(({ row, num }) => {
     const meta = metaFor(row);
     const hasLink = !!((state.orderUrlTemplates || {})[row.channel] || '').trim();
@@ -486,6 +499,7 @@ function render() {
         ${meta && meta.split ? `<span class="badge badge-split" title="Linnworks split this order across locations — this row is part ${meta.split.part} of ${meta.split.of} and ships separately (its own tracking, its own process)">${meta.split.part}/${meta.split.of}</span>` : ''}
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
+        meta && meta.customer ? `<button type="button" class="item-info cust-info" data-act="customer" title="Customer and ship-to address — click to open">i</button>` : ''}${
         row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
       <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
@@ -634,6 +648,111 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* ---------- Capture history mode (owner 2026-09-23) ----------
+   the History icon flips the capture table to every processed order, in
+   the same columns, grouped by day, newest first; the band keeps its
+   search + channel chips and swaps its icons for a date range; the lit
+   History icon toggles back to the live list */
+
+const capHist = { on: false, rows: [], busy: false, seq: 0, range: { kind: '7', from: '', to: '' } };
+
+async function loadCapHist() {
+  const seq = ++capHist.seq;
+  capHist.busy = true;
+  render();
+  const { from, to } = shRangeDays(capHist.range);
+  const rows = await api.getHistoryRange(from, to).catch(() => []);
+  if (seq !== capHist.seq) return;
+  capHist.rows = Array.isArray(rows) ? rows : [];
+  capHist.busy = false;
+  render();
+}
+
+function setCapHist(on) {
+  capHist.on = on;
+  $('capHistBtn').classList.toggle('is-on', on);
+  $('capHistRange').hidden = !on;
+  $('shipImportBtn').hidden = on;
+  $('ordersRefreshBtn').hidden = on;
+  channelFilter = 'all';
+  if (on) loadCapHist(); else render();
+  if (!on) focusScan();
+}
+
+// processed rows in the capture table's row shape: green gutter, PO with
+// its processed time, the item snapshot, tracking, notes — no actions
+function capHistRowHtml(row, num) {
+  const items = (Array.isArray(row.items) ? row.items : []).slice(0, 4);
+  const more = (Array.isArray(row.items) ? row.items : []).slice(4);
+  const img = (sku) => {
+    const it = stockCache && (stockCache.items || []).find(i => String(i.sku).toUpperCase() === String(sku).toUpperCase());
+    return it && it.image ? `<img class="item-thumb" src="${esc(it.image)}" loading="lazy" alt="" />` : '';
+  };
+  const itemsHtml = items.map(i => `<span class="item-entry">${img(i.sku)}${esc(i.sku)}${i.qty > 1 ? `<span class="qty-chip" title="${i.qty} units of this item on the order">×${i.qty}</span>` : ''}</span>`).join('')
+    + (more.length ? `<span class="item-more" data-tip="${esc(more.map(i => `${i.sku} ×${i.qty}`).join(', '))}">+${more.length} more</span>` : '');
+  const when = row.synced_at ? fmtTime(row.synced_at) : '';
+  return `<tr data-id="${row.id}" class="is-hist">
+      <td class="cell-gutter st-synced" title="Processed ${when} · captured ${fmtTime(row.created_at)}">${num}</td>
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))} · processed ${when}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
+      <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
+      <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
+      <td class="cell-notes"><span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
+      <td class="cell-actions"></td>
+    </tr>`;
+}
+
+function renderCapHist() {
+  const all = capHist.rows;
+  const channels = [...new Set(all.map(r => r.channel))];
+  const chipBar = $('channelChips');
+  if (all.length && channels.length > 1) {
+    if (channelFilter !== 'all' && !channels.includes(channelFilter)) channelFilter = 'all';
+    const counts = {};
+    for (const r of all) counts[r.channel] = (counts[r.channel] || 0) + 1;
+    chipBar.hidden = false;
+    chipBar.innerHTML = [
+      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${all.length}</button>`,
+      ...channels.map(c => `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+    ].join('');
+  } else {
+    chipBar.hidden = true;
+    channelFilter = 'all';
+  }
+  $('clearFailedBtn').hidden = true;
+  $('findBar').hidden = false;
+  let rows = channelFilter === 'all' ? all : all.filter(r => r.channel === channelFilter);
+  if (findQuery) {
+    const q = findQuery.toLowerCase();
+    rows = rows.filter(r => r.order_number.toLowerCase().includes(q)
+      || (r.tracking || '').toLowerCase().includes(q)
+      || (r.notes || '').toLowerCase().includes(q)
+      || (Array.isArray(r.items) && r.items.some(i => String(i.sku || '').toLowerCase().includes(q))));
+    $('findCount').textContent = rows.length === 0 ? 'no matches' : `${rows.length} of ${all.length}`;
+  } else {
+    $('findCount').textContent = '';
+  }
+  if (orderSort === 'old') rows = rows.slice().reverse();
+  const empty = rows.length === 0;
+  $('rowsTable').hidden = empty;
+  $('rowsEmpty').hidden = !empty;
+  $('rowsEmpty').querySelector('.rows-empty-title').textContent = capHist.busy ? 'Loading…' : (findQuery ? 'No matches' : 'No processed orders in this period');
+  $('rowsEmpty').querySelector('.rows-empty-hint').textContent = capHist.busy ? '' : 'Pick a wider date range above, or press Back to today.';
+  const today = salesDayKey(new Date().toISOString());
+  const yesterday = salesDayKey(new Date(Date.now() - 86400000).toISOString());
+  const dayLabel = (d) => d === today ? `Today · ${retDateUS(d)}` : d === yesterday ? `Yesterday · ${retDateUS(d)}` : retDateUS(d);
+  const perDay = {};
+  for (const r of all) perDay[r.day] = (perDay[r.day] || 0) + 1;
+  let out = '', day = '', n = rows.length;
+  for (const r of rows) {
+    if (r.day !== day) { day = r.day; out += `<tr class="cap-day"><td colspan="6">${dayLabel(day)}<span class="sh-dim">${perDay[day]} order${perDay[day] === 1 ? '' : 's'}</span></td></tr>`; }
+    out += capHistRowHtml(r, n--);
+  }
+  $('rowsBody').innerHTML = out;
+}
+
+$('capHistBtn').addEventListener('click', () => setCapHist(!capHist.on));
+shRangeWire('capHistRange', capHist.range, loadCapHist);
+
 /* ---------- Ctrl+F row finder ---------- */
 
 let findQuery = '';
@@ -758,7 +877,65 @@ $('clearFailedBtn').addEventListener('click', async () => {
   focusScan();
 });
 
+/* ---------- the customer card on a PO (owner 2026-09-24) ----------
+   click the "i" after the PO#: a card with the buyer's name, ship-to and
+   phone, each with a copy button. Click the "i" again, click away, or
+   press Esc to close. Click, not hover, so it never opens by accident. */
+
+let custCard = null; // { el, btn }
+
+function closeCustCard() {
+  if (!custCard) return;
+  custCard.el.remove();
+  custCard.btn.classList.remove('is-open');
+  custCard = null;
+}
+
+function openCustCard(btn, row, meta) {
+  if (custCard && custCard.btn === btn) { closeCustCard(); return; }
+  closeCustCard();
+  const c = meta.customer;
+  const rows = [];
+  if (c.name) rows.push(['Customer', esc(c.name), c.name]);
+  if (c.company) rows.push(['Company', esc(c.company), c.company]);
+  if (c.address && c.address.length) rows.push(['Ship to', c.address.map(esc).join('<br>'), c.address.join('\n')]);
+  if (c.phone) rows.push(['Phone', `<span class="mono">${esc(c.phone)}</span>`, c.phone]);
+  const el = document.createElement('div');
+  el.className = 'cust-card';
+  el.innerHTML = rows.map(([l, html, raw]) => `<div class="cust-row"><span class="cust-l">${l}</span><span class="cust-v">${html}</span><button type="button" class="btn-icon cust-copy" data-copy="${esc(raw)}" title="Copy the ${l.toLowerCase()}">${ICONS.copy}</button></div>`).join('')
+    + `<div class="cust-foot">${esc(channelLabel(row.channel))} · captured ${fmtTime(row.created_at)}</div>`;
+  document.body.appendChild(el);
+  const r = btn.getBoundingClientRect();
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let left = r.left, top = r.bottom + 6;
+  if (left + w > window.innerWidth - 12) left = Math.max(12, window.innerWidth - 12 - w);
+  if (top + h > window.innerHeight - 12) top = Math.max(12, r.top - 6 - h);
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  btn.classList.add('is-open');
+  custCard = { el, btn };
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (!custCard) return;
+  if (e.target.closest('.cust-card') || e.target === custCard.btn) return;
+  closeCustCard();
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && custCard) closeCustCard(); }, true);
+document.addEventListener('click', (e) => {
+  const cp = e.target.closest('.cust-card .cust-copy');
+  if (cp) copyFromApp(cp.dataset.copy);
+});
+
 $('rowsBody').addEventListener('click', async (e) => {
+  const custBtn = e.target.closest('button.cust-info');
+  if (custBtn) {
+    const tr = custBtn.closest('tr');
+    const row = state.rows.find(r => String(r.id) === tr.dataset.id);
+    const meta = row && metaFor(row);
+    if (row && meta && meta.customer) openCustCard(custBtn, row, meta);
+    return;
+  }
   // PARKED chip: one click clears the parked tag + lock in Linnworks
   const unpark = e.target.closest('[data-unpark]');
   if (unpark) {
@@ -795,6 +972,13 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!btn) return;
   const card = e.target.closest('tr');
   const id = Number(card.dataset.id);
+  // history view (owner 2026-09-24): its rows are processed orders, not in
+  // state.rows — the note is the one thing still editable there
+  if (capHist.on && card.classList.contains('is-hist')) {
+    const hrow = capHist.rows.find(r => r.id === id);
+    if (hrow && btn.dataset.act === 'note') openNotes(hrow);
+    return;
+  }
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
@@ -881,6 +1065,7 @@ $('notesForm').addEventListener('submit', async (e) => {
   await api.updateRow(notesRowId, { notes: $('notesText').value.trim() });
   notesRowId = null;
   await refresh();
+  if (capHist.on) loadCapHist();
 });
 
 $('notesDialog').addEventListener('close', () => focusScan());
@@ -2327,20 +2512,29 @@ function applyStockColWidths() {
   }
 }
 
+let stockLoading = false; // a reload in flight: lazy badge loads wait for it
+
 async function loadStock() {
+  stockLoading = true;
   $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('stockSummary').textContent = '';
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
+  loadStockHistToday(); // stock-history dots on the tray clocks, same lazy pattern
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
   const res = await api.getStock();
+  stockLoading = false;
   if (!res.ok) {
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
     return;
   }
   stockCache = res;
-  stockColAuto = {}; // fresh inventory: let the columns re-measure once
+  // the column pins survive a reload (owner 2026-09-23: "it keeps shifting
+  // whenever I go in and out of the tab") — every tab entry reloads the
+  // grid, and re-measuring each time froze whatever badges had happened to
+  // arrive by then. Pins now last the session; a grip double-click or a
+  // new column re-measures.
   renderStockChips(); // the WFS + Low stock chips appear once data allows
   renderStock();
 }
@@ -2388,7 +2582,7 @@ async function loadStockDeltas() {
       m[d === today ? 'today' : 'yesterday'] += Number(l.qty) || 0;
     }
     stockDeltas = map;
-    if (activePage === 'stock' && stockCache) renderStock(); // fill in lazily
+    if (activePage === 'stock' && stockCache && !stockLoading) renderStock(); // fill in lazily
   } finally {
     stockDeltasBusy = false;
   }
@@ -2481,9 +2675,13 @@ function renderStock() {
     const del = (state && !state.captureOnly && r.stockItemId)
       ? `<button class="btn-icon is-danger stock-del-btn" data-delsku="${esc(r.sku)}" data-delsid="${esc(r.stockItemId)}" title="Delete this SKU from Linnworks…">${ICONS.trash}</button>`
       : '';
+    // stock history (owner 2026-09-23): the clock opens this SKU's log; a
+    // dot on it means the SKU moved today
+    const today = stockHistToday && stockHistToday[String(r.sku).toUpperCase()];
+    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.clock}</button>`;
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
-      ${ds}${ren}${del}</span>`;
+      ${hist}${ds}${ren}${del}</span>`;
   };
   // when the search matched a linked channel SKU and not the row's own
   // fields, the matching channel SKU shows beside the row so the hit
@@ -2533,7 +2731,7 @@ function renderStock() {
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
-            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="Click to correct the count">${r.l.stockLevel}</button></td>`;
+            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);
@@ -3291,6 +3489,8 @@ $('stockList').addEventListener('click', async (e) => {
   }
   const salesBtn = e.target.closest('button.stock-sales-btn');
   if (salesBtn) { openSalesDialog(salesBtn.dataset.salesku, Number(salesBtn.dataset.avail) || 0); return; }
+  const histBtn = e.target.closest('button.stock-hist-btn');
+  if (histBtn) { openStockHistory(histBtn.dataset.histsku); return; }
   const padBtn = e.target.closest('button.ds-pad-btn');
   if (padBtn) { beginPadEdit(padBtn); return; }
   const dsRemove = e.target.closest('button.ds-remove-btn');
@@ -4712,7 +4912,7 @@ $('chmapWmBody').addEventListener('click', async (e) => {
         if (still || !chLinked || !chLinked[label]) return;
         chLinked[label].delete(id);
         renderStockChips();
-        if (activePage === 'stock' && stockCache) renderStock();
+        if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
       }).catch(() => { /* chip stays; the next full scan settles it */ });
     }
     item.linked = false;
@@ -4766,7 +4966,7 @@ $('chmapLwBody').addEventListener('click', async (e) => {
       const label = chmapChanLabel(chmap.chan).toLowerCase();
       if (chLinked[label]) chLinked[label].add(linkedStockId);
       renderStockChips();
-      if (activePage === 'stock' && stockCache) renderStock();
+      if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
     }
     chmapLoadItems(true); // silent re-pull picks up the new rowId for Unlink
     loadUnlisted();
@@ -5891,6 +6091,467 @@ const SALES_CHANNELS = [
 
 const SALES_RANGES = [7, 14, 30, 60, 90];
 
+/* ---------- stock history (owner 2026-09-23) ----------
+   every level change the app made, per SKU: the tray clock opens the log,
+   today's summary feeds the dot on the clock and the count's tooltip. The
+   same one-line row (action pill · what · when · who) draws the per-SKU
+   dialog and the History dialog's Stock tab; sales come from Linnworks'
+   processed orders and join the list as SOLD rows. */
+
+let stockHistToday = null; // { SKU: { count, lastAt, lastDelta, lastReason, lastComputer, lastBy } } | null
+let stockHistTodayBusy = false;
+
+const ICON_CART = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M230.14,58.87A8,8,0,0,0,224,56H62.68L56.6,22.57A8,8,0,0,0,48.73,16H24a8,8,0,0,0,0,16h18L67.56,172.29a24,24,0,0,0,5.33,11.27,28,28,0,1,0,44.4,8.44h45.42A27.75,27.75,0,0,0,160,204a28,28,0,1,0,28-28H91.17a8,8,0,0,1-7.87-6.57L80.13,152h116a24,24,0,0,0,23.61-19.71l12.16-66.86A8,8,0,0,0,230.14,58.87ZM104,204a12,12,0,1,1-12-12A12,12,0,0,1,104,204Zm96,0a12,12,0,1,1-12-12A12,12,0,0,1,200,204Zm4.07-74.57A8,8,0,0,1,196.2,136H77.22L65.59,72H214.41Z"/></svg>';
+
+// what happened, as one word: the pill's text and color
+const SH_ACT = {
+  sold: { word: 'SOLD', cls: 'act-sold' },
+  returned: { word: 'RETURNED', cls: 'act-returned' },
+  added: { word: 'ADDED', cls: 'act-added' },
+  removed: { word: 'REMOVED', cls: 'act-removed' },
+  shipped: { word: 'SHIPPED', cls: 'act-shipped' },
+  set: { word: 'SET', cls: 'act-set' },
+  edited: { word: 'EDITED', cls: 'act-edited' },
+  deleted: { word: 'DELETED', cls: 'act-deleted' },
+};
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'set', 'edited', 'deleted'];
+function shActionOf(e) {
+  switch (e.reason) {
+    case 'sale': return 'sold';
+    case 'return': return 'returned';
+    case 'return-edit': case 'return-delete': case 'correction': case 'edit-qty': case 'edit-sku': return 'edited';
+    case 'deleted': return 'deleted';
+    case 'set': case 'bulk-set': return 'set';
+    case 'wfs': case 'dropship': case 'substitution': return 'shipped';
+    default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
+  }
+}
+const SH_MARKET = { walmart: 'WALMART', ebay: 'EBAY', temu: 'TEMU', amazon: 'AMAZON' };
+function shWordCase(k) { return SH_ACT[k].word[0] + SH_ACT[k].word.slice(1).toLowerCase(); }
+
+// a Linnworks processed line as a stock-history event (SOLD)
+function shSaleEvent(l) {
+  const src = String(l.source || '').trim();
+  const day = salesDayKey(l.processedOn);
+  return {
+    id: `sale:${l.orderId}:${l.sku}`, created_at: l.processedOn, day, sku: String(l.sku || '').toUpperCase(),
+    delta: -(Number(l.qty) || 1), level_after: null, reason: 'sale', ref: l.reference || '', note: '',
+    computer: src, by: '', market: SH_MARKET[src.toLowerCase()] || src.toUpperCase(),
+  };
+}
+
+// the "what" of a row: count × SKU, the arrow when a return landed on a
+// graded listing, the PO / order in grey
+const SH_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
+const SH_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
+function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slice(8, 10)}` : ''; }
+
+function shWhat(e, withSku) {
+  const n = Math.abs(Number(e.delta) || 0);
+  const skuEl0 = (v) => withSku
+    ? `<span class="mono sh-sku" data-sku="${esc(v)}" title="Click to see only ${esc(v)}">${esc(v)}</span>`
+    : `<span class="mono">${esc(v)}</span>`;
+  if (SH_LINK_REASONS.has(e.reason) || e.link_gid) {
+    // a correction: what it changed, then the pointer back to the line it corrects
+    const d = e.dataObj || {};
+    const back = e.target
+      ? `<button type="button" class="sh-goto" data-goto="${esc(e.target.gid)}" title="Jump to that line">↳ ${e.reason === 'deleted' ? 'deleted' : 'corrects'} the entry from ${shDayShort(e.target.day)}${e.target.computer ? ` by ${esc(String(e.target.computer).toUpperCase())}` : ''}</button>`
+      : '';
+    const extra = /·\s*(.+?: (?:removed|count was).*)$/.exec(e.note || '');
+    const tail = extra ? ` <span class="sh-dim">(${esc(extra[1])})</span>` : '';
+    if (e.reason === 'deleted') return `${d.fromQty ?? n} × ${skuEl0(d.fromSku || e.sku)}${tail} ${back}`;
+    if (d.toSku && d.fromSku && d.toSku !== d.fromSku) return `${d.toQty ?? n} × ${skuEl0(d.fromSku)} <span class="sh-arrow">→</span> ${skuEl0(d.toSku)}${tail} ${back}`;
+    return `${skuEl0(d.toSku || e.sku)} <span class="sh-dim">${d.fromQty} → ${d.toQty} units</span>${tail} ${back}`;
+  }
+  const skuEl = (v) => withSku
+    ? `<span class="mono sh-sku" data-sku="${esc(v)}" title="Click to see only ${esc(v)}">${esc(v)}</span>`
+    : `<span class="mono">${esc(v)}</span>`;
+  const isSale = e.reason === 'sale';
+  const refLabel = isSale ? 'Order#' : (e.reason === 'wfs' || e.reason === 'dropship') ? 'Ref' : 'PO#';
+  const ref = e.ref ? ` <span class="sh-dim">(${refLabel}: ${esc(e.ref)})</span>` : '';
+  const ordered = /ordered (\S+)/.exec(e.note || '');
+  const units = withSku ? `${n} × ` : `${n} unit${n === 1 ? '' : 's'} `;
+  if (e.delta === null || e.delta === undefined) {
+    const setTo = /set to (\d+)/.exec(e.note || '');
+    return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+  }
+  if (e.reason === 'return' && ordered && ordered[1].toUpperCase() !== e.sku) {
+    return withSku
+      ? `${units}${skuEl(ordered[1])} <span class="sh-arrow">→</span> ${skuEl(e.sku)}${ref}`
+      : `${units}<span class="sh-arrow">→</span> ${skuEl(e.sku)}${ref}`;
+  }
+  const tail = e.reason === 'wfs' ? ' <span class="sh-dim">to WFS</span>'
+    : e.reason === 'dropship' ? ' <span class="sh-dim">dropship pad</span>'
+    : e.reason === 'substitution' ? ' <span class="sh-dim">substitution</span>'
+    : (e.reason === 'return-edit' || e.reason === 'return-delete') ? ` <span class="sh-dim">${e.delta > 0 ? 'restocked' : 'taken back'}</span>`
+    : e.reason === 'revert' ? ' <span class="sh-dim">reverted</span>'
+    : e.reason === 'correction' ? ' <span class="sh-dim">corrected</span>'
+    : e.reason === 'bulk-add' ? ' <span class="sh-dim">received</span>'
+    : e.reason === 'new-sku' ? ' <span class="sh-dim">new listing</span>'
+    : '';
+  return `${units}${withSku ? skuEl(e.sku) : ''}${tail}${ref}${shMarks(e)}`;
+}
+
+// "corrected → 15 ×" / "deleted" on a line that has corrections; each mark
+// jumps to the correction line
+function shMarks(e) {
+  if (!e.marks || !e.marks.length) return '';
+  return e.marks.map(m => m.kind === 'delete'
+    ? ` <button type="button" class="sh-mark is-rev sh-goto" data-goto="${esc(m.gid)}" title="Deleted on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())} — click to see">deleted</button>`
+    : ` <button type="button" class="sh-mark is-fix sh-goto" data-goto="${esc(m.gid)}" title="Corrected on ${shDayShort(m.day)} by ${esc(String(m.computer || '').toUpperCase())} — click to see">corrected → ${e.eff ? `${e.eff.qty} ×${e.eff.sku !== e.sku ? ` ${esc(e.eff.sku)}` : ''}` : ''}</button>`).join('');
+}
+
+function shRowHtml(e, withSku, clickable) {
+  const act = shActionOf(e), A = SH_ACT[act];
+  const isSale = e.reason === 'sale';
+  const who = isSale ? (e.market || 'SALE') : String(e.computer || '—').toUpperCase();
+  const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
+  const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
+  const deleted = e.eff && e.eff.deleted;
+  const canFix = !isSale && !deleted && (SH_EDITABLE.has(e.reason) || isLink);
+  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : '';
+  const tools = canFix
+    ? `<span class="sh-tools">${isLink ? '' : `<button type="button" class="btn-icon sh-edit-btn" title="Edit this line — change the quantity or the SKU">${ICONS.pencil}</button>`}<button type="button" class="btn-icon is-danger sh-del-btn" title="${isLink ? 'Delete this correction — undoes it' : 'Delete this line — takes its stock back out'}">${ICONS.trash}</button></span>`
+    : where ? `<span class="sh-tools is-link" title="This line is corrected in ${where}">edit in ${where}</span>` : '';
+  return `<div class="history-item sh-line ${isLink ? 'is-linked' : ''} ${deleted ? 'is-deleted' : ''}" data-gid="${esc(e.gid || '')}" title="${esc(title)}">
+    <button type="button" class="sh-act ${A.cls} ${clickable ? '' : 'is-static'}" data-act="${act}" title="${clickable ? `Show only ${A.word.toLowerCase()}` : A.word}">${A.word}</button>
+    <span class="sh-text">${shWhat(e, withSku)}</span>${tools}
+    <span class="sh-when mono">${retDateUS(e.day)} <span class="sh-dim">${fmtTime(e.created_at)}</span></span>
+    <span class="sh-pc ${isSale ? 'is-ext' : ''}" title="${esc(isSale ? `Sold on ${who}` : `Computer: ${e.computer || 'unknown'}${e.by ? ` · by ${e.by}` : ''}`)}">${isSale ? ICON_CART : ICONS.monitor}${esc(who)}${e.by ? ` <span class="sh-ini">${esc(e.by)}</span>` : ''}</span>
+  </div>`;
+}
+
+/* --- correcting a line in place (owner 2026-09-23) --- */
+
+let shEditSeq = 0;
+function shSkuDatalist() {
+  const dl = $('shSkuList');
+  if (!dl || dl.childElementCount || !stockCache) return;
+  dl.innerHTML = (stockCache.items || []).slice(0, 4000).map(i => `<option value="${esc(i.sku)}"></option>`).join('');
+}
+
+// turns a row into the editor (del = the delete confirm); `reload` redraws
+// the list once a correction landed
+function shOpenEditor(line, e, del, reload) {
+  const seq = ++shEditSeq;
+  shSkuDatalist();
+  const eff = e.eff || { sku: e.sku, qty: Math.abs(Number(e.delta) || 0), isSet: e.delta === null };
+  const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
+  line.classList.add('sh-editing');
+  line.innerHTML = `
+    <span class="sh-act ${SH_ACT[shActionOf(e)].cls} is-static">${SH_ACT[shActionOf(e)].word}</span>
+    <span class="sh-text sh-edit-form">
+      ${del
+        ? `<span class="sh-edit-q">${isLink ? 'Delete this correction and undo it?' : `Delete ${eff.isSet ? 'this count' : `${eff.qty} × ${esc(eff.sku)}`}?`}</span>`
+        : `<label>Qty <input class="input mono sh-edit-qty" type="number" min="0" step="1" value="${eff.qty}"></label>
+           ${eff.isSet ? `<span class="mono">${esc(eff.sku)}</span>` : `<label>× SKU <input class="input mono sh-edit-sku" type="text" value="${esc(eff.sku)}" list="shSkuList" autocomplete="off" spellcheck="false"></label>`}`}
+      <span class="sh-edit-preview">Checking…</span>
+      <button type="button" class="btn ${del ? 'btn-danger' : 'btn-primary'} sh-edit-save" disabled>${del ? 'Delete' : 'Save correction'}</button>
+      <button type="button" class="btn btn-ghost sh-edit-cancel">Cancel</button>
+    </span>`;
+  const qty = line.querySelector('.sh-edit-qty'), skuIn = line.querySelector('.sh-edit-sku');
+  const prev = line.querySelector('.sh-edit-preview'), save = line.querySelector('.sh-edit-save');
+  const args = () => ({ gid: e.gid, del, qty: qty ? Number(qty.value) : undefined, sku: skuIn ? skuIn.value.trim().toUpperCase() : undefined });
+  let timer = null;
+  const plan = async () => {
+    save.disabled = true;
+    prev.textContent = 'Checking…';
+    const res = await api.stockHistoryPlan(args()).catch(err => ({ ok: false, error: err.message }));
+    if (seq !== shEditSeq) return;
+    if (!res.ok) { prev.textContent = res.error || 'Cannot do that.'; prev.classList.add('is-err'); return; }
+    prev.classList.remove('is-err');
+    prev.innerHTML = `Linnworks will get <b>${esc(res.text)}</b>${res.notes && res.notes.length ? ` <span class="sh-dim">· ${esc(res.notes.join(' · '))}</span>` : ''}`;
+    save.disabled = false;
+  };
+  const replan = () => { clearTimeout(timer); timer = setTimeout(plan, 350); };
+  if (qty) qty.addEventListener('input', replan);
+  if (skuIn) skuIn.addEventListener('input', replan);
+  line.querySelector('.sh-edit-cancel').addEventListener('click', () => { shEditSeq++; reload(); });
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    const res = await api.stockHistoryApply(args()).catch(err => ({ ok: false, error: err.message }));
+    if (!res.ok) { prev.textContent = res.error || 'Could not save.'; prev.classList.add('is-err'); save.disabled = false; return; }
+    toast(del ? `Deleted — ${res.text}` : `Corrected — ${res.text}`);
+    stockHistToday = null;
+    loadStockHistToday();
+    if (activePage === 'stock') loadStock();
+    reload();
+  });
+  const first = qty || save;
+  if (first) first.focus();
+  plan();
+}
+
+// clicks shared by the per-SKU dialog and the History dialog's Stock tab:
+// pills filter, marks and pointers jump, the tools open the editor
+function shBindTools(box, rowsOf, reload, onAct, onSku) {
+  box.addEventListener('click', (ev) => {
+    const goto = ev.target.closest('.sh-goto');
+    if (goto) {
+      const t = box.querySelector(`.sh-line[data-gid="${CSS.escape(goto.dataset.goto)}"]`);
+      if (t) { t.scrollIntoView({ block: 'center' }); t.classList.remove('is-flash'); void t.offsetWidth; t.classList.add('is-flash'); }
+      else toast('That line is outside the current filters or date range.');
+      return;
+    }
+    const tool = ev.target.closest('.sh-edit-btn, .sh-del-btn');
+    if (tool) {
+      const line = tool.closest('.sh-line');
+      const e = rowsOf().find(r => r.gid === line.dataset.gid);
+      if (e) shOpenEditor(line, e, tool.classList.contains('sh-del-btn'), reload);
+      return;
+    }
+    if (ev.target.closest('.sh-editing')) return; // the editor's own controls
+    const act = ev.target.closest('.sh-act');
+    if (act && !act.classList.contains('is-static')) { onAct(act.dataset.act); return; }
+    const sku = ev.target.closest('.sh-sku');
+    if (sku && onSku) onSku(sku.dataset.sku);
+  });
+}
+
+// the tray clock's / count's title: last change today, or a plain label
+function stockHistTip(today, forCount) {
+  const base = forCount ? 'Click to correct the count' : 'Stock history';
+  if (!today) return forCount ? base : `${base} — nothing moved today`;
+  const d = today.lastDelta === null || today.lastDelta === undefined ? `= ${today.lastAfter}` : `${today.lastDelta > 0 ? '+' : ''}${today.lastDelta}`;
+  const who = `${today.lastComputer || '?'}${today.lastBy ? ` (${today.lastBy})` : ''}`;
+  const line = `${today.count} change${today.count === 1 ? '' : 's'} today · last ${d} at ${fmtTime(today.lastAt)} · ${SH_ACT[shActionOf({ reason: today.lastReason, delta: today.lastDelta })].word.toLowerCase()} · ${who}`;
+  return forCount ? `${line}\n${base}` : `${base} · ${line}`;
+}
+
+async function loadStockHistToday() {
+  if (stockHistTodayBusy) return;
+  stockHistTodayBusy = true;
+  try {
+    const res = await api.stockHistoryToday();
+    if (!res || !res.ok) return;
+    stockHistToday = res.bySku || {};
+    if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
+  } finally {
+    stockHistTodayBusy = false;
+  }
+}
+
+/* --- multi-select dropdowns (computers, actions) and the date range --- */
+
+function shDdSync(boxId, set, empty, label) {
+  const box = $(boxId);
+  const btn = box.querySelector('.sh-dd-btn');
+  const lab = btn.querySelector('.sh-dd-label');
+  box.querySelectorAll('input[type=checkbox]').forEach(i => { i.checked = set.has(i.value); });
+  const names = [...set].map(label);
+  lab.textContent = !set.size ? empty : set.size <= 2 ? names.join(', ') : `${set.size} picked`;
+  btn.classList.toggle('has-sel', set.size > 0);
+}
+
+function shDdCloseAll() {
+  document.querySelectorAll('.sh-dd-menu').forEach(m => { m.hidden = true; });
+  document.querySelectorAll('.sh-dd-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+
+// wire one dropdown: the button toggles, ticks land in `set`, then onChange
+function shDdWire(boxId, set, onChange) {
+  const box = $(boxId);
+  const btn = box.querySelector('.sh-dd-btn');
+  const menu = box.querySelector('.sh-dd-menu');
+  btn.addEventListener('click', () => {
+    const open = menu.hidden;
+    shDdCloseAll();
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  });
+  menu.addEventListener('change', (ev) => {
+    const i = ev.target;
+    if (i.type !== 'checkbox') return;
+    if (i.checked) set.add(i.value); else set.delete(i.value);
+    onChange();
+  });
+}
+document.addEventListener('mousedown', (ev) => { if (!ev.target.closest('.sh-dd')) shDdCloseAll(); }, true);
+
+function shMenuFill(menuId, values, opts = {}) {
+  $(menuId).innerHTML = values.map(v => {
+    const label = opts.label ? opts.label(v) : v;
+    const dot = opts.dot ? `<span class="sh-act-dot ${opts.dot(v)}"></span>` : '';
+    return `<label class="ret-dd-mi"><input type="checkbox" value="${esc(v)}"> ${dot}${esc(label)}${opts.count ? `<span class="ret-dd-tgt">${opts.count(v)}</span>` : ''}</label>`;
+  }).join('');
+}
+
+// date range dropdown: presets + a custom from/to. state = { kind, from, to }
+function shRangeDays(range) {
+  const day = (d) => salesDayKey(d.toISOString());
+  const today = new Date();
+  if (range.kind === 'custom' && range.from && range.to) return { from: range.from, to: range.to };
+  if (range.kind === 'all') return { from: '2000-01-01', to: day(today) };
+  if (range.kind === 'month') return { from: `${day(today).slice(0, 7)}-01`, to: day(today) };
+  const n = Number(range.kind) || 7;
+  return { from: day(new Date(Date.now() - (n - 1) * 86400000)), to: day(today) };
+}
+function shRangeLabel(range) {
+  const us = (d) => { const p = String(d).split('-'); return `${+p[1]}/${+p[2]}`; };
+  if (range.kind === 'custom' && range.from && range.to) return `${us(range.from)} – ${us(range.to)}/${range.to.slice(0, 4)}`;
+  return { 7: 'Last 7 days', 30: 'Last 30 days', month: 'This month', all: 'All time' }[range.kind] || 'Last 7 days';
+}
+function shRangeWire(boxId, range, onChange) {
+  const box = $(boxId);
+  const btn = box.querySelector('.sh-dd-btn');
+  const menu = box.querySelector('.sh-dd-menu');
+  const custom = menu.querySelector('.sh-custom');
+  const lab = btn.querySelector('.sh-dd-label');
+  const sync = () => {
+    lab.textContent = shRangeLabel(range);
+    menu.querySelectorAll('[data-range]').forEach(x => x.classList.toggle('sel', x.dataset.range === range.kind));
+    custom.hidden = range.kind !== 'custom';
+  };
+  btn.addEventListener('click', () => {
+    const open = menu.hidden;
+    shDdCloseAll();
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      const d = shRangeDays(range);
+      menu.querySelector('.sh-from').value = range.from || d.from;
+      menu.querySelector('.sh-to').value = range.to || d.to;
+    }
+  });
+  menu.addEventListener('click', (ev) => {
+    const mi = ev.target.closest('[data-range]');
+    if (mi) {
+      range.kind = mi.dataset.range;
+      if (range.kind !== 'custom') { sync(); menu.hidden = true; onChange(); return; }
+      sync();
+      return;
+    }
+    if (ev.target.closest('.sh-custom-show')) {
+      const f = menu.querySelector('.sh-from').value, t = menu.querySelector('.sh-to').value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t) || f > t) { toast('Pick a from date on or before the to date.'); return; }
+      range.from = f; range.to = t; range.kind = 'custom';
+      sync(); menu.hidden = true; onChange();
+    }
+  });
+  sync();
+}
+
+// SOLD rows: Linnworks processed lines for a day range (served from the
+// sales cache when it can be); [] when offline / capture-only
+async function shSalesEvents(from, to, sku) {
+  const res = await api.salesQuery(from, to).catch(() => null);
+  if (!res || !res.ok) return [];
+  const want = sku ? String(sku).toUpperCase() : null;
+  return (res.lines || [])
+    .filter(l => l.sku && (!want || String(l.sku).toUpperCase() === want))
+    .map(shSaleEvent).filter(e => e.day >= from && e.day <= to);
+}
+const shNewestFirst = (a, b) => String(b.created_at).localeCompare(String(a.created_at));
+
+/* --- one SKU: the tray clock's dialog --- */
+
+const shDlg = { sku: '', seq: 0, rows: [], pcs: new Set(), acts: new Set() };
+
+async function openStockHistory(sku) {
+  const seq = ++shDlg.seq;
+  shDlg.sku = sku; shDlg.rows = []; shDlg.pcs = new Set(); shDlg.acts = new Set();
+  $('stockHistSku').textContent = sku;
+  $('stockHistSub').textContent = '';
+  $('stockHistBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  shMenuFill('shPcMenu', []);
+  shMenuFill('shActMenu', SH_ACT_ORDER, { label: shWordCase, dot: k => SH_ACT[k].cls });
+  shDdSync('shPcDd', shDlg.pcs, 'Everyone', v => v);
+  shDdSync('shActDd', shDlg.acts, 'All actions', shWordCase);
+  $('stockHistDialog').showModal();
+  const from = salesDayKey(new Date(Date.now() - 29 * 86400000).toISOString());
+  const to = salesDayKey(new Date().toISOString());
+  const [res, sales] = await Promise.all([api.stockHistory(sku), shSalesEvents(from, to, sku)]);
+  if (shDlg.seq !== seq || !$('stockHistDialog').open) return;
+  if (!res.ok) {
+    $('stockHistBody').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`;
+    return;
+  }
+  shDlg.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
+  const pcs = [...new Set(shDlg.rows.map(e => e.reason === 'sale' ? e.market : e.computer).filter(Boolean))];
+  shMenuFill('shPcMenu', pcs);
+  renderStockHistory();
+}
+
+function renderStockHistory() {
+  const { sku, rows } = shDlg;
+  const item = stockCache && (stockCache.items || []).find(i => String(i.sku).toUpperCase() === String(sku).toUpperCase());
+  const lvl = item && (item.levels || []).find(l => l.locationId === stockCache.locationId);
+  const weekAgo = Date.now() - 7 * 86400000;
+  let inWeek = 0, outWeek = 0;
+  for (const r of rows) {
+    if (new Date(r.created_at).getTime() < weekAgo || r.delta === null || r.delta === undefined) continue;
+    if (r.delta > 0) inWeek += r.delta; else outWeek += -r.delta;
+  }
+  const last = rows.find(r => r.reason !== 'sale');
+  const logged = rows.filter(r => r.reason !== 'sale');
+  $('stockHistSub').textContent = logged.length
+    ? `${logged.length} change${logged.length === 1 ? '' : 's'} logged by Capture Station${rows.length > logged.length ? ` · ${rows.length - logged.length} sold in the last 30 days` : ''}`
+    : `Nothing logged yet — history starts with the first change made through Capture Station.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`;
+  const strip = `<div class="sales-strip sh-strip">
+      <div class="sales-stat"><div class="l">In stock</div><div class="v">${lvl ? lvl.stockLevel : '—'}</div><div class="s">${lvl ? `${lvl.available} available · ${lvl.inOrders} in orders` : 'not in the loaded grid'}</div></div>
+      <div class="sales-stat"><div class="l">In · 7 days</div><div class="v is-pos">+${inWeek}</div><div class="s">units added</div></div>
+      <div class="sales-stat"><div class="l">Out · 7 days</div><div class="v is-neg">−${outWeek}</div><div class="s">units removed</div></div>
+      <div class="sales-stat"><div class="l">Last touched</div><div class="v is-name">${last ? esc(String(last.computer || '—').toUpperCase()) + (last.by ? ` · ${esc(last.by)}` : '') : '—'}</div><div class="s">${last ? `${retDateUS(last.day)} ${fmtTime(last.created_at)}` : ''}</div></div>
+    </div>`;
+  const shown = rows.filter(e => (!shDlg.pcs.size || shDlg.pcs.has(e.reason === 'sale' ? e.market : e.computer))
+    && (!shDlg.acts.size || shDlg.acts.has(shActionOf(e))));
+  shDdSync('shPcDd', shDlg.pcs, 'Everyone', v => v);
+  shDdSync('shActDd', shDlg.acts, 'All actions', shWordCase);
+  const list = shown.length
+    ? `<div class="history-list sh-list"><div class="history-day">${shown.map(e => shRowHtml(e, false, true)).join('')}</div></div>`
+    : `<p class="dlg-note">${rows.length ? 'No changes match those filters.' : ''}</p>`;
+  $('stockHistBody').innerHTML = strip + list;
+}
+
+shDdWire('shPcDd', shDlg.pcs, renderStockHistory);
+shDdWire('shActDd', shDlg.acts, renderStockHistory);
+$('stockHistClose').addEventListener('click', () => $('stockHistDialog').close());
+shBindTools($('stockHistBody'), () => shDlg.rows, () => openStockHistory(shDlg.sku), (a) => {
+  if (shDlg.acts.has(a)) shDlg.acts.delete(a); else { shDlg.acts.clear(); shDlg.acts.add(a); }
+  renderStockHistory();
+});
+
+/* --- every SKU: the History dialog's Stock tab --- */
+
+const hs = { seq: 0, rows: [], pcs: new Set(), acts: new Set(), text: '', range: { kind: '7', from: '', to: '' }, loaded: false };
+
+async function loadHistoryStock() {
+  const seq = ++hs.seq;
+  $('hsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  const { from, to } = shRangeDays(hs.range);
+  const [res, sales] = await Promise.all([api.stockHistoryRange(from, to), shSalesEvents(from, to)]);
+  if (hs.seq !== seq) return;
+  if (!res.ok) { $('hsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`; return; }
+  hs.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
+  hs.loaded = true;
+  const pcs = [...new Set(hs.rows.map(e => e.reason === 'sale' ? e.market : e.computer).filter(Boolean))];
+  shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (e.reason === 'sale' ? e.market : e.computer) === v).length });
+  shMenuFill('hsActMenu', SH_ACT_ORDER, { label: shWordCase, dot: k => SH_ACT[k].cls, count: k => hs.rows.filter(e => shActionOf(e) === k).length });
+  renderHistoryStock();
+}
+
+function renderHistoryStock() {
+  const q = hs.text.toUpperCase();
+  const shown = hs.rows.filter(e => (!hs.pcs.size || hs.pcs.has(e.reason === 'sale' ? e.market : e.computer))
+    && (!hs.acts.size || hs.acts.has(shActionOf(e)))
+    && (!q || `${e.sku} ${e.ref || ''} ${e.note || ''}`.toUpperCase().includes(q)));
+  shDdSync('hsPcDd', hs.pcs, 'Everyone', v => v);
+  shDdSync('hsActDd', hs.acts, 'All actions', shWordCase);
+  $('hsList').innerHTML = shown.length
+    ? `<div class="history-day">${shown.map(e => shRowHtml(e, true, true)).join('')}</div>`
+    : `<p class="dlg-note">${hs.rows.length ? 'No stock changes match.' : 'No stock changes in this period. Logging started the day this version was installed.'}</p>`;
+}
+
+shDdWire('hsPcDd', hs.pcs, renderHistoryStock);
+shDdWire('hsActDd', hs.acts, renderHistoryStock);
+shRangeWire('hsRangeDd', hs.range, loadHistoryStock);
+$('hsSearch').addEventListener('input', () => { hs.text = $('hsSearch').value.trim(); renderHistoryStock(); });
+shBindTools($('hsList'), () => hs.rows, loadHistoryStock, (a) => {
+  if (hs.acts.has(a)) hs.acts.delete(a); else { hs.acts.clear(); hs.acts.add(a); }
+  renderHistoryStock();
+}, (sku) => { $('hsSearch').value = sku; hs.text = sku; renderHistoryStock(); });
+
+
 let salesDlg = null; // { sku, avail, range, seq, days, channels, on, table }
 
 async function openSalesDialog(sku, avail) {
@@ -6317,7 +6978,6 @@ $('stockBulkBtn').addEventListener('click', () => {
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
   if (first) first.focus();
   if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
-  bulkHistLoad();
 });
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
@@ -6357,181 +7017,17 @@ $('bulkApply').addEventListener('click', async () => {
     const r = await api.stockBulkRevert(res.entry.id);
     if (!r.ok) throw new Error(r.error || 'Revert failed');
     loadStock();
-    bulkHistLoad();
   });
   toast(`${res.entry.rows.length} SKU${res.entry.rows.length === 1 ? '' : 's'} ${mode === 'add' ? 'added to stock' : 'set to the typed counts'} · Ctrl+Z reverses the whole import`, 7000);
   $('bulkGridRows').innerHTML = '';
   bulkAddRow();
   $('bulkNote').value = '';
   loadStock();
-  bulkHistLoad();
 });
 
-let bulkHistEntries = []; // the revert confirm names the entry from here
-
-// units of entry `id`, line `rowIdx`, already moved to another SKU by fix
-// entries — a reverted fix gave its units back, so it doesn't count
-function bulkFixMoved(id, rowIdx) {
-  const undone = new Set(bulkHistEntries.filter(x => x.revertOf).map(x => x.revertOf));
-  return bulkHistEntries
-    .filter(x => x.mode === 'fix' && x.fixOf === id && Number(x.fixRow) === Number(rowIdx) && !undone.has(x.id))
-    .reduce((s, x) => s + (Number(x.fixQty) || 0), 0);
-}
-
-async function bulkHistLoad() {
-  const box = $('bulkHist');
-  const res = await api.stockBulkHistory().catch(() => null);
-  bulkHistEntries = (res && res.ok && res.entries) || [];
-  if (!bulkHistEntries.length) {
-    box.innerHTML = '<p class="dlg-note">Nothing yet.</p>';
-    return;
-  }
-  const reverted = new Set(bulkHistEntries.filter(e => e.revertOf).map(e => e.revertOf));
-  box.innerHTML = bulkHistEntries.map((e, i) => {
-    const rows = e.rows || [];
-    const nSku = `${rows.length} SKU${rows.length === 1 ? '' : 's'}`;
-    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
-    const what = e.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} · ${nSku}`
-      : e.mode === 'set' ? `set counts · ${nSku}`
-        : e.mode === 'edit' ? `edited <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> ${rows[0] && rows[0].before != null ? `${rows[0].before} → ` : '→ '}${rows[0] ? rows[0].after : ''}`
-          : e.mode === 'fix' ? `moved ${e.fixQty || ''} unit${Number(e.fixQty) === 1 ? '' : 's'} <span class="mono">${esc(rows[0] ? rows[0].sku : '')}</span> → <span class="mono">${esc(rows[rows.length - 1] ? rows[rows.length - 1].sku : '')}</span>`
-            : `↩ reversed an earlier change · ${nSku}`;
-    const fixable = !reverted.has(e.id) && (e.mode === 'add' || e.mode === 'set' || e.mode === 'edit');
-    const act = reverted.has(e.id)
-      ? '<span class="bulk-h-rvtd">reverted ✓</span>'
-      : `<button type="button" class="bulk-h-revert" data-brv="${esc(e.id)}" title="Reverse this change — subtracts what it added (or restores what it removed), leaving everything since alone">↩ Revert</button>`;
-    return `
-    <div class="bulk-h">
-      <div class="bulk-h-line" data-bh="${i}">
-        <b>${esc(new Date(e.ts).toLocaleString())}</b> · ${esc(e.station || '')} · ${what}${e.file ? ` · <span class="mono">${esc(e.file)}</span>` : ''}${e.note ? ` · <span class="bulk-h-note" title="${esc(e.note)}">“${esc(e.note)}”</span>` : ''}
-        ${act}<span class="bulk-h-chev">▸</span>
-      </div>
-      <div class="bulk-h-body" hidden>
-        <table class="bulk-table">
-          <thead><tr><th>SKU</th><th class="num">Before</th><th class="num">${e.mode === 'add' ? 'Added' : e.mode === 'revert' || e.mode === 'fix' ? 'Change' : 'Set to'}</th><th class="num">After</th><th></th></tr></thead>
-          <tbody>${rows.map((r, ri) => {
-    const change = (Number(r.after) || 0) - (Number(r.before) || 0);
-    const moved = fixable ? bulkFixMoved(e.id, ri) : 0;
-    const avail = change - moved;
-    const canFix = fixable && change > 0 && avail > 0;
-    const cell = (canFix
-      ? `<button type="button" class="bulk-h-fix" title="Wrong SKU? Change it in place — the units move to the SKU you pick">✎</button>` : '')
-      + (moved > 0 ? `<span class="bulk-h-moved" title="${moved} unit${moved === 1 ? '' : 's'} moved to another SKU — see the “moved” entries above">↷ ${moved} moved</span>` : '');
-    const q = (e.mode === 'add' || ((e.mode === 'revert' || e.mode === 'fix') && r.qty > 0)) ? `+${r.qty}` : r.qty;
-    return `<tr><td class="mono bulk-h-sku"${canFix ? ` data-bfx="${esc(e.id)}" data-bfr="${ri}" title="Double-click to change which SKU these units went to"` : ''}>${esc(r.sku)}</td><td class="num mono">${r.before == null ? '—' : r.before}</td><td class="num mono">${q}</td><td class="num mono">${r.after == null ? '—' : r.after}</td><td class="bulk-h-fixcell">${cell}</td></tr>`;
-  }).join('')}</tbody>
-        </table>
-        ${e.skipped && e.skipped.length ? `<p class="dlg-note bulk-warn">skipped (not in Linnworks): <span class="mono">${e.skipped.map(esc).join(', ')}</span></p>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-let bulkRevPending = ''; // entry id awaiting the confirm popup
-
-// In-place SKU correction (owner 2026-09-17: "double click within the
-// history and just change it really quickly"): the SKU cell swaps into an
-// input with suggestions + a small units box (prefilled with everything
-// still movable). Enter applies the move, Esc cancels.
-let bulkFixClose = null; // open editor's cleanup, one at a time
-
-function bulkFixInlineOpen(td) {
-  if (bulkFixClose) bulkFixClose();
-  const entry = bulkHistEntries.find(x => x.id === td.dataset.bfx);
-  const ri = Number(td.dataset.bfr);
-  const row = entry && (entry.rows || [])[ri];
-  if (!row) return;
-  const change = (Number(row.after) || 0) - (Number(row.before) || 0);
-  const avail = change - bulkFixMoved(entry.id, ri);
-  if (avail < 1) { toast('Those units were already moved.'); return; }
-  ensureInventory(); // the SKU picker's lookup data
-  const orig = td.innerHTML;
-  td.innerHTML = `
-    <div class="bulk-h-fixwrap">
-      <input class="input mono bulk-h-fixsku" type="text" autocomplete="off" spellcheck="false" aria-label="Correct SKU" />
-      <input class="input mono bulk-h-fixqty" type="number" min="1" max="${avail}" step="1" value="${avail}" aria-label="Units to move" title="How many of the ${avail} unit${avail === 1 ? '' : 's'} to move" />
-      <div class="combo-list" hidden></div>
-    </div>`;
-  const skuIn = td.querySelector('.bulk-h-fixsku');
-  const qtyIn = td.querySelector('.bulk-h-fixqty');
-  const listEl = td.querySelector('.combo-list');
-  skuIn.value = String(row.sku);
-  const close = () => {
-    document.removeEventListener('mousedown', away, true);
-    td.innerHTML = orig;
-    bulkFixClose = null;
-  };
-  const away = (ev) => { if (!td.contains(ev.target) && !listEl.contains(ev.target)) close(); };
-  const apply = async () => {
-    const to = skuIn.value.trim().toUpperCase();
-    const m = Number(qtyIn.value);
-    if (!to || to === String(row.sku).toUpperCase()) { close(); return; } // unchanged — never mind
-    if (!Number.isInteger(m) || m < 1 || m > avail) { toast(`Units must be a whole number between 1 and ${avail}.`); qtyIn.focus(); return; }
-    skuIn.disabled = true; qtyIn.disabled = true;
-    const res = await api.stockBulkFix(entry.id, ri, to, m);
-    if (!res.ok) { skuIn.disabled = false; qtyIn.disabled = false; toast(res.error || 'Could not move the units.'); return; }
-    close();
-    toast(`Moved ${m} × ${row.sku} → ${to}`);
-    loadStock();
-    bulkHistLoad();
-  };
-  makeCombo(skuIn, listEl, (item) => { skuIn.value = item.sku; qtyIn.focus(); });
-  const onKey = (ev) => {
-    // preventDefault on Esc also keeps the bulk dialog itself open
-    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); return; }
-    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
-  };
-  skuIn.addEventListener('keydown', onKey);
-  qtyIn.addEventListener('keydown', onKey);
-  document.addEventListener('mousedown', away, true);
-  bulkFixClose = close;
-  skuIn.focus();
-  skuIn.select();
-}
-
-$('bulkHist').addEventListener('dblclick', (e) => {
-  const td = e.target.closest('td.bulk-h-sku[data-bfx]');
-  if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
-});
-
-$('bulkHist').addEventListener('click', (e) => {
-  const fx = e.target.closest('.bulk-h-fix');
-  if (fx) {
-    const td = fx.closest('tr').querySelector('td.bulk-h-sku[data-bfx]');
-    if (td && !td.querySelector('.bulk-h-fixwrap')) bulkFixInlineOpen(td);
-    return;
-  }
-  const rv = e.target.closest('.bulk-h-revert');
-  if (rv) {
-    bulkRevPending = rv.dataset.brv;
-    const entry = bulkHistEntries.find(x => x.id === bulkRevPending);
-    const rows = (entry && entry.rows) || [];
-    const units = rows.reduce((a, r) => a + Math.abs((Number(r.after) || 0) - (Number(r.before) || 0)), 0);
-    $('bulkRevWhat').textContent = entry
-      ? `${new Date(entry.ts).toLocaleString()} · ${entry.station || ''} · ${entry.mode === 'add' ? `added ${units} unit${units === 1 ? '' : 's'} across` : entry.mode === 'set' ? 'set counts on' : entry.mode === 'edit' ? 'edited' : 'reversed a change on'} ${rows.length === 1 ? rows[0].sku : `${rows.length} SKUs`}${entry.note ? ` · “${entry.note}”` : ''}`
-      : '';
-    $('bulkRevGo').disabled = false;
-    $('bulkRevDialog').showModal();
-    return;
-  }
-  const line = e.target.closest('.bulk-h-line');
-  if (!line) return;
-  const body = line.parentElement.querySelector('.bulk-h-body');
-  body.hidden = !body.hidden;
-  line.querySelector('.bulk-h-chev').textContent = body.hidden ? '▸' : '▾';
-});
-
-$('bulkRevCancel').addEventListener('click', () => $('bulkRevDialog').close());
-$('bulkRevGo').addEventListener('click', async () => {
-  if (!bulkRevPending) return;
-  $('bulkRevGo').disabled = true;
-  const res = await api.stockBulkRevert(bulkRevPending);
-  $('bulkRevDialog').close();
-  if (!res.ok) { toast(res.error || 'Could not revert.'); return; }
-  toast('Reversed — the history keeps both entries.');
-  loadStock();
-  bulkHistLoad();
-});
+// (the popup's own history list left 2026-09-23: every import, edit,
+// revert and fix now shows in the History dialog's Stock tab, where a line
+// can be edited or deleted in place)
 
 /* ---------- Pricing tab (owner 2026-09-18, design 'Pricing and Overview'):
    products × auto-generated channel columns. Walmart (repricer-owned)
@@ -6586,6 +7082,7 @@ async function enterPricing(force) {
   }
   prData = res;
   prRender();
+  return !!res.rescanning;
 }
 
 function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channels || []).length}, minmax(240px, 1.15fr))`; }
@@ -6724,7 +7221,15 @@ function prRender() {
 }
 
 $('prSearch').addEventListener('input', () => { prQ = $('prSearch').value; prRender(); });
-$('prRefresh').addEventListener('click', () => enterPricing(true));
+$('prRefresh').addEventListener('click', async () => {
+  const btn = $('prRefresh');
+  btn.disabled = true;
+  btn.classList.add('is-spinning');
+  const rescanning = await enterPricing(true);
+  btn.disabled = false;
+  // a link rescan is still running: keep spinning until 'pricing:refreshed'
+  if (!rescanning) btn.classList.remove('is-spinning');
+});
 const prSortPaint = () => {
   for (const b of document.querySelectorAll('#prSortSet button')) b.classList.toggle('is-on', b.dataset.prsort === prSort);
 };
@@ -7048,7 +7553,7 @@ async function prVarPickOpen(btn) {
 }
 
 // the background stored-price fill finished a batch — repaint quietly
-api.on('pricing:refreshed', () => { if (activePage === 'pricing') enterPricing(); });
+api.on('pricing:refreshed', () => { $('prRefresh').classList.remove('is-spinning'); if (activePage === 'pricing') enterPricing(); });
 
 /* price history: the centered popup */
 async function prHistLoad() {
@@ -7230,7 +7735,7 @@ function imgPatchGrid(dataUrl) {
     const u = unlistedDetail.find(x => x.sku === String(sku).toUpperCase());
     if (u) u.image = dataUrl;
   }
-  if (activePage === 'stock' && stockCache) renderStock();
+  if (activePage === 'stock' && stockCache && !stockLoading) renderStock();
 }
 
 function openImgDialog(sku, sid, url) {
@@ -8199,62 +8704,16 @@ function recvSeed(lines) {
   renderRecv();
 }
 
-/* ---------- history dialog ---------- */
-
-function historyStatusLabel(row) {
-  switch (row.status) {
-    case 'synced': return `Processed ${row.synced_at ? fmtTime(row.synced_at) : ''}`.trim();
-    case 'captured': return 'Ready';
-    case 'pending': return 'No tracking';
-    case 'failed': return 'Failed';
-    default: return row.status;
-  }
-}
-
-let historyCache = [];
+/* ---------- history dialog: the stock history ---------- */
 
 async function openHistory() {
-  historyCache = await api.getHistory();
-  $('historyParkedOnly').checked = false;
-  renderHistory();
+  hs.loaded = false; // re-read on every open (changes since)
+  $('historyDialog').classList.add('is-stock');
   $('historyDialog').showModal();
+  loadHistoryStock();
 }
 
-function renderHistory() {
-  const parkedOnly = $('historyParkedOnly').checked;
-  const rows = parkedOnly
-    ? historyCache.filter(r => (r.notes || '').includes('was parked'))
-    : historyCache;
-  const byDay = new Map();
-  for (const r of rows) {
-    if (!byDay.has(r.day)) byDay.set(r.day, []);
-    byDay.get(r.day).push(r);
-  }
-  $('historyList').innerHTML = rows.length === 0
-    ? `<p class="dlg-note">${parkedOnly ? 'No parked orders on record.' : 'Nothing processed yet. Orders appear here once they are pushed to Linnworks.'}</p>`
-    : [...byDay.entries()].map(([day, list]) => `
-      <div class="history-day">
-        <div class="history-day-head">${esc(day)} &middot; ${list.length} order${list.length === 1 ? '' : 's'}</div>
-        ${list.map(r => `
-          <div class="history-item">
-            <span class="history-time mono">${fmtTime(r.created_at)}</span>
-            <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy · ${esc(channelLabel(r.channel))}">${esc(r.order_number)}</span>
-            ${r.tracking
-              ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
-              : '<span class="mono history-tracking">—</span>'}
-            <span class="history-status st-${esc(r.status)}" title="${esc(r.fail_reason || '')}">${esc(historyStatusLabel(r))}</span>
-            ${r.sub_sku ? `<span class="sub-pill" title="${esc(r.sub_note || `Shipped ${r.sub_sku} instead of the listed item`)}">SUB → ${esc(r.sub_sku)}${r.sub_qty > 1 ? ` ×${r.sub_qty}` : ''}</span>` : ''}
-            ${r.notes ? `<span class="history-notes" title="${esc(r.notes)}">${esc(r.notes)}</span>` : ''}
-          </div>`).join('')}
-      </div>`).join('');
-}
-
-$('historyParkedOnly').addEventListener('change', renderHistory);
-$('historyBtn').addEventListener('click', openHistory);
-$('historyList').addEventListener('click', (e) => {
-  const copyEl = e.target.closest('[data-copy]');
-  if (copyEl) copyFromApp(copyEl.dataset.copy);
-});
+$('historyBtn').addEventListener('click', () => openHistory());
 $('historyClose').addEventListener('click', () => $('historyDialog').close());
 $('historyDialog').addEventListener('close', () => focusScan());
 
