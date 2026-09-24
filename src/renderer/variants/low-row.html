@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Running low — row redesign (pick one)</title>
+<!--
+  Owner 2026-09-24: "I want to redesign the running low order as well".
+  Starts from the Send to WFS block style shipped in v1.28.9 (strip | SKU
+  + mini sheet | keys) so both columns match. Real rows from the owner's
+  live screenshot; lead time 7 days. Real 400px column width, enlarged
+  1.35x, on the real styles.css.
+    L1 - same block, sheet Order / 30-Day Sales / On hand / Left, keys
+         OPEN (Stock filtered to the SKU) over IGNORE (new: hide 7 days)
+    L2 - same block without keys; run-out date + "selling faster" tag on
+         the SKU line
+    L3 - five-column sheet splitting shelf and WFS stock, one ORDER key
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
+  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
+  .wr-col { width: 400px; zoom: 1.35; }
+  .wr-col .ov-panel { padding: 8px 10px; }
+  .wr-col h4 { margin: 2px 0 8px; }
+
+  /* the shipped Send-to-WFS block, reused */
+  .blk { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+  .blk.nokeys { grid-template-columns: 3px 1fr; }
+  .blk + .blk { margin-top: 8px; }
+  .blk .strip { background: var(--accent); }
+  .blk.r .strip { background: var(--neg-text); } .blk.a .strip { background: #D9A21B; }
+  .blk .main { min-width: 0; }
+  .blk .id { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
+  .blk .sku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .blk .tag { margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; color: var(--muted); }
+  .blk .tag.hot { color: var(--neg-text); }
+  .blk .tag .out { color: var(--muted); font-weight: 600; margin-right: 6px; text-transform: none; letter-spacing: 0; }
+  .cells { display: grid; }
+  .cells.c4 { grid-template-columns: 0.9fr 1.3fr 1fr 0.9fr; }
+  .cells.c5 { grid-template-columns: 0.9fr 1.2fr 0.8fr 0.7fr 0.8fr; }
+  .cells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .cells.c4 div:nth-child(4), .cells.c4 span:nth-child(8), .cells.c5 div:nth-child(5), .cells.c5 span:nth-child(10) { border-right: none; }
+  .cells .r { color: var(--neg-text); } .cells .a { color: var(--badge-yellow-text); } .cells .o { color: var(--badge-yellow-text); }
+  .keys { display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
+  .keys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+  .keys .pri { background: #956400; color: #fff; }
+  .keys .pri + button { border-top: 1px solid #D6D3CC; }
+  .keys .pri:hover { background: #7A5200; }
+  .keys .sec { background: var(--surface-2); color: var(--muted); }
+  .keys .sec:hover { background: #EFEEEA; color: var(--text); }
+  .foot { font-size: 10.5px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Running low · row redesign</h1>
+  <div class="sub">Starts from the Send to WFS block (v1.28.9) so both columns match. Your real rows; 7-day lead time. Real column width (400px), enlarged 1.35×.</div>
+  <div class="wr-grid">
+
+    <div>
+      <div class="wr-lbl"><b>L1</b> · same block, OPEN / IGNORE keys</div>
+      <div class="wr-col"><div class="ov-panel"><h4 class="ov-h-a">Running low</h4>
+        <div class="blk r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">A15-128GB-BLACK</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">35</span><span>36</span><span>0</span><span class="r">0 days</span></div></div>
+          <div class="keys"><button class="pri">Open</button><button class="sec">Ignore</button></div></div>
+        <div class="blk r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X306-128GB-GREEN</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">15</span><span>12</span><span>0</span><span class="r">0 days</span></div></div>
+          <div class="keys"><button class="pri">Open</button><button class="sec">Ignore</button></div></div>
+        <div class="blk a"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X236-128GB-GRAY</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">35</span><span>45</span><span>8</span><span class="a">5 days</span></div></div>
+          <div class="keys"><button class="pri">Open</button><button class="sec">Ignore</button></div></div>
+        <div class="foot">Order = daily pace × (7-day lead + 21 days) − stock</div>
+      </div></div>
+      <div class="wr-note">Identical build to Send to WFS, amber instead of green. OPEN jumps to the SKU in Stock; IGNORE hides it for 7 days (new — needs building). "▲ faster" when the last 14 days sell faster.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>L2</b> · no keys, run-out date on the SKU line</div>
+      <div class="wr-col"><div class="ov-panel"><h4 class="ov-h-a">Running low</h4>
+        <div class="blk nokeys r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">A15-128GB-BLACK</span><span class="tag hot"><span class="out">out Sep 23</span>▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">35</span><span>36</span><span>0</span><span class="r">0 days</span></div></div></div>
+        <div class="blk nokeys r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X306-128GB-GREEN</span><span class="tag hot"><span class="out">out Sep 23</span>▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">15</span><span>12</span><span>0</span><span class="r">0 days</span></div></div></div>
+        <div class="blk nokeys a"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X236-128GB-GRAY</span><span class="tag hot"><span class="out">out Sep 28</span>▲ faster</span></div>
+          <div class="cells c4"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div><span class="o">35</span><span>45</span><span>8</span><span class="a">5 days</span></div></div></div>
+        <div class="foot">Order = daily pace × (7-day lead + 21 days) − stock</div>
+      </div></div>
+      <div class="wr-note">Nothing to press — it's a buying list. The SKU still opens Stock on click. Shows the run-out date.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>L3</b> · shelf and WFS split, one ORDER key</div>
+      <div class="wr-col"><div class="ov-panel"><h4 class="ov-h-a">Running low</h4>
+        <div class="blk r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">A15-128GB-BLACK</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c5"><div>Order</div><div>30-Day</div><div>Shelf</div><div>WFS</div><div>Left</div><span class="o">35</span><span>36</span><span>0</span><span>0</span><span class="r">0d</span></div></div>
+          <div class="keys"><button class="pri">Order</button></div></div>
+        <div class="blk r"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X306-128GB-GREEN</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c5"><div>Order</div><div>30-Day</div><div>Shelf</div><div>WFS</div><div>Left</div><span class="o">15</span><span>12</span><span>0</span><span>0</span><span class="r">0d</span></div></div>
+          <div class="keys"><button class="pri">Order</button></div></div>
+        <div class="blk a"><span class="strip"></span><div class="main">
+          <div class="id"><span class="sku">X236-128GB-GRAY</span><span class="tag hot">▲ faster</span></div>
+          <div class="cells c5"><div>Order</div><div>30-Day</div><div>Shelf</div><div>WFS</div><div>Left</div><span class="o">35</span><span>45</span><span>8</span><span>0</span><span class="a">5d</span></div></div>
+          <div class="keys"><button class="pri">Order</button></div></div>
+        <div class="foot">Order = daily pace × (7-day lead + 21 days) − stock</div>
+      </div></div>
+      <div class="wr-note">Shows where the stock is (warehouse shelf vs. WFS). ORDER would add the SKU to a buy list / purchase order — that doesn't exist yet, so tell me what it should do.</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
