@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Pricing C1 — variations dropdown, round 2</title>
+<!--
+  Owner 2026-09-24: "I like the excel styling, but the variations look weird
+  on the dropdown" (V1's indented, gapped, truncated rows). Three dropdowns
+  that stay a spreadsheet. Sample numbers.
+    D1 - outline group: the variation rows butt straight onto the parent
+         like an Excel row group (- bracket in the gutter), header row only
+         once, grade + full SKU on two lines
+    D2 - open inside the blocks: the toggle grows each channel block with
+         OPEN BOX / USED sections; no new rows at all
+    D3 - sub-sheet: one full-width Excel table under the product, a row per
+         grade and a column per channel
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; max-width: 1240px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; max-width: 900px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 26px 0 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 8px; max-width: 800px; }
+
+  .cols { display: grid; grid-template-columns: 220px repeat(3, 1fr); gap: 8px; }
+  .chead { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--muted); padding: 0 0 5px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .chead .w { color: #1F6C9F; } .chead .e { color: #956400; } .chead .t { color: #6A2E9E; }
+  .row + .row { margin-top: 8px; }
+
+  .blk { display: grid; grid-template-columns: 3px 1fr; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); align-self: start; }
+  .strip { background: var(--accent); }
+  .strip.a { background: #D9A21B; } .strip.r { background: var(--neg-text); }
+  .strip.w { background: #1F6C9F; } .strip.e { background: #956400; } .strip.t { background: #6A2E9E; }
+  .strip.ob { background: #3B82C4; } .strip.us { background: #C08A1E; }
+  .main { min-width: 0; }
+  .prod .main { padding: 7px 9px; }
+  .sku { font-size: 12px; font-weight: 700; color: var(--badge-blue-text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stk { font-size: 10.5px; color: var(--muted); font-family: var(--font); display: block; margin-top: 2px; }
+  .tog { display: inline-block; margin-top: 6px; font-family: var(--font); font-size: 10.5px; font-weight: 600; color: var(--text); background: var(--surface-2); border: 1px solid #E0DED8; border-radius: 3px; padding: 2px 7px; }
+  .grade { display: inline-block; font-family: var(--font); font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px; margin-right: 5px; vertical-align: 1px; }
+  .grade.ob { background: var(--badge-blue-bg, #E6F0F8); color: var(--badge-blue-text); }
+  .grade.us { background: var(--badge-yellow-bg, #FBF1DC); color: var(--badge-yellow-text); }
+  .grade.nw { background: #E7F3EC; color: var(--accent); }
+  .vx { float: right; font-family: var(--font); font-size: 11px; color: var(--faint); }
+
+  .sheet { display: grid; grid-template-columns: 1fr 44px 70px; }
+  .sheet > div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-bottom: 1px solid #E0DED8; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .sheet > span { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #EEECE7; border-right: 1px solid #EEECE7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet > :nth-child(3n) { border-right: none; }
+  .sheet > .gh { grid-column: 1 / -1; padding: 3px 8px; font-family: var(--font); font-size: 9px; font-weight: 700; letter-spacing: .06em; color: var(--muted); background: #FAFAF8; border-right: none; border-bottom: 1px solid #EEECE7; }
+  .num { text-align: right; }
+  .dim { color: var(--faint); }
+  .hot { color: var(--badge-yellow-text); font-weight: 700; }
+  .ro { color: var(--muted); }
+  .ed { font-weight: 700; color: var(--text); text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+  .foot { padding: 4px 8px; font-size: 10px; color: var(--muted); font-family: var(--font); background: #FAFAF8; }
+  .foot b { font-family: var(--mono); color: var(--text); }
+  .foot.ref { background: #F2F7FB; }
+  .none { padding: 8px; font-size: 10.5px; color: var(--faint); font-style: italic; font-family: var(--font); }
+  .add { display: block; padding: 4px 8px; font-size: 10px; color: var(--faint); font-family: var(--font); border-top: 1px dashed #E0DED8; }
+
+
+  /* D1 outline group */
+  .grp { display: grid; grid-template-columns: 18px 1fr; }
+  .gut { position: relative; }
+  .gut .box { position: absolute; top: 12px; left: 2px; width: 12px; height: 12px; border: 1px solid #A8A49C; background: #fff; font: 700 11px/10px var(--mono); text-align: center; color: #57534C; }
+  .gut .line { position: absolute; top: 25px; bottom: 14px; left: 8px; border-left: 1px solid #A8A49C; }
+  .gut .line::after { content: ''; position: absolute; bottom: 0; left: 0; width: 6px; border-top: 1px solid #A8A49C; }
+  .d1 .cols { gap: 0 8px; }
+  .d1 .vr .blk { border-radius: 0; border-top: none; }
+  .d1 .top .blk { border-radius: 4px 4px 0 0; }
+  .d1 .vr.last .blk { border-radius: 0 0 4px 4px; }
+  .d1 .vr .prod .main { padding: 5px 9px; }
+  .d1 .vr .sku { font-size: 11px; white-space: normal; word-break: break-all; }
+  .d1 .gl { display: block; margin-bottom: 2px; }
+  .d1 .vr .foot { border-top: 1px solid #EEECE7; }
+  .d1 .vadd { grid-column: 2; padding: 5px 0 0; font-size: 10.5px; color: var(--muted); font-family: var(--font); }
+  .d1 .vadd span { border: 1px dashed #D6D3CC; border-radius: 3px; padding: 2px 8px; }
+  .d1 .top .prod { border-bottom: 1px solid #D6D3CC; }
+  .d1 .vr .none { padding: 6px 8px; }
+  /* D2 closed/open pair */
+  .pair { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .state { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--faint); margin-bottom: 4px; font-family: var(--font); }
+  .sheet > .gh .gs { float: right; font-family: var(--mono); color: var(--text); letter-spacing: 0; }
+  /* D3 sub-sheet */
+  .sub3 { margin: 0 0 0 0; display: grid; grid-template-columns: 220px 1fr; gap: 8px; }
+  .sub3 .conn { font-size: 10.5px; color: var(--muted); font-family: var(--font); padding: 8px 0 0 12px; }
+  .xt { border: 1px solid #D6D3CC; border-top: none; border-radius: 0 0 4px 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); display: grid;
+        grid-template-columns: 96px minmax(170px, 1.4fr) 56px 1fr 1fr 1fr 1fr 1fr 28px; }
+  .xt > div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-bottom: 1px solid #E0DED8; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .xt > div.w { box-shadow: inset 0 2px 0 #1F6C9F; } .xt > div.e { box-shadow: inset 0 2px 0 #956400; } .xt > div.t { box-shadow: inset 0 2px 0 #6A2E9E; }
+  .xt > span { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #EEECE7; border-right: 1px solid #EEECE7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xt > :nth-child(9n) { border-right: none; text-align: center; color: var(--faint); }
+  .xt > .xadd { grid-column: 1 / -1; font-family: var(--font); font-size: 10.5px; color: var(--muted); border-right: none; text-align: left !important; }
+  .d3top .blk { border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Pricing C1 · variations dropdown, round 2</h1>
+  <div class="sub">V1's nested rows looked off (indented, gaps, cut-off SKUs). Three dropdowns that stay a spreadsheet. Same example: X400-128GB-GRAY with OPEN-BOX- and USED- variations, shown open.</div>
+
+  <div class="wr-lbl"><b>D1</b> · outline group (Excel row grouping)</div>
+  <div class="d1"><div class="grp"><span></span><div class="cols chead"><span>PRODUCT</span><span class="w">WALMART</span><span class="e">EBAY</span><span class="t">TEMU US</span></div></div>
+  <div class="grp"><div class="gut"><span class="box">−</span><span class="line"></span></div><div>
+    <div class="cols top"><div class="blk prod"><span class="strip"></span><div class="main"><span class="sku">X400-128GB-GRAY</span><span class="stk">42 in stock · 2 variations · 8 units</span></div></div><div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span class="num ro">$149.99</span><span>X400-128GB-GRAY</span><span class="num ">×26</span><span class="num ro">$152.49</span></div><div class="foot ref">last <b>$149.99</b> 9/24 · 30-day avg <b>$147.62</b> · 77 sold</div></div></div><div class="blk"><span class="strip e"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-GRAY-EB</span><span class="num ">×4</span><span class="num ed">$159.99</span></div><div class="foot">last <b>$155.00</b> 9/19 · avg <b>$152.00</b></div></div></div><div class="blk"><span class="strip t"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400128GRAY</span><span class="num dim">—</span><span class="num ed">$164.99</span></div><div class="foot">no sales in 30 days</div></div></div></div>
+    <div class="cols vr"><div class="blk prod"><span class="strip ob"></span><div class="main"><span class="vx">✕</span><span class="gl"><span class="grade ob">OPEN BOX</span><span class="stk" style="display:inline">5 in stock</span></span><span class="sku">OPEN-BOX-X400-128GB-GRAY</span></div></div>
+      <div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><span>OPEN-BOX-X400-128GB-GRAY</span><span class="num ">×9</span><span class="num ro">$129.99</span></div><div class="foot ref">last <b>$127.50</b> 9/23 · 30-day avg <b>$128.10</b></div></div></div>
+      <div class="blk"><span class="strip e"></span><div class="main"><div class="sheet"><span>X400-128-GRAY-OB</span><span class="num ">×2</span><span class="num ed">$134.99</span></div><div class="foot">last <b>$134.99</b> 9/16</div></div></div>
+      <div class="blk"><span class="strip t"></span><div class="main"><div class="none">not listed · + channel SKU</div></div></div></div>
+    <div class="cols vr last"><div class="blk prod"><span class="strip us"></span><div class="main"><span class="vx">✕</span><span class="gl"><span class="grade us">USED</span><span class="stk" style="display:inline">3 in stock</span></span><span class="sku">USED-X400-128GB-GRAY</span></div></div>
+      <div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><span>USED-X400-128GB-GRAY</span><span class="num ">×6</span><span class="num ro">$109.99</span></div><div class="foot ref">last <b>$108.00</b> 9/22 · 30-day avg <b>$109.40</b></div></div></div>
+      <div class="blk"><span class="strip e"></span><div class="main"><div class="none">not listed · + channel SKU</div></div></div>
+      <div class="blk"><span class="strip t"></span><div class="main"><div class="none">not listed · + channel SKU</div></div></div></div>
+    <div class="vadd"><span>+ variation</span></div>
+  </div></div></div>
+  <div class="wr-note">The variation rows attach straight under the product with no gaps, like grouped rows in Excel — the − in the gutter collapses them (+ when closed). Column headers only once; each grade shows its badge and stock on top and the full SKU underneath (no cut-off).</div>
+
+  <div class="wr-lbl"><b>D2</b> · opens inside the blocks</div>
+  <div class="pair">
+   <div><div class="state">CLOSED</div><div class="cols chead"><span>PRODUCT</span><span class="w">WALMART</span><span class="e">EBAY</span><span class="t">TEMU US</span></div>
+    <div class="cols row"><div class="blk prod"><span class="strip"></span><div class="main"><span class="sku">X400-128GB-GRAY</span><span class="stk">42 in stock</span><span class="tog">▸ Open box 5 · Used 3</span></div></div><div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span class="num ro">$149.99</span><span>X400-128GB-GRAY</span><span class="num ">×26</span><span class="num ro">$152.49</span></div><div class="foot ref">last <b>$149.99</b> 9/24 · 30-day avg <b>$147.62</b> · 77 sold</div></div></div><div class="blk"><span class="strip e"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-GRAY-EB</span><span class="num ">×4</span><span class="num ed">$159.99</span></div><div class="foot">last <b>$155.00</b> 9/19 · avg <b>$152.00</b></div></div></div><div class="blk"><span class="strip t"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400128GRAY</span><span class="num dim">—</span><span class="num ed">$164.99</span></div><div class="foot">no sales in 30 days</div></div></div></div></div>
+   <div><div class="state">OPEN</div>
+    <div class="cols row"><div class="blk prod"><span class="strip"></span><div class="main"><span class="sku">X400-128GB-GRAY</span>
+      <span class="stk"><span class="grade nw">NEW</span>42 in stock</span><span class="stk"><span class="grade ob">OPEN BOX</span>5 in stock</span><span class="stk"><span class="grade us">USED</span>3 in stock</span>
+      <span class="tog">▾ hide variations</span></div></div>
+      <div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span class="gh">NEW<span class=gs>avg $147.62</span></span><span class="">X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span class="num ro">$149.99</span><span class="">X400-128GB-GRAY</span><span class="num ">×26</span><span class="num ro">$152.49</span><span class="gh">OPEN BOX<span class=gs>avg $128.10</span></span><span class="">OPEN-BOX-X400-128GB-GRAY</span><span class="num ">×9</span><span class="num ro">$129.99</span><span class="gh">USED<span class=gs>avg $109.40</span></span><span class="">USED-X400-128GB-GRAY</span><span class="num ">×6</span><span class="num ro">$109.99</span></div><div class="foot ref">30-day avg per grade in each section header</div></div></div>
+      <div class="blk"><span class="strip e"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span class="gh">NEW<span class=gs>avg $152.00</span></span><span class="">X400-128GB-GRAY-EB</span><span class="num ">×4</span><span class="num ed">$159.99</span><span class="gh">OPEN BOX</span><span class="">X400-128-GRAY-OB</span><span class="num ">×2</span><span class="num ed">$134.99</span><span class="gh">USED</span><span class="dim">not listed</span><span class="num dim">—</span><span class="num dim">+</span></div><div class="foot">last <b>$155.00</b> 9/19 (new)</div></div></div>
+      <div class="blk"><span class="strip t"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span class="gh">NEW</span><span class="">X400128GRAY</span><span class="num dim">—</span><span class="num ed">$164.99</span><span class="gh">OPEN BOX</span><span class="dim">not listed</span><span class="num dim">—</span><span class="num dim">+</span><span class="gh">USED</span><span class="dim">not listed</span><span class="num dim">—</span><span class="num dim">+</span></div><div class="foot">no sales in 30 days</div></div></div>
+    </div></div>
+  </div>
+  <div class="wr-note">No extra rows: the toggle on the product grows every channel block with OPEN BOX and USED sections, each headed with that grade's 30-day average. Closed, it's exactly C1. Everything for a product stays in its own row.</div>
+
+  <div class="wr-lbl"><b>D3</b> · sub-sheet under the product</div>
+  <div class="cols chead"><span>PRODUCT</span><span class="w">WALMART</span><span class="e">EBAY</span><span class="t">TEMU US</span></div>
+  <div class="cols d3top"><div class="blk prod"><span class="strip"></span><div class="main"><span class="sku">X400-128GB-GRAY</span><span class="stk">42 in stock</span><span class="tog">▾ 2 variations · 8 units</span></div></div><div class="blk"><span class="strip w"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-BLACK-INTL-VER</span><span class="num hot">×51</span><span class="num ro">$149.99</span><span>X400-128GB-GRAY</span><span class="num ">×26</span><span class="num ro">$152.49</span></div><div class="foot ref">last <b>$149.99</b> 9/24 · 30-day avg <b>$147.62</b> · 77 sold</div></div></div><div class="blk"><span class="strip e"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400-128GB-GRAY-EB</span><span class="num ">×4</span><span class="num ed">$159.99</span></div><div class="foot">last <b>$155.00</b> 9/19 · avg <b>$152.00</b></div></div></div><div class="blk"><span class="strip t"></span><div class="main"><div class="sheet"><div>Channel SKU</div><div class="num">Sold</div><div class="num">Price</div><span>X400128GRAY</span><span class="num dim">—</span><span class="num ed">$164.99</span></div><div class="foot">no sales in 30 days</div></div></div></div>
+  <div class="sub3"><div class="conn">└ variations</div>
+    <div class="xt" style="border-top:1px solid #D6D3CC;border-radius:4px">
+      <div>Grade</div><div>SKU</div><div class="num">Stock</div><div class="w">Walmart price</div><div class="w">Walmart avg · 30d</div><div class="e">eBay price</div><div class="e">eBay last sold</div><div class="t">Temu price</div><div></div>
+      <span><span class="grade ob">OPEN BOX</span></span><span>OPEN-BOX-X400-128GB-GRAY</span><span class="num">5</span><span class="ro">$129.99</span><span>$128.10 <span class="dim">×9</span></span><span class="ed">$134.99</span><span>$134.99 <span class="dim">9/16</span></span><span class="dim">+ list</span><span>✕</span>
+      <span><span class="grade us">USED</span></span><span>USED-X400-128GB-GRAY</span><span class="num">3</span><span class="ro">$109.99</span><span>$109.40 <span class="dim">×6</span></span><span class="dim">+ list</span><span class="dim">—</span><span class="dim">+ list</span><span>✕</span>
+      <span class="xadd">+ variation</span>
+    </div></div>
+  <div class="wr-note">Opening the product drops one full-width Excel table under it: a row per grade, columns per channel (price, plus Walmart's 30-day average and eBay's last sale). The most spreadsheet-like — every grade's numbers line up in one grid. Shows one listing per channel per grade; extra listings open on click.</div>
+
+</div>
+</body>
+</html>
