@@ -687,10 +687,13 @@ function stockRowsFromBulkEntry(e) {
 // rows already in the local log that this computer made (for seeding its
 // shared-folder file); bulk-derived rows stay out — every computer derives
 // those itself from the bulk history that already syncs
+// names compare in the station form, so rows written before the computer
+// name was normalized ("Imran MacBook Pro") still count as this computer's
+const pcKey = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 function stockLogOwnRows(computers) {
-  const names = new Set((computers || []).map(c => String(c || '').toUpperCase()).filter(Boolean));
+  const names = new Set((computers || []).map(pcKey).filter(Boolean));
   return open().prepare(`SELECT * FROM stock_log WHERE gid NOT LIKE 'bulk:%' ORDER BY id ASC`).all()
-    .filter(r => names.has(String(r.computer || '').toUpperCase()));
+    .filter(r => names.has(pcKey(r.computer)));
 }
 
 function stockHistory(sku, limit = 500) {

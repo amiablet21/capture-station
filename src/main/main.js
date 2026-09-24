@@ -5676,9 +5676,13 @@ function recordStockRows(rows, { share = true } = {}) {
   if (share) for (const r of inserted) retsync.appendAux('stocklog', r);
   return inserted;
 }
+// the shared-folder station form (IMRAN-MACBOOK-PRO), whatever the setting's
+// spelling - the raw "Imran MacBook Pro" split one computer into two names
+// in the history's Everyone filter (owner 2026-09-24)
 function stockLogComputer() {
   const cfg = config.load();
-  return String((cfg.returnsSync || {}).station || '').trim() || os.hostname();
+  const raw = retsync.stationName() || String((cfg.returnsSync || {}).station || '').trim() || os.hostname();
+  return String(raw).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
 }
 function installStockLog() {
   setStockLogHook((ev) => {

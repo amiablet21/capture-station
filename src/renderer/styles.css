@@ -4586,6 +4586,10 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-wstrip { background: var(--accent); }
 .ov-wrow.r .ov-wstrip { background: var(--neg-text); }
 .ov-wrow.a .ov-wstrip { background: #D9A21B; }
+.ov-wrow.p .ov-wstrip { background: #2E86D9; }
+.ov-wnote { margin-left: auto; font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.ov-wcells .st-p { color: var(--badge-blue-text); } .ov-wcells .st-a { color: var(--badge-yellow-text); } .ov-wcells .st-g { color: var(--accent); }
+.ov-wkeys button:only-child { border-bottom: none !important; }
 .ov-wmain { min-width: 0; }
 .ov-wid { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
 .ov-wsku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
