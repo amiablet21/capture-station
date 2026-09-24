@@ -1572,6 +1572,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-csku { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
 .pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
+.pr-got { font-family: var(--mono); font-size: 10px; color: var(--faint); margin: -2px 0 3px; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-avg { font-size: 10.5px; color: var(--muted); margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.pr-avg b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }
 .pr-price:hover { border-color: var(--accent); }
 /* read-only (repricer-owned): grey carries the meaning — the ≈ prefix
@@ -1628,75 +1631,6 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
    Option A of pr-suggest-variants.html, 2026-09-20 — no "Add both") */
 .pr-vschip { font: inherit; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; border: none; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--accent-soft-text); cursor: pointer; }
 .pr-vschip:hover { box-shadow: inset 0 0 0 1px var(--accent); }
-
-/* C1 console blocks (owner 2026-09-24, variants/pricing-blocks.html): the
-   product and every channel cell are Send-to-WFS style blocks - strip |
-   mini sheet | footer; variations attach as Excel-style grouped rows (D1,
-   variants/pricing-dropdown.html) */
-.pr-head, .pr-row { column-gap: 8px; }
-.pr-row { padding: 5px 14px; border-bottom: none; align-items: stretch; }
-.pr-body > .pr-row:first-child { padding-top: 10px; }
-.pr-cell { padding-right: 0; }
-.pr-cell.pr-blk { display: grid; grid-template-columns: 3px 1fr; gap: 0; align-items: stretch; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; background: var(--surface); }
-.pr-strip { background: var(--accent); }
-.pr-cc0 { background: #1F6C9F; } .pr-cc1 { background: #956400; } .pr-cc2 { background: #6A2E9E; } .pr-cc3 { background: #9F2F2D; } .pr-cc4 { background: #346538; }
-.pr-st-g { background: var(--accent); } .pr-st-a { background: #D9A21B; } .pr-st-r { background: var(--neg-text); }
-.pr-bmain { min-width: 0; display: flex; flex-direction: column; }
-.pr-pmain { flex-direction: row; gap: 10px; align-items: flex-start; padding: 8px 10px; position: relative; }
-.pr-blk .pr-psku { color: var(--badge-blue-text); font-weight: 700; }
-.pr-xs { display: grid; grid-template-columns: minmax(0, 1fr) 46px 74px; font-family: var(--mono); }
-.pr-xh { padding: 3px 8px; font-family: var(--font); font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-bottom: 1px solid #E0DED8; border-right: 1px solid #E0DED8; white-space: nowrap; }
-.pr-xc { padding: 4px 8px; font-size: 11px; border-bottom: 1px solid #EEECE7; border-right: 1px solid #EEECE7; min-width: 0; display: flex; align-items: center; }
-.pr-xs > :nth-child(3n) { border-right: none; }
-.pr-xn { justify-content: flex-end; text-align: right; }
-.pr-xsku { gap: 4px; }
-.pr-xsku .pr-csku { font-size: 11px; color: var(--text); }
-.pr-xsku .pr-open { opacity: 0; }
-.pr-xsku:hover .pr-open { opacity: 1; }
-.pr-blk .pr-sold { min-width: 0; font-size: 11px; color: var(--text); }
-.pr-blk .pr-hot { color: var(--badge-yellow-text); }
-.pr-dim { color: var(--faint); }
-.pr-blk .pr-price-ro { min-width: 0; padding: 0; font-size: 11.5px; }
-.pr-blk .pr-price { min-width: 0; padding: 0; border: none; border-radius: 0; background: none; font-size: 11.5px; font-weight: 700; text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
-.pr-blk .pr-price:hover { color: var(--accent); text-decoration-color: var(--accent); }
-.pr-blk .pr-editin { width: 62px; padding: 1px 4px; font-size: 11.5px; }
-.pr-foot { position: relative; margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 10.5px; color: var(--muted); background: #FAFAF8; min-width: 0; }
-.pr-foot-ref { background: #F2F7FB; }
-.pr-foot-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pr-foot-t b { font-family: var(--mono); color: var(--text); }
-.pr-foot .pr-add { position: absolute; right: 0; top: 0; bottom: 0; display: flex; align-items: center; border: none; border-radius: 0; padding: 0 8px; font-size: 10px; background: inherit; box-shadow: -10px 0 8px -4px #FAFAF8; opacity: 0; transition: opacity 0.12s; }
-.pr-foot-ref .pr-add { box-shadow: -10px 0 8px -4px #F2F7FB; }
-.pr-row:hover .pr-foot .pr-add, .pr-foot-add .pr-add { opacity: 1; }
-.pr-foot-add { background: none; border-top: 1px dashed #E0DED8; }
-.pr-foot-add .pr-add { position: static; padding: 0; box-shadow: none; }
-.pr-blk .pr-none { padding: 8px 10px; }
-/* D1: the variation rows butt onto the parent like an Excel row group */
-.pr-num { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 9px; position: relative; }
-.pr-vbox { width: 13px; height: 13px; padding: 0; border: 1px solid #A8A49C; border-radius: 1px; background: var(--surface); color: #57534C; font: 700 11px/10px var(--mono); cursor: pointer; position: relative; z-index: 1; }
-.pr-vbox:hover { border-color: var(--accent); color: var(--accent); }
-.pr-row.pr-grp-open { padding-bottom: 0; }
-.pr-row.pr-grp-open > .pr-num::after { content: ''; position: absolute; left: 50%; top: 42px; bottom: 0; border-left: 1px solid #A8A49C; }
-.pr-grp-open > .pr-blk { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.pr-vrow { background: none; padding-top: 0; padding-bottom: 0; }
-.pr-vrow > .pr-blk { border-top: none; border-radius: 0; }
-.pr-vrow.pr-vlast > .pr-blk { border-radius: 0 0 4px 4px; }
-.pr-vrow .pr-prod { padding-left: 0; }
-.pr-velbow { padding: 0; }
-.pr-velbow::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid #A8A49C; }
-.pr-vlast .pr-velbow::before { bottom: 50%; }
-.pr-vlast .pr-velbow::after { content: ''; position: absolute; left: 50%; top: 50%; width: 7px; border-top: 1px solid #A8A49C; }
-.pr-vrow .pr-pmain { padding: 6px 10px; }
-.pr-vgl { display: flex; align-items: center; gap: 6px; }
-.pr-vsku { white-space: normal; word-break: break-all; font-size: 11px; }
-.pr-grade { font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px; }
-.pr-grade.pr-g-ob { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
-.pr-grade.pr-g-us { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.pr-grade.pr-g-sc { background: var(--neg-bg); color: var(--neg-text); }
-.pr-grade.pr-g-ot { background: var(--surface-2); color: var(--muted); }
-.pr-strip.pr-g-ob { background: #3B82C4; } .pr-strip.pr-g-us { background: #C08A1E; } .pr-strip.pr-g-sc { background: var(--neg-text); } .pr-strip.pr-g-ot { background: #A8A49C; }
-.pr-vrow .pr-vx { top: 6px; right: 8px; }
-.pr-vrow:hover .pr-vx { opacity: 1; }
-.pr-vfoot { padding: 6px 14px 10px 66px; border-bottom: none; background: none; }
 .prsug-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px dashed var(--border); }
 .prsug-sku { flex: 1; font-size: 12px; }
 .prsug-cond { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
