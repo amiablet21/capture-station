@@ -3259,8 +3259,8 @@ tr.unl-dim:hover td { opacity: 1; }
 .dlg-x:hover { background: var(--surface); color: var(--text); }
 .dlg-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.dlg-wfs { width: min(860px, 94vw); }
-.wfs-cols { display: grid; grid-template-columns: 1fr 280px; max-height: 84vh; }
+.dlg-wfs { width: min(920px, 94vw); }
+.wfs-cols { display: grid; grid-template-columns: 1fr 320px; max-height: 84vh; }
 .wfs-left { padding: 20px; display: flex; flex-direction: column; min-width: 0; }
 
 /* the shipment lines as a green-headed sheet */
@@ -3345,9 +3345,14 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 .wfs-right-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .wfs-past-h { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
-.wfs-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; }
+.wfs-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .wfs-card-h { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
 .wfs-card-h b { font-weight: 600; }
+/* station + status on their own row, under the date/units line (the one
+   row got crammed and clipped the units, owner 2026-09-23) */
+.wfs-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.wfs-card-tags:empty { display: none; }
+.wfs-card-tags .wfs-card-st { margin-left: 0; }
 .wfs-card-u { margin-left: auto; font-family: var(--mono); font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; }
 
 /* which desktop logged the shipment — emerald when it was this one,
@@ -3364,7 +3369,7 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 .wfs-card-st.is-me { background: #E7F3EC; color: #17854C; }
 .wfs-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 3px; }
+.wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 6px; }
 .wfs-card-item .mono { font-size: 11.5px; }
 .wfs-card-item .n { margin-left: auto; font-family: var(--mono); font-weight: 600; }
 
@@ -4562,6 +4567,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-meta { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 1px; }
 .ov-t td.rr .ov-meta { font-family: var(--font); color: var(--muted); margin-top: 3px; }
 .ov-faster { color: var(--neg-text); }
+.ov-chs { display: flex; flex-wrap: wrap; gap: 0 10px; color: var(--muted); }
+.ov-chs > span { white-space: nowrap; }
+.ov-chs b { font-weight: 600; color: var(--faint); }
 .ov-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
 .ov-bar i { display: block; height: 100%; border-radius: 999px; }
 .ov-bar i.r { background: var(--neg-text); }
@@ -4571,6 +4579,40 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
 .ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
 .ov-badge { font-size: 9.5px; padding: 1px 8px; }
+/* Send to WFS rows as console blocks (owner design 2026-09-24,
+   variants/wfs-row.html T1): strip | SKU + mini sheet | SEND over IGNORE */
+.ov-wlist { display: flex; flex-direction: column; gap: 8px; }
+.ov-wrow { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+.ov-wstrip { background: var(--accent); }
+.ov-wrow.r .ov-wstrip { background: var(--neg-text); }
+.ov-wrow.a .ov-wstrip { background: #D9A21B; }
+.ov-wrow.p .ov-wstrip { background: #2E86D9; }
+.ov-wnote { margin-left: auto; font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.ov-wcells .st-p { color: var(--badge-blue-text); } .ov-wcells .st-a { color: var(--badge-yellow-text); } .ov-wcells .st-g { color: var(--accent); }
+.ov-wkeys button:only-child { border-bottom: none !important; }
+.ov-wmain { min-width: 0; }
+.ov-wid { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
+.ov-wsku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-wmore { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.ov-wcells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
+.ov-wcells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-wcells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
+.ov-wcells div:nth-child(4), .ov-wcells span:nth-child(8) { border-right: none; }
+.ov-wcells .r { color: var(--neg-text); } .ov-wcells .a { color: var(--badge-yellow-text); }
+.ov-wkeys { display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
+.ov-wkeys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.ov-wsend { background: var(--accent); color: #fff; border-bottom: 1px solid #D6D3CC !important; }
+.ov-wsend:hover { background: var(--accent-hover); }
+.ov-wign { background: var(--surface-2); color: var(--muted); }
+.ov-wign:hover { background: #EFEEEA; color: var(--text); }
+/* under each SKU: the send amount, then the days WFS has left */
+.ov-sendline { display: block; margin-top: 4px; }
+.ov-daysleft { display: block; font-size: 10.5px; margin-top: 3px; color: var(--muted); }
+.ov-daysleft.r { color: var(--neg-text); } .ov-daysleft.a { color: var(--badge-yellow-text); }
+/* Send over Ignore, stacked in their own right-hand column */
+.ov-t td.ov-actcell { width: 1%; padding-left: 2px; vertical-align: middle; }
+.ov-stack { display: flex; flex-direction: column; gap: 4px; }
+.ov-stack .btn { font-size: 11.5px; padding: 2px 12px; }
 .ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
 .ov-link:hover { color: var(--text); }
 .ov-undo { font-size: 11px; color: var(--muted); padding: 6px; border-bottom: 1px solid var(--border-soft); }

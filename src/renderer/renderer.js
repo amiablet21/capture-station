@@ -6146,6 +6146,16 @@ const SH_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
 const SH_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
 function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slice(8, 10)}` : ''; }
 
+
+// one name per computer: the stock history holds the same machine as typed
+// ("Imran MacBook Pro") and as its shared-folder station ("IMRAN-MACBOOK-PRO");
+// both fold to the station form so the Everyone filter lists it once
+// (owner 2026-09-24: "why is there 2 imran macbook pro")
+function shPcKey(name) {
+  return String(name || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+const shPcOf = (e) => (e.reason === 'sale' ? e.market : shPcKey(e.computer));
+
 function shWhat(e, withSku) {
   const n = Math.abs(Number(e.delta) || 0);
   const skuEl0 = (v) => withSku
@@ -6155,7 +6165,7 @@ function shWhat(e, withSku) {
     // a correction: what it changed, then the pointer back to the line it corrects
     const d = e.dataObj || {};
     const back = e.target
-      ? `<button type="button" class="sh-goto" data-goto="${esc(e.target.gid)}" title="Jump to that line">↳ ${e.reason === 'deleted' ? 'deleted' : 'corrects'} the entry from ${shDayShort(e.target.day)}${e.target.computer ? ` by ${esc(String(e.target.computer).toUpperCase())}` : ''}</button>`
+      ? `<button type="button" class="sh-goto" data-goto="${esc(e.target.gid)}" title="Jump to that line">↳ ${e.reason === 'deleted' ? 'deleted' : 'corrects'} the entry from ${shDayShort(e.target.day)}${e.target.computer ? ` by ${esc(shPcKey(e.target.computer))}` : ''}</button>`
       : '';
     const extra = /·\s*(.+?: (?:removed|count was).*)$/.exec(e.note || '');
     const tail = extra ? ` <span class="sh-dim">(${esc(extra[1])})</span>` : '';
@@ -6204,7 +6214,7 @@ function shMarks(e) {
 function shRowHtml(e, withSku, clickable) {
   const act = shActionOf(e), A = SH_ACT[act];
   const isSale = e.reason === 'sale';
-  const who = isSale ? (e.market || 'SALE') : String(e.computer || '—').toUpperCase();
+  const who = isSale ? (e.market || 'SALE') : (shPcKey(e.computer) || '—');
   const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
@@ -6467,7 +6477,7 @@ async function openStockHistory(sku) {
     return;
   }
   shDlg.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
-  const pcs = [...new Set(shDlg.rows.map(e => e.reason === 'sale' ? e.market : e.computer).filter(Boolean))];
+  const pcs = [...new Set(shDlg.rows.map(e => shPcOf(e)).filter(Boolean))];
   shMenuFill('shPcMenu', pcs);
   renderStockHistory();
 }
@@ -6493,7 +6503,7 @@ function renderStockHistory() {
       <div class="sales-stat"><div class="l">Out · 7 days</div><div class="v is-neg">−${outWeek}</div><div class="s">units removed</div></div>
       <div class="sales-stat"><div class="l">Last touched</div><div class="v is-name">${last ? esc(String(last.computer || '—').toUpperCase()) + (last.by ? ` · ${esc(last.by)}` : '') : '—'}</div><div class="s">${last ? `${retDateUS(last.day)} ${fmtTime(last.created_at)}` : ''}</div></div>
     </div>`;
-  const shown = rows.filter(e => (!shDlg.pcs.size || shDlg.pcs.has(e.reason === 'sale' ? e.market : e.computer))
+  const shown = rows.filter(e => (!shDlg.pcs.size || shDlg.pcs.has(shPcOf(e)))
     && (!shDlg.acts.size || shDlg.acts.has(shActionOf(e))));
   shDdSync('shPcDd', shDlg.pcs, 'Everyone', v => v);
   shDdSync('shActDd', shDlg.acts, 'All actions', shWordCase);
@@ -6524,15 +6534,15 @@ async function loadHistoryStock() {
   if (!res.ok) { $('hsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`; return; }
   hs.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
   hs.loaded = true;
-  const pcs = [...new Set(hs.rows.map(e => e.reason === 'sale' ? e.market : e.computer).filter(Boolean))];
-  shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (e.reason === 'sale' ? e.market : e.computer) === v).length });
+  const pcs = [...new Set(hs.rows.map(e => shPcOf(e)).filter(Boolean))];
+  shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (shPcOf(e)) === v).length });
   shMenuFill('hsActMenu', SH_ACT_ORDER, { label: shWordCase, dot: k => SH_ACT[k].cls, count: k => hs.rows.filter(e => shActionOf(e) === k).length });
   renderHistoryStock();
 }
 
 function renderHistoryStock() {
   const q = hs.text.toUpperCase();
-  const shown = hs.rows.filter(e => (!hs.pcs.size || hs.pcs.has(e.reason === 'sale' ? e.market : e.computer))
+  const shown = hs.rows.filter(e => (!hs.pcs.size || hs.pcs.has(shPcOf(e)))
     && (!hs.acts.size || hs.acts.has(shActionOf(e)))
     && (!q || `${e.sku} ${e.ref || ''} ${e.note || ''}`.toUpperCase().includes(q)));
   shDdSync('hsPcDd', hs.pcs, 'Everyone', v => v);
@@ -7933,7 +7943,7 @@ async function openWfs(prefill) {
     row.querySelector('.wfs-qty').value = l.qty;
   }
   wfsAddLine();
-  $('wfsNote').value = '';
+  $('wfsNote').value = wfsFromOverview ? prefill.note || '' : '';
   $('wfsResult').textContent = '';
   $('wfsResult').className = 'dlg-note test-result wfs-result';
   wfsTotals();
@@ -7961,9 +7971,11 @@ async function renderWfsPast() {
       <div class="wfs-card" title="Saved ${esc(s.created_at.slice(0, 10))} ${fmtTime(s.created_at)}">
         <div class="wfs-card-h">
           <b>${retDateUS(s.created_at.slice(0, 10))}</b>
+          <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
+        </div>
+        <div class="wfs-card-tags">
           ${s.station ? `<span class="wfs-card-st${s.mine ? ' is-me' : ''}" title="${s.mine ? 'Logged on this desktop' : `Logged on ${esc(s.station)}`}">${esc(s.station)}</span>` : ''}
           ${s.mine === false ? '' : wfsStatusBadge(s)}
-          <span class="wfs-card-u">${s.items.reduce((a, i) => a + i.qty, 0)} units</span>
         </div>
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
         ${s.items.map(i => `
@@ -10235,36 +10247,52 @@ function ovRenderWfs() {
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  const units = plan.rows.reduce((a, r) => a + r.send, 0);
-  const rowsHtml = plan.rows.map((r, i) => {
-    const weekly = Math.round(r.perDay * 7);
-    const meta = [r.chSku && r.chSku.toUpperCase() !== r.sku.toUpperCase() ? esc(r.chSku) : '', `${weekly}/wk`, `${r.atWfs} at WFS`,
-      r.flightUnits ? `${r.flightUnits} on the way` : ''].filter(Boolean).join(' · ');
-    return `<tr><td class="ov-rank">${i + 1}</td>
-      <td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="ov-meta">${meta}</span>
-        <div class="ov-bar"><i class="${ovTone(r.coverDays)}" data-w="${Math.min(100, r.coverDays / plan.triggerDays * 100)}"></i></div></td>
-      <td class="rr"><span class="ov-pill ${ovTone(r.coverDays)}">+ ${r.send}</span><span class="ov-meta">${r.coverDays.toFixed(1)}d left</span>
-        <span class="ov-act"><button class="btn btn-secondary" data-ovsend="${esc(r.sku)}">Send</button><button class="btn btn-ghost" data-ovignore="${esc(r.sku)}">Ignore</button></span></td></tr>`;
+  // one console-style block per SKU (owner design 2026-09-24, variants/
+  // wfs-row.html): urgency strip | SKU line + mini sheet | SEND over IGNORE.
+  // The SKU line is the Walmart channel SKU that sold most in the last 30
+  // days (the Linnworks SKU when they match); more listings show as +N.
+  const rowsHtml = plan.rows.map((r) => {
+    const t = ovTone(r.coverDays);
+    const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
+    const head = chs.length ? chs[0].sku : r.sku;
+    const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
+      `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
+    const left = r.coverDays < 0.05 ? '0 days' : `${r.coverDays.toFixed(1)} days`;
+    return `<div class="ov-wrow ${t}"><span class="ov-wstrip"></span>
+      <div class="ov-wmain">
+        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
+        <div class="ov-wcells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+          <span>+${r.send}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${r.atWfs}</span><span class="${t}">${left}</span></div>
+      </div>
+      <div class="ov-wkeys"><button class="ov-wsend" data-ovsend="${esc(r.sku)}">Send</button><button class="ov-wign" data-ovignore="${esc(r.sku)}">Ignore</button></div>
+    </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
-  const badge = { pending: ['status-pending', 'Pending'], check: ['badge-parked', 'Check'], received: ['status-synced', 'Received'] };
   const onWay = plan.flight.filter(f => f.status !== 'received').reduce((a, f) => a + f.units, 0);
+  // shipments on their way, in the same console-block format as the send
+  // rows (owner 2026-09-24): strip by status | SKU line + mini sheet | key
   const flightHtml = plan.flight.map(f => {
-    const [cls, label] = badge[f.status];
+    const label = { pending: 'Pending', check: 'Check', received: 'Received' }[f.status];
+    const tone = { pending: 'p', check: 'a', received: 'g' }[f.status];
     const first = f.items[0] || { sku: '' };
-    const when = f.status === 'check'
-      ? `sent ${ovShortDate(f.createdAt)} · check Seller Center`
-      : `${f.units} sent ${ovShortDate(f.createdAt)}${f.note ? ` · ${esc(f.note)}` : ''}`;
-    return `<tr><td class="ov-rank"></td>
-      <td><span class="ov-sku" data-ovsku="${esc(first.sku)}">${esc(first.sku)}</span>${f.items.length > 1 ? ` <span class="ov-dim">+${f.items.length - 1} more</span>` : ''}<span class="ov-meta">${when}</span></td>
-      <td class="rr"><span class="badge ov-badge ${cls}">${label}</span>
-        ${f.status === 'received' ? `<a class="ov-link" data-ovunrecv="${f.id}">Undo</a>` : `<span class="ov-act"><button class="btn btn-ghost" data-ovrecv="${f.id}">Mark received</button></span>`}</td></tr>`;
+    const days = Math.max(0, Math.floor((Date.now() - Date.parse(f.createdAt)) / 86400000));
+    const tip = f.items.map(i => `${i.sku} ×${i.qty}`).join('\n') + (f.status === 'check' ? '\nNothing marked received in 14+ days - check Seller Center' : '');
+    return `<div class="ov-wrow ${tone}"><span class="ov-wstrip"></span>
+      <div class="ov-wmain">
+        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}${f.note ? `<span class="ov-wnote" title="${esc(f.note)}">${esc(f.note)}</span>` : ''}</div>
+        <div class="ov-wcells"><div>Sent</div><div>Date</div><div>Days out</div><div>Status</div>
+          <span>${f.units.toLocaleString()}</span><span>${ovShortDate(f.createdAt)}</span><span>${days}</span><span class="st-${tone}">${label}</span></div>
+      </div>
+      <div class="ov-wkeys">${f.status === 'received'
+        ? `<button class="ov-wign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
+        : `<button class="ov-wsend" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
+    </div>`;
   }).join('');
-  box.innerHTML = `<h4 class="ov-h-g">Send to WFS · ${units.toLocaleString()} units<span class="sub">${plan.rows.length} SKU${plan.rows.length === 1 ? '' : 's'} under ${plan.triggerDays} days</span></h4>
-    ${plan.rows.length ? `<table class="ov-t"><tbody>${rowsHtml}</tbody></table>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
+  box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>
+    ${plan.rows.length ? `<div class="ov-wlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
-    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><table class="ov-t"><tbody>${flightHtml}</tbody></table>` : ''}
+    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-wlist">${flightHtml}</div>` : ''}
     <div class="ov-more">Send = WFS pace × ${plan.targetDays} days − at WFS − on the way</div>`;
 }
 
@@ -10343,6 +10371,7 @@ function ovSendToWfs(sku) {
     if (activePage !== 'stock') return;
     openWfs({
       lines: [{ sku: r.sku, gtin: r.gtin, qty: r.send }],
+      note: (r.chSkus || []).length ? `WFS: ${r.chSkus.map(c => c.sku).join(', ')}` : '',
       from: `From Overview · ${r.sku} sells ${Math.round(r.perDay * 7)}/wk at WFS and has ${r.coverDays.toFixed(1)} days there${r.flightUnits ? ' counting what is on the way' : ''} — ${r.send} brings it to ${ovData.wfsPlan.targetDays} days`,
     });
   }, 300);
