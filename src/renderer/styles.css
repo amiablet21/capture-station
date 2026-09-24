@@ -4590,6 +4590,17 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-wnote { margin-left: auto; font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .ov-wcells .st-p { color: var(--badge-blue-text); } .ov-wcells .st-a { color: var(--badge-yellow-text); } .ov-wcells .st-g { color: var(--accent); }
 .ov-wkeys button:only-child { border-bottom: none !important; }
+/* Running low blocks: amber primary key, order in amber, 'faster' flag */
+.ov-wopen { background: #956400; color: #fff; border-bottom: 1px solid #D6D3CC !important; }
+.ov-wopen:hover { background: #7A5200; }
+.ov-wcells .o { color: var(--badge-yellow-text); }
+.ov-wcells.ov-lcells { grid-template-columns: 0.75fr 1.55fr 1fr 1fr; }
+.ov-wcells.ov-lcells div { letter-spacing: .03em; }
+/* the Running low column is the narrowest: slimmer keys, tighter cells */
+#ovLow .ov-wrow { grid-template-columns: 3px 1fr 64px; }
+#ovLow .ov-wcells div, #ovLow .ov-wcells span { padding-left: 6px; padding-right: 6px; }
+#ovLow .ov-wkeys button { letter-spacing: .04em; }
+.ov-wfast { margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--neg-text); white-space: nowrap; }
 .ov-wmain { min-width: 0; }
 .ov-wid { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
 .ov-wsku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4848,7 +4859,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .bulk-h-more:hover { background: var(--accent-soft); color: var(--accent-soft-text); }
 
 /* ---------- the customer card on a PO (owner 2026-09-24) ---------- */
-.cust-info { margin-left: 8px; cursor: pointer; font: inherit; }
+/* the PO#'s customer "i" wears the same quiet italic dot as the SKU's
+   channel-SKU "i" (owner 2026-09-24) - a button, so reset its chrome */
+.cust-info { margin-left: 8px; padding: 0; background: none; cursor: pointer; font-family: Georgia, serif; font-style: italic; font-weight: 400; font-size: 9.5px; line-height: 1; vertical-align: 1px; }
 .cust-info.is-open, .cust-info:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .cust-card { position: fixed; z-index: 80; min-width: 300px; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 8px 24px rgba(47, 52, 55, 0.12); padding: 6px 4px; font-family: var(--font); font-weight: 400; }
 .cust-row { display: grid; grid-template-columns: 62px 1fr 26px; gap: 8px; align-items: start; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); }

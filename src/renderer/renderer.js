@@ -92,6 +92,8 @@ if (!window.api) {
     wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
     wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
+    lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
+    lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
     receivingFinish: async () => ({ ok: false, error: 'Preview mode' }),
     receivingList: async () => ({ ok: true, folder: '', sessions: [] }),
@@ -478,8 +480,13 @@ function render() {
       // multi-unit lines wear a loud chip: a missed second unit = a refund
       const qty = i.qty > 1 ? `<span class="qty-chip" title="${i.qty} units of this item on the order">×${i.qty}</span>` : '';
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
-      const info = i.channelSku && i.channelSku !== label
-        ? `<span class="item-info" data-tip="Channel SKU: ${esc(i.channelSku)}">i</span>` : '';
+      // the "i" tells the channel SKU and what the line sold for (owner
+      // 2026-09-24: "include the price it sold for")
+      const money = (v) => `${!i.currency || i.currency === 'USD' ? '$' : `${i.currency} `}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const sold = i.lineTotal > 0
+        ? (i.qty > 1 ? `Sold for ${money(i.lineTotal / i.qty)} each · ${money(i.lineTotal)} total` : `Sold for ${money(i.lineTotal)}`) : '';
+      const tip = [i.channelSku && i.channelSku !== label ? `Channel SKU: ${i.channelSku}` : '', sold].filter(Boolean).join(' · ');
+      const info = tip ? `<span class="item-info" data-tip="${esc(tip)}">i</span>` : '';
       return linked
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}${lineSub(i)}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}${lineSub(i)}</span>`;
@@ -10325,22 +10332,33 @@ function ovRenderSold() {
 function ovRenderLow() {
   const box = $('ovLow');
   const m = ovData && ovData.money;
-  if (!m || !m.low) {
+  const plan = ovData && ovData.lowPlan;
+  if (!m || !plan || !plan.ready) {
     const err = ovData && ovData.moneyError;
     box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
     return;
   }
-  const total = m.low.reduce((a, r) => a + r.order, 0);
-  const rows = m.low.map(r => {
-    const meta = [`${r.avail} on shelf`, r.atWfs ? `${r.atWfs} at WFS` : '', `${r.perDay.toFixed(1)}/day`, `out ~${esc(r.outOn)}`].filter(Boolean).join(' · ');
-    return `<tr><td><span class="ov-sku" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="ov-meta">${meta}${r.faster ? ' · <span class="ov-faster">selling faster</span>' : ''}</span>
-        <div class="ov-bar"><i class="${ovTone(r.daysLeft)}" data-w="${Math.min(100, r.daysLeft / m.leadDays * 100)}"></i></div></td>
-      <td class="rr"><span class="ov-pill a">${r.order}</span><span class="ov-meta">${r.daysLeft}d left</span></td></tr>`;
+  // console blocks like Send to WFS (owner design 2026-09-24, variants/
+  // low-row.html L1): strip | SKU + sheet | OPEN over IGNORE
+  const rows = plan.rows.map(r => {
+    const t = ovTone(r.daysLeft);
+    const tip = `${r.avail} on shelf${r.atWfs ? ` · ${r.atWfs} at WFS` : ''} · ${r.perDay.toFixed(1)}/day · out ~${r.outOn}`;
+    return `<div class="ov-wrow ${t}"><span class="ov-wstrip"></span>
+      <div class="ov-wmain">
+        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span>${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">▲ Faster</span>' : ''}</div>
+        <div class="ov-wcells ov-lcells"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div>
+          <span class="o">${r.order}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${(r.avail + r.atWfs).toLocaleString()}</span><span class="${t}">${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'}</span></div>
+      </div>
+      <div class="ov-wkeys"><button class="ov-wopen" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock">Open</button><button class="ov-wign" data-ovlowignore="${esc(r.sku)}">Ignore</button></div>
+    </div>`;
   }).join('');
-  box.innerHTML = `<h4 class="ov-h-a">Running low · order ${total.toLocaleString()}<span class="sub">${m.leadDays}-day lead time</span></h4>
-    ${m.low.length ? `<table class="ov-t"><tbody>${rows}</tbody></table>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
-    ${m.lowCount > m.low.length ? `<div class="ov-more">+ ${m.lowCount - m.low.length} more — <a data-ovlow>open Stock</a></div>` : ''}
-    <div class="ov-more">Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock · <a data-ovlow>open Stock</a></div>`;
+  const undo = plan.ignored.length
+    ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovlowunignore>Undo</a></div>` : '';
+  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${m.leadDays}-day lead time</span></h4>
+    ${plan.rows.length ? `<div class="ov-wlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
+    ${undo}
+    ${plan.more ? `<div class="ov-more">+ ${plan.more} more — <a data-ovlow>open Stock</a></div>` : ''}
+    <div class="ov-more">Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock</div>`;
 }
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after
@@ -10378,14 +10396,20 @@ function ovSendToWfs(sku) {
 }
 
 $('ovCols').addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-ovsend],[data-ovignore],[data-ovunignore],[data-ovrecv],[data-ovunrecv],[data-ovsku],[data-ovlow]');
+  const t = e.target.closest('[data-ovsend],[data-ovignore],[data-ovunignore],[data-ovrecv],[data-ovunrecv],[data-ovlowopen],[data-ovlowignore],[data-ovlowunignore],[data-ovsku],[data-ovlow]');
   if (!t) return;
   if (t.dataset.ovsend) { ovSendToWfs(t.dataset.ovsend); return; }
+  if (t.dataset.ovlowopen) { ovOpenStock(t.dataset.ovlowopen); return; }
   if (t.dataset.ovsku !== undefined) { if (t.dataset.ovsku) ovOpenStock(t.dataset.ovsku); return; }
   if (t.hasAttribute('data-ovlow')) { ovOpenStock('', true); return; }
   if (t.dataset.ovignore) {
     const r = ovData.wfsPlan.rows.find(x => x.sku === t.dataset.ovignore);
     await api.wfsIgnore(t.dataset.ovignore, r ? r.perDay : 0);
+  } else if (t.dataset.ovlowignore) {
+    const r = ((ovData.lowPlan && ovData.lowPlan.rows) || []).find(x => x.sku === t.dataset.ovlowignore);
+    await api.lowIgnore(t.dataset.ovlowignore, r ? r.perDay : 0);
+  } else if (t.hasAttribute('data-ovlowunignore')) {
+    await api.lowUnignore();
   } else if (t.hasAttribute('data-ovunignore')) {
     await api.wfsUnignore();
   } else if (t.dataset.ovrecv) {

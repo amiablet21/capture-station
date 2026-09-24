@@ -1180,6 +1180,8 @@ async function runOrderImport() {
               channelSku: it.channelSku || '',
               title: it.title || '',
               qty: it.quantity || 1,
+              lineTotal: Number(it.lineTotal) || 0,
+              currency: o.currency || '',
               unmapped: !linked,
               img: (it.sku && skuImages[it.sku]) || '',
             };
@@ -3878,6 +3880,7 @@ function registerIpc() {
         if (daysLeft <= lead) {
           low.push({
             sku: it.sku, avail, atWfs, perDay: Math.round(perDay * 100) / 100,
+            sold30: s.qty, // units sold on every channel in the window
             daysLeft: Math.floor(daysLeft),
             outOn: fmtDay(nowTs + Math.floor(daysLeft) * 86400000),
             order: Math.max(5, Math.ceil((perDay * (lead + cover) - onHand) / 5) * 5),
@@ -3899,7 +3902,7 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 4, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units
+      v: 5, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30
       wfsCand,
       low: low.slice(0, 40),
       lowCount: low.length,
@@ -3945,17 +3948,33 @@ function registerIpc() {
     };
     const sold = live ? live.sold : null;
     let money = overviewCache.money;
-    if (!money || money.v !== 4 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    if (!money || money.v !== 5 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
       const p = refreshOverviewMoney(cfg);
       // stale view answers instantly while a refresh runs; first call (or a
       // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 4) {
+      if (!money || money.v !== 5) {
         try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
       } else {
         p.catch(() => { /* stale money stands */ });
       }
     }
-    return { ok: true, orders, money, sold, wfsPlan: overviewWfsPlan(cfg, money) };
+    return { ok: true, orders, money, sold, wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money) };
+  }
+
+  // Running low column: the money pass's list minus the SKUs ignored from
+  // the Overview (owner design 2026-09-24, variants/low-row.html L1).
+  // Ignores share the wfs_ignores table under a LOW: prefix; one lapses
+  // early when the SKU's pace grows half again past the ignored pace.
+  function overviewLowPlan(cfg, money) {
+    const w = { ignoreDays: 7, ...(cfg.wfs || {}) };
+    const ignores = new Map(db.listWfsIgnores().filter(r => r.sku.startsWith('LOW:')).map(r => [r.sku.slice(4), r]));
+    const rows = [];
+    const ignored = [];
+    for (const r of (money && money.low) || []) {
+      const ig = ignores.get(String(r.sku).toUpperCase());
+      if (ig && !(r.perDay > ig.pace * 1.5)) ignored.push(r); else rows.push(r);
+    }
+    return { rows, ignored, ignoreDays: w.ignoreDays, more: Math.max(0, ((money && money.lowCount) || 0) - rows.length - ignored.length), ready: !!(money && money.low) };
   }
 
   // Send to WFS column: candidates from the money pass + local shipment log
@@ -4638,6 +4657,16 @@ function registerIpc() {
   });
   ipcMain.handle('overview:wfsUnignore', (_e, payload) => {
     db.clearWfsIgnore(payload && payload.sku);
+    return { ok: true };
+  });
+  ipcMain.handle('overview:lowIgnore', (_e, { sku, pace }) => {
+    if (!sku) return { ok: false, error: 'Missing SKU.' };
+    const w = { ignoreDays: 7, ...(config.load().wfs || {}) };
+    db.setWfsIgnore(`LOW:${sku}`, w.ignoreDays, pace);
+    return { ok: true };
+  });
+  ipcMain.handle('overview:lowUnignore', () => {
+    db.clearIgnoresByPrefix('LOW:');
     return { ok: true };
   });
   ipcMain.handle('wfs:create', async (_e, payload) => {

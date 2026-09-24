@@ -266,6 +266,7 @@ class LinnworksClient {
           source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
           totalCharge: Number(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge)) || 0,
+          currency: String((o.TotalsInfo && o.TotalsInfo.Currency) || ''),
           despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
           // the buyer and the ship-to (owner 2026-09-24: the "i" on the PO)
           customer: (() => {
@@ -293,6 +294,12 @@ class LinnworksClient {
             channelSku: it.ChannelSKU || '',
             title: it.Title || '',
             quantity: it.Quantity || 1,
+            // what the line sold for: the channel's line total (inc tax)
+            // when present, else unit price x qty - same rule as the sales
+            // lines; the Capture list's item "i" shows it
+            lineTotal: Math.round((Number(it.CostIncTax) > 0
+              ? Number(it.CostIncTax)
+              : (Number(it.PricePerUnit) || 0) * (it.Quantity || 1)) * 100) / 100,
             isService: !!it.IsService,
             unlinked: !!it.IsUnlinked,
             // composite/bundle lines carry their children (recursive OrderItem

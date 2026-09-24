@@ -493,7 +493,12 @@ function setWfsIgnore(sku, days, pace) {
 // sku omitted = restore every ignored suggestion
 function clearWfsIgnore(sku) {
   if (sku) open().prepare('DELETE FROM wfs_ignores WHERE sku = ?').run(String(sku).toUpperCase());
-  else open().prepare('DELETE FROM wfs_ignores').run();
+  else open().prepare("DELETE FROM wfs_ignores WHERE sku NOT LIKE 'LOW:%'").run(); // Running low ignores stay
+}
+
+// Running low ignores live in the same table under a LOW: prefix
+function clearIgnoresByPrefix(prefix) {
+  open().prepare('DELETE FROM wfs_ignores WHERE sku LIKE ?').run(`${String(prefix).toUpperCase()}%`);
 }
 
 function listWfsIgnores() {
@@ -959,7 +964,7 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, listWfsIgnores, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, stockRowsFromBulkEntry, stockLogOwnRows,
