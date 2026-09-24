@@ -696,7 +696,7 @@ function capHistRowHtml(row, num) {
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))} · processed ${when}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
-      <td class="cell-notes"><span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${row.notes ? `<span class="note-text" title="${esc(row.notes)}">${esc(row.notes)}</span>` : ''}</td>
+      <td class="cell-notes"><span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
       <td class="cell-actions"></td>
     </tr>`;
 }
@@ -972,6 +972,13 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!btn) return;
   const card = e.target.closest('tr');
   const id = Number(card.dataset.id);
+  // history view (owner 2026-09-24): its rows are processed orders, not in
+  // state.rows — the note is the one thing still editable there
+  if (capHist.on && card.classList.contains('is-hist')) {
+    const hrow = capHist.rows.find(r => r.id === id);
+    if (hrow && btn.dataset.act === 'note') openNotes(hrow);
+    return;
+  }
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
@@ -1058,6 +1065,7 @@ $('notesForm').addEventListener('submit', async (e) => {
   await api.updateRow(notesRowId, { notes: $('notesText').value.trim() });
   notesRowId = null;
   await refresh();
+  if (capHist.on) loadCapHist();
 });
 
 $('notesDialog').addEventListener('close', () => focusScan());
