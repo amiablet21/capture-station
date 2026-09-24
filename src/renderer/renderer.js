@@ -7122,11 +7122,25 @@ function prChCells(p) {
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
           <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
-        </div>`).join('');
-    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+        </div>${prGotLine(l.got)}`).join('');
+    const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
+    const avgLine = avg
+      ? `<div class="pr-avg" title="Average ${esc(c.source)} sale price for ${esc(p.sku)} over the last 30 days, across all its listings, weighted by units">30-day avg <b>${prMoney(avg.avg)}</b> · ${avg.units} sold</div>`
+      : '';
+    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}${avgLine}
         <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
       </div>`;
   }).join('');
+}
+
+// what the listing actually sold for (owner 2026-09-24): a reference line
+// under the price - last sale and date, plus the 30-day average when it
+// differs. Linnworks line totals, so tax is in when the channel reports it.
+function prGotLine(g) {
+  if (!g) return '';
+  const on = g.lastOn ? `${+g.lastOn.slice(5, 7)}/${+g.lastOn.slice(8, 10)}` : '';
+  const avg = g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : '';
+  return `<div class="pr-got" title="Last 30 days: ${g.units} sold through this listing">sold ${prMoney(g.last)}${on ? ` on ${on}` : ''}${avg}</div>`;
 }
 
 // the inside of one variation group (the rows + the footer), without the
