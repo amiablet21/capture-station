@@ -693,10 +693,10 @@ function capHistRowHtml(row, num) {
   const when = row.synced_at ? fmtTime(row.synced_at) : '';
   return `<tr data-id="${row.id}" class="is-hist">
       <td class="cell-gutter st-synced" title="Processed ${when} · captured ${fmtTime(row.created_at)}">${num}</td>
-      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))} · processed ${when}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span><span class="cap-when" title="Processed ${when}">${when}</span></td>
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))} · processed ${when}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
-      <td class="cell-notes">${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${row.notes ? `<span class="note-text" title="${esc(row.notes)}">${esc(row.notes)}</span>` : ''}</td>
+      <td class="cell-notes"><span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${row.notes ? `<span class="note-text" title="${esc(row.notes)}">${esc(row.notes)}</span>` : ''}</td>
       <td class="cell-actions"></td>
     </tr>`;
 }
@@ -6543,17 +6543,6 @@ shBindTools($('hsList'), () => hs.rows, loadHistoryStock, (a) => {
   renderHistoryStock();
 }, (sku) => { $('hsSearch').value = sku; hs.text = sku; renderHistoryStock(); });
 
-function showHistoryTab(tab) {
-  $('historyTabs').querySelectorAll('.view-chip').forEach(b => b.classList.toggle('is-active', b.dataset.htab === tab));
-  $('historyCapView').hidden = tab !== 'captures';
-  $('historyStockView').hidden = tab !== 'stock';
-  $('historyDialog').classList.toggle('is-stock', tab === 'stock');
-  if (tab === 'stock' && !hs.loaded) loadHistoryStock();
-}
-$('historyTabs').addEventListener('click', (e) => {
-  const b = e.target.closest('.view-chip');
-  if (b) showHistoryTab(b.dataset.htab);
-});
 
 let salesDlg = null; // { sku, avail, range, seq, days, channels, on, table }
 
@@ -8696,64 +8685,16 @@ function recvSeed(lines) {
   renderRecv();
 }
 
-/* ---------- history dialog ---------- */
+/* ---------- history dialog: the stock history ---------- */
 
-function historyStatusLabel(row) {
-  switch (row.status) {
-    case 'synced': return `Processed ${row.synced_at ? fmtTime(row.synced_at) : ''}`.trim();
-    case 'captured': return 'Ready';
-    case 'pending': return 'No tracking';
-    case 'failed': return 'Failed';
-    default: return row.status;
-  }
-}
-
-let historyCache = [];
-
-async function openHistory(tab) {
-  historyCache = await api.getHistory();
-  $('historyParkedOnly').checked = false;
-  renderHistory();
-  hs.loaded = false; // the Stock tab re-reads on every open (changes since)
-  showHistoryTab(tab || 'captures');
+async function openHistory() {
+  hs.loaded = false; // re-read on every open (changes since)
+  $('historyDialog').classList.add('is-stock');
   $('historyDialog').showModal();
+  loadHistoryStock();
 }
 
-function renderHistory() {
-  const parkedOnly = $('historyParkedOnly').checked;
-  const rows = parkedOnly
-    ? historyCache.filter(r => (r.notes || '').includes('was parked'))
-    : historyCache;
-  const byDay = new Map();
-  for (const r of rows) {
-    if (!byDay.has(r.day)) byDay.set(r.day, []);
-    byDay.get(r.day).push(r);
-  }
-  $('historyList').innerHTML = rows.length === 0
-    ? `<p class="dlg-note">${parkedOnly ? 'No parked orders on record.' : 'Nothing processed yet. Orders appear here once they are pushed to Linnworks.'}</p>`
-    : [...byDay.entries()].map(([day, list]) => `
-      <div class="history-day">
-        <div class="history-day-head">${esc(day)} &middot; ${list.length} order${list.length === 1 ? '' : 's'}</div>
-        ${list.map(r => `
-          <div class="history-item">
-            <span class="history-time mono">${fmtTime(r.created_at)}</span>
-            <span class="mono history-order copyable" data-copy="${esc(r.order_number)}" title="Click to copy · ${esc(channelLabel(r.channel))}">${esc(r.order_number)}</span>
-            ${r.tracking
-              ? `<span class="mono history-tracking copyable" data-copy="${esc(r.tracking)}" title="Click to copy ${esc(r.tracking)}">${esc(r.tracking)}</span>`
-              : '<span class="mono history-tracking">—</span>'}
-            <span class="history-status st-${esc(r.status)}" title="${esc(r.fail_reason || '')}">${esc(historyStatusLabel(r))}</span>
-            ${r.sub_sku ? `<span class="sub-pill" title="${esc(r.sub_note || `Shipped ${r.sub_sku} instead of the listed item`)}">SUB → ${esc(r.sub_sku)}${r.sub_qty > 1 ? ` ×${r.sub_qty}` : ''}</span>` : ''}
-            ${r.notes ? `<span class="history-notes" title="${esc(r.notes)}">${esc(r.notes)}</span>` : ''}
-          </div>`).join('')}
-      </div>`).join('');
-}
-
-$('historyParkedOnly').addEventListener('change', renderHistory);
 $('historyBtn').addEventListener('click', () => openHistory());
-$('historyList').addEventListener('click', (e) => {
-  const copyEl = e.target.closest('[data-copy]');
-  if (copyEl) copyFromApp(copyEl.dataset.copy);
-});
 $('historyClose').addEventListener('click', () => $('historyDialog').close());
 $('historyDialog').addEventListener('close', () => focusScan());
 

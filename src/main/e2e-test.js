@@ -1109,13 +1109,13 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`(() => { shDlg.acts.add('returned'); renderStockHistory(); return [...document.querySelectorAll('#stockHistBody .sh-act')].map(e => e.textContent); })()`);
     check('stock history dialog: action filter narrows to RETURNED', res && res.length === 1 && res[0] === 'RETURNED', res);
     await exec(`$('stockHistDialog').close()`);
-    // the History dialog's Stock tab: every SKU, the same pill rows, filters + range
-    await exec(`openHistory('stock')`);
+    // the History dialog IS the stock history now: every SKU, the same pill rows, filters + range
+    await exec(`openHistory()`);
     await new Promise(r => setTimeout(r, 300));
-    res = await exec(`({ open: $('historyDialog').open, stockShown: !$('historyStockView').hidden, capHidden: $('historyCapView').hidden,
+    res = await exec(`({ open: $('historyDialog').open, stockShown: !$('historyStockView').hidden, capHidden: !document.getElementById('historyCapView'),
       rows: document.querySelectorAll('#hsList .sh-line').length, skus: [...document.querySelectorAll('#hsList .sh-sku')].map(e => e.textContent),
       range: $('hsRangeDd').querySelector('.sh-dd-label').textContent })`);
-    check('History dialog: Stock tab lists every SKU\'s changes with the SKU on the row, last 7 days by default',
+    check('History dialog: opens straight on the stock history, every SKU with the SKU on the row, last 7 days by default, no captures tab',
       res && res.open === true && res.stockShown === true && res.capHidden === true && res.rows === 2 && res.skus[0] === 'SH-TEST-SKU' && res.range === 'Last 7 days', res);
     res = await exec(`(() => { $('hsSearch').value = 'PO-77'; hs.text = 'PO-77'; renderHistoryStock(); return document.querySelectorAll('#hsList .sh-line').length; })()`);
     check('History dialog: Stock tab search narrows by PO#', res === 1, res);
@@ -1130,11 +1130,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`({ on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
       dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
       gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
-      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim() })`);
-    check('Capture history mode: the table shows processed orders by day with a green gutter, items and tracking; the band swaps to the range and the History icon lights up',
+      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cell-notes').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order').textContent.trim() })`);
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time in Notes; the band swaps to the range and the History icon lights up',
       res && res.on === true && res.lit === true && res.range === true && res.importHidden === true
         && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
-        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST',
+        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /^Processed \d\d:\d\d$/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
       res);
     res = await exec(`(() => { $('capHistBtn').click(); return { on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
     check('Capture history mode: clicking the History icon again restores the live list', res && res.on === false && res.lit === false && res.importShown === true && res.hist === 0, res);

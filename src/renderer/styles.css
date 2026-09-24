@@ -4816,3 +4816,4 @@ tr.unl-dim:hover td { opacity: 1; }
 .cust-copy { width: 24px; height: 24px; margin-top: -2px; }
 .cust-copy svg { width: 13px; height: 13px; }
 .cust-foot { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; border-top: 1px solid var(--border-soft); }
+.cell-notes .history-status { margin-left: 0; margin-right: 8px; }

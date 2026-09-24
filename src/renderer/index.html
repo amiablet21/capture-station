@@ -1451,20 +1451,10 @@
   <!-- History: all captures, grouped by day -->
   <dialog id="historyDialog" class="dlg dlg-wide">
     <div class="dlg-body">
-      <h2 class="dlg-title">History</h2>
-      <!-- Captures = what this dialog always showed; Stock = every SKU's
-           level changes from the stock_log (owner 2026-09-23) -->
-      <div class="chip-tray sh-tabs" id="historyTabs">
-        <button class="view-chip is-active" data-htab="captures" type="button">Captures</button>
-        <button class="view-chip" data-htab="stock" type="button">Stock</button>
-      </div>
-      <div id="historyCapView">
-        <div class="settings-row">
-          <label class="check"><input id="historyParkedOnly" type="checkbox" /> Show only orders that were parked</label>
-        </div>
-        <div id="historyList" class="history-list"></div>
-      </div>
-      <div id="historyStockView" hidden>
+      <h2 class="dlg-title">Stock history</h2>
+      <!-- the stock history (owner 2026-09-24: the captures list left — the
+           Capture page's own History view carries those, processed time in Notes) -->
+      <div id="historyStockView">
         <div class="sh-filters">
           <div class="search-field">
             <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
