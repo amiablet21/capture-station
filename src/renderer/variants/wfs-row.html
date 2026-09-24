@@ -1,14 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (B workshop)</title>
+<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (button workshop)</title>
 <!--
-  Owner 2026-09-23/24: redesign the Send to WFS rows line by line.
-  Round 1 picked R3 (urgency strip + stats); round 2 picked variation B
-  (the stats as a mini sheet). Round 3 (this file): B with the weekly
-  "Sells 18/wk" replaced by total units sold in the last 30 days
-  ("1 Month Sales" - owner: "I don't like the 18/wk"), shown in red /
-  amber / green, plus header-label alternatives. Real 400px column width,
-  enlarged 1.35x, on the real styles.css.
+  Owner 2026-09-24: redesign the Send to WFS rows line by line.
+  Picked so far: R3 strip + B mini sheet + "30-Day Sales" column.
+  Round 4 (this file): the Send / Ignore buttons looked "weird in the
+  middle" - three placements with bigger pill buttons. Real 400px column
+  width, enlarged 1.35x, on the real styles.css.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -16,85 +14,107 @@
   .wr-page { padding: 20px 28px 40px; }
   .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
-  .wr-sec { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 22px 0 10px; }
-  .wr-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 22px 30px; }
+  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
   .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
   .wr-lbl b { color: var(--text); letter-spacing: .02em; }
   .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
   .wr-col { width: 400px; zoom: 1.35; }
-  .wr-col.sm { zoom: 1; }
   .wr-col .ov-panel { padding: 4px 10px; }
 
-  /* the row: urgency strip | SKU + mini sheet | Send / Ignore */
-  .row { display: flex; gap: 10px; padding: 9px 8px 9px 0; }
+  .row { display: flex; gap: 10px; padding: 10px 8px 10px 0; }
   .row + .row { border-top: 1px solid var(--border-soft); }
   .row .strip { width: 3px; border-radius: 3px; flex: 0 0 auto; }
   .row .strip.r { background: var(--neg-text); } .row .strip.a { background: #D9A21B; } .row .strip.g { background: var(--accent); }
   .row .l { flex: 1; min-width: 0; }
-  .row .acts { display: flex; flex-direction: column; gap: 4px; align-items: stretch; justify-content: center; }
-  .row .acts .btn { font-size: 11.5px; padding: 3px 12px; }
 
-  /* the mini sheet */
   .sheet { display: grid; grid-template-columns: 0.85fr 1.35fr 0.9fr 1.25fr; border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; margin-top: 6px; }
-  .sheet div { display: flex; align-items: flex-end; padding: 3px 7px; border-right: 1px solid #EAE8E3; font-size: 8.5px; line-height: 1.25; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: #F4F3F0; }
+  .sheet div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 7px; border-right: 1px solid #EAE8E3; font-size: 8.5px; line-height: 1.25; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: #F4F3F0; }
   .sheet div:nth-child(4) { border-right: none; }
   .sheet span { white-space: nowrap; padding: 4px 7px; border-right: 1px solid #EAE8E3; border-top: 1px solid #E0DED8; font-family: var(--mono); font-size: 12px; font-weight: 700; background: var(--surface); }
   .sheet span:nth-child(8) { border-right: none; }
   .sheet span.r { color: var(--neg-text); } .sheet span.a { color: var(--badge-yellow-text); } .sheet span.g { color: var(--accent); }
-  .sheet span small { font-weight: 400; color: var(--faint); font-size: 10px; }
+
+  /* pill buttons */
+  .pill-btn { font-family: var(--font); font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 18px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
+  .pill-send { background: var(--accent); color: #fff; }
+  .pill-send:hover { background: var(--accent-hover); }
+  .pill-ign { background: var(--surface); color: var(--muted); border-color: var(--border); }
+  .pill-ign:hover { color: var(--text); background: var(--surface-2); }
+
+  /* P1 · tall stacked pills filling the row height */
+  .p1 .acts { display: flex; flex-direction: column; justify-content: space-between; width: 84px; }
+  .p1 .acts .pill-btn { padding: 6px 0; }
+
+  /* P2 · side-by-side pills on the SKU line, sheet full width below */
+  .p2 .top { display: flex; align-items: flex-start; gap: 8px; }
+  .p2 .top .ids { flex: 1; min-width: 0; }
+  .p2 .top .acts { display: flex; gap: 6px; }
+  .p2 .top .pill-btn { padding: 5px 14px; font-size: 12px; }
+
+  /* P3 · one wide Send pill under the sheet, Ignore as a small ghost pill */
+  .p3 .foot { display: flex; gap: 6px; margin-top: 8px; }
+  .p3 .foot .pill-send { flex: 1; font-family: var(--mono); }
 </style>
 </head>
 <body>
 <div class="wr-page">
-  <h1>Send to WFS · B workshop</h1>
-  <div class="sub">B with "Sells 18/wk" replaced by total units sold in the last 30 days. Real column width (400px), enlarged 1.35×.</div>
-
-  <div class="wr-sec">B · 1 Month Sales — red, amber and green rows together</div>
-  <div class="wr-col"><div class="ov-panel">
-    <div class="row"><span class="strip r"></span>
-      <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-        <div class="sheet"><div>Send</div><div>1 Month Sales</div><div>At WFS</div><div>Left</div>
-          <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
-      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
-    <div class="row"><span class="strip a"></span>
-      <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
-        <div class="sheet"><div>Send</div><div>1 Month Sales</div><div>At WFS</div><div>Left</div>
-          <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div>
-      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
-    <div class="row"><span class="strip g"></span>
-      <div class="l"><span class="ov-sku">X133-64GB-GRAY</span><span class="ov-meta">SM-X133-64GB-GREY</span>
-        <div class="sheet"><div>Send</div><div>1 Month Sales</div><div>At WFS</div><div>Left</div>
-          <span>+96</span><span>240</span><span>100</span><span class="g">12.5 days</span></div></div>
-      <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div>
-  </div></div>
-  <div class="wr-note">"1 Month Sales" = units that sold through WFS in the last 30 days (18/wk ≈ 77 a month).</div>
-
-  <div class="wr-sec">Other ways to label that column (actual size)</div>
+  <h1>Send to WFS · buttons workshop</h1>
+  <div class="sub">30-Day Sales version, three ways to place bigger pill buttons. Real column width (400px), enlarged 1.35×.</div>
   <div class="wr-grid">
+
     <div>
-      <div class="wr-lbl"><b>30-Day Sales</b></div>
-      <div class="wr-col sm"><div class="ov-panel"><div class="row"><span class="strip r"></span>
-        <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-          <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-            <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
-        <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div></div></div>
+      <div class="wr-lbl"><b>P1</b> · tall stacked pills</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="row p1"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
+          <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
+        <div class="row p1"><span class="strip a"></span>
+          <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div>
+          <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
+      </div></div>
+      <div class="wr-note">Same place, bigger pills: Send lines up with the SKU, Ignore with the bottom of the sheet. The sheet gets narrower, so "30-Day Sales" gets cut off.</div>
     </div>
+
     <div>
-      <div class="wr-lbl"><b>Sold · 30 days</b></div>
-      <div class="wr-col sm"><div class="ov-panel"><div class="row"><span class="strip r"></span>
-        <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-          <div class="sheet"><div>Send</div><div>Sold · 30 days</div><div>At WFS</div><div>Left</div>
-            <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
-        <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div></div></div>
+      <div class="wr-lbl"><b>P2</b> · pills beside the SKU, sheet full width</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="row p2"><span class="strip r"></span>
+          <div class="l">
+            <div class="top"><div class="ids"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span></div>
+              <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div></div>
+        <div class="row p2"><span class="strip a"></span>
+          <div class="l">
+            <div class="top"><div class="ids"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span></div>
+              <span class="acts"><button class="pill-btn pill-send">Send</button><button class="pill-btn pill-ign">Ignore</button></span></div>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div></div>
+      </div></div>
+      <div class="wr-note">Buttons sit on the SKU line, top right; the sheet gets the whole width underneath so the numbers breathe.</div>
     </div>
+
     <div>
-      <div class="wr-lbl"><b>1 Month Sales + units</b></div>
-      <div class="wr-col sm"><div class="ov-panel"><div class="row"><span class="strip r"></span>
-        <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
-          <div class="sheet"><div>Send</div><div>1 Month Sales</div><div>At WFS</div><div>Left</div>
-            <span>+78</span><span>77 <small>units</small></span><span>0</span><span class="r">0 days</span></div></div>
-        <span class="acts"><button class="btn btn-primary">Send</button><button class="btn btn-ghost">Ignore</button></span></div></div></div>
+      <div class="wr-lbl"><b>P3</b> · one wide Send pill under the sheet</div>
+      <div class="wr-col"><div class="ov-panel">
+        <div class="row p3"><span class="strip r"></span>
+          <div class="l"><span class="ov-sku">X400-128GB-GRAY</span><span class="ov-meta">X400-128GB-BLACK-INTL-VER</span>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div>
+            <div class="foot"><button class="pill-btn pill-send">Send 78 to WFS</button><button class="pill-btn pill-ign">Ignore</button></div></div></div>
+        <div class="row p3"><span class="strip a"></span>
+          <div class="l"><span class="ov-sku">X135-64GB-GRAY</span><span class="ov-meta">X135-64GB-GRAY-LTE</span>
+            <div class="sheet"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div>
+            <div class="foot"><button class="pill-btn pill-send">Send 62 to WFS</button><button class="pill-btn pill-ign">Ignore</button></div></div></div>
+      </div></div>
+      <div class="wr-note">A big green pill across the bottom that says exactly what happens; Ignore beside it. Tallest rows of the three.</div>
     </div>
+
   </div>
 </div>
 </body>
