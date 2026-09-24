@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (terminal workshop)</title>
+<head><meta charset="UTF-8" /><title>Send to WFS — one row, isolated (T1, channel SKU first)</title>
 <!--
   Owner 2026-09-24: redesign the Send to WFS rows line by line.
   Picked so far: urgency strip + mini sheet + "30-Day Sales". Buttons:
   "stacked on the right ... it should almost look like a terminal".
-  Round 5 (this file): two readings - T1 a light console grid where
-  Send / Ignore are the sheet's last column; T2 a dark terminal row.
+  Round 5 picked T1 (light console grid, Send / Ignore as full-height keys
+  in the last column). Round 6 (this file): the Walmart channel SKU leads
+  in blue, the Linnworks SKU sits under it in grey (owner 2026-09-24).
   Real 400px column width, enlarged 1.35x, on the real styles.css.
 -->
 <link rel="stylesheet" href="../styles.css" />
@@ -15,7 +16,7 @@
   .wr-page { padding: 20px 28px 40px; }
   .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; }
-  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
+  .wr-grid { display: grid; grid-template-columns: max-content; gap: 26px 36px; }
   .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
   .wr-lbl b { color: var(--text); letter-spacing: .02em; }
   .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
@@ -27,8 +28,10 @@
   .t1 + .t1 { margin-top: 8px; }
   .t1 .strip.r { background: var(--neg-text); } .t1 .strip.a { background: #D9A21B; } .t1 .strip.g { background: var(--accent); }
   .t1 .id { padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; }
-  .t1 .id .sku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); }
-  .t1 .id .ch { display: block; font-size: 10px; color: var(--faint); }
+  .t1 .id .ch { display: block; font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); }
+  .t1 .id .ch + .ch { font-size: 10.5px; font-weight: 600; margin-top: 1px; }
+  .t1 .id .lw { display: block; font-size: 10px; color: var(--faint); margin-top: 1px; }
+  .t1 .id .lw::before { content: 'Linnworks · '; font-family: var(--font); letter-spacing: 0; }
   .t1 .cells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
   .t1 .cells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; }
   .t1 .cells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
@@ -65,38 +68,30 @@
 </head>
 <body>
 <div class="wr-page">
-  <h1>Send to WFS · terminal workshop</h1>
-  <div class="sub">Send / Ignore stacked on the right. Two readings of "terminal". Real column width (400px), enlarged 1.35×.</div>
+  <h1>Send to WFS · T1, channel SKU first</h1>
+  <div class="sub">T1 with the Walmart channel SKU on top (blue) and the Linnworks SKU under it (grey). Real column width (400px), enlarged 1.35×.</div>
   <div class="wr-grid">
 
     <div>
-      <div class="wr-lbl"><b>T1</b> · console grid (light, matches the app)</div>
+      <div class="wr-lbl"><b>T1</b> · channel SKU first</div>
       <div class="wr-col"><div class="ov-panel">
         <div class="t1"><span class="strip r"></span>
-          <div class="main"><div class="id"><span class="sku">X400-128GB-GRAY</span><span class="ch">X400-128GB-BLACK-INTL-VER</span></div>
+          <div class="main"><div class="id"><span class="ch">X400-128GB-BLACK-INTL-VER</span><span class="lw">X400-128GB-GRAY</span></div>
             <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
               <span>+78</span><span>77</span><span>0</span><span class="r">0 days</span></div></div>
           <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
         <div class="t1"><span class="strip a"></span>
-          <div class="main"><div class="id"><span class="sku">X135-64GB-GRAY</span><span class="ch">X135-64GB-GRAY-LTE</span></div>
+          <div class="main"><div class="id"><span class="ch">X135-64GB-GRAY-LTE</span><span class="ch">X135-64GB-GRAY-WFS2</span><span class="lw">X135-64GB-GRAY</span></div>
             <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
               <span>+62</span><span>197</span><span>32</span><span class="a">4.9 days</span></div></div>
           <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
+        <div class="t1"><span class="strip g"></span>
+          <div class="main"><div class="id"><span class="ch">X133-128GB-GRAY</span></div>
+            <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
+              <span>+43</span><span>43</span><span>18</span><span>12.5 days</span></div></div>
+          <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
       </div></div>
-      <div class="wr-note">Each row is one bordered block. Send / Ignore are square keys stacked in the last column, running the full height of the row.</div>
-    </div>
-
-    <div>
-      <div class="wr-lbl"><b>T2</b> · dark terminal</div>
-      <div class="wr-col"><div class="t2wrap">
-        <div class="t2 r"><div class="info"><span class="sku">X400-128GB-GRAY</span><span class="ch">X400-128GB-BLACK-INTL-VER</span>
-          <div class="vals"><i>send</i><i>30-day sales</i><i>at wfs</i><i>left</i><b>+78</b><b>77</b><b>0</b><b class="r">0 days</b></div></div>
-          <div class="keys"><button class="send">[ SEND ]</button><button class="ign">[ IGNORE ]</button></div></div>
-        <div class="t2 a"><div class="info"><span class="sku">X135-64GB-GRAY</span><span class="ch">X135-64GB-GRAY-LTE</span>
-          <div class="vals"><i>send</i><i>30-day sales</i><i>at wfs</i><i>left</i><b>+62</b><b>197</b><b>32</b><b class="a">4.9 days</b></div></div>
-          <div class="keys"><button class="send">[ SEND ]</button><button class="ign">[ IGNORE ]</button></div></div>
-      </div></div>
-      <div class="wr-note">A dark console look: green monospace, a "&gt;" prompt before each SKU, [ SEND ] / [ IGNORE ] keys stacked on the right. Stands out from the rest of the (light) app.</div>
+      <div class="wr-note">Row 1: one Walmart listing. Row 2: the item sells under two WFS listings, both shown in blue. Row 3: the channel SKU is the same as the Linnworks SKU, so it shows once.</div>
     </div>
 
   </div>
