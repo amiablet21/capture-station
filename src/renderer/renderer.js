@@ -7108,60 +7108,87 @@ function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channel
 
 // one product's channel cells — shared by parent and variation rows, each
 // with its own top-seller highlight (module-level so the variations toggle
-// can build ONE group without re-rendering the whole table)
-function prChCells(p) {
+// can build ONE group without re-rendering the whole table).
+// C1 layout (owner 2026-09-24, variants/pricing-blocks.html): every cell is
+// a console block - channel strip | mini sheet (Channel SKU / Sold / Price)
+// | footer with the last sale and the 30-day average. Variation rows (D1,
+// variants/pricing-dropdown.html) drop the sheet header so they read as
+// more rows of the parent's sheet.
+function prChCells(p, vrow) {
   const cols = prCols();
+  const base = (prData && prData.channels) || [];
   const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
   return cols.map((c, ci) => {
     const lines = p.channels[c.key] || [];
-    const inner = lines.map(l => `
-        <div class="pr-line">
-          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
-          ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
-          ${c.fluctuates
+    const cc = `pr-cc${Math.max(0, base.findIndex(x => x.key === c.key)) % PR_COLORS.length}`;
+    const add = `<button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>`;
+    if (!lines.length) {
+      return `<div class="pr-cell pr-ch pr-blk"><span class="pr-strip ${cc}"></span><div class="pr-bmain">
+        <div class="pr-none">not listed</div><div class="pr-foot pr-foot-add">${add}</div></div></div>`;
+    }
+    const sheet = lines.map(l => `
+          <span class="pr-xc pr-xsku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}${prGotTip(l.got)}"><span class="pr-csku">${esc(l.csku)}</span><button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button></span>
+          <span class="pr-xc pr-xn">${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : '<span class="pr-dim">—</span>'}</span>
+          <span class="pr-xc pr-xn">${c.fluctuates
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
-    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
-          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
-        </div>${prGotLine(l.got)}`).join('');
-    const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
-    const avgLine = avg
-      ? `<div class="pr-avg" title="Average ${esc(c.source)} sale price for ${esc(p.sku)} over the last 30 days, across all its listings, weighted by units">30-day avg <b>${prMoney(avg.avg)}</b> · ${avg.units} sold</div>`
-      : '';
-    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}${avgLine}
-        <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
-      </div>`;
+    : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}</span>`).join('');
+    const head = vrow ? '' : '<span class="pr-xh">Channel SKU</span><span class="pr-xh pr-xn">Sold</span><span class="pr-xh pr-xn">Price</span>';
+    return `<div class="pr-cell pr-ch pr-blk"><span class="pr-strip ${cc}"></span><div class="pr-bmain">
+        <div class="pr-xs">${head}${sheet}</div>
+        <div class="pr-foot${c.fluctuates ? ' pr-foot-ref' : ''}">${prFootSold(lines)}${add}</div></div></div>`;
   }).join('');
 }
 
-// what the listing actually sold for (owner 2026-09-24): a reference line
-// under the price - last sale and date, plus the 30-day average when it
-// differs. Linnworks line totals, so tax is in when the channel reports it.
-function prGotLine(g) {
-  if (!g) return '';
-  const on = g.lastOn ? `${+g.lastOn.slice(5, 7)}/${+g.lastOn.slice(8, 10)}` : '';
-  const avg = g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : '';
-  return `<div class="pr-got" title="Last 30 days: ${g.units} sold through this listing">sold ${prMoney(g.last)}${on ? ` on ${on}` : ''}${avg}</div>`;
+// the block footer: newest sale across the cell's listings + the unit-
+// weighted 30-day average (owner 2026-09-24: "see what the SKU last sold
+// for ... so I know how to price TEMU and ebay")
+function prFootSold(lines) {
+  const got = lines.map(l => l.got).filter(Boolean);
+  if (!got.length) return '<span class="pr-foot-t">no sales in 30 days</span>';
+  const newest = got.reduce((a, g) => (String(g.lastOn) > String(a.lastOn) ? g : a));
+  const units = got.reduce((a, g) => a + g.units, 0);
+  const avg = got.reduce((a, g) => a + g.avg * g.units, 0) / units;
+  const on = newest.lastOn ? ` ${+newest.lastOn.slice(5, 7)}/${+newest.lastOn.slice(8, 10)}` : '';
+  return `<span class="pr-foot-t" title="Last 30 days, across ${got.length === 1 ? 'this listing' : `these ${got.length} listings`} — Linnworks line totals, so tax is in when the channel reports it">last <b>${prMoney(newest.last)}</b>${on} · avg <b>${prMoney(avg)}</b> · ${units} sold</span>`;
 }
+function prGotTip(g) {
+  if (!g) return '';
+  const on = g.lastOn ? ` on ${+g.lastOn.slice(5, 7)}/${+g.lastOn.slice(8, 10)}` : '';
+  return ` · last sold ${prMoney(g.last)}${on} · 30-day avg ${prMoney(g.avg)} (${g.units} sold)`;
+}
+// the grade a variation SKU carries, for its badge and strip colour
+function prGrade(sku) {
+  const s = String(sku).toUpperCase();
+  if (/OPEN[\s-]?BOX/.test(s)) return { cls: 'ob', label: 'OPEN BOX' };
+  if (/(^|[^A-Z])USED($|[^A-Z])/.test(s)) return { cls: 'us', label: 'USED' };
+  if (/(^|[^A-Z])SCRAP($|[^A-Z])/.test(s)) return { cls: 'sc', label: 'SCRAP' };
+  return { cls: 'ot', label: 'VARIATION' };
+}
+// product strip = stock: out red, low amber, else green
+const prStockCls = (n) => (Number(n) <= 0 ? 'pr-st-r' : Number(n) <= 5 ? 'pr-st-a' : 'pr-st-g');
 
 // the inside of one variation group (the rows + the footer), without the
-// curtain wrapper — prRender and the toggle share it
+// curtain wrapper — prRender and the toggle share it. D1: the rows butt
+// onto the parent like an Excel row group; the gutter carries the bracket.
 function prGroupInner(p) {
   const parts = [];
-  for (const v of p.variations || []) {
+  const vars = p.variations || [];
+  vars.forEach((v, i) => {
+    const g = prGrade(v.sku);
     parts.push(`
-    <div class="pr-row pr-vrow" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
-      <div class="pr-cell pr-num pr-velbow">└</div>
-      <div class="pr-cell pr-prod">
+    <div class="pr-row pr-vrow${i === vars.length - 1 ? ' pr-vlast' : ''}" data-psku="${esc(v.sku)}" data-pid="${esc(v.stockItemId)}">
+      <div class="pr-cell pr-num pr-velbow"></div>
+      <div class="pr-cell pr-prod pr-blk"><span class="pr-strip pr-g-${g.cls}"></span><div class="pr-bmain pr-pmain">
         ${v.image ? `<img class="pr-thumb" src="${esc(v.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
         <div class="pr-prodtxt">
-          <span class="mono pr-psku">${esc(v.sku)}</span>
-          <span class="pr-pstock">${v.stock} in stock</span>
+          <span class="pr-vgl"><span class="pr-grade pr-g-${g.cls}">${g.label}</span><span class="pr-pstock">${v.stock} in stock</span></span>
+          <span class="mono pr-psku pr-vsku">${esc(v.sku)}</span>
         </div>
         <button type="button" class="pr-vx" data-vx="${esc(v.sku)}" title="Detach — ${esc(v.sku)} goes back to its own row">✕</button>
-      </div>
-      ${prChCells(v)}
+      </div></div>
+      ${prChCells(v, true)}
     </div>`);
-  }
+  });
   parts.push(`
     <div class="pr-vfoot">
       <button type="button" class="pr-varadd pr-varadd-foot" data-va="${esc(p.sku)}">+ variation</button>
@@ -7227,9 +7254,9 @@ function prRender() {
     // searching a condition SKU opens its group so the hit is visible
     const open = vars.length > 0 && (prExpanded.has(pU) || (q && !matchOne(p) && vars.some(matchOne)));
     const parts = [`
-    <div class="pr-row ${fam}" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
-      <div class="pr-cell pr-num">${num || ''}</div>
-      <div class="pr-cell pr-prod">
+    <div class="pr-row ${fam}${open ? ' pr-grp-open' : ''}" data-psku="${esc(p.sku)}" data-pid="${esc(p.stockItemId)}">
+      <div class="pr-cell pr-num">${num || ''}${vars.length ? `<button type="button" class="pr-vartog pr-vbox" data-vt="${esc(p.sku)}" title="Show / hide the variations">${open ? '−' : '+'}</button>` : ''}</div>
+      <div class="pr-cell pr-prod pr-blk"><span class="pr-strip ${prStockCls(p.stock)}"></span><div class="pr-bmain pr-pmain">
         ${p.image ? `<img class="pr-thumb" src="${esc(p.image)}" alt="" loading="lazy" />` : '<div class="pr-thumb pr-thumb-empty"></div>'}
         <div class="pr-prodtxt">
           <span class="mono pr-psku">${esc(p.sku)}${fam ? prCapBadge(p.sku) : ''}</span>
@@ -7239,7 +7266,7 @@ function prRender() {
     : `<button type="button" class="pr-varadd" data-va="${esc(p.sku)}" title="Group a condition SKU (open box / used / …) under this product">+ variation</button>`}
           ${sugChip(p)}
         </div>
-      </div>
+      </div></div>
       ${prChCells(p)}
     </div>`];
     if (open) {
@@ -7407,6 +7434,16 @@ async function prPickOpen(btn) {
   });
 }
 
+// both toggles (the gutter box and the product's "▸ 2 variations") and the
+// parent's joined corners follow the group's open state
+function prTogPaint(row, open) {
+  if (!row) return;
+  row.classList.toggle('pr-grp-open', open);
+  for (const b of row.querySelectorAll('.pr-vartog')) {
+    b.textContent = b.classList.contains('pr-vbox') ? (open ? '−' : '+') : b.textContent.replace(open ? '▸' : '▾', open ? '▾' : '▸');
+  }
+}
+
 $('prBody').addEventListener('click', (e) => {
   const price = e.target.closest('.pr-price');
   if (price) { prEditPrice(price); return; }
@@ -7428,7 +7465,7 @@ $('prBody').addEventListener('click', (e) => {
       prExpanded.delete(k);
       const vg = $('prBody').querySelector(`.pr-vgroup[data-vg="${CSS.escape(k)}"]`);
       if (!vg) { prRender(); return; }
-      vt.innerHTML = vt.innerHTML.replace('▾', '▸'); // caret answers instantly
+      prTogPaint(parentRow, false); // caret answers instantly
       vg.classList.remove('open');
       vg.addEventListener('transitionend', () => vg.remove(), { once: true });
       setTimeout(() => vg.remove(), 420); // in case transitionend never fires
@@ -7436,7 +7473,7 @@ $('prBody').addEventListener('click', (e) => {
       const p = ((prData && prData.products) || []).find(x => String(x.sku).toUpperCase() === k);
       if (!p || !parentRow) return;
       prExpanded.add(k);
-      vt.innerHTML = vt.innerHTML.replace('▸', '▾');
+      prTogPaint(parentRow, true);
       parentRow.insertAdjacentHTML('afterend',
         `<div class="pr-vgroup${parentRow.classList.contains('pr-fam') ? ' pr-fam' : ''}" data-vg="${esc(k)}"><div class="pr-vclip">${prGroupInner(p)}</div></div>`);
       const vg = parentRow.nextElementSibling;
