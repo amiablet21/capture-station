@@ -123,6 +123,8 @@ contextBridge.exposeInMainWorld('api', {
   wfsReceived: (id, received) => ipcRenderer.invoke('wfs:received', { id, received }),
   wfsIgnore: (sku, pace) => ipcRenderer.invoke('overview:wfsIgnore', { sku, pace }),
   wfsUnignore: (sku) => ipcRenderer.invoke('overview:wfsUnignore', { sku }),
+  lowIgnore: (sku, pace) => ipcRenderer.invoke('overview:lowIgnore', { sku, pace }),
+  lowUnignore: () => ipcRenderer.invoke('overview:lowUnignore'),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),
   receivingList: () => ipcRenderer.invoke('receiving:list'),
   chooseReceivingFolder: () => ipcRenderer.invoke('receiving:chooseFolder'),
