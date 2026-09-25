@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('api', {
   stockBulkRevert: (id) => ipcRenderer.invoke('stock:bulkRevert', { id }),
   stockBulkFix: (id, rowIdx, toSku, qty) => ipcRenderer.invoke('stock:bulkFix', { id, rowIdx, toSku, qty }),
   pricingList: (force) => ipcRenderer.invoke('pricing:list', { force: !!force }),
+  pricingListingHistory: (source, channelSku, price, days) => ipcRenderer.invoke('pricing:listingHistory', { source, channelSku, price, days }),
   pricingSet: (payload) => ipcRenderer.invoke('pricing:set', payload),
   pricingHistory: () => ipcRenderer.invoke('pricing:history'),
   pricingRevert: (id) => ipcRenderer.invoke('pricing:revert', { id }),

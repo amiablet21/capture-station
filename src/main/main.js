@@ -1082,6 +1082,75 @@ function savePriceSnap(snap) {
 // writes these, only watches (owner 2026-09-18 — ~140 items enrolled)
 function priceFluctuates(source) { return /walmart/i.test(String(source || '')); }
 
+/* ---- per-listing price history (owner 2026-09-25: "how much sold since
+   this price went down or went up ... a price history for each channel
+   SKU"). Periods come from the price log (hand sets, reverts, repricer
+   moves seen on refresh); a listing with no logged change gets its periods
+   from the prices it actually sold at. Units per period come from sales. */
+
+// every logged price event per SOURCE|CHANNELSKU, oldest first
+function priceLogByListing() {
+  const out = {};
+  for (const e of mergedPriceHist()) {
+    if (!['set', 'revert', 'auto'].includes(e.mode) || !e.channelSku) continue;
+    const k = `${String(e.source || '').toUpperCase()}|${String(e.channelSku).toUpperCase()}`;
+    (out[k] = out[k] || []).push({ ts: e.ts, from: Number(e.oldPrice) || 0, to: Number(e.newPrice) || 0, mode: e.mode, by: e.by || '', station: e.station || '' });
+  }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  return out;
+}
+
+// sales: [{ t, qty, unit }] · log: oldest first · periods come back newest first
+function listingPriceHistory({ sales: rawSales, log, days, curPrice, limit }) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const now = Date.now();
+  const histFrom = now - days * 86400000;
+  const sales = (rawSales || []).filter(x => x.t >= histFrom).sort((a, b) => a.t - b.t);
+  const unitsIn = (from, to) => sales.filter(x => x.t >= from && x.t < to).reduce((n, x) => n + x.qty, 0);
+  const perDay = (u, from, to) => r2(u / Math.max(1, (to - Math.max(from, histFrom)) / 86400000));
+  let periods = [];
+  let src = 'log';
+  if (log && log.length) {
+    const edges = log.map(c => ({ t: Date.parse(c.ts) || 0, c }));
+    const t0 = edges[0].t;
+    if (t0 > histFrom) periods.push({ price: edges[0].c.from, since: '', until: new Date(t0).toISOString(), units: unitsIn(histFrom, t0), perDay: perDay(unitsIn(histFrom, t0), histFrom, t0) });
+    edges.forEach((e, i) => {
+      const end = i + 1 < edges.length ? edges[i + 1].t : now;
+      if (end <= histFrom) return;
+      const u = unitsIn(Math.max(e.t, histFrom), end);
+      periods.push({ price: e.c.to, since: new Date(e.t).toISOString(), until: i + 1 < edges.length ? new Date(end).toISOString() : '', units: u, perDay: perDay(u, e.t, end), mode: e.c.mode, by: e.c.by, station: e.c.station, from: e.c.from });
+    });
+  } else if (sales.length) {
+    // no logged change: runs of the same sold price, oldest first; the
+    // newest run is still the price today, so it runs to now
+    src = 'sales';
+    for (const x of sales) {
+      const cur = periods[periods.length - 1];
+      if (cur && Math.abs(cur.price - x.unit) < 0.01) { cur.units += x.qty; cur.untilT = x.t; }
+      else periods.push({ price: x.unit, sinceT: x.t, untilT: x.t, units: x.qty });
+    }
+    periods = periods.map((p, i, all) => (i === all.length - 1
+      ? { price: p.price, since: new Date(p.sinceT).toISOString(), until: '', units: p.units, perDay: perDay(p.units, p.sinceT, now) }
+      : { price: p.price, since: new Date(p.sinceT).toISOString(), until: new Date(all[i + 1].sinceT).toISOString(), units: p.units, perDay: perDay(p.units, p.sinceT, all[i + 1].sinceT) }));
+  } else {
+    return null;
+  }
+  const last = log && log.length ? log[log.length - 1] : null;
+  const lastT = last ? Date.parse(last.ts) || 0 : 0;
+  const since = last ? unitsIn(lastT, now) : 0;
+  const prev = periods.length > 1 ? periods[periods.length - 2] : null;
+  const newestFirst = periods.reverse();
+  return {
+    src,
+    days,
+    total: sales.reduce((n, x) => n + x.qty, 0),
+    periods: limit ? newestFirst.slice(0, limit) : newestFirst,
+    last: last ? { ts: last.ts, from: last.from, to: last.to, mode: last.mode } : null,
+    since: last ? { units: since, perDay: perDay(since, lastT, now), prevPerDay: prev ? prev.perDay : null } : null,
+    cur: Number(curPrice) || 0,
+  };
+}
+
 /* ---- variation groups (owner 2026-09-18): condition SKUs (OPEN-BOX-…,
    USED-…) grouped under their New product on the Pricing tab. Grouping is
    MANUAL — the naming convention only suggests. An op log (add / remove /
@@ -2284,59 +2353,10 @@ function registerIpc() {
       // moves seen on refresh); a listing with no logged change gets its
       // periods from the prices it actually sold at. Units per period come
       // from the 60 days of Linnworks sales.
-      const priceLog = {};
-      for (const e of mergedPriceHist()) {
-        if (!['set', 'revert', 'auto'].includes(e.mode) || !e.channelSku) continue;
-        const k = `${String(e.source || '').toUpperCase()}|${String(e.channelSku).toUpperCase()}`;
-        (priceLog[k] = priceLog[k] || []).push({ ts: e.ts, from: Number(e.oldPrice) || 0, to: Number(e.newPrice) || 0, mode: e.mode, by: e.by || '', station: e.station || '' });
-      }
-      const histFrom = Date.now() - HIST_DAYS * 86400000;
+      const priceLog = priceLogByListing();
       const priceHist = (colKey, csku, curPrice) => {
         const k = `${colKey}|${String(csku).toUpperCase()}`;
-        const sales = (saleLog[k] || []).slice().sort((a, b) => a.t - b.t);
-        const log = (priceLog[k] || []).slice().sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
-        const now = Date.now();
-        const unitsIn = (from, to) => sales.filter(x => x.t >= from && x.t < to).reduce((n, x) => n + x.qty, 0);
-        const perDay = (u, from, to) => r2(u / Math.max(1, (to - Math.max(from, histFrom)) / 86400000));
-        let periods = [];
-        let src = 'log';
-        if (log.length) {
-          const edges = log.map(c => ({ t: Date.parse(c.ts) || 0, c }));
-          // before the first logged change, back to the window start
-          const t0 = edges[0].t;
-          if (t0 > histFrom) periods.push({ price: edges[0].c.from, since: '', until: new Date(t0).toISOString(), units: unitsIn(histFrom, t0), perDay: perDay(unitsIn(histFrom, t0), histFrom, t0) });
-          edges.forEach((e, i) => {
-            const end = i + 1 < edges.length ? edges[i + 1].t : now;
-            if (end <= histFrom) return;
-            const u = unitsIn(Math.max(e.t, histFrom), end);
-            periods.push({ price: e.c.to, since: new Date(e.t).toISOString(), until: i + 1 < edges.length ? new Date(end).toISOString() : '', units: u, perDay: perDay(u, e.t, end), mode: e.c.mode, by: e.c.by, station: e.c.station, from: e.c.from });
-          });
-        } else if (sales.length) {
-          // no logged change: runs of the same sold price, oldest first
-          src = 'sales';
-          for (const x of sales) {
-            const cur = periods[periods.length - 1];
-            if (cur && Math.abs(cur.price - x.unit) < 0.01) { cur.units += x.qty; cur.untilT = x.t; }
-            else periods.push({ price: x.unit, sinceT: x.t, untilT: x.t, units: x.qty });
-          }
-          // the newest run is still the price today: it runs to now
-          periods = periods.map((p, i, all) => (i === all.length - 1
-            ? { price: p.price, since: new Date(p.sinceT).toISOString(), until: '', units: p.units, perDay: perDay(p.units, p.sinceT, now) }
-            : { price: p.price, since: new Date(p.sinceT).toISOString(), until: new Date(all[i + 1].sinceT).toISOString(), units: p.units, perDay: perDay(p.units, p.sinceT, all[i + 1].sinceT) }));
-        } else {
-          return null;
-        }
-        const last = log.length ? log[log.length - 1] : null;
-        const since = last ? unitsIn(Date.parse(last.ts) || 0, now) : 0;
-        const lastT = last ? Date.parse(last.ts) || 0 : 0;
-        const prev = periods.length > 1 ? periods[periods.length - 2] : null;
-        return {
-          src,
-          periods: periods.reverse().slice(0, 12),
-          last: last ? { ts: last.ts, from: last.from, to: last.to, mode: last.mode } : null,
-          since: last ? { units: since, perDay: perDay(since, lastT, now), prevPerDay: prev ? prev.perDay : null } : null,
-          cur: Number(curPrice) || 0,
-        };
+        return listingPriceHistory({ sales: saleLog[k] || [], log: priceLog[k] || [], days: HIST_DAYS, curPrice, limit: 12 });
       };
       const soldInfo = (colKey, csku) => {
         const a = soldAt[`${colKey}|${String(csku).toUpperCase()}`];
@@ -2549,6 +2569,27 @@ function registerIpc() {
     return built && built.ok ? { ...built, rescanning } : built;
   });
 
+  // the big price-history window: one listing over a chosen range
+  ipcMain.handle('pricing:listingHistory', async (_e, { source, channelSku, price, days } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    const d = Math.max(30, Math.min(365, Number(days) || 60));
+    const dk = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const sq = await querySales(dk(new Date(Date.now() - (d - 1) * 86400000)), dk(new Date()));
+    if (!sq.ok) return { ok: false, error: sq.error || 'Could not load sales.' };
+    const src = String(source || '').toUpperCase();
+    const ch = String(channelSku || '').toUpperCase();
+    const sales = [];
+    for (const l of sq.lines) {
+      const qty = Number(l.qty) || 0;
+      const rev = Number(l.revenue) || 0;
+      if (qty <= 0 || rev <= 0) continue;
+      if (String(l.source || '').toUpperCase() !== src || String(l.channelSku || l.sku || '').toUpperCase() !== ch) continue;
+      sales.push({ t: Date.parse(l.processedOn) || 0, qty, unit: Math.round(rev / qty * 100) / 100 });
+    }
+    const log = priceLogByListing()[`${src}|${ch}`] || [];
+    return { ok: true, history: listingPriceHistory({ sales, log, days: d, curPrice: price }) };
+  });
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };

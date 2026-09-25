@@ -7150,6 +7150,7 @@ function prChCells(p) {
     const inner = lines.map(l => `
         <div class="pr-entry"><div class="pr-line">
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
+          <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
@@ -7186,29 +7187,19 @@ function prGotLine(l, ci, maxU) {
   return `<div class="pr-got${ph ? ' pr-got-link' : ''}"${hist} title="Last 30 days through this listing${ph ? ' — click for its price history' : ''}">${sold}</div>${move}`;
 }
 
-// one listing's price history (owner 2026-09-25): the price periods, newest
-// first, with how many sold at each and how fast
-function prHistOpen(el) {
-  prPickClose();
-  const row = el.closest('.pr-row');
-  const c = prCols()[Number(el.dataset.ci)];
-  if (!row || !c) return;
-  const all = ((prData && prData.products) || []).flatMap(x => [x, ...(x.variations || [])]);
-  const prod = all.find(x => String(x.stockItemId) === row.dataset.pid);
-  const l = prod && (prod.channels[c.key] || []).find(x => x.csku === el.dataset.csku);
-  const ph = l && l.ph;
-  if (!ph) return;
-  // V3 (owner pick 2026-09-25, variants/pricing-history-viz.html): one row
-  // per price - the price and its dates, who set it and when, then how fast
-  // it sold at that price (per week, with a bar so the best price shows)
+// one listing's price history (owner 2026-09-25): a large centered window
+// opened from the eye button next to the channel SKU (or the sold / change
+// lines). V3 rows (variants/pricing-history-viz.html): the price and its
+// dates, who set it and when, how fast it sold at that price.
+const prlh = { c: null, l: null, days: 60, seq: 0 };
+function prHistRows(ph, c) {
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
   const perWk = (p) => Math.round((Number(p.perDay) || 0) * 70) / 10;
   const maxWk = Math.max(0.1, ...ph.periods.map(perWk));
-  const who = (p) => {
-    if (p.mode === 'auto') return `<span class="prh-rp">${esc(c.source.charAt(0) + c.source.slice(1).toLowerCase())}'s repricer</span>`;
-    return `<span class="prh-st">${esc(p.station || 'This desktop')}</span>${p.by ? ` (${esc(p.by)})` : ''}`;
-  };
-  const rows = ph.periods.map((p, i) => {
+  const who = (p) => (p.mode === 'auto'
+    ? `<span class="prh-rp">${esc(/ebay/i.test(c.source) ? 'eBay' : /temu/i.test(c.source) ? 'Temu' : c.source.charAt(0) + c.source.slice(1).toLowerCase())}'s repricer</span>`
+    : `<span class="prh-st">${esc(p.station || 'This desktop')}</span>${p.by ? ` (${esc(p.by)})` : ''}`);
+  return ph.periods.map((p, i) => {
     const label = i === 0 ? 'Now' : p.since ? `${day(p.since)} – ${day(p.until)}` : `Before ${day(p.until)}`;
     let text;
     if (ph.src === 'log' && p.since && p.from) {
@@ -7226,24 +7217,56 @@ function prHistOpen(el) {
         <div class="prh-w"><b>${wk.toFixed(1)}</b><small>per week · ${p.units} sold</small><div class="prh-bar"><i data-w="${Math.max(2, Math.round(wk / maxWk * 100))}"></i></div></div>
       </div>`;
   }).join('');
-  const r = el.getBoundingClientRect();
-  const pop = document.createElement('div');
-  pop.className = 'prpick prh-pop';
-  pop.innerHTML = `
-    <div class="prh-head"><span class="prh-ch">${esc(c.source)}</span><span class="mono prh-sku">${esc(l.csku)}</span></div>
-    <div class="prh-rows">${rows}</div>
-    <div class="prpick-foot">${ph.src === 'log'
-    ? 'Changes from the price log (set here, reverts, repricer moves seen on refresh) · sales from Linnworks, last 60 days'
-    : 'No price change logged for this listing yet — these are the prices it sold at (Linnworks, last 60 days)'}</div>`;
-  // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
-  for (const bar of pop.querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
-  document.body.appendChild(pop);
-  const h = pop.offsetHeight || 200;
-  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
-  pop.style.top = r.bottom + h + 12 > window.innerHeight ? `${Math.max(8, r.top - h - 6)}px` : `${r.bottom + 6}px`;
-  prPickEl = pop;
-  document.addEventListener('mousedown', prPickAway, true);
 }
+function prHistPaint(ph) {
+  const c = prlh.c;
+  const total = ph ? (ph.total ?? ph.periods.reduce((n, p) => n + (p.units || 0), 0)) : 0;
+  $('prlhSum').textContent = ph ? `${total} sold in ${ph.days || prlh.days} days${ph.periods.length ? ` · ${ph.periods.length} price${ph.periods.length === 1 ? '' : 's'}` : ''}` : '';
+  $('prlhBody').innerHTML = ph && ph.periods.length
+    ? prHistRows(ph, c)
+    : `<p class="dlg-note prlh-empty">No sales and no price changes in the last ${prlh.days} days.</p>`;
+  // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
+  for (const bar of $('prlhBody').querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
+  $('prlhFoot').textContent = ph && ph.src === 'sales'
+    ? 'No price change logged for this listing yet — these are the prices it actually sold at (from Linnworks orders).'
+    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders.';
+  for (const b of $('prlhRange').querySelectorAll('button')) b.classList.toggle('is-on', Number(b.dataset.days) === prlh.days);
+}
+async function prListHistLoad(days) {
+  prlh.days = days;
+  const seq = ++prlh.seq;
+  for (const b of $('prlhRange').querySelectorAll('button')) b.classList.toggle('is-on', Number(b.dataset.days) === days);
+  $('prlhBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+  $('prlhSum').textContent = days > 90 ? 'Reading older orders from Linnworks — the first time can take a minute…' : '';
+  const res = await api.pricingListingHistory(prlh.c.source, prlh.l.csku, prlh.l.price, days).catch(e => ({ ok: false, error: e.message }));
+  if (seq !== prlh.seq || !$('prListHistDlg').open) return;
+  if (!res || !res.ok) { $('prlhBody').innerHTML = `<p class="dlg-note prlh-empty">${esc((res && res.error) || 'Could not load the history.')}</p>`; $('prlhSum').textContent = ''; return; }
+  prHistPaint(res.history);
+}
+function prHistOpen(el) {
+  prPickClose();
+  const row = el.closest('.pr-row');
+  const c = prCols()[Number(el.dataset.ci)];
+  if (!row || !c) return;
+  const all = ((prData && prData.products) || []).flatMap(x => [x, ...(x.variations || [])]);
+  const prod = all.find(x => String(x.stockItemId) === row.dataset.pid);
+  const l = prod && (prod.channels[c.key] || []).find(x => x.csku === el.dataset.csku);
+  if (!l) return;
+  Object.assign(prlh, { c, l, days: 60 });
+  $('prlhCh').textContent = c.source.toUpperCase();
+  $('prlhSku').textContent = l.csku;
+  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>`;
+  // the 60 days already came with the sheet: paint at once, no wait
+  prlh.seq++;
+  prHistPaint(l.ph ? { ...l.ph, periods: l.ph.periods } : null);
+  $('prListHistDlg').showModal();
+}
+$('prlhClose').addEventListener('click', () => $('prListHistDlg').close());
+$('prlhRange').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-days]');
+  if (!b || !prlh.c) return;
+  prListHistLoad(Number(b.dataset.days));
+});
 
 // the inside of one variation group (the rows + the footer), without the
 // curtain wrapper — prRender and the toggle share it
@@ -10594,17 +10617,7 @@ $('ovRefreshBtn').addEventListener('click', async () => {
   await ovFetch();
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
-// phone dashboard QR (owner request 2026-08-17)
-$('ovPhoneBtn').addEventListener('click', async () => {
-  const r = await api.overviewPhone().catch(() => null);
-  if (!r || !r.ok) { toast((r && r.error) || 'Phone dashboard unavailable'); return; }
-  // Tailscale-only by owner call (2026-08-17: the WiFi QR was unnecessary);
-  // the LAN address stands in only if Tailscale is ever signed out
-  $('phoneQr').src = r.tsQr || r.qr;
-  $('phoneUrl').textContent = r.tsUrl || r.url;
-  $('phoneQrLbl').textContent = r.tsQr ? 'Anywhere · Tailscale' : 'Shop WiFi (Tailscale is signed out)';
-  $('phoneDialog').showModal();
-});
+// (the Phone button left the Overview 2026-09-25; the phone dashboard itself still runs)
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
 
 // page-width grip, same feel as the Stock sheet's: drag the right rail, the

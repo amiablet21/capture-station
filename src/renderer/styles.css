@@ -1586,6 +1586,31 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .pr-move { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 1px; line-height: 1.45; }
 .pr-move b { color: var(--text); }
 .pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
+/* the eye next to a channel SKU opens its price history window */
+.pr-eye { flex: 0 0 auto; border: none; background: none; padding: 1px 3px; margin-left: -2px; color: var(--faint); cursor: pointer; border-radius: 4px; display: inline-flex; align-items: center; }
+.pr-eye svg { width: 14px; height: 14px; }
+.pr-eye:hover { color: var(--badge-blue-text); background: var(--surface-2); }
+/* the price history window: centered, large, a range to see further back */
+.prlh-dlg { width: min(760px, 94vw); }
+.prlh-dlg .dlg-body { display: flex; flex-direction: column; overflow: hidden; padding: 20px 22px; }
+.prlh-head { display: flex; align-items: baseline; gap: 10px; }
+.prlh-sku { font-size: 15px; font-weight: 700; }
+.prlh-now { font-size: 12px; color: var(--muted); }
+.prlh-now b { font-family: var(--mono); font-size: 14px; color: var(--text); }
+.prlh-x { margin-left: auto; align-self: flex-start; margin-right: -8px; }
+.prlh-x:hover { background: var(--surface-2); }
+.prlh-x:focus-visible { outline: none; }
+.prlh-bar { display: flex; align-items: center; gap: 12px; margin: 12px 0 10px; }
+.prlh-sum { font-size: 12px; color: var(--muted); }
+.prlh-body { flex: 1 1 auto; min-height: 0; max-height: 62vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.prlh-body .prh-r:first-child { border-top: none; }
+.prlh-body .prh-r { grid-template-columns: 110px 1fr 130px; padding: 12px 18px; }
+.prlh-body .prh-p { font-size: 16px; }
+.prlh-body .prh-t { font-size: 13px; }
+.prlh-body .prh-w b { font-size: 21px; }
+.prlh-body .prh-w small { font-size: 11px; }
+.prlh-empty { padding: 18px; }
+.prlh-foot { font-size: 11px; color: var(--faint); margin-top: 10px; }
 /* one listing's price history popover: one row per price (owner pick V3) */
 .prh-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 8px; }
 .prh-ch { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
@@ -4570,10 +4595,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .ov-refresh { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
-.ov-refresh svg { width: 13px; height: 13px; }
+.ov-refresh svg { width: 16px; height: 16px; }
 .ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
 @keyframes ovSpin { to { transform: rotate(360deg); } }
-.ov-phone { margin-left: 0; } /* the refresh button owns the auto gap */
 /* own padding + scroll handling: bare dialog content rode the UA defaults and
    grew BOTH scrollbars in short/zoomed windows (owner caught it 2026-08-17) */
 .phone-dlg { text-align: center; padding: 18px 22px; overflow-y: auto; overflow-x: hidden; max-height: 88vh; }

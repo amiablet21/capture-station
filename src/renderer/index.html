@@ -279,10 +279,9 @@
     <div class="ov-sheet-row">
     <div class="ov-wrap" id="ovWrap">
       <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span>
-        <button id="ovRefreshBtn" class="btn btn-ghost ov-refresh" title="Refresh the numbers now">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
-          Refresh</button>
-        <button id="ovPhoneBtn" class="btn btn-ghost ov-phone" title="Scan a QR code to open this dashboard on your phone">Phone</button>
+        <!-- just the refresh icon; the Phone button left (owner 2026-09-25) -->
+        <button id="ovRefreshBtn" class="cap-ico ov-refresh" title="Refresh the numbers now" aria-label="Refresh">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></button>
       </div>
       <div class="ov-cols" id="ovCols">
         <div class="ov-panel ov-today ov-sold" id="ovSold"></div>
@@ -318,6 +317,27 @@
       <div id="prBody" class="pr-body"><p class="dlg-note pr-note">Loading…</p></div>
     </div>
   </section>
+
+  <!-- Pricing: one listing's price history, opened from its eye button —
+       centered and large, with a range to see further back (owner 2026-09-25) -->
+  <dialog id="prListHistDlg" class="dlg prlh-dlg">
+    <div class="dlg-body">
+      <div class="prlh-head">
+        <span id="prlhCh" class="prh-ch"></span>
+        <span id="prlhSku" class="mono prlh-sku"></span>
+        <span id="prlhNow" class="prlh-now"></span>
+        <button id="prlhClose" class="dlg-x prlh-x" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="prlh-bar">
+        <span class="pr-sortset" id="prlhRange">
+          <button type="button" data-days="60">60 days</button><button type="button" data-days="90">90 days</button><button type="button" data-days="180">6 months</button><button type="button" data-days="365">1 year</button>
+        </span>
+        <span id="prlhSum" class="prlh-sum"></span>
+      </div>
+      <div id="prlhBody" class="prlh-body"></div>
+      <div id="prlhFoot" class="prlh-foot"></div>
+    </div>
+  </dialog>
 
   <!-- Pricing: price-change history, a centered popup (owner 2026-09-18) -->
   <dialog id="priceHistDialog" class="dlg prh-dlg">
