@@ -11183,6 +11183,13 @@ function swwDay(iso) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
 }
 
+// carrier + service without repeating the carrier ("USPS Ground Advantage")
+function swwSvcLabel(r) {
+  const c = String(r.carrierName || r.carrier || '');
+  const d = String(r.displayName || r.name || '');
+  return d.toUpperCase().startsWith(c.toUpperCase()) ? d : `${c} ${d}`.trim();
+}
+
 function swwRateOf(q, name) {
   if (!q || !q.rates || !q.rates.length) return null;
   return q.rates.find(r => r.name === name) || q.rates.find(r => r.name === q.pick) || q.rates[0];
@@ -11303,7 +11310,7 @@ function swwRateHtml(r, selected, sig, pick) {
   const price = r.amount + (sigFee ? sigFee.amount : 0);
   return `<label class="sww-rate ${selected ? 'is-sel' : ''}">
     <input type="radio" name="swwRate" value="${esc(r.name)}" ${selected ? 'checked' : ''} />
-    <span><b>${esc(r.carrierName)}</b> ${esc(r.displayName)}${r.name === pick ? '<span class="sww-rate-rec">RECOMMENDED</span>' : ''}${r.onTime ? '' : '<span class="sww-rate-late">late for the promise</span>'}</span>
+    <span><b>${esc(swwSvcLabel(r))}</b>${r.name === pick ? '<span class="sww-rate-rec">RECOMMENDED</span>' : ''}${r.onTime ? '' : '<span class="sww-rate-late">late for the promise</span>'}</span>
     <span class="sww-rate-when">${r.deliveryDate ? `arrives ${esc(swwDay(r.deliveryDate))}` : ''}</span>
     <span class="sww-rate-price">${swwMoney(price)}</span>
   </label>`;
@@ -11381,7 +11388,7 @@ function renderSwwDialog() {
       <td><input type="checkbox" class="sww-on" ${c.on ? 'checked' : ''} ${swwDlg.running || res ? 'disabled' : ''} /></td>
       <td class="mono">${esc(row.order_number)}</td>
       <td class="sww-items">${esc(swwItemsText(row) || '—')}</td>
-      <td>${rates.length ? `<select class="input sww-svc" ${swwDlg.running || res ? 'disabled' : ''}>${rates.map(r => `<option value="${esc(r.name)}" ${sel && r.name === sel.name ? 'selected' : ''}>${esc(r.carrierName)} ${esc(r.displayName)}${r.name === q.pick ? ' ★' : ''}${r.onTime ? '' : ' (late)'} — ${swwMoney(r.amount)}</option>`).join('')}</select>` : '<span class="sww-err">no rate</span>'}</td>
+      <td>${rates.length ? `<select class="input sww-svc" ${swwDlg.running || res ? 'disabled' : ''}>${rates.map(r => `<option value="${esc(r.name)}" ${sel && r.name === sel.name ? 'selected' : ''}>${esc(swwSvcLabel(r))}${r.name === q.pick ? ' ★' : ''}${r.onTime ? '' : ' (late)'} — ${swwMoney(r.amount)}</option>`).join('')}</select>` : '<span class="sww-err">no rate</span>'}</td>
       <td class="sww-when">${sel && sel.deliveryDate ? esc(swwDay(sel.deliveryDate)) : ''}</td>
       <td class="price">${sel ? swwMoney(price) : ''}</td>
       <td class="sww-res">${resHtml}</td>

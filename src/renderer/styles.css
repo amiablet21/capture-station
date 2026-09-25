@@ -4936,7 +4936,9 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 .sww-badge.is-warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
 
+.sww-dlg { width: min(980px, 94vw); }
 .sww-body { max-height: 62vh; overflow: auto; }
+.sww-body:focus, .sww-body:focus-visible { outline: none; } /* Chromium focuses scrollable panes on showModal */
 .sww-head { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
 .sww-head b { color: var(--text); font-weight: 600; }
 .sww-pkg { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; font-size: 12.5px; }
@@ -4966,8 +4968,8 @@ tr.unl-dim:hover td { opacity: 1; }
 .sww-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .sww-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
 .sww-table tr.is-off td { opacity: 0.45; }
-.sww-table .sww-svc { max-width: 280px; font-size: 12px; padding: 3px 6px; }
-.sww-table .sww-items { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.sww-table .sww-svc { max-width: 250px; font-size: 12px; padding: 3px 6px; }
+.sww-table .sww-items { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .sww-table .sww-when { color: var(--muted); white-space: nowrap; }
 .sww-table .price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; white-space: nowrap; }
 .sww-table .sww-res { white-space: nowrap; font-size: 12px; }
