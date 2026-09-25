@@ -2309,7 +2309,7 @@ function registerIpc() {
             const end = i + 1 < edges.length ? edges[i + 1].t : now;
             if (end <= histFrom) return;
             const u = unitsIn(Math.max(e.t, histFrom), end);
-            periods.push({ price: e.c.to, since: new Date(e.t).toISOString(), until: i + 1 < edges.length ? new Date(end).toISOString() : '', units: u, perDay: perDay(u, e.t, end), mode: e.c.mode, by: e.c.by, from: e.c.from });
+            periods.push({ price: e.c.to, since: new Date(e.t).toISOString(), until: i + 1 < edges.length ? new Date(end).toISOString() : '', units: u, perDay: perDay(u, e.t, end), mode: e.c.mode, by: e.c.by, station: e.c.station, from: e.c.from });
           });
         } else if (sales.length) {
           // no logged change: runs of the same sold price, oldest first

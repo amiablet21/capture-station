@@ -80,6 +80,16 @@
   .h2 .r1 .when { margin-left: auto; font-size: 11px; color: var(--muted); }
   .h2 .bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--muted); }
   .h2 .bar i { height: 6px; border-radius: 3px; background: var(--accent); opacity: .75; }
+  /* H2b: each price change as a sentence */
+  .h2 .who { font-size: 12px; color: var(--text); line-height: 1.45; }
+  .h2 .who b { font-weight: 600; }
+  .h2 .who .pc { font-family: var(--mono); font-weight: 600; }
+  .h2 .who .st { font-family: var(--mono); font-size: 11px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .h2 .who .rp { font-weight: 600; color: #1F6C9F; }
+  .h2 .who .nw, .h2 .who .pc { white-space: nowrap; }
+  .h2 .who .dn, .h2 .who .up { font-weight: 600; }
+  .grid.g1 { grid-template-columns: 460px; }
+  .grid.g1 .pop { width: 460px; }
 </style>
 </head>
 <body>
@@ -143,6 +153,26 @@
         </div>
         <div class="ft">Sales from Linnworks, last 60 days</div></div>
       <div class="wr-note">Newest price on top; the green bar shows how many sold at each price, so a price that sold better stands out.</div>
+    </div>
+  </div>
+
+  <div class="grid g1">
+    <div>
+      <div class="wr-lbl"><b>H2</b> · timeline that says who changed what</div>
+      <div class="pop h2"><div class="ph"><span class="ch">EBAY</span><span class="s">X133-64GB-GRAY</span></div>
+        <div class="tl">
+          <div class="it cur"><span class="dot"></span><div class="body">
+            <div class="who"><span class="st">IMRAN-MACBOOK-PRO</span> <span class="dn">lowered</span> the price from <span class="pc">$144.99</span> to <span class="pc">$139.99</span> on <b class="nw">Sep 19</b></div>
+            <div class="bar"><i style="width:120px"></i>4 sold since · 0.7/day</div></div></div>
+          <div class="it"><span class="dot"></span><div class="body">
+            <div class="who"><span class="st">STOCK-ROOM</span> <span class="dn">lowered</span> the price from <span class="pc">$149.99</span> to <span class="pc">$144.99</span> on <b class="nw">Sep 5</b></div>
+            <div class="bar"><i style="width:60px"></i>2 sold at $144.99 until Sep 19 · 0.1/day</div></div></div>
+          <div class="it"><span class="dot"></span><div class="body">
+            <div class="who">Before that it was <span class="pc">$149.99</span></div>
+            <div class="bar"><i style="width:30px"></i>1 sold · 0.0/day</div></div></div>
+        </div>
+        <div class="ft">Sales from Linnworks, last 60 days</div></div>
+      <div class="wr-note">A price going up reads "<span class="up">raised</span>". A Walmart listing reads "<span class="rp">Walmart's repricer</span> lowered the price from $141.00 to $139.99 on Sep 15" (spotted on a Pricing refresh). With initials entered it reads "IMRAN-MACBOOK-PRO (IK) lowered…"; a revert reads "…reverted the price to $144.99…".</div>
     </div>
   </div>
 </div>
