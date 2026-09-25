@@ -1587,6 +1587,10 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .pr-move b { color: var(--text); }
 .pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
 /* the eye next to a channel SKU opens its price history window */
+/* the SKU is only as wide as its text so the eye sits right after it; the
+   price keeps the right edge (owner 2026-09-25: "put the eye closer") */
+.pr-line > .pr-csku { flex: 0 1 auto; }
+.pr-line > .pr-price, .pr-line > .pr-price-ro, .pr-line > .pr-editwrap { margin-left: auto; }
 .pr-eye { flex: 0 0 auto; border: none; background: none; padding: 1px 3px; margin-left: -2px; color: var(--faint); cursor: pointer; border-radius: 4px; display: inline-flex; align-items: center; }
 .pr-eye svg { width: 14px; height: 14px; }
 .pr-eye:hover { color: var(--badge-blue-text); background: var(--surface-2); }
