@@ -1570,13 +1570,13 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-pstock { font-size: 11px; color: var(--faint); }
 .pr-ch { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .pr-line { display: flex; align-items: center; gap: 6px; }
-.pr-csku { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-csku { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the channel SKU IS the link to its listing (owner 2026-09-25: no arrow) */
-button.pr-csku { border: none; background: none; padding: 0; text-align: left; cursor: pointer; font-weight: inherit; }
+button.pr-csku { border: none; background: none; padding: 0; text-align: left; cursor: pointer; color: var(--text); font-size: 11px; }
 button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline; text-underline-offset: 2px; }
 .pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
 .pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
-.pr-got { font-family: var(--mono); font-size: 10px; color: var(--faint); margin: -2px 0 3px; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-got { font-family: var(--mono); font-size: 10px; color: var(--muted); margin: -2px 0 3px; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pr-avg { font-size: 10.5px; color: var(--muted); margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
 .pr-avg b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }
