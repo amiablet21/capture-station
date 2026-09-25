@@ -4772,6 +4772,17 @@ tr.unl-dim:hover td { opacity: 1; }
 .stock-hist-btn.has-today::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
 
 .dlg-sh { width: 860px; max-width: 94vw; }
+/* one scroll only: the dialog body is a fixed column and the change list
+   takes the rest of it (owner 2026-09-25: the body scrolled a little and
+   hid the Close button) */
+.dlg-sh .dlg-body { display: flex; flex-direction: column; overflow: hidden; }
+.dlg-sh #stockHistBody { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dlg-sh #stockHistBody > .sh-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.dlg-sh #stockHistBody > :not(.sh-list) { flex: 0 0 auto; }
+.dlg-sh .sales-head { align-items: center; }
+.sh-x { margin-left: auto; margin-right: -6px; align-self: flex-start; }
+.sh-x:hover { background: var(--surface-2); }
+.sh-x:focus-visible { outline: none; } /* the dialog focuses it on open - no ring */
 .dlg-wide.is-stock { width: min(920px, 94vw); }
 .sh-strip { grid-template-columns: repeat(4, 1fr); }
 .sh-strip .v.is-pos { color: var(--pos-text); }

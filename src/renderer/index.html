@@ -1395,6 +1395,8 @@
       <div class="sales-head">
         <h2 class="dlg-title">Stock history</h2>
         <span id="stockHistSku" class="mono sales-sku"></span>
+        <!-- an ✕ in the corner instead of a Close bar (owner 2026-09-25) -->
+        <button id="stockHistClose" class="dlg-x sh-x" type="button" title="Close" aria-label="Close">✕</button>
       </div>
       <div id="stockHistSub" class="sales-sub"></div>
       <div class="sh-filters">
@@ -1408,9 +1410,6 @@
         </div>
       </div>
       <div id="stockHistBody"></div>
-      <div class="dlg-actions">
-        <button id="stockHistClose" class="btn btn-primary">Close</button>
-      </div>
     </div>
   </dialog>
 
