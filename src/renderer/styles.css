@@ -2836,7 +2836,17 @@ tr.unl-dim:hover td { opacity: 1; }
    is the only elastic part, so on a narrow window the CHIPS flow onto a
    second line inside their slot while search and the buttons stay put */
 .stock-band .stock-chips { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
-.stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.stock-band-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* too narrow for the buttons (zoomed in): they wrap inside their slot and the
+   band stays inside the window instead of pushing the page off both edges */
+.stock-band .stock-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* zoomed in far enough that search · chips · buttons can't share a line:
+   the buttons take their own row instead of sliding under the chips */
+@media (max-width: 1100px) {
+  .stock-band { flex-wrap: wrap; }
+  .stock-band .stock-chips { flex: 1 1 360px; }
+  .stock-band-right { flex: 1 1 100%; }
+}
 .stock-band .stock-hint { display: none; } /* the counts subline read as noise in the band (owner, 2026-08-17) */
 .stock-band .stock-actions { display: flex; align-items: center; gap: 6px; }
 /* refresh as a bare icon at the end of the band (owner 2026-09-14) */
@@ -2957,7 +2967,10 @@ tr.unl-dim:hover td { opacity: 1; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden; /* no bottom scrollbar; the sheet grip sets the width */
+  /* zoomed in (or a narrow window) the table is wider than the sheet: scroll
+     sideways instead of cutting the columns off (owner 2026-09-25, "I zoom
+     in, but I can't scroll on the stock page to see the other columns") */
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 0 0 var(--r-card) var(--r-card); /* the band owns the top corners */
   background: var(--surface);
@@ -3490,6 +3503,9 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 
 .col-grip:hover { background: var(--accent-soft); }
+/* the last column's grip stays inside the table: sticking 4px out, it gave
+   the (now scrollable) stock list a pointless sideways scrollbar */
+th:last-child > .col-grip { right: 0; }
 
 .stock-table th {
   position: sticky;
