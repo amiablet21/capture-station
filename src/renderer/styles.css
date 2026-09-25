@@ -452,6 +452,7 @@ body {
 .cell-gutter.st-captured { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
 .cell-gutter.st-synced { background: var(--pos-bg); color: var(--pos-text); font-weight: 600; }
 .cell-gutter.st-failed { background: var(--neg-bg); color: var(--neg-text); font-weight: 600; }
+.cell-gutter.st-pending { background: var(--surface-2); color: var(--muted); font-weight: 600; }
 
 .rows-table tbody tr.is-current td.cell-gutter { box-shadow: inset 3px 0 0 var(--accent); }
 
