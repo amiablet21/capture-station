@@ -1576,7 +1576,23 @@ button.pr-csku { border: none; background: none; padding: 0; text-align: left; c
 button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline; text-underline-offset: 2px; }
 .pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
 .pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
-.pr-got { font-family: var(--mono); font-size: 10px; color: var(--muted); margin: -2px 0 3px; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-got { font-family: var(--mono); font-size: 10px; color: var(--muted); margin: 2px 0 0; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-got b { font-weight: 700; color: var(--text); }
+.pr-got b.pr-hot { color: var(--badge-yellow-text); }
+/* every channel-SKU listing is a small box (owner 2026-09-25, option D) */
+.pr-entry { border: 1px solid #E3E1DB; border-radius: 6px; padding: 5px 8px 4px; background: var(--surface); }
+.pr-got-link, .pr-move { cursor: pointer; }
+.pr-got-link:hover, .pr-move:hover { color: var(--text); }
+.pr-move { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 1px; line-height: 1.45; }
+.pr-move b { color: var(--text); }
+.pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
+/* one listing's price history popover */
+.prh-grid { display: grid; grid-template-columns: 1.3fr 0.8fr 0.8fr 0.6fr 0.7fr; font-size: 12px; padding: 0 0 6px; }
+.prh-grid > span { padding: 5px 14px 5px 0; border-top: 1px dashed var(--border); white-space: nowrap; }
+.prh-grid > span:nth-child(5n+1) { padding-left: 14px; }
+.prh-grid > span.h { border-top: none; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding-top: 2px; }
+.prh-grid .n { text-align: right; }
+.prh-grid .cur { font-weight: 700; }
 .pr-avg { font-size: 10.5px; color: var(--muted); margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
 .pr-avg b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }

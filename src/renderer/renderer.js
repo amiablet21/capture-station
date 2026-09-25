@@ -7141,17 +7141,19 @@ function prGridCols() { return `44px minmax(230px, 1fr) repeat(${(prData.channel
 // can build ONE group without re-rendering the whole table)
 function prChCells(p) {
   const cols = prCols();
-  const maxSold = Math.max(0, ...cols.flatMap(c => (p.channels[c.key] || []).map(l => l.sold)));
   return cols.map((c, ci) => {
     const lines = p.channels[c.key] || [];
+    // every listing is its own small box (owner 2026-09-25, option D):
+    // SKU link + price on top, sold count + last sale under it, then the
+    // move since the last price change; the lower lines open its history
+    const maxU = Math.max(0, ...cols.flatMap(cc => (p.channels[cc.key] || []).map(x => (x.got ? x.got.units : 0))));
     const inner = lines.map(l => `
         <div class="pr-entry"><div class="pr-line">
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
-          ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
-        </div>${prGotLine(l.got)}</div>`).join('');
+        </div>${prGotLine(l, ci, maxU)}</div>`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
     const avgLine = avg
       ? `<div class="pr-avg" title="Average ${esc(c.source)} sale price for ${esc(p.sku)} over the last 30 days, across all its listings, weighted by units">30-day avg <b>${prMoney(avg.avg)}</b> · ${avg.units} sold</div>`
@@ -7165,11 +7167,59 @@ function prChCells(p) {
 // what the listing actually sold for (owner 2026-09-24): a reference line
 // under the price - last sale and date, plus the 30-day average when it
 // differs. Linnworks line totals, so tax is in when the channel reports it.
-function prGotLine(g) {
-  if (!g) return '';
-  const on = g.lastOn ? `${+g.lastOn.slice(5, 7)}/${+g.lastOn.slice(8, 10)}` : '';
-  const avg = g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : '';
-  return `<div class="pr-got" title="Last 30 days: ${g.units} sold through this listing">sold ${prMoney(g.last)}${on ? ` on ${on}` : ''}${avg}</div>`;
+function prGotLine(l, ci, maxU) {
+  const g = l.got;
+  const ph = l.ph;
+  const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
+  const hist = ph ? ` data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}"` : '';
+  const sold = g
+    ? `<b class="${g.units === maxU && maxU > 0 ? 'pr-hot' : ''}">${g.units} sold</b> · last ${prMoney(g.last)} ${md(g.lastOn)}${g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : ''}`
+    : '<span class="pr-dim">no sales in 30 days</span>';
+  let move = '';
+  if (ph && ph.last && ph.since) {
+    const d = ph.last.to - ph.last.from;
+    const dir = d < 0 ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>';
+    const r1 = (v) => (Math.round(v * 10) / 10).toString();
+    const was = ph.since.prevPerDay !== null && ph.since.prevPerDay !== undefined ? ` (was ${r1(ph.since.prevPerDay)})` : '';
+    move = `<div class="pr-move"${hist} title="Since the price changed on ${md(ph.last.ts)} (${ph.last.mode === 'auto' ? 'repricer' : 'set here'}) — click for this listing's price history">${dir} ${prMoney(Math.abs(d))} on ${md(ph.last.ts)} · <b>${ph.since.units}</b> sold since · ${r1(ph.since.perDay)}/day${was}</div>`;
+  }
+  return `<div class="pr-got${ph ? ' pr-got-link' : ''}"${hist} title="Last 30 days through this listing${ph ? ' — click for its price history' : ''}">${sold}</div>${move}`;
+}
+
+// one listing's price history (owner 2026-09-25): the price periods, newest
+// first, with how many sold at each and how fast
+function prHistOpen(el) {
+  prPickClose();
+  const row = el.closest('.pr-row');
+  const c = prCols()[Number(el.dataset.ci)];
+  if (!row || !c) return;
+  const all = ((prData && prData.products) || []).flatMap(x => [x, ...(x.variations || [])]);
+  const prod = all.find(x => String(x.stockItemId) === row.dataset.pid);
+  const l = prod && (prod.channels[c.key] || []).find(x => x.csku === el.dataset.csku);
+  const ph = l && l.ph;
+  if (!ph) return;
+  const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
+  const r = el.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.className = 'prpick prh-pop';
+  pop.innerHTML = `
+    <div class="prpick-head"><b>${esc(c.source)}</b> · <span class="mono">${esc(l.csku)}</span> · price history</div>
+    <div class="prh-grid">
+      <span class="h">Price</span><span class="h">From</span><span class="h">To</span><span class="h n">Sold</span><span class="h n">Per day</span>
+      ${ph.periods.map((p, i) => {
+        const moveTxt = p.from ? (p.price < p.from ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>') : '';
+        return `<span class="mono${i === 0 ? ' cur' : ''}">${moveTxt} ${prMoney(p.price)}</span><span>${p.since ? md(p.since) : 'before'}</span><span>${p.until ? md(p.until) : 'now'}</span><span class="n mono">${p.units}</span><span class="n mono">${p.perDay}</span>`;
+      }).join('')}
+    </div>
+    <div class="prpick-foot">${ph.src === 'log'
+    ? 'Price changes from the price log (set here, reverts, repricer moves seen on refresh) · sales from Linnworks, last 60 days'
+    : 'No price change logged for this listing yet — these are the prices it actually sold at (Linnworks, last 60 days)'}</div>`;
+  document.body.appendChild(pop);
+  const h = pop.offsetHeight || 200;
+  pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
+  pop.style.top = r.bottom + h + 12 > window.innerHeight ? `${Math.max(8, r.top - h - 6)}px` : `${r.bottom + 6}px`;
+  prPickEl = pop;
+  document.addEventListener('mousedown', prPickAway, true);
 }
 
 // the inside of one variation group (the rows + the footer), without the
@@ -7439,6 +7489,8 @@ async function prPickOpen(btn) {
 $('prBody').addEventListener('click', (e) => {
   const price = e.target.closest('.pr-price');
   if (price) { prEditPrice(price); return; }
+  const hist = e.target.closest('[data-hist]');
+  if (hist) { prHistOpen(hist); return; }
   const open = e.target.closest('.pr-open');
   if (open) {
     const c = prCols()[Number(open.dataset.ci)];
