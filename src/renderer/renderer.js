@@ -6129,7 +6129,10 @@ function shActionOf(e) {
     case 'return-edit': case 'return-delete': case 'correction': case 'edit-qty': case 'edit-sku': return 'edited';
     case 'deleted': return 'deleted';
     case 'set': case 'bulk-set': return 'set';
-    case 'wfs': case 'dropship': case 'substitution': return 'shipped';
+    // a dropship pad move is the app holding the DropShip level at the pad,
+    // not stock leaving (owner 2026-09-24: pad 10 -> 0 read "SHIPPED 10 x")
+    case 'dropship': return 'set';
+    case 'wfs': case 'substitution': return 'shipped';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -6193,6 +6196,15 @@ function shWhat(e, withSku) {
   if (e.delta === null || e.delta === undefined) {
     const setTo = /set to (\d+)/.exec(e.note || '');
     return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+  }
+  if (e.reason === 'dropship') {
+    // the pad engine's level move at the DropShip location: from → to
+    const d = Number(e.delta) || 0;
+    const to = e.level_after;
+    const move = to === null || to === undefined
+      ? `<b>${d > 0 ? '+' : '−'}${Math.abs(d)}</b>`
+      : `${to - d} → <b>${to}</b>`;
+    return `${withSku ? `${skuEl(e.sku)} ` : ''}<span class="sh-dim">dropship pad</span> ${move}${ref}${shMarks(e)}`;
   }
   if (e.reason === 'return' && ordered && ordered[1].toUpperCase() !== e.sku) {
     return withSku
