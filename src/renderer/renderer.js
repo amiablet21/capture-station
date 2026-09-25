@@ -10451,7 +10451,7 @@ function ovRenderWfs() {
     const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
       `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
     const left = r.coverDays < 0.05 ? '0 days' : `${r.coverDays.toFixed(1)} days`;
-    return `<div class="ov-wrow ${t}"><span class="ov-wstrip"></span>
+    return `<div class="ov-wrow ${t}">
       <div class="ov-wmain">
         <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
         <div class="ov-wcells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
@@ -10471,7 +10471,7 @@ function ovRenderWfs() {
     const first = f.items[0] || { sku: '' };
     const days = Math.max(0, Math.floor((Date.now() - Date.parse(f.createdAt)) / 86400000));
     const tip = f.items.map(i => `${i.sku} ×${i.qty}`).join('\n') + (f.status === 'check' ? '\nNothing marked received in 14+ days - check Seller Center' : '');
-    return `<div class="ov-wrow ${tone}"><span class="ov-wstrip"></span>
+    return `<div class="ov-wrow ${tone}">
       <div class="ov-wmain">
         <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}${f.note ? `<span class="ov-wnote" title="${esc(f.note)}">${esc(f.note)}</span>` : ''}</div>
         <div class="ov-wcells"><div>Sent</div><div>Date</div><div>Days out</div><div>Status</div>
@@ -10531,9 +10531,9 @@ function ovRenderLow() {
   const rows = plan.rows.map(r => {
     const t = ovTone(r.daysLeft);
     const tip = `${r.avail} on shelf${r.atWfs ? ` · ${r.atWfs} at WFS` : ''} · ${r.perDay.toFixed(1)}/day · out ~${r.outOn}`;
-    return `<div class="ov-wrow ${t}"><span class="ov-wstrip"></span>
+    return `<div class="ov-wrow ${t}">
       <div class="ov-wmain">
-        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span>${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">▲ Faster</span>' : ''}</div>
+        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span>${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}</div>
         <div class="ov-wcells ov-lcells"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div>
           <span class="o">${r.order}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${(r.avail + r.atWfs).toLocaleString()}</span><span class="${t}">${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'}</span></div>
       </div>
