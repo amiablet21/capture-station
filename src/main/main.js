@@ -137,10 +137,10 @@ function writeWfsCsv() {
   try {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
-    const lines = ['date,note,sku,gtin,qty'];
+    const lines = ['date,note,sku,channel_sku,gtin,qty'];
     for (const s of db.listWfsShipments(1000).slice().reverse()) {
       for (const it of s.items) {
-        lines.push([s.created_at, s.note, it.sku, it.gtin, it.qty].map(csvEscape).join(','));
+        lines.push([s.created_at, s.note, it.sku, it.channelSku || '', it.gtin, it.qty].map(csvEscape).join(','));
       }
     }
     fs.writeFileSync(path.join(folder, 'wfs-shipments.csv'), lines.join('\r\n'), 'utf8');
@@ -1950,10 +1950,20 @@ function registerIpc() {
   ipcMain.handle('listing:open', (_e, { sku, channel, external, refId }) => {
     const cfg = config.load();
     let url = '';
-    if (String(channel || '').toLowerCase() === 'ebay' && /^\d{9,15}$/.test(String(refId || '').trim())) {
-      url = `https://www.ebay.com/itm/${String(refId).trim()}`;
+    // "TEMU US" / "EBAY" / "WALMART" column names -> the template keys
+    const ch = String(channel || '').toLowerCase();
+    const key = ch.includes('walmart') ? 'walmart' : ch.includes('ebay') ? 'ebay' : ch.includes('temu') ? 'temu' : ch;
+    const ref = String(refId || '').trim();
+    // the public product page when Linnworks carries the marketplace's
+    // numeric item id (owner 2026-09-25: click the channel SKU -> product page)
+    if (key === 'ebay' && /^\d{9,15}$/.test(ref)) {
+      url = `https://www.ebay.com/itm/${ref}`;
+    } else if (key === 'walmart' && /^\d{5,15}$/.test(ref)) {
+      url = `https://www.walmart.com/ip/${ref}`;
+    } else if (key === 'temu' && /^\d{6,20}$/.test(ref)) {
+      url = `https://www.temu.com/goods.html?goods_id=${ref}`;
     } else {
-      const tpl = String((cfg.listingUrlTemplates || {})[String(channel || '').toLowerCase()] || '').trim();
+      const tpl = String((cfg.listingUrlTemplates || {})[key] || '').trim();
       if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
       url = tpl.replaceAll('{sku}', encodeURIComponent(String(sku)));
     }
@@ -4103,8 +4113,13 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 5, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30
+      v: 6, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku
       wfsCand,
+      // every item's WFS channel SKUs, best seller first - the WFS shipment
+      // sheet fills its Channel SKU column from it (owner 2026-09-25)
+      wfsChBySku: Object.fromEntries(Object.entries(stats)
+        .filter(([, st]) => Object.keys(st.wfsCh).length)
+        .map(([k, st]) => [k, Object.entries(st.wfsCh).sort((a, b) => b[1] - a[1]).map(([c]) => c)])),
       low: low.slice(0, 40),
       lowCount: low.length,
       coverDays: cover,
@@ -4149,11 +4164,11 @@ function registerIpc() {
     };
     const sold = live ? live.sold : null;
     let money = overviewCache.money;
-    if (!money || money.v !== 5 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    if (!money || money.v !== 6 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
       const p = refreshOverviewMoney(cfg);
       // stale view answers instantly while a refresh runs; first call (or a
       // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 5) {
+      if (!money || money.v !== 6) {
         try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
       } else {
         p.catch(() => { /* stale money stands */ });
@@ -4875,7 +4890,7 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const note = String((payload && payload.note) || '').slice(0, 500);
     const items = ((payload && payload.items) || [])
-      .map(i => ({ sku: String(i.sku || '').trim(), gtin: String(i.gtin || '').trim(), qty: Number(i.qty) }))
+      .map(i => ({ sku: String(i.sku || '').trim(), channelSku: String(i.channelSku || '').trim().slice(0, 80), gtin: String(i.gtin || '').trim(), qty: Number(i.qty) }))
       .filter(i => i.sku && Number.isInteger(i.qty) && i.qty > 0);
     if (!items.length) return { ok: false, error: 'Add at least one line with a SKU and quantity.' };
     try {

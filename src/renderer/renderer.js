@@ -7146,12 +7146,11 @@ function prChCells(p) {
     const lines = p.channels[c.key] || [];
     const inner = lines.map(l => `
         <div class="pr-line">
-          <span class="pr-csku" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''}">${esc(l.csku)}</span>
+          <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
           ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
-          <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
         </div>${prGotLine(l.got)}`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
     const avgLine = avg
@@ -7445,7 +7444,12 @@ $('prBody').addEventListener('click', (e) => {
     const c = prCols()[Number(open.dataset.ci)];
     // system browser, like the PO# links (owner 2026-09-18)
     api.listingOpen(open.dataset.csku, c ? c.source.toLowerCase() : '', true, open.dataset.ref)
-      .then(r => { if (!r.ok && r.error) toast(r.error); });
+      .then(r => {
+        if (r.ok) return;
+        // no link for this listing: the SKU goes to the clipboard instead
+        api.copyText(open.dataset.csku);
+        toast(`No product link for this ${c ? c.source : ''} listing — ${open.dataset.csku} copied`);
+      });
     return;
   }
   const vt = e.target.closest('.pr-vartog');
@@ -7926,6 +7930,7 @@ function wfsLineHtml() {
         <input type="text" class="input mono wfs-sku" placeholder="Type a SKU…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" />
         <div class="combo-list" hidden></div>
       </div>
+      <input type="text" class="input mono wfs-ch" placeholder="—" autocomplete="off" spellcheck="false" aria-label="Channel SKU" title="The Walmart channel SKU this goes under — filled from what the item sold as at WFS" />
       <input type="text" class="input mono wfs-gtin" autocomplete="off" spellcheck="false" />
       <input type="number" class="input mono wfs-qty" min="1" step="1" />
       <button class="wfs-remove" title="Remove line" type="button">✕</button>
@@ -7941,6 +7946,37 @@ function wfsFindSku(q) {
   return stockCache ? stockCache.items.find(i => i.sku.toLowerCase() === k) || null : null;
 }
 
+// the WFS channel SKUs each item sold under (last 30 days, best seller
+// first), from the Overview's sales pass - the sheet's Channel SKU column
+// fills from it (owner 2026-09-25: "include the channel SKU, that is important")
+let wfsChMap = null;
+function wfsChLoad() {
+  if (ovData && ovData.money && ovData.money.wfsChBySku) { wfsChMap = ovData.money.wfsChBySku; return; }
+  if (wfsChMap || state.captureOnly || !api.overviewData) return;
+  api.overviewData().then(d => {
+    if (d && d.money && d.money.wfsChBySku) { wfsChMap = d.money.wfsChBySku; wfsChFillAll(); }
+  }).catch(() => { /* typed by hand then */ });
+}
+function wfsChFor(sku) {
+  const list = wfsChMap && wfsChMap[String(sku || '').trim().toUpperCase()];
+  return Array.isArray(list) ? list : [];
+}
+// fill an empty Channel SKU cell from the item's top WFS channel SKU; the
+// others ride the tooltip
+function wfsChFill(line) {
+  const ch = line.querySelector('.wfs-ch');
+  const list = wfsChFor(line.querySelector('.wfs-sku').value);
+  // an auto-filled value follows the SKU as it changes; a typed one stays
+  if (!ch.value.trim() || ch.dataset.auto) {
+    ch.value = list[0] || '';
+    if (list.length) ch.dataset.auto = '1'; else delete ch.dataset.auto;
+  }
+  ch.title = list.length > 1 ? `Sold at WFS as: ${list.join(', ')}` : 'The Walmart channel SKU this goes under';
+}
+function wfsChFillAll() {
+  for (const line of $('wfsLines').querySelectorAll('.wfs-line')) if (line.querySelector('.wfs-sku').value.trim()) wfsChFill(line);
+}
+
 function wfsAddLine() {
   $('wfsLines').insertAdjacentHTML('beforeend', wfsLineHtml());
   // each line gets the app's searchable combobox (SKU / title / barcode,
@@ -7952,6 +7988,7 @@ function wfsAddLine() {
     input.value = item.sku;
     const gtin = line.querySelector('.wfs-gtin');
     if (!gtin.value.trim()) gtin.value = item.barcode || '';
+    wfsChFill(line);
     wfsGrow();
     wfsTotals();
     line.querySelector('.wfs-qty').focus();
@@ -7984,6 +8021,7 @@ async function openWfs(prefill) {
   // SKU suggestions ride the shared inventory list (combo shows "Loading…"
   // until it lands); GTIN autofill comes from the same items
   ensureInventory();
+  wfsChLoad();
   wfsFromOverview = !!(prefill && prefill.lines);
   $('wfsFromOv').hidden = !wfsFromOverview;
   $('wfsFromOv').textContent = wfsFromOverview ? prefill.from || '' : '';
@@ -7992,6 +8030,7 @@ async function openWfs(prefill) {
     wfsAddLine();
     const row = $('wfsLines').lastElementChild;
     row.querySelector('.wfs-sku').value = l.sku;
+    row.querySelector('.wfs-ch').value = l.channelSku || '';
     row.querySelector('.wfs-gtin').value = l.gtin || '';
     row.querySelector('.wfs-qty').value = l.qty;
   }
@@ -8033,7 +8072,7 @@ async function renderWfsPast() {
         ${s.note ? `<div class="wfs-card-note" title="${esc(s.note)}">${esc(s.note)}</div>` : ''}
         ${s.items.map(i => `
           <div class="wfs-card-item">
-            <span class="mono" title="${esc(i.gtin || '')}">${esc(i.sku)}</span>
+            <span class="wfs-card-skus"><span class="mono" title="${esc(i.gtin || '')}">${esc(i.sku)}</span>${i.channelSku && i.channelSku.toUpperCase() !== String(i.sku).toUpperCase() ? `<span class="mono wfs-card-ch" title="Walmart channel SKU">${esc(i.channelSku)}</span>` : ''}</span>
             <span class="n">×${i.qty}</span>
           </div>`).join('')}
       </div>`).join('');
@@ -8054,8 +8093,10 @@ $('wfsLines').addEventListener('click', (e) => {
 // typing a full known SKU (without picking from the list) still pre-fills
 // the GTIN and grows the sheet, exactly like a pick
 $('wfsLines').addEventListener('input', (e) => {
+  if (e.target.closest('.wfs-ch')) delete e.target.dataset.auto; // typed by hand: keep it
   const skuInput = e.target.closest('.wfs-sku');
   if (skuInput) {
+    wfsChFill(skuInput.closest('.wfs-line'));
     const item = wfsFindSku(skuInput.value);
     if (item) {
       const gtin = skuInput.closest('.wfs-line').querySelector('.wfs-gtin');
@@ -8071,6 +8112,7 @@ $('wfsSave').addEventListener('click', async () => {
   out.className = 'dlg-note test-result wfs-result';
   const items = [...$('wfsLines').querySelectorAll('.wfs-line')].map(line => ({
     sku: line.querySelector('.wfs-sku').value.trim(),
+    channelSku: line.querySelector('.wfs-ch').value.trim(),
     gtin: line.querySelector('.wfs-gtin').value.trim(),
     qty: Number(line.querySelector('.wfs-qty').value),
   })).filter(i => i.sku || i.gtin || i.qty);
@@ -10436,7 +10478,7 @@ function ovSendToWfs(sku) {
   setTimeout(() => {
     if (activePage !== 'stock') return;
     openWfs({
-      lines: [{ sku: r.sku, gtin: r.gtin, qty: r.send }],
+      lines: [{ sku: r.sku, channelSku: (r.chSkus && r.chSkus[0] && r.chSkus[0].sku) || '', gtin: r.gtin, qty: r.send }],
       note: (r.chSkus || []).length ? `WFS: ${r.chSkus.map(c => c.sku).join(', ')}` : '',
       from: `From Overview · ${r.sku} sells ${Math.round(r.perDay * 7)}/wk at WFS and has ${r.coverDays.toFixed(1)} days there${r.flightUnits ? ' counting what is on the way' : ''} — ${r.send} brings it to ${ovData.wfsPlan.targetDays} days`,
     });
