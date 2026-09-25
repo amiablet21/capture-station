@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Pricing — listing box + price history (pick one)</title>
+<!--
+  Owner 2026-09-25: the boxed listing ("38 sold · last $139.99 9/24 · avg
+  $139.10" + "▼ $5.00 on 9/19 · 4 sold since · 0.7/day (was 0.1)") and the
+  price-history popover are "hard to read, it's weird". Variations of both,
+  X133-64GB-GRAY sample numbers at the real column width (~330px).
+    B1 - labelled mini cells (Sold / Last sold / Avg) under the SKU
+    B2 - plain sentence in normal type + a coloured price-change pill
+    B3 - sold as a big number beside the price, one quiet line, clock icon
+    H1 - history as a clean table in normal type, current price highlighted
+    H2 - history as a timeline: one card per price with a sold bar
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; max-width: 900px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 0 0 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 330px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 330px); gap: 26px 32px; margin-bottom: 30px; }
+  .grid.g2 { grid-template-columns: repeat(2, 420px); }
+  .grid.g2 .wr-note { max-width: 420px; }
+  .col { display: flex; flex-direction: column; gap: 6px; }
+  .box { border: 1px solid #E3E1DB; border-radius: 6px; padding: 7px 9px; background: #fff; }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pr { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .pr.ed { color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
+  .up { color: var(--pos-text); } .dn { color: var(--neg-text); }
+  /* B1 */
+  .b1 .cells { display: grid; grid-template-columns: 0.8fr 1.4fr 1fr; margin-top: 6px; border-top: 1px solid #EEECE7; padding-top: 5px; }
+  .b1 .cells div { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .b1 .cells span { font-size: 12px; font-weight: 600; color: var(--text); }
+  .b1 .cells span small { font-size: 10.5px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+  .b1 .cells span.hot { color: var(--badge-yellow-text); }
+  .b1 .chg { margin-top: 5px; font-size: 11px; color: var(--text); background: #FDF1F0; border-radius: 4px; padding: 3px 7px; }
+  /* B2 */
+  .b2 .line { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .b2 .line b { color: var(--text); font-weight: 600; }
+  .b2 .line b.hot { color: var(--badge-yellow-text); }
+  .b2 .pill { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 11px; font-weight: 500; border-radius: 999px; padding: 2px 9px; }
+  .b2 .pill.dn { background: var(--neg-bg); color: var(--neg-text); }
+  .b2 .pill span { color: var(--text); font-weight: 400; }
+  /* B3 */
+  .b3 .top { align-items: flex-start; }
+  .b3 .sold { text-align: right; min-width: 44px; }
+  .b3 .sold b { display: block; font-size: 15px; font-weight: 700; line-height: 1; color: var(--text); }
+  .b3 .sold b.hot { color: var(--badge-yellow-text); }
+  .b3 .sold small { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .b3 .line { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .b3 .clock { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+  .b3 .clock svg { width: 11px; height: 11px; }
+  .b3 .line .dn { font-weight: 600; }
+  /* history */
+  .pop { width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-modal); box-shadow: 0 12px 32px rgba(47,52,55,.16); overflow: hidden; }
+  .pop .ph { padding: 11px 14px 9px; font-size: 13px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+  .pop .ph .ch { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: #956400; }
+  .pop .ph .s { font-family: var(--mono); font-size: 12px; }
+  .pop .ft { font-size: 10.5px; color: var(--faint); padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface-2); }
+  .h1 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .h1 th { text-align: left; font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 5px 14px; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .h1 td { padding: 8px 14px; border-bottom: 1px solid #EEECE7; }
+  .h1 th.n, .h1 td.n { text-align: right; }
+  .h1 tr.cur td { background: #F2F7FB; font-weight: 600; }
+  .h1 td .d { font-size: 11px; font-weight: 500; margin-left: 4px; }
+  .h2 .tl { padding: 4px 14px 10px; }
+  .h2 .it { display: grid; grid-template-columns: 14px 1fr; gap: 10px; }
+  .h2 .dot { position: relative; }
+  .h2 .dot::before { content: ''; position: absolute; left: 4px; top: 6px; width: 7px; height: 7px; border-radius: 999px; background: #A8A49C; }
+  .h2 .it.cur .dot::before { background: var(--accent); }
+  .h2 .dot::after { content: ''; position: absolute; left: 7px; top: 15px; bottom: -6px; border-left: 1px solid #E0DED8; }
+  .h2 .it:last-child .dot::after { display: none; }
+  .h2 .body { padding: 2px 0 12px; }
+  .h2 .r1 { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+  .h2 .r1 b { font-family: var(--mono); }
+  .h2 .r1 .when { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .h2 .bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .h2 .bar i { height: 6px; border-radius: 3px; background: var(--accent); opacity: .75; }
+  /* H2b: each price change as a sentence */
+  .h2 .who { font-size: 12px; color: var(--text); line-height: 1.45; }
+  .h2 .who b { font-weight: 600; }
+  .h2 .who .pc { font-family: var(--mono); font-weight: 600; }
+  .h2 .who .st { font-family: var(--mono); font-size: 11px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .h2 .who .rp { font-weight: 600; color: #1F6C9F; }
+  .h2 .who .nw, .h2 .who .pc { white-space: nowrap; }
+  .h2 .who .dn, .h2 .who .up { font-weight: 600; }
+  .h2 .bar b { color: var(--text); font-weight: 600; }
+  .h2 .bar { font-size: 11.5px; }
+  .grid.g1 { grid-template-columns: 460px; }
+  .grid.g1 .pop { width: 460px; }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Pricing · listing box and price history</h1>
+  <div class="sub">Same data as before (X133-64GB-GRAY, sample numbers), laid out three ways, then the price history two ways. Real column width.</div>
+
+  <div class="grid">
+    <div>
+      <div class="wr-lbl"><b>B1</b> · labelled mini cells</div>
+      <div class="col b1">
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr">$139.99</span></div>
+          <div class="cells"><div>Sold</div><div>Last sold</div><div>Avg</div><span class="hot">38</span><span>$139.99<small>9/24</small></span><span>$139.10</span></div></div>
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr ed">$139.99</span></div>
+          <div class="cells"><div>Sold</div><div>Last sold</div><div>Avg</div><span>5</span><span>$134.99<small>9/24</small></span><span>$142.50</span></div>
+          <div class="chg"><span class="dn">▼ $5.00</span> on 9/19 — 4 sold since, 0.7/day (was 0.1)</div></div>
+      </div>
+      <div class="wr-note">Each number gets a small label, like the Send to WFS sheet. The price change sits in its own pale strip.</div>
+    </div>
+    <div>
+      <div class="wr-lbl"><b>B2</b> · a plain sentence + change pill</div>
+      <div class="col b2">
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr">$139.99</span></div>
+          <div class="line"><b class="hot">38 sold</b> in 30 days · last sold for <b>$139.99</b> on 9/24</div></div>
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr ed">$139.99</span></div>
+          <div class="line"><b>5 sold</b> in 30 days · last sold for <b>$134.99</b> on 9/24</div>
+          <div class="pill dn">▼ $5.00 on 9/19 <span>· 4 sold since</span></div></div>
+      </div>
+      <div class="wr-note">Normal type, reads like a sentence. The average moves into the history. A red (down) or green (up) pill shows the last price change; click it for the history.</div>
+    </div>
+    <div>
+      <div class="wr-lbl"><b>B3</b> · sold as a big number</div>
+      <div class="col b3">
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr">$139.99</span><span class="sold"><b class="hot">38</b><small>sold</small></span></div>
+          <div class="line">last $139.99 on 9/24<span class="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>History</span></div></div>
+        <div class="box"><div class="top"><span class="sku">X133-64GB-GRAY</span><span class="pr ed">$139.99</span><span class="sold"><b>5</b><small>sold</small></span></div>
+          <div class="line"><span class="dn">▼ $5 on 9/19</span> · 4 sold since<span class="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>History</span></div></div>
+      </div>
+      <div class="wr-note">The 30-day sold count is the big number next to the price. One short line underneath, and a History button opens the price history.</div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div>
+      <div class="wr-lbl"><b>H1</b> · history as a clean table</div>
+      <div class="pop h1"><div class="ph"><span class="ch">EBAY</span><span class="s">X133-64GB-GRAY</span></div>
+        <table><tr><th>Price</th><th>Dates</th><th class="n">Sold</th><th class="n">Per day</th></tr>
+          <tr class="cur"><td>$139.99<span class="d dn">▼ $5</span></td><td>9/19 – now</td><td class="n">4</td><td class="n">0.7</td></tr>
+          <tr><td>$144.99<span class="d dn">▼ $5</span></td><td>9/5 – 9/19</td><td class="n">2</td><td class="n">0.1</td></tr>
+          <tr><td>$149.99</td><td>before 9/5</td><td class="n">1</td><td class="n">0.0</td></tr></table>
+        <div class="ft">Sales from Linnworks, last 60 days</div></div>
+      <div class="wr-note">Normal type, one Dates column, the current price highlighted blue.</div>
+    </div>
+    <div>
+      <div class="wr-lbl"><b>H2</b> · history as a timeline</div>
+      <div class="pop h2"><div class="ph"><span class="ch">EBAY</span><span class="s">X133-64GB-GRAY</span></div>
+        <div class="tl">
+          <div class="it cur"><span class="dot"></span><div class="body"><div class="r1"><b>$139.99</b><span class="dn">▼ $5</span><span class="when">since 9/19</span></div><div class="bar"><i style="width:120px"></i>4 sold · 0.7/day</div></div></div>
+          <div class="it"><span class="dot"></span><div class="body"><div class="r1"><b>$144.99</b><span class="dn">▼ $5</span><span class="when">9/5 – 9/19</span></div><div class="bar"><i style="width:60px"></i>2 sold · 0.1/day</div></div></div>
+          <div class="it"><span class="dot"></span><div class="body"><div class="r1"><b>$149.99</b><span class="when">before 9/5</span></div><div class="bar"><i style="width:30px"></i>1 sold · 0.0/day</div></div></div>
+        </div>
+        <div class="ft">Sales from Linnworks, last 60 days</div></div>
+      <div class="wr-note">Newest price on top; the green bar shows how many sold at each price, so a price that sold better stands out.</div>
+    </div>
+  </div>
+
+  <div class="grid g1">
+    <div>
+      <div class="wr-lbl"><b>H2</b> · timeline that says who changed what</div>
+      <div class="pop h2"><div class="ph"><span class="ch">EBAY</span><span class="s">X133-64GB-GRAY</span></div>
+        <div class="tl">
+          <div class="it cur"><span class="dot"></span><div class="body">
+            <div class="who"><span class="st">IMRAN-MACBOOK-PRO</span> <span class="dn">lowered</span> the price from <span class="pc">$144.99</span> to <span class="pc">$139.99</span> on <b class="nw">Sep 19</b></div>
+            <div class="bar"><i style="width:120px"></i><span>Since then, it sold <b>4 units</b> · about <b>4.9 per week</b></span></div></div></div>
+          <div class="it"><span class="dot"></span><div class="body">
+            <div class="who"><span class="st">STOCK-ROOM</span> <span class="dn">lowered</span> the price from <span class="pc">$149.99</span> to <span class="pc">$144.99</span> on <b class="nw">Sep 5</b></div>
+            <div class="bar"><i style="width:60px"></i><span>Until Sep 19, it sold <b>2 units</b> · about <b>1.0 per week</b></span></div></div></div>
+          <div class="it"><span class="dot"></span><div class="body">
+            <div class="who">Before that it was <span class="pc">$149.99</span></div>
+            <div class="bar"><i style="width:30px"></i><span>It sold <b>1 unit</b> · about <b>0.3 per week</b></span></div></div></div>
+        </div>
+        <div class="ft">Sales from Linnworks, last 60 days</div></div>
+      <div class="wr-note">A price going up reads "<span class="up">raised</span>". A Walmart listing reads "<span class="rp">Walmart's repricer</span> lowered the price from $141.00 to $139.99 on Sep 15" (spotted on a Pricing refresh). With initials entered it reads "IMRAN-MACBOOK-PRO (IK) lowered…"; a revert reads "…reverted the price to $144.99…".</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
