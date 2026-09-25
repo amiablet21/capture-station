@@ -3726,10 +3726,13 @@ function registerIpc() {
     // units sold today per SKU: open orders that arrived today plus the
     // arrived-and-already-processed ones (their lines fetched once, cached)
     const sold = new Map();
-    const addSold = (sku, qty, source) => {
-      const k = String(sku || '').toUpperCase();
-      if (!k) return;
-      const r = sold.get(k) || { sku: String(sku), units: 0, channels: {} };
+    // unmapped lines key by their channel SKU and carry the flag, so the
+    // grid shows the listing with the capture page's warning triangle
+    // instead of Linnworks' placeholder item number (owner 2026-09-25: "1")
+    const addSold = (sku, qty, source, unmapped) => {
+      const k = `${unmapped ? '!' : ''}${String(sku || '').toUpperCase()}`;
+      if (k === '!' || !k) return;
+      const r = sold.get(k) || { sku: String(sku), units: 0, channels: {}, unmapped: !!unmapped };
       r.units += qty;
       const c = chan(source);
       r.channels[c] = (r.channels[c] || 0) + qty;
@@ -3740,7 +3743,11 @@ function registerIpc() {
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
       seen.add(o.orderId);
       orders.push({ ts, source: o.source, charge: o.totalCharge });
-      for (const it of o.items || []) if (!it.isService) addSold(it.sku || it.channelSku, it.quantity, o.source);
+      for (const it of o.items || []) {
+        if (it.isService) continue;
+        const um = !it.stockItemId || it.stockItemId === ZERO_GUID;
+        addSold(um ? (it.channelSku || it.title || it.sku) : (it.sku || it.channelSku), it.quantity, o.source, um);
+      }
     }
     if (soldLines.day !== today) soldLines = { day: today, byOrder: new Map() };
     const missing = soldHeads.filter(h => !soldLines.byOrder.has(h.orderId));
@@ -3750,7 +3757,9 @@ function registerIpc() {
       for (const l of lines) soldLines.byOrder.get(l.orderId)?.push(l);
     }
     for (const h of soldHeads) {
-      for (const l of soldLines.byOrder.get(h.orderId) || []) addSold(l.sku || l.channelSku, l.qty, l.source);
+      for (const l of soldLines.byOrder.get(h.orderId) || []) {
+        addSold(l.unmapped ? (l.channelSku || l.title || l.sku) : (l.sku || l.channelSku), l.qty, l.source, l.unmapped);
+      }
     }
     const byChannel = {};
     const byChannelSales = {};

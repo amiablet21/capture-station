@@ -750,6 +750,10 @@ class LinnworksClient {
             reference: head.reference || (order.GeneralInfo && order.GeneralInfo.ReferenceNum) || '',
             sku: it.SKU || it.ItemNumber || '',
             channelSku: it.ChannelSKU || '',
+            // not linked to a stock item: SKU falls back to Linnworks' line
+            // ItemNumber (often just "1"), so readers show the channel SKU
+            // (either id field may carry the stock item on processed orders)
+            unmapped: ![it.ItemId, it.StockItemId].some(v => v && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(String(v))),
             title: it.Title || '',
             qty,
             // line revenue: the channel's line total (inc tax) when present,

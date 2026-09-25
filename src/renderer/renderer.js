@@ -10342,7 +10342,9 @@ function ovRenderSold() {
   const grid = sold.rows.length
     ? `<div class="ov-xgrid ov-xgrid-full ov-soldgrid">
         <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
-        ${sold.rows.map((r, i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span><span class="xsku" title="${esc(r.sku)}" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span><span class="xu">${r.units}</span></div>`).join('')}
+        ${sold.rows.map((r, i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span>${r.unmapped
+    ? `<span class="xsku item-unmapped" title="${esc(r.sku)} — not mapped in Linnworks, so stock did NOT deduct">⚠ ${esc(r.sku)}</span>`
+    : `<span class="xsku" title="${esc(r.sku)}" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span>`}<span class="xu">${r.units}</span></div>`).join('')}
         <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</span><span class="xu">${sold.units}</span></div>
       </div>`
     : '<div class="ov-empty">Nothing sold yet today.</div>';
