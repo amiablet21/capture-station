@@ -1586,13 +1586,27 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .pr-move { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 1px; line-height: 1.45; }
 .pr-move b { color: var(--text); }
 .pr-up { color: var(--pos-text); } .pr-dn { color: var(--neg-text); }
-/* one listing's price history popover */
-.prh-grid { display: grid; grid-template-columns: 1.3fr 0.8fr 0.8fr 0.6fr 0.7fr; font-size: 12px; padding: 0 0 6px; }
-.prh-grid > span { padding: 5px 14px 5px 0; border-top: 1px dashed var(--border); white-space: nowrap; }
-.prh-grid > span:nth-child(5n+1) { padding-left: 14px; }
-.prh-grid > span.h { border-top: none; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding-top: 2px; }
-.prh-grid .n { text-align: right; }
-.prh-grid .cur { font-weight: 700; }
+/* one listing's price history popover: one row per price (owner pick V3) */
+.prh-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 8px; }
+.prh-ch { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
+.prh-sku { font-size: 12px; font-weight: 600; }
+.prh-rows { max-height: 360px; overflow-y: auto; }
+.prh-r { display: grid; grid-template-columns: 84px 1fr 96px; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #F0EFEB; }
+.prh-r.cur { background: #F4FAF6; }
+.prh-p { font-family: var(--mono); font-size: 14.5px; font-weight: 700; white-space: nowrap; }
+.prh-p small { display: block; font-family: var(--font); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin-top: 2px; }
+.prh-r.cur .prh-p small { color: var(--accent); }
+.prh-t { font-size: 11.5px; line-height: 1.45; color: var(--text); }
+.prh-when { color: var(--muted); }
+.prh-pc { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+.prh-st { font-family: var(--mono); font-size: 10.5px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.prh-rp { font-weight: 600; color: var(--badge-blue-text); }
+.prh-t .pr-dn, .prh-t .pr-up { font-weight: 600; }
+.prh-w { text-align: right; }
+.prh-w b { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.prh-w small { display: block; font-size: 10.5px; color: var(--muted); }
+.prh-bar { height: 4px; border-radius: 2px; background: #E9E7E1; margin-top: 4px; overflow: hidden; }
+.prh-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
 .pr-avg { font-size: 10.5px; color: var(--muted); margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
 .pr-avg b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .pr-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); padding: 3px 9px; min-width: 76px; text-align: right; cursor: pointer; }

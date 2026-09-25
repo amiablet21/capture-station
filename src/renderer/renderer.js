@@ -7179,9 +7179,9 @@ function prGotLine(l, ci, maxU) {
   if (ph && ph.last && ph.since) {
     const d = ph.last.to - ph.last.from;
     const dir = d < 0 ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>';
-    const r1 = (v) => (Math.round(v * 10) / 10).toString();
-    const was = ph.since.prevPerDay !== null && ph.since.prevPerDay !== undefined ? ` (was ${r1(ph.since.prevPerDay)})` : '';
-    move = `<div class="pr-move"${hist} title="Since the price changed on ${md(ph.last.ts)} (${ph.last.mode === 'auto' ? 'repricer' : 'set here'}) — click for this listing's price history">${dir} ${prMoney(Math.abs(d))} on ${md(ph.last.ts)} · <b>${ph.since.units}</b> sold since · ${r1(ph.since.perDay)}/day${was}</div>`;
+    const wk = (v) => (Math.round(v * 70) / 10).toFixed(1);
+    const was = ph.since.prevPerDay !== null && ph.since.prevPerDay !== undefined ? ` (was ${wk(ph.since.prevPerDay)})` : '';
+    move = `<div class="pr-move"${hist} title="Since the price changed on ${md(ph.last.ts)} (${ph.last.mode === 'auto' ? 'repricer' : 'set here'}) — click for this listing's price history">${dir} ${prMoney(Math.abs(d))} on ${md(ph.last.ts)} · <b>${ph.since.units}</b> sold since · ${wk(ph.since.perDay)}/week${was}</div>`;
   }
   return `<div class="pr-got${ph ? ' pr-got-link' : ''}"${hist} title="Last 30 days through this listing${ph ? ' — click for its price history' : ''}">${sold}</div>${move}`;
 }
@@ -7198,22 +7198,45 @@ function prHistOpen(el) {
   const l = prod && (prod.channels[c.key] || []).find(x => x.csku === el.dataset.csku);
   const ph = l && l.ph;
   if (!ph) return;
-  const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
+  // V3 (owner pick 2026-09-25, variants/pricing-history-viz.html): one row
+  // per price - the price and its dates, who set it and when, then how fast
+  // it sold at that price (per week, with a bar so the best price shows)
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+  const perWk = (p) => Math.round((Number(p.perDay) || 0) * 70) / 10;
+  const maxWk = Math.max(0.1, ...ph.periods.map(perWk));
+  const who = (p) => {
+    if (p.mode === 'auto') return `<span class="prh-rp">${esc(c.source.charAt(0) + c.source.slice(1).toLowerCase())}'s repricer</span>`;
+    return `<span class="prh-st">${esc(p.station || 'This desktop')}</span>${p.by ? ` (${esc(p.by)})` : ''}`;
+  };
+  const rows = ph.periods.map((p, i) => {
+    const label = i === 0 ? 'Now' : p.since ? `${day(p.since)} – ${day(p.until)}` : `Before ${day(p.until)}`;
+    let text;
+    if (ph.src === 'log' && p.since && p.from) {
+      const verb = p.mode === 'revert' ? '<span class="pr-up">reverted</span> it' : p.price < p.from ? '<span class="pr-dn">lowered</span> it' : '<span class="pr-up">raised</span> it';
+      text = `${who(p)} ${verb} from <span class="prh-pc">${prMoney(p.from)}</span> <span class="prh-when">on ${day(p.since)}</span>`;
+    } else if (ph.src === 'log') {
+      text = '<span class="prh-when">The price before that</span>';
+    } else {
+      text = `<span class="prh-when">Sold at this price ${p.until ? `${day(p.since)} – ${day(p.until)}` : `since ${day(p.since)}`}</span>`;
+    }
+    const wk = perWk(p);
+    return `<div class="prh-r${i === 0 ? ' cur' : ''}">
+        <div class="prh-p">${prMoney(p.price)}<small>${label}</small></div>
+        <div class="prh-t">${text}</div>
+        <div class="prh-w"><b>${wk.toFixed(1)}</b><small>per week · ${p.units} sold</small><div class="prh-bar"><i data-w="${Math.max(2, Math.round(wk / maxWk * 100))}"></i></div></div>
+      </div>`;
+  }).join('');
   const r = el.getBoundingClientRect();
   const pop = document.createElement('div');
   pop.className = 'prpick prh-pop';
   pop.innerHTML = `
-    <div class="prpick-head"><b>${esc(c.source)}</b> · <span class="mono">${esc(l.csku)}</span> · price history</div>
-    <div class="prh-grid">
-      <span class="h">Price</span><span class="h">From</span><span class="h">To</span><span class="h n">Sold</span><span class="h n">Per day</span>
-      ${ph.periods.map((p, i) => {
-        const moveTxt = p.from ? (p.price < p.from ? '<span class="pr-dn">▼</span>' : '<span class="pr-up">▲</span>') : '';
-        return `<span class="mono${i === 0 ? ' cur' : ''}">${moveTxt} ${prMoney(p.price)}</span><span>${p.since ? md(p.since) : 'before'}</span><span>${p.until ? md(p.until) : 'now'}</span><span class="n mono">${p.units}</span><span class="n mono">${p.perDay}</span>`;
-      }).join('')}
-    </div>
+    <div class="prh-head"><span class="prh-ch">${esc(c.source)}</span><span class="mono prh-sku">${esc(l.csku)}</span></div>
+    <div class="prh-rows">${rows}</div>
     <div class="prpick-foot">${ph.src === 'log'
-    ? 'Price changes from the price log (set here, reverts, repricer moves seen on refresh) · sales from Linnworks, last 60 days'
-    : 'No price change logged for this listing yet — these are the prices it actually sold at (Linnworks, last 60 days)'}</div>`;
+    ? 'Changes from the price log (set here, reverts, repricer moves seen on refresh) · sales from Linnworks, last 60 days'
+    : 'No price change logged for this listing yet — these are the prices it sold at (Linnworks, last 60 days)'}</div>`;
+  // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
+  for (const bar of pop.querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
   document.body.appendChild(pop);
   const h = pop.offsetHeight || 200;
   pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 448))}px`;
