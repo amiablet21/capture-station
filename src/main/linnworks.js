@@ -44,6 +44,19 @@ function levelsBySku(res) {
   return map;
 }
 
+// A processed-order line's sale value excluding sales tax. Cost is the
+// ex-tax line total, CostIncTax the inc-tax one and Tax the tax amount; a
+// channel that fills only some of them still resolves to the ex-tax figure.
+function lineExTax(it, qty) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const cost = Number(it.Cost) || 0;
+  const incTax = Number(it.CostIncTax) || 0;
+  const tax = Math.max(0, Number(it.Tax) || 0);
+  if (cost > 0 && (incTax <= 0 || cost <= incTax)) return r2(cost);
+  if (incTax > 0) return r2(Math.max(0, incTax - tax));
+  return r2((Number(it.PricePerUnit) || 0) * (qty || 1));
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -760,11 +773,12 @@ class LinnworksClient {
             unmapped: ![it.ItemId, it.StockItemId].some(v => v && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(String(v))),
             title: it.Title || '',
             qty,
-            // line revenue: the channel's line total (inc tax) when present,
-            // otherwise the unit price times quantity
-            revenue: Math.round((Number(it.CostIncTax) > 0
-              ? Number(it.CostIncTax)
-              : (Number(it.PricePerUnit) || 0) * qty) * 100) / 100,
+            // line revenue BEFORE sales tax (owner 2026-09-25: the tax-inclusive
+            // total made every state's tax look like a new selling price on
+            // the Pricing history). Linnworks carries the ex-tax line total
+            // as Cost; failing that, the inc-tax total minus its Tax; failing
+            // that, the unit price times quantity.
+            revenue: lineExTax(it, qty),
           });
         }
       }
