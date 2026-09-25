@@ -1482,28 +1482,87 @@ function foreignCaptures(from, to) {
   }
   return out;
 }
-// Capture history: every captured order from every station, processed or
-// not; one row per order (the station that got furthest wins)
-function captureHistoryRange(from, to) {
+// Capture history (owner 2026-09-25: "I just want to see all orders,
+// processed or not"): every Linnworks order in the window - processed ones
+// by their processed day, open ones by their received day - with each
+// station's capture (tracking, notes, who) laid over it; captures Linnworks
+// no longer lists still show. One row per order reference.
+async function captureHistoryRange(from, to) {
   try { publishCaptures(); } catch { /* the view still shows the local rows */ }
   const f = String(from || '0000-00-00');
   const t = String(to || '9999-99-99');
   const me = retsync.stationName() || '';
-  const all = [
+  // captures: the station that got furthest wins
+  const caps = [
     ...db.rowsInDays(f, t).filter(capIsCaptured).map(r => ({ ...r, station: me })),
     ...foreignCaptures(f, t),
   ];
   const score = (r) => (r.status === 'synced' ? 4 : 0) + (r.tracking ? 2 : 0) + (r.remote ? 0 : 1);
-  const best = new Map();
-  for (const r of all) {
-    const k = `${r.order_number}|${r.lw_order_id || ''}`;
-    const prev = best.get(k);
-    if (!prev || score(r) > score(prev)) best.set(k, r);
+  const capBy = new Map();
+  for (const r of caps) {
+    const k = String(r.order_number || '').trim();
+    const prev = capBy.get(k);
+    if (!prev || score(r) > score(prev)) capBy.set(k, r);
+  }
+  // Linnworks: processed lines (shared sales cache) + the open book
+  const lw = new Map(); // reference -> order
+  const cfg = config.load();
+  if (!cfg.captureOnly) {
+    const dayOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : db.localDay(d); };
+    const addLine = (ref, base, sku, qty) => {
+      const o = lw.get(ref) || { ...base, items: [] };
+      const hit = o.items.find(i => i.sku === sku);
+      if (hit) hit.qty += qty; else if (sku) o.items.push({ sku, qty });
+      lw.set(ref, o);
+    };
+    try {
+      const sq = await querySales(f < '2000-01-01' ? db.localDay(new Date(Date.now() - 365 * 86400000)) : f, t);
+      for (const l of (sq.ok ? sq.lines : [])) {
+        const ref = String(l.reference || '').trim();
+        if (!ref) continue;
+        const day = dayOf(l.processedOn);
+        if (!day || day < f || day > t) continue;
+        addLine(ref, {
+          order_number: ref, channel: sourceToChannel(l.source), status: 'lw-processed',
+          created_at: l.processedOn, synced_at: l.processedOn, day,
+          tracking: l.tracking || '', carrier: l.carrier || '',
+        }, l.unmapped ? (l.channelSku || l.sku) : (l.sku || l.channelSku), Number(l.qty) || 1);
+      }
+    } catch { /* Linnworks unreachable: captures only */ }
+    try {
+      for (const o of await getOpenOrdersCached(cfg)) {
+        const ref = String(o.reference || '').trim();
+        if (!ref || lw.has(ref)) continue;
+        const day = dayOf(o.receivedDate);
+        if (!day || day < f || day > t) continue;
+        for (const it of o.items || []) {
+          if (it.isService) continue;
+          const um = !it.stockItemId || it.stockItemId === ZERO_GUID;
+          addLine(ref, {
+            order_number: ref, channel: sourceToChannel(o.source), status: 'open',
+            created_at: o.receivedDate, synced_at: '', day, tracking: '', carrier: '',
+          }, um ? (it.channelSku || it.sku) : (it.sku || it.channelSku), Number(it.quantity) || 1);
+        }
+        if (!lw.has(ref)) lw.set(ref, { order_number: ref, channel: sourceToChannel(o.source), status: 'open', created_at: o.receivedDate, synced_at: '', day, tracking: '', carrier: '', items: [] });
+      }
+    } catch { /* open book unreachable */ }
   }
   let n = 0;
-  return [...best.values()]
-    .map(r => (r.remote ? { ...r, id: -(++n) } : r))
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const out = [];
+  for (const [ref, o] of lw) {
+    const c = capBy.get(ref);
+    capBy.delete(ref);
+    if (!c) { out.push({ ...o, id: -(++n), remote: true }); continue; }
+    // captured: the capture's details, Linnworks' processed state when the
+    // app never pushed it (label bought on the channel, shipped elsewhere)
+    const row = c.remote ? { ...c, id: -(++n) } : { ...c };
+    if (row.status !== 'synced' && o.status === 'lw-processed') { row.status = 'lw-processed'; row.synced_at = o.synced_at; }
+    if (!row.tracking && o.tracking) { row.tracking = o.tracking; row.carrier = o.carrier; }
+    if (!(Array.isArray(row.items) && row.items.length)) row.items = o.items;
+    out.push(row);
+  }
+  for (const c of capBy.values()) out.push(c.remote ? { ...c, id: -(++n) } : c);
+  return out.sort((a, b) => String(b.day).localeCompare(String(a.day)) || String(b.created_at).localeCompare(String(a.created_at)));
 }
 
 function startLowStockWatcher() {

@@ -701,15 +701,22 @@ function capHistRowHtml(row, num) {
   // every station's captures (owner 2026-09-25): processed rows green,
   // captured-but-not-processed amber-ish, failed red; the station tag says
   // which computer captured it
-  const st = row.status === 'synced' ? 'st-synced' : row.status === 'failed' ? 'st-failed' : 'st-captured';
+  // plus every Linnworks order nobody captured (owner 2026-09-25: "I just
+  // want to see all orders, processed or not")
+  const done = row.status === 'synced' || row.status === 'lw-processed';
+  const st = done ? 'st-synced' : row.status === 'failed' ? 'st-failed' : row.status === 'open' ? 'st-pending' : 'st-captured';
   const stWord = row.status === 'synced'
     ? `<span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>`
+    : row.status === 'lw-processed'
+      ? `<span class="history-status st-synced" title="Processed in Linnworks at ${when}, not through Capture Station (label bought on the channel, or processed elsewhere)">Processed in Linnworks ${when}</span>`
+    : row.status === 'open'
+      ? '<span class="history-status st-pending" title="Still in Linnworks open orders, nobody captured it yet">Open · not captured</span>'
     : row.status === 'failed'
       ? `<span class="history-status st-failed" title="${esc(row.fail_reason || 'The last sync failed')}">Not processed · failed</span>`
       : '<span class="history-status st-captured" title="Captured, not pushed to Linnworks yet — Sync on the computer that captured it">Captured · not processed</span>';
   const pc = row.station ? `<span class="cap-station" title="Captured on ${esc(row.station)}">${esc(row.station)}</span>` : '';
-  return `<tr data-id="${row.id}" class="is-hist${row.status === 'synced' ? '' : ' is-unproc'}">
-      <td class="cell-gutter ${st}" title="${row.status === 'synced' ? `Processed ${when}` : 'Not processed yet'} · captured ${fmtTime(row.created_at)}${row.station ? ` on ${esc(row.station)}` : ''}">${num}</td>
+  return `<tr data-id="${row.id}" class="is-hist${done ? '' : ' is-unproc'}">
+      <td class="cell-gutter ${st}" title="${done ? `Processed ${when}` : 'Not processed yet'} · captured ${fmtTime(row.created_at)}${row.station ? ` on ${esc(row.station)}` : ''}">${num}</td>
       <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
@@ -752,7 +759,7 @@ function renderCapHist() {
   const empty = rows.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty;
-  $('rowsEmpty').querySelector('.rows-empty-title').textContent = capHist.busy ? 'Loading…' : (findQuery ? 'No matches' : 'No captured orders in this period');
+  $('rowsEmpty').querySelector('.rows-empty-title').textContent = capHist.busy ? 'Loading…' : (findQuery ? 'No matches' : 'No orders in this period');
   $('rowsEmpty').querySelector('.rows-empty-hint').textContent = capHist.busy ? '' : 'Pick a wider date range above, or press Back to today.';
   const today = salesDayKey(new Date().toISOString());
   const yesterday = salesDayKey(new Date(Date.now() - 86400000).toISOString());

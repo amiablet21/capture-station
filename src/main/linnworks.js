@@ -748,6 +748,10 @@ class LinnworksClient {
             locationId,
             processedOn: head.processedOn || '',
             reference: head.reference || (order.GeneralInfo && order.GeneralInfo.ReferenceNum) || '',
+            // the Capture history shows every order, captured or not
+            tracking: (order.ShippingInfo && order.ShippingInfo.TrackingNumber) || '',
+            carrier: (order.ShippingInfo && (order.ShippingInfo.Vendor || order.ShippingInfo.PostalServiceName)) || '',
+            receivedOn: (order.GeneralInfo && order.GeneralInfo.ReceivedDate) || '',
             sku: it.SKU || it.ItemNumber || '',
             channelSku: it.ChannelSKU || '',
             // not linked to a stock item: SKU falls back to Linnworks' line
