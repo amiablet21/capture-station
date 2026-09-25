@@ -7145,13 +7145,13 @@ function prChCells(p) {
   return cols.map((c, ci) => {
     const lines = p.channels[c.key] || [];
     const inner = lines.map(l => `
-        <div class="pr-line">
+        <div class="pr-entry"><div class="pr-line">
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
           ${l.sold > 0 ? `<span class="pr-sold ${l.sold === maxSold ? 'pr-hot' : ''}" title="Sold through this listing in the last 60 days (counted since the tally began)">×${l.sold}</span>` : ''}
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
-        </div>${prGotLine(l.got)}`).join('');
+        </div>${prGotLine(l.got)}</div>`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
     const avgLine = avg
       ? `<div class="pr-avg" title="Average ${esc(c.source)} sale price for ${esc(p.sku)} over the last 30 days, across all its listings, weighted by units">30-day avg <b>${prMoney(avg.avg)}</b> · ${avg.units} sold</div>`
