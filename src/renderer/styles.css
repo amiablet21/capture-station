@@ -1571,6 +1571,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .pr-ch { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .pr-line { display: flex; align-items: center; gap: 6px; }
 .pr-csku { font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the channel SKU IS the link to its listing (owner 2026-09-25: no arrow) */
+button.pr-csku { border: none; background: none; padding: 0; text-align: left; cursor: pointer; font-weight: inherit; }
+button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline; text-underline-offset: 2px; }
 .pr-sold { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 34px; text-align: right; }
 .pr-hot { color: var(--badge-yellow-text); font-weight: 700; }
 .pr-got { font-family: var(--mono); font-size: 10px; color: var(--faint); margin: -2px 0 3px; padding-left: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3271,7 +3274,7 @@ tr.unl-dim:hover td { opacity: 1; }
 .wfs-sheet { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .wfs-sheet-h {
   display: grid;
-  grid-template-columns: 1fr 170px 64px 32px;
+  grid-template-columns: 1fr 1fr 140px 58px 32px;
   background: #1f9d5b;
   color: #fff;
   font-size: 10.5px;
@@ -3281,7 +3284,7 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 .wfs-sheet-h span { padding: 7px 10px; }
 .wfs-h-qty { text-align: right; }
-.wfs-line { display: grid; grid-template-columns: 1fr 170px 64px 32px; align-items: stretch; border-top: 1px solid var(--border-soft); }
+.wfs-line { display: grid; grid-template-columns: 1fr 1fr 140px 58px 32px; align-items: stretch; border-top: 1px solid var(--border-soft); }
 .wfs-line:first-child { border-top: none; }
 .wfs-line .input {
   border: none;
@@ -3376,6 +3379,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .wfs-card-item { display: flex; gap: 10px; font-size: 11.5px; margin-top: 6px; }
 .wfs-card-item .mono { font-size: 11.5px; }
 .wfs-card-item .n { margin-left: auto; font-family: var(--mono); font-weight: 600; }
+/* the Walmart channel SKU under the Linnworks SKU (owner 2026-09-25) */
+.wfs-card-skus { display: flex; flex-direction: column; min-width: 0; }
+.wfs-card-ch { font-size: 10.5px !important; color: var(--badge-blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stock-loading {
   display: flex;
