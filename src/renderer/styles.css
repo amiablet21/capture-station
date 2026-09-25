@@ -4853,6 +4853,9 @@ tr.unl-dim:hover td { opacity: 1; }
 .sh-custom-actions .btn { padding: 5px 12px; font-size: 12px; }
 
 /* Capture page history mode: the same table, processed orders by day */
+/* Capture history across every computer (owner 2026-09-25) */
+.is-unproc .cell-order, .is-unproc .cell-items, .is-unproc .cell-tracking { opacity: 0.62; }
+.cap-station { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 6px; vertical-align: 1px; }
 .is-hist-on { color: var(--accent-soft-text); background: var(--accent-soft); }
 .cap-day td { background: var(--surface-2) !important; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 6px 12px; border-right: none !important; }
 .cap-day td .sh-dim { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }

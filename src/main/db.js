@@ -375,6 +375,13 @@ function historyRowsRange(from, to, limit = 3000) {
     .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit).map(parseRow);
 }
 
+// every row captured in a day window, any status - the shared capture log
+// publishes from it and the history view reads it (owner 2026-09-25)
+function rowsInDays(from, to, limit = 5000) {
+  return open().prepare('SELECT * FROM rows WHERE day >= ? AND day <= ? ORDER BY id DESC LIMIT ?')
+    .all(String(from || '0000-00-00'), String(to || '9999-99-99'), limit).map(parseRow);
+}
+
 function findByOrderNumber(orderNumber) {
   return parseRow(open().prepare('SELECT * FROM rows WHERE order_number = ? ORDER BY id DESC').get(orderNumber));
 }
@@ -967,7 +974,7 @@ module.exports = {
   rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
-  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, stockRowsFromBulkEntry, stockLogOwnRows,
+  lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,
   stockLogGet, stockLogLinkMap, stockLogEffective, annotateStockRows, stockLogLaterSet, planStockCorrection, STOCK_LOG_EDITABLE,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
 };
