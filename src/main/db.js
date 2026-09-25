@@ -168,6 +168,40 @@ function open() {
       pace REAL NOT NULL DEFAULT 0
     );
   `);
+  // Ship with Walmart labels bought through the API (src/main/sww.js): one
+  // row per purchase, the files kept on disk so reprints never re-buy.
+  // status: bought | printed | voided | failed
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      row_id INTEGER NOT NULL,
+      po TEXT NOT NULL,
+      carrier TEXT NOT NULL,
+      service TEXT NOT NULL,
+      service_name TEXT NOT NULL DEFAULT '',
+      tracking TEXT NOT NULL,
+      tracking_url TEXT NOT NULL DEFAULT '',
+      cost_cents INTEGER,
+      package TEXT NOT NULL DEFAULT '{}',
+      file_pdf TEXT NOT NULL DEFAULT '',
+      file_png TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'bought',
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      day TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_labels_row ON labels(row_id);
+    CREATE INDEX IF NOT EXISTS idx_labels_day ON labels(day);
+    CREATE TABLE IF NOT EXISTS package_profiles (
+      sku TEXT PRIMARY KEY,
+      weight_oz REAL NOT NULL,
+      l_in REAL NOT NULL,
+      w_in REAL NOT NULL,
+      h_in REAL NOT NULL,
+      package_type TEXT NOT NULL DEFAULT 'CUSTOM_PACKAGE',
+      updated_at TEXT NOT NULL
+    );
+  `);
   return db;
 }
 
@@ -960,7 +994,97 @@ function backup() {
   return { dest, healthy: true, detail: 'ok' };
 }
 
+/* ---------- Ship with Walmart labels + per-SKU package profiles ---------- */
+
+function parseLabel(r) {
+  if (!r) return null;
+  let pkg = {};
+  try { pkg = JSON.parse(r.package || '{}'); } catch { /* keep {} */ }
+  return { ...r, package: pkg };
+}
+
+function insertLabel({ rowId, po, carrier, service, serviceName, tracking, trackingUrl, costCents, pkg, filePdf, filePng, status }) {
+  const now = new Date();
+  const res = open().prepare(`INSERT INTO labels
+    (row_id, po, carrier, service, service_name, tracking, tracking_url, cost_cents, package, file_pdf, file_png, status, created_at, day)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(Number(rowId), String(po), String(carrier || ''), String(service || ''), String(serviceName || ''),
+      String(tracking || ''), String(trackingUrl || ''), Number.isFinite(costCents) ? Math.round(costCents) : null,
+      JSON.stringify(pkg || {}), String(filePdf || ''), String(filePng || ''), status || 'bought',
+      now.toISOString(), localDay(now));
+  return getLabel(Number(res.lastInsertRowid));
+}
+
+function getLabel(id) {
+  return parseLabel(open().prepare('SELECT * FROM labels WHERE id = ?').get(id));
+}
+
+// the row's live label (newest that was not voided)
+function labelForRow(rowId) {
+  return parseLabel(open().prepare(
+    "SELECT * FROM labels WHERE row_id = ? AND status != 'voided' ORDER BY id DESC LIMIT 1").get(rowId));
+}
+
+function labelsForRows(ids) {
+  const out = {};
+  if (!ids || !ids.length) return out;
+  const stmt = open().prepare("SELECT * FROM labels WHERE row_id = ? AND status != 'voided' ORDER BY id DESC LIMIT 1");
+  for (const id of ids) {
+    const l = parseLabel(stmt.get(id));
+    if (l) out[id] = l;
+  }
+  return out;
+}
+
+function setLabelStatus(id, status, error) {
+  open().prepare('UPDATE labels SET status = ?, error = ? WHERE id = ?')
+    .run(status, String(error || '').slice(0, 500), id);
+  return getLabel(id);
+}
+
+function setLabelFiles(id, filePdf, filePng) {
+  open().prepare('UPDATE labels SET file_pdf = ?, file_png = ? WHERE id = ?')
+    .run(String(filePdf || ''), String(filePng || ''), id);
+  return getLabel(id);
+}
+
+function listLabels(from, to, limit = 2000) {
+  return open().prepare('SELECT * FROM labels WHERE day >= ? AND day <= ? ORDER BY id DESC LIMIT ?')
+    .all(from, to, limit).map(parseLabel);
+}
+
+function labelsToday() {
+  return open().prepare('SELECT * FROM labels WHERE day = ? ORDER BY id DESC').all(localDay()).map(parseLabel);
+}
+
+function getPackageProfile(sku) {
+  if (!sku) return null;
+  return open().prepare('SELECT * FROM package_profiles WHERE sku = ?').get(String(sku).trim().toUpperCase()) || null;
+}
+
+function setPackageProfile(sku, { weightOz, l, w, h, type }) {
+  const key = String(sku || '').trim().toUpperCase();
+  if (!key) return null;
+  open().prepare(`INSERT INTO package_profiles (sku, weight_oz, l_in, w_in, h_in, package_type, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(sku) DO UPDATE SET weight_oz = excluded.weight_oz, l_in = excluded.l_in, w_in = excluded.w_in,
+      h_in = excluded.h_in, package_type = excluded.package_type, updated_at = excluded.updated_at`)
+    .run(key, Number(weightOz) || 0, Number(l) || 0, Number(w) || 0, Number(h) || 0,
+      String(type || 'CUSTOM_PACKAGE'), new Date().toISOString());
+  return getPackageProfile(key);
+}
+
+function deletePackageProfile(sku) {
+  open().prepare('DELETE FROM package_profiles WHERE sku = ?').run(String(sku || '').trim().toUpperCase());
+}
+
+function listPackageProfiles() {
+  return open().prepare('SELECT * FROM package_profiles ORDER BY sku').all();
+}
+
 module.exports = {
+  insertLabel, getLabel, labelForRow, labelsForRows, setLabelStatus, setLabelFiles, listLabels, labelsToday,
+  getPackageProfile, setPackageProfile, deletePackageProfile, listPackageProfiles,
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,

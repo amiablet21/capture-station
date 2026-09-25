@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.0 highlights — Ship with Walmart from the Capture page
+
+- **Every open Walmart order is quoted automatically** through Walmart's Ship with Walmart API: the tracking cell shows the recommended service and its price (cheapest service that meets Walmart's delivery promise by default). Click the chip to confirm, pick another service, adjust the box, add signature, and **Buy**: the label is bought, saved and printed, and the tracking lands on the row with no scan.
+- **Buy labels** (band button) reviews every quoted Walmart row in one table, with the pick and price per order and the total, then buys and prints them in turn.
+- Reprint and void from the row actions (void is free until the order is marked shipped). Labels are kept under the CSV folder in `labels\` so a reprint never re-buys.
+- Setup: Settings > Ship with Walmart: Client ID + Client Secret from Seller Center's API key management (Orders + Shipping access), ship-from address, default box, printer. **Dry run is on by default** and shows what would be bought without buying. Optional SumatraPDF path for silent PDF printing; otherwise the PNG label prints from a hidden 4×6 page. Design notes: `docs/ship-with-walmart-api.md`.
+
 ## v1.3.0 highlights
 
 - **Capture is a work queue**: Linnworks open orders auto-drop as pending rows (every 5 min; WFS location excluded); untouched rows auto-remove when an order leaves open orders (cancellations). Marketplace filter chips, persistent search (PO#/SKU/channel SKU/title/tracking/notes), stacked item lines with thumbnails, ⚠ unmapped-listing flags, channel-SKU info dots, DS badges on dropship-routed rows.

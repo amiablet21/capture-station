@@ -4872,3 +4872,107 @@ tr.unl-dim:hover td { opacity: 1; }
 .cust-copy svg { width: 13px; height: 13px; }
 .cust-foot { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; border-top: 1px solid var(--border-soft); }
 .cell-notes .history-status { margin-left: 0; margin-right: 8px; }
+
+/* ---------- Ship with Walmart: quote chips, label badge, buy dialog ---------- */
+
+.cap-btn {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.cap-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.cap-btn:disabled { opacity: 0.5; cursor: default; }
+.cap-btn[hidden] { display: none; }
+
+.sww-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 2px 4px 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--badge-blue-text);
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  cursor: pointer;
+  margin-right: 6px;
+  max-width: 280px;
+  white-space: nowrap;
+  vertical-align: middle;
+  transition: filter 120ms var(--ease);
+}
+.sww-chip:hover { filter: brightness(0.95); }
+.sww-chip-svc { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.sww-chip-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+.sww-chip-buy { background: var(--badge-blue-text); color: #fff; border-radius: 999px; padding: 1px 8px; font-weight: 600; font-size: 11px; }
+.sww-chip.is-late { border-color: var(--badge-yellow-text); background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+.sww-chip.is-late .sww-chip-buy { background: var(--badge-yellow-text); }
+.sww-chip.is-busy, .sww-chip.is-idle { border-style: dashed; border-color: var(--border); background: none; color: var(--muted); cursor: default; padding-right: 9px; }
+.sww-chip.is-idle { cursor: pointer; }
+.sww-chip.is-idle:hover { border-color: var(--accent); color: var(--accent); }
+.sww-chip.is-err { border-style: dashed; border-color: var(--neg-text); background: var(--neg-bg); color: var(--neg-text); padding-right: 9px; }
+.sww-chip.is-stale { opacity: 0.75; }
+
+.sww-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  vertical-align: middle;
+}
+.sww-badge.is-warn { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+
+.sww-body { max-height: 62vh; overflow: auto; }
+.sww-head { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+.sww-head b { color: var(--text); font-weight: 600; }
+.sww-pkg { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; font-size: 12.5px; }
+.sww-pkg .input { width: 68px; }
+.sww-dim { color: var(--faint); font-size: 12px; }
+.sww-err { color: var(--neg-text); }
+.sww-rates { border: 1px solid var(--border); border-radius: var(--r-ctl); overflow: hidden; }
+.sww-rate {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.sww-rate:last-child { border-bottom: none; }
+.sww-rate:hover { background: var(--surface-2); }
+.sww-rate.is-sel { background: var(--accent-soft); }
+.sww-rate-when { color: var(--muted); font-size: 12px; }
+.sww-rate-late { color: var(--badge-yellow-text); font-weight: 600; font-size: 11px; margin-left: 8px; }
+.sww-rate-rec { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); margin-left: 8px; }
+.sww-rate-price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.sww-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sww-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.sww-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+.sww-table tr.is-off td { opacity: 0.45; }
+.sww-table .sww-svc { max-width: 280px; font-size: 12px; padding: 3px 6px; }
+.sww-table .sww-items { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.sww-table .sww-when { color: var(--muted); white-space: nowrap; }
+.sww-table .price { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; white-space: nowrap; }
+.sww-table .sww-res { white-space: nowrap; font-size: 12px; }
+.sww-res-ok { color: var(--badge-green-text); font-family: var(--mono); }
+.sww-res-fail { color: var(--neg-text); }
+.sww-total { display: flex; justify-content: flex-end; gap: 18px; padding: 10px 8px 0; font-weight: 600; font-family: var(--mono); }
+.sww-actions { align-items: center; }
+#swwDialogStatus { margin-right: auto; }

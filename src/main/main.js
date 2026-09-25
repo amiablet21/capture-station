@@ -11,6 +11,7 @@ const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const presence = require('./presence');
+const sww = require('./sww');
 // every local returns save already tells the shared folder (emitRow /
 // emitPutFor / emitDel) — the wrapper tells the LAN peers too, so their
 // rescan fires ahead of the cloud drive (presence pings carry no data)
@@ -82,6 +83,8 @@ function buildState() {
     orderUrlTemplates: cfg.orderUrlTemplates || {},
     returnUrlTemplates: cfg.returnUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
+    // Ship with Walmart: quotes + labels for the rows on screen
+    sww: sww.snapshot(cfg, cfg.captureOnly ? [] : db.activeRows()),
     locations: {
       primaryId: cfg.linnworks.locationId || '',
       primaryName: cfg.linnworks.locationName || '',
@@ -1257,6 +1260,9 @@ async function runOrderImport() {
       if (win && !win.isDestroyed()) win.webContents.send('orders:imported', { added, removed });
     }
     pushState();
+    // Ship with Walmart: price the Walmart rows in the background so the
+    // packer sees the recommended service the moment the row appears
+    sww.refreshQuotes().catch(() => { /* quotes are best effort */ });
   } catch { /* offline or auth hiccup: next pass retries */ }
 }
 
@@ -2650,8 +2656,76 @@ function registerIpc() {
   ipcMain.handle('config:set', (_e, patch) => {
     const cfg = config.save(patch || {});
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
+    if (patch && patch.sww) {
+      // key / address / box / rule changed: fresh client, fresh quotes
+      sww.resetClient();
+      sww.refreshQuotes({ force: true }).catch(() => { /* best effort */ });
+    }
     pushState();
     return cfg;
+  });
+
+  /* ---------- Ship with Walmart ---------- */
+
+  ipcMain.handle('sww:test', async (_e, creds) => {
+    try {
+      return await sww.testConnection(creds || {});
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('sww:quote', async (_e, { rowId, force, pkg } = {}) => {
+    const row = db.getRow(Number(rowId));
+    if (!row) return { ok: false, error: 'Row not found.' };
+    const q = await sww.quoteRow(row, { force: !!force, pkg: pkg || null });
+    const snap = sww.snapshot(config.load(), db.activeRows());
+    if (win && !win.isDestroyed()) win.webContents.send('sww:quotes', snap.quotes);
+    return { ok: !!q && !q.error, error: q ? q.error : 'Not a Walmart order awaiting a label.', quote: snap.quotes[row.id] || null };
+  });
+  ipcMain.handle('sww:refreshQuotes', (_e, { force } = {}) => sww.refreshQuotes({ force: !!force }));
+  ipcMain.handle('sww:buy', async (_e, payload) => {
+    const res = await sww.buyLabel(payload || {});
+    pushState();
+    return res;
+  });
+  ipcMain.handle('sww:buyBulk', async (_e, { ids, choices, dryRun } = {}) => {
+    const res = await sww.buyBulk({
+      ids, choices, dryRun,
+      onProgress: (p) => { if (win && !win.isDestroyed()) win.webContents.send('sww:progress', p); },
+    });
+    pushState();
+    return res;
+  });
+  ipcMain.handle('sww:void', async (_e, { rowId } = {}) => {
+    const res = await sww.voidLabel({ rowId });
+    pushState();
+    return res;
+  });
+  ipcMain.handle('sww:reprint', (_e, { rowId, labelId } = {}) => sww.reprint({ rowId, labelId }));
+  ipcMain.handle('sww:labels', (_e, { from, to } = {}) => db.listLabels(from || db.localDay(), to || db.localDay()));
+  ipcMain.handle('sww:printers', () => sww.listPrinters());
+  ipcMain.handle('sww:profiles', () => db.listPackageProfiles());
+  ipcMain.handle('sww:profileSet', (_e, { sku, pkg } = {}) => {
+    if (!sku) return { ok: false, error: 'Missing SKU.' };
+    if (!pkg) { db.deletePackageProfile(sku); return { ok: true, removed: true }; }
+    const saved = db.setPackageProfile(sku, pkg);
+    sww.refreshQuotes({ force: true }).catch(() => { /* best effort */ });
+    return { ok: !!saved, profile: saved };
+  });
+  ipcMain.handle('sww:openFolder', () => {
+    const folder = sww.labelsFolder();
+    try { fs.mkdirSync(folder, { recursive: true }); } catch { /* shown anyway */ }
+    shell.openPath(folder);
+    return { ok: true };
+  });
+  ipcMain.handle('sww:pickSumatra', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Pick SumatraPDF.exe',
+      properties: ['openFile'],
+      filters: [{ name: 'SumatraPDF', extensions: ['exe'] }],
+    });
+    if (canceled || !filePaths[0]) return { ok: false };
+    return { ok: true, path: filePaths[0] };
   });
   ipcMain.handle('csv:export', () => exportCsv());
   ipcMain.handle('linnworks:test', async (_e, creds) => {
@@ -5823,6 +5897,21 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   createWindow();
+  // Ship with Walmart reports back through these: tracking lands on the row
+  // exactly as a scan would (undo entry, status, CSV mirror), quotes push a
+  // light event instead of a full state rebuild
+  sww.init({
+    getWin: () => win,
+    log: (msg) => { ignoredLog.push({ at: new Date().toISOString(), text: msg }); if (ignoredLog.length > 200) ignoredLog.shift(); },
+    onQuotes: (snap) => { if (win && !win.isDestroyed()) win.webContents.send('sww:quotes', snap); },
+    applyTracking: (row, tracking, carrier) => {
+      const updated = db.setTracking(row.id, tracking, carrier || '');
+      undoStack.push({ type: 'setTracking', rowId: row.id, prev: { tracking: row.tracking, carrier: row.carrier } });
+      if (tracking && currentRowId === row.id) currentRowId = null;
+      pushState();
+      return updated;
+    },
+  });
   startRetSync();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();

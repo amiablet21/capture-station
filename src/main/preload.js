@@ -36,6 +36,8 @@ const EVENTS = [
   'stock:imgInherited',
   'update:available',
   'pricing:refreshed',
+  'sww:quotes',
+  'sww:progress',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -181,6 +183,20 @@ contextBridge.exposeInMainWorld('api', {
   claimsInfo: (po) => ipcRenderer.invoke('claims:info', { po: po || '' }),
   claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),
   presenceEditing: (gid, on) => ipcRenderer.invoke('presence:editing', { gid, on }),
+  // Ship with Walmart: quotes on the Capture rows, buy / bulk / void / reprint
+  swwTest: (creds) => ipcRenderer.invoke('sww:test', creds),
+  swwQuote: (rowId, force, pkg) => ipcRenderer.invoke('sww:quote', { rowId, force: !!force, pkg: pkg || null }),
+  swwRefreshQuotes: (force) => ipcRenderer.invoke('sww:refreshQuotes', { force: !!force }),
+  swwBuy: (payload) => ipcRenderer.invoke('sww:buy', payload),
+  swwBuyBulk: (ids, choices, dryRun) => ipcRenderer.invoke('sww:buyBulk', { ids, choices: choices || {}, dryRun }),
+  swwVoid: (rowId) => ipcRenderer.invoke('sww:void', { rowId }),
+  swwReprint: (rowId, labelId) => ipcRenderer.invoke('sww:reprint', { rowId, labelId }),
+  swwLabels: (from, to) => ipcRenderer.invoke('sww:labels', { from, to }),
+  swwPrinters: () => ipcRenderer.invoke('sww:printers'),
+  swwPickSumatra: () => ipcRenderer.invoke('sww:pickSumatra'),
+  swwOpenLabelsFolder: () => ipcRenderer.invoke('sww:openFolder'),
+  swwProfileSet: (sku, pkg) => ipcRenderer.invoke('sww:profileSet', { sku, pkg }),
+  swwProfiles: () => ipcRenderer.invoke('sww:profiles'),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   on: (channel, cb) => {
     if (!EVENTS.includes(channel)) return;

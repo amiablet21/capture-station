@@ -124,6 +124,8 @@
          cluster: tray = import shipped, arrow = refresh, globe = browser;
          the titles carry the words -->
     <div class="cap-icons">
+      <!-- Ship with Walmart bulk buy: every quoted Walmart row in one go -->
+      <button id="swwBulkBtn" class="cap-btn" hidden title="Buy Ship with Walmart labels for every quoted Walmart order in the list — review the picks first">Buy labels</button>
       <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
       </button>
@@ -846,6 +848,76 @@
         <span id="testConnResult" class="test-result"></span>
       </div>
 
+      <h3 class="dlg-section">Ship with Walmart</h3>
+      <div class="settings-row">
+        <label class="check"><input id="setSwwEnabled" type="checkbox" /> Quote and buy Walmart shipping labels from the Capture page</label>
+      </div>
+      <p class="dlg-note">API key: Seller Center → Settings → API key management → your own key pair (Client ID + Client Secret) with Orders and Shipping access. Labels bill to your Walmart payments exactly as they do in Seller Center.</p>
+      <div class="grid2">
+        <label class="field">
+          <span class="field-label">Client ID</span>
+          <input id="setSwwClientId" type="text" class="input mono" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span class="field-label">Client Secret</span>
+          <input id="setSwwClientSecret" type="password" class="input mono" autocomplete="off" />
+        </label>
+      </div>
+      <div class="settings-row">
+        <button id="swwTestBtn" class="btn btn-secondary">Test connection</button>
+        <span id="swwTestResult" class="test-result"></span>
+        <label class="check"><input id="setSwwSandbox" type="checkbox" /> Sandbox (Walmart's test host, no real labels)</label>
+        <label class="check"><input id="setSwwDryRun" type="checkbox" /> Dry run, show what would be bought without buying</label>
+      </div>
+      <p class="dlg-note">Ship-from address — printed on every label. Contact name, address, city, state, ZIP and phone are required by Walmart.</p>
+      <div class="grid2">
+        <label class="field"><span class="field-label">Contact name</span><input id="setSwwName" type="text" class="input" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Company (optional)</span><input id="setSwwCompany" type="text" class="input" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Address line 1</span><input id="setSwwAddr1" type="text" class="input" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Address line 2 (optional)</span><input id="setSwwAddr2" type="text" class="input" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">City</span><input id="setSwwCity" type="text" class="input" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">State (2 letters)</span><input id="setSwwState" type="text" class="input mono" maxlength="2" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">ZIP</span><input id="setSwwZip" type="text" class="input mono" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Phone</span><input id="setSwwPhone" type="text" class="input mono" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Email (optional)</span><input id="setSwwEmail" type="text" class="input mono" autocomplete="off" /></label>
+      </div>
+      <p class="dlg-note">Default box — used for any order whose SKUs have no saved package. Ticking "Remember for this SKU" on a label saves that box for next time.</p>
+      <div class="settings-row">
+        <span class="field-label">Weight (oz)</span>
+        <input id="setSwwWeight" type="number" min="0.1" step="0.1" class="input input-time mono" />
+        <span class="field-label">L × W × H (in)</span>
+        <input id="setSwwL" type="number" min="0.1" step="0.1" class="input input-time mono" />
+        <input id="setSwwW" type="number" min="0.1" step="0.1" class="input input-time mono" />
+        <input id="setSwwH" type="number" min="0.1" step="0.1" class="input input-time mono" />
+      </div>
+      <div class="settings-row">
+        <span class="field-label">Recommend</span>
+        <select id="setSwwRule" class="input input-inline">
+          <option value="cheapest-on-time">Cheapest service that meets Walmart's delivery promise</option>
+          <option value="cheapest">Cheapest service, even if late</option>
+        </select>
+        <label class="check"><input id="setSwwSignature" type="checkbox" /> Signature on delivery (adds the carrier fee)</label>
+      </div>
+      <div class="settings-row">
+        <span class="field-label">Label printer</span>
+        <select id="setSwwPrinter" class="input input-inline">
+          <option value="">Windows default printer</option>
+        </select>
+        <label class="check"><input id="setSwwAutoPrint" type="checkbox" /> Print as soon as a label is bought</label>
+      </div>
+      <div class="settings-row">
+        <span class="field-label">SumatraPDF (optional, silent PDF printing)</span>
+        <span id="setSwwSumatra" class="test-result mono"></span>
+        <button id="swwSumatraBtn" class="btn btn-ghost">Pick SumatraPDF.exe</button>
+        <button id="swwSumatraClearBtn" class="btn btn-ghost">Clear</button>
+        <button id="swwLabelsFolderBtn" class="btn btn-ghost">Open labels folder</button>
+      </div>
+      <p class="dlg-note">Without SumatraPDF the PNG label prints from a hidden 4×6 page, which works on every thermal printer; SumatraPDF prints the carrier's own PDF. Labels are kept under the CSV folder in <span class="mono">labels\</span> so reprints never re-buy.</p>
+      <div class="settings-row">
+        <label class="check"><input id="setSwwMarkShipped" type="checkbox" /> Also mark the order shipped on Walmart the moment the label is bought</label>
+      </div>
+      <p class="dlg-note">Leave this off: Process → Linnworks already tells Walmart the tracking. Turn it on only if a live test shows Walmart not picking the tracking up from Linnworks.</p>
+
       <h3 class="dlg-section">Sync</h3>
       <div class="settings-row">
         <label class="check"><input id="setDryRun" type="checkbox" /> Dry run, log actions without writing to Linnworks</label>
@@ -908,6 +980,20 @@
       <div id="syncDialogList" class="sync-list"></div>
       <div class="dlg-actions">
         <button id="syncDialogClose" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Ship with Walmart: one order (pick the service, confirm, buy + print)
+       or the bulk review (every quoted Walmart row with its pick and price) -->
+  <dialog id="swwDialog" class="dlg dlg-wide sww-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="swwDialogTitle">Buy shipping label</h2>
+      <div id="swwDialogBody" class="sww-body"></div>
+      <div class="dlg-actions sww-actions">
+        <span id="swwDialogStatus" class="test-result"></span>
+        <button id="swwDialogCancel" class="btn btn-ghost">Cancel</button>
+        <button id="swwDialogBuy" class="btn btn-primary">Buy label</button>
       </div>
     </div>
   </dialog>

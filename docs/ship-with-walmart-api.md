@@ -1,5 +1,12 @@
 # Ship with Walmart via API — study and integration design
 
+Status 2026-09-25: **implemented** in v1.29.0 as `src/main/walmart.js` (API
+client) + `src/main/sww.js` (quotes, buy, bulk, void, print), `labels` and
+`package_profiles` tables in `db.js`, the `sww` config block, the quote chip
+and buy dialogs on the Capture page, and Settings > Ship with Walmart. The
+headless smoke test used during the build lives outside the repo; the
+first live order (dry run off, one label) is still the acceptance test.
+
 Date: 2026-09-25 (schemas verified against developer.walmart.com the same
 day). Question: can Capture Station buy Ship with Walmart (SWW) labels
 through the Walmart Marketplace API instead of the packer printing each

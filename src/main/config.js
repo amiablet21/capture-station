@@ -8,12 +8,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const SECRET_FIELDS = ['applicationId', 'applicationSecret', 'token'];
+// Walmart API key (Ship with Walmart) gets the same treatment: `swwEnc`
+const SWW_SECRET_FIELDS = ['clientId', 'clientSecret'];
 
-function encryptCreds(linnworks) {
+function encryptCreds(linnworks, fields = SECRET_FIELDS) {
   try {
     if (!safeStorage.isEncryptionAvailable()) return null;
     const secrets = {};
-    for (const f of SECRET_FIELDS) secrets[f] = linnworks[f] || '';
+    for (const f of fields) secrets[f] = (linnworks || {})[f] || '';
     return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
   } catch {
     return null;
@@ -54,6 +56,32 @@ const DEFAULTS = {
     locationName: '',
   },
   dryRun: true,
+  // Ship with Walmart through the Marketplace API (src/main/sww.js): the
+  // Capture page quotes every open Walmart order and buys + prints the
+  // label on click (or in bulk). Off until the API key is entered.
+  // serviceRule: 'cheapest' | 'cheapest-on-time' | an exact service name
+  // (e.g. USPS_GROUND_ADVANTAGE). dryRun logs the label it WOULD buy.
+  // printer: '' = the OS default. sumatraPath: optional SumatraPDF.exe for
+  // silent PDF printing; without it the PNG label prints from a hidden window.
+  sww: {
+    enabled: false,
+    dryRun: true,
+    sandbox: false,
+    clientId: '',
+    clientSecret: '',
+    fromAddress: {
+      contactName: '', companyName: '', addressLine1: '', addressLine2: '',
+      city: '', state: '', postalCode: '', country: 'US', phone: '', email: '',
+    },
+    defaultPackage: { type: 'CUSTOM_PACKAGE', weightOz: 16, l: 10, w: 8, h: 4 },
+    serviceRule: 'cheapest-on-time',
+    carriers: ['USPS', 'FedEx'],
+    signature: false,
+    printer: '',
+    sumatraPath: '',
+    autoPrint: true,
+    markShippedOnLabel: false,
+  },
   // Route open orders the primary location can't cover to a fallback
   // (dropship) location; move them back when the primary is replenished.
   stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },
@@ -213,6 +241,11 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  if (stored.swwEnc) {
+    const secrets = decryptCreds(stored.swwEnc);
+    if (secrets) stored.sww = { ...(stored.sww || {}), ...secrets };
+    delete stored.swwEnc;
+  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -275,6 +308,11 @@ function save(patch) {
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
+  const swwEnc = encryptCreds(cfg.sww, SWW_SECRET_FIELDS);
+  if (swwEnc) {
+    persisted.swwEnc = swwEnc;
+    for (const f of SWW_SECRET_FIELDS) persisted.sww[f] = '';
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

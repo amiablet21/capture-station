@@ -202,14 +202,17 @@ function statusTitle(row) {
 
 function trackingCell(row) {
   if (!row.tracking) {
+    // Ship with Walmart: the recommended service + price sits first; the
+    // scan / add-tracking path stays for labels bought elsewhere
+    const chip = swwQuoteChip(row);
     if (state && row.id === state.currentRowId) {
-      return '<input id="rowScanInput" class="row-scan-input mono" type="text" placeholder="Scan tracking…" autocomplete="off" spellcheck="false" />'
+      return chip + '<input id="rowScanInput" class="row-scan-input mono" type="text" placeholder="Scan tracking…" autocomplete="off" spellcheck="false" />'
         + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking (Esc)">✕</button>';
     }
-    return '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
+    return chip + '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
-  return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>`;
+  return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>${swwLabelBadge(row)}`;
 }
 
 function notesCell(row) {
@@ -406,6 +409,11 @@ function render() {
     chipBar.hidden = true;
     channelFilter = 'all';
   }
+  // Ship with Walmart bulk buy: every Walmart row with a live quote
+  const bulkIds = swwBulkIds();
+  $('swwBulkBtn').hidden = activePage !== 'capture' || capHist.on || bulkIds.length === 0;
+  $('swwBulkBtn').textContent = `Buy labels · ${bulkIds.length}`;
+  $('swwBulkBtn').disabled = !!(state.sww && state.sww.bulkRunning);
   // one-click cleanup for rows whose orders already left Linnworks' open book
   const failedGone = state.rows.filter(r =>
     r.status === 'failed' && String(r.fail_reason || '').startsWith('Not found in open orders')).length;
@@ -515,6 +523,7 @@ function render() {
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
+          ${swwRowActions(row)}
           <button class="btn-icon" data-act="edit" title="Edit / add notes">${ICONS.pencil}</button>
           <button class="btn-icon is-danger" data-act="del" title="Delete">${ICONS.trash}</button>
         </span>
@@ -1001,6 +1010,23 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (btn.dataset.act === 'moveback' || btn.dataset.act === 'movedropship') {
     return;
   }
+  // Ship with Walmart: confirm + buy, retry a quote, reprint, void
+  if (btn.dataset.act === 'label') { openSwwDialog(row); return; }
+  if (btn.dataset.act === 'requote') { swwRequote(row); return; }
+  if (btn.dataset.act === 'reprint') {
+    btn.disabled = true;
+    const r = await api.swwReprint(id);
+    toast(r.ok ? `Label for ${row.order_number} sent to the printer` : `Print failed: ${r.error}`, 3500);
+    btn.disabled = false;
+    return;
+  }
+  if (btn.dataset.act === 'void') {
+    if (!confirm(`Void the Ship with Walmart label for ${row.order_number}?\n\nWalmart cancels the label (no charge) and the tracking is cleared from this row.`)) return;
+    const r = await api.swwVoid(id);
+    toast(r.ok ? r.message : `Void failed: ${r.error}`, 4000);
+    await refresh();
+    return;
+  }
   if (btn.dataset.act === 'open') {
     await api.reopenRow(id);
     await refresh();
@@ -1188,8 +1214,111 @@ async function openSettings() {
   $('setPinClear').checked = false;
   $('testConnResult').textContent = '';
   $('testConnResult').className = 'test-result';
+  fillSwwSettings(cfg);
   $('settingsDialog').showModal();
 }
+
+/* ---------- Ship with Walmart settings ---------- */
+
+function fillSwwSettings(cfg) {
+  const sw = cfg.sww || {};
+  const fa = sw.fromAddress || {};
+  const dp = sw.defaultPackage || {};
+  $('setSwwEnabled').checked = !!sw.enabled;
+  $('setSwwClientId').value = sw.clientId || '';
+  $('setSwwClientSecret').value = sw.clientSecret || '';
+  $('setSwwSandbox').checked = !!sw.sandbox;
+  $('setSwwDryRun').checked = sw.dryRun !== false;
+  $('setSwwName').value = fa.contactName || '';
+  $('setSwwCompany').value = fa.companyName || '';
+  $('setSwwAddr1').value = fa.addressLine1 || '';
+  $('setSwwAddr2').value = fa.addressLine2 || '';
+  $('setSwwCity').value = fa.city || '';
+  $('setSwwState').value = fa.state || '';
+  $('setSwwZip').value = fa.postalCode || '';
+  $('setSwwPhone').value = fa.phone || '';
+  $('setSwwEmail').value = fa.email || '';
+  $('setSwwWeight').value = String(dp.weightOz || 16);
+  $('setSwwL').value = String(dp.l || 10);
+  $('setSwwW').value = String(dp.w || 8);
+  $('setSwwH').value = String(dp.h || 4);
+  $('setSwwRule').value = sw.serviceRule === 'cheapest' ? 'cheapest' : 'cheapest-on-time';
+  $('setSwwSignature').checked = !!sw.signature;
+  $('setSwwAutoPrint').checked = sw.autoPrint !== false;
+  $('setSwwMarkShipped').checked = !!sw.markShippedOnLabel;
+  $('setSwwSumatra').textContent = sw.sumatraPath || 'not set — the PNG label prints from a hidden 4×6 page';
+  $('swwTestResult').textContent = '';
+  $('swwTestResult').className = 'test-result';
+  const psel = $('setSwwPrinter');
+  psel.innerHTML = `<option value="">Windows default printer</option>${sw.printer ? `<option value="${esc(sw.printer)}">${esc(sw.printer)}</option>` : ''}`;
+  psel.value = sw.printer || '';
+  api.swwPrinters().then(list => {
+    if (!Array.isArray(list) || !list.length) return;
+    const cur = psel.value;
+    psel.innerHTML = '<option value="">Windows default printer</option>'
+      + list.map(p => `<option value="${esc(p.name)}">${esc(p.name)}${p.isDefault ? ' (default)' : ''}</option>`).join('');
+    if (cur && !list.some(p => p.name === cur)) psel.innerHTML += `<option value="${esc(cur)}">${esc(cur)} (not found)</option>`;
+    psel.value = cur;
+  }).catch(() => { /* printers are a convenience */ });
+}
+
+function swwSettingsPatch() {
+  const num = (id, d) => { const n = parseFloat($(id).value); return n > 0 ? Math.round(n * 100) / 100 : d; };
+  return {
+    enabled: $('setSwwEnabled').checked,
+    dryRun: $('setSwwDryRun').checked,
+    sandbox: $('setSwwSandbox').checked,
+    clientId: $('setSwwClientId').value.trim(),
+    clientSecret: $('setSwwClientSecret').value.trim(),
+    fromAddress: {
+      contactName: $('setSwwName').value.trim(),
+      companyName: $('setSwwCompany').value.trim(),
+      addressLine1: $('setSwwAddr1').value.trim(),
+      addressLine2: $('setSwwAddr2').value.trim(),
+      city: $('setSwwCity').value.trim(),
+      state: $('setSwwState').value.trim().toUpperCase(),
+      postalCode: $('setSwwZip').value.trim(),
+      country: 'US',
+      phone: $('setSwwPhone').value.trim(),
+      email: $('setSwwEmail').value.trim(),
+    },
+    defaultPackage: { type: 'CUSTOM_PACKAGE', weightOz: num('setSwwWeight', 16), l: num('setSwwL', 10), w: num('setSwwW', 8), h: num('setSwwH', 4) },
+    serviceRule: $('setSwwRule').value === 'cheapest' ? 'cheapest' : 'cheapest-on-time',
+    signature: $('setSwwSignature').checked,
+    printer: $('setSwwPrinter').value,
+    autoPrint: $('setSwwAutoPrint').checked,
+    markShippedOnLabel: $('setSwwMarkShipped').checked,
+  };
+}
+
+$('swwTestBtn').addEventListener('click', async () => {
+  const out = $('swwTestResult');
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.swwTest({
+    clientId: $('setSwwClientId').value.trim(),
+    clientSecret: $('setSwwClientSecret').value.trim(),
+    sandbox: $('setSwwSandbox').checked,
+  });
+  if (!res.ok) { out.textContent = res.error; out.classList.add('is-fail'); return; }
+  const names = (res.carriers || []).map(c => c.name || c.shortName).join(', ');
+  out.textContent = `Connected${res.sandbox ? ' (sandbox)' : ''}: ${names || 'no carriers listed'}`;
+  out.classList.add('is-ok');
+});
+
+$('swwSumatraBtn').addEventListener('click', async () => {
+  const res = await api.swwPickSumatra();
+  if (!res.ok) return;
+  await api.setConfig({ sww: { sumatraPath: res.path } });
+  $('setSwwSumatra').textContent = res.path;
+});
+
+$('swwSumatraClearBtn').addEventListener('click', async () => {
+  await api.setConfig({ sww: { sumatraPath: '' } });
+  $('setSwwSumatra').textContent = 'not set — the PNG label prints from a hidden 4×6 page';
+});
+
+$('swwLabelsFolderBtn').addEventListener('click', () => api.swwOpenLabelsFolder());
 
 $('settingsBtn').addEventListener('click', openSettings);
 
@@ -1289,6 +1418,7 @@ $('settingsSave').addEventListener('click', async () => {
     },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
+    sww: swwSettingsPatch(),
   });
   $('settingsDialog').close();
   await refresh();
@@ -11035,4 +11165,358 @@ $("tmExport").addEventListener("click", async () => {
   tmCur = null;
   renderTmQueue();
   renderTmForm();
+});
+
+/* ---------- Ship with Walmart (owner 2026-09-25) ----------
+   Every open Walmart row is quoted in the background; the tracking cell
+   shows the recommended service + price as a chip. Click = confirm / pick
+   another service / adjust the box, buy, print. "Buy labels" in the band
+   does the same for the whole list after a review table. Tracking lands
+   on the row through the same path a scan takes. */
+
+function swwMoney(v) { return Number.isFinite(v) ? `$${v.toFixed(2)}` : ''; }
+
+function swwDay(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+}
+
+function swwRateOf(q, name) {
+  if (!q || !q.rates || !q.rates.length) return null;
+  return q.rates.find(r => r.name === name) || q.rates.find(r => r.name === q.pick) || q.rates[0];
+}
+
+function swwRowQuote(row) {
+  const s = state && state.sww;
+  if (!s || !s.enabled) return null;
+  return s.quotes[row.id] || null;
+}
+
+function swwEligible(row) {
+  return !!state && !!state.sww && state.sww.enabled && row.channel === 'walmart' && !row.tracking && row.status !== 'synced';
+}
+
+// the chip in the tracking cell
+function swwQuoteChip(row) {
+  if (!swwEligible(row)) return '';
+  const s = state.sww;
+  const q = s.quotes[row.id];
+  if (!q) {
+    return s.quoting
+      ? '<span class="sww-chip is-busy" title="Getting Walmart rates…">Quoting…</span>'
+      : '<button class="sww-chip is-idle" data-act="requote" title="Get Ship with Walmart rates for this order">Quote label</button>';
+  }
+  if (q.busy && !(q.rates && q.rates.length)) return '<span class="sww-chip is-busy" title="Getting Walmart rates…">Quoting…</span>';
+  if (q.error && !(q.rates && q.rates.length)) {
+    return `<button class="sww-chip is-err" data-act="requote" title="${esc(q.error)}&#10;Click to retry">No rate · retry</button>`;
+  }
+  const pick = swwRateOf(q, q.pick);
+  const others = q.rates.length - 1;
+  const lines = [
+    `${pick.carrierName} ${pick.displayName} · ${swwMoney(pick.amount)}${pick.deliveryDate ? ` · arrives ${swwDay(pick.deliveryDate)}` : ''}${pick.onTime ? '' : ' · LATE for Walmart\'s promise'}`,
+    `${q.pkg ? `${q.pkg.weightOz} oz · ${q.pkg.l}×${q.pkg.w}×${q.pkg.h} in${q.pkg.source === 'profile' ? ' (saved for this SKU)' : ' (default box)'}` : ''}`,
+    `${others ? `${others} other service${others === 1 ? '' : 's'} · ` : ''}Click to confirm and buy${s.dryRun ? ' (dry run: nothing is bought)' : ''}`,
+  ].filter(Boolean).join('\n');
+  return `<button class="sww-chip${pick.onTime ? '' : ' is-late'}${q.stale ? ' is-stale' : ''}" data-act="label" title="${esc(lines)}">`
+    + `<span class="sww-chip-svc">${esc(pick.displayName)}</span><span class="sww-chip-price">${swwMoney(pick.amount)}</span><span class="sww-chip-buy">${s.dryRun ? 'Dry run' : 'Buy'}</span></button>`;
+}
+
+function swwLabelBadge(row) {
+  const s = state && state.sww;
+  const l = s && s.enabled && s.labels ? s.labels[row.id] : null;
+  if (!l || l.tracking !== row.tracking) return '';
+  const cost = Number.isFinite(l.cost_cents) ? swwMoney(l.cost_cents / 100) : '';
+  const bits = ['Ship with Walmart label', l.service_name || l.service, cost, l.status === 'printed' ? 'printed' : '', l.error || ''].filter(Boolean);
+  return `<span class="sww-badge${l.error ? ' is-warn' : ''}" title="${esc(bits.join(' · '))}">SWW</span>`;
+}
+
+function swwRowActions(row) {
+  const s = state && state.sww;
+  const l = s && s.enabled && s.labels ? s.labels[row.id] : null;
+  if (!l || l.tracking !== row.tracking) return '';
+  const print = `<button class="btn-icon" data-act="reprint" title="Print this label again (no re-buy)">${ICONS.print}</button>`;
+  const voidBtn = row.status !== 'synced'
+    ? `<button class="btn-icon" data-act="void" title="Void this label — Walmart cancels it (no charge) and the tracking is cleared">${ICONS.void}</button>` : '';
+  return print + voidBtn;
+}
+
+ICONS.print = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M214,80H196V40a12,12,0,0,0-12-12H72A12,12,0,0,0,60,40V80H42A26,26,0,0,0,16,106v66a26,26,0,0,0,26,26H60v18a12,12,0,0,0,12,12H184a12,12,0,0,0,12-12V198h18a26,26,0,0,0,26-26V106A26,26,0,0,0,214,80ZM84,52h88V80H84ZM172,204H84V164h88Zm44-32a2,2,0,0,1-2,2H196V152a12,12,0,0,0-12-12H72a12,12,0,0,0-12,12v22H42a2,2,0,0,1-2-2V106a2,2,0,0,1,2-2H214a2,2,0,0,1,2,2Z"/></svg>';
+ICONS.void = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,184a80,80,0,0,1-63.4-31.1L176.9,64.6A80,80,0,0,1,128,208ZM79.1,191.4,191.4,79.1A80,80,0,0,0,79.1,191.4Z" transform="translate(0 0)"/><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,184a80,80,0,1,1,80-80A80.09,80.09,0,0,1,128,208Zm40-97.4L145.4,133,168,155.6a12,12,0,0,1-17,17L128.4,150,105.8,172.6a12,12,0,0,1-17-17L111.4,133,88.8,110.4a12,12,0,0,1,17-17l22.6,22.6L151,93.4a12,12,0,0,1,17,17Z"/></svg>';
+
+function swwBulkIds() {
+  if (!state || !state.sww || !state.sww.enabled) return [];
+  return state.rows
+    .filter(r => swwEligible(r) && (channelFilter === 'all' || r.channel === channelFilter))
+    .filter(r => { const q = state.sww.quotes[r.id]; return q && !q.busy && q.rates && q.rates.length; })
+    .map(r => r.id);
+}
+
+async function swwRequote(row, pkg) {
+  const res = await api.swwQuote(row.id, true, pkg || null);
+  if (!res.ok && res.error) toast(`Quote failed: ${res.error}`, 4000);
+  return res;
+}
+
+/* ---------- the dialog: one order, or the bulk review ---------- */
+
+let swwDlg = null;
+
+function swwItemsText(row) {
+  const m = metaFor(row);
+  const items = (m && m.items && m.items.length) ? m.items : (row.items || []);
+  return items.map(i => `${i.sku || i.channelSku || i.title || '?'}${i.qty > 1 ? ` ×${i.qty}` : ''}`).join(', ');
+}
+
+function swwSingleSku(row) {
+  const items = Array.isArray(row.items) ? row.items : [];
+  return items.length === 1 && (Number(items[0].qty) || 1) === 1 ? items[0].sku : '';
+}
+
+function openSwwDialog(row) {
+  const q = swwRowQuote(row);
+  swwDlg = {
+    mode: 'single', rowId: row.id, po: row.order_number,
+    service: q && q.pick, signature: !!state.sww.signature,
+    pkg: q && q.pkg ? { ...q.pkg } : null, remember: false, busy: false,
+  };
+  renderSwwDialog();
+  $('swwDialog').showModal();
+}
+
+function openSwwBulk() {
+  const ids = swwBulkIds();
+  if (!ids.length) { toast('No quoted Walmart orders in the list.'); return; }
+  const choices = {};
+  for (const id of ids) {
+    const q = state.sww.quotes[id];
+    choices[id] = { on: true, service: q.pick, signature: !!state.sww.signature };
+  }
+  swwDlg = { mode: 'bulk', ids, choices, running: false, results: {}, progress: null, done: null };
+  renderSwwDialog();
+  $('swwDialog').showModal();
+}
+
+function swwRateHtml(r, selected, sig, pick) {
+  const sigFee = sig ? (r.addOns || []).find(a => a.name === 'SIGNATURE') : null;
+  const price = r.amount + (sigFee ? sigFee.amount : 0);
+  return `<label class="sww-rate ${selected ? 'is-sel' : ''}">
+    <input type="radio" name="swwRate" value="${esc(r.name)}" ${selected ? 'checked' : ''} />
+    <span><b>${esc(r.carrierName)}</b> ${esc(r.displayName)}${r.name === pick ? '<span class="sww-rate-rec">RECOMMENDED</span>' : ''}${r.onTime ? '' : '<span class="sww-rate-late">late for the promise</span>'}</span>
+    <span class="sww-rate-when">${r.deliveryDate ? `arrives ${esc(swwDay(r.deliveryDate))}` : ''}</span>
+    <span class="sww-rate-price">${swwMoney(price)}</span>
+  </label>`;
+}
+
+function renderSwwDialog() {
+  if (!swwDlg) return;
+  const body = $('swwDialogBody');
+  const buy = $('swwDialogBuy');
+  const status = $('swwDialogStatus');
+  const dry = !!(state.sww && state.sww.dryRun);
+  if (swwDlg.mode === 'single') {
+    const row = state.rows.find(r => r.id === swwDlg.rowId);
+    const q = row ? swwRowQuote(row) : null;
+    $('swwDialogTitle').textContent = `Buy shipping label · ${swwDlg.po}`;
+    if (!row) { body.innerHTML = '<p class="dlg-note">This order left the list.</p>'; buy.disabled = true; return; }
+    const pkg = swwDlg.pkg || (q && q.pkg) || {};
+    const single = swwSingleSku(row);
+    const rates = (q && q.rates) || [];
+    const sel = rates.length ? swwRateOf(q, swwDlg.service) : null;
+    if (sel) swwDlg.service = sel.name;
+    const sigFee = sel && swwDlg.signature ? (sel.addOns || []).find(a => a.name === 'SIGNATURE') : null;
+    const total = sel ? sel.amount + (sigFee ? sigFee.amount : 0) : NaN;
+    const sigAvail = rates.some(r => (r.addOns || []).some(a => a.name === 'SIGNATURE'));
+    body.innerHTML = `
+      <div class="sww-head">
+        <span>Items: <b>${esc(swwItemsText(row) || '—')}</b></span>
+        ${q && q.shipToName ? `<span>Ship to: <b>${esc(q.shipToName)}</b> · ${esc(q.shipToCity)}</span>` : ''}
+        ${q && q.deliverBy ? `<span>Walmart promises delivery by <b>${esc(swwDay(q.deliverBy))}</b>${q.methodCode ? ` (${esc(q.methodCode)})` : ''}</span>` : ''}
+      </div>
+      <div class="sww-pkg">
+        <span class="field-label">Box</span>
+        <input id="swwPkgW" class="input mono" type="number" min="0.1" step="0.1" value="${esc(String(pkg.weightOz || ''))}" title="Weight in ounces" /> oz ·
+        <input id="swwPkgL" class="input mono" type="number" min="0.1" step="0.1" value="${esc(String(pkg.l || ''))}" title="Length (in)" /> ×
+        <input id="swwPkgWd" class="input mono" type="number" min="0.1" step="0.1" value="${esc(String(pkg.w || ''))}" title="Width (in)" /> ×
+        <input id="swwPkgH" class="input mono" type="number" min="0.1" step="0.1" value="${esc(String(pkg.h || ''))}" title="Height (in)" /> in
+        <button id="swwRequoteBtn" class="btn btn-ghost" type="button" title="Get fresh rates for this box">Requote</button>
+        <span class="sww-dim">${pkg.source === 'profile' ? 'saved box for this SKU' : pkg.source === 'edited' ? 'edited' : 'default box'}</span>
+        ${single ? `<label class="check"><input id="swwRemember" type="checkbox" ${swwDlg.remember ? 'checked' : ''} /> Remember this box for ${esc(single)}</label>` : ''}
+      </div>
+      <div class="sww-rates">
+        ${q && q.busy ? '<p class="dlg-note">Getting rates…</p>' : ''}
+        ${q && q.error && !rates.length ? `<p class="dlg-note sww-err">${esc(q.error)}</p>` : ''}
+        ${rates.slice().sort((a, b) => a.amount - b.amount).map(r => swwRateHtml(r, sel && r.name === sel.name, swwDlg.signature, q.pick)).join('')}
+        ${q && q.alert && !rates.some(r => r.onTime) ? `<p class="dlg-note">${esc(q.alert)}</p>` : ''}
+      </div>
+      ${sigAvail ? `<div class="settings-row"><label class="check"><input id="swwSig" type="checkbox" ${swwDlg.signature ? 'checked' : ''} /> Signature on delivery${sigFee ? ` (+${swwMoney(sigFee.amount)})` : ''}</label></div>` : ''}`;
+    buy.textContent = dry ? `Dry run${sel ? ` · ${swwMoney(total)}` : ''}` : `Buy${sel ? ` · ${swwMoney(total)}` : ' label'}`;
+    buy.disabled = !sel || swwDlg.busy;
+    status.textContent = swwDlg.status || '';
+    status.className = `test-result${swwDlg.statusFail ? ' is-fail' : ''}`;
+    $('swwDialogCancel').textContent = 'Cancel';
+    return;
+  }
+  // bulk review
+  const ids = swwDlg.ids;
+  const on = ids.filter(id => swwDlg.choices[id] && swwDlg.choices[id].on);
+  let total = 0;
+  const rowsHtml = ids.map(id => {
+    const row = state.rows.find(r => r.id === id);
+    const q = state.sww.quotes[id];
+    const c = swwDlg.choices[id];
+    const res = swwDlg.results[id];
+    if (!row) return '';
+    const rates = (q && q.rates) ? q.rates.slice().sort((a, b) => a.amount - b.amount) : [];
+    const sel = rates.length ? swwRateOf(q, c.service) : null;
+    if (sel) c.service = sel.name;
+    const sigFee = sel && c.signature ? (sel.addOns || []).find(a => a.name === 'SIGNATURE') : null;
+    const price = sel ? sel.amount + (sigFee ? sigFee.amount : 0) : NaN;
+    if (c.on && sel && !res) total += price;
+    const resHtml = res
+      ? (res.ok ? `<span class="sww-res-ok">✓ ${esc(res.dryRun ? 'dry run' : (res.tracking || 'bought'))}${res.printed === false ? ' · print failed' : ''}</span>` : `<span class="sww-res-fail">✗ ${esc(res.message)}</span>`)
+      : '';
+    return `<tr data-id="${id}" class="${c.on ? '' : 'is-off'}">
+      <td><input type="checkbox" class="sww-on" ${c.on ? 'checked' : ''} ${swwDlg.running || res ? 'disabled' : ''} /></td>
+      <td class="mono">${esc(row.order_number)}</td>
+      <td class="sww-items">${esc(swwItemsText(row) || '—')}</td>
+      <td>${rates.length ? `<select class="input sww-svc" ${swwDlg.running || res ? 'disabled' : ''}>${rates.map(r => `<option value="${esc(r.name)}" ${sel && r.name === sel.name ? 'selected' : ''}>${esc(r.carrierName)} ${esc(r.displayName)}${r.name === q.pick ? ' ★' : ''}${r.onTime ? '' : ' (late)'} — ${swwMoney(r.amount)}</option>`).join('')}</select>` : '<span class="sww-err">no rate</span>'}</td>
+      <td class="sww-when">${sel && sel.deliveryDate ? esc(swwDay(sel.deliveryDate)) : ''}</td>
+      <td class="price">${sel ? swwMoney(price) : ''}</td>
+      <td class="sww-res">${resHtml}</td>
+    </tr>`;
+  }).join('');
+  $('swwDialogTitle').textContent = `Buy labels · ${ids.length} Walmart order${ids.length === 1 ? '' : 's'}`;
+  body.innerHTML = `
+    <p class="dlg-note">★ = recommended by your rule. Change a service in its dropdown, untick anything to leave for later. ${dry ? '<b>Dry run is on: nothing is bought.</b>' : 'Each label is bought and printed in turn.'}</p>
+    <table class="sww-table">
+      <thead><tr><th></th><th>PO#</th><th>Items</th><th>Service</th><th>Arrives</th><th class="price">Price</th><th></th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="sww-total"><span>${on.length} selected</span><span>${swwMoney(total)}</span></div>`;
+  if (swwDlg.done) {
+    const d = swwDlg.done;
+    status.textContent = d.dryRun ? `Dry run: ${d.results.filter(r => r.ok).length} would be bought, ${d.failed} failed` : `${d.bought} bought · ${d.failed} failed · ${d.totalCost}`;
+    status.className = `test-result${d.failed ? ' is-fail' : ' is-ok'}`;
+    buy.hidden = true;
+    $('swwDialogCancel').textContent = 'Close';
+  } else if (swwDlg.running) {
+    const p = swwDlg.progress;
+    status.textContent = p ? `Buying ${p.current}/${p.total}: ${p.po}` : 'Starting…';
+    status.className = 'test-result';
+    buy.disabled = true;
+    buy.textContent = 'Buying…';
+    $('swwDialogCancel').textContent = 'Close';
+  } else {
+    status.textContent = '';
+    status.className = 'test-result';
+    buy.hidden = false;
+    buy.disabled = on.length === 0;
+    buy.textContent = dry ? `Dry run · ${on.length}` : `Buy ${on.length} label${on.length === 1 ? '' : 's'} · ${swwMoney(total)}`;
+    $('swwDialogCancel').textContent = 'Cancel';
+  }
+}
+
+function swwReadPkg() {
+  const n = (id) => parseFloat($(id).value);
+  const pkg = { weightOz: n('swwPkgW'), l: n('swwPkgL'), w: n('swwPkgWd'), h: n('swwPkgH'), type: 'CUSTOM_PACKAGE', source: 'edited' };
+  if (![pkg.weightOz, pkg.l, pkg.w, pkg.h].every(v => v > 0)) return null;
+  return pkg;
+}
+
+$('swwDialogBody').addEventListener('change', (e) => {
+  if (!swwDlg) return;
+  if (swwDlg.mode === 'single') {
+    if (e.target.name === 'swwRate') { swwDlg.service = e.target.value; renderSwwDialog(); }
+    else if (e.target.id === 'swwSig') { swwDlg.signature = e.target.checked; renderSwwDialog(); }
+    else if (e.target.id === 'swwRemember') { swwDlg.remember = e.target.checked; }
+    else if (/^swwPkg/.test(e.target.id)) { const p = swwReadPkg(); if (p) swwDlg.pkg = p; }
+    return;
+  }
+  const tr = e.target.closest('tr[data-id]');
+  if (!tr) return;
+  const c = swwDlg.choices[Number(tr.dataset.id)];
+  if (!c) return;
+  if (e.target.classList.contains('sww-on')) c.on = e.target.checked;
+  if (e.target.classList.contains('sww-svc')) c.service = e.target.value;
+  renderSwwDialog();
+});
+
+$('swwDialogBody').addEventListener('click', async (e) => {
+  if (!swwDlg || swwDlg.mode !== 'single') return;
+  if (e.target.id !== 'swwRequoteBtn') return;
+  const pkg = swwReadPkg();
+  if (!pkg) { swwDlg.status = 'Weight and all three box sides must be above zero.'; swwDlg.statusFail = true; renderSwwDialog(); return; }
+  swwDlg.pkg = pkg;
+  swwDlg.busy = true; swwDlg.status = 'Getting rates…'; swwDlg.statusFail = false;
+  renderSwwDialog();
+  const row = state.rows.find(r => r.id === swwDlg.rowId);
+  const res = row ? await api.swwQuote(row.id, true, pkg) : { ok: false, error: 'Row gone' };
+  if (!swwDlg || swwDlg.mode !== 'single') return;
+  swwDlg.busy = false;
+  swwDlg.status = res.ok ? '' : res.error;
+  swwDlg.statusFail = !res.ok;
+  if (res.ok && res.quote) { state.sww.quotes[row.id] = res.quote; swwDlg.pkg = { ...res.quote.pkg, source: 'edited' }; swwDlg.service = res.quote.pick; }
+  renderSwwDialog();
+});
+
+$('swwDialogBuy').addEventListener('click', async () => {
+  if (!swwDlg) return;
+  if (swwDlg.mode === 'single') {
+    const row = state.rows.find(r => r.id === swwDlg.rowId);
+    if (!row) return;
+    const pkg = swwReadPkg() || swwDlg.pkg;
+    swwDlg.busy = true; swwDlg.status = state.sww.dryRun ? 'Dry run…' : 'Buying the label…'; swwDlg.statusFail = false;
+    renderSwwDialog();
+    const remember = swwDlg.remember && swwSingleSku(row);
+    const res = await api.swwBuy({ rowId: row.id, service: swwDlg.service, pkg, signature: swwDlg.signature });
+    if (!swwDlg || swwDlg.mode !== 'single') return;
+    if (!res.ok) {
+      swwDlg.busy = false; swwDlg.status = res.error || 'Failed'; swwDlg.statusFail = true;
+      renderSwwDialog();
+      return;
+    }
+    if (remember && pkg) api.swwProfileSet(remember, pkg).catch(() => { /* convenience */ });
+    swwDlg = null;
+    $('swwDialog').close();
+    toast(res.dryRun ? res.message : `Label bought for ${row.order_number}: ${res.message}`, 5000);
+    await refresh();
+    return;
+  }
+  // bulk
+  const ids = swwDlg.ids.filter(id => swwDlg.choices[id] && swwDlg.choices[id].on);
+  if (!ids.length) return;
+  const choices = {};
+  for (const id of ids) choices[id] = { service: swwDlg.choices[id].service, signature: swwDlg.choices[id].signature };
+  swwDlg.running = true; swwDlg.results = {}; swwDlg.progress = null;
+  renderSwwDialog();
+  const res = await api.swwBuyBulk(ids, choices);
+  if (!swwDlg || swwDlg.mode !== 'bulk') return;
+  swwDlg.running = false;
+  if (!res.ok) { swwDlg.done = { bought: 0, failed: ids.length, totalCost: '', results: [], dryRun: false }; $('swwDialogStatus').textContent = res.error; }
+  else {
+    for (const r of res.results) swwDlg.results[r.rowId] = r;
+    swwDlg.done = res;
+  }
+  renderSwwDialog();
+  await refresh();
+});
+
+$('swwDialogCancel').addEventListener('click', () => { $('swwDialog').close(); });
+$('swwDialog').addEventListener('close', () => { swwDlg = null; focusScan(); });
+$('swwBulkBtn').addEventListener('click', openSwwBulk);
+
+api.on('sww:quotes', (quotes) => {
+  if (!state || !state.sww) return;
+  state.sww.quotes = quotes || {};
+  if (activePage === 'capture') render();
+  if (swwDlg) renderSwwDialog();
+});
+
+api.on('sww:progress', (p) => {
+  if (!swwDlg || swwDlg.mode !== 'bulk') return;
+  swwDlg.progress = p;
+  if (p.result) swwDlg.results[p.result.rowId] = p.result;
+  renderSwwDialog();
 });
