@@ -1608,7 +1608,7 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .prlh-sum { font-size: 12px; color: var(--muted); }
 .prlh-body { flex: 1 1 auto; min-height: 0; max-height: 62vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
 .prlh-body .prh-r:first-child { border-top: none; }
-.prlh-body .prh-r { grid-template-columns: 110px 1fr 130px; padding: 12px 18px; }
+.prlh-body .prh-r { grid-template-columns: 110px 1fr 170px; padding: 12px 18px; }
 .prlh-body .prh-p { font-size: 16px; }
 .prlh-body .prh-t { font-size: 13px; }
 .prlh-body .prh-w b { font-size: 21px; }
@@ -1620,7 +1620,7 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .prh-ch { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
 .prh-sku { font-size: 12px; font-weight: 600; }
 .prh-rows { max-height: 360px; overflow-y: auto; }
-.prh-r { display: grid; grid-template-columns: 84px 1fr 96px; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #F0EFEB; }
+.prh-r { display: grid; grid-template-columns: 84px 1fr 120px; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #F0EFEB; }
 .prh-r.cur { background: #F4FAF6; }
 .prh-p { font-family: var(--mono); font-size: 14.5px; font-weight: 700; white-space: nowrap; }
 .prh-p small { display: block; font-family: var(--font); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin-top: 2px; }
