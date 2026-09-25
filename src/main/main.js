@@ -1416,8 +1416,101 @@ async function runLowStockCheck(itemsOpt, minIntervalMs = 0) {
   finally { lowStockRunning = false; }
 }
 
+/* ---------- shared capture log (owner 2026-09-25: "show all captured
+   orders from every computer") ----------
+   Each station appends snapshots of its CAPTURED rows (tracking, or past
+   pending) to captures-<STATION>.jsonl in the shared folder - the same
+   own-file-per-station contract as the stock history, so the sync service
+   never conflicts. Only rows whose snapshot changed since the last publish
+   are appended; a row that disappears gets a 'del'. The Capture history
+   folds every station's file. */
+const CAP_PUBLISH_DAYS = 60;
+function capPubPath() { return path.join(app.getPath('userData'), 'captures-published.json'); }
+const capIsCaptured = (r) => !!r && (r.status !== 'pending' || !!r.tracking);
+function capSnap(r) {
+  return {
+    order_number: r.order_number, lw_order_id: r.lw_order_id || '', channel: r.channel, items: r.items || [],
+    tracking: r.tracking || '', carrier: r.carrier || '', notes: r.notes || '', status: r.status,
+    created_at: r.created_at, synced_at: r.synced_at || '', day: r.day,
+    sub_sku: r.sub_sku || '', sub_qty: r.sub_qty || 0, sub_for: r.sub_for || '', sub_note: r.sub_note || '',
+  };
+}
+function publishCaptures() {
+  if (!retsync.enabled()) return;
+  let pub = {};
+  try { pub = JSON.parse(fs.readFileSync(capPubPath(), 'utf8')) || {}; } catch { /* first run: publish everything */ }
+  const from = db.localDay(new Date(Date.now() - CAP_PUBLISH_DAYS * 86400000));
+  const live = new Map(db.rowsInDays(from, '9999-99-99').filter(capIsCaptured).map(r => [String(r.id), r]));
+  const ts = Date.now();
+  let changed = false;
+  for (const [id, r] of live) {
+    const snap = capSnap(r);
+    const sig = JSON.stringify(snap);
+    if (pub[id] === sig) continue;
+    if (!retsync.appendAux('captures', { op: 'put', id: Number(id), ts, row: snap })) return; // folder offline: retry next pass
+    pub[id] = sig;
+    changed = true;
+  }
+  for (const id of Object.keys(pub)) {
+    if (live.has(id)) continue;
+    const r = db.getRow(Number(id));
+    if (r && capIsCaptured(r)) continue; // just aged out of the window - still there
+    if (!retsync.appendAux('captures', { op: 'del', id: Number(id), ts })) return;
+    delete pub[id];
+    changed = true;
+  }
+  if (changed) { try { fs.writeFileSync(capPubPath(), JSON.stringify(pub)); } catch { /* republishes next pass */ } }
+}
+// the other stations' captured rows in a day window: newest event per
+// station:id wins, deletes drop out
+function foreignCaptures(from, to) {
+  if (!retsync.enabled()) return [];
+  const me = retsync.stationName();
+  const last = new Map();
+  for (const e of retsync.readAux('captures')) {
+    if (!e || e.station === me || e.id === undefined) continue;
+    const k = `${e.station}:${e.id}`;
+    const prev = last.get(k);
+    if (!prev || (Number(e.ts) || 0) >= (Number(prev.ts) || 0)) last.set(k, e);
+  }
+  const out = [];
+  for (const e of last.values()) {
+    if (e.op !== 'put' || !e.row) continue;
+    const d = String(e.row.day || '');
+    if (d < from || d > to) continue;
+    out.push({ ...e.row, station: e.station, remote: true });
+  }
+  return out;
+}
+// Capture history: every captured order from every station, processed or
+// not; one row per order (the station that got furthest wins)
+function captureHistoryRange(from, to) {
+  try { publishCaptures(); } catch { /* the view still shows the local rows */ }
+  const f = String(from || '0000-00-00');
+  const t = String(to || '9999-99-99');
+  const me = retsync.stationName() || '';
+  const all = [
+    ...db.rowsInDays(f, t).filter(capIsCaptured).map(r => ({ ...r, station: me })),
+    ...foreignCaptures(f, t),
+  ];
+  const score = (r) => (r.status === 'synced' ? 4 : 0) + (r.tracking ? 2 : 0) + (r.remote ? 0 : 1);
+  const best = new Map();
+  for (const r of all) {
+    const k = `${r.order_number}|${r.lw_order_id || ''}`;
+    const prev = best.get(k);
+    if (!prev || score(r) > score(prev)) best.set(k, r);
+  }
+  let n = 0;
+  return [...best.values()]
+    .map(r => (r.remote ? { ...r, id: -(++n) } : r))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
 function startLowStockWatcher() {
   setTimeout(() => runLowStockCheck(), 15000);
+  // the shared capture log rides the same startup: publish soon, then every 2 min
+  setTimeout(() => { try { publishCaptures(); } catch { /* next pass */ } }, 20000);
+  setInterval(() => { try { publishCaptures(); } catch { /* next pass */ } }, 2 * 60 * 1000);
   setInterval(() => runLowStockCheck(), 15 * 60 * 1000);
 }
 
@@ -2704,7 +2797,7 @@ function registerIpc() {
   });
   ipcMain.handle('debug:get', () => ignoredLog.slice().reverse());
   ipcMain.handle('history:get', () => db.historyRows());
-  ipcMain.handle('history:range', (_e, { from, to } = {}) => db.historyRowsRange(from, to));
+  ipcMain.handle('history:range', (_e, { from, to } = {}) => captureHistoryRange(from, to));
   // Condition SKUs inherit the New listing's photo (owner 2026-09-15):
   // whenever the stock loads, any OPEN-BOX-/USED-/SCRAP- Linnworks item with
   // NO image whose base SKU (the name after the prefix, exact match) has one

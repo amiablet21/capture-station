@@ -698,12 +698,22 @@ function capHistRowHtml(row, num) {
   const itemsHtml = items.map(i => `<span class="item-entry">${img(i.sku)}${esc(i.sku)}${i.qty > 1 ? `<span class="qty-chip" title="${i.qty} units of this item on the order">×${i.qty}</span>` : ''}</span>`).join('')
     + (more.length ? `<span class="item-more" data-tip="${esc(more.map(i => `${i.sku} ×${i.qty}`).join(', '))}">+${more.length} more</span>` : '');
   const when = row.synced_at ? fmtTime(row.synced_at) : '';
-  return `<tr data-id="${row.id}" class="is-hist">
-      <td class="cell-gutter st-synced" title="Processed ${when} · captured ${fmtTime(row.created_at)}">${num}</td>
-      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))} · processed ${when}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
+  // every station's captures (owner 2026-09-25): processed rows green,
+  // captured-but-not-processed amber-ish, failed red; the station tag says
+  // which computer captured it
+  const st = row.status === 'synced' ? 'st-synced' : row.status === 'failed' ? 'st-failed' : 'st-captured';
+  const stWord = row.status === 'synced'
+    ? `<span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>`
+    : row.status === 'failed'
+      ? `<span class="history-status st-failed" title="${esc(row.fail_reason || 'The last sync failed')}">Not processed · failed</span>`
+      : '<span class="history-status st-captured" title="Captured, not pushed to Linnworks yet — Sync on the computer that captured it">Captured · not processed</span>';
+  const pc = row.station ? `<span class="cap-station" title="Captured on ${esc(row.station)}">${esc(row.station)}</span>` : '';
+  return `<tr data-id="${row.id}" class="is-hist${row.status === 'synced' ? '' : ' is-unproc'}">
+      <td class="cell-gutter ${st}" title="${row.status === 'synced' ? `Processed ${when}` : 'Not processed yet'} · captured ${fmtTime(row.created_at)}${row.station ? ` on ${esc(row.station)}` : ''}">${num}</td>
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
-      <td class="cell-notes"><span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
+      <td class="cell-notes">${pc}${stWord}${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
       <td class="cell-actions"></td>
     </tr>`;
 }
@@ -742,7 +752,7 @@ function renderCapHist() {
   const empty = rows.length === 0;
   $('rowsTable').hidden = empty;
   $('rowsEmpty').hidden = !empty;
-  $('rowsEmpty').querySelector('.rows-empty-title').textContent = capHist.busy ? 'Loading…' : (findQuery ? 'No matches' : 'No processed orders in this period');
+  $('rowsEmpty').querySelector('.rows-empty-title').textContent = capHist.busy ? 'Loading…' : (findQuery ? 'No matches' : 'No captured orders in this period');
   $('rowsEmpty').querySelector('.rows-empty-hint').textContent = capHist.busy ? '' : 'Pick a wider date range above, or press Back to today.';
   const today = salesDayKey(new Date().toISOString());
   const yesterday = salesDayKey(new Date(Date.now() - 86400000).toISOString());
@@ -983,7 +993,8 @@ $('rowsBody').addEventListener('click', async (e) => {
   // state.rows — the note is the one thing still editable there
   if (capHist.on && card.classList.contains('is-hist')) {
     const hrow = capHist.rows.find(r => r.id === id);
-    if (hrow && btn.dataset.act === 'note') openNotes(hrow);
+    // another computer's row is read-only here (its own desktop owns it)
+    if (hrow && !hrow.remote && btn.dataset.act === 'note') openNotes(hrow);
     return;
   }
   const row = state.rows.find(r => r.id === id);
