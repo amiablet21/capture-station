@@ -4696,6 +4696,24 @@ th:last-child > .col-grip { right: 0; }
 .ov-wsend:hover { background: var(--accent-hover); }
 .ov-wign { background: var(--surface-2); color: var(--muted); }
 .ov-wign:hover { background: #EFEEEA; color: var(--text); }
+/* K3 (owner pick 2026-09-25, variants/wfs-keys.html), without its icons
+   ("no favicon or emoji"): no left strip - the urgency tints the Left cell;
+   two equal soft-tinted keys in plain type, the second a quiet grey */
+.ov-wrow { grid-template-columns: 1fr 78px; border-radius: 6px; }
+#ovLow .ov-wrow { grid-template-columns: 1fr 64px; }
+.ov-wcells span:nth-child(8).r { background: var(--neg-bg); }
+.ov-wcells span:nth-child(8).a { background: var(--badge-yellow-bg); }
+.ov-wkeys { border-left: 1px solid #E0DED8; }
+.ov-wkeys button { font-family: var(--font); font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.ov-wkeys .ov-wsend { background: #EAF4EE; color: var(--accent); border-bottom: 1px solid #E0DED8 !important; }
+.ov-wkeys .ov-wsend:hover { background: #DCEEE3; }
+.ov-wkeys .ov-wopen { background: #FBF1DC; color: var(--badge-yellow-text); border-bottom: 1px solid #E0DED8 !important; }
+.ov-wkeys .ov-wopen:hover { background: #F6E6C4; }
+.ov-wkeys .ov-wign { background: #F7F6F3; color: var(--muted); font-weight: 500; }
+.ov-wkeys .ov-wign:hover { background: #EFEEEA; color: var(--text); }
+.ov-wkeys button:only-child { border-bottom: none !important; }
+.ov-wfast { font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 11px; font-family: var(--font); }
+#ovLow .ov-wkeys button { letter-spacing: 0; }
 /* under each SKU: the send amount, then the days WFS has left */
 .ov-sendline { display: block; margin-top: 4px; }
 .ov-daysleft { display: block; font-size: 10.5px; margin-top: 3px; color: var(--muted); }
