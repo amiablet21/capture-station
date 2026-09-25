@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Send to WFS — no strip, new Send / Ignore (pick one)</title>
+<!--
+  Owner 2026-09-25: drop the coloured left strip; redesign Send / Ignore
+  ("too terminal-ish ... I like how it fits the corners"). Every idea keeps
+  the keys filling the card's right edge; the urgency moves to the Left
+  cell. Real 400px column width, enlarged 1.35x, on the real styles.css.
+    K1 - soft keys: pale green Send with an arrow, plain Ignore, sans type
+    K2 - solid Send filling the corner, Ignore as a quiet text link under it
+    K3 - icon keys: box icon + Send, eye-off + Ignore, soft tints
+    K4 - one Send key the full height, Ignore as a small ✕ in the SKU line
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; }
+  .wr-page { padding: 20px 28px 40px; }
+  .wr-page h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .wr-page .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 18px; max-width: 900px; }
+  .wr-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 26px 36px; }
+  .wr-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
+  .wr-lbl b { color: var(--text); letter-spacing: .02em; }
+  .wr-note { font-size: 11px; color: var(--muted); margin-top: 6px; max-width: 540px; }
+  .wr-col { width: 400px; zoom: 1.35; }
+  .wr-col .ov-panel { padding: 8px 10px; }
+
+  /* the shipped block minus the strip */
+  .b { display: grid; grid-template-columns: 1fr 78px; border: 1px solid #D6D3CC; border-radius: 6px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
+  .b + .b { margin-top: 8px; }
+  .id { display: flex; align-items: center; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
+  .sku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
+  .cells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; }
+  .cells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
+  .cells div:nth-child(4), .cells span:nth-child(8) { border-right: none; }
+  /* urgency now lives on the Left cell */
+  .cells span.lr { background: var(--neg-bg); color: var(--neg-text); }
+  .cells span.la { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .keys { display: flex; flex-direction: column; border-left: 1px solid #E0DED8; }
+  .keys button { flex: 1; border: none; cursor: pointer; font-family: var(--font); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .keys svg { width: 13px; height: 13px; }
+
+  /* K1 soft keys */
+  .k1 .send { background: var(--accent-soft); color: var(--accent-soft-text); border-bottom: 1px solid #E0DED8; }
+  .k1 .send:hover { background: var(--accent); color: #fff; }
+  .k1 .ign { background: var(--surface); color: var(--muted); font-weight: 500; }
+  .k1 .ign:hover { color: var(--text); background: var(--surface-2); }
+  /* K2 solid send + link */
+  .k2 .keys { border-left: none; }
+  .k2 .send { flex: 2.2; background: var(--accent); color: #fff; font-size: 12.5px; }
+  .k2 .send:hover { background: var(--accent-hover); }
+  .k2 .ign { flex: 1; background: var(--surface); color: var(--faint); font-weight: 500; font-size: 11px; border-left: 1px solid #E0DED8; }
+  .k2 .ign:hover { color: var(--text); text-decoration: underline; }
+  /* K3 icon keys */
+  .k3 .send { background: #EAF4EE; color: var(--accent); border-bottom: 1px solid #E0DED8; }
+  .k3 .send:hover { background: #DCEEE3; }
+  .k3 .ign { background: #F7F6F3; color: var(--muted); font-weight: 500; }
+  .k3 .ign:hover { background: #EFEEEA; color: var(--text); }
+  /* K4 one key + corner x */
+  .k4 .send { background: var(--accent); color: #fff; flex-direction: column; gap: 2px; font-size: 12.5px; }
+  .k4 .send small { font-size: 10px; font-weight: 500; opacity: .85; }
+  .k4 .send:hover { background: var(--accent-hover); }
+  .k4 .x { margin-left: auto; border: none; background: none; color: var(--faint); font-size: 11px; cursor: pointer; padding: 0 2px; font-family: var(--font); }
+  .k4 .x:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wr-page">
+  <h1>Send to WFS · no left strip, new Send / Ignore</h1>
+  <div class="sub">The coloured strip is gone; how urgent a SKU is now shows on its Left cell (red at 0–4 days, amber under 14). Every idea keeps the buttons filling the card's right corners. Your real rows; real column width (400px), enlarged 1.35×.</div>
+  <div class="wr-grid">
+
+    <div>
+      <div class="wr-lbl"><b>K1</b> · soft keys</div>
+      <div class="wr-col"><div class="ov-panel k1"><h4 class="ov-h-g">Send to WFS</h4>
+        <div class="b"><div><div class="id"><span class="sku">X230-128GB-GRAY-GLOBAL-1</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+129</span><span>30</span><span>0</span><span class="lr">0 days</span></div></div>
+          <div class="keys"><button class="send">Send <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="ign">Ignore</button></div></div>
+        <div class="b"><div><div class="id"><span class="sku">X135-64GB-GRAY-LTE</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+62</span><span>197</span><span>32</span><span class="la">4.9 days</span></div></div>
+          <div class="keys"><button class="send">Send <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><button class="ign">Ignore</button></div></div>
+      </div></div>
+      <div class="wr-note">Normal type instead of spaced capitals. Send is pale green with an arrow and turns solid green on hover; Ignore is plain grey text.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>K2</b> · solid Send, quiet Ignore</div>
+      <div class="wr-col"><div class="ov-panel k2"><h4 class="ov-h-g">Send to WFS</h4>
+        <div class="b"><div><div class="id"><span class="sku">X230-128GB-GRAY-GLOBAL-1</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+129</span><span>30</span><span>0</span><span class="lr">0 days</span></div></div>
+          <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
+        <div class="b"><div><div class="id"><span class="sku">X135-64GB-GRAY-LTE</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+62</span><span>197</span><span>32</span><span class="la">4.9 days</span></div></div>
+          <div class="keys"><button class="send">Send</button><button class="ign">Ignore</button></div></div>
+      </div></div>
+      <div class="wr-note">Send stays the solid green corner (about two-thirds of the height); Ignore shrinks to a small grey word underneath, so the eye goes to Send.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>K3</b> · icon keys</div>
+      <div class="wr-col"><div class="ov-panel k3"><h4 class="ov-h-g">Send to WFS</h4>
+        <div class="b"><div><div class="id"><span class="sku">X230-128GB-GRAY-GLOBAL-1</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+129</span><span>30</span><span>0</span><span class="lr">0 days</span></div></div>
+          <div class="keys"><button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Send</button><button class="ign"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c5 0 9 4.5 10 7-.4 1-1.2 2.3-2.4 3.5M6.1 6.1C4.1 7.4 2.7 9.4 2 12c1 2.5 5 7 10 7 1.7 0 3.2-.5 4.5-1.2"/></svg>Ignore</button></div></div>
+        <div class="b"><div><div class="id"><span class="sku">X135-64GB-GRAY-LTE</span></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+62</span><span>197</span><span>32</span><span class="la">4.9 days</span></div></div>
+          <div class="keys"><button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Send</button><button class="ign"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c5 0 9 4.5 10 7-.4 1-1.2 2.3-2.4 3.5M6.1 6.1C4.1 7.4 2.7 9.4 2 12c1 2.5 5 7 10 7 1.7 0 3.2-.5 4.5-1.2"/></svg>Ignore</button></div></div>
+      </div></div>
+      <div class="wr-note">A box icon on Send and a crossed-out eye on Ignore, both softly tinted. Friendlier and easy to tell apart at a glance.</div>
+    </div>
+
+    <div>
+      <div class="wr-lbl"><b>K4</b> · one Send key, ✕ to ignore</div>
+      <div class="wr-col"><div class="ov-panel k4"><h4 class="ov-h-g">Send to WFS</h4>
+        <div class="b"><div><div class="id"><span class="sku">X230-128GB-GRAY-GLOBAL-1</span><button class="x" title="Ignore for 7 days">✕</button></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+129</span><span>30</span><span>0</span><span class="lr">0 days</span></div></div>
+          <div class="keys"><button class="send">Send<small>129 units</small></button></div></div>
+        <div class="b"><div><div class="id"><span class="sku">X135-64GB-GRAY-LTE</span><button class="x" title="Ignore for 7 days">✕</button></div>
+          <div class="cells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div><span>+62</span><span>197</span><span>32</span><span class="la">4.9 days</span></div></div>
+          <div class="keys"><button class="send">Send<small>62 units</small></button></div></div>
+      </div></div>
+      <div class="wr-note">One green Send key fills the whole right edge and says how many units; Ignore becomes a small ✕ at the end of the SKU line (hover says "Ignore for 7 days").</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
