@@ -57,6 +57,14 @@ function lineExTax(it, qty) {
   return r2((Number(it.PricePerUnit) || 0) * (qty || 1));
 }
 
+// An order's charge with its sales tax taken back out (Linnworks keeps the
+// order's total tax beside the total charge on both books).
+function orderNetCharge(totalCharge, tax) {
+  const total = Number(totalCharge) || 0;
+  const t = Math.max(0, Number(tax) || 0);
+  return Math.round(Math.max(0, total - Math.min(t, total)) * 100) / 100;
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -279,6 +287,9 @@ class LinnworksClient {
           source: o.GeneralInfo ? (o.GeneralInfo.Source || '') : '',
           receivedDate: o.GeneralInfo ? (o.GeneralInfo.ReceivedDate || '') : '',
           totalCharge: Number(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge)) || 0,
+          // what the sale is worth before sales tax — the Overview's Gross $
+          // (owner 2026-09-25: tax out of every money figure)
+          netCharge: orderNetCharge(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge), o.TotalsInfo && o.TotalsInfo.Tax),
           currency: String((o.TotalsInfo && o.TotalsInfo.Currency) || ''),
           despatchBy: o.GeneralInfo ? (o.GeneralInfo.DespatchByDate || '') : '',
           // the buyer and the ship-to (owner 2026-09-24: the "i" on the PO)
@@ -806,6 +817,7 @@ class LinnworksClient {
           receivedOn: o.dReceivedDate || o.dReceievedDate || '',
           source: o.Source || '',
           totalCharge: Number(o.fTotalCharge ?? o.TotalCharge) || 0,
+          netCharge: orderNetCharge(o.fTotalCharge ?? o.TotalCharge, o.fTax ?? o.Tax),
         });
       }
       if (!(po.Data || []).length || page >= (po.TotalPages || 1)) break;
