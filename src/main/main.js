@@ -2082,6 +2082,37 @@ function registerIpc() {
         if (!(k in handSet)) handSet[k] = Number(e.mode === 'revert' ? e.newPrice : e.newPrice) || 0;
       }
       const sales = readChanSales60();
+      // what each listing actually SOLD for (owner 2026-09-24: "see what the
+      // SKU last sold for ... so I know how to price TEMU and ebay"): the
+      // last 30 days of processed lines, per source + channel SKU the last
+      // sale and the unit-weighted average; per source + Linnworks SKU the
+      // average across all its listings. Best effort - no sales, no hints.
+      const soldAt = {}; // SOURCE|CHSKU -> { last, lastDay, sum, units }
+      const soldSku = {}; // SOURCE|SKU -> { sum, units }
+      try {
+        const dk = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const sq = await querySales(dk(new Date(Date.now() - 29 * 86400000)), dk(new Date()));
+        for (const l of (sq.ok ? sq.lines : [])) {
+          const qty = Number(l.qty) || 0;
+          const rev = Number(l.revenue) || 0;
+          if (qty <= 0 || rev <= 0) continue;
+          const src = String(l.source || '').toUpperCase();
+          const ck = `${src}|${String(l.channelSku || l.sku || '').toUpperCase()}`;
+          const a = soldAt[ck] = soldAt[ck] || { last: 0, lastOn: '', sum: 0, units: 0 };
+          a.sum += rev; a.units += qty;
+          if (String(l.processedOn) >= a.lastOn) { a.lastOn = String(l.processedOn); a.last = rev / qty; }
+          if (l.sku) {
+            const sk = `${src}|${String(l.sku).toUpperCase()}`;
+            const b = soldSku[sk] = soldSku[sk] || { sum: 0, units: 0 };
+            b.sum += rev; b.units += qty;
+          }
+        }
+      } catch { /* hints only */ }
+      const r2 = (v) => Math.round(v * 100) / 100;
+      const soldInfo = (colKey, csku) => {
+        const a = soldAt[`${colKey}|${String(csku).toUpperCase()}`];
+        return a ? { last: r2(a.last), lastOn: a.lastOn, avg: r2(a.sum / a.units), units: a.units } : null;
+      };
       const products = new Map(); // stockItemId -> row
       for (const col of columns) {
         for (const li of catalogs[col.key]) {
@@ -2107,6 +2138,7 @@ function registerIpc() {
             refId: li.channelRefId || '',
             sold: sales.units[String(li.sku).toUpperCase()] || 0,
             wfs: !!li.wfs,
+            got: soldInfo(col.key, li.sku),
           });
         }
       }
@@ -2219,7 +2251,15 @@ function registerIpc() {
           const stored = recStored
             ? (recStored.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || recStored.prices[`${col.key}|`] || 0)
             : 0;
-          lines.push({ csku: rec.sku, price: stored, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false });
+          lines.push({ csku: rec.sku, price: stored, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false, got: soldInfo(col.key, rec.sku) });
+        }
+      }
+      // per channel, the 30-day average across every listing of the product
+      for (const row of products.values()) {
+        row.avgBy = {};
+        for (const col of columns) {
+          const b = soldSku[`${col.key}|${String(row.sku).toUpperCase()}`];
+          if (b) row.avgBy[col.key] = { avg: r2(b.sum / b.units), units: b.units };
         }
       }
 

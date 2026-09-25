@@ -6129,7 +6129,10 @@ function shActionOf(e) {
     case 'return-edit': case 'return-delete': case 'correction': case 'edit-qty': case 'edit-sku': return 'edited';
     case 'deleted': return 'deleted';
     case 'set': case 'bulk-set': return 'set';
-    case 'wfs': case 'dropship': case 'substitution': return 'shipped';
+    // a dropship pad move is the app holding the DropShip level at the pad,
+    // not stock leaving (owner 2026-09-24: pad 10 -> 0 read "SHIPPED 10 x")
+    case 'dropship': return 'set';
+    case 'wfs': case 'substitution': return 'shipped';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -6161,7 +6164,9 @@ function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slic
 function shPcKey(name) {
   return String(name || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
-const shPcOf = (e) => (e.reason === 'sale' ? e.market : shPcKey(e.computer));
+// sales fold too, so a Linnworks source spelled like a station ("Stock Room")
+// can't sit next to it as a second entry
+const shPcOf = (e) => shPcKey(e.reason === 'sale' ? e.market : e.computer);
 
 function shWhat(e, withSku) {
   const n = Math.abs(Number(e.delta) || 0);
@@ -6192,6 +6197,15 @@ function shWhat(e, withSku) {
     const setTo = /set to (\d+)/.exec(e.note || '');
     return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
   }
+  if (e.reason === 'dropship') {
+    // the pad engine's level move at the DropShip location: from → to
+    const d = Number(e.delta) || 0;
+    const to = e.level_after;
+    const move = to === null || to === undefined
+      ? `<b>${d > 0 ? '+' : '−'}${Math.abs(d)}</b>`
+      : `${to - d} → <b>${to}</b>`;
+    return `${withSku ? `${skuEl(e.sku)} ` : ''}<span class="sh-dim">dropship pad</span> ${move}${ref}${shMarks(e)}`;
+  }
   if (e.reason === 'return' && ordered && ordered[1].toUpperCase() !== e.sku) {
     return withSku
       ? `${units}${skuEl(ordered[1])} <span class="sh-arrow">→</span> ${skuEl(e.sku)}${ref}`
@@ -6221,7 +6235,7 @@ function shMarks(e) {
 function shRowHtml(e, withSku, clickable) {
   const act = shActionOf(e), A = SH_ACT[act];
   const isSale = e.reason === 'sale';
-  const who = isSale ? (e.market || 'SALE') : (shPcKey(e.computer) || '—');
+  const who = isSale ? (shPcKey(e.market) || 'SALE') : (shPcKey(e.computer) || '—');
   const title = [e.note && !/ordered /.test(e.note) ? e.note : '', e.change_source || ''].filter(Boolean).join(' · ');
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
@@ -7120,11 +7134,25 @@ function prChCells(p) {
     ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
           <button type="button" class="pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="Open this listing in your browser">↗</button>
-        </div>`).join('');
-    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}
+        </div>${prGotLine(l.got)}`).join('');
+    const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
+    const avgLine = avg
+      ? `<div class="pr-avg" title="Average ${esc(c.source)} sale price for ${esc(p.sku)} over the last 30 days, across all its listings, weighted by units">30-day avg <b>${prMoney(avg.avg)}</b> · ${avg.units} sold</div>`
+      : '';
+    return `<div class="pr-cell pr-ch">${lines.length ? inner : '<span class="pr-none">not listed</span>'}${avgLine}
         <button type="button" class="pr-add" data-ci="${ci}" title="Link a ${esc(c.source)} listing to this product — same link the Mappings dialog makes">+ channel SKU</button>
       </div>`;
   }).join('');
+}
+
+// what the listing actually sold for (owner 2026-09-24): a reference line
+// under the price - last sale and date, plus the 30-day average when it
+// differs. Linnworks line totals, so tax is in when the channel reports it.
+function prGotLine(g) {
+  if (!g) return '';
+  const on = g.lastOn ? `${+g.lastOn.slice(5, 7)}/${+g.lastOn.slice(8, 10)}` : '';
+  const avg = g.units > 1 && Math.abs(g.avg - g.last) >= 0.01 ? ` · avg ${prMoney(g.avg)}` : '';
+  return `<div class="pr-got" title="Last 30 days: ${g.units} sold through this listing">sold ${prMoney(g.last)}${on ? ` on ${on}` : ''}${avg}</div>`;
 }
 
 // the inside of one variation group (the rows + the footer), without the
