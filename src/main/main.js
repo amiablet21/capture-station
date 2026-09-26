@@ -3816,7 +3816,8 @@ function registerIpc() {
   const overviewCachePath = () => path.join(app.getPath('userData'), 'overview-cache.json');
   try {
     const j = JSON.parse(fs.readFileSync(overviewCachePath(), 'utf8'));
-    if (j && j.money) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
+    // v2: $ before sales tax — an older snapshot is dropped, not shown
+    if (j && j.money && j.v === 2) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
   } catch { /* no saved overview yet */ }
 
   function refreshOverviewMoney(cfg) {
@@ -3824,7 +3825,7 @@ function registerIpc() {
     overviewCache.promise = computeOverviewMoney(cfg)
       .then(m => {
         overviewCache = { at: Date.now(), money: m, promise: null };
-        try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m })); } catch { /* best effort */ }
+        try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
         return m;
       })
       .catch(e => { overviewCache.promise = null; throw e; });
@@ -3837,7 +3838,7 @@ function registerIpc() {
   // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
   // day, persisted so boots answer instantly.
   const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
-  const OVERVIEW_HISTORY_V = 4; // v2: bucketed by RECEIVED date · v3: + gross sales per day · v4: + per-channel split
+  const OVERVIEW_HISTORY_V = 5; // v2: bucketed by RECEIVED date · v3: + gross sales per day · v4: + per-channel split · v5: $ before sales tax
   const ovChanOf = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
   let overviewHistory = { at: 0, days: null, promise: null };
   const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
@@ -3857,7 +3858,7 @@ function registerIpc() {
       const to = new Date();
       const from = new Date(to.getTime() - 366 * 86400000);
       const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
-      const days = {}; // ymd -> { n: orders received, s: gross sales $, c: { channel: { n, s } } }
+      const days = {}; // ymd -> { n: orders received, s: sales $ before tax, c: { channel: { n, s } } }
       const bump = (ts, charge, src) => {
         if (Number.isNaN(ts)) return;
         const key = db.localDay(new Date(ts));
@@ -3868,9 +3869,9 @@ function registerIpc() {
         c.n += 1;
         c.s += Number(charge) || 0;
       };
-      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.totalCharge, h.source);
+      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.netCharge, h.source);
       try {
-        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.totalCharge, o.source);
+        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.netCharge, o.source);
       } catch { /* open book unavailable: processed-only still beats captures */ }
       overviewHistory = { at: Date.now(), days, promise: null };
       try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days, v: OVERVIEW_HISTORY_V })); } catch { /* best effort */ }
@@ -3991,7 +3992,7 @@ function registerIpc() {
       const ts = Date.parse(h.receivedOn || h.processedOn);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(h.orderId)) continue;
       seen.add(h.orderId);
-      orders.push({ ts, source: h.source, charge: h.totalCharge });
+      orders.push({ ts, source: h.source, charge: h.netCharge });
       soldHeads.push(h);
     }
     // units sold today per SKU: open orders that arrived today plus the
@@ -4013,7 +4014,7 @@ function registerIpc() {
       const ts = Date.parse(o.receivedDate);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
       seen.add(o.orderId);
-      orders.push({ ts, source: o.source, charge: o.totalCharge });
+      orders.push({ ts, source: o.source, charge: o.netCharge });
       for (const it of o.items || []) {
         if (it.isService) continue;
         const um = !it.stockItemId || it.stockItemId === ZERO_GUID;
@@ -4375,7 +4376,7 @@ function registerIpc() {
     try {
       open = (await getOpenOrdersCached(cfg)).map(o => ({
         order: o.reference || o.orderId, channel: ovChanOf(o.source || ''),
-        at: o.receivedDate, charge: Number(o.totalCharge) || 0,
+        at: o.receivedDate, charge: Number(o.netCharge) || 0,
         items: (o.items || []).filter(l => !l.isService).map(l => ({ sku: l.sku || l.channelSku || '', qty: l.quantity || 1, img: pic(l.sku || l.channelSku) })),
       })).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
     } catch { /* open book optional; today's rows still answer */ }

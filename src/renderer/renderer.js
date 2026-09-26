@@ -7226,8 +7226,8 @@ function prHistPaint(ph) {
   // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
   for (const bar of $('prlhBody').querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
   $('prlhFoot').textContent = ph && ph.src === 'sales'
-    ? 'No price change logged for this listing yet — these are the prices it actually sold at (from Linnworks orders).'
-    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders.';
+    ? 'No price change logged for this listing yet — these are the prices it actually sold at, before sales tax (from Linnworks orders).'
+    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders, before sales tax.';
   for (const b of $('prlhRange').querySelectorAll('button')) b.classList.toggle('is-on', Number(b.dataset.days) === prlh.days);
 }
 async function prListHistLoad(days) {
