@@ -1355,17 +1355,22 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && l1[1].includes('"Tab, ""quoted"""') && l1[1].includes('Ship1') && l1[1].includes('FixedPrice'), l1[1]);
       const csv2 = ecsv.buildEbayCsv([{
         sku: 'USED-S26-ULTRA', categoryId: '9355', title: 'S26 Ultra', cond: 'used',
-        specs: { Brand: 'Samsung' }, picUrls: [], description: 'd', price: '899.99', qty: 2,
+        specs: { Brand: 'Samsung', 'Storage Capacity': '512GB', Color: 'Black' }, picUrls: [], description: 'd', price: '899.99', qty: 2,
         variations: [
-          { sku: 'USED-S26-ULTRA-512GB-BLACK', details: 'Storage=512GB;Color=Black', price: '899.99', qty: 2 },
-          { sku: 'USED-S26-ULTRA-256GB-GRAY', details: 'Storage=256GB;Color=Gray', price: '799.99', qty: 1 },
+          { sku: 'USED-S26-ULTRA-512GB-BLACK', storage: '512GB', color: 'Black', price: '899.99', qty: 2 },
+          { sku: 'USED-S26-ULTRA-256GB-GRAY', details: 'Storage=256GB;Color=Gray', price: '799.99', qty: 1 }, // old-style payload still reads
         ],
       }], {});
       const l2 = csv2.trim().split('\n');
       check('ebay csv: variation listing = parent + child rows with own SKUs',
         l2.length === 4 && !l2[1].includes('Variation')
-          && l2[2].includes('USED-S26-ULTRA-512GB-BLACK') && l2[2].includes('Variation') && l2[2].includes('Storage=512GB;Color=Black')
-          && l2[3].includes('799.99'), l2.length);
+          && l2[2].includes('USED-S26-ULTRA-512GB-BLACK') && l2[2].includes('Variation') && l2[2].includes('Storage Capacity=512GB|Color=Black')
+          && l2[3].includes('Storage Capacity=256GB|Color=Gray') && l2[3].includes('799.99'), l2.length);
+      // eBay's upload syntax: the parent lists every value per specific, pipe
+      // between specifics — and a varying specific never doubles as an item
+      // specific on the parent (the rejected 2026-09-28 upload)
+      check('ebay csv: parent row carries all variation values, no clashing item specifics',
+        l2[1].includes('Storage Capacity=512GB;256GB|Color=Black;Gray') && l2[1].includes(',Samsung,,,'), l2[1]);
       const parsed = ecsv.parseEbayPage(`<meta property="og:title" content="Samsung Tab A9+ | eBay">
         {"categoryId":"171485","price":"119.99"}
         <div class="ux-labels-values__labels"><span>Brand</span></div><div class="ux-labels-values__values"><span>Samsung</span></div>

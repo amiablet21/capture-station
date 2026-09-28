@@ -4301,7 +4301,7 @@ th:last-child > .col-grip { right: 0; }
 .ebay-spec { display: flex; flex-direction: column; gap: 2px; }
 .ebay-spec label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: var(--faint); }
 .ebay-spec input { font-size: 11.5px; padding: 5px 8px; }
-.ebay-spec input.is-missing { border-color: var(--badge-yellow-text); }
+.ebay-spec input.is-missing, #ebCategory.is-missing { border-color: var(--badge-yellow-text); }
 .ebay-vars { display: flex; flex-direction: column; gap: 6px; }
 .ebay-varcard { position: relative; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .ebay-varcard .vgrid { display: grid; grid-template-columns: 1fr 1fr 1fr 60px; gap: 6px; }
