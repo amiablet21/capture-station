@@ -2356,7 +2356,27 @@ function registerIpc() {
       const priceLog = priceLogByListing();
       const priceHist = (colKey, csku, curPrice) => {
         const k = `${colKey}|${String(csku).toUpperCase()}`;
-        return listingPriceHistory({ sales: saleLog[k] || [], log: priceLog[k] || [], days: HIST_DAYS, curPrice, limit: 12 });
+        // a repricer-owned channel: the log only ever holds Linnworks-feed
+        // moves, not what the listing really sold at — its periods come
+        // from the sales alone
+        const log = priceFluctuates(colKey) ? [] : (priceLog[k] || []);
+        return listingPriceHistory({ sales: saleLog[k] || [], log, days: HIST_DAYS, curPrice, limit: 12 });
+      };
+      // the price a repricer-owned listing is REALLY at (owner 2026-09-28:
+      // "why does it still show 149.99?"): Linnworks never hears what the
+      // repricer sets on Walmart, so its catalog figure goes stale for
+      // months. The newest sale is the truth; the Linnworks figure stays
+      // beside it for the hover.
+      const lastSold = (colKey, csku) => {
+        const runs = saleLog[`${colKey}|${String(csku).toUpperCase()}`] || [];
+        let best = null;
+        for (const x of runs) if (!best || x.t > best.t) best = x;
+        return best ? best.unit : 0;
+      };
+      const chanPrice = (col, csku, lwPrice) => {
+        if (!col.fluctuates) return { price: lwPrice };
+        const sold = lastSold(col.key, csku);
+        return sold > 0 ? { price: sold, lwPrice, fromSales: true } : { price: lwPrice, lwPrice };
       };
       const soldInfo = (colKey, csku) => {
         const a = soldAt[`${colKey}|${String(csku).toUpperCase()}`];
@@ -2379,16 +2399,17 @@ function registerIpc() {
           const stored = rec
             ? (rec.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || rec.prices[`${col.key}|`] || 0)
             : 0;
-          const price = li.price || over || stored || Number(inv.retailPrice) || 0;
+          const lwPrice = li.price || over || stored || Number(inv.retailPrice) || 0;
+          const cp = chanPrice(col, li.sku, lwPrice);
           (row.channels[col.key] = row.channels[col.key] || []).push({
             csku: li.sku,
-            price,
+            ...cp,
             approx: !li.price, // the feed didn't carry it: shown as ≈
             refId: li.channelRefId || '',
             sold: sales.units[String(li.sku).toUpperCase()] || 0,
             wfs: !!li.wfs,
             got: soldInfo(col.key, li.sku),
-            ph: priceHist(col.key, li.sku, price),
+            ph: priceHist(col.key, li.sku, cp.price),
           });
         }
       }
@@ -2399,16 +2420,17 @@ function registerIpc() {
         for (const col of columns) {
           if (!col.fluctuates) continue;
           for (const l of row.channels[col.key] || []) {
-            if (!l.price) continue;
+            const feed = l.fromSales ? l.lwPrice : l.price; // the Linnworks figure, never the sale price
+            if (!feed) continue;
             const k = `${col.key}|${String(l.csku).toUpperCase()}`;
             const prev = Number(snap[k]) || 0;
-            if (prev && Math.abs(prev - l.price) >= 0.01) {
+            if (prev && Math.abs(prev - feed) >= 0.01) {
               priceLogEntry({
                 mode: 'auto', by: '', source: col.source, subSource: col.subSource,
-                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: l.price,
+                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: feed,
               });
             }
-            snap[k] = l.price;
+            snap[k] = feed;
           }
         }
       }
@@ -2501,7 +2523,8 @@ function registerIpc() {
           const stored = recStored
             ? (recStored.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || recStored.prices[`${col.key}|`] || 0)
             : 0;
-          lines.push({ csku: rec.sku, price: stored, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false, got: soldInfo(col.key, rec.sku), ph: priceHist(col.key, rec.sku, stored) });
+          const cp = chanPrice(col, rec.sku, stored);
+          lines.push({ csku: rec.sku, ...cp, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false, got: soldInfo(col.key, rec.sku), ph: priceHist(col.key, rec.sku, cp.price) });
         }
       }
       // per channel, the 30-day average across every listing of the product
@@ -2587,7 +2610,8 @@ function registerIpc() {
       if (String(l.source || '').toUpperCase() !== src || String(l.channelSku || l.sku || '').toUpperCase() !== ch) continue;
       sales.push({ t: Date.parse(l.processedOn) || 0, qty, unit: Math.round(rev / qty * 100) / 100 });
     }
-    const log = priceLogByListing()[`${src}|${ch}`] || [];
+    // repricer-owned channel: periods from the sales alone (see priceHist)
+    const log = priceFluctuates(src) ? [] : (priceLogByListing()[`${src}|${ch}`] || []);
     return { ok: true, history: listingPriceHistory({ sales, log, days: d, curPrice: price }) };
   });
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {

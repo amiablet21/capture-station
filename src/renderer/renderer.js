@@ -7152,7 +7152,9 @@ function prChCells(p) {
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
           <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${c.fluctuates
-    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
+    ? `<span class="pr-price-ro" title="${l.fromSales
+      ? `The repricer owns this price — this is what the listing last sold at (before tax), never written here. Linnworks has ${prMoney(l.lwPrice)} on file${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`
+      : `The repricer owns this price — shown here, never written. No sale in 60 days, so this is the Linnworks figure${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
         </div>${prGotLine(l, ci, maxU)}</div>`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
@@ -7253,7 +7255,7 @@ function prHistOpen(el) {
   Object.assign(prlh, { c, l, days: 60 });
   $('prlhCh').textContent = c.source.toUpperCase();
   $('prlhSku').textContent = l.csku;
-  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>`;
+  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>${l.fromSales ? `<span class="prlh-lw" title="What Linnworks has on file for this listing — the repricer's real price only shows through the sales">Linnworks: ${prMoney(l.lwPrice)}</span>` : ''}`;
   // the 60 days already came with the sheet: paint at once, no wait
   prlh.seq++;
   prHistPaint(l.ph ? { ...l.ph, periods: l.ph.periods } : null);
