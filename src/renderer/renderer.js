@@ -9755,16 +9755,40 @@ $("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://w
    form's fields overlaid, pushed through Linnworks' stored eBay connection.
    Variations still ride the CSV path. Configurator picks persist per
    condition (they carry the eBay condition, so one per condition). */
-let ebLw = { configs: null, byCond: {}, subSource: '' };
+// error = why the list is empty (Linnworks refused, or it holds none) — the
+// dropdown and the List button both read it out instead of going quiet
+// (owner hit a dead dropdown with no explanation, 2026-09-28)
+let ebLw = { configs: null, byCond: {}, subSource: '', error: '', loading: false };
 
-async function ebLwLoadConfigs() {
-  if (ebLw.configs || (state && state.captureOnly)) { ebLwFillSelect(); return; }
-  ebLw.configs = []; // one load per session; a failure leaves the select disabled
-  const res = await api.ebayLwConfigs().catch(() => null);
+// a short, honest reason for an empty configurator list
+function ebLwReason() {
+  if (ebLw.loading) return 'reading configurators from Linnworks…';
+  if (ebLw.error) {
+    const st = ebLw.error.match(/\((\d{3})\)/);
+    if (st && (st[1] === '403' || st[1] === '401')) return `Linnworks refused (${st[1]}) — the API application needs the Listings permission`;
+    const msg = String(ebLw.error).replace(/\s+/g, ' ').trim();
+    return `Linnworks: ${msg.length > 90 ? msg.slice(0, 87) + '…' : msg}`;
+  }
+  return 'no eBay configurators in Linnworks yet — make one there, then Refresh';
+}
+
+async function ebLwLoadConfigs(force) {
+  if (state && state.captureOnly) { ebLwFillSelect(); return; }
+  if (ebLw.configs && !force) { ebLwFillSelect(); return; }
+  if (ebLw.loading) { ebLwFillSelect(); return; } // a mid-load render keeps the condition current
+  ebLw.loading = true;
+  ebLw.error = '';
+  ebLwFillSelect();
+  const res = await api.ebayLwConfigs().catch(err => ({ ok: false, error: err.message }));
+  ebLw.loading = false;
   if (res && res.ok) {
     ebLw.configs = res.configs || [];
     ebLw.byCond = (res.saved && res.saved.byCond) || {};
     ebLw.subSource = (res.saved && res.saved.subSource) || '';
+  } else {
+    ebLw.configs = [];
+    ebLw.error = (res && res.error) || 'no answer from Linnworks';
+    toast(`Could not read the eBay configurators — ${ebLwReason()}`, 9000);
   }
   ebLwFillSelect();
 }
@@ -9773,9 +9797,15 @@ function ebLwFillSelect() {
   const sel = $('ebLwConfig');
   const cond = ebCur ? ebCur.cond : 'new';
   const list = ebLw.configs || [];
-  sel.innerHTML = `<option value="">configurator for ${esc(cond)}…</option>` + list.map(c =>
+  // an empty list explains itself in the placeholder; the tooltip carries
+  // the full Linnworks message when there is one
+  const head = list.length ? `configurator for ${esc(cond)}…` : esc(ebLwReason());
+  sel.innerHTML = `<option value="">${head}</option>` + list.map(c =>
     `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
   sel.disabled = !list.length;
+  sel.title = list.length
+    ? 'The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)'
+    : ebLwReason();
 }
 
 $('ebLwConfig').addEventListener('change', async () => {
@@ -9790,7 +9820,12 @@ $('ebLwList').addEventListener('click', async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast('Type a SKU first.'); return; }
   const configId = ebLw.byCond[ebCur.cond];
-  if (!configId) { toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`); return; }
+  if (!configId) {
+    // no list at all: say WHY, never point at a dropdown that cannot open
+    if (!(ebLw.configs || []).length) { toast(`Cannot list through Linnworks yet — ${ebLwReason()}`, 9000); return; }
+    toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`);
+    return;
+  }
   const { vars, listing } = ebBuildListingPayload();
   if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
   ebBusy = true;
@@ -10376,6 +10411,7 @@ $("ebRefresh").addEventListener("click", () => {
   chLinked = null;
   loadChLinked();
   loadUnlisted(true);
+  ebLwLoadConfigs(true); // a configurator made in Linnworks a minute ago shows up
   toast("Re-scanning listings…", 2000);
 });
 
