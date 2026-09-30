@@ -52,7 +52,7 @@ npm run dist
 
 Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%APPDATA%/capture-station`). The DB is backed up automatically to `userData/backups` on every app close (14 kept). `File > Export Today to CSV` exports a copy anywhere.
 
-**Channel SKU export.** Stock page > **Export Walmart SKUs** (or `File > Export Channel SKUs > Walmart / eBay / Temu`) saves every listing on that marketplace to a CSV: channel SKU, linked inventory SKU, title, listed qty, price, WFS flag, linked yes/no, source/sub-source, and whether the listing came from the channel's scan feed or only from a link record. Sync mode only.
+**Channel SKU export.** Stock page > **Export Walmart SKUs** (or `File > Export Channel SKUs > Walmart / eBay / Temu`) saves the marketplace listings that are mapped to a Linnworks item to a CSV: inventory SKU, channel SKU, title, listed qty, price, WFS flag, source/sub-source. Unmapped listings are left out. Sync mode only.
 
 ## Linnworks setup (sync mode only)
 

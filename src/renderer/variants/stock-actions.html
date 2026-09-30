@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Stock band actions — after Export Walmart SKUs joined (2026-09-30)</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  body { padding: 22px 24px 30px; gap: 26px; overflow: auto; height: auto; }
+  .sec { width: 940px; }
+  .sec-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 3px; }
+  .sec-title b { color: var(--accent-soft-text); }
+  .sec-sub { font-size: 12px; color: var(--muted); margin-bottom: 9px; line-height: 1.5; }
+
+  /* the real band, at a window width where today's row wraps */
+  .band { display: flex; align-items: center; gap: 6px 10px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: var(--r-card) var(--r-card) 0 0; position: relative; }
+  .band.wrapok { flex-wrap: wrap; }
+  .search { flex: 0 0 auto; white-space: nowrap; display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl); color: var(--faint); background: var(--surface); }
+  .search svg { width: 13px; height: 13px; flex: none; }
+  .chips { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+  .tray { display: flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; }
+  .tray span { font-size: 12px; font-weight: 500; padding: 4px 11px; border-radius: 8px; color: var(--muted); white-space: nowrap; }
+  .tray span.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,0.08); }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 3px 12px; border-radius: 999px; border: 1px solid transparent; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); white-space: nowrap; }
+  .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .actions.wrap { flex-wrap: wrap; max-width: 330px; }
+  .btn { font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-ctl); border: 1px solid var(--border); background: transparent; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; line-height: 1.25; }
+  .btn.ico { padding: 5px 7px; }
+  .btn svg { width: 14px; height: 14px; flex: none; }
+  .btn .caret { width: 10px; height: 10px; margin-left: -2px; color: var(--faint); }
+  .btn.tint { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  /* joined group: one border, dividers between */
+  .group { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-ctl); overflow: hidden; }
+  .group .btn { border: none; border-radius: 0; border-left: 1px solid var(--border); }
+  .group .btn:first-child { border-left: none; }
+  /* dropdown, drawn open */
+  .menu { position: absolute; right: 12px; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(47,52,55,0.12); padding: 5px; min-width: 210px; z-index: 2; }
+  .menu .it { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 6px; white-space: nowrap; }
+  .menu .it svg { width: 14px; height: 14px; color: var(--muted); }
+  .menu .it.hl { background: var(--surface-2); }
+  .menu .it .sub { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .menu .sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
+  .menu .head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding: 6px 10px 2px; }
+  .tip { position: absolute; top: calc(100% + 6px); background: #2F3437; color: #fff; font-size: 11.5px; padding: 4px 9px; border-radius: 5px; white-space: nowrap; }
+  .tip::before { content: ''; position: absolute; top: -4px; left: 50%; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom-color: #2F3437; }
+  /* the sheet header under the band, for E */
+  .head-row { display: grid; grid-template-columns: 90px 150px 1fr; background: var(--surface); border: 1px solid var(--border); border-top: 1px solid var(--border-soft); }
+  .head-row div { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 9px 12px; border-right: 1px solid var(--border-soft); display: flex; align-items: center; gap: 8px; }
+  .head-row .hico { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 20px; border: 1px solid var(--border); border-radius: 5px; color: var(--faint); background: var(--surface); }
+  .head-row .hico svg { width: 12px; height: 12px; }
+  .head-row .hico.on { color: var(--accent-soft-text); border-color: var(--accent-soft); background: var(--accent-soft); }
+  /* the slim strip under the band, for F */
+  .strip { display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 5px 12px; background: var(--surface-2); border: 1px solid var(--border); border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--muted); }
+  .strip .lk { padding: 2px 7px; border-radius: 4px; }
+  .strip .lk:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+  .strip .dot { color: var(--faint); }
+  .after { border-top: 1px solid var(--border-soft); height: 34px; background: var(--surface); border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0 0 var(--r-card) var(--r-card); }
+</style></head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-search" viewBox="0 0 256 256"><path fill="currentColor" d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 256 256"><path fill="currentColor" d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L7 9m5-5 5 5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0 5-5m-5 5-5-5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h11v10H3zM14 10h4l3 3v3h-7zM7.5 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm10 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 5h18l-7 8v6l-4-2v-4z"/></symbol>
+</svg>
+
+<!-- ================= TODAY ================= -->
+<div class="sec">
+  <div class="sec-title">Today — five things on the right, and they wrap</div>
+  <div class="sec-sub">Four word buttons plus the refresh icon are wider than the slot at this window width, so WFS Shipments and the refresh drop under the row. The band gets taller and the eye has to hunt across two rows for one control.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions wrap">
+      <span class="btn">Bulk import</span><span class="btn">Mappings</span><span class="btn">Export Walmart SKUs</span><span class="btn">WFS Shipments</span><span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+  </div>
+  <div class="after"></div>
+</div>
+
+<!-- ================= A ================= -->
+<div class="sec">
+  <div class="sec-title"><b>A</b> — One Actions menu</div>
+  <div class="sec-sub">Everything that opens a dialog or writes a file folds into one button. Refresh stays out because it is the thing you hit most. The menu also gives eBay and Temu exports a home without adding buttons. One click more for each action.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions">
+      <span class="btn">Actions <svg class="caret"><use href="#i-caret"/></svg></span><span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+    <div class="menu" style="right:46px">
+      <div class="it"><svg><use href="#i-link"/></svg>Mappings…</div>
+      <div class="it"><svg><use href="#i-truck"/></svg>WFS Shipments…</div>
+      <div class="sep"></div>
+      <div class="it"><svg><use href="#i-up"/></svg>Bulk import…</div>
+      <div class="it hl"><svg><use href="#i-down"/></svg>Export Walmart SKUs…</div>
+      <div class="it"><svg><use href="#i-down"/></svg>Export eBay SKUs…</div>
+      <div class="it"><svg><use href="#i-down"/></svg>Export Temu SKUs…</div>
+    </div>
+  </div>
+  <div class="after" style="height:215px"></div>
+</div>
+
+<!-- ================= B ================= -->
+<div class="sec">
+  <div class="sec-title"><b>B</b> — Icon rail</div>
+  <div class="sec-sub">Four icons in one joined group, refresh outside it. Narrowest option by far and nothing can ever wrap. The cost is learning four glyphs; tooltips carry the names, and the group border says "these are tools, not filters".</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions">
+      <span class="group">
+        <span class="btn ico" title="Bulk import"><svg><use href="#i-up"/></svg></span>
+        <span class="btn ico" title="Mappings"><svg><use href="#i-link"/></svg></span>
+        <span class="btn ico" title="Export Walmart SKUs" style="position:relative"><svg><use href="#i-down"/></svg><span class="tip">Export Walmart SKUs</span></span>
+        <span class="btn ico" title="WFS Shipments"><svg><use href="#i-truck"/></svg></span>
+      </span>
+      <span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+  </div>
+  <div class="after" style="height:44px"></div>
+</div>
+
+<!-- ================= C ================= -->
+<div class="sec">
+  <div class="sec-title"><b>C</b> — Daily ones stay words, the rest under More</div>
+  <div class="sec-sub">Mappings and WFS Shipments are the two you open during the day, so they keep their names. Bulk import and the exports are occasional file jobs, so they go behind a ⋯ button. Two words plus two icons fits with room to spare.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions">
+      <span class="btn">Mappings</span><span class="btn">WFS Shipments</span><span class="btn ico"><svg><use href="#i-dots"/></svg></span><span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+    <div class="menu" style="right:46px">
+      <div class="head">Files</div>
+      <div class="it"><svg><use href="#i-up"/></svg>Bulk import…<span class="sub">SKU + Qty sheet</span></div>
+      <div class="it hl"><svg><use href="#i-down"/></svg>Export Walmart SKUs…<span class="sub">CSV</span></div>
+      <div class="it"><svg><use href="#i-down"/></svg>Export eBay SKUs…<span class="sub">CSV</span></div>
+      <div class="it"><svg><use href="#i-down"/></svg>Export Temu SKUs…<span class="sub">CSV</span></div>
+    </div>
+  </div>
+  <div class="after" style="height:215px"></div>
+</div>
+
+<!-- ================= D ================= -->
+<div class="sec">
+  <div class="sec-title"><b>D</b> — Short labels with icons, one joined group</div>
+  <div class="sec-sub">Same four actions, still named, but "Import · Mappings · Export · WFS" with a small glyph each, sharing one border. Reads as a toolbar instead of four loose buttons, and it is about 40% narrower than today. Export is the download arrow, Import the upload arrow, so the pair explains itself.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions">
+      <span class="group">
+        <span class="btn"><svg><use href="#i-up"/></svg>Import</span>
+        <span class="btn"><svg><use href="#i-link"/></svg>Mappings</span>
+        <span class="btn"><svg><use href="#i-down"/></svg>Export</span>
+        <span class="btn"><svg><use href="#i-truck"/></svg>WFS</span>
+      </span>
+      <span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+  </div>
+  <div class="after" style="height:44px"></div>
+</div>
+
+<!-- ================= E ================= -->
+<div class="sec">
+  <div class="sec-title"><b>E</b> — Export moves to the Channels column header</div>
+  <div class="sec-sub">The export is about channel SKUs, and the sheet already has a CHANNELS column with a filter icon in its header. A download icon beside that filter is exactly where the data lives; the band goes back to three words plus refresh, which never wrapped. Hover says "Export Walmart SKUs (CSV)"; a right-click or long-press offers eBay and Temu.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions">
+      <span class="btn">Bulk import</span><span class="btn">Mappings</span><span class="btn">WFS Shipments</span><span class="btn ico"><svg><use href="#i-refresh"/></svg></span>
+    </span>
+  </div>
+  <div class="head-row">
+    <div>Avail ↓</div>
+    <div>Channels <span class="hico"><svg><use href="#i-filter"/></svg></span><span class="hico on" style="position:relative"><svg><use href="#i-down"/></svg><span class="tip" style="left:-70px;text-transform:none;letter-spacing:0;font-weight:500">Export Walmart SKUs (CSV)</span></span></div>
+    <div style="border-right:none"></div>
+  </div>
+  <div class="after" style="height:44px;border-top:none"></div>
+</div>
+
+<!-- ================= F ================= -->
+<div class="sec">
+  <div class="sec-title"><b>F</b> — Filters up top, tools on a quiet strip below</div>
+  <div class="sec-sub">Split by job: the band answers "what am I looking at" (search, views, refresh) and a slim grey strip under it holds the tools as plain text links. It is a second row like today, but a deliberate one: consistent height, always in the same place, and it can take eBay and Temu exports without anything jumping.</div>
+  <div class="band">
+    <span class="search"><svg><use href="#i-search"/></svg>Search SKU, title or barcode</span>
+    <span class="chips"><span class="tray"><span class="on">All</span><span>New</span><span>Open Box</span><span>Used</span><span>Scrap</span></span><span class="pill">Unlisted</span></span>
+    <span class="actions"><span class="btn ico"><svg><use href="#i-refresh"/></svg></span></span>
+  </div>
+  <div class="strip">
+    <span class="lk">Bulk import</span><span class="dot">·</span><span class="lk">Mappings</span><span class="dot">·</span><span class="lk">Export Walmart SKUs</span><span class="dot">·</span><span class="lk">WFS Shipments</span>
+  </div>
+  <div class="after" style="height:44px;border-top:none"></div>
+</div>
+
+</body>
+</html>

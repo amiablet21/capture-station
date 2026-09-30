@@ -1,7 +1,7 @@
 'use strict';
 // Channel-SKU export: merge one marketplace's scanned catalog feed with the
-// item-level link records into CSV rows (owner 2026-09-30: "a list of all
-// the channel SKUs"). Pure — no Electron, no network — so it is testable
+// item-level link records into CSV rows — the MAPPED listings only (owner
+// 2026-09-30: "the mapped channel SKUs, not every Walmart SKU"). Pure — no Electron, no network — so it is testable
 // with plain node. The feed carries title / qty / price / WFS for every
 // listing Linnworks has seen on the channel, linked or not; the link
 // records say WHICH inventory SKU a listing points at (the feed's
@@ -69,15 +69,20 @@ function buildChannelSkuRows(channelKey, items, feeds, recs) {
       }
     }
   }
-  return [...rows.values()].sort((a, b) => a.channelSku.localeCompare(b.channelSku, undefined, { numeric: true, sensitivity: 'base' }));
+  // MAPPED listings only (owner 2026-09-30: "the mapped channel SKUs, not
+  // every Walmart SKU"): a feed row nothing points at is not in the file
+  return [...rows.values()]
+    .filter(r => r.linked === 'yes')
+    .sort((a, b) => a.inventorySku.localeCompare(b.inventorySku, undefined, { numeric: true, sensitivity: 'base' })
+      || a.channelSku.localeCompare(b.channelSku, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
-const HEADER = ['Channel SKU', 'Inventory SKU', 'Title', 'Listed qty', 'Price', 'WFS', 'Linked', 'Source', 'SubSource', 'In channel scan'];
+const HEADER = ['Inventory SKU', 'Channel SKU', 'Title', 'Listed qty', 'Price', 'WFS', 'Source', 'SubSource'];
 
 function buildChannelSkuCsv(rows) {
   const lines = [HEADER.join(',')];
   for (const r of rows) {
-    lines.push([r.channelSku, r.inventorySku, r.title, r.qty, r.price, r.wfs, r.linked, r.source, r.subSource, r.inScan].map(csvEscape).join(','));
+    lines.push([r.inventorySku, r.channelSku, r.title, r.qty, r.price, r.wfs, r.source, r.subSource].map(csvEscape).join(','));
   }
   return lines.join('\r\n') + '\r\n';
 }
