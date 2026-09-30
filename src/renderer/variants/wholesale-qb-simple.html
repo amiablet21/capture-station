@@ -121,7 +121,7 @@
 <body>
 
 <h1>Wholesale — the invoice, in the app's own styling</h1>
-<div class="sub">The QuickBooks invoice layout (customer and number up top, lines, note left, totals right) drawn with the app's own pieces: its dialog, its buttons, its inputs, its table headers, its green. No terms, due date, email, discount, amount received, attachments or recurring.</div>
+<div class="sub">The QuickBooks invoice layout (customer and number up top, lines, note left, totals right) drawn with the app's own pieces: its dialog, its buttons, its inputs, its table headers, its green. No terms, due date, email, discount, amount received, attachments or recurring. This is inventory management first: price and shipping are optional extras for your own records.</div>
 
 <div class="opt">
   <div class="opt-label"><b>1 · The invoice</b><span>two lines in, third being typed</span></div>
@@ -137,16 +137,16 @@
 
       <table>
         <colgroup><col style="width:200px"><col><col style="width:126px"><col style="width:68px"><col style="width:92px"><col style="width:100px"><col style="width:30px"></colgroup>
-        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th></tr></thead>
+        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate <span style="font-weight:500;text-transform:none;letter-spacing:0">(optional)</span></th><th class="r">Amount</th><th></th></tr></thead>
         <tbody>
           <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td class="r stock">1,974 → <span class="to">1,964</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td class="x">✕</td></tr>
-          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono">157.00</span></td><td class="r amt">314.00</td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td class="x">✕</td></tr>
           <tr class="on"><td class="sug"><span class="cell f sku">X133-64<span class="ph" style="font-family:var(--font);font-weight:400">|</span></span>
             <div class="sug-list">
               <div class="sug-o hl"><span class="sku">X133-64GB-SILVER</span><span class="t">Galaxy Tab A9 64GB Silver</span><span class="s">634 · last 118.00</span></div>
               <div class="sug-o"><span class="sku">X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB Graphite · on line 1</span><span class="s">1,974</span></div>
               <div class="sug-o"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB, open box</span><span class="s">12</span></div>
-            </div></td><td><span class="cell ph">fills from the item</span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">0.00</span></td><td class="r amt ph">0.00</td><td class="x">✕</td></tr>
+            </div></td><td><span class="cell ph">fills from the item</span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td class="x">✕</td></tr>
         </tbody>
       </table>
       <div style="height:92px"></div>
@@ -155,16 +155,17 @@
       <div class="bot">
         <div class="note"><span class="field-label">Note</span><div class="input ph">PO#, payment terms, who picked it up…</div></div>
         <div class="tot">
-          <div class="row"><span>Subtotal · 12 units</span><span class="v">$1,494.00</span></div>
-          <div class="row"><span>Shipping</span><span class="ship"><span class="input">UPS<span class="caret">▼</span></span><span class="input mono ph" style="width:90px">tracking</span><span class="input mono" style="width:68px">24.50</span></span></div>
-          <div class="row total"><span>Total</span><span class="v">$1,518.50</span></div>
-          <div class="stockbox">Save takes <b>12 units</b> off Digital World Shop</div>
+          <div class="row"><span>Units</span><span class="v">12</span></div>
+          <div class="row"><span>Goods <span class="ph">· 1 line unpriced</span></span><span class="v">$1,180.00</span></div>
+          <div class="row"><span>Shipping</span><span class="ship"><span class="input ph">Carrier<span class="caret">▼</span></span><span class="input mono ph" style="width:90px">tracking</span><span class="input mono ph" style="width:68px">0.00</span></span></div>
+          <div class="row total"><span>Total</span><span class="v">$1,180.00</span></div>
+          <div class="stockbox">Save takes <b>12 units</b> off Digital World Shop · price and shipping never block it</div>
         </div>
       </div>
     </div>
     <div class="dlg-actions"><span class="sum">also writes wholesale-orders.csv</span><span class="btn btn-ghost">Cancel</span><span class="btn btn-ghost">Print</span><span class="btn btn-primary">Save</span></div>
   </div>
-  <div class="cap">Only SKU and Qty are required. Rate can stay 0.00, shipping can stay blank. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
+  <div class="cap">Only SKU and Qty are required. Rate, shipping and note are optional; a line with no rate simply doesn't count toward the total, and Save never asks for them. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
 </div>
 
 <div class="opt">
