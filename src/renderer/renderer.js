@@ -9680,11 +9680,15 @@ function ebParseSku(sku) {
   const m = base.match(/(\d+(?:GB|TB))/i);
   const parts = base.split("-").filter(Boolean);
   const last = parts[parts.length - 1] || "";
+  // tokens after the storage size: one = the color, more = a bundle or
+  // accessory SKU (X210-64GB-GRAY-CASE-USBC) that is NOT a color variant
+  const after = m ? base.slice(base.indexOf(m[1]) + m[1].length).split("-").filter(Boolean) : [];
   return {
     cond, base,
     model: m ? base.slice(0, Math.max(0, base.indexOf(m[1]) - 1)) : (parts[0] || ""),
     storage: m ? m[1] : "",
     color: last && !/GB|TB/i.test(last) ? last[0] + last.slice(1).toLowerCase() : "",
+    plain: !!m && after.length === 1,
     // the SKU never spells the brand out — the model token implies it
     // (same heuristic the Temu tab uses)
     brand: /IPAD|IPHONE|APPLE/i.test(s) ? "Apple" : "Samsung",
@@ -9707,8 +9711,19 @@ function ebTitleFor(baseTitle, cond) {
 const EB_SPEC_JUNK = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
 function ebCleanSpecs(specs) {
   const out = {};
-  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = v;
+  // eBay's page renders model numbers with non-breaking hyphens (U+2011);
+  // an MPN carrying them never matches the catalog — plain hyphens here
+  const plainDash = (v) => String(v ?? "").replace(/[\u2010\u2011\u2012\u2013]/g, "-");
+  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = plainDash(v);
   return out;
+}
+
+// eBay category when no live listing lent us one: the two leaf categories
+// this store lists in (owner's upload was refused for an empty category,
+// 2026-09-28 — eBay's upload has no "fill it later")
+const EB_CATEGORY = { tablet: "171485", phone: "9355" }; // Tablets & eBook Readers / Cell Phones & Smartphones
+function ebDefaultCategory(sku, title) {
+  return EB_CATEGORY[tmGuessCat(sku, title || "")] || EB_CATEGORY.phone;
 }
 
 // mirror of main/ebaycsv.js buildDescription: the live preview IS the export
@@ -9854,6 +9869,7 @@ async function ebSelect(sku, scratch) {
     // SKU typed by hand keeps the old open-box default until parsed
     cond: (q && q.cond) || p.cond || (scratch ? "openbox" : "new"),
     stockItemId: (q && q.stockItemId) || "",
+    categoryId: sku ? ebDefaultCategory(sku, q && q.title) : "",
     title: "", price: "", qty: q ? q.qty : 1,
     specs: {}, vars: [], photos: [],
     src: "", item: "",
@@ -9903,7 +9919,10 @@ async function ebSelect(sku, scratch) {
 function ebApplyCard(card, p) {
   ebCur.src = "ebay";
   ebCur.item = card.item || "";
-  ebCur.categoryId = card.categoryId || "";
+  // the card's category (read off the live listing, or typed once) wins;
+  // a card without one falls to the phone/tablet default
+  ebCur.categoryId = card.categoryId || ebDefaultCategory(ebCur.sku, card.title);
+  ebCur.catSrc = card.categoryId ? "card" : "default";
   ebCur.title = ebTitleFor(card.title, ebCur.cond);
   ebCur.price = card.price ? (Math.max(1, card.price * 0.92)).toFixed(2) : "";
   ebCur.specs = ebCleanSpecs(card.specs);
@@ -9945,6 +9964,7 @@ function ebAutoSiblings() {
     if (r.sku === ebCur.sku) continue;
     const ps = ebParseSku(r.sku);
     if (ps.cond !== p.cond || ps.model !== p.model) continue;
+    if (!ps.plain) continue; // -CASE / -BUNDLE SKUs are products of their own, not colors
     if (ebCur.vars.some(v => ebVarSku(v) === r.sku)) continue;
     ebCur.vars.push({ sku: r.sku, storage: ps.storage, color: ps.color, price: "", qty: r.qty, auto: true });
     // one product, one draft: absorbing a sibling retires its own draft
@@ -9971,6 +9991,7 @@ function ebLiveFamily() {
     if (!sku.startsWith(prefix) || inListing.has(sku)) continue;
     if (!it.stockItemId || !chLinked.ebay.has(it.stockItemId)) continue;
     const ps = ebParseSku(sku);
+    if (!ps.plain) continue;
     out.push({ sku, storage: ps.storage, color: ps.color });
   }
   return out;
@@ -9985,6 +10006,14 @@ function renderEbayForm() {
   document.querySelectorAll(".ebay-condbtn").forEach(b => b.classList.toggle("is-on", has && b.dataset.cond === ebCur.cond));
   $("ebVersion").value = has ? (ebCur.version || "US") : "US";
   $("ebVersion").disabled = !has;
+  $("ebCategory").value = has ? (ebCur.categoryId || "") : "";
+  $("ebCategory").disabled = !has;
+  $("ebCategory").classList.toggle("is-missing", has && !ebCur.categoryId);
+  $("ebCategoryHint").textContent = !has ? ""
+    : !ebCur.categoryId ? "required for the CSV upload — eBay refuses a row without one"
+    : ebCur.catSrc === "card" ? "from your live listing of this model — edit to override"
+    : ebCur.catSrc === "typed" ? `saved for every future ${ebParseSku(ebCur.sku).model || ""} listing`
+    : `${ebCur.categoryId === EB_CATEGORY.tablet ? "Tablets & eBook Readers" : "Cell Phones & Smartphones"} — the store default; the Linnworks path takes its own from the configurator`;
   $("ebPrice").value = has ? ebCur.price : "";
   $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
   $("ebQty").value = has ? ebCur.qty : "";
@@ -10047,8 +10076,8 @@ function renderEbayForm() {
   // preview + export note
   $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue, or press New listing.</div>`;
   const missing = [];
-  if (has && !ebCur.photos.length) missing.push("no photos yet");
-  if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
+  if (has && !ebCur.photos.length) missing.push("no photos yet — eBay wants at least one");
+  if (has && !ebCur.categoryId) missing.push("no eBay category — the CSV cannot upload without one");
   $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
   $("ebExport").disabled = !has;
   $("ebLwList").disabled = !has;
@@ -10101,6 +10130,23 @@ $("ebVersion").addEventListener("change", (e) => {
   if (!ebCur) return;
   ebCur.version = e.target.value;
   renderEbayForm(); // preview + history + draft in one go
+});
+// a typed category is remembered on the model card, so the next return of
+// the same model (any condition) opens with it
+$("ebCategory").addEventListener("change", async (e) => {
+  if (!ebCur) return;
+  const id = e.target.value.replace(/\D/g, "");
+  ebCur.categoryId = id;
+  ebCur.catSrc = id ? "typed" : "";
+  const model = ebParseSku(ebCur.sku).model;
+  if (id && model && !ebCur.scratch) {
+    const cfg = await ebLoadCfg();
+    const cards = { ...(cfg.ebayModelCards || {}) };
+    cards[model] = { ...(cards[model] || {}), categoryId: id };
+    ebCfg.ebayModelCards = cards;
+    api.setConfig({ ebayModelCards: cards }).catch(() => {});
+  }
+  renderEbayForm();
 });
 $("ebUndo").addEventListener("click", () => ebHistGo(-1));
 $("ebRedo").addEventListener("click", () => ebHistGo(1));
@@ -10164,6 +10210,8 @@ $("ebSku").addEventListener("change", (e) => {
   ebCur.specs = ebManualSpecs(p);
   ebCur.src = "manual";
   ebCur.err = "from-scratch listing";
+  ebCur.categoryId = ebDefaultCategory(sku, "");
+  ebCur.catSrc = "default";
   ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
   renderEbayForm();
 });
@@ -10246,9 +10294,11 @@ $("ebShots").addEventListener("click", async (e) => {
 // the form's state as the payload the export AND the Linnworks publish
 // both send — one assembly, no drift between the two paths
 function ebBuildListingPayload() {
+  // storage + color travel as fields; main/ebaycsv.js writes them in eBay's
+  // upload syntax (`Storage Capacity=64GB|Color=Gray`)
   const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
     sku: ebVarSku(v),
-    details: `Storage=${v.storage};Color=${v.color}`,
+    storage: String(v.storage).trim(), color: String(v.color).trim(),
     price: v.price || ebCur.price, qty: Number(v.qty) || 1,
   }));
   if (vars.length) {
@@ -10257,7 +10307,8 @@ function ebBuildListingPayload() {
     const ps = ebParseSku(ebCur.sku);
     vars.unshift({
       sku: ebCur.sku,
-      details: `Storage=${ps.storage || ebCur.specs["Storage Capacity"] || ""};Color=${ps.color || ebCur.specs["Color"] || ""}`,
+      storage: ps.storage || ebCur.specs["Storage Capacity"] || "",
+      color: ps.color || ebCur.specs["Color"] || "",
       price: ebCur.price, qty: Number(ebCur.qty) || 1,
     });
   }
@@ -10276,6 +10327,7 @@ function ebBuildListingPayload() {
 $("ebExport").addEventListener("click", async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast("Type a SKU first."); return; }
+  if (!String(ebCur.categoryId || "").trim()) { toast("Type the eBay category ID first — eBay refuses an upload row without one."); $("ebCategory").focus(); return; }
   ebBusy = true;
   $("ebExport").textContent = "Exporting…";
   const { vars, listing } = ebBuildListingPayload();
@@ -10314,16 +10366,40 @@ $("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://w
    form's fields overlaid, pushed through Linnworks' stored eBay connection.
    Variations still ride the CSV path. Configurator picks persist per
    condition (they carry the eBay condition, so one per condition). */
-let ebLw = { configs: null, byCond: {}, subSource: '' };
+// error = why the list is empty (Linnworks refused, or it holds none) — the
+// dropdown and the List button both read it out instead of going quiet
+// (owner hit a dead dropdown with no explanation, 2026-09-28)
+let ebLw = { configs: null, byCond: {}, subSource: '', error: '', loading: false };
 
-async function ebLwLoadConfigs() {
-  if (ebLw.configs || (state && state.captureOnly)) { ebLwFillSelect(); return; }
-  ebLw.configs = []; // one load per session; a failure leaves the select disabled
-  const res = await api.ebayLwConfigs().catch(() => null);
+// a short, honest reason for an empty configurator list
+function ebLwReason() {
+  if (ebLw.loading) return 'reading configurators from Linnworks…';
+  if (ebLw.error) {
+    const st = ebLw.error.match(/\((\d{3})\)/);
+    if (st && (st[1] === '403' || st[1] === '401')) return `Linnworks refused (${st[1]}) — the API application needs the Listings permission`;
+    const msg = String(ebLw.error).replace(/\s+/g, ' ').trim();
+    return `Linnworks: ${msg.length > 90 ? msg.slice(0, 87) + '…' : msg}`;
+  }
+  return 'no eBay configurators in Linnworks yet — make one there, then Refresh';
+}
+
+async function ebLwLoadConfigs(force) {
+  if (state && state.captureOnly) { ebLwFillSelect(); return; }
+  if (ebLw.configs && !force) { ebLwFillSelect(); return; }
+  if (ebLw.loading) { ebLwFillSelect(); return; } // a mid-load render keeps the condition current
+  ebLw.loading = true;
+  ebLw.error = '';
+  ebLwFillSelect();
+  const res = await api.ebayLwConfigs().catch(err => ({ ok: false, error: err.message }));
+  ebLw.loading = false;
   if (res && res.ok) {
     ebLw.configs = res.configs || [];
     ebLw.byCond = (res.saved && res.saved.byCond) || {};
     ebLw.subSource = (res.saved && res.saved.subSource) || '';
+  } else {
+    ebLw.configs = [];
+    ebLw.error = (res && res.error) || 'no answer from Linnworks';
+    toast(`Could not read the eBay configurators — ${ebLwReason()}`, 9000);
   }
   ebLwFillSelect();
 }
@@ -10332,9 +10408,15 @@ function ebLwFillSelect() {
   const sel = $('ebLwConfig');
   const cond = ebCur ? ebCur.cond : 'new';
   const list = ebLw.configs || [];
-  sel.innerHTML = `<option value="">configurator for ${esc(cond)}…</option>` + list.map(c =>
+  // an empty list explains itself in the placeholder; the tooltip carries
+  // the full Linnworks message when there is one
+  const head = list.length ? `configurator for ${esc(cond)}…` : esc(ebLwReason());
+  sel.innerHTML = `<option value="">${head}</option>` + list.map(c =>
     `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
   sel.disabled = !list.length;
+  sel.title = list.length
+    ? 'The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)'
+    : ebLwReason();
 }
 
 $('ebLwConfig').addEventListener('change', async () => {
@@ -10349,7 +10431,12 @@ $('ebLwList').addEventListener('click', async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast('Type a SKU first.'); return; }
   const configId = ebLw.byCond[ebCur.cond];
-  if (!configId) { toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`); return; }
+  if (!configId) {
+    // no list at all: say WHY, never point at a dropdown that cannot open
+    if (!(ebLw.configs || []).length) { toast(`Cannot list through Linnworks yet — ${ebLwReason()}`, 9000); return; }
+    toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`);
+    return;
+  }
   const { vars, listing } = ebBuildListingPayload();
   if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
   ebBusy = true;
@@ -10935,6 +11022,7 @@ $("ebRefresh").addEventListener("click", () => {
   chLinked = null;
   loadChLinked();
   loadUnlisted(true);
+  ebLwLoadConfigs(true); // a configurator made in Linnworks a minute ago shows up
   toast("Re-scanning listings…", 2000);
 });
 
