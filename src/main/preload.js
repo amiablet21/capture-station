@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (patch) => ipcRenderer.invoke('config:set', patch),
   exportCsv: () => ipcRenderer.invoke('csv:export'),
+  exportChannelSkus: (channel, condition) => ipcRenderer.invoke('channelSkus:export', { channel, condition: condition || '' }),
   openCsvFolder: () => ipcRenderer.invoke('csv:openFolder'),
   chooseCsvFolder: () => ipcRenderer.invoke('csv:chooseFolder'),
   testLinnworks: (creds) => ipcRenderer.invoke('linnworks:test', creds),

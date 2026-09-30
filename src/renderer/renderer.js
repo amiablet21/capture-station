@@ -58,6 +58,7 @@ if (!window.api) {
     getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false, wholesale: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
+    exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
@@ -317,7 +318,7 @@ function render() {
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
-  $('wholesaleBtn').hidden = !(pages.stock && pages.wholesale); // per-station opt-in (owner 2026-09-30)
+  $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
   const openToday = (state.todayCount || 0) - (state.todayProcessed || 0);
@@ -3250,6 +3251,48 @@ $('stockRefresh').addEventListener('click', () => {
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
+// Every MAPPED listing on one channel as a CSV — inventory SKU, channel
+// SKU, title, condition, listed qty, price, WFS flag (owner 2026-09-30).
+// The active condition chip narrows the file exactly like it narrows the
+// grid (All = every condition, each row still carries its Condition column).
+async function stockExportChannel(channel) {
+  const btn = $('stockActionsBtn');
+  const cond = !stockActiveView ? '' : stockActiveView.plain ? 'New' : (stockActiveView.label || '');
+  const label = channelLabel(channel);
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    const res = await api.exportChannelSkus(channel, cond);
+    if (res.ok) toast(`${res.count} ${cond ? cond + ' ' : ''}${label} channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
+    else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
+  }
+}
+// Actions dropdown (owner pick 2026-09-30, option A): Mappings, WFS
+// Shipments, Bulk import and the channel-SKU exports behind one button, so
+// the band never wraps again. Same in-app <dialog> menu as the Returns tab,
+// anchored under the button and clamped inside the window.
+$('stockActionsBtn').addEventListener('click', () => {
+  const dlg = $('stockActionsDlg');
+  dlg.showModal();
+  const r = $('stockActionsBtn').getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8));
+  dlg.style.left = `${Math.round(left)}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+$('stockActionsDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('stockActionsDlg').close();
+  if (!item) return; // backdrop click: dismiss
+  const act = item.dataset.act || '';
+  if (act === 'mappings') chmapOpen();
+  else if (act === 'wfs') openWfs();
+  else if (act === 'wholesale') openWsList();
+  else if (act === 'bulk') bulkOpen();
+  else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
+});
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
   if (!$('stockSearch').value) {
@@ -4881,7 +4924,7 @@ function renderChmap() {
       || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
 }
 
-$('chmapBtn').addEventListener('click', () => chmapOpen());
+// (Mappings opens from the Stock page's Actions menu — see stockActionsDlg)
 $('chmapClose').addEventListener('click', () => $('chmapDialog').close());
 $('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
 $('chmapHasQty').addEventListener('click', () => { chmap.hasQty = !chmap.hasQty; renderChmap(); });
@@ -7042,7 +7085,8 @@ function bulkRefresh() {
   $('bulkApply').disabled = !bulkValidRows().length;
 }
 
-$('stockBulkBtn').addEventListener('click', () => {
+// opened from the Stock page's Actions menu (see stockActionsDlg)
+function bulkOpen() {
   ensureInventory(); // the SKU picker's lookup data
   $('bulkGridRows').innerHTML = '';
   $('bulkNote').value = '';
@@ -7053,7 +7097,7 @@ $('stockBulkBtn').addEventListener('click', () => {
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
   if (first) first.focus();
   if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
-});
+}
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
 $('bulkGridRows').addEventListener('input', () => bulkRefresh());
@@ -7178,7 +7222,9 @@ function prChCells(p) {
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
           <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${c.fluctuates
-    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
+    ? `<span class="pr-price-ro" title="${l.fromSales
+      ? `The repricer owns this price — this is what the listing last sold at (before tax), never written here. Linnworks has ${prMoney(l.lwPrice)} on file${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`
+      : `The repricer owns this price — shown here, never written. No sale in 60 days, so this is the Linnworks figure${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
         </div>${prGotLine(l, ci, maxU)}</div>`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
@@ -7252,8 +7298,8 @@ function prHistPaint(ph) {
   // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
   for (const bar of $('prlhBody').querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
   $('prlhFoot').textContent = ph && ph.src === 'sales'
-    ? 'No price change logged for this listing yet — these are the prices it actually sold at (from Linnworks orders).'
-    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders.';
+    ? 'No price change logged for this listing yet — these are the prices it actually sold at, before sales tax (from Linnworks orders).'
+    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders, before sales tax.';
   for (const b of $('prlhRange').querySelectorAll('button')) b.classList.toggle('is-on', Number(b.dataset.days) === prlh.days);
 }
 async function prListHistLoad(days) {
@@ -7279,7 +7325,7 @@ function prHistOpen(el) {
   Object.assign(prlh, { c, l, days: 60 });
   $('prlhCh').textContent = c.source.toUpperCase();
   $('prlhSku').textContent = l.csku;
-  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>`;
+  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>${l.fromSales ? `<span class="prlh-lw" title="What Linnworks has on file for this listing — the repricer's real price only shows through the sales">Linnworks: ${prMoney(l.lwPrice)}</span>` : ''}`;
   // the 60 days already came with the sheet: paint at once, no wait
   prlh.seq++;
   prHistPaint(l.ph ? { ...l.ph, periods: l.ph.periods } : null);
@@ -8200,7 +8246,7 @@ async function renderWfsPast() {
       </div>`).join('');
 }
 
-$('wfsBtn').addEventListener('click', () => openWfs());
+// (WFS Shipments opens from the Stock page's Actions menu — see stockActionsDlg)
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
 
@@ -8296,7 +8342,7 @@ $('wsListBody').addEventListener('click', async (e) => {
     if (stockCache) loadStock();
   }
 });
-$('wholesaleBtn').addEventListener('click', () => openWsList());
+// (Wholesale invoices opens from the Stock page's Actions menu — see stockActionsDlg)
 
 /* ---- customers: combo, inline card, saved with the invoice ---- */
 async function wsLoadCustomers() {

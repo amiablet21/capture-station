@@ -1600,6 +1600,7 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .prlh-head { display: flex; align-items: baseline; gap: 10px; }
 .prlh-sku { font-size: 15px; font-weight: 700; }
 .prlh-now { font-size: 12px; color: var(--muted); }
+.prlh-lw { margin-left: 10px; font-size: 11.5px; font-weight: 500; color: var(--muted); font-family: var(--mono); }
 .prlh-now b { font-family: var(--mono); font-size: 14px; color: var(--text); }
 .prlh-x { margin-left: auto; align-self: flex-start; margin-right: -8px; }
 .prlh-x:hover { background: var(--surface-2); }
@@ -4854,6 +4855,14 @@ th:last-child > .col-grip { right: 0; }
 /* the check column is always reserved so labels never shift */
 .tab-menu-item::before { content: '✓'; width: 13px; flex: 0 0 auto; font-size: 11px; color: transparent; }
 .tab-menu-item.is-current::before { color: var(--text); }
+/* Stock page Actions menu: plain items (no check column — nothing here is a
+   "current" choice) and a hairline between the dialogs and the file jobs */
+.stock-actions-menu { min-width: 222px; }
+.stock-actions-menu .tab-menu-item::before { display: none; }
+.stock-actions-menu .tab-menu-item { padding-left: 12px; }
+.stock-actions-menu .tab-menu-item:disabled { opacity: 0.5; cursor: default; }
+.tab-menu-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+.stock-actions-btn .tab-caret { margin-left: 3px; }
 .stock-shelf-link { font-family: inherit; font-size: 11.5px; font-weight: 500; border: none; background: none; color: var(--accent-soft-text); cursor: pointer; padding: 6px 4px; }
 .stock-shelf-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* hidden = invisible, NOT gone: if the link left the layout, the flexible

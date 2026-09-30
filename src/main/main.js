@@ -23,6 +23,7 @@ let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
+let runUnlistedScanShared = async () => unlistedCache; // bound to registerIpc's runUnlistedScan once it exists
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
 let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
@@ -971,6 +972,48 @@ async function exportCsv() {
   if (canceled || !filePath) return { ok: false, canceled: true };
   fs.writeFileSync(filePath, buildCsvContent(rows), 'utf8');
   return { ok: true, path: filePath, count: rows.length };
+}
+
+/* ---------- channel SKU export ----------
+   Every listing on one marketplace channel as a CSV (owner 2026-09-30: "I
+   just want a list of all the channel SKUs"). Row building lives in
+   chskus-csv.js; this is the Linnworks fetch + save dialog around it. */
+// condition: '' = every mapped listing; 'New' or a stockViews label = only
+// that slice (the Stock page's active chip rides along on the button)
+async function exportChannelSkus(channel, condition = '') {
+  const { LABELS, buildChannelSkuRows, buildChannelSkuCsv } = require('./chskus-csv.js');
+  const key = String(channel || '').toLowerCase();
+  const label = LABELS[key];
+  if (!label) return { ok: false, error: `Unknown channel: ${channel}` };
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+  const day = db.localDay();
+  const cond = String(condition || '').trim();
+  const slug = cond ? '-' + cond.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: `Export ${label} channel SKUs${cond ? ` (${cond})` : ''}`,
+    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus${slug}-${day}.csv`),
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try {
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const channels = (await client.getMappingChannels()).filter(c => new RegExp(key, 'i').test(c.source));
+    const feeds = [];
+    for (const ch of channels) {
+      try { feeds.push({ channel: ch, rows: await client.getChannelItems(ch.id, ch.source, ch.subSource) }); } catch { /* the link records still export */ }
+    }
+    // the link records cover in-stock items; a stale scan refreshes first so
+    // a listing linked today is in the file
+    let recs = {};
+    try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
+    const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond });
+    fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
+    return { ok: true, path: filePath, count: rows.length, channel: label, condition: cond };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 /* ---------- sync ---------- */
@@ -2440,7 +2483,27 @@ function registerIpc() {
       const priceLog = priceLogByListing();
       const priceHist = (colKey, csku, curPrice) => {
         const k = `${colKey}|${String(csku).toUpperCase()}`;
-        return listingPriceHistory({ sales: saleLog[k] || [], log: priceLog[k] || [], days: HIST_DAYS, curPrice, limit: 12 });
+        // a repricer-owned channel: the log only ever holds Linnworks-feed
+        // moves, not what the listing really sold at — its periods come
+        // from the sales alone
+        const log = priceFluctuates(colKey) ? [] : (priceLog[k] || []);
+        return listingPriceHistory({ sales: saleLog[k] || [], log, days: HIST_DAYS, curPrice, limit: 12 });
+      };
+      // the price a repricer-owned listing is REALLY at (owner 2026-09-28:
+      // "why does it still show 149.99?"): Linnworks never hears what the
+      // repricer sets on Walmart, so its catalog figure goes stale for
+      // months. The newest sale is the truth; the Linnworks figure stays
+      // beside it for the hover.
+      const lastSold = (colKey, csku) => {
+        const runs = saleLog[`${colKey}|${String(csku).toUpperCase()}`] || [];
+        let best = null;
+        for (const x of runs) if (!best || x.t > best.t) best = x;
+        return best ? best.unit : 0;
+      };
+      const chanPrice = (col, csku, lwPrice) => {
+        if (!col.fluctuates) return { price: lwPrice };
+        const sold = lastSold(col.key, csku);
+        return sold > 0 ? { price: sold, lwPrice, fromSales: true } : { price: lwPrice, lwPrice };
       };
       const soldInfo = (colKey, csku) => {
         const a = soldAt[`${colKey}|${String(csku).toUpperCase()}`];
@@ -2463,16 +2526,17 @@ function registerIpc() {
           const stored = rec
             ? (rec.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || rec.prices[`${col.key}|`] || 0)
             : 0;
-          const price = li.price || over || stored || Number(inv.retailPrice) || 0;
+          const lwPrice = li.price || over || stored || Number(inv.retailPrice) || 0;
+          const cp = chanPrice(col, li.sku, lwPrice);
           (row.channels[col.key] = row.channels[col.key] || []).push({
             csku: li.sku,
-            price,
+            ...cp,
             approx: !li.price, // the feed didn't carry it: shown as ≈
             refId: li.channelRefId || '',
             sold: sales.units[String(li.sku).toUpperCase()] || 0,
             wfs: !!li.wfs,
             got: soldInfo(col.key, li.sku),
-            ph: priceHist(col.key, li.sku, price),
+            ph: priceHist(col.key, li.sku, cp.price),
           });
         }
       }
@@ -2483,16 +2547,17 @@ function registerIpc() {
         for (const col of columns) {
           if (!col.fluctuates) continue;
           for (const l of row.channels[col.key] || []) {
-            if (!l.price) continue;
+            const feed = l.fromSales ? l.lwPrice : l.price; // the Linnworks figure, never the sale price
+            if (!feed) continue;
             const k = `${col.key}|${String(l.csku).toUpperCase()}`;
             const prev = Number(snap[k]) || 0;
-            if (prev && Math.abs(prev - l.price) >= 0.01) {
+            if (prev && Math.abs(prev - feed) >= 0.01) {
               priceLogEntry({
                 mode: 'auto', by: '', source: col.source, subSource: col.subSource,
-                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: l.price,
+                channelSku: l.csku, stockSku: row.sku, oldPrice: prev, newPrice: feed,
               });
             }
-            snap[k] = l.price;
+            snap[k] = feed;
           }
         }
       }
@@ -2585,7 +2650,8 @@ function registerIpc() {
           const stored = recStored
             ? (recStored.prices[`${col.key}|${String(col.subSource || '').toUpperCase()}`] || recStored.prices[`${col.key}|`] || 0)
             : 0;
-          lines.push({ csku: rec.sku, price: stored, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false, got: soldInfo(col.key, rec.sku), ph: priceHist(col.key, rec.sku, stored) });
+          const cp = chanPrice(col, rec.sku, stored);
+          lines.push({ csku: rec.sku, ...cp, approx: true, refId: rec.refId || '', sold: sales.units[u] || 0, wfs: false, got: soldInfo(col.key, rec.sku), ph: priceHist(col.key, rec.sku, cp.price) });
         }
       }
       // per channel, the 30-day average across every listing of the product
@@ -2671,7 +2737,8 @@ function registerIpc() {
       if (String(l.source || '').toUpperCase() !== src || String(l.channelSku || l.sku || '').toUpperCase() !== ch) continue;
       sales.push({ t: Date.parse(l.processedOn) || 0, qty, unit: Math.round(rev / qty * 100) / 100 });
     }
-    const log = priceLogByListing()[`${src}|${ch}`] || [];
+    // repricer-owned channel: periods from the sales alone (see priceHist)
+    const log = priceFluctuates(src) ? [] : (priceLogByListing()[`${src}|${ch}`] || []);
     return { ok: true, history: listingPriceHistory({ sales, log, days: d, curPrice: price }) };
   });
   ipcMain.handle('pricing:set', async (_e, { stockItemId, stockSku, source, subSource, channelSku, price, old }) => {
@@ -3049,6 +3116,7 @@ function registerIpc() {
     return cfg;
   });
   ipcMain.handle('csv:export', () => exportCsv());
+  ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
       const result = await testConnection(creds || config.load().linnworks);
@@ -3900,7 +3968,8 @@ function registerIpc() {
   const overviewCachePath = () => path.join(app.getPath('userData'), 'overview-cache.json');
   try {
     const j = JSON.parse(fs.readFileSync(overviewCachePath(), 'utf8'));
-    if (j && j.money) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
+    // v2: $ before sales tax — an older snapshot is dropped, not shown
+    if (j && j.money && j.v === 2) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
   } catch { /* no saved overview yet */ }
 
   function refreshOverviewMoney(cfg) {
@@ -3908,7 +3977,7 @@ function registerIpc() {
     overviewCache.promise = computeOverviewMoney(cfg)
       .then(m => {
         overviewCache = { at: Date.now(), money: m, promise: null };
-        try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m })); } catch { /* best effort */ }
+        try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
         return m;
       })
       .catch(e => { overviewCache.promise = null; throw e; });
@@ -3921,7 +3990,7 @@ function registerIpc() {
   // 2026-08-17). A year of headers, per-local-day counts, refreshed twice a
   // day, persisted so boots answer instantly.
   const OVERVIEW_HISTORY_TTL_MS = 12 * 3600 * 1000;
-  const OVERVIEW_HISTORY_V = 4; // v2: bucketed by RECEIVED date · v3: + gross sales per day · v4: + per-channel split
+  const OVERVIEW_HISTORY_V = 5; // v2: bucketed by RECEIVED date · v3: + gross sales per day · v4: + per-channel split · v5: $ before sales tax
   const ovChanOf = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
   let overviewHistory = { at: 0, days: null, promise: null };
   const overviewHistoryPath = () => path.join(app.getPath('userData'), 'overview-history.json');
@@ -3941,7 +4010,7 @@ function registerIpc() {
       const to = new Date();
       const from = new Date(to.getTime() - 366 * 86400000);
       const heads = await client.listProcessedHeaders(from.toISOString(), to.toISOString());
-      const days = {}; // ymd -> { n: orders received, s: gross sales $, c: { channel: { n, s } } }
+      const days = {}; // ymd -> { n: orders received, s: sales $ before tax, c: { channel: { n, s } } }
       const bump = (ts, charge, src) => {
         if (Number.isNaN(ts)) return;
         const key = db.localDay(new Date(ts));
@@ -3952,9 +4021,9 @@ function registerIpc() {
         c.n += 1;
         c.s += Number(charge) || 0;
       };
-      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.totalCharge, h.source);
+      for (const h of heads) bump(Date.parse(h.receivedOn || h.processedOn), h.netCharge, h.source);
       try {
-        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.totalCharge, o.source);
+        for (const o of await getOpenOrdersCached(cfg)) bump(Date.parse(o.receivedDate), o.netCharge, o.source);
       } catch { /* open book unavailable: processed-only still beats captures */ }
       overviewHistory = { at: Date.now(), days, promise: null };
       try { fs.writeFileSync(overviewHistoryPath(), JSON.stringify({ at: overviewHistory.at, days, v: OVERVIEW_HISTORY_V })); } catch { /* best effort */ }
@@ -4075,7 +4144,7 @@ function registerIpc() {
       const ts = Date.parse(h.receivedOn || h.processedOn);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(h.orderId)) continue;
       seen.add(h.orderId);
-      orders.push({ ts, source: h.source, charge: h.totalCharge });
+      orders.push({ ts, source: h.source, charge: h.netCharge });
       soldHeads.push(h);
     }
     // units sold today per SKU: open orders that arrived today plus the
@@ -4097,7 +4166,7 @@ function registerIpc() {
       const ts = Date.parse(o.receivedDate);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
       seen.add(o.orderId);
-      orders.push({ ts, source: o.source, charge: o.totalCharge });
+      orders.push({ ts, source: o.source, charge: o.netCharge });
       for (const it of o.items || []) {
         if (it.isService) continue;
         const um = !it.stockItemId || it.stockItemId === ZERO_GUID;
@@ -4459,7 +4528,7 @@ function registerIpc() {
     try {
       open = (await getOpenOrdersCached(cfg)).map(o => ({
         order: o.reference || o.orderId, channel: ovChanOf(o.source || ''),
-        at: o.receivedDate, charge: Number(o.totalCharge) || 0,
+        at: o.receivedDate, charge: Number(o.netCharge) || 0,
         items: (o.items || []).filter(l => !l.isService).map(l => ({ sku: l.sku || l.channelSku || '', qty: l.quantity || 1, img: pic(l.sku || l.channelSku) })),
       })).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
     } catch { /* open book optional; today's rows still answer */ }
@@ -5328,6 +5397,7 @@ function registerIpc() {
     unlistedScanRunning = runUnlistedScanBody(cfg).finally(() => { unlistedScanRunning = null; });
     return unlistedScanRunning;
   }
+  runUnlistedScanShared = runUnlistedScan; // the channel-SKU export reads the same link records
   async function runUnlistedScanBody(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
@@ -6203,6 +6273,14 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'Export Today to CSV', accelerator: 'CmdOrCtrl+E', click: () => exportCsv() },
+        {
+          label: 'Export Channel SKUs',
+          submenu: [
+            { label: 'Walmart…', click: () => exportChannelSkus('walmart') },
+            { label: 'eBay…', click: () => exportChannelSkus('ebay') },
+            { label: 'Temu…', click: () => exportChannelSkus('temu') },
+          ],
+        },
         {
           label: 'Back Up Database Now',
           click: () => {
