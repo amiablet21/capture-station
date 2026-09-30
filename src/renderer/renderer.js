@@ -10386,6 +10386,7 @@ $("ebRefresh").addEventListener("click", () => {
 // their way), Running low (with an order quantity from the sales pace).
 
 let ovData = null;
+let ovUpdatedAt = null; // when the numbers last came back
 let ovFetching = false;
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -10410,6 +10411,7 @@ async function ovFetch() {
     const r = await api.overviewData().catch(() => null);
     if (r && r.ok) {
       ovData = r;
+      ovUpdatedAt = new Date();
       if (activePage === 'overview') ovRenderAll();
     }
   } finally {
@@ -10426,8 +10428,10 @@ function ovRenderAll() {
   ovRenderWfs();
   ovRenderSold();
   ovRenderLow();
+  $('ovUpdated').textContent = ovUpdatedAt
+    ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // bar widths go through the CSSOM: the CSP blocks inline style attributes
-  $('ovCols').querySelectorAll('.ov-bar i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+  $('ovCols').querySelectorAll('.ov-bar i[data-w], .ov-share i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
 }
 
 function ovRenderWfs() {
@@ -10480,7 +10484,10 @@ function ovRenderWfs() {
         : `<button class="ov-wsend" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
     </div>`;
   }).join('');
-  box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>
+  const sendUnits = plan.rows.reduce((a, r) => a + (Number(r.send) || 0), 0);
+  const wfsSub = plan.rows.length
+    ? `<span class="sub"><b>${plan.rows.length}</b> SKU${plan.rows.length === 1 ? '' : 's'} · <b>${sendUnits.toLocaleString()}</b> units</span>` : '';
+  box.innerHTML = `<h4 class="ov-h-g">Send to WFS${wfsSub}</h4>
     ${plan.rows.length ? `<div class="ov-wlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
     ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-wlist">${flightHtml}</div>` : ''}
@@ -10504,15 +10511,24 @@ function ovRenderSold() {
         <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</span><span class="xu">${sold.units}</span></div>
       </div>`
     : '<div class="ov-empty">Nothing sold yet today.</div>';
+  // the marketplace split rides under the number (polish 2026-09-30): a
+  // share bar in the channel colours, then dot · name · units
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+  const byCh = sold.byChannel || {};
+  const chTotal = chans.reduce((a, [k]) => a + (byCh[k] || 0), 0);
+  const share = chans.filter(([k]) => byCh[k] > 0)
+    .map(([k]) => `<i class="cn-${k}" data-w="${(byCh[k] / chTotal * 100).toFixed(1)}"></i>`).join('');
+  const legend = chans.map(([k, n]) => `<span class="cn-${k}">${n} <b>${(byCh[k] || 0).toLocaleString()}</b></span>`).join('');
+  const yday = today && Number.isFinite(Number(today.yesterday)) ? today.total - Number(today.yesterday) : null;
+  const vs = yday === null ? '' : yday === 0 ? ' · same as yesterday'
+    : ` · <span class="${yday > 0 ? 'up' : 'down'}">${yday > 0 ? '+' : '−'}${Math.abs(yday)} vs yesterday</span>`;
   box.innerHTML = `
     <div><div class="k">Units sold today</div>
       <div class="big mono">${sold.units.toLocaleString()}</div>
-      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</div></div>
-    ${grid}
-    <div class="ov-chcells">${chans.map(([k, n]) => `
-      <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv">${((sold.byChannel || {})[k] || 0).toLocaleString()}</div></div>`).join('')}
-    </div>`;
+      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}${vs}</div>
+      <div class="ov-share">${share}</div>
+      <div class="ov-chlegend">${legend}</div></div>
+    ${grid}`;
 }
 
 function ovRenderLow() {
@@ -10540,7 +10556,8 @@ function ovRenderLow() {
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovlowunignore>Undo</a></div>` : '';
-  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${m.leadDays}-day lead time</span></h4>
+  const lowN = plan.rows.length + (Number(plan.more) || 0);
+  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${lowN ? `<b>${lowN}</b> SKU${lowN === 1 ? '' : 's'} · ` : ''}${m.leadDays}-day lead time</span></h4>
     ${plan.rows.length ? `<div class="ov-wlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
     ${undo}
     ${plan.more ? `<div class="ov-more">+ ${plan.more} more — <a data-ovlow>open Stock</a></div>` : ''}

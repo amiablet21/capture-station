@@ -4614,7 +4614,9 @@ th:last-child > .col-grip { right: 0; }
 .ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 14px 22px 26px; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.ov-refresh { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.ov-refresh { display: inline-flex; align-items: center; gap: 6px; }
+/* when the numbers were last fetched (polish 2026-09-30) */
+.ov-updated { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .ov-refresh svg { width: 16px; height: 16px; }
 .ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
 @keyframes ovSpin { to { transform: rotate(360deg); } }
@@ -4718,6 +4720,28 @@ th:last-child > .col-grip { right: 0; }
 .ov-wkeys button:only-child { border-bottom: none !important; }
 .ov-wfast { font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 11px; font-family: var(--font); }
 #ovLow .ov-wkeys button { letter-spacing: 0; }
+/* polish (2026-09-30): the mini sheet loses its grey label band and its
+   vertical rules - each label sits right over its value, so the eye reads
+   the block as four figures, not a spreadsheet stripe. The urgency tint
+   fills the whole Left column (label + value) flush against the keys, and
+   Faster is a small red pill. */
+.ov-wrow { border-color: #E0DED8; }
+.ov-wid { padding: 7px 10px 0; border-bottom: none; }
+.ov-wsku { font-size: 12px; }
+.ov-wcells div { padding: 5px 8px 0; font-size: 8.5px; letter-spacing: .04em; background: none; border: none; color: var(--faint); }
+.ov-wcells span { padding: 1px 8px 7px; font-size: 12.5px; border: none; font-variant-numeric: tabular-nums; }
+.ov-wcells.ov-lcells div { letter-spacing: .02em; }
+.ov-wcells span:nth-child(8).r, .ov-wcells span:nth-child(8).a { background: none; }
+.ov-wrow.r .ov-wcells div:nth-child(4), .ov-wrow.r .ov-wcells span:nth-child(8) { background: var(--neg-bg); }
+.ov-wrow.r .ov-wcells div:nth-child(4) { color: var(--neg-text); }
+.ov-wrow.a .ov-wcells div:nth-child(4), .ov-wrow.a .ov-wcells span:nth-child(8) { background: var(--badge-yellow-bg); }
+.ov-wrow.a .ov-wcells div:nth-child(4) { color: var(--badge-yellow-text); }
+#ovLow .ov-wcells div, #ovLow .ov-wcells span { padding-left: 6px; padding-right: 6px; }
+.ov-wfast { font-size: 9.5px; line-height: 16px; padding: 0 7px; border-radius: 999px; background: var(--neg-bg); }
+.ov-wmore { line-height: 15px; }
+.ov-wnote { align-self: center; }
+/* panel headers say how much work sits in the column */
+.ov-panel h4 .sub b { font-family: var(--mono); font-weight: 600; color: var(--text); }
 /* under each SKU: the send amount, then the days WFS has left */
 .ov-sendline { display: block; margin-top: 4px; }
 .ov-daysleft { display: block; font-size: 10.5px; margin-top: 3px; color: var(--muted); }
@@ -4735,18 +4759,24 @@ th:last-child > .col-grip { right: 0; }
 
 /* left column: the today card - big number, the sold grid, channel
    cells pinned to the bottom edge */
-.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.ov-today { padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
 .ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; margin: 4px 0 6px; }
 .ov-today .delta { font-size: 10.5px; color: var(--muted); min-height: 14px; }
-.ov-chcells { margin: auto -16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
-.ov-chcell { padding: 9px 8px 12px; text-align: center; }
-.ov-chcell + .ov-chcell { border-left: 1px solid var(--border); }
-.ov-chcell .cn { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.ov-today .delta .up { color: var(--accent-soft-text); }
+.ov-today .delta .down { color: var(--neg-text); }
+/* the marketplace split rides right under the number (polish 2026-09-30;
+   the three cells under the grid fell off-screen on a long day): a share
+   bar in the channel colours, then dot · name · units */
+.ov-share { display: flex; gap: 2px; height: 6px; border-radius: 999px; overflow: hidden; background: #EFEEEA; margin: 10px 0 8px; }
+.ov-share i { display: block; height: 100%; background: currentColor; }
+.ov-chlegend { display: flex; gap: 14px; font-size: 11px; color: var(--muted); }
+.ov-chlegend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ov-chlegend span::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ov-chlegend b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .cn-walmart { color: #2E86D9; }
 .cn-ebay { color: #047857; }
 .cn-temu { color: #C97B12; }
-.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; }
 
 /* the "full grid" (owner pick 2026-08-17): Excel-style, shaded header row,
    cell borders both ways - here SKU | Units with row numbers and a total */
