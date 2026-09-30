@@ -6498,7 +6498,10 @@ const shDlg = { sku: '', seq: 0, rows: [], pcs: new Set(), acts: new Set() };
 
 async function openStockHistory(sku) {
   const seq = ++shDlg.seq;
-  shDlg.sku = sku; shDlg.rows = []; shDlg.pcs = new Set(); shDlg.acts = new Set();
+  // clear the filter sets IN PLACE: shDdWire bound the dropdowns to these
+  // exact Set objects at load, so replacing them left every tick landing in
+  // a Set nobody read and the re-render unchecked it at once (owner 2026-09-30)
+  shDlg.sku = sku; shDlg.rows = []; shDlg.pcs.clear(); shDlg.acts.clear();
   $('stockHistSku').textContent = sku;
   $('stockHistSub').textContent = '';
   $('stockHistBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
