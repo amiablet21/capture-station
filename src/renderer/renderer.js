@@ -3235,24 +3235,46 @@ $('stockRefresh').addEventListener('click', () => {
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
-// Every MAPPED Walmart listing as a CSV — inventory SKU, channel SKU,
-// title, condition, listed qty, price, WFS flag (owner 2026-09-30). The
-// active condition chip narrows the file exactly like it narrows the grid
-// (All = every condition, each row still carries its Condition column).
-// eBay and Temu sit under File > Export Channel SKUs.
-$('stockExportBtn').addEventListener('click', async () => {
-  const btn = $('stockExportBtn');
+// Every MAPPED listing on one channel as a CSV — inventory SKU, channel
+// SKU, title, condition, listed qty, price, WFS flag (owner 2026-09-30).
+// The active condition chip narrows the file exactly like it narrows the
+// grid (All = every condition, each row still carries its Condition column).
+async function stockExportChannel(channel) {
+  const btn = $('stockActionsBtn');
   const cond = !stockActiveView ? '' : stockActiveView.plain ? 'New' : (stockActiveView.label || '');
+  const label = channelLabel(channel);
   btn.disabled = true;
   btn.textContent = 'Exporting…';
   try {
-    const res = await api.exportChannelSkus('walmart', cond);
-    if (res.ok) toast(`${res.count} ${cond ? cond + ' ' : ''}Walmart channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
+    const res = await api.exportChannelSkus(channel, cond);
+    if (res.ok) toast(`${res.count} ${cond ? cond + ' ' : ''}${label} channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
     else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Export Walmart SKUs';
+    btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
   }
+}
+// Actions dropdown (owner pick 2026-09-30, option A): Mappings, WFS
+// Shipments, Bulk import and the channel-SKU exports behind one button, so
+// the band never wraps again. Same in-app <dialog> menu as the Returns tab,
+// anchored under the button and clamped inside the window.
+$('stockActionsBtn').addEventListener('click', () => {
+  const dlg = $('stockActionsDlg');
+  dlg.showModal();
+  const r = $('stockActionsBtn').getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8));
+  dlg.style.left = `${Math.round(left)}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+$('stockActionsDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('stockActionsDlg').close();
+  if (!item) return; // backdrop click: dismiss
+  const act = item.dataset.act || '';
+  if (act === 'mappings') chmapOpen();
+  else if (act === 'wfs') openWfs();
+  else if (act === 'bulk') bulkOpen();
+  else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
 });
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
@@ -4885,7 +4907,7 @@ function renderChmap() {
       || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
 }
 
-$('chmapBtn').addEventListener('click', () => chmapOpen());
+// (Mappings opens from the Stock page's Actions menu — see stockActionsDlg)
 $('chmapClose').addEventListener('click', () => $('chmapDialog').close());
 $('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
 $('chmapHasQty').addEventListener('click', () => { chmap.hasQty = !chmap.hasQty; renderChmap(); });
@@ -7036,7 +7058,8 @@ function bulkRefresh() {
   $('bulkApply').disabled = !bulkValidRows().length;
 }
 
-$('stockBulkBtn').addEventListener('click', () => {
+// opened from the Stock page's Actions menu (see stockActionsDlg)
+function bulkOpen() {
   ensureInventory(); // the SKU picker's lookup data
   $('bulkGridRows').innerHTML = '';
   $('bulkNote').value = '';
@@ -7047,7 +7070,7 @@ $('stockBulkBtn').addEventListener('click', () => {
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
   if (first) first.focus();
   if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
-});
+}
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
 $('bulkGridRows').addEventListener('input', () => bulkRefresh());
@@ -8196,7 +8219,7 @@ async function renderWfsPast() {
       </div>`).join('');
 }
 
-$('wfsBtn').addEventListener('click', () => openWfs());
+// (WFS Shipments opens from the Stock page's Actions menu — see stockActionsDlg)
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
 

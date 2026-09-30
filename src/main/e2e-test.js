@@ -998,7 +998,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
         homeEditable: !!(homeBtn && homeBtn.dataset.sku === 'S25-128GB-NAVY'),
         headers: head ? head.textContent : '',
         summary: $('stockSummary').textContent,
-        hiddenBtns: [$('newSkuBtn').hidden, $('recvBtn').hidden, $('wfsBtn').hidden],
+        hiddenBtns: [$('newSkuBtn').hidden, $('recvBtn').hidden],
       };
       stockWfsActive = false; stockCache = null; renderStockChips();
       return out;

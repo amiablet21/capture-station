@@ -26,6 +26,16 @@
     </dialog>
     <!-- Listings tab menu (eBay | Temu): same dropdown pattern — replaced
          the floating pill row (owner picked option A, 2026-09-17) -->
+    <!-- Stock page Actions dropdown (anchored under #stockActionsBtn) -->
+    <dialog id="stockActionsDlg" class="tab-menu stock-actions-menu">
+      <button class="tab-menu-item" data-act="mappings" title="Link marketplace listings to Linnworks items — twin listings included">Mappings…</button>
+      <button class="tab-menu-item" data-act="wfs" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments…</button>
+      <div class="tab-menu-sep"></div>
+      <button class="tab-menu-item" data-act="bulk" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import…</button>
+      <button class="tab-menu-item" data-act="export:walmart" title="Save every mapped Walmart listing to a CSV — inventory SKU, channel SKU, title, condition, listed qty, price, WFS. An active condition chip narrows the file to that slice">Export Walmart SKUs…</button>
+      <button class="tab-menu-item" data-act="export:ebay" title="Every mapped eBay listing as a CSV (the active condition chip narrows it)">Export eBay SKUs…</button>
+      <button class="tab-menu-item" data-act="export:temu" title="Every mapped Temu listing as a CSV (the active condition chip narrows it)">Export Temu SKUs…</button>
+    </dialog>
     <dialog id="listingsMenuDlg" class="tab-menu">
       <button class="tab-menu-item" data-page="ebay">eBay lister</button>
       <button class="tab-menu-item" data-page="temu">Temu lister</button>
@@ -184,9 +194,11 @@
               <button id="stockShelfLink" class="stock-shelf-link" hidden>selling history → Shelf ↗</button>
               <button id="minApplyAll" class="btn btn-ghost min-apply-all" hidden
                       title="Write every differing suggested minimum (velocity × lead × 1.5) to Linnworks in one pass">Apply suggested minimums</button>
-              <button id="stockBulkBtn" class="btn btn-ghost" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import</button>
-              <button id="chmapBtn" class="btn btn-ghost" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
-              <button id="stockExportBtn" class="btn btn-ghost" title="Save every mapped Walmart listing to a CSV — inventory SKU, channel SKU, title, condition, listed qty, price, WFS. An active condition chip (New / Open Box / Used / Scrap) narrows the file to that slice. eBay and Temu: File > Export Channel SKUs">Export Walmart SKUs</button>
+              <!-- one Actions menu instead of four word buttons (owner pick
+                   2026-09-30, option A of stock-actions.html): Bulk import,
+                   Mappings, WFS Shipments and the channel-SKU exports live
+                   in the dropdown; the band can no longer wrap -->
+              <button id="stockActionsBtn" class="btn btn-ghost stock-actions-btn" title="Mappings, WFS shipments, bulk import and channel SKU exports">Actions <span class="tab-caret">▾</span></button>
               <!-- temporarily hidden pending a toolbar redesign (owner request
                    2026-08-02); the dialogs and logic behind them are untouched.
                    WFS Shipments came back 2026-09-09 (owner asked for exactly
@@ -194,7 +206,6 @@
                    never touch the Walmart-fed WFS location) -->
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
-              <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
               <!-- refresh rides at the end as a plain icon, out of the row of
                    words (owner 2026-09-14: "make it an icon, not squished") -->
               <button id="stockRefresh" class="btn btn-ghost stock-refresh-ico" title="Reload from Linnworks" aria-label="Refresh">
