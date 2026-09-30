@@ -894,7 +894,9 @@ async function exportCsv() {
    Every listing on one marketplace channel as a CSV (owner 2026-09-30: "I
    just want a list of all the channel SKUs"). Row building lives in
    chskus-csv.js; this is the Linnworks fetch + save dialog around it. */
-async function exportChannelSkus(channel) {
+// condition: '' = every mapped listing; 'New' or a stockViews label = only
+// that slice (the Stock page's active chip rides along on the button)
+async function exportChannelSkus(channel, condition = '') {
   const { LABELS, buildChannelSkuRows, buildChannelSkuCsv } = require('./chskus-csv.js');
   const key = String(channel || '').toLowerCase();
   const label = LABELS[key];
@@ -902,9 +904,11 @@ async function exportChannelSkus(channel) {
   const cfg = config.load();
   if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
   const day = db.localDay();
+  const cond = String(condition || '').trim();
+  const slug = cond ? '-' + cond.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: `Export ${label} channel SKUs`,
-    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus-${day}.csv`),
+    title: `Export ${label} channel SKUs${cond ? ` (${cond})` : ''}`,
+    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus${slug}-${day}.csv`),
     filters: [{ name: 'CSV', extensions: ['csv'] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
@@ -920,9 +924,9 @@ async function exportChannelSkus(channel) {
     // a listing linked today is in the file
     let recs = {};
     try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
-    const rows = buildChannelSkuRows(key, items, feeds, recs);
+    const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond });
     fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
-    return { ok: true, path: filePath, count: rows.length, channel: label };
+    return { ok: true, path: filePath, count: rows.length, channel: label, condition: cond };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -3028,7 +3032,7 @@ function registerIpc() {
     return cfg;
   });
   ipcMain.handle('csv:export', () => exportCsv());
-  ipcMain.handle('channelSkus:export', (_e, { channel } = {}) => exportChannelSkus(channel));
+  ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
       const result = await testConnection(creds || config.load().linnworks);

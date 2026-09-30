@@ -3235,16 +3235,19 @@ $('stockRefresh').addEventListener('click', () => {
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
-// Every Walmart listing as a CSV — channel SKU, linked inventory SKU,
-// title, listed qty, price, WFS flag (owner 2026-09-30). eBay and Temu sit
-// under File > Export Channel SKUs.
+// Every MAPPED Walmart listing as a CSV — inventory SKU, channel SKU,
+// title, condition, listed qty, price, WFS flag (owner 2026-09-30). The
+// active condition chip narrows the file exactly like it narrows the grid
+// (All = every condition, each row still carries its Condition column).
+// eBay and Temu sit under File > Export Channel SKUs.
 $('stockExportBtn').addEventListener('click', async () => {
   const btn = $('stockExportBtn');
+  const cond = !stockActiveView ? '' : stockActiveView.plain ? 'New' : (stockActiveView.label || '');
   btn.disabled = true;
   btn.textContent = 'Exporting…';
   try {
-    const res = await api.exportChannelSkus('walmart');
-    if (res.ok) toast(`${res.count} Walmart channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
+    const res = await api.exportChannelSkus('walmart', cond);
+    if (res.ok) toast(`${res.count} ${cond ? cond + ' ' : ''}Walmart channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
     else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
   } finally {
     btn.disabled = false;
