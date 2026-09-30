@@ -193,6 +193,8 @@
                    never touch the Walmart-fed WFS location) -->
               <button id="newSkuBtn" class="btn btn-secondary" title="Create a new inventory item in Linnworks" hidden>New SKU</button>
               <button id="recvBtn" class="btn btn-secondary" hidden>Receiving</button>
+              <!-- wholesale (owner 2026-09-30): per-station opt-in in Settings › Pages -->
+              <button id="wholesaleBtn" class="btn btn-ghost" hidden title="Wholesale invoices — units leave the warehouse when an invoice is saved; price and shipping optional">Wholesale</button>
               <button id="wfsBtn" class="btn btn-ghost" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
               <!-- refresh rides at the end as a plain icon, out of the row of
                    words (owner 2026-09-14: "make it an icon, not squished") -->
@@ -809,6 +811,7 @@
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
         <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
         <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
+        <label class="check"><input id="setPageWholesale" type="checkbox" /> Wholesale</label>
       </div>
       <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone. A returns-only station: tick Returns, untick the rest, set a Settings PIN so it stays that way.</p>
 
@@ -1185,6 +1188,116 @@
       <div class="dlg-actions">
         <button id="chmapNfCancel" class="btn btn-ghost" type="button">Cancel</button>
         <button id="chmapNfGo" class="btn btn-primary" type="button">Create</button>
+      </div>
+    </div>
+  </dialog>
+
+
+  <!-- Wholesale invoices (owner 2026-09-30, design variants/wholesale-qb-simple.html):
+       the list opens first; an invoice is the QuickBooks-shaped sheet with
+       price and shipping optional; serial numbers per line in a popup.
+       Saving deducts the warehouse like a WFS shipment; every record rides
+       the shared log folder. -->
+  <dialog id="wsListDialog" class="dlg dlg-ws-list">
+    <div class="dlg-body">
+      <div class="ws-list-head">
+        <h2 class="dlg-title">Wholesale invoices</h2>
+        <div class="search-field ws-list-search">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+          <input id="wsListSearch" class="search-input" type="text" placeholder="Search customer, invoice no. or SKU" autocomplete="off" spellcheck="false" />
+        </div>
+        <button id="wsNewBtn" class="btn btn-primary" type="button">New invoice</button>
+        <button id="wsListClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div id="wsListBody" class="ws-list-body"></div>
+    </div>
+  </dialog>
+
+  <dialog id="wsDialog" class="dlg dlg-ws">
+    <div class="dlg-body">
+      <div class="ws-head">
+        <h2 class="dlg-title">Wholesale invoice <span id="wsTitleNo" class="mono ws-title-no"></span></h2>
+        <button id="wsClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="ws-top">
+        <div class="ws-cust">
+          <span class="field-label">Customer</span>
+          <div class="ws-cust-wrap">
+            <input id="wsCustInput" class="input" type="text" placeholder="Company name — saved customers appear as you type" maxlength="120" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" />
+            <div id="wsCustList" class="combo-list ws-cust-list" hidden></div>
+          </div>
+          <div id="wsCustWho" class="ws-who" hidden></div>
+          <div id="wsCustNew" class="ws-newc" hidden>
+            <span class="field-label" id="wsCustNewLbl">New customer</span>
+            <div class="ws-newc-grid">
+              <input id="wsCContact" class="input" type="text" placeholder="Contact" maxlength="120" autocomplete="off" />
+              <input id="wsCPhone" class="input" type="text" placeholder="Phone" maxlength="60" autocomplete="off" />
+              <input id="wsCEmail" class="input mono ws-wide" type="text" placeholder="Email" maxlength="160" autocomplete="off" spellcheck="false" />
+              <input id="wsCAddress" class="input ws-wide" type="text" placeholder="Address" maxlength="400" autocomplete="off" />
+            </div>
+            <div class="ws-newc-btns">
+              <span class="dlg-note">Name is the only required field. Saved with the invoice, shared with every desktop.</span>
+              <button id="wsCustNewCancel" class="btn btn-ghost" type="button">Cancel</button>
+              <button id="wsCustNewSave" class="btn btn-secondary" type="button">Save customer</button>
+            </div>
+          </div>
+        </div>
+        <div class="ws-f"><span class="field-label">Invoice no.</span><input id="wsNumber" class="input mono" type="text" maxlength="40" autocomplete="off" spellcheck="false" /></div>
+        <div class="ws-f"><span class="field-label">Date</span><input id="wsDate" class="input" type="date" /></div>
+      </div>
+      <table class="ws-lines">
+        <colgroup><col class="ws-c-sku"><col><col class="ws-c-qty"><col class="ws-c-rate"><col class="ws-c-amt"><col class="ws-c-sn"><col class="ws-c-x"></colgroup>
+        <thead><tr><th>SKU</th><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th><th></th></tr></thead>
+        <tbody id="wsLines"></tbody>
+      </table>
+      <div class="ws-addrow">
+        <button id="wsAddLine" class="btn btn-ghost" type="button">＋ Add line</button>
+        <button id="wsScanBtn" class="btn btn-ghost" type="button" title="Puts the cursor on the next empty line — scan the item's barcode">Scan barcode</button>
+      </div>
+      <div class="ws-bot">
+        <div class="ws-note-col">
+          <span class="field-label">Note</span>
+          <textarea id="wsNote" class="input ws-note" rows="3" maxlength="500" placeholder="PO#, payment terms, who picked it up…"></textarea>
+          <div class="ws-shipvia">
+            <span class="field-label">Ship via</span>
+            <select id="wsCarrier" class="input ws-carrier"><option value="">Carrier</option><option>UPS</option><option>USPS</option><option>FedEx</option><option>Pickup</option><option>Other</option></select>
+            <input id="wsTracking" class="input mono" type="text" placeholder="tracking number" maxlength="80" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
+        <div class="ws-tot">
+          <div class="ws-row"><span>Units</span><span id="wsUnits" class="mono">0</span></div>
+          <div class="ws-row"><span>Goods</span><span id="wsGoods" class="mono">$0.00</span></div>
+          <div class="ws-row"><span>Shipping</span><input id="wsShipping" class="input mono ws-ship" type="text" inputmode="decimal" placeholder="0.00" maxlength="12" autocomplete="off" /></div>
+          <div class="ws-row ws-total"><span>Total</span><span id="wsTotal" class="mono">$0.00</span></div>
+          <div id="wsLeaving" class="ws-leaving"></div>
+        </div>
+      </div>
+      <p id="wsResult" class="dlg-note test-result ws-result"></p>
+      <div class="dlg-actions ws-actions">
+        <span class="ws-actions-note">also writes wholesale-orders.csv</span>
+        <button id="wsCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="wsPrint" class="btn btn-ghost" type="button" title="Save, then save the invoice as a PDF">Print</button>
+        <button id="wsSave" class="btn btn-primary" type="button">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="wsSnDialog" class="dlg dlg-ws-sn">
+    <div class="dlg-body">
+      <div class="ws-head">
+        <h2 class="dlg-title">Serial numbers <span id="wsSnSku" class="mono ws-title-no"></span></h2>
+        <button id="wsSnClose" class="dlg-x" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div id="wsSnSub" class="ws-sn-sub"></div>
+      <div class="ws-sn-scan"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg>
+        <input id="wsSnInput" class="input mono ws-sn-in" type="text" placeholder="Scan a barcode or type a serial" maxlength="120" autocomplete="off" spellcheck="false" />
+        <span id="wsSnHint" class="ws-sn-hint">scan or type · Enter saves</span>
+      </div>
+      <div id="wsSnList" class="ws-sn-list"></div>
+      <div class="dlg-actions ws-actions">
+        <span id="wsSnFoot" class="ws-actions-note"></span>
+        <button id="wsSnExport" class="btn btn-ghost" type="button">Export CSV</button>
+        <button id="wsSnDone" class="btn btn-primary" type="button">Done</button>
       </div>
     </div>
   </dialog>

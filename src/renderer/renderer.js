@@ -55,7 +55,7 @@ if (!window.api) {
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false, wholesale: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     openCsvFolder: async () => ({ ok: true }),
@@ -92,6 +92,19 @@ if (!window.api) {
     wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
     wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleCustomers: async () => ({ ok: true, customers: [] }),
+    wholesaleCustomerSave: async (rec) => ({ ok: true, customer: { gid: `PREVIEW:${Math.random()}`, name: rec.name, contact: rec.contact || '', email: rec.email || '', phone: rec.phone || '', address: rec.address || '' } }),
+    wholesaleCustomerDelete: async () => ({ ok: true }),
+    wholesaleList: async () => ({ ok: true, invoices: [], serialCounts: {}, nextNumber: '1001', station: 'PREVIEW' }),
+    wholesaleGet: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSave: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleVoid: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSerials: async () => ({ ok: true, serials: [] }),
+    wholesaleSerialAdd: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSerialDelete: async () => ({ ok: true, serials: [] }),
+    wholesaleSerialsCsv: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleDiscardDraft: async () => ({ ok: true }),
+    wholesalePrint: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -304,6 +317,7 @@ function render() {
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
+  $('wholesaleBtn').hidden = !(pages.stock && pages.wholesale); // per-station opt-in (owner 2026-09-30)
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
   const openToday = (state.todayCount || 0) - (state.todayProcessed || 0);
@@ -1173,6 +1187,7 @@ async function openSettings() {
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
+  $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
@@ -1281,6 +1296,7 @@ $('settingsSave').addEventListener('click', async () => {
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
+      wholesale: $('setPageWholesale').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
@@ -6135,11 +6151,12 @@ const SH_ACT = {
   added: { word: 'ADDED', cls: 'act-added' },
   removed: { word: 'REMOVED', cls: 'act-removed' },
   shipped: { word: 'SHIPPED', cls: 'act-shipped' },
+  wholesale: { word: 'WHOLESALE', cls: 'act-wholesale' },
   set: { word: 'SET', cls: 'act-set' },
   edited: { word: 'EDITED', cls: 'act-edited' },
   deleted: { word: 'DELETED', cls: 'act-deleted' },
 };
-const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'set', 'edited', 'deleted'];
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'set', 'edited', 'deleted'];
 function shActionOf(e) {
   switch (e.reason) {
     case 'sale': return 'sold';
@@ -6151,6 +6168,7 @@ function shActionOf(e) {
     // not stock leaving (owner 2026-09-24: pad 10 -> 0 read "SHIPPED 10 x")
     case 'dropship': return 'set';
     case 'wfs': case 'substitution': return 'shipped';
+    case 'wholesale': case 'wholesale-void': return 'wholesale';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -6215,6 +6233,11 @@ function shWhat(e, withSku) {
     const setTo = /set to (\d+)/.exec(e.note || '');
     return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
   }
+  if (e.reason === 'wholesale' || e.reason === 'wholesale-void') {
+    // an invoice line: "10 units (Bright Tech · #2041)", a void reads +N
+    const who = [e.note, e.ref ? `#${e.ref}` : ''].filter(Boolean).join(' · ');
+    return `${e.delta > 0 ? '+' : ''}${withSku ? `${e.delta > 0 ? n : n} × ${skuEl(e.sku)}` : `${n} unit${n === 1 ? '' : 's'}`}${who ? ` <span class="sh-dim">(${esc(who)})</span>` : ''}`;
+  }
   if (e.reason === 'dropship') {
     // the pad engine's level move at the DropShip location: from → to
     const d = Number(e.delta) || 0;
@@ -6258,7 +6281,7 @@ function shRowHtml(e, withSku, clickable) {
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
   const canFix = !isSale && !deleted && (SH_EDITABLE.has(e.reason) || isLink);
-  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : '';
+  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : e.reason === 'wholesale' || e.reason === 'wholesale-void' ? 'Wholesale' : '';
   const tools = canFix
     ? `<span class="sh-tools">${isLink ? '' : `<button type="button" class="btn-icon sh-edit-btn" title="Edit this line — change the quantity or the SKU">${ICONS.pencil}</button>`}<button type="button" class="btn-icon is-danger sh-del-btn" title="${isLink ? 'Delete this correction — undoes it' : 'Delete this line — takes its stock back out'}">${ICONS.trash}</button></span>`
     : where ? `<span class="sh-tools is-link" title="This line is corrected in ${where}">edit in ${where}</span>` : '';
@@ -8181,6 +8204,493 @@ $('wfsBtn').addEventListener('click', () => openWfs());
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
 
+/* ---------- Wholesale invoices (owner 2026-09-30) ---------- */
+// Design: variants/wholesale-qb-simple.html. The list opens first; an
+// invoice is customer + number + date, lines (SKU, description, qty, rate,
+// amount, serial numbers, ✕), note, ship via, totals and the amber box
+// saying what leaves the shelf. Only SKU and qty are required. Saving
+// deducts Digital World Shop like a WFS shipment; every record rides the
+// shared log folder so both desktops see one list.
+
+const WS_SN_ICON = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg>';
+let wsCustomers = [];
+let wsInvoices = [];
+let wsSerialCounts = {};
+let wsNextNumber = '';
+let wsStationName = '';
+let wsListQuery = '';
+let wsInv = null;   // the open invoice: { gid, prev: saved record | null }
+let wsCust = null;  // the picked customer record | null
+let wsCustEditing = null; // customer being edited in the inline card | null
+
+const wsMoney = (n) => `$${(Number(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+const wsNum = (n) => (Number(n) || 0).toLocaleString('en-US');
+const wsLocalDay = (iso) => { const d = iso ? new Date(iso) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function wsInvUnits(inv) { return inv.lines.reduce((a, l) => a + l.qty, 0); }
+function wsInvTotal(inv) {
+  const priced = inv.lines.some(l => l.rate !== null) || inv.shipping > 0;
+  return priced ? inv.lines.reduce((a, l) => a + (l.rate === null ? 0 : l.rate * l.qty), 0) + (inv.shipping || 0) : null;
+}
+
+/* ---- the list ---- */
+async function openWsList() {
+  ensureInventory();
+  const res = await api.wholesaleList();
+  if (!res.ok) { toast(res.error || 'Could not load wholesale invoices'); return; }
+  wsInvoices = res.invoices || [];
+  wsSerialCounts = res.serialCounts || {};
+  wsNextNumber = res.nextNumber || '';
+  wsStationName = res.station || '';
+  $('wsListSearch').value = wsListQuery;
+  renderWsList();
+  if (!$('wsListDialog').open) $('wsListDialog').showModal();
+}
+function renderWsList() {
+  const q = wsListQuery.trim().toLowerCase();
+  const rows = wsInvoices.filter(inv => !q || [inv.number, inv.customer_name, ...inv.lines.map(l => l.sku)].join(' ').toLowerCase().includes(q));
+  if (!rows.length) {
+    $('wsListBody').innerHTML = `<p class="dlg-note" style="padding:16px 20px">${wsInvoices.length ? 'No invoice matches that search.' : 'No wholesale invoices yet — New invoice starts the first one.'}</p>`;
+    return;
+  }
+  $('wsListBody').innerHTML = `<table class="ws-lt">
+    <colgroup><col style="width:116px"><col style="width:72px"><col style="width:210px"><col><col style="width:60px"><col style="width:100px"><col style="width:196px"></colgroup>
+    <thead><tr><th>Date</th><th>No.</th><th>Customer</th><th>Items</th><th class="r">Units</th><th class="r">Total</th><th class="r">Action</th></tr></thead>
+    <tbody>${rows.map(inv => {
+      const tot = wsInvTotal(inv);
+      const items = inv.lines.length ? `<span class="mono">${esc(inv.lines[0].sku)}</span> ×${inv.lines[0].qty}${inv.lines.length > 1 ? ` · +${inv.lines.length - 1} more` : ''}` : '';
+      const foreign = inv.station && wsStationName && inv.station !== wsStationName;
+      return `<tr class="${inv.voided_at ? 'is-void' : ''}" data-gid="${esc(inv.gid)}">
+        <td>${retDateUS(inv.day)}</td>
+        <td class="ws-no">${inv.number ? esc(inv.number) : '—'}</td>
+        <td class="ws-c" title="${esc(inv.customer_name || '')}${foreign ? ` · logged on ${esc(inv.station)}` : ''}">${esc(inv.customer_name || 'no customer')}${inv.voided_at ? '<span class="ws-tag">voided · put back</span>' : ''}${foreign ? `<span class="ws-st">${esc(inv.station)}</span>` : ''}</td>
+        <td class="ws-it">${items}</td>
+        <td class="r mono">${wsInvUnits(inv)}</td>
+        <td class="r ws-amt">${tot === null ? '<span class="sh-dim">—</span>' : wsMoney(tot)}</td>
+        <td class="ws-act"><button type="button" data-act="open">${inv.voided_at ? 'View' : 'Edit'}</button><button type="button" data-act="print">Print</button>${inv.voided_at ? '' : '<button type="button" class="is-danger" data-act="void">Void</button>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+$('wsListSearch').addEventListener('input', () => { wsListQuery = $('wsListSearch').value; renderWsList(); });
+$('wsListClose').addEventListener('click', () => $('wsListDialog').close());
+$('wsNewBtn').addEventListener('click', () => openWsInvoice(''));
+$('wsListBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  const tr = e.target.closest('tr[data-gid]');
+  if (!tr) return;
+  const gid = tr.dataset.gid;
+  const act = btn ? btn.dataset.act : 'open';
+  if (act === 'open') { openWsInvoice(gid); return; }
+  if (act === 'print') {
+    const r = await api.wholesalePrint(gid);
+    if (r.ok) toast(`Saved ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not print');
+    return;
+  }
+  if (act === 'void') {
+    const inv = wsInvoices.find(i => i.gid === gid);
+    if (!inv || !window.confirm(`Void invoice ${inv.number || ''} for ${inv.customer_name || 'no customer'}?\n${wsInvUnits(inv)} units go back on the shelf. The invoice stays as a record.`)) return;
+    btn.disabled = true;
+    const r = await api.wholesaleVoid(gid);
+    if (!r.ok) { btn.disabled = false; toast(r.error || 'Could not void'); return; }
+    toast(`Invoice ${inv.number || ''} voided · ${wsInvUnits(inv)} units back in stock`);
+    await openWsList();
+    if (stockCache) loadStock();
+  }
+});
+$('wholesaleBtn').addEventListener('click', () => openWsList());
+
+/* ---- customers: combo, inline card, saved with the invoice ---- */
+async function wsLoadCustomers() {
+  const res = await api.wholesaleCustomers();
+  wsCustomers = res.ok ? res.customers : [];
+}
+function wsCustMatches(q) {
+  const k = q.trim().toLowerCase();
+  const list = !k ? wsCustomers : wsCustomers.filter(c => [c.name, c.contact, c.email, c.address].join(' ').toLowerCase().includes(k));
+  return list.slice(0, 8);
+}
+let wsCustMatchesNow = [];
+let wsCustHl = -1;
+function wsCustRender() {
+  const input = $('wsCustInput'), list = $('wsCustList');
+  const q = input.value.trim();
+  wsCustMatchesNow = wsCustMatches(q);
+  const exact = wsCustomers.find(c => c.name.toLowerCase() === q.toLowerCase());
+  const addNew = q && !exact ? `<button type="button" class="combo-opt combo-addnew" data-i="-1"><span class="mono">+ New customer “${esc(q)}”</span></button>` : '';
+  const hl = wsCustHl >= 0 ? wsCustHl : (wsCustMatchesNow.length ? 0 : -1);
+  const opts = wsCustMatchesNow.map((c, i) => `<button type="button" class="combo-opt ${i === hl ? 'is-hl' : ''}" data-i="${i}"><b>${esc(c.name)}</b><small>${esc([c.contact, c.address, c.email].filter(Boolean).join(' · ') || 'no details yet')}</small></button>`).join('');
+  if (!addNew && !opts) { list.hidden = true; return; }
+  // a typed name with no saved match: Enter means "new customer"
+  list.innerHTML = (hl === -1 && addNew ? addNew.replace('combo-opt combo-addnew', 'combo-opt combo-addnew is-hl') : addNew) + opts;
+  list.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+}
+function wsCustClose() { $('wsCustList').hidden = true; $('wsCustInput').setAttribute('aria-expanded', 'false'); wsCustHl = -1; }
+function wsCustPick(c) {
+  wsCust = c;
+  $('wsCustInput').value = c.name;
+  wsCustClose();
+  wsCustShow();
+}
+function wsCustShow() {
+  const who = $('wsCustWho');
+  if (!wsCust) { who.hidden = true; who.innerHTML = ''; return; }
+  const bits = [wsCust.contact, wsCust.address, wsCust.email ? `<span class="mono">${esc(wsCust.email)}</span>` : '', wsCust.phone ? `<span class="mono">${esc(wsCust.phone)}</span>` : ''].filter(Boolean);
+  who.innerHTML = `${bits.length ? bits.map(b => b.startsWith('<span') ? b : esc(b)).join(' · ') : '<span class="sh-dim">no details yet</span>'}<button type="button" id="wsCustEdit">edit</button>`;
+  who.hidden = false;
+  $('wsCustEdit').addEventListener('click', () => wsCustCardOpen(wsCust));
+}
+function wsCustCardOpen(c) {
+  wsCustEditing = c || null;
+  $('wsCustNewLbl').textContent = c ? `Edit ${c.name}` : `New customer — ${$('wsCustInput').value.trim()}`;
+  $('wsCContact').value = c ? c.contact || '' : '';
+  $('wsCPhone').value = c ? c.phone || '' : '';
+  $('wsCEmail').value = c ? c.email || '' : '';
+  $('wsCAddress').value = c ? c.address || '' : '';
+  $('wsCustNew').hidden = false;
+  $('wsCContact').focus();
+}
+function wsCustCardClose() { $('wsCustNew').hidden = true; wsCustEditing = null; }
+async function wsCustCardSave() {
+  const name = $('wsCustInput').value.trim();
+  if (!name) { $('wsCustInput').focus(); return; }
+  const r = await api.wholesaleCustomerSave({ gid: wsCustEditing ? wsCustEditing.gid : '', name, contact: $('wsCContact').value.trim(), phone: $('wsCPhone').value.trim(), email: $('wsCEmail').value.trim(), address: $('wsCAddress').value.trim() });
+  if (!r.ok) { toast(r.error || 'Could not save the customer'); return; }
+  await wsLoadCustomers();
+  wsCustCardClose();
+  wsCustPick(r.customer);
+  toast(`${r.customer.name} saved`);
+}
+$('wsCustInput').addEventListener('input', () => {
+  // typing past a picked name un-picks it; the exact name re-picks
+  const v = $('wsCustInput').value.trim();
+  wsCust = wsCustomers.find(c => c.name.toLowerCase() === v.toLowerCase()) || null;
+  wsCustShow();
+  wsCustHl = -1; // render picks the first match
+  wsCustRender();
+});
+$('wsCustInput').addEventListener('focus', () => { wsCustRender(); });
+$('wsCustInput').addEventListener('blur', () => setTimeout(wsCustClose, 150));
+$('wsCustInput').addEventListener('keydown', (e) => {
+  const list = $('wsCustList');
+  const opts = [...list.querySelectorAll('.combo-opt')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (list.hidden) { wsCustRender(); return; }
+    if (!opts.length) return;
+    const cur = opts.findIndex(o => o.classList.contains('is-hl'));
+    const next = (cur + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+    opts.forEach((o, i) => o.classList.toggle('is-hl', i === next));
+    wsCustHl = Number(opts[next].dataset.i);
+    return;
+  }
+  if (e.key === 'Escape') { wsCustClose(); return; }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const hl = opts.find(o => o.classList.contains('is-hl')) || opts[0];
+  if (!list.hidden && hl) { wsCustChoose(hl); return; }
+  if (wsCust) { wsCustClose(); $('wsNumber').focus(); }
+});
+function wsCustChoose(opt) {
+  const i = Number(opt.dataset.i);
+  if (i < 0) { wsCust = null; wsCustClose(); wsCustShow(); wsCustCardOpen(null); return; }
+  if (wsCustMatchesNow[i]) wsCustPick(wsCustMatchesNow[i]);
+}
+$('wsCustList').addEventListener('mousedown', (e) => {
+  const opt = e.target.closest('.combo-opt');
+  if (!opt) return;
+  e.preventDefault();
+  wsCustChoose(opt);
+});
+$('wsCustNewCancel').addEventListener('click', wsCustCardClose);
+$('wsCustNewSave').addEventListener('click', wsCustCardSave);
+for (const id of ['wsCContact', 'wsCPhone', 'wsCEmail', 'wsCAddress']) {
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); wsCustCardSave(); } });
+}
+
+/* ---- the invoice ---- */
+async function openWsInvoice(gid) {
+  ensureInventory();
+  await wsLoadCustomers();
+  let inv = null;
+  wsCust = null;
+  if (gid) {
+    const r = await api.wholesaleGet(gid);
+    if (!r.ok) { toast(r.error || 'Could not open the invoice'); return; }
+    inv = r.invoice;
+    Object.assign(wsSerialCounts, r.serialCounts || {});
+    wsCust = r.customer || null;
+  }
+  wsInv = { gid: inv ? inv.gid : `${wsStationName || 'LOCAL'}:${crypto.randomUUID()}`, prev: inv };
+  const ro = !!(inv && inv.voided_at);
+  $('wsTitleNo').textContent = [inv && inv.number ? `#${inv.number}` : '', ro ? 'voided' : ''].filter(Boolean).join(' · ');
+  $('wsNumber').value = inv ? inv.number : wsNextNumber;
+  $('wsDate').value = wsLocalDay(inv ? inv.created_at : '');
+  $('wsCustInput').value = inv ? inv.customer_name : '';
+  wsCustCardClose();
+  wsCustShow();
+  $('wsLines').innerHTML = '';
+  for (const l of inv ? inv.lines : []) wsAddLine(l);
+  if (!ro) wsAddLine();
+  $('wsNote').value = inv ? inv.note : '';
+  $('wsCarrier').value = inv ? inv.carrier : '';
+  if ($('wsCarrier').value !== (inv ? inv.carrier : '')) $('wsCarrier').value = inv && inv.carrier ? 'Other' : '';
+  $('wsTracking').value = inv ? inv.tracking : '';
+  $('wsShipping').value = inv && inv.shipping ? inv.shipping.toFixed(2) : '';
+  $('wsResult').textContent = '';
+  $('wsResult').className = 'dlg-note test-result ws-result';
+  for (const el of $('wsDialog').querySelectorAll('input, textarea, select, .ws-x, #wsAddLine, #wsScanBtn')) el.disabled = ro;
+  $('wsDate').disabled = ro || !!inv; // the date is when the stock left; it stays
+  $('wsSave').hidden = ro;
+  $('wsCancel').textContent = ro ? 'Close' : 'Cancel';
+  wsRecalc();
+  $('wsDialog').showModal();
+  if (!ro) (inv ? $('wsLines').querySelector('.ws-line:last-child .ws-sku') : $('wsCustInput')).focus();
+}
+
+function wsLineHtml() {
+  return `<tr class="ws-line">
+    <td><div class="ws-combo"><input type="text" class="ws-cell ws-sku mono" placeholder="SKU" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" /><div class="combo-list" hidden></div></div></td>
+    <td><input type="text" class="ws-cell ws-title" maxlength="300" autocomplete="off" aria-label="Description" /></td>
+    <td><input type="number" class="ws-cell ws-qty mono r" min="1" step="1" placeholder="1" aria-label="Qty" /></td>
+    <td><input type="text" class="ws-cell ws-rate mono r" inputmode="decimal" maxlength="12" aria-label="Rate" /></td>
+    <td class="r ws-amt is-empty">—</td>
+    <td class="r"><button type="button" class="ws-sn" title="Serial numbers">${WS_SN_ICON}<span class="n"></span></button></td>
+    <td class="r"><button type="button" class="ws-x" title="Remove line">✕</button></td>
+  </tr>`;
+}
+function wsAddLine(l) {
+  $('wsLines').insertAdjacentHTML('beforeend', wsLineHtml());
+  const row = $('wsLines').lastElementChild;
+  const sku = row.querySelector('.ws-sku'), title = row.querySelector('.ws-title'), qty = row.querySelector('.ws-qty'), rate = row.querySelector('.ws-rate');
+  if (l) { sku.value = l.sku; title.value = l.title || ''; qty.value = l.qty; rate.value = l.rate === null || l.rate === undefined ? '' : Number(l.rate).toFixed(2); }
+  makeCombo(sku, row.querySelector('.combo-list'), (item) => {
+    sku.value = item.sku;
+    if (!title.value.trim()) title.value = item.title || '';
+    if (!qty.value) qty.value = 1;
+    wsRecalc();
+    wsGrow();
+    qty.focus(); qty.select();
+  });
+  sku.addEventListener('change', () => {
+    // a typed-in-full SKU fills the title too
+    const it = wfsFindSku(sku.value);
+    if (it && !title.value.trim()) title.value = it.title || '';
+    wsRecalc();
+    wsGrow();
+  });
+  sku.addEventListener('input', wsRecalc);
+  qty.addEventListener('input', wsRecalc);
+  rate.addEventListener('input', wsRecalc);
+  qty.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rate.focus(); rate.select(); } });
+  rate.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    wsGrow();
+    const next = row.nextElementSibling;
+    if (next) next.querySelector('.ws-sku').focus();
+  });
+  rate.addEventListener('blur', () => { const n = Number(rate.value); if (rate.value.trim() && Number.isFinite(n)) rate.value = n.toFixed(2); wsRecalc(); });
+  row.querySelector('.ws-x').addEventListener('click', () => {
+    row.remove();
+    if (!$('wsLines').children.length) wsAddLine();
+    wsRecalc();
+  });
+  row.querySelector('.ws-sn').addEventListener('click', () => openWsSerials(row));
+  return row;
+}
+function wsGrow() {
+  const last = $('wsLines').lastElementChild;
+  if (last && last.querySelector('.ws-sku').value.trim()) wsAddLine();
+}
+function wsLinesData() {
+  return [...$('wsLines').querySelectorAll('.ws-line')].map(r => ({
+    sku: r.querySelector('.ws-sku').value.trim().toUpperCase(),
+    title: r.querySelector('.ws-title').value.trim(),
+    qty: Math.round(Number(r.querySelector('.ws-qty').value) || 0) || (r.querySelector('.ws-sku').value.trim() ? 1 : 0),
+    rate: r.querySelector('.ws-rate').value.trim() === '' || !Number.isFinite(Number(r.querySelector('.ws-rate').value)) ? null : Math.round(Number(r.querySelector('.ws-rate').value) * 100) / 100,
+  })).filter(l => l.sku && l.qty > 0);
+}
+// the shelf count at the primary location, from the loaded inventory
+function wsLevelOf(sku) {
+  const it = wfsFindSku(sku);
+  if (!it || !Array.isArray(it.levels)) return null;
+  const lid = (state && state.locations && state.locations.primaryId) || recvLocationId;
+  const lv = it.levels.find(l => l.locationId === lid) || it.levels[0];
+  return lv ? Number(lv.stockLevel) || 0 : null;
+}
+function wsRecalc() {
+  let units = 0, goods = 0;
+  for (const r of $('wsLines').querySelectorAll('.ws-line')) {
+    const sku = r.querySelector('.ws-sku').value.trim().toUpperCase();
+    const q = Math.round(Number(r.querySelector('.ws-qty').value) || 0) || (sku ? 1 : 0);
+    const rateRaw = r.querySelector('.ws-rate').value.trim();
+    const rate = rateRaw === '' || !Number.isFinite(Number(rateRaw)) ? null : Number(rateRaw);
+    const amt = r.querySelector('.ws-amt');
+    if (sku && rate !== null) { amt.textContent = wsMoney(rate * q).slice(1); amt.classList.remove('is-empty'); goods += rate * q; }
+    else { amt.textContent = '—'; amt.classList.add('is-empty'); }
+    if (sku) units += q;
+    // the serial icon: green with a count once any are logged, amber while short
+    const btn = r.querySelector('.ws-sn');
+    const n = wsInv ? (wsSerialCounts[`${wsInv.gid}|${sku}`] || 0) : 0;
+    btn.querySelector('.n').textContent = n ? String(n) : '';
+    btn.classList.toggle('has', n > 0 && n >= q);
+    btn.classList.toggle('short', n > 0 && n < q);
+    btn.title = sku ? `Serial numbers · ${n} of ${q}` : 'Serial numbers — pick a SKU first';
+  }
+  const ship = Number($('wsShipping').value) || 0;
+  $('wsUnits').textContent = wsNum(units);
+  $('wsGoods').textContent = wsMoney(goods);
+  $('wsTotal').textContent = wsMoney(goods + ship);
+  // what leaves the shelf: per SKU, the change against what a previous save already took
+  const prevBy = new Map();
+  for (const l of wsInv && wsInv.prev ? wsInv.prev.lines : []) prevBy.set(l.sku, (prevBy.get(l.sku) || 0) + l.qty);
+  const by = new Map();
+  for (const l of wsLinesData()) by.set(l.sku, (by.get(l.sku) || 0) + l.qty);
+  const rows = [];
+  let out = 0;
+  for (const [sku, q] of by) {
+    const d = q - (prevBy.get(sku) || 0);
+    if (!d) continue;
+    out += d;
+    const now = wsLevelOf(sku);
+    rows.push(`<div class="ws-lv"><span>${esc(sku)}</span><span class="n">${d > 0 ? '−' : '+'}${Math.abs(d)}</span><span class="d">${now === null ? '' : `${wsNum(now)} → ${wsNum(now - d)}`}</span></div>`);
+  }
+  for (const [sku, q] of prevBy) if (!by.has(sku)) { out -= q; const now = wsLevelOf(sku); rows.push(`<div class="ws-lv"><span>${esc(sku)}</span><span class="n">+${q}</span><span class="d">${now === null ? '' : `${wsNum(now)} → ${wsNum(now + q)}`}</span></div>`); }
+  $('wsLeaving').innerHTML = rows.length
+    ? `<div class="ws-lv-h">${wsInv && wsInv.prev ? 'Change on save' : 'Leaving Digital World Shop on save'} · <b>${out > 0 ? `${out} units` : `${-out} back`}</b></div>${rows.join('')}`
+    : '';
+}
+$('wsShipping').addEventListener('input', wsRecalc);
+$('wsShipping').addEventListener('blur', () => { const n = Number($('wsShipping').value); $('wsShipping').value = $('wsShipping').value.trim() && Number.isFinite(n) && n > 0 ? n.toFixed(2) : ''; wsRecalc(); });
+$('wsAddLine').addEventListener('click', () => { const last = $('wsLines').lastElementChild; if (!last || last.querySelector('.ws-sku').value.trim()) wsAddLine(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
+$('wsScanBtn').addEventListener('click', () => { wsGrow(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
+
+async function wsSave({ thenPrint = false } = {}) {
+  if (!wsInv) return;
+  const res = $('wsResult');
+  const lines = wsLinesData();
+  if (!lines.length) { res.textContent = 'Add at least one line with a SKU and a quantity.'; res.classList.add('is-err'); return; }
+  const unknown = recvLookup === 'ready' ? lines.filter(l => !wfsFindSku(l.sku)).map(l => l.sku) : [];
+  if (unknown.length && !window.confirm(`${unknown.join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not in Linnworks — save anyway? The deduction will fail for unknown SKUs.`)) return;
+  // a typed customer that was never picked is saved on the spot, so the
+  // name is there next time
+  let custName = $('wsCustInput').value.trim();
+  if (!wsCust && custName) {
+    const r = await api.wholesaleCustomerSave({ name: custName });
+    if (r.ok) { wsCust = r.customer; wsCustomers.push(r.customer); }
+  }
+  if (wsCust) custName = wsCust.name;
+  $('wsSave').disabled = true; $('wsPrint').disabled = true;
+  res.textContent = 'Saving…'; res.classList.remove('is-err');
+  const out = await api.wholesaleSave({
+    gid: wsInv.gid, number: $('wsNumber').value.trim(), date: $('wsDate').value ? `${$('wsDate').value}T12:00:00` : '',
+    customerGid: wsCust ? wsCust.gid : '', customerName: custName, lines,
+    note: $('wsNote').value.trim(), carrier: $('wsCarrier').value, tracking: $('wsTracking').value.trim(), shipping: Number($('wsShipping').value) || 0,
+  });
+  $('wsSave').disabled = false; $('wsPrint').disabled = false;
+  if (!out.ok) { res.textContent = out.error || 'Could not save.'; res.classList.add('is-err'); return; }
+  const units = lines.reduce((a, l) => a + l.qty, 0);
+  const wasNew = !wsInv.prev;
+  wsInv.prev = out.invoice;
+  res.textContent = '';
+  toast(wasNew ? `Invoice ${out.invoice.number || ''} saved · ${units} units off the shelf` : `Invoice ${out.invoice.number || ''} updated`);
+  $('wsDialog').close();
+  if ($('wsListDialog').open) openWsList(); else { wsNextNumber = ''; }
+  if (stockCache) loadStock(); // the grid's counts moved
+  if (thenPrint) {
+    const r = await api.wholesalePrint(out.invoice.gid);
+    if (r.ok) toast(`Saved ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not print');
+  }
+}
+$('wsSave').addEventListener('click', () => wsSave());
+$('wsPrint').addEventListener('click', async () => {
+  if (wsInv && wsInv.prev && wsInv.prev.voided_at) { const r = await api.wholesalePrint(wsInv.gid); if (r.ok) toast(`Saved ${r.path}`); return; }
+  wsSave({ thenPrint: true });
+});
+async function wsCancel() {
+  if (wsInv && !wsInv.prev) await api.wholesaleDiscardDraft(wsInv.gid); // scanned serials on a never-saved invoice go with it
+  $('wsDialog').close();
+}
+$('wsCancel').addEventListener('click', wsCancel);
+$('wsClose').addEventListener('click', wsCancel);
+$('wsDialog').addEventListener('cancel', (e) => { e.preventDefault(); wsCancel(); });
+
+/* ---- serial numbers: every scan saved the moment Enter lands ---- */
+let wsSn = null; // { row, sku, qty }
+let wsSnList = [];
+async function openWsSerials(row) {
+  const sku = row.querySelector('.ws-sku').value.trim().toUpperCase();
+  if (!sku) { toast('Pick a SKU on this line first'); row.querySelector('.ws-sku').focus(); return; }
+  const qty = Math.round(Number(row.querySelector('.ws-qty').value) || 0) || 1;
+  wsSn = { row, sku, qty, dupSerial: '' };
+  $('wsSnSku').textContent = sku;
+  $('wsSnInput').value = '';
+  $('wsSnHint').textContent = 'scan or type · Enter saves';
+  $('wsSnHint').classList.remove('is-dup');
+  const r = await api.wholesaleSerials(wsInv.gid, sku);
+  wsSnList = r.ok ? r.serials : [];
+  renderWsSerials();
+  $('wsSnDialog').showModal();
+  $('wsSnInput').focus();
+}
+function renderWsSerials(flash) {
+  const inv = wsInv && wsInv.prev;
+  $('wsSnSub').innerHTML = `<b>${wsSnList.length} of ${wsSn.qty}</b> logged${inv && inv.number ? ` · invoice #${esc(inv.number)}` : ''}${$('wsCustInput').value.trim() ? ` · ${esc($('wsCustInput').value.trim())}` : ''}`;
+  const total = wsSnList.length;
+  $('wsSnList').innerHTML = wsSnList.map((x, i) => `<div class="ws-sn-row ${flash && flash.gid === x.gid ? (flash.dup ? 'is-dup' : 'is-new') : ''}" data-gid="${esc(x.gid)}">
+      <span class="i">${total - i}</span><span class="v">${esc(x.serial)}</span>
+      <span class="t">${flash && flash.gid === x.gid ? (flash.dup ? 'duplicate — not added' : 'saved just now') : fmtTime(x.created_at)}</span>
+      <button type="button" class="ws-x" title="Remove this serial">✕</button>
+    </div>`).join('');
+  $('wsSnFoot').textContent = total ? `${total} saved · saves as you go, close whenever` : 'saves as you go — close whenever';
+  $('wsSnExport').disabled = !total;
+}
+$('wsSnInput').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter' || !wsSn) return;
+  e.preventDefault();
+  const v = $('wsSnInput').value.trim();
+  if (!v) return;
+  const r = await api.wholesaleSerialAdd(wsInv.gid, wsSn.sku, v);
+  if (!r.ok) {
+    if (r.duplicate) {
+      wsSnList = r.serials || wsSnList;
+      const dup = wsSnList.find(x => x.serial.toUpperCase() === v.toUpperCase());
+      $('wsSnHint').textContent = dup ? `already on line ${wsSnList.length - wsSnList.indexOf(dup)}` : r.error;
+      $('wsSnHint').classList.add('is-dup');
+      renderWsSerials(dup ? { gid: dup.gid, dup: true } : null);
+    } else toast(r.error || 'Could not save the serial');
+    $('wsSnInput').select();
+    return;
+  }
+  wsSnList = r.serials;
+  $('wsSnHint').textContent = 'scan or type · Enter saves';
+  $('wsSnHint').classList.remove('is-dup');
+  renderWsSerials({ gid: r.serial.gid });
+  $('wsSnInput').value = '';
+  wsSerialCounts[`${wsInv.gid}|${wsSn.sku}`] = wsSnList.length;
+  wsRecalc();
+});
+$('wsSnList').addEventListener('click', async (e) => {
+  const x = e.target.closest('.ws-x');
+  const rowEl = e.target.closest('.ws-sn-row');
+  if (!x || !rowEl) return;
+  const r = await api.wholesaleSerialDelete(rowEl.dataset.gid);
+  if (!r.ok) { toast(r.error || 'Could not remove'); return; }
+  wsSnList = r.serials || wsSnList.filter(s => s.gid !== rowEl.dataset.gid);
+  renderWsSerials();
+  wsSerialCounts[`${wsInv.gid}|${wsSn.sku}`] = wsSnList.length;
+  wsRecalc();
+  $('wsSnInput').focus();
+});
+$('wsSnExport').addEventListener('click', async () => {
+  const r = await api.wholesaleSerialsCsv(wsInv.gid, wsSn.sku);
+  if (r.ok) toast(`${r.count} serial${r.count === 1 ? '' : 's'} → ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not export');
+});
+function wsSnClose() { $('wsSnDialog').close(); wsRecalc(); }
+$('wsSnDone').addEventListener('click', wsSnClose);
+$('wsSnClose').addEventListener('click', wsSnClose);
+$('wsSnDialog').addEventListener('cancel', (e) => { e.preventDefault(); wsSnClose(); });
+
 $('wfsLines').addEventListener('click', (e) => {
   const rm = e.target.closest('.wfs-remove');
   if (!rm) return;
@@ -8369,7 +8879,7 @@ function makeCombo(input, listEl, onPick, opts) {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
     // returns log, the receive popup's sheet AND the WFS shipment sheet
     // anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap')) return;
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap') && !input.closest('.ws-lines')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
