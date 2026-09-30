@@ -8289,13 +8289,29 @@ async function openWsList() {
   wsStationName = res.station || '';
   $('wsListSearch').value = wsListQuery;
   renderWsList();
-  if (!$('wsListDialog').open) $('wsListDialog').showModal();
+  if (!$('wsListDialog').open) {
+    $('wsListDialog').showModal();
+    // the search takes focus when there is something to search; otherwise
+    // nothing does (showModal would ring the ✕, the only control left)
+    if (wsInvoices.length) $('wsListSearch').focus(); else if (document.activeElement) document.activeElement.blur();
+  }
 }
 function renderWsList() {
   const q = wsListQuery.trim().toLowerCase();
   const rows = wsInvoices.filter(inv => !q || [inv.number, inv.customer_name, ...inv.lines.map(l => l.sku)].join(' ').toLowerCase().includes(q));
+  $('wsListSearch').closest('.ws-list-search').hidden = !wsInvoices.length; // nothing to search yet
+  $('wsNewBtn').hidden = !wsInvoices.length; // the empty state carries its own New invoice
   if (!rows.length) {
-    $('wsListBody').innerHTML = `<p class="dlg-note" style="padding:16px 20px">${wsInvoices.length ? 'No invoice matches that search.' : 'No wholesale invoices yet — New invoice starts the first one.'}</p>`;
+    $('wsListBody').innerHTML = wsInvoices.length
+      ? `<div class="ws-empty is-search"><div class="ws-empty-h">No invoice matches “${esc(q)}”</div><div class="ws-empty-s">Search looks at the customer, the invoice number and every SKU on it.</div></div>`
+      : `<div class="ws-empty">
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M72 104a8 8 0 0 1 8-8h96a8 8 0 0 1 0 16H80a8 8 0 0 1-8-8Zm8 40h96a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16Zm144-96v168a8 8 0 0 1-11.58 7.15L192 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L144 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L96 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L48 212.94l-20.42 10.21A8 8 0 0 1 16 216V48a16 16 0 0 1 16-16h192a16 16 0 0 1 16 16Zm-16 0H32v155.06l12.42-6.21a8 8 0 0 1 7.16 0L72 207.06l20.42-10.21a8 8 0 0 1 7.16 0L120 207.06l20.42-10.21a8 8 0 0 1 7.16 0L168 207.06l20.42-10.21a8 8 0 0 1 7.16 0L208 203.06Z"/></svg>
+          <div class="ws-empty-h">No wholesale invoices yet</div>
+          <div class="ws-empty-s">An invoice is a customer, the SKUs they took and how many. Saving it takes those units off Digital World Shop and logs them under each SKU's history. Price and shipping are optional.</div>
+          <button type="button" class="btn btn-primary" id="wsEmptyNew">＋ New invoice</button>
+        </div>`;
+    const b = $('wsEmptyNew');
+    if (b) b.addEventListener('click', () => openWsInvoice(''));
     return;
   }
   $('wsListBody').innerHTML = `<table class="ws-lt">
