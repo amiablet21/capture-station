@@ -4671,21 +4671,36 @@ th:last-child > .col-grip { right: 0; }
 .ov-wmore { font-size: 10px; font-weight: 700; font-family: var(--mono); line-height: 15px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
 .ov-wfast { font-size: 9.5px; font-weight: 600; line-height: 16px; padding: 0 7px; border-radius: 999px; color: var(--neg-text); background: var(--neg-bg); white-space: nowrap; }
 
-/* ---- Runway rows (owner 2026-09-30: "completely new and cool", variants/
-   ov-runway.html R1). Each SKU is a hairline row: SKU line with the keys
-   at its right end, then a runway bar that turns "days left" into a
-   picture - the solid part is what is there now (coloured by urgency),
-   the hatched green part is what the Send / Order adds, out to the target
-   (30 days at WFS; lead + cover for Running low, with a tick at the lead
-   time: if the solid part ends before the tick, it runs out before the
-   order lands). A quiet meta line under it carries the figures. ---- */
-.ov-rlist { display: flex; flex-direction: column; margin: 0 -6px; }
-.ov-rw { padding: 8px 8px 9px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
-.ov-rw:first-child { border-top: none; }
-.ov-rw:hover { background: var(--surface-2); }
-.ov-rw-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ov-rw-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
-.ov-rw-keys { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: none; }
+/* ---- Dial rows (owner pick 2026-09-30, variants/ov-runway.html R3 over
+   R1 runway rows and R2 ticket stubs). Each SKU is a hairline row: a small
+   ring dial at the left shows days-left as an arc out of the target (30
+   days at WFS; lead + cover for Running low) with the number inside, in
+   the urgency colour (red under 5 days, amber under 10); SKU and figures
+   in the middle; Send N / Order N over a quiet Ignore at the right. ---- */
+.ov-dlist { display: flex; flex-direction: column; margin: 0 -6px; }
+.ov-dl { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
+.ov-dl:first-child { border-top: none; }
+.ov-dl:hover { background: var(--surface-2); }
+.ov-dial { position: relative; width: 38px; height: 38px; }
+.ov-dial svg { display: block; width: 38px; height: 38px; transform: rotate(-90deg); }
+.ov-dial .trk { fill: none; stroke: #EFEEEA; stroke-width: 4; }
+.ov-dial .val { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
+.ov-dial span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: currentColor; font-variant-numeric: tabular-nums; }
+.ov-dial span small { font-size: 8px; font-weight: 600; color: var(--faint); margin-left: 1px; }
+.ov-dl.r .ov-dial { color: var(--neg-text); }
+.ov-dl.a .ov-dial { color: var(--badge-yellow-text); }
+.ov-dl.g .ov-dial { color: var(--accent); }
+.ov-dl.g .ov-dial span { color: var(--accent-soft-text); }
+.ov-dl.p .ov-dial { color: #2E86D9; }
+.ov-dl.p .ov-dial span { color: var(--badge-blue-text); }
+.ov-dl-body { min-width: 0; }
+.ov-dl-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ov-dl-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
+.ov-dl-meta { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-dl-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ov-dl-meta .ov-wfast { margin-right: 6px; vertical-align: 1px; }
+.ov-dl-meta .sep { margin: 0 5px; color: var(--faint); }
+.ov-dl-keys { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
 .ov-rw-send, .ov-rw-ign { font-family: var(--font); border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 120ms var(--ease), color 120ms var(--ease); }
 .ov-rw-send { font-size: 11.5px; font-weight: 600; padding: 3px 11px; background: var(--accent); color: #fff; }
 .ov-rw-send:hover { background: var(--accent-hover); }
@@ -4694,30 +4709,8 @@ th:last-child > .col-grip { right: 0; }
 .ov-rw-send.o:hover { background: #7A5200; }
 .ov-rw-send.q { background: var(--accent-soft); color: var(--accent-soft-text); }
 .ov-rw-send.q:hover { background: #D5EBDF; }
-.ov-rw-ign { font-size: 11px; font-weight: 500; padding: 3px 8px; background: none; color: var(--faint); }
+.ov-rw-ign { font-size: 11px; font-weight: 500; padding: 1px 8px; background: none; color: var(--faint); }
 .ov-rw-ign:hover { background: #EFEEEA; color: var(--text); }
-.ov-rw-run { display: flex; align-items: center; gap: 9px; margin: 7px 0 5px; }
-.ov-rw-bar { position: relative; flex: 1; display: flex; height: 7px; border-radius: 999px; background: #EFEEEA; overflow: hidden; }
-.ov-rw-bar i { display: block; height: 100%; flex: none; }
-.ov-rw-bar .have { background: currentColor; }
-.ov-rw-bar .add { background: repeating-linear-gradient(135deg, var(--accent) 0 2.5px, #CFE7DA 2.5px 6px); }
-.ov-rw-bar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: #2F3437; box-shadow: 0 0 0 1.5px #fff; }
-.ov-rw.r .ov-rw-bar { color: var(--neg-text); }
-.ov-rw.a .ov-rw-bar { color: var(--badge-yellow-text); }
-.ov-rw.g .ov-rw-bar { color: var(--accent); }
-.ov-rw-days { flex: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.ov-rw-days b { font-size: 11.5px; font-weight: 700; }
-.ov-rw.r .ov-rw-days b { color: var(--neg-text); }
-.ov-rw.a .ov-rw-days b { color: var(--badge-yellow-text); }
-.ov-rw.g .ov-rw-days b { color: var(--accent-soft-text); }
-.ov-rw-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ov-rw-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.ov-rw-meta .o { color: var(--badge-yellow-text); }
-.ov-rw-meta .sep { margin: 0 5px; color: var(--faint); }
-.ov-rw-meta .ov-wfast { margin-left: 0; margin-right: 6px; vertical-align: 1px; }
-/* shipments on the way share the row shape: a blue runway = days out */
-.ov-rw.p .ov-rw-bar { color: #2E86D9; }
-.ov-rw.p .ov-rw-days b { color: var(--badge-blue-text); }
 
 .ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
 .ov-link:hover { color: var(--text); }

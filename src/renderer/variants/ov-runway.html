@@ -13,6 +13,8 @@
          the button; SKU + three figures on the right; ✕ to ignore.
     R3 - Dial rows: a small ring dial of days-left at the left of each
          row, SKU and figures in the middle, keys at the right.
+  OWNER PICK: R3 ("I like this more"), shipped in styles.css as .ov-dl*;
+  in the app Faster rides in the figures line so long SKUs don't clip.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -25,6 +27,31 @@
   .lbl b { color: var(--text); letter-spacing: .02em; }
   .note { font-size: 11px; color: var(--muted); margin-top: 8px; max-width: 760px; }
   .two { display: grid; grid-template-columns: 400px 348px; gap: 10px; align-items: start; }
+
+
+  /* R1 runway rows (was in styles.css until the owner picked R3) */
+  .ov-rlist { display: flex; flex-direction: column; margin: 0 -6px; }
+  .ov-rw { padding: 8px 8px 9px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
+  .ov-rw:first-child { border-top: none; }
+  .ov-rw:hover { background: var(--surface-2); }
+  .ov-rw-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ov-rw-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
+  .ov-rw-keys { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: none; }
+  .ov-rw-keys .ov-rw-ign { padding: 3px 8px; }
+  .ov-rw-run { display: flex; align-items: center; gap: 9px; margin: 7px 0 5px; }
+  .ov-rw-bar { position: relative; flex: 1; display: flex; height: 7px; border-radius: 999px; background: #EFEEEA; overflow: hidden; }
+  .ov-rw-bar i { display: block; height: 100%; flex: none; }
+  .ov-rw-bar .have { background: currentColor; }
+  .ov-rw-bar .add { background: repeating-linear-gradient(135deg, var(--accent) 0 2.5px, #CFE7DA 2.5px 6px); }
+  .ov-rw-bar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: #2F3437; box-shadow: 0 0 0 1.5px #fff; }
+  .ov-rw.r .ov-rw-bar { color: var(--neg-text); } .ov-rw.a .ov-rw-bar { color: var(--badge-yellow-text); } .ov-rw.g .ov-rw-bar { color: var(--accent); } .ov-rw.p .ov-rw-bar { color: #2E86D9; }
+  .ov-rw-days { flex: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+  .ov-rw-days b { font-size: 11.5px; font-weight: 700; }
+  .ov-rw.r .ov-rw-days b { color: var(--neg-text); } .ov-rw.a .ov-rw-days b { color: var(--badge-yellow-text); } .ov-rw.g .ov-rw-days b { color: var(--accent-soft-text); } .ov-rw.p .ov-rw-days b { color: var(--badge-blue-text); }
+  .ov-rw-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ov-rw-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .ov-rw-meta .ov-wfast { margin-right: 6px; vertical-align: 1px; }
+  .ov-rw-meta .sep { margin: 0 5px; color: var(--faint); }
 
   /* R2 ticket stubs */
   .tk-list { display: flex; flex-direction: column; gap: 7px; }

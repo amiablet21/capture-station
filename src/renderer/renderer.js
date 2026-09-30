@@ -10392,8 +10392,12 @@ let ovFetching = false;
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ovTone = (days) => days < 5 ? 'r' : days < 10 ? 'a' : 'g';
-// a runway segment's width, as a percent of the target
-const ovPct = (days, target) => target > 0 ? Math.max(0, Math.min(100, days / target * 100)).toFixed(1) : '0';
+// the ring dial: an arc of days out of the target, the number inside
+const OV_DIAL_C = 2 * Math.PI * 15;
+function ovDial(days, target, label) {
+  const frac = target > 0 ? Math.max(0, Math.min(1, days / target)) : 0;
+  return `<div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="${(OV_DIAL_C * frac).toFixed(1)} ${OV_DIAL_C.toFixed(1)}"/></svg><span>${label}<small>d</small></span></div>`;
+}
 const ovShortDate = (iso) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : `${OV_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
@@ -10434,7 +10438,6 @@ function ovRenderAll() {
     ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // bar widths go through the CSSOM: the CSP blocks inline style attributes
   $('ovCols').querySelectorAll('[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
-  $('ovCols').querySelectorAll('[data-l]').forEach(i => { i.style.left = `${i.dataset.l}%`; });
 }
 
 function ovRenderWfs() {
@@ -10445,12 +10448,11 @@ function ovRenderWfs() {
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  // runway rows (owner 2026-09-30 "completely new and cool", variants/
-  // ov-runway.html R1): SKU line with Ignore | Send N at its right end, a
-  // runway bar (solid = days at WFS now, hatched = what the send adds, out
-  // to the target), then the figures. The SKU shown is the Walmart channel
-  // SKU that sold most in the last 30 days (the Linnworks SKU when they
-  // match); more listings show as +N.
+  // dial rows (owner pick 2026-09-30, variants/ov-runway.html R3): a ring
+  // dial of days at WFS out of the target, SKU + figures, Send N over
+  // Ignore. The SKU shown is the Walmart channel SKU that sold most in the
+  // last 30 days (the Linnworks SKU when they match); more listings show
+  // as +N.
   const target = plan.targetDays;
   const rowsHtml = plan.rows.map((r) => {
     const t = ovTone(r.coverDays);
@@ -10458,21 +10460,20 @@ function ovRenderWfs() {
     const head = chs.length ? chs[0].sku : r.sku;
     const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
       `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
-    const have = Math.min(Math.max(r.coverDays, 0), target);
-    const addDays = r.perDay > 0 ? r.send / r.perDay : 0;
-    const add = Math.min(addDays, target - have);
-    const cover = r.coverDays < 0.05 ? '0' : r.coverDays.toFixed(1);
-    return `<div class="ov-rw ${t}">
-      <div class="ov-rw-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}
-        <span class="ov-rw-keys"><button class="ov-rw-ign" data-ovignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button><button class="ov-rw-send" data-ovsend="${esc(r.sku)}" title="Send ${r.send} = ${Math.round(r.perDay * 7)}/wk at WFS × ${target} days − ${r.atWfs} at WFS − ${r.flightUnits || 0} on the way">Send<b>${r.send}</b></button></span></div>
-      <div class="ov-rw-run"><div class="ov-rw-bar" title="${esc(`${cover} days at WFS now; sending ${r.send} adds about ${Math.round(addDays)} days`)}"><i class="have" data-w="${ovPct(have, target)}"></i><i class="add" data-w="${ovPct(add, target)}"></i></div><span class="ov-rw-days"><b>${cover}</b> / ${target} days</span></div>
-      <div class="ov-rw-meta"><b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${r.atWfs}</b> at WFS${r.flightUnits ? ` · <b>${r.flightUnits}</b> on the way` : ''}</div>
+    const cover = r.coverDays < 0.05 ? '0' : r.coverDays < 10 ? r.coverDays.toFixed(1) : String(Math.round(r.coverDays));
+    return `<div class="ov-dl ${t}" title="${esc(`${cover} days at WFS out of the ${target}-day target`)}">
+      ${ovDial(r.coverDays, target, cover)}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
+        <div class="ov-dl-meta"><b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${r.atWfs}</b> at WFS${r.flightUnits ? ` · <b>${r.flightUnits}</b> on the way` : ''}</div>
+      </div>
+      <div class="ov-dl-keys"><button class="ov-rw-send" data-ovsend="${esc(r.sku)}" title="Send ${r.send} = ${Math.round(r.perDay * 7)}/wk at WFS × ${target} days − ${r.atWfs} at WFS − ${r.flightUnits || 0} on the way">Send<b>${r.send}</b></button><button class="ov-rw-ign" data-ovignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
     </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
   const onWay = plan.flight.filter(f => f.status !== 'received').reduce((a, f) => a + f.units, 0);
-  // shipments on their way share the row shape: a blue runway of days out
+  // shipments on their way share the row shape: a blue dial of days out
   // (full at 14, when an unreceived shipment turns into a Check)
   const flightHtml = plan.flight.map(f => {
     const label = { pending: 'Pending', check: 'Check', received: 'Received' }[f.status];
@@ -10480,23 +10481,22 @@ function ovRenderWfs() {
     const first = f.items[0] || { sku: '' };
     const days = Math.max(0, Math.floor((Date.now() - Date.parse(f.createdAt)) / 86400000));
     const tip = f.items.map(i => `${i.sku} ×${i.qty}`).join('\n') + (f.status === 'check' ? '\nNothing marked received in 14+ days - check Seller Center' : '');
-    return `<div class="ov-rw ${tone}">
-      <div class="ov-rw-top"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}
-        <span class="ov-rw-keys">${f.status === 'received'
-          ? `<button class="ov-rw-ign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
-          : `<button class="ov-rw-send q" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</span></div>
-      <div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="${ovPct(Math.min(days, 14), 14)}"></i></div><span class="ov-rw-days"><b>${days}</b> day${days === 1 ? '' : 's'} out</span></div>
-      <div class="ov-rw-meta"><b>${f.units.toLocaleString()}</b> units · sent <b>${ovShortDate(f.createdAt)}</b> · ${label}${f.note ? `<span class="sep">·</span>${esc(f.note)}` : ''}</div>
+    return `<div class="ov-dl ${tone}" title="${esc(`${days} day${days === 1 ? '' : 's'} out`)}">
+      ${ovDial(days, 14, String(days))}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}</div>
+        <div class="ov-dl-meta"><b>${f.units.toLocaleString()}</b> units · sent <b>${ovShortDate(f.createdAt)}</b> · ${label}${f.note ? `<span class="sep">·</span>${esc(f.note)}` : ''}</div>
+      </div>
+      <div class="ov-dl-keys">${f.status === 'received'
+        ? `<button class="ov-rw-ign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
+        : `<button class="ov-rw-send q" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
     </div>`;
   }).join('');
-  const sendUnits = plan.rows.reduce((a, r) => a + (Number(r.send) || 0), 0);
-  const wfsSub = plan.rows.length
-    ? `<span class="sub"><b>${plan.rows.length}</b> SKU${plan.rows.length === 1 ? '' : 's'} · <b>${sendUnits.toLocaleString()}</b> units</span>` : '';
   box.innerHTML = `<h4 class="ov-h-g">Send to WFS${wfsSub}</h4>
-    ${plan.rows.length ? `<div class="ov-rlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
+    ${plan.rows.length ? `<div class="ov-dlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
-    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-rlist">${flightHtml}</div>` : ''}
-    <div class="ov-more" title="Send = WFS pace × ${target} days − at WFS − on the way">Solid = days at WFS now · hatched = what the send adds · target ${target} days</div>`;
+    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-dlist">${flightHtml}</div>` : ''}
+    <div class="ov-more" title="Send = WFS pace × ${target} days − at WFS − on the way">Dial = days at WFS out of the ${target}-day target</div>`;
 }
 
 function ovRenderSold() {
@@ -10545,31 +10545,29 @@ function ovRenderLow() {
     box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
     return;
   }
-  // runway rows like Send to WFS (variants/ov-runway.html R1): the target
-  // is the lead time plus the cover days; a tick marks the lead - when the
-  // solid part stops short of it, the SKU runs out before the order lands
+  // dial rows like Send to WFS (variants/ov-runway.html R3): the dial is
+  // days on hand out of the lead time plus the cover days
   const target = m.leadDays + m.coverDays;
   const rows = plan.rows.map(r => {
     const t = ovTone(r.daysLeft);
     const tip = `${r.avail} on shelf${r.atWfs ? ` · ${r.atWfs} at WFS` : ''} · ${r.perDay.toFixed(1)}/day · out ~${r.outOn}`;
-    const have = Math.min(Math.max(r.daysLeft, 0), target);
-    const addDays = r.perDay > 0 ? r.order / r.perDay : 0;
-    const add = Math.min(addDays, target - have);
-    return `<div class="ov-rw ${t}">
-      <div class="ov-rw-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span>
-        <span class="ov-rw-keys"><button class="ov-rw-ign" data-ovlowignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button><button class="ov-rw-send o" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock · order ${r.order} = ${r.perDay.toFixed(1)}/day × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Order<b>${r.order}</b></button></span></div>
-      <div class="ov-rw-run"><div class="ov-rw-bar" title="${esc(`${r.daysLeft} days on hand; the tick is the ${m.leadDays}-day lead; ordering ${r.order} adds about ${Math.round(addDays)} days`)}"><i class="have" data-w="${ovPct(have, target)}"></i><i class="add" data-w="${ovPct(add, target)}"></i><b class="tick" data-l="${ovPct(m.leadDays, target)}"></b></div><span class="ov-rw-days"><b>${r.daysLeft}</b> / ${target} days</span></div>
-      <div class="ov-rw-meta">${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}<b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${(r.avail + r.atWfs).toLocaleString()}</b> on hand · out <b>${r.daysLeft <= 0 ? 'today' : esc(String(r.outOn || ''))}</b></div>
+    return `<div class="ov-dl ${t}" title="${esc(`${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days`)}">
+      ${ovDial(r.daysLeft, target, String(r.daysLeft))}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span></div>
+        <div class="ov-dl-meta">${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}<b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${(r.avail + r.atWfs).toLocaleString()}</b> on hand${r.daysLeft > 0 && r.outOn ? ` · out <b>${esc(String(r.outOn))}</b>` : ''}</div>
+      </div>
+      <div class="ov-dl-keys"><button class="ov-rw-send o" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock · order ${r.order} = ${r.perDay.toFixed(1)}/day × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Order<b>${r.order}</b></button><button class="ov-rw-ign" data-ovlowignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
     </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovlowunignore>Undo</a></div>` : '';
   const lowN = plan.rows.length + (Number(plan.more) || 0);
   box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${lowN ? `<b>${lowN}</b> SKU${lowN === 1 ? '' : 's'} · ` : ''}${m.leadDays}-day lead time</span></h4>
-    ${plan.rows.length ? `<div class="ov-rlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
+    ${plan.rows.length ? `<div class="ov-dlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
     ${undo}
     ${plan.more ? `<div class="ov-more">+ ${plan.more} more — <a data-ovlow>open Stock</a></div>` : ''}
-    <div class="ov-more" title="Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Tick = the ${m.leadDays}-day lead · solid = days on hand · hatched = what the order adds</div>`;
+    <div class="ov-more" title="Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Dial = days on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days</div>`;
 }
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after
