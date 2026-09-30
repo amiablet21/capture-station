@@ -75,8 +75,10 @@
 
   /* bottom: note left, totals right */
   .bot { display:grid; grid-template-columns:1fr 290px; gap:28px; align-items:start; }
-  .note .input { height:auto; min-height:64px; align-items:flex-start; }
-  .tot .row { display:flex; align-items:center; justify-content:space-between; padding:5px 0; font-size:12.5px; color:var(--muted); }
+  .note > .input { height:auto; min-height:64px; align-items:flex-start; }
+  .tot .row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; font-size:12.5px; color:var(--muted); min-height:34px; }
+  .shipvia { display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .shipvia .field-label { margin:0; white-space:nowrap; }
   .tot .row .v { font-family:var(--mono); color:var(--text); }
   .tot .ship { display:flex; gap:6px; }
   .tot .ship .input { height:28px; font-size:12px; padding:0 8px; }
@@ -84,6 +86,34 @@
   .tot .row.total .v { font-size:18px; font-weight:700; letter-spacing:-0.02em; }
   .stockbox { margin-top:10px; background:var(--yellow-bg); color:var(--yellow); border-radius:var(--r-ctl); padding:7px 10px; font-size:12px; }
   .stockbox b { font-family:var(--mono); }
+
+  /* serial numbers: an icon per line, count badge once any are logged */
+  .sn { display:inline-flex; align-items:center; justify-content:center; gap:3px; height:26px; min-width:26px; padding:0 5px; border-radius:var(--r-ctl); color:var(--muted); }
+  .sn svg { width:15px; height:15px; }
+  .sn.has { color:var(--accent-soft-text); background:var(--accent-soft); }
+  .sn .n { font-family:var(--mono); font-size:11px; font-weight:700; }
+  .sn.short { color:var(--yellow); background:var(--yellow-bg); }
+  .sn-dlg { width:520px; }
+  .sn-sub { font-size:12px; color:var(--muted); margin:-8px 0 12px; }
+  .sn-sub b { font-family:var(--mono); color:var(--text); }
+  .sn-scan { display:flex; align-items:center; gap:10px; border:1.5px solid var(--accent); border-radius:8px; box-shadow:0 0 0 3px var(--accent-soft); padding:9px 12px; margin-bottom:12px; }
+  .sn-scan svg { width:18px; height:18px; color:var(--accent); flex:0 0 auto; }
+  .sn-scan .big { font-family:var(--mono); font-size:14px; flex:1; }
+  .sn-scan .big .ph { font-family:var(--font); font-size:13px; }
+  .sn-scan .hint { font-size:11px; color:var(--faint); white-space:nowrap; }
+  .sn-list { border:1px solid var(--border); border-radius:8px; overflow:hidden; max-height:260px; }
+  .sn-row { display:flex; align-items:center; gap:10px; padding:7px 12px; border-top:1px solid var(--border-soft); font-size:12.5px; }
+  .sn-row:first-child { border-top:none; }
+  .sn-row .i { font-family:var(--mono); font-size:11px; color:var(--faint); width:22px; }
+  .sn-row .v { font-family:var(--mono); font-weight:600; flex:1; }
+  .sn-row .t { font-size:11px; color:var(--faint); white-space:nowrap; }
+  .sn-row .x { color:var(--faint); font-size:11px; }
+  .sn-row.new { background:var(--accent-soft); }
+  .sn-row.new .t { color:var(--accent-soft-text); font-weight:600; }
+  .sn-row.dup { background:var(--yellow-bg); }
+  .sn-row.dup .t { color:var(--yellow); font-weight:600; }
+  .sn-foot .btn { display:inline-flex; align-items:center; gap:6px; }
+  .sn-foot .btn svg { width:13px; height:13px; }
 
   /* customer dropdown = the app's combo list */
   .dd { position:relative; }
@@ -136,28 +166,29 @@
       </div>
 
       <table>
-        <colgroup><col style="width:200px"><col><col style="width:126px"><col style="width:68px"><col style="width:92px"><col style="width:100px"><col style="width:30px"></colgroup>
-        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th></tr></thead>
+        <colgroup><col style="width:200px"><col><col style="width:126px"><col style="width:68px"><col style="width:92px"><col style="width:92px"><col style="width:58px"><col style="width:30px"></colgroup>
+        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th><th></th></tr></thead>
         <tbody>
-          <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td class="r stock">1,974 → <span class="to">1,964</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td class="x">✕</td></tr>
-          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td class="r stock">1,974 → <span class="to">1,964</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td><span class="sn has" title="Serial numbers · 10 of 10"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">10</span></span></td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn short" title="Serial numbers · 1 of 2"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">1</span></span></td><td class="x">✕</td></tr>
           <tr class="on"><td class="sug"><span class="cell f sku">X133-64<span class="ph" style="font-family:var(--font);font-weight:400">|</span></span>
             <div class="sug-list">
               <div class="sug-o hl"><span class="sku">X133-64GB-SILVER</span><span class="t">Galaxy Tab A9 64GB Silver</span><span class="s">634 · last 118.00</span></div>
               <div class="sug-o"><span class="sku">X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB Graphite · on line 1</span><span class="s">1,974</span></div>
               <div class="sug-o"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB, open box</span><span class="s">12</span></div>
-            </div></td><td><span class="cell ph">fills from the item</span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td class="x">✕</td></tr>
+            </div></td><td><span class="cell ph">fills from the item</span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn" title="Serial numbers"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg></span></td><td class="x">✕</td></tr>
         </tbody>
       </table>
       <div style="height:92px"></div>
       <div class="addrow"><span class="btn btn-ghost">＋ Add line</span><span class="btn btn-ghost">Scan barcode</span></div>
 
       <div class="bot">
-        <div class="note"><span class="field-label">Note</span><div class="input ph">PO#, payment terms, who picked it up…</div></div>
+        <div class="note"><span class="field-label">Note</span><div class="input ph">PO#, payment terms, who picked it up…</div>
+          <div class="shipvia"><span class="field-label">Ship via</span><div class="input ph" style="width:130px">Carrier<span class="caret">▼</span></div><div class="input mono ph" style="flex:1">tracking number</div></div></div>
         <div class="tot">
           <div class="row"><span>Units</span><span class="v">12</span></div>
           <div class="row"><span>Goods</span><span class="v">$1,180.00</span></div>
-          <div class="row"><span>Shipping</span><span class="ship"><span class="input ph">Carrier<span class="caret">▼</span></span><span class="input mono ph" style="width:90px">tracking</span><span class="input mono ph" style="width:68px">0.00</span></span></div>
+          <div class="row"><span>Shipping</span><span class="v"><span class="input mono ph" style="width:84px;height:28px;justify-content:flex-end">0.00</span></span></div>
           <div class="row total"><span>Total</span><span class="v">$1,180.00</span></div>
           <div class="stockbox">Save takes <b>12 units</b> off Digital World Shop</div>
         </div>
@@ -165,7 +196,40 @@
     </div>
     <div class="dlg-actions"><span class="sum">also writes wholesale-orders.csv</span><span class="btn btn-ghost">Cancel</span><span class="btn btn-ghost">Print</span><span class="btn btn-primary">Save</span></div>
   </div>
-  <div class="cap">Only SKU and Qty are required. Rate, shipping and note are optional; a line with no rate simply doesn't count toward the total, and Save never asks for them. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
+  <div class="cap">The barcode icon on each line opens the serial popup below; it turns green with a count once serials are logged, amber while fewer than the qty. Only SKU and Qty are required. Rate, shipping and note are optional; a line with no rate simply doesn't count toward the total, and Save never asks for them. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1b · Serial numbers popup</b><span>from the icon on line 2 — every scan saves itself, ✕ removes one, Export CSV writes the list</span></div>
+  <div class="dlg sn-dlg">
+    <div class="dlg-body">
+      <div class="dlg-title">Serial numbers<span class="no">X210-128GB-GRAY</span><span class="dlg-x">✕</span></div>
+      <div class="sn-sub"><b>1 of 2</b> logged · invoice #2041 · Bright Tech Distributors</div>
+      <div class="sn-scan"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="big">R52X70<span class="ph">|</span></span><span class="hint">scan or type · Enter saves</span></div>
+      <div class="sn-list">
+        <div class="sn-row new"><span class="i">1</span><span class="v">R52X70ABC1234</span><span class="t">saved just now</span><span class="x">✕</span></div>
+      </div>
+    </div>
+    <div class="dlg-actions sn-foot"><span class="sum">saves as you go — close whenever</span><span class="btn btn-ghost"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M224 152v56a16 16 0 0 1-16 16H48a16 16 0 0 1-16-16v-56a8 8 0 0 1 16 0v56h160v-56a8 8 0 0 1 16 0Zm-101.66 5.66a8 8 0 0 0 11.32 0l40-40a8 8 0 0 0-11.32-11.32L136 132.69V40a8 8 0 0 0-16 0v92.69l-26.34-26.35a8 8 0 0 0-11.32 11.32Z"/></svg>Export CSV</span><span class="btn btn-primary">Done</span></div>
+  </div>
+  <div class="dlg sn-dlg" style="margin-top:14px">
+    <div class="dlg-body">
+      <div class="dlg-title">Serial numbers<span class="no">X133-64GB-GRAY</span><span class="dlg-x">✕</span></div>
+      <div class="sn-sub"><b>10 of 10</b> logged · invoice #2041 · Bright Tech Distributors</div>
+      <div class="sn-scan"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="big">R52X70ABC1240<span class="ph">|</span></span><span class="hint">already on line 3</span></div>
+      <div class="sn-list">
+        <div class="sn-row dup"><span class="i">3</span><span class="v">R52X70ABC1240</span><span class="t">duplicate — not added</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">10</span><span class="v">R52X70ABC1247</span><span class="t">9:14</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">9</span><span class="v">R52X70ABC1246</span><span class="t">9:14</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">8</span><span class="v">R52X70ABC1245</span><span class="t">9:13</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">7</span><span class="v">R52X70ABC1244</span><span class="t">9:13</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">6</span><span class="v">R52X70ABC1243</span><span class="t">9:13</span><span class="x">✕</span></div>
+        <div class="sn-row"><span class="i">5</span><span class="v">R52X70ABC1242</span><span class="t">9:12</span><span class="x">✕</span></div>
+      </div>
+    </div>
+    <div class="dlg-actions sn-foot"><span class="sum">10 saved</span><span class="btn btn-ghost"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M224 152v56a16 16 0 0 1-16 16H48a16 16 0 0 1-16-16v-56a8 8 0 0 1 16 0v56h160v-56a8 8 0 0 1 16 0Zm-101.66 5.66a8 8 0 0 0 11.32 0l40-40a8 8 0 0 0-11.32-11.32L136 132.69V40a8 8 0 0 0-16 0v92.69l-26.34-26.35a8 8 0 0 0-11.32 11.32Z"/></svg>Export CSV</span><span class="btn btn-primary">Done</span></div>
+  </div>
+  <div class="cap">One scan box, newest on top. Each serial is written the moment Enter lands, so closing the popup or the app loses nothing. A repeat scan is flagged and not added. Logging more serials than the line's qty is allowed but the count badge turns amber. Export CSV writes invoice, customer, SKU, serial and time, one row per serial; the invoice's Print includes the serials under each line.</div>
 </div>
 
 <div class="opt">
