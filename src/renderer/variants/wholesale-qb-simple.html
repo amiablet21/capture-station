@@ -86,6 +86,10 @@
   .tot .row.total .v { font-size:18px; font-weight:700; letter-spacing:-0.02em; }
   .stockbox { margin-top:10px; background:var(--yellow-bg); color:var(--yellow); border-radius:var(--r-ctl); padding:7px 10px; font-size:12px; }
   .stockbox b { font-family:var(--mono); }
+  .stockbox .sb-h { font-weight:600; margin-bottom:4px; }
+  .stockbox .sb-r { display:flex; align-items:baseline; gap:10px; font-size:12px; padding:2px 0; }
+  .stockbox .sb-r .n { margin-left:auto; font-weight:700; }
+  .stockbox .sb-r .d { color:var(--yellow); opacity:0.75; font-size:11px; min-width:96px; text-align:right; }
 
   /* serial numbers: an icon per line, count badge once any are logged */
   .sn { display:inline-flex; align-items:center; justify-content:center; gap:3px; height:26px; min-width:26px; padding:0 5px; border-radius:var(--r-ctl); color:var(--muted); }
@@ -166,17 +170,17 @@
       </div>
 
       <table>
-        <colgroup><col style="width:200px"><col><col style="width:126px"><col style="width:68px"><col style="width:92px"><col style="width:92px"><col style="width:58px"><col style="width:30px"></colgroup>
-        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th><th></th></tr></thead>
+        <colgroup><col style="width:210px"><col><col style="width:72px"><col style="width:100px"><col style="width:104px"><col style="width:58px"><col style="width:30px"></colgroup>
+        <thead><tr><th>SKU</th><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th><th></th></tr></thead>
         <tbody>
-          <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td class="r stock">1,974 → <span class="to">1,964</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td><span class="sn has" title="Serial numbers · 10 of 10"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">10</span></span></td><td class="x">✕</td></tr>
-          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn short" title="Serial numbers · 1 of 2"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">1</span></span></td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td><span class="sn has" title="Serial numbers · 10 of 10"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">10</span></span></td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn short" title="Serial numbers · 1 of 2"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg><span class="n">1</span></span></td><td class="x">✕</td></tr>
           <tr class="on"><td class="sug"><span class="cell f sku">X133-64<span class="ph" style="font-family:var(--font);font-weight:400">|</span></span>
             <div class="sug-list">
               <div class="sug-o hl"><span class="sku">X133-64GB-SILVER</span><span class="t">Galaxy Tab A9 64GB Silver</span><span class="s">634 · last 118.00</span></div>
               <div class="sug-o"><span class="sku">X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB Graphite · on line 1</span><span class="s">1,974</span></div>
               <div class="sug-o"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB, open box</span><span class="s">12</span></div>
-            </div></td><td><span class="cell"></span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn" title="Serial numbers"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg></span></td><td class="x">✕</td></tr>
+            </div></td><td><span class="cell"></span></td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">—</span></td><td class="r amt ph">—</td><td><span class="sn" title="Serial numbers"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg></span></td><td class="x">✕</td></tr>
         </tbody>
       </table>
       <div style="height:92px"></div>
@@ -190,13 +194,17 @@
           <div class="row"><span>Goods</span><span class="v">$1,180.00</span></div>
           <div class="row"><span>Shipping</span><span class="v"><span class="input mono ph" style="width:84px;height:28px;justify-content:flex-end">0.00</span></span></div>
           <div class="row total"><span>Total</span><span class="v">$1,180.00</span></div>
-          <div class="stockbox">Save takes <b>12 units</b> off Digital World Shop</div>
+          <div class="stockbox">
+            <div class="sb-h">Leaving Digital World Shop on save · <b>12 units</b></div>
+            <div class="sb-r"><span class="mono">X133-64GB-GRAY</span><span class="mono n">−10</span><span class="mono d">1,974 → 1,964</span></div>
+            <div class="sb-r"><span class="mono">X210-128GB-GRAY</span><span class="mono n">−2</span><span class="mono d">736 → 734</span></div>
+          </div>
         </div>
       </div>
     </div>
     <div class="dlg-actions"><span class="sum">also writes wholesale-orders.csv</span><span class="btn btn-ghost">Cancel</span><span class="btn btn-ghost">Print</span><span class="btn btn-primary">Save</span></div>
   </div>
-  <div class="cap">The barcode icon on each line opens the serial popup below; it turns green with a count once serials are logged, amber while fewer than the qty. Only SKU and Qty are required. Rate, shipping and note are optional; a line with no rate simply doesn't count toward the total, and Save never asks for them. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
+  <div class="cap">What each line takes off the shelf is summed up in the amber box under the totals, with the before and after count per SKU. The barcode icon on each line opens the serial popup below; it turns green with a count once serials are logged, amber while fewer than the qty. Only SKU and Qty are required. Rate, shipping and note are optional; a line with no rate simply doesn't count toward the total, and Save never asks for them. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
 </div>
 
 <div class="opt">
@@ -230,6 +238,24 @@
     <div class="dlg-actions sn-foot"><span class="sum">10 saved</span><span class="btn btn-ghost"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M224 152v56a16 16 0 0 1-16 16H48a16 16 0 0 1-16-16v-56a8 8 0 0 1 16 0v56h160v-56a8 8 0 0 1 16 0Zm-101.66 5.66a8 8 0 0 0 11.32 0l40-40a8 8 0 0 0-11.32-11.32L136 132.69V40a8 8 0 0 0-16 0v92.69l-26.34-26.35a8 8 0 0 0-11.32 11.32Z"/></svg>Export CSV</span><span class="btn btn-primary">Done</span></div>
   </div>
   <div class="cap">One scan box, newest on top. Each serial is written the moment Enter lands, so closing the popup or the app loses nothing. A repeat scan is flagged and not added. Logging more serials than the line's qty is allowed but the count badge turns amber. Export CSV writes invoice, customer, SKU, serial and time, one row per serial; the invoice's Print includes the serials under each line.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1c · Only on chosen computers</b><span>Settings › Pages on this station gets a Wholesale tick, off by default, behind the existing Settings PIN</span></div>
+  <div class="dlg" style="width:640px; padding:20px;">
+    <div style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--faint); margin-bottom:8px;">Pages on this station</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:13px;">
+      <label><input type="checkbox" checked> Overview</label>
+      <label><input type="checkbox" checked> Stock</label>
+      <label><input type="checkbox"> Pricing</label>
+      <label><input type="checkbox" checked> History</label>
+      <label><input type="checkbox"> Returns</label>
+      <label><input type="checkbox"> Listings</label>
+      <label style="background:var(--accent-soft); color:var(--accent-soft-text); border-radius:6px; padding:0 8px; font-weight:600;"><input type="checkbox" checked> Wholesale</label>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-top:8px;">Capture is always on. Wholesale shows the button on the Stock page and the customer list; leave it unticked on the packing station.</p>
+  </div>
+  <div class="cap">Same mechanism as the other pages: the tick lives in this machine's own config, so each desktop decides for itself. With a Settings PIN set, nobody at the packing station can turn it on. Unticked machines never load the customer list or the invoices, though the shared CSV still exists in the log folder for the ones that do.</div>
 </div>
 
 <div class="opt">
