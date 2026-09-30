@@ -16,7 +16,7 @@
   body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:#2F3437; padding:26px 34px 70px; }
   h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
   .sub { font-size:12px; color:#787774; margin-bottom:26px; max-width:860px; }
-  .opt { margin-bottom:48px; max-width:1000px; }
+  .opt { margin-bottom:48px; max-width:1100px; }
   .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
   .opt-label b { font-size:14px; }
   .opt-label span { font-size:11.5px; color:#787774; }
@@ -126,7 +126,7 @@
   .dd-o small { color:var(--qb-muted); font-size:12px; }
 
   /* ---------- the list ---------- */
-  .list { width:1000px; max-width:100%; background:var(--surface); color:var(--qb-text); border-radius:6px; box-shadow:0 8px 30px rgba(57,58,61,0.16); overflow:hidden; font-size:14px; }
+  .list { width:1100px; max-width:100%; background:var(--surface); color:var(--qb-text); border-radius:6px; box-shadow:0 8px 30px rgba(57,58,61,0.16); overflow:hidden; font-size:14px; }
   .list-top { display:flex; align-items:center; padding:18px 28px 12px; }
   .list-top h2 { font-size:26px; font-weight:400; }
   .list-top .g { margin-left:auto; background:var(--qb-green); color:#fff; font-family:var(--font); font-size:14px; font-weight:600; border:none; border-radius:3px; padding:9px 18px; }
@@ -141,7 +141,8 @@
   .filters { display:flex; gap:10px; align-items:center; padding:0 28px 12px; }
   .filters .in { height:32px; font-size:13px; }
   .filters .in.s { width:260px; }
-  .lt { width:100%; border-collapse:collapse; }
+  .lt { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .lt td { overflow:hidden; text-overflow:ellipsis; }
   .lt th { background:var(--qb-head); color:var(--qb-muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-align:left; padding:9px 10px; border-top:1px solid var(--qb-border-soft); border-bottom:1px solid var(--qb-border-soft); white-space:nowrap; }
   .lt th:first-child, .lt td:first-child { padding-left:28px; }
   .lt th:last-child, .lt td:last-child { padding-right:28px; }
@@ -269,13 +270,13 @@ Houston, TX 77002</div></div>
       <div class="tile"><div class="n">$942.00<small>1 invoice</small></div><div class="l">Unpaid</div></div>
     </div>
     <div class="filters"><div class="in s ph">Search invoice no., customer or SKU</div><div class="in">All customers<span class="caret">▼</span></div><div class="in">Last 90 days<span class="caret">▼</span></div></div>
-    <table class="lt">
-      <thead><tr><th>Date</th><th>No.</th><th>Customer</th><th>Items</th><th class="r">Units</th><th class="r">Amount</th><th>Status</th><th>Stock</th><th class="r" style="width:150px">Action</th></tr></thead>
+    <table class="lt"><colgroup><col style="width:112px"><col style="width:58px"><col style="width:196px"><col style="width:176px"><col style="width:58px"><col style="width:100px"><col style="width:120px"><col style="width:150px"><col style="width:130px"></colgroup>
+      <thead><tr><th>Date</th><th>No.</th><th>Customer</th><th>Items</th><th class="r">Units</th><th class="r">Amount</th><th>Status</th><th>Stock</th><th class="r">Action</th></tr></thead>
       <tbody>
         <tr><td class="d">09/26/2026</td><td class="no">2038</td><td class="c">Bright Tech Distributors</td><td class="it"><span class="mono">X133-64GB-GRAY</span> ×40</td><td class="r">40</td><td class="r amt">$4,720.00</td><td><span class="st ok">Paid</span></td><td><span class="st ok">Deducted</span></td><td class="r act">Print<span class="caret">▼</span></td></tr>
-        <tr><td class="d">09/19/2026</td><td class="no">2031</td><td class="c">Metro Cell &amp; Tablet</td><td class="it"><span class="mono">X210-128GB-GRAY</span> ×6</td><td class="r">6</td><td class="r amt">$942.00</td><td><span class="st wait">Open · due 10/19</span></td><td><span class="st ok">Deducted</span></td><td class="r act">Receive payment<span class="caret">▼</span></td></tr>
+        <tr><td class="d">09/19/2026</td><td class="no">2031</td><td class="c">Metro Cell &amp; Tablet</td><td class="it"><span class="mono">X210-128GB-GRAY</span> ×6</td><td class="r">6</td><td class="r amt">$942.00</td><td><span class="st wait">Due 10/19</span></td><td><span class="st ok">Deducted</span></td><td class="r act">Receive payment<span class="caret">▼</span></td></tr>
         <tr><td class="d">09/12/2026</td><td class="no">—</td><td class="c">Sunbelt Wireless LLC</td><td class="it"><span class="mono">A15-64GB-BLACK</span> ×3</td><td class="r">3</td><td class="r amt">—</td><td><span class="st" style="background:#EEE;color:var(--qb-muted)">No price</span></td><td><span class="st ok">Deducted</span></td><td class="r act">Edit<span class="caret">▼</span></td></tr>
-        <tr class="void"><td class="d">09/04/2026</td><td class="no">2025</td><td class="c">Sunrise Electronics Depot</td><td class="it"><span class="mono">X400-128GB-GRAY</span> ×5</td><td class="r">5</td><td class="r amt">$1,075.00</td><td><span class="st void">Voided</span></td><td><span class="st" style="background:#EEE;color:var(--qb-muted)">Returned to stock</span></td><td class="r act">View</td></tr>
+        <tr class="void"><td class="d">09/04/2026</td><td class="no">2025</td><td class="c">Sunrise Electronics Depot</td><td class="it"><span class="mono">X400-128GB-GRAY</span> ×5</td><td class="r">5</td><td class="r amt">$1,075.00</td><td><span class="st void">Voided</span></td><td><span class="st" style="background:#EEE;color:var(--qb-muted)">Put back</span></td><td class="r act">View</td></tr>
         <tr><td class="d">08/30/2026</td><td class="no">2019</td><td class="c">Sunrise Electronics Depot</td><td class="it"><span class="mono">X133-64GB-GRAY</span> ×20 · +2 more</td><td class="r">30</td><td class="r amt">$3,585.00</td><td><span class="st ok">Paid</span></td><td><span class="st ok">Deducted</span></td><td class="r act">Print<span class="caret">▼</span></td></tr>
       </tbody>
     </table>
