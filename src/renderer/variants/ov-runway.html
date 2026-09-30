@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Send to WFS + Running low — three new looks (pick one)</title>
+<!--
+  Owner 2026-09-30: "redesign the Send to WFS and Running low, completely
+  new and cool". Three directions at the real column widths (400 / 348px)
+  on the real styles.css, with the rows from today's screenshot:
+    R1 - Runway rows: hairline rows; a runway bar turns "days left" into a
+         picture (solid = what is there now, hatched green = what the
+         Send / Order adds, tick = the lead time); the qty rides inside
+         the key ("Send 129"). R1's CSS lives in styles.css (.ov-rw*).
+    R2 - Ticket stubs: the qty is a big tinted stub on the left that IS
+         the button; SKU + three figures on the right; ✕ to ignore.
+    R3 - Dial rows: a small ring dial of days-left at the left of each
+         row, SKU and figures in the middle, keys at the right.
+  OWNER PICK: R3 ("I like this more"), shipped in styles.css as .ov-dl*;
+  in the app Faster rides in the figures line so long SKUs don't clip.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; }
+  .pg { padding: 18px 26px 40px; }
+  .pg h1 { font-size: 15px; font-weight: 600; margin: 0 0 3px; }
+  .pg .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 16px; max-width: 900px; }
+  .opt { margin-bottom: 30px; }
+  .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 8px; }
+  .lbl b { color: var(--text); letter-spacing: .02em; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 8px; max-width: 760px; }
+  .two { display: grid; grid-template-columns: 400px 348px; gap: 10px; align-items: start; }
+
+
+  /* R1 runway rows (was in styles.css until the owner picked R3) */
+  .ov-rlist { display: flex; flex-direction: column; margin: 0 -6px; }
+  .ov-rw { padding: 8px 8px 9px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
+  .ov-rw:first-child { border-top: none; }
+  .ov-rw:hover { background: var(--surface-2); }
+  .ov-rw-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ov-rw-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
+  .ov-rw-keys { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: none; }
+  .ov-rw-keys .ov-rw-ign { padding: 3px 8px; }
+  .ov-rw-run { display: flex; align-items: center; gap: 9px; margin: 7px 0 5px; }
+  .ov-rw-bar { position: relative; flex: 1; display: flex; height: 7px; border-radius: 999px; background: #EFEEEA; overflow: hidden; }
+  .ov-rw-bar i { display: block; height: 100%; flex: none; }
+  .ov-rw-bar .have { background: currentColor; }
+  .ov-rw-bar .add { background: repeating-linear-gradient(135deg, var(--accent) 0 2.5px, #CFE7DA 2.5px 6px); }
+  .ov-rw-bar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: #2F3437; box-shadow: 0 0 0 1.5px #fff; }
+  .ov-rw.r .ov-rw-bar { color: var(--neg-text); } .ov-rw.a .ov-rw-bar { color: var(--badge-yellow-text); } .ov-rw.g .ov-rw-bar { color: var(--accent); } .ov-rw.p .ov-rw-bar { color: #2E86D9; }
+  .ov-rw-days { flex: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+  .ov-rw-days b { font-size: 11.5px; font-weight: 700; }
+  .ov-rw.r .ov-rw-days b { color: var(--neg-text); } .ov-rw.a .ov-rw-days b { color: var(--badge-yellow-text); } .ov-rw.g .ov-rw-days b { color: var(--accent-soft-text); } .ov-rw.p .ov-rw-days b { color: var(--badge-blue-text); }
+  .ov-rw-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ov-rw-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .ov-rw-meta .ov-wfast { margin-right: 6px; vertical-align: 1px; }
+  .ov-rw-meta .sep { margin: 0 5px; color: var(--faint); }
+
+  /* R2 ticket stubs */
+  .tk-list { display: flex; flex-direction: column; gap: 7px; }
+  .tk { display: grid; grid-template-columns: 62px 1fr; border: 1px solid #E0DED8; border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .tk-stub { border: none; border-right: 1px dashed #D6D3CC; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 6px 4px; background: var(--accent-soft); color: var(--accent-soft-text); font-family: var(--font); }
+  .tk-stub small { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .tk-stub b { font-family: var(--mono); font-size: 17px; font-weight: 700; line-height: 1.15; }
+  .tk-stub:hover { background: var(--accent); color: #fff; }
+  .tk.lo .tk-stub { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .tk.lo .tk-stub:hover { background: #956400; color: #fff; }
+  .tk-body { padding: 6px 8px 7px 10px; min-width: 0; }
+  .tk-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .tk-top .ov-wsku { font-size: 12px; }
+  .tk-x { margin-left: auto; border: none; background: none; color: var(--faint); font-size: 10px; cursor: pointer; padding: 0 2px; font-family: var(--font); }
+  .tk-x:hover { color: var(--text); }
+  .tk-stats { display: flex; gap: 14px; margin-top: 3px; font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .tk-stats span { display: inline-flex; align-items: baseline; gap: 4px; }
+  .tk-stats i { font-style: normal; font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: 0; }
+  .tk-stats .d { margin-left: auto; padding: 0 7px; border-radius: 999px; }
+  .tk.r .tk-stats .d { background: var(--neg-bg); color: var(--neg-text); } .tk.r .tk-stats .d i { color: var(--neg-text); }
+  .tk.a .tk-stats .d { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .tk.a .tk-stats .d i { color: var(--badge-yellow-text); }
+  .tk.g .tk-stats .d { background: var(--accent-soft); color: var(--accent-soft-text); } .tk.g .tk-stats .d i { color: var(--accent-soft-text); }
+
+  /* R3 dial rows */
+  .dl-list { display: flex; flex-direction: column; }
+  .dl { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; padding: 7px 2px; border-top: 1px solid var(--border-soft); }
+  .dl:first-child { border-top: none; }
+  .dl-ring { position: relative; width: 38px; height: 38px; }
+  .dial { width: 38px; height: 38px; transform: rotate(-90deg); }
+  .dial .trk { fill: none; stroke: #EFEEEA; stroke-width: 4; }
+  .dial .val { fill: none; stroke-width: 4; stroke-linecap: round; }
+  .dial.r .val { stroke: var(--neg-text); } .dial.a .val { stroke: var(--badge-yellow-text); } .dial.g .val { stroke: var(--accent); }
+  .dl-ring span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .dl-ring span small { font-size: 8px; font-weight: 600; color: var(--faint); margin-left: 1px; }
+  .dl.r .dl-ring span { color: var(--neg-text); } .dl.a .dl-ring span { color: var(--badge-yellow-text); } .dl.g .dl-ring span { color: var(--accent-soft-text); }
+  .dl-body { min-width: 0; }
+  .dl-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .dl-top .ov-wsku { font-size: 12px; }
+  .dl-meta { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .dl-keys { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+  .dl-keys .ov-rw-ign { padding: 1px 8px; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <h1>Send to WFS · Running low — three new looks</h1>
+  <div class="sub">Same rows as today's screenshot, real column widths, real stylesheet. All three keep the SKU click-through, Ignore, the ignored-undo line, "On the way", and the +N more link.</div>
+
+  <div class="opt"><div class="lbl"><b>R1</b> · Runway rows</div>
+    <div class="two"><div class="ov-panel"><h4 class="ov-h-g">Send to WFS<span class="sub"><b>7</b> SKUs · <b>411</b> units</span></h4><div class="ov-rlist"><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X230-128GB-GRAY-GLOBAL-1</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>129</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100"></i></div><span class="ov-rw-days"><b>0</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>31</b> sold · <b>0</b> at WFS</div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X135-64GB-GRAY-LTE</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>58</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100"></i></div><span class="ov-rw-days"><b>0</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>128</b> sold · <b>0</b> at WFS</div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X230-256GB-GRAY-GLOBAL-1</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>3</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="40"></i></div><span class="ov-rw-days"><b>0</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>3</b> sold · <b>0</b> at WFS</div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X230-256GB-SILVER-GLOBAL-1</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>65</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100"></i></div><span class="ov-rw-days"><b>0</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>30</b> sold · <b>0</b> at WFS</div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X400-128GB-BLACK-INTL-VER</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>95</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100"></i></div><span class="ov-rw-days"><b>0</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>60</b> sold · <b>0</b> at WFS</div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">SM-X620 GRAY</span><span class="ov-wmore">+1</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>21</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="3.3"></i><i class="add" data-w="96.7"></i></div><span class="ov-rw-days"><b>1</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>25</b> sold · <b>1</b> at WFS</div></div><div class="ov-rw a"><div class="ov-rw-top"><span class="ov-wsku">X133-128GB-GRAY</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send">Send<b>40</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="23.0"></i><i class="add" data-w="77.0"></i></div><span class="ov-rw-days"><b>6.9</b> / 30 days</span></div>
+<div class="ov-rw-meta"><b>52</b> sold · <b>12</b> at WFS · <b>12</b> on the way</div></div></div>
+<div class="ov-undo">1 ignored for 7 days (X135-64GB-SILVER-LTE)<a>Undo</a></div>
+<div class="ov-sec">On the way to WFS<span class="n">84 units</span></div><div class="ov-rlist"><div class="ov-rw p"><div class="ov-rw-top"><span class="ov-wsku">X133-64GB-GRAY</span><span class="ov-wmore">+2</span><span class="ov-rw-keys"><button class="ov-rw-send q">Received</button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="29"></i></div><span class="ov-rw-days"><b>4</b> days out</span></div>
+<div class="ov-rw-meta"><b>84</b> units · sent <b>Sep 26</b> · Pending<span class="sep">·</span>WFS: X133-64GB-GRAY-1</div></div></div>
+<div class="ov-more">Solid = days at WFS now · hatched = what the send adds · target 30 days</div></div><div class="ov-panel"><h4 class="ov-h-a">Running low<span class="sub"><b>9</b> SKUs · 7-day lead time</span></h4><div class="ov-rlist"><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">A15-128GB-BLACK</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>40</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100.0"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>0</b> / 21 days</span></div>
+<div class="ov-rw-meta"><span class="ov-wfast">Faster</span><b>39</b> sold · <b>0</b> on hand · out <b>today</b></div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">USED-X133-64GB-GRAY</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>15</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100.0"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>0</b> / 21 days</span></div>
+<div class="ov-rw-meta"><span class="ov-wfast">Faster</span><b>11</b> sold · <b>0</b> on hand · out <b>today</b></div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">X306-128GB-GREEN</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>15</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100.0"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>0</b> / 21 days</span></div>
+<div class="ov-rw-meta"><span class="ov-wfast">Faster</span><b>11</b> sold · <b>0</b> on hand · out <b>today</b></div></div><div class="ov-rw r"><div class="ov-rw-top"><span class="ov-wsku">OPEN-BOX-X610-128GB-BLACK</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>10</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="0.0"></i><i class="add" data-w="100.0"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>0</b> / 21 days</span></div>
+<div class="ov-rw-meta"><span class="ov-wfast">Faster</span><b>10</b> sold · <b>0</b> on hand · out <b>today</b></div></div><div class="ov-rw a"><div class="ov-rw-top"><span class="ov-wsku">X620-128GB-SILVER</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>10</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="28.6"></i><i class="add" data-w="71.4"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>6</b> / 21 days</span></div>
+<div class="ov-rw-meta"><b>7</b> sold · <b>2</b> on hand · out <b>Oct 6</b></div></div><div class="ov-rw g"><div class="ov-rw-top"><span class="ov-wsku">OPEN-BOX-X210-64GB-GRAY</span><span class="ov-rw-keys"><button class="ov-rw-ign">Ignore</button><button class="ov-rw-send o">Order<b>10</b></button></span></div>
+<div class="ov-rw-run"><div class="ov-rw-bar"><i class="have" data-w="57.1"></i><i class="add" data-w="42.9"></i><b class="tick" data-l="33.3"></b></div><span class="ov-rw-days"><b>12</b> / 21 days</span></div>
+<div class="ov-rw-meta"><b>7</b> sold · <b>4</b> on hand · out <b>Oct 12</b></div></div></div>
+<div class="ov-more">+ 3 more — <a>open Stock</a></div>
+<div class="ov-more">Tick = the 7-day lead · solid = days on hand · hatched = what the order adds</div></div></div>
+    <div class="note">Every SKU gets a runway: the solid part is how many days are covered right now (red under 5, amber under 10), the hatched green part is what the Send / Order adds, out to the target (30 days at WFS; the 7-day lead plus 14 days of cover for Running low, with a tick at the lead - when the solid part stops short of the tick, it runs out before the order lands). A short hatch means there isn't enough stock to fill it (X230-256GB-GRAY: only 3 on the shelf). The quantity rides inside the key. Rows are hairline-separated, so the column reads as one list.</div></div>
+
+  <div class="opt"><div class="lbl"><b>R2</b> · Ticket stubs</div>
+    <div class="two"><div class="ov-panel"><h4 class="ov-h-g">Send to WFS<span class="sub"><b>7</b> SKUs · <b>411</b> units</span></h4><div class="tk-list"><div class="tk r"><button class="tk-stub"><small>Send</small><b>129</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X230-128GB-GRAY-GLOBAL-1</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>31</i>sold</span><span><i>0</i>at WFS</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r"><button class="tk-stub"><small>Send</small><b>58</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X135-64GB-GRAY-LTE</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>128</i>sold</span><span><i>0</i>at WFS</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r"><button class="tk-stub"><small>Send</small><b>3</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X230-256GB-GRAY-GLOBAL-1</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>3</i>sold</span><span><i>0</i>at WFS</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r"><button class="tk-stub"><small>Send</small><b>65</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X230-256GB-SILVER-GLOBAL-1</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>30</i>sold</span><span><i>0</i>at WFS</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r"><button class="tk-stub"><small>Send</small><b>95</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X400-128GB-BLACK-INTL-VER</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>60</i>sold</span><span><i>0</i>at WFS</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r"><button class="tk-stub"><small>Send</small><b>21</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">SM-X620 GRAY</span><span class="ov-wmore">+1</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>25</i>sold</span><span><i>1</i>at WFS</span><span class="d"><i>1</i>days left</span></div></div></div><div class="tk a"><button class="tk-stub"><small>Send</small><b>40</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X133-128GB-GRAY</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>52</i>sold</span><span><i>12</i>at WFS</span><span class="d"><i>6.9</i>days left</span></div></div></div></div><div class="ov-more">Send = WFS pace × 30 days − at WFS − on the way</div></div><div class="ov-panel"><h4 class="ov-h-a">Running low<span class="sub"><b>9</b> SKUs · 7-day lead time</span></h4><div class="tk-list"><div class="tk r lo"><button class="tk-stub"><small>Order</small><b>40</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">A15-128GB-BLACK</span><span class="ov-wfast">Faster</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>39</i>sold</span><span><i>0</i>on hand</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r lo"><button class="tk-stub"><small>Order</small><b>15</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">USED-X133-64GB-GRAY</span><span class="ov-wfast">Faster</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>11</i>sold</span><span><i>0</i>on hand</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r lo"><button class="tk-stub"><small>Order</small><b>15</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X306-128GB-GREEN</span><span class="ov-wfast">Faster</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>11</i>sold</span><span><i>0</i>on hand</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk r lo"><button class="tk-stub"><small>Order</small><b>10</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">OPEN-BOX-X610-128GB-BLACK</span><span class="ov-wfast">Faster</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>10</i>sold</span><span><i>0</i>on hand</span><span class="d"><i>0</i>days left</span></div></div></div><div class="tk a lo"><button class="tk-stub"><small>Order</small><b>10</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">X620-128GB-SILVER</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>7</i>sold</span><span><i>2</i>on hand</span><span class="d"><i>6</i>days left</span></div></div></div><div class="tk g lo"><button class="tk-stub"><small>Order</small><b>10</b></button><div class="tk-body"><div class="tk-top"><span class="ov-wsku">OPEN-BOX-X210-64GB-GRAY</span><button class="tk-x" title="Ignore for 7 days">✕</button></div>
+<div class="tk-stats"><span><i>7</i>sold</span><span><i>4</i>on hand</span><span class="d"><i>12</i>days left</span></div></div></div></div><div class="ov-more">+ 3 more — <a>open Stock</a></div></div></div>
+    <div class="note">The quantity is the whole point, so it becomes a big tinted stub on the left - the stub is the button (green Send / amber Order, solid on hover). A dashed tear line, then the SKU and three figures; days-left is a pill in the urgency colour; ✕ ignores.</div></div>
+
+  <div class="opt"><div class="lbl"><b>R3</b> · Dial rows</div>
+    <div class="two"><div class="ov-panel"><h4 class="ov-h-g">Send to WFS<span class="sub"><b>7</b> SKUs · <b>411</b> units</span></h4><div class="dl-list"><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X230-128GB-GRAY-GLOBAL-1</span></div><div class="dl-meta"><b>31</b> sold · <b>0</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>129</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X135-64GB-GRAY-LTE</span></div><div class="dl-meta"><b>128</b> sold · <b>0</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>58</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X230-256GB-GRAY-GLOBAL-1</span></div><div class="dl-meta"><b>3</b> sold · <b>0</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>3</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X230-256GB-SILVER-GLOBAL-1</span></div><div class="dl-meta"><b>30</b> sold · <b>0</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>65</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X400-128GB-BLACK-INTL-VER</span></div><div class="dl-meta"><b>60</b> sold · <b>0</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>95</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="3.1 94.2"/></svg><span>1<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">SM-X620 GRAY</span><span class="ov-wmore">+1</span></div><div class="dl-meta"><b>25</b> sold · <b>1</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>21</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl a"><div class="dl-ring"><svg class="dial a" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="21.7 94.2"/></svg><span>6.9<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X133-128GB-GRAY</span></div><div class="dl-meta"><b>52</b> sold · <b>12</b> at WFS</div></div><div class="dl-keys"><button class="ov-rw-send">Send<b>40</b></button><button class="ov-rw-ign">Ignore</button></div></div></div><div class="ov-more">Dial = days at WFS out of the 30-day target</div></div><div class="ov-panel"><h4 class="ov-h-a">Running low<span class="sub"><b>9</b> SKUs · 7-day lead time</span></h4><div class="dl-list"><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">A15-128GB-BLACK</span><span class="ov-wfast">Faster</span></div><div class="dl-meta"><b>39</b> sold · <b>0</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>40</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">USED-X133-64GB-GRAY</span><span class="ov-wfast">Faster</span></div><div class="dl-meta"><b>11</b> sold · <b>0</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>15</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X306-128GB-GREEN</span><span class="ov-wfast">Faster</span></div><div class="dl-meta"><b>11</b> sold · <b>0</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>15</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl r"><div class="dl-ring"><svg class="dial r" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">OPEN-BOX-X610-128GB-BLACK</span><span class="ov-wfast">Faster</span></div><div class="dl-meta"><b>10</b> sold · <b>0</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl a"><div class="dl-ring"><svg class="dial a" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="26.9 94.2"/></svg><span>6<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">X620-128GB-SILVER</span></div><div class="dl-meta"><b>7</b> sold · <b>2</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div><div class="dl g"><div class="dl-ring"><svg class="dial g" viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="53.9 94.2"/></svg><span>12<small>d</small></span></div><div class="dl-body"><div class="dl-top"><span class="ov-wsku">OPEN-BOX-X210-64GB-GRAY</span></div><div class="dl-meta"><b>7</b> sold · <b>4</b> on hand</div></div><div class="dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div></div><div class="ov-more">+ 3 more — <a>open Stock</a></div></div></div>
+    <div class="note">A small dial per row shows days-left as a filled arc out of the target, with the number inside. SKU and figures in the middle, the keys stacked on the right. The most compact of the three.</div></div>
+</div>
+<script>
+  document.querySelectorAll('[data-w]').forEach(i => { i.style.width = i.dataset.w + '%'; });
+  document.querySelectorAll('[data-l]').forEach(i => { i.style.left = i.dataset.l + '%'; });
+</script>
+</body>
+</html>

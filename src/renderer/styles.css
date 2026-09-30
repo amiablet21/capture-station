@@ -4615,7 +4615,9 @@ th:last-child > .col-grip { right: 0; }
 .ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 14px 22px 26px; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.ov-refresh { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.ov-refresh { display: inline-flex; align-items: center; gap: 6px; }
+/* when the numbers were last fetched (polish 2026-09-30) */
+.ov-updated { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .ov-refresh svg { width: 16px; height: 16px; }
 .ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
 @keyframes ovSpin { to { transform: rotate(360deg); } }
@@ -4664,69 +4666,53 @@ th:last-child > .col-grip { right: 0; }
 .ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
 .ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
 .ov-badge { font-size: 9.5px; padding: 1px 8px; }
-/* Send to WFS rows as console blocks (owner design 2026-09-24,
-   variants/wfs-row.html T1): strip | SKU + mini sheet | SEND over IGNORE */
-.ov-wlist { display: flex; flex-direction: column; gap: 8px; }
-.ov-wrow { display: grid; grid-template-columns: 3px 1fr 78px; border: 1px solid #D6D3CC; border-radius: 4px; overflow: hidden; font-family: var(--mono); background: var(--surface); }
-.ov-wstrip { background: var(--accent); }
-.ov-wrow.r .ov-wstrip { background: var(--neg-text); }
-.ov-wrow.a .ov-wstrip { background: #D9A21B; }
-.ov-wrow.p .ov-wstrip { background: #2E86D9; }
-.ov-wnote { margin-left: auto; font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
-.ov-wcells .st-p { color: var(--badge-blue-text); } .ov-wcells .st-a { color: var(--badge-yellow-text); } .ov-wcells .st-g { color: var(--accent); }
-.ov-wkeys button:only-child { border-bottom: none !important; }
-/* Running low blocks: amber primary key, order in amber, 'faster' flag */
-.ov-wopen { background: #956400; color: #fff; border-bottom: 1px solid #D6D3CC !important; }
-.ov-wopen:hover { background: #7A5200; }
-.ov-wcells .o { color: var(--badge-yellow-text); }
-.ov-wcells.ov-lcells { grid-template-columns: 0.75fr 1.55fr 1fr 1fr; }
-.ov-wcells.ov-lcells div { letter-spacing: .03em; }
-/* the Running low column is the narrowest: slimmer keys, tighter cells */
-#ovLow .ov-wrow { grid-template-columns: 3px 1fr 64px; }
-#ovLow .ov-wcells div, #ovLow .ov-wcells span { padding-left: 6px; padding-right: 6px; }
-#ovLow .ov-wkeys button { letter-spacing: .04em; }
-.ov-wfast { margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--neg-text); white-space: nowrap; }
-.ov-wmain { min-width: 0; }
-.ov-wid { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px 5px; border-bottom: 1px solid #E0DED8; min-width: 0; }
-.ov-wsku { font-size: 11.5px; font-weight: 700; color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-wmore { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
-.ov-wcells { display: grid; grid-template-columns: 0.8fr 1.3fr 0.9fr 1.1fr; }
-.ov-wcells div { padding: 3px 8px; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #F4F3F0; border-right: 1px solid #E0DED8; border-bottom: 1px solid #E0DED8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ov-wcells span { padding: 4px 8px; font-size: 12px; font-weight: 700; border-right: 1px solid #E0DED8; white-space: nowrap; }
-.ov-wcells div:nth-child(4), .ov-wcells span:nth-child(8) { border-right: none; }
-.ov-wcells .r { color: var(--neg-text); } .ov-wcells .a { color: var(--badge-yellow-text); }
-.ov-wkeys { display: flex; flex-direction: column; border-left: 1px solid #D6D3CC; }
-.ov-wkeys button { flex: 1; border: none; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
-.ov-wsend { background: var(--accent); color: #fff; border-bottom: 1px solid #D6D3CC !important; }
-.ov-wsend:hover { background: var(--accent-hover); }
-.ov-wign { background: var(--surface-2); color: var(--muted); }
-.ov-wign:hover { background: #EFEEEA; color: var(--text); }
-/* K3 (owner pick 2026-09-25, variants/wfs-keys.html), without its icons
-   ("no favicon or emoji"): no left strip - the urgency tints the Left cell;
-   two equal soft-tinted keys in plain type, the second a quiet grey */
-.ov-wrow { grid-template-columns: 1fr 78px; border-radius: 6px; }
-#ovLow .ov-wrow { grid-template-columns: 1fr 64px; }
-.ov-wcells span:nth-child(8).r { background: var(--neg-bg); }
-.ov-wcells span:nth-child(8).a { background: var(--badge-yellow-bg); }
-.ov-wkeys { border-left: 1px solid #E0DED8; }
-.ov-wkeys button { font-family: var(--font); font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.ov-wkeys .ov-wsend { background: #EAF4EE; color: var(--accent); border-bottom: 1px solid #E0DED8 !important; }
-.ov-wkeys .ov-wsend:hover { background: #DCEEE3; }
-.ov-wkeys .ov-wopen { background: #FBF1DC; color: var(--badge-yellow-text); border-bottom: 1px solid #E0DED8 !important; }
-.ov-wkeys .ov-wopen:hover { background: #F6E6C4; }
-.ov-wkeys .ov-wign { background: #F7F6F3; color: var(--muted); font-weight: 500; }
-.ov-wkeys .ov-wign:hover { background: #EFEEEA; color: var(--text); }
-.ov-wkeys button:only-child { border-bottom: none !important; }
-.ov-wfast { font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 11px; font-family: var(--font); }
-#ovLow .ov-wkeys button { letter-spacing: 0; }
-/* under each SKU: the send amount, then the days WFS has left */
-.ov-sendline { display: block; margin-top: 4px; }
-.ov-daysleft { display: block; font-size: 10.5px; margin-top: 3px; color: var(--muted); }
-.ov-daysleft.r { color: var(--neg-text); } .ov-daysleft.a { color: var(--badge-yellow-text); }
-/* Send over Ignore, stacked in their own right-hand column */
-.ov-t td.ov-actcell { width: 1%; padding-left: 2px; vertical-align: middle; }
-.ov-stack { display: flex; flex-direction: column; gap: 4px; }
-.ov-stack .btn { font-size: 11.5px; padding: 2px 12px; }
+/* SKU line pieces shared by the Overview rows: the SKU link, the +N
+   listings chip, the Faster flag (a small red pill) */
+.ov-wsku { font-size: 11.5px; font-weight: 700; font-family: var(--mono); color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-wmore { font-size: 10px; font-weight: 700; font-family: var(--mono); line-height: 15px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.ov-wfast { font-size: 9.5px; font-weight: 600; line-height: 16px; padding: 0 7px; border-radius: 999px; color: var(--neg-text); background: var(--neg-bg); white-space: nowrap; }
+
+/* ---- Dial rows (owner pick 2026-09-30, variants/ov-runway.html R3 over
+   R1 runway rows and R2 ticket stubs). Each SKU is a hairline row: a small
+   ring dial at the left shows days-left as an arc out of the target (30
+   days at WFS; lead + cover for Running low) with the number inside, in
+   the urgency colour (red under 5 days, amber under 10); SKU and figures
+   in the middle; Send N / Order N over a quiet Ignore at the right. ---- */
+.ov-dlist { display: flex; flex-direction: column; margin: 0 -6px; }
+.ov-dl { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
+.ov-dl:first-child { border-top: none; }
+.ov-dl:hover { background: var(--surface-2); }
+.ov-dial { position: relative; width: 38px; height: 38px; }
+.ov-dial svg { display: block; width: 38px; height: 38px; transform: rotate(-90deg); }
+.ov-dial .trk { fill: none; stroke: #EFEEEA; stroke-width: 4; }
+.ov-dial .val { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
+.ov-dial span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: currentColor; font-variant-numeric: tabular-nums; }
+.ov-dial span small { font-size: 8px; font-weight: 600; color: var(--faint); margin-left: 1px; }
+.ov-dl.r .ov-dial { color: var(--neg-text); }
+.ov-dl.a .ov-dial { color: var(--badge-yellow-text); }
+.ov-dl.g .ov-dial { color: var(--accent); }
+.ov-dl.g .ov-dial span { color: var(--accent-soft-text); }
+.ov-dl.p .ov-dial { color: #2E86D9; }
+.ov-dl.p .ov-dial span { color: var(--badge-blue-text); }
+.ov-dl-body { min-width: 0; }
+.ov-dl-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ov-dl-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
+.ov-dl-meta { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-dl-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ov-dl-meta .ov-wfast { margin-right: 6px; vertical-align: 1px; }
+.ov-dl-meta .sep { margin: 0 5px; color: var(--faint); }
+.ov-dl-keys { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+.ov-rw-send, .ov-rw-ign { font-family: var(--font); border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 120ms var(--ease), color 120ms var(--ease); }
+.ov-rw-send { font-size: 11.5px; font-weight: 600; padding: 3px 11px; background: var(--accent); color: #fff; }
+.ov-rw-send:hover { background: var(--accent-hover); }
+.ov-rw-send b { font-family: var(--mono); font-weight: 700; margin-left: 5px; font-variant-numeric: tabular-nums; }
+.ov-rw-send.o { background: #956400; }
+.ov-rw-send.o:hover { background: #7A5200; }
+.ov-rw-send.q { background: var(--accent-soft); color: var(--accent-soft-text); }
+.ov-rw-send.q:hover { background: #D5EBDF; }
+.ov-rw-ign { font-size: 11px; font-weight: 500; padding: 1px 8px; background: none; color: var(--faint); }
+.ov-rw-ign:hover { background: #EFEEEA; color: var(--text); }
+
 .ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
 .ov-link:hover { color: var(--text); }
 .ov-undo { font-size: 11px; color: var(--muted); padding: 6px; border-bottom: 1px solid var(--border-soft); }
@@ -4736,18 +4722,24 @@ th:last-child > .col-grip { right: 0; }
 
 /* left column: the today card - big number, the sold grid, channel
    cells pinned to the bottom edge */
-.ov-today { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.ov-today { padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
 .ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
 .ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; margin: 4px 0 6px; }
 .ov-today .delta { font-size: 10.5px; color: var(--muted); min-height: 14px; }
-.ov-chcells { margin: auto -16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
-.ov-chcell { padding: 9px 8px 12px; text-align: center; }
-.ov-chcell + .ov-chcell { border-left: 1px solid var(--border); }
-.ov-chcell .cn { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.ov-today .delta .up { color: var(--accent-soft-text); }
+.ov-today .delta .down { color: var(--neg-text); }
+/* the marketplace split rides right under the number (polish 2026-09-30;
+   the three cells under the grid fell off-screen on a long day): a share
+   bar in the channel colours, then dot · name · units */
+.ov-share { display: flex; gap: 2px; height: 6px; border-radius: 999px; overflow: hidden; background: #EFEEEA; margin: 10px 0 8px; }
+.ov-share i { display: block; height: 100%; background: currentColor; }
+.ov-chlegend { display: flex; gap: 14px; font-size: 11px; color: var(--muted); }
+.ov-chlegend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ov-chlegend span::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ov-chlegend b { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .cn-walmart { color: #2E86D9; }
 .cn-ebay { color: #047857; }
 .cn-temu { color: #C97B12; }
-.ov-chcell .cv { font-family: var(--mono); font-size: 15px; font-weight: 700; margin-top: 3px; }
 
 /* the "full grid" (owner pick 2026-08-17): Excel-style, shaded header row,
    cell borders both ways - here SKU | Units with row numbers and a total */
