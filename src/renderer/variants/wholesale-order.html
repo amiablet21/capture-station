@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Wholesale orders — Stock page</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06); --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --neg-bg:#FDEBEC; --neg-text:#9F2F2D;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --r-modal:12px; --r-ctl:6px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 70px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:820px; }
+  .opt { margin-bottom:42px; max-width:980px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:13px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .cap { font-size:11px; color:var(--faint); margin-top:8px; max-width:900px; }
+
+  /* ---- app controls, faithful ---- */
+  .btn { font-family:var(--font); font-size:13px; font-weight:500; padding:7px 14px; border-radius:var(--r-ctl); border:1px solid transparent; cursor:pointer; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--muted); border-color:var(--border); }
+  .btn-ghost.is-new { border-color:var(--accent); color:var(--accent-soft-text); box-shadow:0 0 0 3px var(--accent-soft); }
+  .input { font-family:var(--font); font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface); color:var(--text); }
+  .input.mono { font-size:12.5px; }
+  .input.is-focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .ph { color:var(--faint); }
+  .lbl { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--faint); }
+  .dlg-title { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:14px; }
+  .dlg-x { width:24px; height:24px; border:none; background:none; color:var(--faint); font-size:12px; border-radius:6px; cursor:pointer; }
+  .dlg-note { font-size:12px; color:var(--muted); }
+
+  /* ---- 1 · the stock band ---- */
+  .band { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:12px; }
+  .search { display:flex; align-items:center; gap:8px; width:260px; white-space:nowrap; border:1px solid var(--border); border-radius:var(--r-ctl); padding:6px 10px; color:var(--faint); font-size:13px; }
+  .search svg { width:14px; height:14px; }
+  .chips { display:flex; gap:2px; background:#EFEEEA; border-radius:10px; padding:3px; }
+  .chips span { font-size:12px; padding:4px 11px; border-radius:8px; color:var(--muted); white-space:nowrap; }
+  .chips span.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 3px rgba(47,52,55,0.08); }
+  .band-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .ico { display:inline-flex; padding:5px 7px; }
+  .ico svg { width:14px; height:14px; }
+
+  /* ---- 2 · the dialog, same skeleton as WFS Shipments ---- */
+  .dlg { width:920px; max-width:100%; border-radius:var(--r-modal); background:var(--surface); box-shadow:0 16px 48px rgba(47,52,55,0.14); border:1px solid var(--border); overflow:visible; }
+  .cols { display:grid; grid-template-columns:1fr 320px; }
+  .left { padding:20px; display:flex; flex-direction:column; min-width:0; }
+  .right { border-left:1px solid var(--border); background:var(--surface-2); padding:14px 16px; border-radius:0 var(--r-modal) var(--r-modal) 0; }
+
+  .head { display:grid; grid-template-columns:150px 1fr; gap:10px; margin-bottom:12px; }
+  .fld { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .fld .input { width:100%; }
+  .cust { position:relative; }
+  .cust-chip { display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:var(--r-ctl); padding:6px 10px; min-width:0; }
+  .cust-chip b { white-space:nowrap; }
+  .cust-chip b { font-weight:600; }
+  .cust-chip .meta { font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .cust-chip .link { margin-left:auto; font-size:11px; font-weight:600; color:var(--accent-soft-text); white-space:nowrap; }
+  .cust-list { position:absolute; left:0; top:calc(100% + 4px); width:min(480px,100%); background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px rgba(47,52,55,0.16); z-index:5; overflow:hidden; }
+  .c-opt { display:flex; align-items:baseline; gap:10px; padding:8px 12px; font-size:12.5px; border-top:1px solid var(--border-soft); }
+  .c-opt:first-child { border-top:none; }
+  .c-opt b { font-weight:600; white-space:nowrap; }
+  .c-opt .m { color:var(--muted); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .c-opt .n { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--faint); white-space:nowrap; }
+  .c-opt.is-hl { background:var(--accent-soft); }
+  .c-opt.is-hl .m { color:var(--accent-soft-text); }
+  .c-new { color:var(--accent-soft-text); font-weight:600; background:var(--surface-2); }
+
+  /* new-customer fields, only open while the typed company is unknown */
+  .newc { border:1px dashed var(--border); border-radius:8px; padding:10px 12px 12px; margin-bottom:12px; background:var(--surface-2); }
+  .newc .lbl { display:block; margin-bottom:6px; }
+  .newc-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+  .newc-grid .input { font-size:12.5px; padding:6px 9px; }
+  .newc-grid .wide { grid-column:1 / -1; }
+
+  .sheet { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .sh-h, .sh-l { display:grid; grid-template-columns:1.15fr 1fr 50px 78px 86px 28px; }
+  .sh-h { background:#1f9d5b; color:#fff; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; }
+  .sh-h span { padding:7px 10px; }
+  .sh-l { border-top:1px solid var(--border-soft); align-items:stretch; }
+  .sh-l:first-child { border-top:none; }
+  .sh-l span { padding:8px 10px; font-size:12.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .r { text-align:right; }
+  .sh-l .ttl { color:var(--muted); }
+  .sh-l .tot { font-family:var(--mono); font-weight:600; }
+  .sh-l .x { color:var(--faint); font-size:11px; text-align:center; padding:8px 4px; overflow:visible; text-overflow:clip; }
+  .sh-l.is-entry { outline:2px solid var(--accent); outline-offset:-2px; border-radius:2px; }
+  .sh-l .avail { font-size:10px; color:var(--faint); margin-left:5px; }
+  .sh-l .avail.low { color:var(--yellow); }
+  .sh-add { width:100%; text-align:left; border:none; border-top:1px solid var(--border-soft); background:var(--surface-2); color:var(--accent-soft-text); font-family:var(--font); font-size:12px; font-weight:600; padding:7px 10px; }
+
+  .ship { display:grid; grid-template-columns:auto 120px 1fr 110px; gap:10px; align-items:center; margin-top:12px; }
+  .ship .input { width:100%; }
+  .noterow { display:flex; align-items:center; gap:10px; margin-top:10px; margin-bottom:16px; }
+  .noterow .input { flex:1; }
+  .foot { display:flex; align-items:center; gap:12px; margin:auto -20px -20px; padding:14px 20px 12px; background:var(--surface-2); border-top:1px solid var(--border); border-radius:0 0 0 var(--r-modal); }
+  .tot { margin-right:auto; font-size:12px; color:var(--muted); line-height:1.4; }
+  .tot b { color:var(--text); font-family:var(--mono); }
+  .tot .ded { display:block; font-size:11.5px; }
+  .tot .ded b { color:var(--neg-text); }
+
+  .right-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .card-h { display:flex; align-items:baseline; gap:8px; font-size:12px; }
+  .card-h b { font-weight:600; }
+  .card-h .inv { font-family:var(--mono); color:var(--muted); font-size:11.5px; }
+  .card-u { margin-left:auto; font-family:var(--mono); font-weight:600; color:var(--accent-soft-text); white-space:nowrap; }
+  .card-c { font-size:12px; font-weight:600; margin-top:2px; }
+  .card-tags { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:4px; }
+  .st { font-family:var(--mono); font-size:10px; padding:1px 7px; border-radius:999px; background:var(--surface-2); color:var(--muted); white-space:nowrap; }
+  .st.is-me { background:#E7F3EC; color:#17854C; }
+  .tag { font-size:10px; font-weight:600; padding:1px 7px; border-radius:999px; white-space:nowrap; }
+  .tag-ship { background:var(--blue-bg); color:var(--blue); }
+  .tag-pick { background:var(--yellow-bg); color:var(--yellow); }
+  .card-item { display:flex; gap:10px; font-size:11.5px; margin-top:6px; }
+  .card-item .n { margin-left:auto; font-family:var(--mono); font-weight:600; }
+  .card-item .p { font-family:var(--mono); color:var(--muted); }
+
+  /* ---- 3 · the stock sheet slice ---- */
+  table { border-collapse:collapse; width:100%; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:right; padding:8px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  th.l { text-align:left; }
+  td { padding:9px 16px; border-bottom:1px solid var(--grid); text-align:right; font-family:var(--mono); font-size:13px; }
+  td.l { text-align:left; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  .tcard { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  tr.hit td { background:#FCFBF7; }
+  .was { color:var(--faint); text-decoration:line-through; font-weight:400; margin-right:8px; }
+  .dn { color:var(--neg-text); font-weight:700; }
+  .flash { display:inline-block; font-family:var(--font); font-size:10px; font-weight:600; background:var(--neg-bg); color:var(--neg-text); border-radius:999px; padding:1px 7px; margin-left:8px; vertical-align:middle; }
+</style>
+</head>
+<body>
+
+<h1>Wholesale orders — on the Stock page</h1>
+<div class="sub">One new button beside WFS Shipments and one dialog built on the same skeleton: lines on the left, the record on the right. Everything except the SKU and qty is optional. Saving deducts the units from Digital World Shop, exactly like a WFS shipment does.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1 · The button</b><span>lives in the row it belongs to: Bulk import brings stock in, Wholesale order and WFS Shipments take it out</span></div>
+  <div class="band">
+    <div class="search"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>Search SKU, title or barcode</div>
+    <div class="chips"><span class="on">All</span><span>Open Box</span><span>Used</span><span>Unlisted</span></div>
+    <div class="band-right">
+      <button class="btn btn-ghost">Bulk import</button>
+      <button class="btn btn-ghost">Mappings</button>
+      <button class="btn btn-ghost is-new">Wholesale order</button>
+      <button class="btn btn-ghost">WFS Shipments</button>
+      <button class="btn btn-ghost ico"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></button>
+    </div>
+  </div>
+  <div class="cap">Ghost button like its neighbours (the green ring here only marks it as new).</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>2 · The dialog, mid-entry</b><span>a repeat customer picked from the saved list, two lines in, third line being typed</span></div>
+  <div class="dlg">
+    <div class="cols">
+      <div class="left">
+        <div class="dlg-title">Wholesale order</div>
+
+        <div class="head">
+          <div class="fld"><span class="lbl">Invoice #</span><span class="input mono">INV-2041</span></div>
+          <div class="fld"><span class="lbl">Customer</span>
+            <div class="cust-chip"><b>Bright Tech Distributors</b><span class="meta">Marcus Lee · marcus@brighttechdist.com · 1420 Commerce St, Houston TX 77002</span><span class="link">edit</span></div>
+          </div>
+        </div>
+
+        <div class="sheet">
+          <div class="sh-h"><span>SKU</span><span>Title</span><span class="r">Qty</span><span class="r">Unit $</span><span class="r">Line total</span><span></span></div>
+          <div class="sh-l"><span class="mono">X133-64GB-GRAY</span><span class="ttl">Galaxy Tab A9 64GB Graphite</span><span class="r mono">10</span><span class="r mono">118.00</span><span class="r tot">1,180.00</span><span class="x">✕</span></div>
+          <div class="sh-l"><span class="mono">X210-128GB-GRAY</span><span class="ttl">Galaxy Tab A9+ 128GB Graphite</span><span class="r mono">2</span><span class="r mono">157.00</span><span class="r tot">314.00</span><span class="x">✕</span></div>
+          <div class="sh-l is-entry"><span class="mono">X133-64GB-SILVER</span><span class="ttl">Galaxy Tab A9 64GB Silver</span><span class="r mono ph">0</span><span class="r mono ph">—</span><span class="r avail">634 avail</span><span class="x">✕</span></div>
+          <button class="sh-add">＋ Add line</button>
+        </div>
+
+        <div class="ship">
+          <span class="lbl">Shipping</span>
+          <span class="input"><span class="ph">Carrier ▾</span></span>
+          <span class="input mono"><span class="ph">Tracking number (optional)</span></span>
+          <span class="input mono r"><span class="ph">$ charge</span></span>
+        </div>
+        <div class="noterow"><span class="lbl">Note</span><span class="input"><span class="ph">PO#, payment terms, anything</span></span></div>
+
+        <div class="foot">
+          <span class="tot"><b>12 units</b> · goods <b>$1,494.00</b> · shipping <b>$0.00</b> · total <b>$1,494.00</b>
+            <span class="ded">Save deducts <b>−12</b> from Digital World Shop</span></span>
+          <button class="btn btn-ghost">Close</button>
+          <button class="btn btn-primary">Save order</button>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="right-head"><span class="lbl">Past orders</span><button class="dlg-x">✕</button></div>
+        <div class="card">
+          <div class="card-h"><b>9/26/2026</b><span class="inv">INV-2038</span><span class="card-u">40 units</span></div>
+          <div class="card-c">Bright Tech Distributors</div>
+          <div class="card-tags"><span class="st is-me">STOCK-ROOM</span><span class="tag tag-ship">UPS · 1Z…4471</span><span class="st">$4,720.00</span></div>
+          <div class="card-item"><span class="mono">X133-64GB-GRAY</span><span class="p">@118.00</span><span class="n">×40</span></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>9/19/2026</b><span class="inv">INV-2031</span><span class="card-u">6 units</span></div>
+          <div class="card-c">Metro Cell &amp; Tablet</div>
+          <div class="card-tags"><span class="st">IMRAN-MACBOOK-PRO</span><span class="tag tag-pick">Pickup</span><span class="st">$942.00</span></div>
+          <div class="card-item"><span class="mono">X210-128GB-GRAY</span><span class="p">@157.00</span><span class="n">×6</span></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>9/12/2026</b><span class="inv ph">no invoice</span><span class="card-u">3 units</span></div>
+          <div class="card-c">Sunbelt Wireless LLC</div>
+          <div class="card-tags"><span class="st is-me">STOCK-ROOM</span></div>
+          <div class="card-item"><span class="mono">A15-64GB-BLACK</span><span class="p ph">no price</span><span class="n">×3</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">Same bones as WFS Shipments: green-headed sheet, note under it, live total in the footer, past records in white cards on the gray column. Unit $ and the whole shipping row can stay blank; a blank price shows as “no price” on the card, never as $0. The “634 avail” hint sits where the line total will go and turns amber if the qty typed exceeds it.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>3 · Picking the customer</b><span>type a few letters — saved companies match on name, contact or city; an unknown name offers to save it</span></div>
+  <div class="dlg" style="width:560px">
+    <div class="left" style="padding-bottom:0">
+      <div class="head" style="margin-bottom:0">
+        <div class="fld"><span class="lbl">Invoice #</span><span class="input mono ph">INV-</span></div>
+        <div class="fld cust"><span class="lbl">Customer</span><span class="input is-focus">Sun<span class="ph">|</span></span>
+          <div class="cust-list">
+            <div class="c-opt is-hl"><b>Sunbelt Wireless LLC</b><span class="m">Priya N. · Phoenix, AZ</span><span class="n">1 order</span></div>
+            <div class="c-opt"><b>Sunrise Electronics Depot</b><span class="m">Tom Alvarez · Orlando, FL</span><span class="n">3 orders</span></div>
+            <div class="c-opt c-new">＋ New customer “Sun”</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:132px"></div>
+    </div>
+  </div>
+  <div class="cap" style="margin-bottom:18px">Enter takes the highlighted company and fills the chip from section 2. “New customer” opens the block below, right under the header, and the company is saved the moment the order is.</div>
+
+  <div class="dlg" style="width:560px">
+    <div class="left">
+      <div class="head" style="margin-bottom:10px">
+        <div class="fld"><span class="lbl">Invoice #</span><span class="input mono">INV-2042</span></div>
+        <div class="fld"><span class="lbl">Customer</span><span class="input">Sun Valley Tech Resale</span></div>
+      </div>
+      <div class="newc">
+        <span class="lbl">New customer — saved with this order for next time</span>
+        <div class="newc-grid">
+          <span class="input"><span class="ph">Contact name</span></span>
+          <span class="input"><span class="ph">Email</span></span>
+          <span class="input"><span class="ph">Phone</span></span>
+          <span class="input wide"><span class="ph">Address</span></span>
+          <span class="input wide"><span class="ph">Tax ID / resale certificate (optional)</span></span>
+        </div>
+      </div>
+      <div class="dlg-note">Only the company name is required. The rest fills in later from “edit” on the chip.</div>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>4 · What Save does to the sheet</b><span>the same deduction path WFS uses: one stock-level update per line at Digital World Shop, nothing else touched</span></div>
+  <div class="tcard">
+    <table>
+      <thead><tr><th class="l">SKU</th><th>In stock</th><th>In orders</th><th>Min</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr class="hit"><td class="l">X133-64GB-GRAY <span class="flash">−10 wholesale</span></td><td><span class="was">1974</span><span class="dn">1964</span></td><td>12</td><td>400</td><td><span class="was">1962</span>1952</td></tr>
+        <tr class="hit"><td class="l">X210-128GB-GRAY <span class="flash">−2 wholesale</span></td><td><span class="was">736</span><span class="dn">734</span></td><td>0</td><td>0</td><td><span class="was">736</span>734</td></tr>
+        <tr><td class="l">X133-64GB-SILVER</td><td>634</td><td>0</td><td>50</td><td>634</td></tr>
+        <tr><td class="l">X400-128GB-GRAY</td><td>582</td><td>0</td><td>4</td><td>582</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cap">The red pill fades after a few seconds; the numbers stay. Each order also lands in the shared log folder as <span class="mono">wholesale-orders.csv</span> next to the WFS and returns files, so every desktop sees the same past orders. Deleting an order from a past card puts the units back.</div>
+</div>
+
+</body>
+</html>
