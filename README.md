@@ -57,7 +57,7 @@ npm run dist
 
 Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%APPDATA%/capture-station`). The DB is backed up automatically to `userData/backups` on every app close (14 kept). `File > Export Today to CSV` exports a copy anywhere.
 
-**Channel SKU export.** Stock page > **Actions ▾** > Export Walmart / eBay / Temu SKUs (or `File > Export Channel SKUs`) saves the marketplace listings that are mapped to a Linnworks item to a CSV: inventory SKU, channel SKU, title, condition (New / Open Box / Used / Scrap, classified by the same `stockViews` patterns as the Stock chips), listed qty, price, WFS flag, source/sub-source. With a condition chip active on the Stock page the Actions-menu exports cover only that slice (file name carries the condition). Unmapped listings are left out. Sync mode only.
+**Channel SKU export.** Stock page > **Actions ▾** > Export Walmart / eBay / Temu SKUs (or `File > Export Channel SKUs`) saves the marketplace listings that are mapped to a Linnworks item to an Excel workbook (styled header, sized columns, frozen header row, filters; pick CSV in the save dialog for a plain file): inventory SKU, channel SKU, title, condition (New / Open Box / Used / Scrap, classified by the same `stockViews` patterns as the Stock chips), listed qty, price, WFS flag, source/sub-source. With a condition chip active on the Stock page the Actions-menu exports cover only that slice (file name carries the condition). Unmapped listings are left out. Sync mode only.
 
 ## Linnworks setup (sync mode only)
 

@@ -981,7 +981,7 @@ async function exportCsv() {
 // condition: '' = every mapped listing; 'New' or a stockViews label = only
 // that slice (the Stock page's active chip rides along on the button)
 async function exportChannelSkus(channel, condition = '') {
-  const { LABELS, buildChannelSkuRows, buildChannelSkuCsv } = require('./chskus-csv.js');
+  const { LABELS, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx } = require('./chskus-csv.js');
   const key = String(channel || '').toLowerCase();
   const label = LABELS[key];
   if (!label) return { ok: false, error: `Unknown channel: ${channel}` };
@@ -990,10 +990,12 @@ async function exportChannelSkus(channel, condition = '') {
   const day = db.localDay();
   const cond = String(condition || '').trim();
   const slug = cond ? '-' + cond.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
+  // Excel workbook by default (styled header, sized columns, filters —
+  // owner 2026-09-30: the CSV opened "too plain"); CSV stays a pick away
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: `Export ${label} channel SKUs${cond ? ` (${cond})` : ''}`,
-    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus${slug}-${day}.csv`),
-    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus${slug}-${day}.xlsx`),
+    filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }, { name: 'CSV', extensions: ['csv'] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
   try {
@@ -1009,7 +1011,8 @@ async function exportChannelSkus(channel, condition = '') {
     let recs = {};
     try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
     const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond });
-    fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
+    if (/\.csv$/i.test(filePath)) fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
+    else fs.writeFileSync(filePath, buildChannelSkuXlsx(rows, `${label} channel SKUs`));
     return { ok: true, path: filePath, count: rows.length, channel: label, condition: cond };
   } catch (e) {
     return { ok: false, error: e.message };

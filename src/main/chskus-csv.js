@@ -114,4 +114,27 @@ function buildChannelSkuCsv(rows) {
   return lines.join('\r\n') + '\r\n';
 }
 
-module.exports = { LABELS, conditionOf, buildChannelSkuRows, buildChannelSkuCsv };
+// The same rows as a styled workbook (owner 2026-09-30: the CSV "is too
+// plain" — a CSV cannot carry formatting): navy bold header, Arial 10,
+// sized columns, frozen header row, autofilter, $ prices.
+const XLSX_COLUMNS = [
+  { header: 'Inventory SKU', width: 26, kind: 'text' },
+  { header: 'Channel SKU', width: 26, kind: 'text' },
+  { header: 'Title', width: 60, kind: 'text' },
+  { header: 'Condition', width: 11, kind: 'text' },
+  { header: 'Listed qty', width: 11, kind: 'int' },
+  { header: 'Price', width: 10, kind: 'money' },
+  { header: 'WFS', width: 6, kind: 'center' },
+  { header: 'Source', width: 11, kind: 'text' },
+  { header: 'SubSource', width: 19, kind: 'text' },
+];
+function buildChannelSkuXlsx(rows, sheetName) {
+  const { buildWorkbook } = require('./xlsxwrite.js');
+  return buildWorkbook({
+    sheetName: sheetName || 'Channel SKUs',
+    columns: XLSX_COLUMNS,
+    rows: rows.map(r => [r.inventorySku, r.channelSku, r.title, r.condition, r.qty, r.price, r.wfs, r.source, r.subSource]),
+  });
+}
+
+module.exports = { LABELS, conditionOf, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx };
