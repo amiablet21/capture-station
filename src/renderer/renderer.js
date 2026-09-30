@@ -58,6 +58,7 @@ if (!window.api) {
     getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
+    exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
@@ -3233,6 +3234,22 @@ $('stockRefresh').addEventListener('click', () => {
   chLinked = null; // Refresh re-derives the missing-listings sets too
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
+});
+// Every Walmart listing as a CSV — channel SKU, linked inventory SKU,
+// title, listed qty, price, WFS flag (owner 2026-09-30). eBay and Temu sit
+// under File > Export Channel SKUs.
+$('stockExportBtn').addEventListener('click', async () => {
+  const btn = $('stockExportBtn');
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    const res = await api.exportChannelSkus('walmart');
+    if (res.ok) toast(`${res.count} Walmart channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
+    else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Export Walmart SKUs';
+  }
 });
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;

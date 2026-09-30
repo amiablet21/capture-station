@@ -23,6 +23,7 @@ let win = null;
 let clipboardTimer = null;
 let testClipboardAllow = null; // e2e-written clipboard values (test isolation)
 let unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // in-stock SKUs with no linked listing
+let runUnlistedScanShared = async () => unlistedCache; // bound to registerIpc's runUnlistedScan once it exists
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
 let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
@@ -887,6 +888,44 @@ async function exportCsv() {
   if (canceled || !filePath) return { ok: false, canceled: true };
   fs.writeFileSync(filePath, buildCsvContent(rows), 'utf8');
   return { ok: true, path: filePath, count: rows.length };
+}
+
+/* ---------- channel SKU export ----------
+   Every listing on one marketplace channel as a CSV (owner 2026-09-30: "I
+   just want a list of all the channel SKUs"). Row building lives in
+   chskus-csv.js; this is the Linnworks fetch + save dialog around it. */
+async function exportChannelSkus(channel) {
+  const { LABELS, buildChannelSkuRows, buildChannelSkuCsv } = require('./chskus-csv.js');
+  const key = String(channel || '').toLowerCase();
+  const label = LABELS[key];
+  if (!label) return { ok: false, error: `Unknown channel: ${channel}` };
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+  const day = db.localDay();
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: `Export ${label} channel SKUs`,
+    defaultPath: path.join(app.getPath('documents'), `${key}-channel-skus-${day}.csv`),
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try {
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    const channels = (await client.getMappingChannels()).filter(c => new RegExp(key, 'i').test(c.source));
+    const feeds = [];
+    for (const ch of channels) {
+      try { feeds.push({ channel: ch, rows: await client.getChannelItems(ch.id, ch.source, ch.subSource) }); } catch { /* the link records still export */ }
+    }
+    // the link records cover in-stock items; a stale scan refreshes first so
+    // a listing linked today is in the file
+    let recs = {};
+    try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
+    const rows = buildChannelSkuRows(key, items, feeds, recs);
+    fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
+    return { ok: true, path: filePath, count: rows.length, channel: label };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 /* ---------- sync ---------- */
@@ -2965,6 +3004,7 @@ function registerIpc() {
     return cfg;
   });
   ipcMain.handle('csv:export', () => exportCsv());
+  ipcMain.handle('channelSkus:export', (_e, { channel } = {}) => exportChannelSkus(channel));
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
       const result = await testConnection(creds || config.load().linnworks);
@@ -5072,6 +5112,7 @@ function registerIpc() {
     unlistedScanRunning = runUnlistedScanBody(cfg).finally(() => { unlistedScanRunning = null; });
     return unlistedScanRunning;
   }
+  runUnlistedScanShared = runUnlistedScan; // the channel-SKU export reads the same link records
   async function runUnlistedScanBody(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const items = await client.listInventory();
@@ -5947,6 +5988,14 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'Export Today to CSV', accelerator: 'CmdOrCtrl+E', click: () => exportCsv() },
+        {
+          label: 'Export Channel SKUs',
+          submenu: [
+            { label: 'Walmart…', click: () => exportChannelSkus('walmart') },
+            { label: 'eBay…', click: () => exportChannelSkus('ebay') },
+            { label: 'Temu…', click: () => exportChannelSkus('temu') },
+          ],
+        },
         {
           label: 'Back Up Database Now',
           click: () => {

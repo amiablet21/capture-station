@@ -52,6 +52,8 @@ npm run dist
 
 Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%APPDATA%/capture-station`). The DB is backed up automatically to `userData/backups` on every app close (14 kept). `File > Export Today to CSV` exports a copy anywhere.
 
+**Channel SKU export.** Stock page > **Export Walmart SKUs** (or `File > Export Channel SKUs > Walmart / eBay / Temu`) saves every listing on that marketplace to a CSV: channel SKU, linked inventory SKU, title, listed qty, price, WFS flag, linked yes/no, source/sub-source, and whether the listing came from the channel's scan feed or only from a link record. Sync mode only.
+
 ## Linnworks setup (sync mode only)
 
 1. Create an API application at the Linnworks developer portal, install it, and get: Application ID, Application Secret, Install Token. Docs: https://apidocs.linnworks.net/docs/generating-an-api-key
