@@ -55,9 +55,10 @@ if (!window.api) {
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false, wholesale: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
+    exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
@@ -92,6 +93,19 @@ if (!window.api) {
     wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
     wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleCustomers: async () => ({ ok: true, customers: [] }),
+    wholesaleCustomerSave: async (rec) => ({ ok: true, customer: { gid: `PREVIEW:${Math.random()}`, name: rec.name, contact: rec.contact || '', email: rec.email || '', phone: rec.phone || '', address: rec.address || '' } }),
+    wholesaleCustomerDelete: async () => ({ ok: true }),
+    wholesaleList: async () => ({ ok: true, invoices: [], serialCounts: {}, nextNumber: '1001', station: 'PREVIEW' }),
+    wholesaleGet: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSave: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleVoid: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSerials: async () => ({ ok: true, serials: [] }),
+    wholesaleSerialAdd: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleSerialDelete: async () => ({ ok: true, serials: [] }),
+    wholesaleSerialsCsv: async () => ({ ok: false, error: 'Preview mode' }),
+    wholesaleDiscardDraft: async () => ({ ok: true }),
+    wholesalePrint: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -304,6 +318,7 @@ function render() {
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
+  $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
 
   $('orderCount').textContent = state.todayCount ?? state.rows.length;
   const openToday = (state.todayCount || 0) - (state.todayProcessed || 0);
@@ -1173,6 +1188,7 @@ async function openSettings() {
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
+  $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
@@ -1281,6 +1297,7 @@ $('settingsSave').addEventListener('click', async () => {
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
+      wholesale: $('setPageWholesale').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
@@ -3234,6 +3251,48 @@ $('stockRefresh').addEventListener('click', () => {
   loadStock();
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
+// Every MAPPED listing on one channel as a CSV — inventory SKU, channel
+// SKU, title, condition, listed qty, price, WFS flag (owner 2026-09-30).
+// The active condition chip narrows the file exactly like it narrows the
+// grid (All = every condition, each row still carries its Condition column).
+async function stockExportChannel(channel) {
+  const btn = $('stockActionsBtn');
+  const cond = !stockActiveView ? '' : stockActiveView.plain ? 'New' : (stockActiveView.label || '');
+  const label = channelLabel(channel);
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    const res = await api.exportChannelSkus(channel, cond);
+    if (res.ok) toast(`${res.count} ${cond ? cond + ' ' : ''}${label} channel SKUs saved to ${res.path.split(/[\\/]/).pop()}`, 4000);
+    else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
+  }
+}
+// Actions dropdown (owner pick 2026-09-30, option A): Mappings, WFS
+// Shipments, Bulk import and the channel-SKU exports behind one button, so
+// the band never wraps again. Same in-app <dialog> menu as the Returns tab,
+// anchored under the button and clamped inside the window.
+$('stockActionsBtn').addEventListener('click', () => {
+  const dlg = $('stockActionsDlg');
+  dlg.showModal();
+  const r = $('stockActionsBtn').getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8));
+  dlg.style.left = `${Math.round(left)}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+$('stockActionsDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('.tab-menu-item');
+  $('stockActionsDlg').close();
+  if (!item) return; // backdrop click: dismiss
+  const act = item.dataset.act || '';
+  if (act === 'mappings') chmapOpen();
+  else if (act === 'wfs') openWfs();
+  else if (act === 'wholesale') openWsList();
+  else if (act === 'bulk') bulkOpen();
+  else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
+});
 $('stockSearch').addEventListener('input', () => {
   $('stockSearchClear').hidden = !$('stockSearch').value;
   if (!$('stockSearch').value) {
@@ -4865,7 +4924,7 @@ function renderChmap() {
       || `<tr><td colspan="2" class="chmap-none">Nothing matches — press <b>+ New SKU</b> to create it.</td></tr>`;
 }
 
-$('chmapBtn').addEventListener('click', () => chmapOpen());
+// (Mappings opens from the Stock page's Actions menu — see stockActionsDlg)
 $('chmapClose').addEventListener('click', () => $('chmapDialog').close());
 $('chmapOnlyUn').addEventListener('click', () => { chmap.onlyUn = !chmap.onlyUn; renderChmap(); });
 $('chmapHasQty').addEventListener('click', () => { chmap.hasQty = !chmap.hasQty; renderChmap(); });
@@ -6135,11 +6194,12 @@ const SH_ACT = {
   added: { word: 'ADDED', cls: 'act-added' },
   removed: { word: 'REMOVED', cls: 'act-removed' },
   shipped: { word: 'SHIPPED', cls: 'act-shipped' },
+  wholesale: { word: 'WHOLESALE', cls: 'act-wholesale' },
   set: { word: 'SET', cls: 'act-set' },
   edited: { word: 'EDITED', cls: 'act-edited' },
   deleted: { word: 'DELETED', cls: 'act-deleted' },
 };
-const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'set', 'edited', 'deleted'];
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'set', 'edited', 'deleted'];
 function shActionOf(e) {
   switch (e.reason) {
     case 'sale': return 'sold';
@@ -6151,6 +6211,7 @@ function shActionOf(e) {
     // not stock leaving (owner 2026-09-24: pad 10 -> 0 read "SHIPPED 10 x")
     case 'dropship': return 'set';
     case 'wfs': case 'substitution': return 'shipped';
+    case 'wholesale': case 'wholesale-void': return 'wholesale';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -6215,6 +6276,11 @@ function shWhat(e, withSku) {
     const setTo = /set to (\d+)/.exec(e.note || '');
     return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
   }
+  if (e.reason === 'wholesale' || e.reason === 'wholesale-void') {
+    // an invoice line: "10 units (Bright Tech · #2041)", a void reads +N
+    const who = [e.note, e.ref ? `#${e.ref}` : ''].filter(Boolean).join(' · ');
+    return `${e.delta > 0 ? '+' : ''}${withSku ? `${e.delta > 0 ? n : n} × ${skuEl(e.sku)}` : `${n} unit${n === 1 ? '' : 's'}`}${who ? ` <span class="sh-dim">(${esc(who)})</span>` : ''}`;
+  }
   if (e.reason === 'dropship') {
     // the pad engine's level move at the DropShip location: from → to
     const d = Number(e.delta) || 0;
@@ -6258,7 +6324,7 @@ function shRowHtml(e, withSku, clickable) {
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
   const canFix = !isSale && !deleted && (SH_EDITABLE.has(e.reason) || isLink);
-  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : '';
+  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : e.reason === 'wholesale' || e.reason === 'wholesale-void' ? 'Wholesale' : '';
   const tools = canFix
     ? `<span class="sh-tools">${isLink ? '' : `<button type="button" class="btn-icon sh-edit-btn" title="Edit this line — change the quantity or the SKU">${ICONS.pencil}</button>`}<button type="button" class="btn-icon is-danger sh-del-btn" title="${isLink ? 'Delete this correction — undoes it' : 'Delete this line — takes its stock back out'}">${ICONS.trash}</button></span>`
     : where ? `<span class="sh-tools is-link" title="This line is corrected in ${where}">edit in ${where}</span>` : '';
@@ -6407,6 +6473,15 @@ function shDdWire(boxId, set, onChange) {
     shDdCloseAll();
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      // fixed-position: sit under the button, clamped inside the window
+      const r = btn.getBoundingClientRect();
+      menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)))}px`;
+      menu.style.top = `${Math.round(r.bottom + 6)}px`;
+      const over = r.bottom + 6 + menu.offsetHeight - window.innerHeight + 8;
+      if (over > 0) menu.style.maxHeight = `${menu.offsetHeight - over}px`; else menu.style.maxHeight = '';
+      menu.style.overflowY = over > 0 ? 'auto' : '';
+    }
   });
   menu.addEventListener('change', (ev) => {
     const i = ev.target;
@@ -6498,7 +6573,10 @@ const shDlg = { sku: '', seq: 0, rows: [], pcs: new Set(), acts: new Set() };
 
 async function openStockHistory(sku) {
   const seq = ++shDlg.seq;
-  shDlg.sku = sku; shDlg.rows = []; shDlg.pcs = new Set(); shDlg.acts = new Set();
+  // clear the filter sets IN PLACE: shDdWire bound the dropdowns to these
+  // exact Set objects at load, so replacing them left every tick landing in
+  // a Set nobody read and the re-render unchecked it at once (owner 2026-09-30)
+  shDlg.sku = sku; shDlg.rows = []; shDlg.pcs.clear(); shDlg.acts.clear();
   $('stockHistSku').textContent = sku;
   $('stockHistSub').textContent = '';
   $('stockHistBody').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
@@ -6546,9 +6624,11 @@ function renderStockHistory() {
     && (!shDlg.acts.size || shDlg.acts.has(shActionOf(e))));
   shDdSync('shPcDd', shDlg.pcs, 'Everyone', v => v);
   shDdSync('shActDd', shDlg.acts, 'All actions', shWordCase);
+  // the empty states take the list's slot at the same height, so the
+  // dialog never shrinks under an open filter menu
   const list = shown.length
     ? `<div class="history-list sh-list"><div class="history-day">${shown.map(e => shRowHtml(e, false, true)).join('')}</div></div>`
-    : `<p class="dlg-note">${rows.length ? 'No changes match those filters.' : ''}</p>`;
+    : `<div class="sh-list sh-empty">${rows.length ? 'No changes match those filters.' : 'Nothing logged for this SKU yet.'}</div>`;
   $('stockHistBody').innerHTML = strip + list;
 }
 
@@ -7016,7 +7096,8 @@ function bulkRefresh() {
   $('bulkApply').disabled = !bulkValidRows().length;
 }
 
-$('stockBulkBtn').addEventListener('click', () => {
+// opened from the Stock page's Actions menu (see stockActionsDlg)
+function bulkOpen() {
   ensureInventory(); // the SKU picker's lookup data
   $('bulkGridRows').innerHTML = '';
   $('bulkNote').value = '';
@@ -7027,7 +7108,7 @@ $('stockBulkBtn').addEventListener('click', () => {
   const first = document.querySelector('#bulkGridRows [data-bf="sku"]');
   if (first) first.focus();
   if (!stockCache) loadStock().then(() => bulkRefresh()).catch(() => { /* Now column stays — */ });
-});
+}
 $('bulkCancel').addEventListener('click', () => $('bulkDialog').close());
 
 $('bulkGridRows').addEventListener('input', () => bulkRefresh());
@@ -7152,7 +7233,9 @@ function prChCells(p) {
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
           <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${c.fluctuates
-    ? `<span class="pr-price-ro" title="The repricer owns this price — shown here, never written${l.approx ? '. The channel feed carried no price, so this is the Linnworks stored price.' : ''}">${prMoney(l.price)}</span>`
+    ? `<span class="pr-price-ro" title="${l.fromSales
+      ? `The repricer owns this price — this is what the listing last sold at (before tax), never written here. Linnworks has ${prMoney(l.lwPrice)} on file${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`
+      : `The repricer owns this price — shown here, never written. No sale in 60 days, so this is the Linnworks figure${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`}">${prMoney(l.price)}</span>`
     : `<button type="button" class="pr-price" data-ci="${ci}" data-csku="${esc(l.csku)}" data-old="${l.price || 0}" title="Click to change — Enter pushes it to ${esc(c.source)} via Linnworks">${prMoney(l.price)}</button>`}
         </div>${prGotLine(l, ci, maxU)}</div>`).join('');
     const avg = c.fluctuates && p.avgBy && p.avgBy[c.key];
@@ -7226,8 +7309,8 @@ function prHistPaint(ph) {
   // bar widths through the CSSOM (the page's CSP blocks inline style attributes)
   for (const bar of $('prlhBody').querySelectorAll('.prh-bar i')) bar.style.width = `${bar.dataset.w}%`;
   $('prlhFoot').textContent = ph && ph.src === 'sales'
-    ? 'No price change logged for this listing yet — these are the prices it actually sold at (from Linnworks orders).'
-    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders.';
+    ? 'No price change logged for this listing yet — these are the prices it actually sold at, before sales tax (from Linnworks orders).'
+    : 'Changes from the price log (prices set here, reverts, repricer moves seen on a Pricing refresh) · sales from Linnworks orders, before sales tax.';
   for (const b of $('prlhRange').querySelectorAll('button')) b.classList.toggle('is-on', Number(b.dataset.days) === prlh.days);
 }
 async function prListHistLoad(days) {
@@ -7253,7 +7336,7 @@ function prHistOpen(el) {
   Object.assign(prlh, { c, l, days: 60 });
   $('prlhCh').textContent = c.source.toUpperCase();
   $('prlhSku').textContent = l.csku;
-  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>`;
+  $('prlhNow').innerHTML = `now <b>${prMoney(l.price)}</b>${l.fromSales ? `<span class="prlh-lw" title="What Linnworks has on file for this listing — the repricer's real price only shows through the sales">Linnworks: ${prMoney(l.lwPrice)}</span>` : ''}`;
   // the 60 days already came with the sheet: paint at once, no wait
   prlh.seq++;
   prHistPaint(l.ph ? { ...l.ph, periods: l.ph.periods } : null);
@@ -8174,9 +8257,512 @@ async function renderWfsPast() {
       </div>`).join('');
 }
 
-$('wfsBtn').addEventListener('click', () => openWfs());
+// (WFS Shipments opens from the Stock page's Actions menu — see stockActionsDlg)
 $('wfsAddLine').addEventListener('click', () => { wfsAddLine(); $('wfsLines').lastElementChild.querySelector('input').focus(); });
 $('wfsClose').addEventListener('click', () => $('wfsDialog').close());
+
+/* ---------- Wholesale invoices (owner 2026-09-30) ---------- */
+// Design: variants/wholesale-qb-simple.html. The list opens first; an
+// invoice is customer + number + date, lines (SKU, description, qty, rate,
+// amount, serial numbers, ✕), note, ship via, totals and the amber box
+// saying what leaves the shelf. Only SKU and qty are required. Saving
+// deducts Digital World Shop like a WFS shipment; every record rides the
+// shared log folder so both desktops see one list.
+
+const WS_SN_ICON = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M32 56v40a8 8 0 0 0 16 0V64h32a8 8 0 0 0 0-16H40a8 8 0 0 0-8 8Zm184-8h-40a8 8 0 0 0 0 16h32v32a8 8 0 0 0 16 0V56a8 8 0 0 0-8-8ZM80 200H48v-32a8 8 0 0 0-16 0v40a8 8 0 0 0 8 8h40a8 8 0 0 0 0-16Zm136-40a8 8 0 0 0-8 8v32h-32a8 8 0 0 0 0 16h40a8 8 0 0 0 8-8v-40a8 8 0 0 0-8-8ZM80 88v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Zm32 0v80a8 8 0 0 0 16 0V88a8 8 0 0 0-16 0Z"/></svg>';
+let wsCustomers = [];
+let wsInvoices = [];
+let wsSerialCounts = {};
+let wsNextNumber = '';
+let wsStationName = '';
+let wsListQuery = '';
+let wsInv = null;   // the open invoice: { gid, prev: saved record | null }
+let wsCust = null;  // the picked customer record | null
+let wsCustEditing = null; // customer being edited in the inline card | null
+
+const wsMoney = (n) => `$${(Number(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+const wsNum = (n) => (Number(n) || 0).toLocaleString('en-US');
+const wsLocalDay = (iso) => { const d = iso ? new Date(iso) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function wsInvUnits(inv) { return inv.lines.reduce((a, l) => a + l.qty, 0); }
+function wsInvTotal(inv) {
+  const priced = inv.lines.some(l => l.rate !== null) || inv.shipping > 0;
+  return priced ? inv.lines.reduce((a, l) => a + (l.rate === null ? 0 : l.rate * l.qty), 0) + (inv.shipping || 0) : null;
+}
+
+/* ---- the list ---- */
+async function openWsList() {
+  ensureInventory();
+  const res = await api.wholesaleList();
+  if (!res.ok) { toast(res.error || 'Could not load wholesale invoices'); return; }
+  wsInvoices = res.invoices || [];
+  wsSerialCounts = res.serialCounts || {};
+  wsNextNumber = res.nextNumber || '';
+  wsStationName = res.station || '';
+  $('wsListSearch').value = wsListQuery;
+  renderWsList();
+  if (!$('wsListDialog').open) {
+    $('wsListDialog').showModal();
+    // the search takes focus when there is something to search; otherwise
+    // nothing does (showModal would ring the ✕, the only control left)
+    if (wsInvoices.length) $('wsListSearch').focus(); else if (document.activeElement) document.activeElement.blur();
+  }
+}
+function renderWsList() {
+  const q = wsListQuery.trim().toLowerCase();
+  const rows = wsInvoices.filter(inv => !q || [inv.number, inv.customer_name, ...inv.lines.map(l => l.sku)].join(' ').toLowerCase().includes(q));
+  $('wsListSearch').closest('.ws-list-search').hidden = !wsInvoices.length; // nothing to search yet
+  $('wsNewBtn').hidden = !wsInvoices.length; // the empty state carries its own New invoice
+  if (!rows.length) {
+    $('wsListBody').innerHTML = wsInvoices.length
+      ? `<div class="ws-empty is-search"><div class="ws-empty-h">No invoice matches “${esc(q)}”</div><div class="ws-empty-s">Search looks at the customer, the invoice number and every SKU on it.</div></div>`
+      : `<div class="ws-empty">
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M72 104a8 8 0 0 1 8-8h96a8 8 0 0 1 0 16H80a8 8 0 0 1-8-8Zm8 40h96a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16Zm144-96v168a8 8 0 0 1-11.58 7.15L192 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L144 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L96 212.94l-20.42 10.21a8 8 0 0 1-7.16 0L48 212.94l-20.42 10.21A8 8 0 0 1 16 216V48a16 16 0 0 1 16-16h192a16 16 0 0 1 16 16Zm-16 0H32v155.06l12.42-6.21a8 8 0 0 1 7.16 0L72 207.06l20.42-10.21a8 8 0 0 1 7.16 0L120 207.06l20.42-10.21a8 8 0 0 1 7.16 0L168 207.06l20.42-10.21a8 8 0 0 1 7.16 0L208 203.06Z"/></svg>
+          <div class="ws-empty-h">No wholesale invoices yet</div>
+          <div class="ws-empty-s">An invoice is a customer, the SKUs they took and how many. Saving it takes those units off Digital World Shop and logs them under each SKU's history. Price and shipping are optional.</div>
+          <button type="button" class="btn btn-primary" id="wsEmptyNew">＋ New invoice</button>
+        </div>`;
+    const b = $('wsEmptyNew');
+    if (b) b.addEventListener('click', () => openWsInvoice(''));
+    return;
+  }
+  $('wsListBody').innerHTML = `<table class="ws-lt">
+    <colgroup><col style="width:116px"><col style="width:72px"><col style="width:210px"><col><col style="width:60px"><col style="width:100px"><col style="width:196px"></colgroup>
+    <thead><tr><th>Date</th><th>No.</th><th>Customer</th><th>Items</th><th class="r">Units</th><th class="r">Total</th><th class="r">Action</th></tr></thead>
+    <tbody>${rows.map(inv => {
+      const tot = wsInvTotal(inv);
+      const items = inv.lines.length ? `<span class="mono">${esc(inv.lines[0].sku)}</span> ×${inv.lines[0].qty}${inv.lines.length > 1 ? ` · +${inv.lines.length - 1} more` : ''}` : '';
+      const foreign = inv.station && wsStationName && inv.station !== wsStationName;
+      return `<tr class="${inv.voided_at ? 'is-void' : ''}" data-gid="${esc(inv.gid)}">
+        <td>${retDateUS(inv.day)}</td>
+        <td class="ws-no">${inv.number ? esc(inv.number) : '—'}</td>
+        <td class="ws-c" title="${esc(inv.customer_name || '')}${foreign ? ` · logged on ${esc(inv.station)}` : ''}">${esc(inv.customer_name || 'no customer')}${inv.voided_at ? '<span class="ws-tag">voided · put back</span>' : ''}${foreign ? `<span class="ws-st">${esc(inv.station)}</span>` : ''}</td>
+        <td class="ws-it">${items}</td>
+        <td class="r mono">${wsInvUnits(inv)}</td>
+        <td class="r ws-amt">${tot === null ? '<span class="sh-dim">—</span>' : wsMoney(tot)}</td>
+        <td class="ws-act"><button type="button" data-act="open">${inv.voided_at ? 'View' : 'Edit'}</button><button type="button" data-act="print">Print</button>${inv.voided_at ? '' : '<button type="button" class="is-danger" data-act="void">Void</button>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+$('wsListSearch').addEventListener('input', () => { wsListQuery = $('wsListSearch').value; renderWsList(); });
+$('wsListClose').addEventListener('click', () => $('wsListDialog').close());
+$('wsNewBtn').addEventListener('click', () => openWsInvoice(''));
+$('wsListBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  const tr = e.target.closest('tr[data-gid]');
+  if (!tr) return;
+  const gid = tr.dataset.gid;
+  const act = btn ? btn.dataset.act : 'open';
+  if (act === 'open') { openWsInvoice(gid); return; }
+  if (act === 'print') {
+    const r = await api.wholesalePrint(gid);
+    if (r.ok) toast(`Saved ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not print');
+    return;
+  }
+  if (act === 'void') {
+    const inv = wsInvoices.find(i => i.gid === gid);
+    if (!inv || !window.confirm(`Void invoice ${inv.number || ''} for ${inv.customer_name || 'no customer'}?\n${wsInvUnits(inv)} units go back on the shelf. The invoice stays as a record.`)) return;
+    btn.disabled = true;
+    const r = await api.wholesaleVoid(gid);
+    if (!r.ok) { btn.disabled = false; toast(r.error || 'Could not void'); return; }
+    toast(`Invoice ${inv.number || ''} voided · ${wsInvUnits(inv)} units back in stock`);
+    await openWsList();
+    if (stockCache) loadStock();
+  }
+});
+// (Wholesale invoices opens from the Stock page's Actions menu — see stockActionsDlg)
+
+/* ---- customers: combo, inline card, saved with the invoice ---- */
+async function wsLoadCustomers() {
+  const res = await api.wholesaleCustomers();
+  wsCustomers = res.ok ? res.customers : [];
+}
+function wsCustMatches(q) {
+  const k = q.trim().toLowerCase();
+  const list = !k ? wsCustomers : wsCustomers.filter(c => [c.name, c.contact, c.email, c.address].join(' ').toLowerCase().includes(k));
+  return list.slice(0, 8);
+}
+let wsCustMatchesNow = [];
+let wsCustHl = -1;
+function wsCustRender() {
+  const input = $('wsCustInput'), list = $('wsCustList');
+  const q = input.value.trim();
+  wsCustMatchesNow = wsCustMatches(q);
+  const exact = wsCustomers.find(c => c.name.toLowerCase() === q.toLowerCase());
+  const addNew = q && !exact ? `<button type="button" class="combo-opt combo-addnew" data-i="-1"><span class="mono">+ New customer “${esc(q)}”</span></button>` : '';
+  const hl = wsCustHl >= 0 ? wsCustHl : (wsCustMatchesNow.length ? 0 : -1);
+  const opts = wsCustMatchesNow.map((c, i) => `<button type="button" class="combo-opt ${i === hl ? 'is-hl' : ''}" data-i="${i}"><b>${esc(c.name)}</b><small>${esc([c.contact, c.address, c.email].filter(Boolean).join(' · ') || 'no details yet')}</small></button>`).join('');
+  if (!addNew && !opts) { list.hidden = true; return; }
+  // a typed name with no saved match: Enter means "new customer"
+  list.innerHTML = (hl === -1 && addNew ? addNew.replace('combo-opt combo-addnew', 'combo-opt combo-addnew is-hl') : addNew) + opts;
+  list.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+}
+function wsCustClose() { $('wsCustList').hidden = true; $('wsCustInput').setAttribute('aria-expanded', 'false'); wsCustHl = -1; }
+function wsCustPick(c) {
+  wsCust = c;
+  $('wsCustInput').value = c.name;
+  wsCustClose();
+  wsCustShow();
+}
+function wsCustShow() {
+  const who = $('wsCustWho');
+  if (!wsCust) { who.hidden = true; who.innerHTML = ''; return; }
+  const bits = [wsCust.contact, wsCust.address, wsCust.email ? `<span class="mono">${esc(wsCust.email)}</span>` : '', wsCust.phone ? `<span class="mono">${esc(wsCust.phone)}</span>` : ''].filter(Boolean);
+  who.innerHTML = `${bits.length ? bits.map(b => b.startsWith('<span') ? b : esc(b)).join(' · ') : '<span class="sh-dim">no details yet</span>'}<button type="button" id="wsCustEdit">edit</button>`;
+  who.hidden = false;
+  $('wsCustEdit').addEventListener('click', () => wsCustCardOpen(wsCust));
+}
+function wsCustCardOpen(c) {
+  wsCustEditing = c || null;
+  $('wsCustNewLbl').textContent = c ? `Edit ${c.name}` : `New customer — ${$('wsCustInput').value.trim()}`;
+  $('wsCContact').value = c ? c.contact || '' : '';
+  $('wsCPhone').value = c ? c.phone || '' : '';
+  $('wsCEmail').value = c ? c.email || '' : '';
+  $('wsCAddress').value = c ? c.address || '' : '';
+  $('wsCustNew').hidden = false;
+  $('wsCContact').focus();
+}
+function wsCustCardClose() { $('wsCustNew').hidden = true; wsCustEditing = null; }
+async function wsCustCardSave() {
+  const name = $('wsCustInput').value.trim();
+  if (!name) { $('wsCustInput').focus(); return; }
+  const r = await api.wholesaleCustomerSave({ gid: wsCustEditing ? wsCustEditing.gid : '', name, contact: $('wsCContact').value.trim(), phone: $('wsCPhone').value.trim(), email: $('wsCEmail').value.trim(), address: $('wsCAddress').value.trim() });
+  if (!r.ok) { toast(r.error || 'Could not save the customer'); return; }
+  await wsLoadCustomers();
+  wsCustCardClose();
+  wsCustPick(r.customer);
+  toast(`${r.customer.name} saved`);
+}
+$('wsCustInput').addEventListener('input', () => {
+  // typing past a picked name un-picks it; the exact name re-picks
+  const v = $('wsCustInput').value.trim();
+  wsCust = wsCustomers.find(c => c.name.toLowerCase() === v.toLowerCase()) || null;
+  wsCustShow();
+  wsCustHl = -1; // render picks the first match
+  wsCustRender();
+});
+$('wsCustInput').addEventListener('focus', () => { wsCustRender(); });
+$('wsCustInput').addEventListener('blur', () => setTimeout(wsCustClose, 150));
+$('wsCustInput').addEventListener('keydown', (e) => {
+  const list = $('wsCustList');
+  const opts = [...list.querySelectorAll('.combo-opt')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (list.hidden) { wsCustRender(); return; }
+    if (!opts.length) return;
+    const cur = opts.findIndex(o => o.classList.contains('is-hl'));
+    const next = (cur + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+    opts.forEach((o, i) => o.classList.toggle('is-hl', i === next));
+    wsCustHl = Number(opts[next].dataset.i);
+    return;
+  }
+  if (e.key === 'Escape') { wsCustClose(); return; }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const hl = opts.find(o => o.classList.contains('is-hl')) || opts[0];
+  if (!list.hidden && hl) { wsCustChoose(hl); return; }
+  if (wsCust) { wsCustClose(); $('wsNumber').focus(); }
+});
+function wsCustChoose(opt) {
+  const i = Number(opt.dataset.i);
+  if (i < 0) { wsCust = null; wsCustClose(); wsCustShow(); wsCustCardOpen(null); return; }
+  if (wsCustMatchesNow[i]) wsCustPick(wsCustMatchesNow[i]);
+}
+$('wsCustList').addEventListener('mousedown', (e) => {
+  const opt = e.target.closest('.combo-opt');
+  if (!opt) return;
+  e.preventDefault();
+  wsCustChoose(opt);
+});
+$('wsCustNewCancel').addEventListener('click', wsCustCardClose);
+$('wsCustNewSave').addEventListener('click', wsCustCardSave);
+for (const id of ['wsCContact', 'wsCPhone', 'wsCEmail', 'wsCAddress']) {
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); wsCustCardSave(); } });
+}
+
+/* ---- the invoice ---- */
+async function openWsInvoice(gid) {
+  ensureInventory();
+  await wsLoadCustomers();
+  let inv = null;
+  wsCust = null;
+  if (gid) {
+    const r = await api.wholesaleGet(gid);
+    if (!r.ok) { toast(r.error || 'Could not open the invoice'); return; }
+    inv = r.invoice;
+    Object.assign(wsSerialCounts, r.serialCounts || {});
+    wsCust = r.customer || null;
+  }
+  wsInv = { gid: inv ? inv.gid : `${wsStationName || 'LOCAL'}:${crypto.randomUUID()}`, prev: inv };
+  const ro = !!(inv && inv.voided_at);
+  $('wsTitleNo').textContent = [inv && inv.number ? `#${inv.number}` : '', ro ? 'voided' : ''].filter(Boolean).join(' · ');
+  $('wsNumber').value = inv ? inv.number : wsNextNumber;
+  $('wsDate').value = wsLocalDay(inv ? inv.created_at : '');
+  $('wsCustInput').value = inv ? inv.customer_name : '';
+  wsCustCardClose();
+  wsCustShow();
+  $('wsLines').innerHTML = '';
+  for (const l of inv ? inv.lines : []) wsAddLine(l);
+  if (!ro) wsAddLine();
+  $('wsNote').value = inv ? inv.note : '';
+  $('wsCarrier').value = inv ? inv.carrier : '';
+  if ($('wsCarrier').value !== (inv ? inv.carrier : '')) $('wsCarrier').value = inv && inv.carrier ? 'Other' : '';
+  $('wsTracking').value = inv ? inv.tracking : '';
+  $('wsShipping').value = inv && inv.shipping ? inv.shipping.toFixed(2) : '';
+  $('wsResult').textContent = '';
+  $('wsResult').className = 'dlg-note test-result ws-result';
+  for (const el of $('wsDialog').querySelectorAll('input, textarea, select, .ws-x, #wsAddLine, #wsScanBtn')) el.disabled = ro;
+  $('wsDate').disabled = ro || !!inv; // the date is when the stock left; it stays
+  $('wsSave').hidden = ro;
+  $('wsCancel').textContent = ro ? 'Close' : 'Cancel';
+  wsRecalc();
+  $('wsDialog').showModal();
+  if (!ro) (inv ? $('wsLines').querySelector('.ws-line:last-child .ws-sku') : $('wsCustInput')).focus();
+}
+
+function wsLineHtml() {
+  return `<tr class="ws-line">
+    <td><div class="ws-combo"><input type="text" class="ws-cell ws-sku mono" placeholder="SKU" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" /><div class="combo-list" hidden></div></div></td>
+    <td><input type="text" class="ws-cell ws-title" maxlength="300" autocomplete="off" aria-label="Description" /></td>
+    <td><input type="number" class="ws-cell ws-qty mono r" min="1" step="1" placeholder="1" aria-label="Qty" /></td>
+    <td><input type="text" class="ws-cell ws-rate mono r" inputmode="decimal" maxlength="12" aria-label="Rate" /></td>
+    <td class="r ws-amt is-empty">—</td>
+    <td class="r"><button type="button" class="ws-sn" title="Serial numbers">${WS_SN_ICON}<span class="n"></span></button></td>
+    <td class="r"><button type="button" class="ws-x" title="Remove line">✕</button></td>
+  </tr>`;
+}
+function wsAddLine(l) {
+  $('wsLines').insertAdjacentHTML('beforeend', wsLineHtml());
+  const row = $('wsLines').lastElementChild;
+  const sku = row.querySelector('.ws-sku'), title = row.querySelector('.ws-title'), qty = row.querySelector('.ws-qty'), rate = row.querySelector('.ws-rate');
+  if (l) { sku.value = l.sku; title.value = l.title || ''; qty.value = l.qty; rate.value = l.rate === null || l.rate === undefined ? '' : Number(l.rate).toFixed(2); }
+  makeCombo(sku, row.querySelector('.combo-list'), (item) => {
+    sku.value = item.sku;
+    if (!title.value.trim()) title.value = item.title || '';
+    if (!qty.value) qty.value = 1;
+    wsRecalc();
+    wsGrow();
+    qty.focus(); qty.select();
+  });
+  sku.addEventListener('change', () => {
+    // a typed-in-full SKU fills the title too
+    const it = wfsFindSku(sku.value);
+    if (it && !title.value.trim()) title.value = it.title || '';
+    wsRecalc();
+    wsGrow();
+  });
+  sku.addEventListener('input', wsRecalc);
+  qty.addEventListener('input', wsRecalc);
+  rate.addEventListener('input', wsRecalc);
+  qty.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rate.focus(); rate.select(); } });
+  rate.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    wsGrow();
+    const next = row.nextElementSibling;
+    if (next) next.querySelector('.ws-sku').focus();
+  });
+  rate.addEventListener('blur', () => { const n = Number(rate.value); if (rate.value.trim() && Number.isFinite(n)) rate.value = n.toFixed(2); wsRecalc(); });
+  row.querySelector('.ws-x').addEventListener('click', () => {
+    row.remove();
+    if (!$('wsLines').children.length) wsAddLine();
+    wsRecalc();
+  });
+  row.querySelector('.ws-sn').addEventListener('click', () => openWsSerials(row));
+  return row;
+}
+function wsGrow() {
+  const last = $('wsLines').lastElementChild;
+  if (last && last.querySelector('.ws-sku').value.trim()) wsAddLine();
+}
+function wsLinesData() {
+  return [...$('wsLines').querySelectorAll('.ws-line')].map(r => ({
+    sku: r.querySelector('.ws-sku').value.trim().toUpperCase(),
+    title: r.querySelector('.ws-title').value.trim(),
+    qty: Math.round(Number(r.querySelector('.ws-qty').value) || 0) || (r.querySelector('.ws-sku').value.trim() ? 1 : 0),
+    rate: r.querySelector('.ws-rate').value.trim() === '' || !Number.isFinite(Number(r.querySelector('.ws-rate').value)) ? null : Math.round(Number(r.querySelector('.ws-rate').value) * 100) / 100,
+  })).filter(l => l.sku && l.qty > 0);
+}
+// the shelf count at the primary location, from the loaded inventory
+function wsLevelOf(sku) {
+  const it = wfsFindSku(sku);
+  if (!it || !Array.isArray(it.levels)) return null;
+  const lid = (state && state.locations && state.locations.primaryId) || recvLocationId;
+  const lv = it.levels.find(l => l.locationId === lid) || it.levels[0];
+  return lv ? Number(lv.stockLevel) || 0 : null;
+}
+function wsRecalc() {
+  let units = 0, goods = 0;
+  for (const r of $('wsLines').querySelectorAll('.ws-line')) {
+    const sku = r.querySelector('.ws-sku').value.trim().toUpperCase();
+    const q = Math.round(Number(r.querySelector('.ws-qty').value) || 0) || (sku ? 1 : 0);
+    const rateRaw = r.querySelector('.ws-rate').value.trim();
+    const rate = rateRaw === '' || !Number.isFinite(Number(rateRaw)) ? null : Number(rateRaw);
+    const amt = r.querySelector('.ws-amt');
+    if (sku && rate !== null) { amt.textContent = wsMoney(rate * q).slice(1); amt.classList.remove('is-empty'); goods += rate * q; }
+    else { amt.textContent = '—'; amt.classList.add('is-empty'); }
+    if (sku) units += q;
+    // the serial icon: green with a count once any are logged, amber while short
+    const btn = r.querySelector('.ws-sn');
+    const n = wsInv ? (wsSerialCounts[`${wsInv.gid}|${sku}`] || 0) : 0;
+    btn.querySelector('.n').textContent = n ? String(n) : '';
+    btn.classList.toggle('has', n > 0 && n >= q);
+    btn.classList.toggle('short', n > 0 && n < q);
+    btn.title = sku ? `Serial numbers · ${n} of ${q}` : 'Serial numbers — pick a SKU first';
+  }
+  const ship = Number($('wsShipping').value) || 0;
+  $('wsUnits').textContent = wsNum(units);
+  $('wsGoods').textContent = wsMoney(goods);
+  $('wsTotal').textContent = wsMoney(goods + ship);
+  // what leaves the shelf: per SKU, the change against what a previous save already took
+  const prevBy = new Map();
+  for (const l of wsInv && wsInv.prev ? wsInv.prev.lines : []) prevBy.set(l.sku, (prevBy.get(l.sku) || 0) + l.qty);
+  const by = new Map();
+  for (const l of wsLinesData()) by.set(l.sku, (by.get(l.sku) || 0) + l.qty);
+  const rows = [];
+  let out = 0;
+  for (const [sku, q] of by) {
+    const d = q - (prevBy.get(sku) || 0);
+    if (!d) continue;
+    out += d;
+    const now = wsLevelOf(sku);
+    rows.push(`<div class="ws-lv"><span>${esc(sku)}</span><span class="n">${d > 0 ? '−' : '+'}${Math.abs(d)}</span><span class="d">${now === null ? '' : `${wsNum(now)} → ${wsNum(now - d)}`}</span></div>`);
+  }
+  for (const [sku, q] of prevBy) if (!by.has(sku)) { out -= q; const now = wsLevelOf(sku); rows.push(`<div class="ws-lv"><span>${esc(sku)}</span><span class="n">+${q}</span><span class="d">${now === null ? '' : `${wsNum(now)} → ${wsNum(now + q)}`}</span></div>`); }
+  $('wsLeaving').innerHTML = rows.length
+    ? `<div class="ws-lv-h">${wsInv && wsInv.prev ? 'Change on save' : 'Leaving Digital World Shop on save'} · <b>${out > 0 ? `${out} units` : `${-out} back`}</b></div>${rows.join('')}`
+    : '';
+}
+$('wsShipping').addEventListener('input', wsRecalc);
+$('wsShipping').addEventListener('blur', () => { const n = Number($('wsShipping').value); $('wsShipping').value = $('wsShipping').value.trim() && Number.isFinite(n) && n > 0 ? n.toFixed(2) : ''; wsRecalc(); });
+$('wsAddLine').addEventListener('click', () => { const last = $('wsLines').lastElementChild; if (!last || last.querySelector('.ws-sku').value.trim()) wsAddLine(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
+$('wsScanBtn').addEventListener('click', () => { wsGrow(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
+
+async function wsSave({ thenPrint = false } = {}) {
+  if (!wsInv) return;
+  const res = $('wsResult');
+  const lines = wsLinesData();
+  if (!lines.length) { res.textContent = 'Add at least one line with a SKU and a quantity.'; res.classList.add('is-err'); return; }
+  const unknown = recvLookup === 'ready' ? lines.filter(l => !wfsFindSku(l.sku)).map(l => l.sku) : [];
+  if (unknown.length && !window.confirm(`${unknown.join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not in Linnworks — save anyway? The deduction will fail for unknown SKUs.`)) return;
+  // a typed customer that was never picked is saved on the spot, so the
+  // name is there next time
+  let custName = $('wsCustInput').value.trim();
+  if (!wsCust && custName) {
+    const r = await api.wholesaleCustomerSave({ name: custName });
+    if (r.ok) { wsCust = r.customer; wsCustomers.push(r.customer); }
+  }
+  if (wsCust) custName = wsCust.name;
+  $('wsSave').disabled = true; $('wsPrint').disabled = true;
+  res.textContent = 'Saving…'; res.classList.remove('is-err');
+  const out = await api.wholesaleSave({
+    gid: wsInv.gid, number: $('wsNumber').value.trim(), date: $('wsDate').value ? `${$('wsDate').value}T12:00:00` : '',
+    customerGid: wsCust ? wsCust.gid : '', customerName: custName, lines,
+    note: $('wsNote').value.trim(), carrier: $('wsCarrier').value, tracking: $('wsTracking').value.trim(), shipping: Number($('wsShipping').value) || 0,
+  });
+  $('wsSave').disabled = false; $('wsPrint').disabled = false;
+  if (!out.ok) { res.textContent = out.error || 'Could not save.'; res.classList.add('is-err'); return; }
+  const units = lines.reduce((a, l) => a + l.qty, 0);
+  const wasNew = !wsInv.prev;
+  wsInv.prev = out.invoice;
+  res.textContent = '';
+  toast(wasNew ? `Invoice ${out.invoice.number || ''} saved · ${units} units off the shelf` : `Invoice ${out.invoice.number || ''} updated`);
+  $('wsDialog').close();
+  if ($('wsListDialog').open) openWsList(); else { wsNextNumber = ''; }
+  if (stockCache) loadStock(); // the grid's counts moved
+  if (thenPrint) {
+    const r = await api.wholesalePrint(out.invoice.gid);
+    if (r.ok) toast(`Saved ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not print');
+  }
+}
+$('wsSave').addEventListener('click', () => wsSave());
+$('wsPrint').addEventListener('click', async () => {
+  if (wsInv && wsInv.prev && wsInv.prev.voided_at) { const r = await api.wholesalePrint(wsInv.gid); if (r.ok) toast(`Saved ${r.path}`); return; }
+  wsSave({ thenPrint: true });
+});
+async function wsCancel() {
+  if (wsInv && !wsInv.prev) await api.wholesaleDiscardDraft(wsInv.gid); // scanned serials on a never-saved invoice go with it
+  $('wsDialog').close();
+}
+$('wsCancel').addEventListener('click', wsCancel);
+$('wsClose').addEventListener('click', wsCancel);
+$('wsDialog').addEventListener('cancel', (e) => { e.preventDefault(); wsCancel(); });
+
+/* ---- serial numbers: every scan saved the moment Enter lands ---- */
+let wsSn = null; // { row, sku, qty }
+let wsSnList = [];
+async function openWsSerials(row) {
+  const sku = row.querySelector('.ws-sku').value.trim().toUpperCase();
+  if (!sku) { toast('Pick a SKU on this line first'); row.querySelector('.ws-sku').focus(); return; }
+  const qty = Math.round(Number(row.querySelector('.ws-qty').value) || 0) || 1;
+  wsSn = { row, sku, qty, dupSerial: '' };
+  $('wsSnSku').textContent = sku;
+  $('wsSnInput').value = '';
+  $('wsSnHint').textContent = 'scan or type · Enter saves';
+  $('wsSnHint').classList.remove('is-dup');
+  const r = await api.wholesaleSerials(wsInv.gid, sku);
+  wsSnList = r.ok ? r.serials : [];
+  renderWsSerials();
+  $('wsSnDialog').showModal();
+  $('wsSnInput').focus();
+}
+function renderWsSerials(flash) {
+  const inv = wsInv && wsInv.prev;
+  $('wsSnSub').innerHTML = `<b>${wsSnList.length} of ${wsSn.qty}</b> logged${inv && inv.number ? ` · invoice #${esc(inv.number)}` : ''}${$('wsCustInput').value.trim() ? ` · ${esc($('wsCustInput').value.trim())}` : ''}`;
+  const total = wsSnList.length;
+  $('wsSnList').innerHTML = wsSnList.map((x, i) => `<div class="ws-sn-row ${flash && flash.gid === x.gid ? (flash.dup ? 'is-dup' : 'is-new') : ''}" data-gid="${esc(x.gid)}">
+      <span class="i">${total - i}</span><span class="v">${esc(x.serial)}</span>
+      <span class="t">${flash && flash.gid === x.gid ? (flash.dup ? 'duplicate — not added' : 'saved just now') : fmtTime(x.created_at)}</span>
+      <button type="button" class="ws-x" title="Remove this serial">✕</button>
+    </div>`).join('');
+  $('wsSnFoot').textContent = total ? `${total} saved · saves as you go, close whenever` : 'saves as you go — close whenever';
+  $('wsSnExport').disabled = !total;
+}
+$('wsSnInput').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter' || !wsSn) return;
+  e.preventDefault();
+  const v = $('wsSnInput').value.trim();
+  if (!v) return;
+  const r = await api.wholesaleSerialAdd(wsInv.gid, wsSn.sku, v);
+  if (!r.ok) {
+    if (r.duplicate) {
+      wsSnList = r.serials || wsSnList;
+      const dup = wsSnList.find(x => x.serial.toUpperCase() === v.toUpperCase());
+      $('wsSnHint').textContent = dup ? `already on line ${wsSnList.length - wsSnList.indexOf(dup)}` : r.error;
+      $('wsSnHint').classList.add('is-dup');
+      renderWsSerials(dup ? { gid: dup.gid, dup: true } : null);
+    } else toast(r.error || 'Could not save the serial');
+    $('wsSnInput').select();
+    return;
+  }
+  wsSnList = r.serials;
+  $('wsSnHint').textContent = 'scan or type · Enter saves';
+  $('wsSnHint').classList.remove('is-dup');
+  renderWsSerials({ gid: r.serial.gid });
+  $('wsSnInput').value = '';
+  wsSerialCounts[`${wsInv.gid}|${wsSn.sku}`] = wsSnList.length;
+  wsRecalc();
+});
+$('wsSnList').addEventListener('click', async (e) => {
+  const x = e.target.closest('.ws-x');
+  const rowEl = e.target.closest('.ws-sn-row');
+  if (!x || !rowEl) return;
+  const r = await api.wholesaleSerialDelete(rowEl.dataset.gid);
+  if (!r.ok) { toast(r.error || 'Could not remove'); return; }
+  wsSnList = r.serials || wsSnList.filter(s => s.gid !== rowEl.dataset.gid);
+  renderWsSerials();
+  wsSerialCounts[`${wsInv.gid}|${wsSn.sku}`] = wsSnList.length;
+  wsRecalc();
+  $('wsSnInput').focus();
+});
+$('wsSnExport').addEventListener('click', async () => {
+  const r = await api.wholesaleSerialsCsv(wsInv.gid, wsSn.sku);
+  if (r.ok) toast(`${r.count} serial${r.count === 1 ? '' : 's'} → ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not export');
+});
+function wsSnClose() { $('wsSnDialog').close(); wsRecalc(); }
+$('wsSnDone').addEventListener('click', wsSnClose);
+$('wsSnClose').addEventListener('click', wsSnClose);
+$('wsSnDialog').addEventListener('cancel', (e) => { e.preventDefault(); wsSnClose(); });
 
 $('wfsLines').addEventListener('click', (e) => {
   const rm = e.target.closest('.wfs-remove');
@@ -8366,7 +8952,7 @@ function makeCombo(input, listEl, onPick, opts) {
     // sheet containers clip absolute dropdowns (overflow:hidden): the
     // returns log, the receive popup's sheet AND the WFS shipment sheet
     // anchor to the viewport
-    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap')) return;
+    if (!input.closest('.ret-sheet-scroll') && !input.closest('.rv-sheet') && !input.closest('.wfs-sheet') && !input.closest('.bulk-grid') && !input.closest('.bulk-h-fixwrap') && !input.closest('.ws-lines')) return;
     const r = input.getBoundingClientRect();
     listEl.classList.add('is-fixed');
     listEl.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 368))}px`;
@@ -9121,11 +9707,15 @@ function ebParseSku(sku) {
   const m = base.match(/(\d+(?:GB|TB))/i);
   const parts = base.split("-").filter(Boolean);
   const last = parts[parts.length - 1] || "";
+  // tokens after the storage size: one = the color, more = a bundle or
+  // accessory SKU (X210-64GB-GRAY-CASE-USBC) that is NOT a color variant
+  const after = m ? base.slice(base.indexOf(m[1]) + m[1].length).split("-").filter(Boolean) : [];
   return {
     cond, base,
     model: m ? base.slice(0, Math.max(0, base.indexOf(m[1]) - 1)) : (parts[0] || ""),
     storage: m ? m[1] : "",
     color: last && !/GB|TB/i.test(last) ? last[0] + last.slice(1).toLowerCase() : "",
+    plain: !!m && after.length === 1,
     // the SKU never spells the brand out — the model token implies it
     // (same heuristic the Temu tab uses)
     brand: /IPAD|IPHONE|APPLE/i.test(s) ? "Apple" : "Samsung",
@@ -9148,8 +9738,19 @@ function ebTitleFor(baseTitle, cond) {
 const EB_SPEC_JUNK = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
 function ebCleanSpecs(specs) {
   const out = {};
-  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = v;
+  // eBay's page renders model numbers with non-breaking hyphens (U+2011);
+  // an MPN carrying them never matches the catalog — plain hyphens here
+  const plainDash = (v) => String(v ?? "").replace(/[\u2010\u2011\u2012\u2013]/g, "-");
+  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = plainDash(v);
   return out;
+}
+
+// eBay category when no live listing lent us one: the two leaf categories
+// this store lists in (owner's upload was refused for an empty category,
+// 2026-09-28 — eBay's upload has no "fill it later")
+const EB_CATEGORY = { tablet: "171485", phone: "9355" }; // Tablets & eBook Readers / Cell Phones & Smartphones
+function ebDefaultCategory(sku, title) {
+  return EB_CATEGORY[tmGuessCat(sku, title || "")] || EB_CATEGORY.phone;
 }
 
 // mirror of main/ebaycsv.js buildDescription: the live preview IS the export
@@ -9295,6 +9896,7 @@ async function ebSelect(sku, scratch) {
     // SKU typed by hand keeps the old open-box default until parsed
     cond: (q && q.cond) || p.cond || (scratch ? "openbox" : "new"),
     stockItemId: (q && q.stockItemId) || "",
+    categoryId: sku ? ebDefaultCategory(sku, q && q.title) : "",
     title: "", price: "", qty: q ? q.qty : 1,
     specs: {}, vars: [], photos: [],
     src: "", item: "",
@@ -9344,7 +9946,10 @@ async function ebSelect(sku, scratch) {
 function ebApplyCard(card, p) {
   ebCur.src = "ebay";
   ebCur.item = card.item || "";
-  ebCur.categoryId = card.categoryId || "";
+  // the card's category (read off the live listing, or typed once) wins;
+  // a card without one falls to the phone/tablet default
+  ebCur.categoryId = card.categoryId || ebDefaultCategory(ebCur.sku, card.title);
+  ebCur.catSrc = card.categoryId ? "card" : "default";
   ebCur.title = ebTitleFor(card.title, ebCur.cond);
   ebCur.price = card.price ? (Math.max(1, card.price * 0.92)).toFixed(2) : "";
   ebCur.specs = ebCleanSpecs(card.specs);
@@ -9386,6 +9991,7 @@ function ebAutoSiblings() {
     if (r.sku === ebCur.sku) continue;
     const ps = ebParseSku(r.sku);
     if (ps.cond !== p.cond || ps.model !== p.model) continue;
+    if (!ps.plain) continue; // -CASE / -BUNDLE SKUs are products of their own, not colors
     if (ebCur.vars.some(v => ebVarSku(v) === r.sku)) continue;
     ebCur.vars.push({ sku: r.sku, storage: ps.storage, color: ps.color, price: "", qty: r.qty, auto: true });
     // one product, one draft: absorbing a sibling retires its own draft
@@ -9412,6 +10018,7 @@ function ebLiveFamily() {
     if (!sku.startsWith(prefix) || inListing.has(sku)) continue;
     if (!it.stockItemId || !chLinked.ebay.has(it.stockItemId)) continue;
     const ps = ebParseSku(sku);
+    if (!ps.plain) continue;
     out.push({ sku, storage: ps.storage, color: ps.color });
   }
   return out;
@@ -9426,6 +10033,14 @@ function renderEbayForm() {
   document.querySelectorAll(".ebay-condbtn").forEach(b => b.classList.toggle("is-on", has && b.dataset.cond === ebCur.cond));
   $("ebVersion").value = has ? (ebCur.version || "US") : "US";
   $("ebVersion").disabled = !has;
+  $("ebCategory").value = has ? (ebCur.categoryId || "") : "";
+  $("ebCategory").disabled = !has;
+  $("ebCategory").classList.toggle("is-missing", has && !ebCur.categoryId);
+  $("ebCategoryHint").textContent = !has ? ""
+    : !ebCur.categoryId ? "required for the CSV upload — eBay refuses a row without one"
+    : ebCur.catSrc === "card" ? "from your live listing of this model — edit to override"
+    : ebCur.catSrc === "typed" ? `saved for every future ${ebParseSku(ebCur.sku).model || ""} listing`
+    : `${ebCur.categoryId === EB_CATEGORY.tablet ? "Tablets & eBook Readers" : "Cell Phones & Smartphones"} — the store default; the Linnworks path takes its own from the configurator`;
   $("ebPrice").value = has ? ebCur.price : "";
   $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
   $("ebQty").value = has ? ebCur.qty : "";
@@ -9488,8 +10103,8 @@ function renderEbayForm() {
   // preview + export note
   $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue, or press New listing.</div>`;
   const missing = [];
-  if (has && !ebCur.photos.length) missing.push("no photos yet");
-  if (has && !ebCur.categoryId) missing.push("no eBay category (copied from a live listing) — fill it on eBay after upload");
+  if (has && !ebCur.photos.length) missing.push("no photos yet — eBay wants at least one");
+  if (has && !ebCur.categoryId) missing.push("no eBay category — the CSV cannot upload without one");
   $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
   $("ebExport").disabled = !has;
   $("ebLwList").disabled = !has;
@@ -9542,6 +10157,23 @@ $("ebVersion").addEventListener("change", (e) => {
   if (!ebCur) return;
   ebCur.version = e.target.value;
   renderEbayForm(); // preview + history + draft in one go
+});
+// a typed category is remembered on the model card, so the next return of
+// the same model (any condition) opens with it
+$("ebCategory").addEventListener("change", async (e) => {
+  if (!ebCur) return;
+  const id = e.target.value.replace(/\D/g, "");
+  ebCur.categoryId = id;
+  ebCur.catSrc = id ? "typed" : "";
+  const model = ebParseSku(ebCur.sku).model;
+  if (id && model && !ebCur.scratch) {
+    const cfg = await ebLoadCfg();
+    const cards = { ...(cfg.ebayModelCards || {}) };
+    cards[model] = { ...(cards[model] || {}), categoryId: id };
+    ebCfg.ebayModelCards = cards;
+    api.setConfig({ ebayModelCards: cards }).catch(() => {});
+  }
+  renderEbayForm();
 });
 $("ebUndo").addEventListener("click", () => ebHistGo(-1));
 $("ebRedo").addEventListener("click", () => ebHistGo(1));
@@ -9605,6 +10237,8 @@ $("ebSku").addEventListener("change", (e) => {
   ebCur.specs = ebManualSpecs(p);
   ebCur.src = "manual";
   ebCur.err = "from-scratch listing";
+  ebCur.categoryId = ebDefaultCategory(sku, "");
+  ebCur.catSrc = "default";
   ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
   renderEbayForm();
 });
@@ -9687,9 +10321,11 @@ $("ebShots").addEventListener("click", async (e) => {
 // the form's state as the payload the export AND the Linnworks publish
 // both send — one assembly, no drift between the two paths
 function ebBuildListingPayload() {
+  // storage + color travel as fields; main/ebaycsv.js writes them in eBay's
+  // upload syntax (`Storage Capacity=64GB|Color=Gray`)
   const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
     sku: ebVarSku(v),
-    details: `Storage=${v.storage};Color=${v.color}`,
+    storage: String(v.storage).trim(), color: String(v.color).trim(),
     price: v.price || ebCur.price, qty: Number(v.qty) || 1,
   }));
   if (vars.length) {
@@ -9698,7 +10334,8 @@ function ebBuildListingPayload() {
     const ps = ebParseSku(ebCur.sku);
     vars.unshift({
       sku: ebCur.sku,
-      details: `Storage=${ps.storage || ebCur.specs["Storage Capacity"] || ""};Color=${ps.color || ebCur.specs["Color"] || ""}`,
+      storage: ps.storage || ebCur.specs["Storage Capacity"] || "",
+      color: ps.color || ebCur.specs["Color"] || "",
       price: ebCur.price, qty: Number(ebCur.qty) || 1,
     });
   }
@@ -9717,6 +10354,7 @@ function ebBuildListingPayload() {
 $("ebExport").addEventListener("click", async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast("Type a SKU first."); return; }
+  if (!String(ebCur.categoryId || "").trim()) { toast("Type the eBay category ID first — eBay refuses an upload row without one."); $("ebCategory").focus(); return; }
   ebBusy = true;
   $("ebExport").textContent = "Exporting…";
   const { vars, listing } = ebBuildListingPayload();
@@ -9755,16 +10393,40 @@ $("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://w
    form's fields overlaid, pushed through Linnworks' stored eBay connection.
    Variations still ride the CSV path. Configurator picks persist per
    condition (they carry the eBay condition, so one per condition). */
-let ebLw = { configs: null, byCond: {}, subSource: '' };
+// error = why the list is empty (Linnworks refused, or it holds none) — the
+// dropdown and the List button both read it out instead of going quiet
+// (owner hit a dead dropdown with no explanation, 2026-09-28)
+let ebLw = { configs: null, byCond: {}, subSource: '', error: '', loading: false };
 
-async function ebLwLoadConfigs() {
-  if (ebLw.configs || (state && state.captureOnly)) { ebLwFillSelect(); return; }
-  ebLw.configs = []; // one load per session; a failure leaves the select disabled
-  const res = await api.ebayLwConfigs().catch(() => null);
+// a short, honest reason for an empty configurator list
+function ebLwReason() {
+  if (ebLw.loading) return 'reading configurators from Linnworks…';
+  if (ebLw.error) {
+    const st = ebLw.error.match(/\((\d{3})\)/);
+    if (st && (st[1] === '403' || st[1] === '401')) return `Linnworks refused (${st[1]}) — the API application needs the Listings permission`;
+    const msg = String(ebLw.error).replace(/\s+/g, ' ').trim();
+    return `Linnworks: ${msg.length > 90 ? msg.slice(0, 87) + '…' : msg}`;
+  }
+  return 'no eBay configurators in Linnworks yet — make one there, then Refresh';
+}
+
+async function ebLwLoadConfigs(force) {
+  if (state && state.captureOnly) { ebLwFillSelect(); return; }
+  if (ebLw.configs && !force) { ebLwFillSelect(); return; }
+  if (ebLw.loading) { ebLwFillSelect(); return; } // a mid-load render keeps the condition current
+  ebLw.loading = true;
+  ebLw.error = '';
+  ebLwFillSelect();
+  const res = await api.ebayLwConfigs().catch(err => ({ ok: false, error: err.message }));
+  ebLw.loading = false;
   if (res && res.ok) {
     ebLw.configs = res.configs || [];
     ebLw.byCond = (res.saved && res.saved.byCond) || {};
     ebLw.subSource = (res.saved && res.saved.subSource) || '';
+  } else {
+    ebLw.configs = [];
+    ebLw.error = (res && res.error) || 'no answer from Linnworks';
+    toast(`Could not read the eBay configurators — ${ebLwReason()}`, 9000);
   }
   ebLwFillSelect();
 }
@@ -9773,9 +10435,15 @@ function ebLwFillSelect() {
   const sel = $('ebLwConfig');
   const cond = ebCur ? ebCur.cond : 'new';
   const list = ebLw.configs || [];
-  sel.innerHTML = `<option value="">configurator for ${esc(cond)}…</option>` + list.map(c =>
+  // an empty list explains itself in the placeholder; the tooltip carries
+  // the full Linnworks message when there is one
+  const head = list.length ? `configurator for ${esc(cond)}…` : esc(ebLwReason());
+  sel.innerHTML = `<option value="">${head}</option>` + list.map(c =>
     `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
   sel.disabled = !list.length;
+  sel.title = list.length
+    ? 'The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)'
+    : ebLwReason();
 }
 
 $('ebLwConfig').addEventListener('change', async () => {
@@ -9790,7 +10458,12 @@ $('ebLwList').addEventListener('click', async () => {
   if (!ebCur || ebBusy) return;
   if (!ebCur.sku) { toast('Type a SKU first.'); return; }
   const configId = ebLw.byCond[ebCur.cond];
-  if (!configId) { toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`); return; }
+  if (!configId) {
+    // no list at all: say WHY, never point at a dropdown that cannot open
+    if (!(ebLw.configs || []).length) { toast(`Cannot list through Linnworks yet — ${ebLwReason()}`, 9000); return; }
+    toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`);
+    return;
+  }
   const { vars, listing } = ebBuildListingPayload();
   if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
   ebBusy = true;
@@ -10376,6 +11049,7 @@ $("ebRefresh").addEventListener("click", () => {
   chLinked = null;
   loadChLinked();
   loadUnlisted(true);
+  ebLwLoadConfigs(true); // a configurator made in Linnworks a minute ago shows up
   toast("Re-scanning listings…", 2000);
 });
 
@@ -10386,11 +11060,18 @@ $("ebRefresh").addEventListener("click", () => {
 // their way), Running low (with an order quantity from the sales pace).
 
 let ovData = null;
+let ovUpdatedAt = null; // when the numbers last came back
 let ovFetching = false;
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ovTone = (days) => days < 5 ? 'r' : days < 10 ? 'a' : 'g';
+// the ring dial: an arc of days out of the target, the number inside
+const OV_DIAL_C = 2 * Math.PI * 15;
+function ovDial(days, target, label) {
+  const frac = target > 0 ? Math.max(0, Math.min(1, days / target)) : 0;
+  return `<div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="${(OV_DIAL_C * frac).toFixed(1)} ${OV_DIAL_C.toFixed(1)}"/></svg><span>${label}<small>d</small></span></div>`;
+}
 const ovShortDate = (iso) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : `${OV_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
@@ -10410,6 +11091,7 @@ async function ovFetch() {
     const r = await api.overviewData().catch(() => null);
     if (r && r.ok) {
       ovData = r;
+      ovUpdatedAt = new Date();
       if (activePage === 'overview') ovRenderAll();
     }
   } finally {
@@ -10426,8 +11108,10 @@ function ovRenderAll() {
   ovRenderWfs();
   ovRenderSold();
   ovRenderLow();
+  $('ovUpdated').textContent = ovUpdatedAt
+    ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // bar widths go through the CSSOM: the CSP blocks inline style attributes
-  $('ovCols').querySelectorAll('.ov-bar i[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+  $('ovCols').querySelectorAll('[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
 }
 
 function ovRenderWfs() {
@@ -10438,53 +11122,55 @@ function ovRenderWfs() {
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
-  // one console-style block per SKU (owner design 2026-09-24, variants/
-  // wfs-row.html): urgency strip | SKU line + mini sheet | SEND over IGNORE.
-  // The SKU line is the Walmart channel SKU that sold most in the last 30
-  // days (the Linnworks SKU when they match); more listings show as +N.
+  // dial rows (owner pick 2026-09-30, variants/ov-runway.html R3): a ring
+  // dial of days at WFS out of the target, SKU + figures, Send N over
+  // Ignore. The SKU shown is the Walmart channel SKU that sold most in the
+  // last 30 days (the Linnworks SKU when they match); more listings show
+  // as +N.
+  const target = plan.targetDays;
   const rowsHtml = plan.rows.map((r) => {
     const t = ovTone(r.coverDays);
     const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
     const head = chs.length ? chs[0].sku : r.sku;
     const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
       `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
-    const left = r.coverDays < 0.05 ? '0 days' : `${r.coverDays.toFixed(1)} days`;
-    return `<div class="ov-wrow ${t}">
-      <div class="ov-wmain">
-        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
-        <div class="ov-wcells"><div>Send</div><div>30-Day Sales</div><div>At WFS</div><div>Left</div>
-          <span>+${r.send}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${r.atWfs}</span><span class="${t}">${left}</span></div>
+    const cover = r.coverDays < 0.05 ? '0' : r.coverDays < 10 ? r.coverDays.toFixed(1) : String(Math.round(r.coverDays));
+    return `<div class="ov-dl ${t}" title="${esc(`${cover} days at WFS out of the ${target}-day target`)}">
+      ${ovDial(r.coverDays, target, cover)}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
+        <div class="ov-dl-meta"><b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${r.atWfs}</b> at WFS${r.flightUnits ? ` · <b>${r.flightUnits}</b> on the way` : ''}</div>
       </div>
-      <div class="ov-wkeys"><button class="ov-wsend" data-ovsend="${esc(r.sku)}">Send</button><button class="ov-wign" data-ovignore="${esc(r.sku)}">Ignore</button></div>
+      <div class="ov-dl-keys"><button class="ov-rw-send" data-ovsend="${esc(r.sku)}" title="Send ${r.send} = ${Math.round(r.perDay * 7)}/wk at WFS × ${target} days − ${r.atWfs} at WFS − ${r.flightUnits || 0} on the way">Send<b>${r.send}</b></button><button class="ov-rw-ign" data-ovignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
     </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
   const onWay = plan.flight.filter(f => f.status !== 'received').reduce((a, f) => a + f.units, 0);
-  // shipments on their way, in the same console-block format as the send
-  // rows (owner 2026-09-24): strip by status | SKU line + mini sheet | key
+  // shipments on their way share the row shape: a blue dial of days out
+  // (full at 14, when an unreceived shipment turns into a Check)
   const flightHtml = plan.flight.map(f => {
     const label = { pending: 'Pending', check: 'Check', received: 'Received' }[f.status];
     const tone = { pending: 'p', check: 'a', received: 'g' }[f.status];
     const first = f.items[0] || { sku: '' };
     const days = Math.max(0, Math.floor((Date.now() - Date.parse(f.createdAt)) / 86400000));
     const tip = f.items.map(i => `${i.sku} ×${i.qty}`).join('\n') + (f.status === 'check' ? '\nNothing marked received in 14+ days - check Seller Center' : '');
-    return `<div class="ov-wrow ${tone}">
-      <div class="ov-wmain">
-        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}${f.note ? `<span class="ov-wnote" title="${esc(f.note)}">${esc(f.note)}</span>` : ''}</div>
-        <div class="ov-wcells"><div>Sent</div><div>Date</div><div>Days out</div><div>Status</div>
-          <span>${f.units.toLocaleString()}</span><span>${ovShortDate(f.createdAt)}</span><span>${days}</span><span class="st-${tone}">${label}</span></div>
+    return `<div class="ov-dl ${tone}" title="${esc(`${days} day${days === 1 ? '' : 's'} out`)}">
+      ${ovDial(days, 14, String(days))}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}</div>
+        <div class="ov-dl-meta"><b>${f.units.toLocaleString()}</b> units · sent <b>${ovShortDate(f.createdAt)}</b> · ${label}${f.note ? `<span class="sep">·</span>${esc(f.note)}` : ''}</div>
       </div>
-      <div class="ov-wkeys">${f.status === 'received'
-        ? `<button class="ov-wign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
-        : `<button class="ov-wsend" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
+      <div class="ov-dl-keys">${f.status === 'received'
+        ? `<button class="ov-rw-ign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
+        : `<button class="ov-rw-send q" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
     </div>`;
   }).join('');
-  box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>
-    ${plan.rows.length ? `<div class="ov-wlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
+  box.innerHTML = `<h4 class="ov-h-g">Send to WFS${wfsSub}</h4>
+    ${plan.rows.length ? `<div class="ov-dlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
-    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-wlist">${flightHtml}</div>` : ''}
-    <div class="ov-more">Send = WFS pace × ${plan.targetDays} days − at WFS − on the way</div>`;
+    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-dlist">${flightHtml}</div>` : ''}
+    <div class="ov-more" title="Send = WFS pace × ${target} days − at WFS − on the way">Dial = days at WFS out of the ${target}-day target</div>`;
 }
 
 function ovRenderSold() {
@@ -10504,15 +11190,24 @@ function ovRenderSold() {
         <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</span><span class="xu">${sold.units}</span></div>
       </div>`
     : '<div class="ov-empty">Nothing sold yet today.</div>';
+  // the marketplace split rides under the number (polish 2026-09-30): a
+  // share bar in the channel colours, then dot · name · units
   const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+  const byCh = sold.byChannel || {};
+  const chTotal = chans.reduce((a, [k]) => a + (byCh[k] || 0), 0);
+  const share = chans.filter(([k]) => byCh[k] > 0)
+    .map(([k]) => `<i class="cn-${k}" data-w="${(byCh[k] / chTotal * 100).toFixed(1)}"></i>`).join('');
+  const legend = chans.map(([k, n]) => `<span class="cn-${k}">${n} <b>${(byCh[k] || 0).toLocaleString()}</b></span>`).join('');
+  const yday = today && Number.isFinite(Number(today.yesterday)) ? today.total - Number(today.yesterday) : null;
+  const vs = yday === null ? '' : yday === 0 ? ' · same as yesterday'
+    : ` · <span class="${yday > 0 ? 'up' : 'down'}">${yday > 0 ? '+' : '−'}${Math.abs(yday)} vs yesterday</span>`;
   box.innerHTML = `
     <div><div class="k">Units sold today</div>
       <div class="big mono">${sold.units.toLocaleString()}</div>
-      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</div></div>
-    ${grid}
-    <div class="ov-chcells">${chans.map(([k, n]) => `
-      <div class="ov-chcell"><div class="cn cn-${k}">${n}</div><div class="cv">${((sold.byChannel || {})[k] || 0).toLocaleString()}</div></div>`).join('')}
-    </div>`;
+      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}${vs}</div>
+      <div class="ov-share">${share}</div>
+      <div class="ov-chlegend">${legend}</div></div>
+    ${grid}`;
 }
 
 function ovRenderLow() {
@@ -10524,27 +11219,29 @@ function ovRenderLow() {
     box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
     return;
   }
-  // console blocks like Send to WFS (owner design 2026-09-24, variants/
-  // low-row.html L1): strip | SKU + sheet | OPEN over IGNORE
+  // dial rows like Send to WFS (variants/ov-runway.html R3): the dial is
+  // days on hand out of the lead time plus the cover days
+  const target = m.leadDays + m.coverDays;
   const rows = plan.rows.map(r => {
     const t = ovTone(r.daysLeft);
     const tip = `${r.avail} on shelf${r.atWfs ? ` · ${r.atWfs} at WFS` : ''} · ${r.perDay.toFixed(1)}/day · out ~${r.outOn}`;
-    return `<div class="ov-wrow ${t}">
-      <div class="ov-wmain">
-        <div class="ov-wid"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span>${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}</div>
-        <div class="ov-wcells ov-lcells"><div>Order</div><div>30-Day Sales</div><div>On hand</div><div>Left</div>
-          <span class="o">${r.order}</span><span>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</span><span>${(r.avail + r.atWfs).toLocaleString()}</span><span class="${t}">${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'}</span></div>
+    return `<div class="ov-dl ${t}" title="${esc(`${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days`)}">
+      ${ovDial(r.daysLeft, target, String(r.daysLeft))}
+      <div class="ov-dl-body">
+        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span></div>
+        <div class="ov-dl-meta">${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}<b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${(r.avail + r.atWfs).toLocaleString()}</b> on hand${r.daysLeft > 0 && r.outOn ? ` · out <b>${esc(String(r.outOn))}</b>` : ''}</div>
       </div>
-      <div class="ov-wkeys"><button class="ov-wopen" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock">Open</button><button class="ov-wign" data-ovlowignore="${esc(r.sku)}">Ignore</button></div>
+      <div class="ov-dl-keys"><button class="ov-rw-send o" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock · order ${r.order} = ${r.perDay.toFixed(1)}/day × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Order<b>${r.order}</b></button><button class="ov-rw-ign" data-ovlowignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
     </div>`;
   }).join('');
   const undo = plan.ignored.length
     ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovlowunignore>Undo</a></div>` : '';
-  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${m.leadDays}-day lead time</span></h4>
-    ${plan.rows.length ? `<div class="ov-wlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
+  const lowN = plan.rows.length + (Number(plan.more) || 0);
+  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${lowN ? `<b>${lowN}</b> SKU${lowN === 1 ? '' : 's'} · ` : ''}${m.leadDays}-day lead time</span></h4>
+    ${plan.rows.length ? `<div class="ov-dlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
     ${undo}
     ${plan.more ? `<div class="ov-more">+ ${plan.more} more — <a data-ovlow>open Stock</a></div>` : ''}
-    <div class="ov-more">Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock</div>`;
+    <div class="ov-more" title="Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Dial = days on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days</div>`;
 }
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after

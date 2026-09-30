@@ -2,12 +2,17 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.4 highlights
+
+- **Wholesale invoices** (Stock page › Actions › Wholesale invoices…, per-station opt-in under Settings › Pages on this station, off by default). The list opens first; New invoice is a QuickBooks-shaped sheet: customer (saved as you go, picked from a dropdown next time), invoice number and date, lines of SKU / description / qty / rate / amount, note, ship via, totals. Only SKU and qty are required; rate and shipping can stay blank. Saving deducts the units from the primary location (same path as WFS shipments) and every line lands in the SKU's Stock history as a WHOLESALE entry; Void puts the units back and keeps the invoice as a struck-through record. Each line has a serial-numbers popup: scan or type, Enter saves that serial at once, ✕ removes one, duplicates are flagged, Export CSV. Print saves the invoice as a PDF. Customers, invoices and serials ride the shared log folder (`wholesale-customers-STATION.jsonl`, `wholesale-invoices-…`, `wholesale-serials-…`, newest snapshot wins) so every desktop sees one list; `wholesale-orders.csv` mirrors the lines beside the daily CSVs.
+- Folds in the parallel branches of the same week: the Stock band's Actions menu (Mappings, WFS Shipments, Bulk import, channel-SKU CSV exports), the Overview dial rows for Send to WFS and Running low, sold prices without sales tax, and the eBay lister CSV eBay accepts.
+
 ## v1.3.0 highlights
 
 - **Capture is a work queue**: Linnworks open orders auto-drop as pending rows (every 5 min; WFS location excluded); untouched rows auto-remove when an order leaves open orders (cancellations). Marketplace filter chips, persistent search (PO#/SKU/channel SKU/title/tracking/notes), stacked item lines with thumbnails, ⚠ unmapped-listing flags, channel-SKU info dots, DS badges on dropship-routed rows.
 - **Click a PO#** to select the row and open the order on its marketplace (per-channel URL templates); tracking is scanned/typed into the row's inline box (global scan box and clipboard auto-capture removed in sync mode; capture-only stations unchanged).
 - **Returns page**: look up the processed order, grade each unit New/Open box/Used/Scrap, and stock auto-redirects to the mapped condition listing (suffix auto-derive + remembered one-time picks). Returns ledger + `returns.csv`, note on the original order.
-- **Receiving moved into the Stock page** (dialog beside WFS Shipments). Stock SKUs click through to their linked channel SKUs.
+- **Receiving moved into the Stock page** (dialog beside WFS Shipments). Since v1.28.25 the Stock band's Bulk import, Mappings, WFS Shipments and channel-SKU exports sit behind one **Actions ▾** menu. Stock SKUs click through to their linked channel SKUs.
 - Resizable everything: sheet-width handles and per-column grips on Capture and Stock, all persisted.
 
 ## v1.1.0 highlights
@@ -51,6 +56,8 @@ npm run dist
 ```
 
 Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%APPDATA%/capture-station`). The DB is backed up automatically to `userData/backups` on every app close (14 kept). `File > Export Today to CSV` exports a copy anywhere.
+
+**Channel SKU export.** Stock page > **Actions ▾** > Export Walmart / eBay / Temu SKUs (or `File > Export Channel SKUs`) saves the marketplace listings that are mapped to a Linnworks item to an Excel workbook (styled header, sized columns, frozen header row, filters; pick CSV in the save dialog for a plain file): inventory SKU, channel SKU, title, condition (New / Open Box / Used / Scrap, classified by the same `stockViews` patterns as the Stock chips), listed qty, price, WFS flag, source/sub-source. With a condition chip active on the Stock page the Actions-menu exports cover only that slice (file name carries the condition). Unmapped listings are left out. Sync mode only.
 
 ## Linnworks setup (sync mode only)
 

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview — polish pass (real styles.css)</title>
+<!--
+  2026-09-30: the shipped three-column Overview (K3 blocks) with a polish
+  pass, rendered on the real styles.css with the markup renderer.js emits.
+    - header: "Updated 4:12 PM" next to the refresh icon
+    - Sold today: the marketplace split rides right under the big number as
+      a share bar + legend (it used to sit under the grid, off-screen on a
+      long day); orders vs yesterday on the sub line
+    - Send to WFS / Running low headers say how much work is in the column
+      ("7 SKUs · 390 units", "8 SKUs · 7-day lead")
+    - blocks: the grey label band and its vertical rules are gone - labels
+      sit right above their values; the urgency tint fills the whole Left
+      column; Faster is a small red pill
+  Later the same day the two right columns became dial rows (owner pick
+  R3 in ov-runway.html); this file shows the whole page as shipped.
+  Open in any browser next to ../styles.css.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; }
+  .tabs-wrap { display: flex; justify-content: center; padding: 14px 0 0; }
+</style>
+</head>
+<body>
+<div class="tabs-wrap"><div class="tabs"><button class="tab is-active">Overview</button><button class="tab">Capture</button><button class="tab">Stock</button><button class="tab">Pricing</button><button class="tab">Returns ▾</button><button class="tab">Listings ▾</button></div></div>
+<section id="overviewPage" class="ov-page">
+  <div class="ov-sheet-row">
+  <div class="ov-wrap" id="ovWrap">
+    <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate">Wednesday, September 30</span>
+      <span class="ov-updated" id="ovUpdated">Updated 4:12 PM</span>
+      <button id="ovRefreshBtn" class="cap-ico ov-refresh" title="Refresh the numbers now" aria-label="Refresh">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></button>
+    </div>
+    <div class="ov-cols" id="ovCols">
+      <div class="ov-panel ov-today ov-sold" id="ovSold">
+        <div><div class="k">Units sold today</div>
+          <div class="big mono">20</div>
+          <div class="delta">20 orders · 15 SKUs · <span class="up">+4 vs yesterday</span></div>
+          <div class="ov-share"><i class="cn-walmart" data-w="95"></i><i class="cn-ebay" data-w="5"></i></div>
+          <div class="ov-chlegend"><span class="cn-walmart">Walmart <b>19</b></span><span class="cn-ebay">eBay <b>1</b></span><span class="cn-temu">Temu <b>0</b></span></div></div>
+        <div class="ov-xgrid ov-xgrid-full ov-soldgrid">
+          <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
+          <div class="ov-feedrow"><span class="xrn">1</span><span class="xsku">X133-64GB-GRAY</span><span class="xu">4</span></div>
+          <div class="ov-feedrow"><span class="xrn">2</span><span class="xsku">X230-128GB-GRAY</span><span class="xu">2</span></div>
+          <div class="ov-feedrow"><span class="xrn">3</span><span class="xsku">X230-256GB-SILVER</span><span class="xu">2</span></div>
+          <div class="ov-feedrow"><span class="xrn">4</span><span class="xsku">OPEN-BOX-X133-64GB-GRAY</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">5</span><span class="xsku">S26-256GB-BLACK</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">6</span><span class="xsku">S26-PLUS-256GB-WHITE</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">7</span><span class="xsku">S26-ULTRA-256GB-BLACK</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">8</span><span class="xsku">S26-ULTRA-256GB-BLUE</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">9</span><span class="xsku">S26-ULTRA-256GB-VIOLET</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">10</span><span class="xsku">X133-128GB-GRAY</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">11</span><span class="xsku">X135-64GB-GRAY</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">12</span><span class="xsku">X135-64GB-SILVER</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">13</span><span class="xsku">X210-64GB-GRAY</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">14</span><span class="xsku">X520-128GB-SILVER</span><span class="xu">1</span></div>
+          <div class="ov-feedrow"><span class="xrn">15</span><span class="xsku">X620-128GB-GRAY</span><span class="xu">1</span></div>
+          <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · 15 SKUs</span><span class="xu">20</span></div>
+        </div>
+      </div>
+      <div class="ov-panel" id="ovWfs"><h4 class="ov-h-g">Send to WFS<span class="sub"><b>7</b> SKUs · <b>411</b> units</span></h4>
+        <div class="ov-dlist"><div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X230-128GB-GRAY-GLOBAL-1</span></div><div class="ov-dl-meta"><b>31</b> sold · <b>0</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>129</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X135-64GB-GRAY-LTE</span></div><div class="ov-dl-meta"><b>128</b> sold · <b>0</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>58</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X230-256GB-GRAY-GLOBAL-1</span></div><div class="ov-dl-meta"><b>3</b> sold · <b>0</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>3</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X230-256GB-SILVER-GLOBAL-1</span></div><div class="ov-dl-meta"><b>30</b> sold · <b>0</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>65</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X400-128GB-BLACK-INTL-VER</span></div><div class="ov-dl-meta"><b>60</b> sold · <b>0</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>95</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="3.1 94.2"/></svg><span>1<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">SM-X620 GRAY</span><span class="ov-wmore">+1</span></div><div class="ov-dl-meta"><b>25</b> sold · <b>1</b> at WFS</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>21</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl a"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="21.7 94.2"/></svg><span>6.9<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X133-128GB-GRAY</span></div><div class="ov-dl-meta"><b>52</b> sold · <b>12</b> at WFS · <b>12</b> on the way</div></div><div class="ov-dl-keys"><button class="ov-rw-send">Send<b>40</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+</div>
+        <div class="ov-undo">1 ignored for 7 days (X135-64GB-SILVER-LTE)<a>Undo</a></div>
+        <div class="ov-sec">On the way to WFS<span class="n">84 units</span></div><div class="ov-dlist"><div class="ov-dl p"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="26.9 94.2"/></svg><span>4<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X133-64GB-GRAY</span><span class="ov-wmore">+2</span></div><div class="ov-dl-meta"><b>84</b> units · sent <b>Sep 26</b> · Pending<span class="sep">·</span>WFS: X133-64GB-GRAY-1</div></div><div class="ov-dl-keys"><button class="ov-rw-send q">Received</button></div></div></div>
+        <div class="ov-more">Dial = days at WFS out of the 30-day target</div></div>
+      <div class="ov-panel" id="ovLow"><h4 class="ov-h-a">Running low<span class="sub"><b>9</b> SKUs · 7-day lead time</span></h4>
+        <div class="ov-dlist"><div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">A15-128GB-BLACK</span></div><div class="ov-dl-meta"><span class="ov-wfast">Faster</span><b>39</b> sold · <b>0</b> on hand</div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>40</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">USED-X133-64GB-GRAY</span></div><div class="ov-dl-meta"><span class="ov-wfast">Faster</span><b>11</b> sold · <b>0</b> on hand</div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>15</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X306-128GB-GREEN</span></div><div class="ov-dl-meta"><span class="ov-wfast">Faster</span><b>11</b> sold · <b>0</b> on hand</div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>15</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl r"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.0 94.2"/></svg><span>0<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">OPEN-BOX-X610-128GB-BLACK</span></div><div class="ov-dl-meta"><span class="ov-wfast">Faster</span><b>10</b> sold · <b>0</b> on hand</div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl a"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="26.9 94.2"/></svg><span>6<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">X620-128GB-SILVER</span></div><div class="ov-dl-meta"><b>7</b> sold · <b>2</b> on hand · out <b>Oct 6</b></div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+<div class="ov-dl g"><div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="53.9 94.2"/></svg><span>12<small>d</small></span></div><div class="ov-dl-body"><div class="ov-dl-top"><span class="ov-wsku">OPEN-BOX-X210-64GB-GRAY</span></div><div class="ov-dl-meta"><b>7</b> sold · <b>4</b> on hand · out <b>Oct 12</b></div></div><div class="ov-dl-keys"><button class="ov-rw-send o">Order<b>10</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+</div>
+        <div class="ov-more">+ 3 more — <a>open Stock</a></div>
+        <div class="ov-more">Dial = days on hand out of the 7-day lead + 14 days</div></div>
+    </div>
+  </div>
+  <div id="ovGrip" class="sheet-grip" title="Drag to widen or narrow the page · double-click to reset"></div>
+  </div>
+</section>
+<script>
+  // the app sets these through the CSSOM (CSP); the mock does the same
+  document.querySelectorAll('[data-w]').forEach(i => { i.style.width = i.dataset.w + '%'; });
+  document.querySelectorAll('[data-l]').forEach(i => { i.style.left = i.dataset.l + '%'; });
+</script>
+</body>
+</html>
