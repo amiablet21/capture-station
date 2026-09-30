@@ -4876,7 +4876,8 @@ th:last-child > .col-grip { right: 0; }
    hid the Close button) */
 .dlg-sh .dlg-body { display: flex; flex-direction: column; overflow: hidden; }
 .dlg-sh #stockHistBody { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.dlg-sh #stockHistBody > .sh-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.dlg-sh #stockHistBody > .sh-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; height: 56vh; }
+.dlg-sh .sh-list.sh-empty { display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12.5px; }
 .dlg-sh #stockHistBody > :not(.sh-list) { flex: 0 0 auto; }
 .dlg-sh .sales-head { align-items: center; }
 .sh-x { margin-left: auto; margin-right: -6px; align-self: flex-start; }
@@ -4953,7 +4954,9 @@ th:last-child > .col-grip { right: 0; }
 .sh-dd-btn .ret-dd-caret { margin-left: 2px; }
 .sh-dd-btn.has-sel { border-color: var(--accent); color: var(--accent-soft-text); background: var(--accent-soft); font-weight: 600; }
 .sh-dd-btn.has-sel .ret-dd-caret { color: var(--accent-soft-text); }
-.sh-dd-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; z-index: 70; }
+/* fixed, placed under its button on open: the history dialog's body
+   clips overflow and used to cut the menu off (owner 2026-09-30) */
+.sh-dd-menu { position: fixed; min-width: 220px; z-index: 70; }
 .sh-dd-menu .ret-dd-mi { padding: 7px 12px; font-size: 12.5px; user-select: none; }
 .sh-dd-menu .ret-dd-mi input { width: 14px; height: 14px; accent-color: var(--accent); margin: 0; }
 .sh-dd-menu .ret-dd-mi:has(input:checked) { background: var(--accent-soft); font-weight: 600; }

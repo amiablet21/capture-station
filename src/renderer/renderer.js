@@ -6473,6 +6473,15 @@ function shDdWire(boxId, set, onChange) {
     shDdCloseAll();
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      // fixed-position: sit under the button, clamped inside the window
+      const r = btn.getBoundingClientRect();
+      menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)))}px`;
+      menu.style.top = `${Math.round(r.bottom + 6)}px`;
+      const over = r.bottom + 6 + menu.offsetHeight - window.innerHeight + 8;
+      if (over > 0) menu.style.maxHeight = `${menu.offsetHeight - over}px`; else menu.style.maxHeight = '';
+      menu.style.overflowY = over > 0 ? 'auto' : '';
+    }
   });
   menu.addEventListener('change', (ev) => {
     const i = ev.target;
@@ -6615,9 +6624,11 @@ function renderStockHistory() {
     && (!shDlg.acts.size || shDlg.acts.has(shActionOf(e))));
   shDdSync('shPcDd', shDlg.pcs, 'Everyone', v => v);
   shDdSync('shActDd', shDlg.acts, 'All actions', shWordCase);
+  // the empty states take the list's slot at the same height, so the
+  // dialog never shrinks under an open filter menu
   const list = shown.length
     ? `<div class="history-list sh-list"><div class="history-day">${shown.map(e => shRowHtml(e, false, true)).join('')}</div></div>`
-    : `<p class="dlg-note">${rows.length ? 'No changes match those filters.' : ''}</p>`;
+    : `<div class="sh-list sh-empty">${rows.length ? 'No changes match those filters.' : 'Nothing logged for this SKU yet.'}</div>`;
   $('stockHistBody').innerHTML = strip + list;
 }
 
