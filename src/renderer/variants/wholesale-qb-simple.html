@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Wholesale — invoice, app styling</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  /* the app's own tokens (styles.css :root) */
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06);
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --neg-bg:#FDEBEC; --neg-text:#9F2F2D; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --r-modal:12px; --r-ctl:6px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 70px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:860px; }
+  .opt { margin-bottom:48px; max-width:900px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:14px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .cap { font-size:11px; color:var(--faint); margin-top:8px; max-width:880px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .ph { color:var(--faint); }
+
+  /* app controls, verbatim from styles.css */
+  .btn { font-family:var(--font); font-size:13px; font-weight:500; padding:7px 14px; border-radius:var(--r-ctl); border:1px solid transparent; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--muted); border-color:var(--border); }
+  .input { display:flex; align-items:center; font-family:var(--font); font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface); color:var(--text); min-width:0; height:33px; }
+  .input .caret { margin-left:auto; color:var(--faint); font-size:10px; padding-left:8px; }
+  .input.f { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .field-label { display:block; font-size:12px; font-weight:500; color:var(--muted); margin-bottom:4px; }
+  .dlg { width:900px; max-width:100%; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-modal); box-shadow:0 16px 48px rgba(47,52,55,0.10); overflow:hidden; }
+  .dlg-body { padding:20px; }
+  .dlg-title { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:14px; display:flex; align-items:center; }
+  .dlg-title .no { font-family:var(--mono); color:var(--muted); font-weight:500; margin-left:8px; }
+  .dlg-x { margin-left:auto; color:var(--faint); font-size:12px; }
+  .dlg-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; background:var(--surface-2); border-top:1px solid var(--border); padding:12px 20px; }
+  .dlg-actions .sum { margin-right:auto; font-size:12px; color:var(--muted); }
+  .dlg-actions .sum b { font-family:var(--mono); color:var(--neg-text); }
+
+  /* header row: customer + no + date */
+  .head { display:grid; grid-template-columns:1fr 120px 120px; gap:0 12px; align-items:start; margin-bottom:16px; }
+  .who { font-size:12px; color:var(--muted); margin-top:5px; line-height:1.4; }
+  .who .mono { font-size:11.5px; }
+  .who a { color:var(--accent-soft-text); font-weight:600; margin-left:8px; }
+
+  /* the lines: app table headers (10px uppercase faint on surface-2) */
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  th { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--faint); text-align:left; padding:7px 8px; background:var(--surface-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  th.r, td.r { text-align:right; }
+  td { padding:5px 8px; border-bottom:1px solid var(--border-soft); vertical-align:middle; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cell { display:block; height:30px; line-height:28px; padding:0 8px; border:1px solid transparent; border-radius:var(--r-ctl); overflow:hidden; text-overflow:ellipsis; }
+  tr:hover .cell, tr.on .cell { border-color:var(--border); background:var(--surface); }
+  .cell.f { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .cell.r { text-align:right; }
+  .sku { font-family:var(--mono); font-weight:600; font-size:12.5px; }
+  .stock { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .stock .to { color:var(--neg-text); font-weight:600; }
+  .amt { font-family:var(--mono); font-weight:600; }
+  .x { color:var(--faint); font-size:11px; text-align:center; }
+  .sug { position:relative; overflow:visible; }
+  .sug-list { position:absolute; left:8px; top:calc(100% - 3px); width:420px; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px rgba(47,52,55,0.16); z-index:5; white-space:normal; overflow:hidden; }
+  .sug-o { display:flex; align-items:baseline; gap:10px; padding:7px 12px; font-size:12.5px; border-top:1px solid var(--border-soft); }
+  .sug-o:first-child { border-top:none; }
+  .sug-o.hl { background:var(--accent-soft); }
+  .sug-o.hl .t { color:var(--accent-soft-text); }
+  .sug-o .t { color:var(--muted); font-size:11.5px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sug-o .s { font-family:var(--mono); font-size:11px; color:var(--faint); white-space:nowrap; }
+  .addrow { display:flex; gap:8px; margin:10px 0 20px; }
+
+  /* bottom: note left, totals right */
+  .bot { display:grid; grid-template-columns:1fr 290px; gap:28px; align-items:start; }
+  .note .input { height:auto; min-height:64px; align-items:flex-start; }
+  .tot .row { display:flex; align-items:center; justify-content:space-between; padding:5px 0; font-size:12.5px; color:var(--muted); }
+  .tot .row .v { font-family:var(--mono); color:var(--text); }
+  .tot .ship { display:flex; gap:6px; }
+  .tot .ship .input { height:28px; font-size:12px; padding:0 8px; }
+  .tot .row.total { border-top:1px solid var(--border); margin-top:4px; padding-top:9px; color:var(--text); font-weight:600; }
+  .tot .row.total .v { font-size:18px; font-weight:700; letter-spacing:-0.02em; }
+  .stockbox { margin-top:10px; background:var(--yellow-bg); color:var(--yellow); border-radius:var(--r-ctl); padding:7px 10px; font-size:12px; }
+  .stockbox b { font-family:var(--mono); }
+
+  /* customer dropdown = the app's combo list */
+  .dd { position:relative; }
+  .combo-list { position:absolute; left:0; top:calc(100% + 4px); width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px rgba(47,52,55,0.16); z-index:5; overflow:hidden; }
+  .combo-opt { padding:8px 12px; border-top:1px solid var(--border-soft); }
+  .combo-opt:first-child { border-top:none; }
+  .combo-opt.hl { background:var(--accent-soft); }
+  .combo-opt b { display:block; font-weight:600; font-size:12.5px; }
+  .combo-opt small { color:var(--muted); font-size:11.5px; }
+  .combo-opt.hl small { color:var(--accent-soft-text); }
+  .combo-addnew { color:var(--accent-soft-text); font-weight:600; background:var(--surface-2); }
+  .newc { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; margin-top:8px; }
+  .newc .wide { grid-column:1 / -1; }
+
+  /* the list */
+  .ltop { display:flex; align-items:center; gap:10px; padding:16px 20px 12px; }
+  .ltop .dlg-title { margin:0; }
+  .ltop .input { margin-left:auto; width:270px; }
+  .lt th:first-child, .lt td:first-child { padding-left:20px; }
+  .lt th:last-child, .lt td:last-child { padding-right:20px; }
+  .lt td { padding:9px 8px; font-size:12.5px; }
+  .lt .no { font-family:var(--mono); color:var(--muted); }
+  .lt .c { font-weight:600; }
+  .lt .it { color:var(--muted); font-size:12px; }
+  .lt .it .mono { color:var(--text); }
+  .lt .act { color:var(--accent-soft-text); font-weight:600; }
+  .lt .act .caret { color:var(--faint); margin-left:5px; font-size:10px; }
+  .lt tr.void td { color:var(--faint); }
+  .lt tr.void td.c, .lt tr.void td.no, .lt tr.void td.amt { text-decoration:line-through; }
+  .lt tr.void .tag { display:inline-block; }
+  .lt tr.void td.act { text-decoration:none; color:var(--faint); }
+  .lt .tag { display:inline-block; font-size:10px; font-weight:600; padding:1px 7px; border-radius:999px; background:var(--surface-2); color:var(--muted); text-decoration:none; margin-left:6px; }
+</style>
+</head>
+<body>
+
+<h1>Wholesale — the invoice, in the app's own styling</h1>
+<div class="sub">The QuickBooks invoice layout (customer and number up top, lines, note left, totals right) drawn with the app's own pieces: its dialog, its buttons, its inputs, its table headers, its green. No terms, due date, email, discount, amount received, attachments or recurring.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1 · The invoice</b><span>two lines in, third being typed</span></div>
+  <div class="dlg">
+    <div class="dlg-body">
+      <div class="dlg-title">Wholesale invoice<span class="no">#2041</span><span class="dlg-x">✕</span></div>
+      <div class="head">
+        <div><span class="field-label">Customer</span><div class="input">Bright Tech Distributors<span class="caret">▼</span></div>
+          <div class="who">Marcus Lee · 1420 Commerce St, Houston TX 77002 · <span class="mono">marcus@brighttechdist.com</span><a>edit</a></div></div>
+        <div><span class="field-label">Invoice no.</span><div class="input mono">2041</div></div>
+        <div><span class="field-label">Date</span><div class="input">9/30/2026</div></div>
+      </div>
+
+      <table>
+        <colgroup><col style="width:200px"><col><col style="width:126px"><col style="width:68px"><col style="width:92px"><col style="width:100px"><col style="width:30px"></colgroup>
+        <thead><tr><th>SKU</th><th>Description</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="cell sku">X133-64GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9 64GB Graphite</span></td><td class="r stock">1,974 → <span class="to">1,964</span></td><td><span class="cell r mono">10</span></td><td><span class="cell r mono">118.00</span></td><td class="r amt">1,180.00</td><td class="x">✕</td></tr>
+          <tr><td><span class="cell sku">X210-128GB-GRAY</span></td><td><span class="cell">Galaxy Tab A9+ 128GB Graphite</span></td><td class="r stock">736 → <span class="to">734</span></td><td><span class="cell r mono">2</span></td><td><span class="cell r mono">157.00</span></td><td class="r amt">314.00</td><td class="x">✕</td></tr>
+          <tr class="on"><td class="sug"><span class="cell f sku">X133-64<span class="ph" style="font-family:var(--font);font-weight:400">|</span></span>
+            <div class="sug-list">
+              <div class="sug-o hl"><span class="sku">X133-64GB-SILVER</span><span class="t">Galaxy Tab A9 64GB Silver</span><span class="s">634 · last 118.00</span></div>
+              <div class="sug-o"><span class="sku">X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB Graphite · on line 1</span><span class="s">1,974</span></div>
+              <div class="sug-o"><span class="sku">OPEN-BOX-X133-64GB-GRAY</span><span class="t">Galaxy Tab A9 64GB, open box</span><span class="s">12</span></div>
+            </div></td><td><span class="cell ph">fills from the item</span></td><td class="r stock ph">—</td><td><span class="cell r mono ph">1</span></td><td><span class="cell r mono ph">0.00</span></td><td class="r amt ph">0.00</td><td class="x">✕</td></tr>
+        </tbody>
+      </table>
+      <div style="height:92px"></div>
+      <div class="addrow"><span class="btn btn-ghost">＋ Add line</span><span class="btn btn-ghost">Scan barcode</span></div>
+
+      <div class="bot">
+        <div class="note"><span class="field-label">Note</span><div class="input ph">PO#, payment terms, who picked it up…</div></div>
+        <div class="tot">
+          <div class="row"><span>Subtotal · 12 units</span><span class="v">$1,494.00</span></div>
+          <div class="row"><span>Shipping</span><span class="ship"><span class="input">UPS<span class="caret">▼</span></span><span class="input mono ph" style="width:90px">tracking</span><span class="input mono" style="width:68px">24.50</span></span></div>
+          <div class="row total"><span>Total</span><span class="v">$1,518.50</span></div>
+          <div class="stockbox">Save takes <b>12 units</b> off Digital World Shop</div>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-actions"><span class="sum">also writes wholesale-orders.csv</span><span class="btn btn-ghost">Cancel</span><span class="btn btn-ghost">Print</span><span class="btn btn-primary">Save</span></div>
+  </div>
+  <div class="cap">Only SKU and Qty are required. Rate can stay 0.00, shipping can stay blank. The customer's saved details sit in one gray line under the box with an “edit” link.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>2 · Customer</b><span>the app's combo list, “+ New customer” first, and what a new customer asks for</span></div>
+  <div class="dlg" style="width:520px; padding:20px 20px 150px; overflow:visible;">
+    <div class="dd"><span class="field-label">Customer</span><div class="input f">Sun<span class="caret">▼</span></div>
+      <div class="combo-list">
+        <div class="combo-opt combo-addnew">＋ New customer “Sun”</div>
+        <div class="combo-opt hl"><b>Sunbelt Wireless LLC</b><small>Phoenix, AZ · 1 invoice</small></div>
+        <div class="combo-opt"><b>Sunrise Electronics Depot</b><small>Orlando, FL · 3 invoices</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="dlg" style="width:520px; padding:20px; margin-top:14px;">
+    <span class="field-label">New customer</span>
+    <div class="input f">Sun Valley Tech Resale</div>
+    <div class="newc">
+      <div class="input ph">Contact</div><div class="input ph">Phone</div>
+      <div class="input ph wide">Email</div>
+      <div class="input ph wide">Address</div>
+    </div>
+    <div class="cap" style="margin-top:10px">Name is the only required field. Saved with the invoice.</div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>3 · Invoices</b><span>what the Wholesale button opens — a list, a search box, New invoice</span></div>
+  <div class="dlg">
+    <div class="ltop"><div class="dlg-title">Wholesale invoices</div><div class="input ph">Search customer, invoice no. or SKU</div><span class="btn btn-primary">New invoice</span></div>
+    <table class="lt">
+      <colgroup><col style="width:112px"><col style="width:64px"><col style="width:240px"><col><col style="width:64px"><col style="width:100px"><col style="width:96px"></colgroup>
+      <thead><tr><th>Date</th><th>No.</th><th>Customer</th><th>Items</th><th class="r">Units</th><th class="r">Total</th><th class="r">Action</th></tr></thead>
+      <tbody>
+        <tr><td>9/26/2026</td><td class="no">2038</td><td class="c">Bright Tech Distributors</td><td class="it"><span class="mono">X133-64GB-GRAY</span> ×40</td><td class="r mono">40</td><td class="r amt">$4,720.00</td><td class="r act">Print<span class="caret">▼</span></td></tr>
+        <tr><td>9/19/2026</td><td class="no">2031</td><td class="c">Metro Cell &amp; Tablet</td><td class="it"><span class="mono">X210-128GB-GRAY</span> ×6</td><td class="r mono">6</td><td class="r amt">$942.00</td><td class="r act">Print<span class="caret">▼</span></td></tr>
+        <tr><td>9/12/2026</td><td class="no">—</td><td class="c">Sunbelt Wireless LLC</td><td class="it"><span class="mono">A15-64GB-BLACK</span> ×3</td><td class="r mono">3</td><td class="r amt ph">—</td><td class="r act">Edit<span class="caret">▼</span></td></tr>
+        <tr class="void"><td>9/4/2026</td><td class="no">2025</td><td class="c">Sunrise Electronics Depot <span class="tag">voided · put back</span></td><td class="it"><span class="mono">X400-128GB-GRAY</span> ×5</td><td class="r mono">5</td><td class="r amt">$1,075.00</td><td class="r act">View</td></tr>
+        <tr><td>8/30/2026</td><td class="no">2019</td><td class="c">Sunrise Electronics Depot</td><td class="it"><span class="mono">X133-64GB-GRAY</span> ×20 · +2 more</td><td class="r mono">30</td><td class="r amt">$3,585.00</td><td class="r act">Print<span class="caret">▼</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cap">The ▼ next to Print holds Edit and Void. Void is the undo: units go back on the shelf and the row stays, struck through.</div>
+</div>
+
+</body>
+</html>
