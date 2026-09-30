@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Wholesale — three ways</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06); --rule:#E4E2DD;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-hover:#065F46; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --neg-bg:#FDEBEC; --neg-text:#9F2F2D; --yellow-bg:#FBF3DB; --yellow:#956400; --blue-bg:#E1F3FE; --blue:#1F6C9F;
+    --r-modal:12px; --r-ctl:6px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 70px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:860px; }
+  .opt { margin-bottom:52px; max-width:960px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:14px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .cap { font-size:11px; color:var(--faint); margin-top:8px; max-width:900px; }
+  .ph { color:var(--faint); }
+  .k { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--faint); }
+  .btn { font-family:var(--font); font-size:13px; font-weight:500; padding:7px 14px; border-radius:var(--r-ctl); border:1px solid transparent; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--muted); border-color:var(--border); }
+  .btn-secondary { background:var(--accent-soft); color:var(--accent-soft-text); }
+  .input { font-family:var(--font); font-size:13px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface); color:var(--text); }
+  .input.focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .neg { color:var(--neg-text); }
+  .pill { display:inline-block; font-size:10px; font-weight:600; padding:1px 7px; border-radius:999px; white-space:nowrap; }
+  .pill-g { background:var(--accent-soft); color:var(--accent-soft-text); }
+  .pill-y { background:var(--yellow-bg); color:var(--yellow); }
+  .pill-b { background:var(--blue-bg); color:var(--blue); }
+  .dlg { border-radius:var(--r-modal); background:var(--surface); box-shadow:0 16px 48px rgba(47,52,55,0.14); border:1px solid var(--border); overflow:hidden; }
+
+  /* ============ A · pick from the shelf ============ */
+  .a { width:940px; max-width:100%; display:grid; grid-template-columns:1fr 340px; }
+  .a-shelf { padding:16px 18px 0; min-width:0; border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .a-title { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; }
+  .a-title h2 { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .a-title .hint { font-size:11.5px; color:var(--faint); }
+  .a-search { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .a-search .input { flex:1; }
+  .a-search .chips { display:flex; gap:2px; background:#EFEEEA; border-radius:10px; padding:3px; }
+  .a-search .chips span { font-size:11.5px; padding:3px 9px; border-radius:8px; color:var(--muted); white-space:nowrap; }
+  .a-search .chips span.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 3px rgba(47,52,55,0.08); }
+  .a-rows { border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:16px; }
+  .a-row { display:grid; grid-template-columns:1fr 120px 100px; align-items:center; gap:8px; padding:8px 12px; border-top:1px solid var(--border-soft); }
+  .a-row:first-child { border-top:none; }
+  .a-row.in { background:#F4FAF6; }
+  .a-row .sku { font-family:var(--mono); font-weight:600; font-size:12.5px; }
+  .a-row .ttl { font-size:11.5px; color:var(--muted); }
+  .a-row .st { text-align:right; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .a-row .st.low { color:var(--yellow); }
+  .a-row .st .after { color:var(--neg-text); font-weight:600; }
+  .a-row .add { justify-self:end; }
+  .step { display:inline-flex; align-items:center; border:1px solid var(--accent); border-radius:6px; overflow:hidden; background:var(--surface); }
+  .step span { padding:3px 8px; font-family:var(--mono); font-size:12px; }
+  .step .sb { color:var(--accent-soft-text); font-weight:700; background:var(--accent-soft); font-family:var(--font); }
+  .step .q { min-width:36px; text-align:center; font-weight:600; }
+  .add-ghost { font-size:11.5px; font-weight:600; color:var(--accent-soft-text); border:1px dashed var(--border); border-radius:6px; padding:3px 10px; }
+
+  .a-rcpt { background:var(--surface-2); padding:16px 18px; display:flex; flex-direction:column; min-width:0; }
+  .a-rcpt .k { display:block; margin-bottom:6px; }
+  .a-cust { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:9px 11px; margin-bottom:10px; display:flex; gap:9px; align-items:center; }
+  .a-cust .av { width:30px; height:30px; border-radius:8px; background:var(--accent-soft); color:var(--accent-soft-text); font-weight:700; font-size:11px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .a-cust b { display:block; font-size:12.5px; line-height:1.25; }
+  .a-cust .m { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .a-cust .sw { margin-left:auto; font-size:11px; font-weight:600; color:var(--accent-soft-text); }
+  .a-meta { display:flex; gap:8px; margin-bottom:12px; }
+  .a-meta .input { flex:1; font-size:12px; padding:5px 9px; }
+  .a-lines { background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:10px; }
+  .a-line { padding:8px 11px; border-top:1px solid var(--border-soft); display:grid; grid-template-columns:1fr auto 14px; gap:2px 8px; align-items:center; }
+  .a-line .sub { grid-column:1 / 3; }
+  .a-line:first-child { border-top:none; }
+  .a-line .sku { font-family:var(--mono); font-weight:600; font-size:12px; }
+  .a-line .amt { font-family:var(--mono); font-weight:600; font-size:12px; text-align:right; }
+  .a-line .sub { font-size:11px; color:var(--muted); font-family:var(--mono); }
+  .a-line .sub .price { border-bottom:1px dashed var(--faint); }
+  .a-line .x { text-align:right; font-size:10px; color:var(--faint); }
+  .a-line.empty { color:var(--faint); font-size:12px; display:block; text-align:center; padding:14px; }
+  .a-tot { font-size:12px; }
+  .a-tot .r { display:flex; justify-content:space-between; padding:3px 0; color:var(--muted); }
+  .a-tot .r .v { font-family:var(--mono); color:var(--text); }
+  .a-tot .r.ship .v { display:flex; gap:6px; }
+  .a-tot .r.ship .cell { border:1px solid var(--border); border-radius:5px; padding:1px 7px; font-size:11px; color:var(--faint); background:var(--surface); }
+  .a-tot .r.ship .cell.n { color:var(--text); min-width:56px; text-align:right; }
+  .a-tot .r.total { border-top:1px solid var(--rule); margin-top:4px; padding-top:7px; color:var(--text); font-weight:600; }
+  .a-tot .r.total .v { font-size:16px; font-weight:700; letter-spacing:-0.02em; }
+  .a-save { margin-top:auto; padding-top:14px; }
+  .a-save .btn { width:100%; padding:10px; font-size:13.5px; font-weight:600; }
+  .a-save .d { font-size:11px; color:var(--muted); text-align:center; margin-top:6px; }
+  .a-save .d b { font-family:var(--mono); color:var(--neg-text); }
+
+  /* ============ B · worksheet page ============ */
+  .b { width:960px; max-width:100%; background:var(--canvas); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .b-top { display:flex; align-items:center; gap:16px; padding:12px 18px; background:var(--surface); border-bottom:1px solid var(--border); }
+  .b-top .back { font-size:12px; color:var(--muted); }
+  .b-top h2 { font-size:15px; font-weight:600; letter-spacing:-0.02em; }
+  .b-top .tabs { margin-left:auto; display:flex; gap:2px; background:#EFEEEA; border-radius:10px; padding:3px; }
+  .b-top .tabs span { font-size:12px; padding:4px 11px; border-radius:8px; color:var(--muted); }
+  .b-top .tabs span.on { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 3px rgba(47,52,55,0.08); }
+  .b-head { display:grid; grid-template-columns:1.6fr 1fr 1fr 1fr 1fr; gap:10px; padding:14px 18px 12px; }
+  .b-head .f { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .b-head .input { width:100%; font-size:12.5px; }
+  .b-head .input.c { display:flex; align-items:center; gap:8px; }
+  .b-head .input.c b { font-weight:600; }
+  .b-head .input.c .m { color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .b-sheet { margin:0 18px; background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .b-sheet table { width:100%; border-collapse:collapse; }
+  .b-sheet th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); padding:7px 12px; background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .b-sheet td { padding:8px 12px; border-bottom:1px solid var(--border-soft); font-size:12.5px; vertical-align:middle; }
+  .b-sheet .r { text-align:right; }
+  .b-sheet .n { color:var(--faint); font-family:var(--mono); font-size:11px; width:30px; }
+  .b-sheet .sku { font-family:var(--mono); font-weight:600; }
+  .b-sheet .ttl { color:var(--muted); font-size:12px; }
+  .b-sheet .st { font-family:var(--mono); color:var(--muted); font-size:12px; white-space:nowrap; }
+  .b-sheet .st .to { color:var(--neg-text); font-weight:600; }
+  .b-sheet .q, .b-sheet .u, .b-sheet .amt { font-family:var(--mono); }
+  .b-sheet .amt { font-weight:600; }
+  .b-sheet .x { color:var(--faint); font-size:11px; text-align:center; width:30px; }
+  .b-sheet tr.live td { background:#FBFDFC; border-bottom:none; }
+  .b-sheet tr.live .cell { display:block; border:1.5px solid var(--accent); border-radius:6px; padding:5px 9px; font-family:var(--mono); font-size:12.5px; box-shadow:0 0 0 3px var(--accent-soft); }
+  .b-sheet tr.live .cell .ph { font-family:var(--font); }
+  .b-sheet tr.live .dim { display:block; border:1px solid var(--border); border-radius:6px; padding:5px 9px; color:var(--faint); text-align:right; font-family:var(--mono); font-size:12.5px; }
+  .b-notes { margin:12px 18px 0; display:flex; gap:10px; align-items:center; }
+  .b-notes .input { flex:1; font-size:12.5px; }
+  .b-foot { margin-top:14px; display:flex; align-items:center; gap:18px; padding:12px 18px; background:var(--surface); border-top:1px solid var(--border); }
+  .b-foot .t { display:flex; flex-direction:column; }
+  .b-foot .t .k { margin-bottom:1px; }
+  .b-foot .t .v { font-family:var(--mono); font-size:14px; font-weight:600; }
+  .b-foot .t .v.big { font-size:18px; letter-spacing:-0.02em; }
+  .b-foot .t .v.neg { color:var(--neg-text); }
+  .b-foot .btns { margin-left:auto; display:flex; gap:8px; }
+  .b-past { margin:18px 18px 16px; }
+  .b-past .k { display:block; margin-bottom:8px; }
+  .b-day { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:9px 12px; display:flex; align-items:center; gap:10px; font-size:12.5px; margin-bottom:6px; }
+  .b-day .chev { color:var(--faint); font-size:10px; }
+  .b-day b { font-weight:600; }
+  .b-day .m { color:var(--muted); }
+  .b-day .n { margin-left:auto; font-family:var(--mono); color:var(--muted); font-size:12px; }
+
+  /* ============ C · scan-first steps ============ */
+  .c { width:540px; max-width:100%; }
+  .c-steps { display:flex; align-items:center; gap:0; padding:14px 18px 0; }
+  .c-step { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--faint); }
+  .c-step .dot { width:20px; height:20px; border-radius:999px; border:1.5px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; font-family:var(--mono); }
+  .c-step.done { color:var(--muted); }
+  .c-step.done .dot { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .c-step.on { color:var(--text); font-weight:600; }
+  .c-step.on .dot { border-color:var(--accent); color:var(--accent-soft-text); }
+  .c-sep { flex:1; height:1px; background:var(--border); margin:0 10px; }
+  .c-who { margin:14px 18px 0; display:flex; align-items:center; gap:10px; font-size:12px; color:var(--muted); background:var(--surface-2); border-radius:8px; padding:8px 12px; }
+  .c-who b { color:var(--text); font-weight:600; }
+  .c-who .inv { font-family:var(--mono); }
+  .c-who .ed { margin-left:auto; font-size:11px; font-weight:600; color:var(--accent-soft-text); }
+  .c-scan { margin:14px 18px 0; border:1.5px solid var(--accent); border-radius:10px; box-shadow:0 0 0 4px var(--accent-soft); padding:12px 14px; display:flex; align-items:center; gap:12px; }
+  .c-scan svg { width:22px; height:22px; color:var(--accent); flex:0 0 auto; }
+  .c-scan .big { font-family:var(--mono); font-size:16px; }
+  .c-scan .big .ph { font-family:var(--font); font-size:14px; }
+  .c-scan .hint { margin-left:auto; font-size:11px; color:var(--faint); white-space:nowrap; }
+  .c-items { margin:12px 18px 0; }
+  .c-item { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--rule); }
+  .c-item .sku { font-family:var(--mono); font-weight:600; font-size:12.5px; }
+  .c-item .ttl { font-size:11.5px; color:var(--muted); }
+  .c-item .st { font-size:11px; color:var(--faint); font-family:var(--mono); }
+  .c-item .st .to { color:var(--neg-text); font-weight:600; }
+  .c-item .price { font-family:var(--mono); font-size:12px; color:var(--muted); border-bottom:1px dashed var(--faint); }
+  .c-item .price.ph { border-bottom-style:dotted; }
+  .c-item.flash { background:#F4FAF6; margin:0 -18px; padding:9px 18px; }
+  .c-item.flash .sku::after { content:'just scanned'; font-family:var(--font); font-weight:600; font-size:10px; color:var(--accent-soft-text); background:var(--accent-soft); border-radius:999px; padding:1px 7px; margin-left:8px; vertical-align:middle; }
+  .c-foot { margin-top:14px; padding:12px 18px; background:var(--surface-2); border-top:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  .c-foot .sum { font-size:12px; color:var(--muted); }
+  .c-foot .sum b { font-family:var(--mono); color:var(--text); }
+  .c-foot .btns { margin-left:auto; display:flex; gap:8px; }
+  .c-review { margin:14px 18px 0; }
+  .c-review .row { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid var(--rule); font-size:12.5px; }
+  .c-review .row .l { color:var(--muted); }
+  .c-review .row .v { font-family:var(--mono); text-align:right; }
+  .c-review .row.tot { border-bottom:none; font-weight:600; }
+  .c-review .row.tot .v { font-size:16px; font-weight:700; }
+  .c-review .row .v .cell { border:1px solid var(--border); border-radius:5px; padding:1px 7px; font-size:11.5px; color:var(--faint); background:var(--surface); margin-left:4px; }
+  .c-review .ded { margin-top:12px; background:var(--neg-bg); color:var(--neg-text); border-radius:8px; padding:9px 12px; font-size:12px; }
+  .c-review .ded b { font-family:var(--mono); }
+  .c-review .ded .l { display:block; font-family:var(--mono); font-size:11.5px; margin-top:3px; }
+</style>
+</head>
+<body>
+
+<h1>Wholesale — three ways</h1>
+<div class="sub">Same order in each: Bright Tech Distributors, 10× X133-64GB-GRAY at 118, 2× X210-128GB-GRAY at 157, one more being added. They differ in where you start: from the shelf, from a worksheet, or from the scanner.</div>
+
+<!-- ===================== A ===================== -->
+<div class="opt">
+  <div class="opt-label"><b>A · Pick from the shelf</b><span>the stock list is the order form — tap + on a row, the receipt on the right fills itself</span></div>
+  <div class="dlg a">
+    <div class="a-shelf">
+      <div class="a-title"><h2>Wholesale order</h2><span class="hint">tap ＋ on anything in stock</span></div>
+      <div class="a-search"><span class="input focus" style="display:flex;align-items:center;gap:8px"><span class="ph">Search SKU, title or barcode</span></span><span class="chips"><span class="on">All</span><span>Open Box</span><span>Used</span></span></div>
+      <div class="a-rows">
+        <div class="a-row in"><div><div class="sku">X133-64GB-GRAY</div><div class="ttl">Galaxy Tab A9 64GB Graphite</div></div><div class="st">1,974 → <span class="after">1,964</span></div><div class="add"><span class="step"><span class="sb">−</span><span class="q">10</span><span class="sb">+</span></span></div></div>
+        <div class="a-row"><div><div class="sku">X210-64GB-GRAY</div><div class="ttl">Galaxy Tab A9+ 64GB Graphite</div></div><div class="st">960</div><div class="add"><span class="add-ghost">＋ Add</span></div></div>
+        <div class="a-row in"><div><div class="sku">X210-128GB-GRAY</div><div class="ttl">Galaxy Tab A9+ 128GB Graphite</div></div><div class="st">736 → <span class="after">734</span></div><div class="add"><span class="step"><span class="sb">−</span><span class="q">2</span><span class="sb">+</span></span></div></div>
+        <div class="a-row"><div><div class="sku">X133-64GB-SILVER</div><div class="ttl">Galaxy Tab A9 64GB Silver</div></div><div class="st">634</div><div class="add"><span class="step"><span class="sb">−</span><span class="q ph">0</span><span class="sb">+</span></span></div></div>
+        <div class="a-row"><div><div class="sku">X400-128GB-GRAY</div><div class="ttl">Galaxy Tab S6 Lite 128GB</div></div><div class="st">582</div><div class="add"><span class="add-ghost">＋ Add</span></div></div>
+        <div class="a-row"><div><div class="sku">A15-64GB-BLACK</div><div class="ttl">Galaxy A15 64GB Black</div></div><div class="st low">14</div><div class="add"><span class="add-ghost">＋ Add</span></div></div>
+      </div>
+    </div>
+    <div class="a-rcpt">
+      <span class="k">Sold to</span>
+      <div class="a-cust"><div class="av">BT</div><div style="min-width:0"><b>Bright Tech Distributors</b><div class="m">Marcus Lee · Houston, TX</div></div><span class="sw">change</span></div>
+      <div class="a-meta"><span class="input mono">INV-2041</span><span class="input ph">Sep 30, 2026</span></div>
+      <span class="k">Order · 12 units</span>
+      <div class="a-lines">
+        <div class="a-line"><span class="sku">X133-64GB-GRAY</span><span class="amt">1,180.00</span><span class="sub">10 × <span class="price">118.00</span></span><span class="x">✕</span></div>
+        <div class="a-line"><span class="sku">X210-128GB-GRAY</span><span class="amt">314.00</span><span class="sub">2 × <span class="price">157.00</span></span><span class="x">✕</span></div>
+      </div>
+      <div class="a-tot">
+        <div class="r"><span>Subtotal</span><span class="v">1,494.00</span></div>
+        <div class="r ship"><span>Shipping</span><span class="v"><span class="cell">UPS ▾</span><span class="cell n">24.50</span></span></div>
+        <div class="r total"><span>Total</span><span class="v">$1,518.50</span></div>
+      </div>
+      <div class="a-save"><button class="btn btn-primary">Save order</button><div class="d">takes <b>−12</b> off Digital World Shop</div></div>
+    </div>
+  </div>
+  <div class="cap">The left side is the Stock page's own list, filtered live; you never type a SKU. A stepper appears the moment you tap Add, and the row's stock count shows before → after in place. The receipt column is narrow on purpose: price is a dashed number you click to change, shipping is one line, and Save is the only big thing.</div>
+</div>
+
+<!-- ===================== B ===================== -->
+<div class="opt">
+  <div class="opt-label"><b>B · Worksheet page</b><span>not a dialog — the Stock page slides to a full-width sheet, the way Receiving worked; last row is always the live entry row</span></div>
+  <div class="b">
+    <div class="b-top"><span class="back">← Stock</span><h2>Wholesale</h2><div class="tabs"><span class="on">New order</span><span>Past orders · 14</span><span>Customers · 6</span></div></div>
+    <div class="b-head">
+      <div class="f"><span class="k">Customer</span><span class="input c"><b>Bright Tech Distributors</b><span class="m">Marcus Lee · Houston, TX</span></span></div>
+      <div class="f"><span class="k">Invoice #</span><span class="input mono">INV-2041</span></div>
+      <div class="f"><span class="k">Date</span><span class="input">Sep 30, 2026</span></div>
+      <div class="f"><span class="k">Ship via</span><span class="input"><span class="ph">UPS / USPS / Pickup</span></span></div>
+      <div class="f"><span class="k">Tracking</span><span class="input mono"><span class="ph">optional</span></span></div>
+    </div>
+    <div class="b-sheet">
+      <table>
+        <thead><tr><th></th><th>SKU</th><th>Title</th><th class="r">In stock</th><th class="r">Qty</th><th class="r">Unit $</th><th class="r">Amount</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td class="sku">X133-64GB-GRAY</td><td class="ttl">Galaxy Tab A9 64GB Graphite</td><td class="r st">1,974 → <span class="to">1,964</span></td><td class="r q">10</td><td class="r u">118.00</td><td class="r amt">1,180.00</td><td class="x">✕</td></tr>
+          <tr><td class="n">2</td><td class="sku">X210-128GB-GRAY</td><td class="ttl">Galaxy Tab A9+ 128GB Graphite</td><td class="r st">736 → <span class="to">734</span></td><td class="r q">2</td><td class="r u">157.00</td><td class="r amt">314.00</td><td class="x">✕</td></tr>
+          <tr class="live"><td class="n">3</td><td><span class="cell">X133-64<span class="ph">|</span></span></td><td class="ttl ph">title fills in</td><td class="r st ph">—</td><td><span class="dim">1</span></td><td><span class="dim">last paid</span></td><td class="r amt ph">—</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="b-notes"><span class="k">Notes</span><span class="input"><span class="ph">payment terms, PO#, who picked up…</span></span></div>
+    <div class="b-foot">
+      <div class="t"><span class="k">Units</span><span class="v">12</span></div>
+      <div class="t"><span class="k">Goods</span><span class="v">$1,494.00</span></div>
+      <div class="t"><span class="k">Shipping</span><span class="v ph">—</span></div>
+      <div class="t"><span class="k">Total</span><span class="v big">$1,494.00</span></div>
+      <div class="t"><span class="k">Leaves stock</span><span class="v neg">−12</span></div>
+      <div class="btns"><button class="btn btn-ghost">Clear</button><button class="btn btn-primary">Finish order</button></div>
+    </div>
+    <div class="b-past">
+      <span class="k">Past orders</span>
+      <div class="b-day"><span class="chev">▶</span><b>Sep 26</b><span class="m">Bright Tech Distributors · INV-2038 · UPS</span><span class="n">40 units · $4,720.00</span></div>
+      <div class="b-day"><span class="chev">▶</span><b>Sep 19</b><span class="m">Metro Cell &amp; Tablet · INV-2031 · pickup</span><span class="n">6 units · $942.00</span></div>
+      <div class="b-day"><span class="chev">▶</span><b>Sep 12</b><span class="m">Sunbelt Wireless LLC · no invoice</span><span class="n">3 units</span></div>
+    </div>
+  </div>
+  <div class="cap">Keyboard-driven like Receiving: type a SKU, Tab to qty, Tab to price, Enter commits the line and opens the next. Room for everything at full width, including a Customers tab where the saved companies live and get edited. Past orders sit under the sheet grouped by day and expand to their lines.</div>
+</div>
+
+<!-- ===================== C ===================== -->
+<div class="opt">
+  <div class="opt-label"><b>C · Scan first</b><span>a narrow three-step card built for the barcode gun: who, then scan everything, then review — price and shipping only at the end</span></div>
+  <div class="dlg c">
+    <div class="c-steps">
+      <div class="c-step done"><span class="dot">✓</span>Customer</div><div class="c-sep"></div>
+      <div class="c-step on"><span class="dot">2</span>Items</div><div class="c-sep"></div>
+      <div class="c-step"><span class="dot">3</span>Review &amp; save</div>
+    </div>
+    <div class="c-who"><b>Bright Tech Distributors</b><span>·</span><span class="inv">INV-2041</span><span class="ed">edit</span></div>
+    <div class="c-scan"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232,48V88a8,8,0,0,1-16,0V56H184a8,8,0,0,1,0-16h40A8,8,0,0,1,232,48ZM72,200H40V168a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H72a8,8,0,0,0,0-16Zm152-40a8,8,0,0,0-8,8v32H184a8,8,0,0,0,0,16h40a8,8,0,0,0,8-8V168A8,8,0,0,0,224,160ZM32,96a8,8,0,0,0,8-8V56H72a8,8,0,0,0,0-16H32a8,8,0,0,0-8,8V88A8,8,0,0,0,32,96ZM80,80a8,8,0,0,0-8,8v80a8,8,0,0,0,16,0V88A8,8,0,0,0,80,80Zm104,88V88a8,8,0,0,0-16,0v80a8,8,0,0,0,16,0ZM144,80a8,8,0,0,0-8,8v80a8,8,0,0,0,16,0V88A8,8,0,0,0,144,80Zm-32,0a8,8,0,0,0-8,8v80a8,8,0,0,0,16,0V88A8,8,0,0,0,112,80Z"/></svg><span class="big"><span class="ph">Scan a barcode or type a SKU</span></span><span class="hint">each scan = +1 · type a number first for more</span></div>
+    <div class="c-items">
+      <div class="c-item flash"><div><div class="sku">X210-128GB-GRAY</div><div class="ttl">Galaxy Tab A9+ 128GB Graphite</div><div class="st">736 → <span class="to">734</span></div></div><span class="price ph">price later</span><span class="step"><span class="sb">−</span><span class="q">2</span><span class="sb">+</span></span></div>
+      <div class="c-item"><div><div class="sku">X133-64GB-GRAY</div><div class="ttl">Galaxy Tab A9 64GB Graphite</div><div class="st">1,974 → <span class="to">1,964</span></div></div><span class="price">118.00</span><span class="step"><span class="sb">−</span><span class="q">10</span><span class="sb">+</span></span></div>
+    </div>
+    <div class="c-foot"><span class="sum"><b>12 units</b> · 2 SKUs</span><div class="btns"><button class="btn btn-ghost">← Customer</button><button class="btn btn-secondary">Review →</button></div></div>
+  </div>
+
+  <div class="dlg c" style="margin-top:14px">
+    <div class="c-steps">
+      <div class="c-step done"><span class="dot">✓</span>Customer</div><div class="c-sep"></div>
+      <div class="c-step done"><span class="dot">✓</span>Items</div><div class="c-sep"></div>
+      <div class="c-step on"><span class="dot">3</span>Review &amp; save</div>
+    </div>
+    <div class="c-who"><b>Bright Tech Distributors</b><span>·</span><span class="inv">INV-2041</span><span>·</span><span>Sep 30</span><span class="ed">edit</span></div>
+    <div class="c-review">
+      <div class="row"><span class="l">10 × X133-64GB-GRAY @ 118.00</span><span class="v">1,180.00</span></div>
+      <div class="row"><span class="l">2 × X210-128GB-GRAY @ <span class="cell">157.00</span></span><span class="v">314.00</span></div>
+      <div class="row"><span class="l">Shipping</span><span class="v"><span class="cell">UPS ▾</span><span class="cell">tracking</span><span class="cell">24.50</span></span></div>
+      <div class="row"><span class="l">Note</span><span class="v"><span class="cell" style="min-width:200px;text-align:left">optional</span></span></div>
+      <div class="row tot"><span class="l" style="color:var(--text)">Total</span><span class="v">$1,518.50</span></div>
+      <div class="ded">Saving takes <b>12 units</b> off Digital World Shop<span class="l">X133-64GB-GRAY −10 · X210-128GB-GRAY −2</span></div>
+    </div>
+    <div class="c-foot"><span class="sum ph">also writes wholesale-orders.csv</span><div class="btns"><button class="btn btn-ghost">← Items</button><button class="btn btn-primary">Save order</button></div></div>
+  </div>
+  <div class="cap">Step 1 is the customer tiles from the invoice design. Step 2 is one big scan box: every scan adds a unit, the newest line floats to the top with a “just scanned” flag, and stock counts update as you go. Nothing about money until step 3, so a packer can build the order and the owner prices it. Fits a narrow window or the mobile view.</div>
+</div>
+
+</body>
+</html>
