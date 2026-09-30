@@ -82,6 +82,42 @@ const csvq = (v) => {
 // listings: [{ sku, categoryId, title, cond, specs {label: value}, picUrls [],
 //              description, price, qty, variations [{sku, details, price, qty}] }]
 // profiles: { shipping, returns, payment, location, dispatchDays }
+// Variation specifics in eBay's upload format: the names eBay's own phone
+// and tablet categories use, NOT the SKU grammar's short words. A child row
+// reads `Storage Capacity=64GB|Color=Gray` (pipe between specifics), the
+// parent row lists every value each specific takes
+// (`Storage Capacity=64GB;128GB|Color=Gray;Black`). The first upload went
+// out as `Storage=64GB;Color=Gray` — eBay read that as one specific with two
+// values (owner's rejected upload, 2026-09-28).
+const VAR_NAMES = { storage: 'Storage Capacity', color: 'Color' };
+
+// a variation's {storage, color}; older payloads carry only the joined
+// `details` string, so parse that when the fields are missing
+function varAxes(v) {
+  const out = { storage: String(v.storage || '').trim(), color: String(v.color || '').trim() };
+  if ((!out.storage || !out.color) && v.details) {
+    for (const part of String(v.details).split(/[;|]/)) {
+      const [k, val] = part.split('=');
+      if (/storage/i.test(k || '') && !out.storage) out.storage = String(val || '').trim();
+      if (/color/i.test(k || '') && !out.color) out.color = String(val || '').trim();
+    }
+  }
+  return out;
+}
+function varDetails(v) {
+  const a = varAxes(v);
+  return [a.storage && `${VAR_NAMES.storage}=${a.storage}`, a.color && `${VAR_NAMES.color}=${a.color}`].filter(Boolean).join('|');
+}
+function parentDetails(variations) {
+  const storages = [], colors = [];
+  for (const v of variations) {
+    const a = varAxes(v);
+    if (a.storage && !storages.includes(a.storage)) storages.push(a.storage);
+    if (a.color && !colors.includes(a.color)) colors.push(a.color);
+  }
+  return [storages.length && `${VAR_NAMES.storage}=${storages.join(';')}`, colors.length && `${VAR_NAMES.color}=${colors.join(';')}`].filter(Boolean).join('|');
+}
+
 function buildEbayCsv(listings, profiles) {
   const p = profiles || {};
   // one header serves every listing: union of all C: labels, stable order
@@ -109,16 +145,20 @@ function buildEbayCsv(listings, profiles) {
     const spec = (k) => (l.specs || {})[k] ?? '';
     if (l.variations && l.variations.length) {
       // parent: everything shared; children: one row per combo with its own
-      // CustomLabel (the condition SKU Linnworks auto-links), price, qty
+      // CustomLabel (the condition SKU Linnworks auto-links), price, qty.
+      // A specific that varies (Storage Capacity, Color) must NOT also sit
+      // on the parent as an item specific — eBay rejects the clash
+      const varying = new Set(Object.values(VAR_NAMES).map(n => n.toLowerCase()));
+      const parentSpec = (k) => varying.has(String(k).toLowerCase()) ? '' : spec(k);
       lines.push([
-        'Add', l.sku, b.cat, l.title, '', '', b.cond,
-        ...specCols.map(spec),
+        'Add', l.sku, b.cat, l.title, '', parentDetails(l.variations), b.cond,
+        ...specCols.map(parentSpec),
         b.pics, l.description, 'FixedPrice', 'GTC', '', '',
         b.loc, b.disp, p.shipping || '', p.returns || '', p.payment || '',
       ].map(csvq).join(','));
       for (const v of l.variations) {
         lines.push([
-          'Add', v.sku, '', '', 'Variation', v.details, '',
+          'Add', v.sku, '', '', 'Variation', varDetails(v), '',
           ...specCols.map(() => ''),
           '', '', '', '', v.price, v.qty,
           '', '', '', '', '',

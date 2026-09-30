@@ -148,6 +148,90 @@ function writeWfsCsv() {
   } catch { /* CSV locked in Excel: the DB still has the log */ }
 }
 
+/* ---------- wholesale invoices (owner 2026-09-30) ---------- */
+
+// Mirror every invoice line to wholesale-orders.csv beside the daily CSVs:
+// one row per line, serials for that line joined with ";".
+function writeWholesaleCsv() {
+  try {
+    const folder = csvFolder();
+    fs.mkdirSync(folder, { recursive: true });
+    const lines = ['date,invoice,customer,sku,title,qty,rate,amount,carrier,tracking,shipping,note,station,voided,serials'];
+    for (const inv of db.wsListInvoices(5000).slice().reverse()) {
+      const serials = db.wsListSerials(inv.gid);
+      for (const l of inv.lines) {
+        const sn = serials.filter(x => x.sku === l.sku).map(x => x.serial).reverse().join(';');
+        lines.push([inv.created_at, inv.number, inv.customer_name, l.sku, l.title, l.qty, l.rate === null ? '' : l.rate.toFixed(2),
+          l.rate === null ? '' : (l.rate * l.qty).toFixed(2), inv.carrier, inv.tracking, inv.shipping ? inv.shipping.toFixed(2) : '',
+          inv.note, inv.station, inv.voided_at ? 'yes' : '', sn].map(csvEscape).join(','));
+      }
+    }
+    fs.writeFileSync(path.join(folder, 'wholesale-orders.csv'), lines.join('\r\n'), 'utf8');
+  } catch { /* CSV locked in Excel: the DB still has the invoices */ }
+}
+
+// The shared folder carries customers, invoices and serials as full-record
+// snapshots, one file per station per kind; every read folds every
+// station's file with newest-wins, then seeds this station's own files
+// once so its pre-sync records reach the others. Same contract as returns
+// and WFS: no two desktops ever write the same file.
+const WS_AUX = [['wholesale-customers', 'wholesale_customers', 'wsUpsertCustomer'], ['wholesale-invoices', 'wholesale_invoices', 'wsUpsertInvoice'], ['wholesale-serials', 'wholesale_serials', 'wsUpsertSerial']];
+let wsSyncBusy = false;
+function syncWholesale() {
+  if (wsSyncBusy || !retsync.enabled()) return;
+  wsSyncBusy = true;
+  try {
+    const mine = [retsync.stationName(), os.hostname(), stockLogComputer()];
+    for (const [prefix, table, fn] of WS_AUX) {
+      for (const rec of retsync.readAux(prefix)) { if (rec && rec.gid) db[fn](rec); }
+      retsync.auxBackfill(prefix, db.wsOwnRows(table, mine));
+    }
+  } catch { /* folder unreachable: the local records stand alone */ }
+  wsSyncBusy = false;
+}
+// one door for every wholesale write: local db, then the shared folder
+function wsPut(kind, rec) {
+  const [prefix, , fn] = WS_AUX.find(x => x[0] === kind);
+  const row = db[fn](rec);
+  if (row) retsync.appendAux(prefix, row);
+  return row;
+}
+const wsNow = () => new Date().toISOString();
+
+// the customer's paper: a printable invoice as a PDF the owner picks a
+// place for, then opens (Print / Save as PDF)
+function wholesaleInvoiceHtml(inv, serials) {
+  const money = (n) => `$${Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  const h = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const cust = db.wsGetCustomer(inv.customer_gid) || { name: inv.customer_name };
+  const goods = inv.lines.reduce((a, l) => a + (l.rate === null ? 0 : l.rate * l.qty), 0);
+  const units = inv.lines.reduce((a, l) => a + l.qty, 0);
+  const priced = inv.lines.some(l => l.rate !== null) || inv.shipping > 0;
+  const rows = inv.lines.map(l => {
+    const sn = serials.filter(x => x.sku === l.sku).map(x => x.serial).reverse();
+    return `<tr><td class="m">${h(l.sku)}${sn.length ? `<div class="sn">S/N: ${h(sn.join(', '))}</div>` : ''}</td><td>${h(l.title)}</td><td class="r">${l.qty}</td>
+      <td class="r">${l.rate === null ? '' : money(l.rate)}</td><td class="r">${l.rate === null ? '' : money(l.rate * l.qty)}</td></tr>`;
+  }).join('');
+  const d = new Date(inv.created_at);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${h(inv.number)}</title><style>
+    body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#2F3437;font-size:13px;margin:36px 44px}
+    h1{font-size:24px;font-weight:600;margin:0}.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px}
+    .meta{text-align:right;font-size:13px}.meta b{display:block;font-size:18px}.k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#787774;margin-bottom:4px}
+    .bill{line-height:1.45}.m{font-family:Consolas,Menlo,monospace;font-size:12.5px}
+    table{width:100%;border-collapse:collapse;margin-top:6px}th{font-size:10.5px;text-align:left;letter-spacing:.06em;text-transform:uppercase;color:#787774;padding:6px 8px;border-bottom:1.5px solid #2F3437}
+    td{padding:8px;border-bottom:1px solid #E4E2DD;vertical-align:top}.r{text-align:right}.sn{font-size:11px;color:#787774;margin-top:3px;font-family:Consolas,Menlo,monospace}
+    .tot{width:280px;margin-left:auto;margin-top:14px}.tot div{display:flex;justify-content:space-between;padding:4px 0}.tot .big{border-top:1px solid #2F3437;margin-top:4px;padding-top:8px;font-weight:700;font-size:16px}
+    .note{margin-top:26px;font-size:12.5px;color:#555}.void{color:#9F2F2D;font-weight:700;letter-spacing:.1em}
+  </style></head><body>
+  <div class="top"><div><h1>Invoice${inv.voided_at ? ' <span class="void">VOIDED</span>' : ''}</h1><div class="k" style="margin-top:14px">Bill to</div>
+    <div class="bill"><b>${h(cust.name)}</b>${cust.contact ? `<br>${h(cust.contact)}` : ''}${cust.address ? `<br>${h(cust.address).replace(/\n/g, '<br>')}` : ''}${cust.email ? `<br>${h(cust.email)}` : ''}${cust.phone ? `<br>${h(cust.phone)}` : ''}</div></div>
+    <div class="meta"><div class="k">Invoice no.</div><b>${h(inv.number || '—')}</b><div class="k" style="margin-top:10px">Date</div>${d.toLocaleDateString('en-US')}${inv.carrier || inv.tracking ? `<div class="k" style="margin-top:10px">Ship via</div>${h([inv.carrier, inv.tracking].filter(Boolean).join(' · '))}` : ''}</div></div>
+  <table><thead><tr><th>SKU</th><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="tot"><div><span>Units</span><span>${units}</span></div>${priced ? `<div><span>Goods</span><span>${money(goods)}</span></div>${inv.shipping ? `<div><span>Shipping</span><span>${money(inv.shipping)}</span></div>` : ''}<div class="big"><span>Total</span><span>${money(goods + (inv.shipping || 0))}</span></div>` : ''}</div>
+  ${inv.note ? `<div class="note">${h(inv.note).replace(/\n/g, '<br>')}</div>` : ''}
+  </body></html>`;
+}
+
 /* ---------- open-orders cache (Stock page per-SKU order list) ---------- */
 
 // GetOpenOrders pages through the whole order book, so clicking several SKUs
@@ -5093,6 +5177,178 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
+  /* ---- wholesale invoices: customers, invoices, serial numbers ---- */
+  const wsStation = () => stockLogComputer();
+  const wsOff = () => { const c = config.load(); return c.captureOnly || !(c.pages && c.pages.wholesale); };
+  ipcMain.handle('wholesale:customers', () => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    syncWholesale();
+    return { ok: true, customers: db.wsListCustomers() };
+  });
+  ipcMain.handle('wholesale:customerSave', (_e, rec) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const name = String((rec && rec.name) || '').trim();
+    if (!name) return { ok: false, error: 'The customer needs a name.' };
+    const gid = String((rec && rec.gid) || '').trim();
+    const prev = gid ? db.wsGetCustomer(gid) : null;
+    const row = wsPut('wholesale-customers', {
+      gid: prev ? prev.gid : db.wsGid(wsStation()), name,
+      contact: rec.contact, email: rec.email, phone: rec.phone, address: rec.address,
+      created_at: prev ? prev.created_at : wsNow(), updated_at: wsNow(), deleted: 0,
+    });
+    return row ? { ok: true, customer: row } : { ok: false, error: 'Could not save the customer.' };
+  });
+  ipcMain.handle('wholesale:customerDelete', (_e, { gid }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const prev = db.wsGetCustomer(gid);
+    if (!prev) return { ok: false, error: 'That customer is gone already.' };
+    wsPut('wholesale-customers', { ...prev, deleted: 1, updated_at: wsNow() });
+    return { ok: true };
+  });
+  ipcMain.handle('wholesale:list', () => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    syncWholesale();
+    return { ok: true, invoices: db.wsListInvoices(1000), serialCounts: db.wsSerialCounts(), nextNumber: db.wsNextNumber(), station: wsStation() };
+  });
+  ipcMain.handle('wholesale:get', (_e, { gid }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    syncWholesale();
+    const inv = db.wsGetInvoice(gid);
+    return inv ? { ok: true, invoice: inv, serialCounts: db.wsSerialCounts(gid), customer: db.wsGetCustomer(inv.customer_gid) } : { ok: false, error: 'That invoice no longer exists.' };
+  });
+  // Save = the stock leaves the warehouse. A new invoice deducts every line;
+  // an edit applies only the difference per SKU, so re-saving never
+  // double-deducts. Price, shipping, note and even the customer may be
+  // blank: this is inventory first (owner 2026-09-30).
+  ipcMain.handle('wholesale:save', async (_e, rec) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const cfg = config.load();
+    const lines = db.wsCleanLines(rec && rec.lines);
+    if (!lines.length) return { ok: false, error: 'Add at least one line with a SKU and a quantity.' };
+    const gid = String((rec && rec.gid) || '').trim();
+    const prev = gid ? db.wsGetInvoice(gid) : null;
+    if (prev && prev.voided_at) return { ok: false, error: 'This invoice was voided — start a new one.' };
+    const number = String((rec && rec.number) || '').trim().slice(0, 40);
+    const customerName = String((rec && rec.customerName) || '').trim().slice(0, 120);
+    // per-SKU difference against what the previous save already took
+    const before = new Map();
+    for (const l of prev ? prev.lines : []) before.set(l.sku, (before.get(l.sku) || 0) + l.qty);
+    const after = new Map();
+    for (const l of lines) after.set(l.sku, (after.get(l.sku) || 0) + l.qty);
+    const deltas = [];
+    for (const sku of new Set([...before.keys(), ...after.keys()])) {
+      const d = (after.get(sku) || 0) - (before.get(sku) || 0);
+      if (d) deltas.push({ sku, delta: -d });
+    }
+    try {
+      if (deltas.length) {
+        const client = new LinnworksClient(cfg.linnworks);
+        await client.changeStockLevels(deltas, cfg.linnworks.locationId, 'Capture Station wholesale invoice',
+          { reason: 'wholesale', ref: number, note: customerName || 'wholesale', by: String((rec && rec.by) || '').slice(0, 12) });
+      }
+      const now = wsNow();
+      const row = wsPut('wholesale-invoices', {
+        gid: prev ? prev.gid : (gid || db.wsGid(wsStation())), number,
+        created_at: prev ? prev.created_at : (rec && rec.date && !Number.isNaN(Date.parse(rec.date)) ? new Date(rec.date).toISOString() : now),
+        customer_gid: String((rec && rec.customerGid) || '').slice(0, 80), customer_name: customerName, lines,
+        note: rec.note, carrier: rec.carrier, tracking: rec.tracking, shipping: rec.shipping,
+        station: prev ? prev.station : wsStation(), by: rec.by, voided_at: '', updated_at: now,
+      });
+      writeWholesaleCsv();
+      return { ok: true, invoice: row ? db.wsGetInvoice(row.gid) : null };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Void = the undo: every unit goes back on the shelf, the invoice stays
+  // as a struck-through record
+  ipcMain.handle('wholesale:void', async (_e, { gid }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const cfg = config.load();
+    const inv = db.wsGetInvoice(gid);
+    if (!inv) return { ok: false, error: 'That invoice no longer exists.' };
+    if (inv.voided_at) return { ok: true, invoice: inv };
+    try {
+      const back = new Map();
+      for (const l of inv.lines) back.set(l.sku, (back.get(l.sku) || 0) + l.qty);
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.changeStockLevels([...back].map(([sku, qty]) => ({ sku, delta: qty })), cfg.linnworks.locationId,
+        'Capture Station wholesale void', { reason: 'wholesale-void', ref: inv.number, note: `${inv.customer_name || 'wholesale'} · voided` });
+      wsPut('wholesale-invoices', { ...inv, voided_at: wsNow(), updated_at: wsNow() });
+      writeWholesaleCsv();
+      return { ok: true, invoice: db.wsGetInvoice(gid) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // serials: every scan is its own record, saved the moment it lands
+  ipcMain.handle('wholesale:serials', (_e, { invoiceGid, sku }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    syncWholesale();
+    return { ok: true, serials: db.wsListSerials(invoiceGid, sku) };
+  });
+  ipcMain.handle('wholesale:serialAdd', (_e, { invoiceGid, sku, serial }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const inv = String(invoiceGid || '').trim(), s = String(sku || '').trim().toUpperCase(), v = String(serial || '').trim();
+    if (!inv || !s) return { ok: false, error: 'Pick a SKU first.' };
+    if (!v) return { ok: false, error: 'Nothing scanned.' };
+    const dup = db.wsListSerials(inv).find(x => x.serial.toUpperCase() === v.toUpperCase());
+    if (dup) return { ok: false, duplicate: true, error: `${v} is already on this invoice (${dup.sku}).`, serials: db.wsListSerials(inv, s) };
+    const now = wsNow();
+    const row = wsPut('wholesale-serials', { gid: db.wsGid(wsStation()), invoice_gid: inv, sku: s, serial: v, created_at: now, updated_at: now, deleted: 0 });
+    if (db.wsGetInvoice(inv)) writeWholesaleCsv();
+    return row ? { ok: true, serial: row, serials: db.wsListSerials(inv, s) } : { ok: false, error: 'Could not save the serial.' };
+  });
+  ipcMain.handle('wholesale:serialDelete', (_e, { gid }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const prev = db.wsGetSerial(gid);
+    if (!prev) return { ok: true };
+    wsPut('wholesale-serials', { ...prev, deleted: 1, updated_at: wsNow() });
+    if (db.wsGetInvoice(prev.invoice_gid)) writeWholesaleCsv();
+    return { ok: true, serials: db.wsListSerials(prev.invoice_gid, prev.sku) };
+  });
+  // a cancelled new invoice takes its scanned-but-never-saved serials with it
+  ipcMain.handle('wholesale:discardDraft', (_e, { invoiceGid }) => {
+    if (wsOff()) return { ok: false };
+    if (db.wsGetInvoice(invoiceGid)) return { ok: true, kept: true };
+    for (const sn of db.wsListSerials(invoiceGid)) wsPut('wholesale-serials', { ...sn, deleted: 1, updated_at: wsNow() });
+    return { ok: true };
+  });
+  ipcMain.handle('wholesale:serialsCsv', async (_e, { invoiceGid, sku }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const inv = db.wsGetInvoice(invoiceGid);
+    const serials = db.wsListSerials(invoiceGid, sku || '');
+    if (!serials.length) return { ok: false, error: 'No serial numbers to export yet.' };
+    const name = `serials-${(inv && inv.number) || 'draft'}${sku ? `-${String(sku).toUpperCase()}` : ''}.csv`;
+    const pick = await dialog.showSaveDialog(win, { title: 'Export serial numbers', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'CSV', extensions: ['csv'] }] });
+    if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
+    const lines = ['invoice,customer,sku,serial,logged_at'];
+    for (const x of serials.slice().reverse()) lines.push([inv ? inv.number : '', inv ? inv.customer_name : '', x.sku, x.serial, x.created_at].map(csvEscape).join(','));
+    try { fs.writeFileSync(pick.filePath, lines.join('\r\n'), 'utf8'); } catch (e) { return { ok: false, error: e.message }; }
+    return { ok: true, path: pick.filePath, count: serials.length };
+  });
+  // Print / Save as PDF: render the paper off-screen, let the owner pick
+  // where the PDF goes, then open it
+  ipcMain.handle('wholesale:print', async (_e, { gid }) => {
+    if (wsOff()) return { ok: false, error: 'Wholesale is off on this station.' };
+    const inv = db.wsGetInvoice(gid);
+    if (!inv) return { ok: false, error: 'Save the invoice first.' };
+    const html = wholesaleInvoiceHtml(inv, db.wsListSerials(gid));
+    const pick = await dialog.showSaveDialog(win, { title: 'Save invoice as PDF', defaultPath: path.join(app.getPath('documents'), `Invoice-${inv.number || inv.day}.pdf`), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
+    const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+    try {
+      await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: 'Letter', margins: { marginType: 'default' } });
+      fs.writeFileSync(pick.filePath, pdf);
+      shell.openPath(pick.filePath);
+      return { ok: true, path: pick.filePath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      pw.destroy();
+    }
+  });
   // Create a new inventory item, optionally with a starting level at the
   // primary location (via the existing UpdateStockLevelsBySKU delta path).
   ipcMain.handle('stock:createSku', async (_e, payload) => {
@@ -6091,6 +6347,8 @@ function stockLogReason(changeSource, meta) {
   if (cs.includes('dropship pad')) return 'dropship';
   if (cs.includes('substitution')) return 'substitution';
   if (cs.includes('wfs')) return 'wfs';
+  if (cs.includes('wholesale void')) return 'wholesale-void';
+  if (cs.includes('wholesale')) return 'wholesale';
   if (cs.includes('new sku')) return 'new-sku';
   if (cs.includes('return delete')) return 'return-delete';
   if (cs.includes('return edit')) return 'return-edit';

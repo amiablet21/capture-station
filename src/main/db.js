@@ -161,6 +161,52 @@ function open() {
   }
   // Overview "Ignore" on a Send-to-WFS suggestion: hidden until `until`,
   // or sooner if the SKU's WFS pace outgrows the pace it was ignored at
+  // Wholesale (owner 2026-09-30): customers, invoices and per-line serial
+  // numbers. Every record carries a gid "<STATION>:<uuid>" and an
+  // updated_at so the shared folder can fold every station's snapshots
+  // with newest-wins; deletes are tombstones (deleted = 1 / voided_at) so
+  // they travel the same way. Lines ride the invoice as JSON.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wholesale_customers (
+      gid TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      contact TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      address TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS wholesale_invoices (
+      gid TEXT PRIMARY KEY,
+      number TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      day TEXT NOT NULL,
+      customer_gid TEXT NOT NULL DEFAULT '',
+      customer_name TEXT NOT NULL DEFAULT '',
+      lines TEXT NOT NULL DEFAULT '[]',
+      note TEXT NOT NULL DEFAULT '',
+      carrier TEXT NOT NULL DEFAULT '',
+      tracking TEXT NOT NULL DEFAULT '',
+      shipping REAL NOT NULL DEFAULT 0,
+      station TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT '',
+      voided_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ws_inv_day ON wholesale_invoices(day);
+    CREATE TABLE IF NOT EXISTS wholesale_serials (
+      gid TEXT PRIMARY KEY,
+      invoice_gid TEXT NOT NULL,
+      sku TEXT NOT NULL,
+      serial TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_ws_ser_inv ON wholesale_serials(invoice_gid, sku);
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS wfs_ignores (
       sku TEXT PRIMARY KEY,
@@ -795,7 +841,7 @@ function planStockCorrection({ original, linkMap, change, levelOf, laterSet }) {
   const isLink = STOCK_LOG_LINK_REASONS.has(original.reason) || !!original.link_gid;
   if (!isLink && !STOCK_LOG_EDITABLE.has(original.reason)) {
     const where = original.reason === 'return' || original.reason === 'return-edit' || original.reason === 'return-delete' ? 'Returns'
-      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
+      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'wholesale' || original.reason === 'wholesale-void' ? 'Wholesale' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
     return { ok: false, error: `This line is corrected in ${where}, not here.` };
   }
   const eff = stockLogEffective(original, linkMap);
@@ -905,6 +951,134 @@ function close() {
 
 // Health check of the LIVE db. quick_check's first row is 'ok' or the first
 // problem found; a throw (file unreadable) also counts as unhealthy.
+/* ---------- wholesale: customers, invoices, serial numbers ---------- */
+
+// gid for a record born on this station
+function wsGid(station) {
+  return `${String(station || os.hostname() || 'LOCAL').toUpperCase()}:${crypto.randomUUID()}`;
+}
+const wsStr = (v, n) => String(v ?? '').trim().slice(0, n);
+const wsIso = (v) => (v && !Number.isNaN(Date.parse(v))) ? new Date(v).toISOString() : new Date().toISOString();
+
+// newest-wins upsert: a snapshot older than what we hold is ignored, so a
+// late-arriving shared-folder line can never roll a record back
+function wsNewer(d, table, gid, updatedAt) {
+  const cur = d.prepare(`SELECT updated_at FROM ${table} WHERE gid = ?`).get(gid);
+  return !cur || String(cur.updated_at) < String(updatedAt);
+}
+
+function wsUpsertCustomer(rec) {
+  const d = open();
+  const gid = wsStr(rec.gid, 80);
+  if (!gid) return null;
+  const row = {
+    gid, name: wsStr(rec.name, 120), contact: wsStr(rec.contact, 120), email: wsStr(rec.email, 160),
+    phone: wsStr(rec.phone, 60), address: wsStr(rec.address, 400),
+    created_at: wsIso(rec.created_at), updated_at: wsIso(rec.updated_at), deleted: rec.deleted ? 1 : 0,
+  };
+  if (!wsNewer(d, 'wholesale_customers', gid, row.updated_at)) return null;
+  d.prepare(`INSERT INTO wholesale_customers (gid, name, contact, email, phone, address, created_at, updated_at, deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(gid) DO UPDATE SET name = excluded.name, contact = excluded.contact, email = excluded.email, phone = excluded.phone,
+      address = excluded.address, updated_at = excluded.updated_at, deleted = excluded.deleted`)
+    .run(row.gid, row.name, row.contact, row.email, row.phone, row.address, row.created_at, row.updated_at, row.deleted);
+  return row;
+}
+function wsListCustomers({ all = false } = {}) {
+  return open().prepare(`SELECT * FROM wholesale_customers ${all ? '' : 'WHERE deleted = 0'} ORDER BY name COLLATE NOCASE ASC`).all();
+}
+function wsGetCustomer(gid) {
+  return open().prepare('SELECT * FROM wholesale_customers WHERE gid = ?').get(String(gid || '')) || null;
+}
+
+// lines: [{ sku, title, qty, rate }] — rate null/'' = no price given
+function wsCleanLines(lines) {
+  return (Array.isArray(lines) ? lines : []).map(l => {
+    const rate = l && l.rate !== null && l.rate !== undefined && String(l.rate).trim() !== '' ? Math.round(Number(l.rate) * 100) / 100 : null;
+    return { sku: wsStr(l && l.sku, 80).toUpperCase(), title: wsStr(l && l.title, 300), qty: Math.round(Number(l && l.qty) || 0), rate: Number.isFinite(rate) ? rate : null };
+  }).filter(l => l.sku && l.qty > 0);
+}
+function wsUpsertInvoice(rec) {
+  const d = open();
+  const gid = wsStr(rec.gid, 80);
+  if (!gid) return null;
+  const created = wsIso(rec.created_at);
+  const row = {
+    gid, number: wsStr(rec.number, 40), created_at: created, day: rec.day && /^\d{4}-\d{2}-\d{2}$/.test(rec.day) ? rec.day : localDay(new Date(created)),
+    customer_gid: wsStr(rec.customer_gid, 80), customer_name: wsStr(rec.customer_name, 120),
+    lines: JSON.stringify(wsCleanLines(typeof rec.lines === 'string' ? JSON.parse(rec.lines || '[]') : rec.lines)),
+    note: wsStr(rec.note, 500), carrier: wsStr(rec.carrier, 40), tracking: wsStr(rec.tracking, 80),
+    shipping: Math.max(0, Math.round((Number(rec.shipping) || 0) * 100) / 100),
+    station: wsStr(rec.station, 40), by: wsStr(rec.by, 60), voided_at: rec.voided_at ? wsIso(rec.voided_at) : '',
+    updated_at: wsIso(rec.updated_at),
+  };
+  if (!wsNewer(d, 'wholesale_invoices', gid, row.updated_at)) return null;
+  d.prepare(`INSERT INTO wholesale_invoices (gid, number, created_at, day, customer_gid, customer_name, lines, note, carrier, tracking, shipping, station, by, voided_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(gid) DO UPDATE SET number = excluded.number, customer_gid = excluded.customer_gid, customer_name = excluded.customer_name,
+      lines = excluded.lines, note = excluded.note, carrier = excluded.carrier, tracking = excluded.tracking, shipping = excluded.shipping,
+      by = excluded.by, voided_at = excluded.voided_at, updated_at = excluded.updated_at`)
+    .run(row.gid, row.number, row.created_at, row.day, row.customer_gid, row.customer_name, row.lines, row.note, row.carrier, row.tracking,
+      row.shipping, row.station, row.by, row.voided_at, row.updated_at);
+  return row;
+}
+const wsInvOut = (r) => r ? { ...r, lines: JSON.parse(r.lines || '[]') } : null;
+function wsListInvoices(limit = 500) {
+  return open().prepare('SELECT * FROM wholesale_invoices ORDER BY created_at DESC LIMIT ?').all(limit).map(wsInvOut);
+}
+function wsGetInvoice(gid) {
+  return wsInvOut(open().prepare('SELECT * FROM wholesale_invoices WHERE gid = ?').get(String(gid || '')));
+}
+// the next invoice number to suggest: one past the highest numeric one
+function wsNextNumber() {
+  let max = 1000;
+  for (const r of open().prepare('SELECT number FROM wholesale_invoices').all()) {
+    const n = Number(String(r.number || '').replace(/\D/g, ''));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return String(max + 1);
+}
+
+function wsUpsertSerial(rec) {
+  const d = open();
+  const gid = wsStr(rec.gid, 80);
+  if (!gid) return null;
+  const row = {
+    gid, invoice_gid: wsStr(rec.invoice_gid, 80), sku: wsStr(rec.sku, 80).toUpperCase(), serial: wsStr(rec.serial, 120),
+    created_at: wsIso(rec.created_at), updated_at: wsIso(rec.updated_at), deleted: rec.deleted ? 1 : 0,
+  };
+  if (!row.invoice_gid || !row.sku || !row.serial) return null;
+  if (!wsNewer(d, 'wholesale_serials', gid, row.updated_at)) return null;
+  d.prepare(`INSERT INTO wholesale_serials (gid, invoice_gid, sku, serial, created_at, updated_at, deleted) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(gid) DO UPDATE SET serial = excluded.serial, updated_at = excluded.updated_at, deleted = excluded.deleted`)
+    .run(row.gid, row.invoice_gid, row.sku, row.serial, row.created_at, row.updated_at, row.deleted);
+  return row;
+}
+function wsListSerials(invoiceGid, sku) {
+  const d = open();
+  return sku
+    ? d.prepare('SELECT * FROM wholesale_serials WHERE invoice_gid = ? AND sku = ? AND deleted = 0 ORDER BY created_at DESC').all(String(invoiceGid || ''), String(sku).toUpperCase())
+    : d.prepare('SELECT * FROM wholesale_serials WHERE invoice_gid = ? AND deleted = 0 ORDER BY created_at DESC').all(String(invoiceGid || ''));
+}
+function wsGetSerial(gid) {
+  return open().prepare('SELECT * FROM wholesale_serials WHERE gid = ?').get(String(gid || '')) || null;
+}
+// { "INVGID|SKU": count } for the list and the line icons
+function wsSerialCounts(invoiceGid) {
+  const out = {};
+  const rows = invoiceGid
+    ? open().prepare('SELECT invoice_gid, sku, COUNT(*) AS n FROM wholesale_serials WHERE deleted = 0 AND invoice_gid = ? GROUP BY invoice_gid, sku').all(String(invoiceGid))
+    : open().prepare('SELECT invoice_gid, sku, COUNT(*) AS n FROM wholesale_serials WHERE deleted = 0 GROUP BY invoice_gid, sku').all();
+  for (const r of rows) out[`${r.invoice_gid}|${r.sku}`] = r.n;
+  return out;
+}
+// every record this station authored, newest snapshot each — the one-time
+// seed of its shared-folder file
+function wsOwnRows(table, stations) {
+  const set = new Set((stations || []).filter(Boolean).map(s => String(s).toUpperCase()));
+  return open().prepare(`SELECT * FROM ${table}`).all().filter(r => set.has(String(r.gid).split(':')[0].toUpperCase()));
+}
+
 function quickCheck() {
   try {
     const r = open().prepare('PRAGMA quick_check').get();
@@ -977,4 +1151,6 @@ module.exports = {
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,
   stockLogGet, stockLogLinkMap, stockLogEffective, annotateStockRows, stockLogLaterSet, planStockCorrection, STOCK_LOG_EDITABLE,
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
+  wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
+  wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
 };
