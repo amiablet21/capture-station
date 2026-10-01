@@ -11090,6 +11090,7 @@ $("ebRefresh").addEventListener("click", () => {
 let ovData = null;
 let ovUpdatedAt = null; // when the numbers last came back
 let ovFetching = false;
+let ovError = null; // the last fetch failed outright (never a silent spinner)
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -11112,16 +11113,30 @@ function enterOverview() {
   ovFetch();
 }
 
+// Two phases on the first open: the quick call answers from what the main
+// process already holds (the money pass from its cache, today's numbers
+// from the last fetch) so the cards paint at once; the full call then
+// brings the live numbers behind it. Later refreshes go straight to full.
 async function ovFetch() {
   if (ovFetching) return;
   ovFetching = true;
   try {
+    if (!ovUpdatedAt) {
+      const q = await api.overviewData({ quick: true }).catch(() => null);
+      if (q && q.ok && !ovUpdatedAt) {
+        ovData = q;
+        if (activePage === 'overview') ovRenderAll();
+      }
+    }
     const r = await api.overviewData().catch(() => null);
     if (r && r.ok) {
       ovData = r;
       ovUpdatedAt = new Date();
-      if (activePage === 'overview') ovRenderAll();
+      ovError = null;
+    } else {
+      ovError = (r && r.error) || 'Could not reach Linnworks for the Overview.';
     }
+    if (activePage === 'overview') ovRenderAll();
   } finally {
     ovFetching = false;
   }
@@ -11146,7 +11161,7 @@ function ovRenderWfs() {
   const box = $('ovWfs');
   const plan = ovData && ovData.wfsPlan;
   if (!plan || !plan.ready) {
-    const err = ovData && ovData.moneyError;
+    const err = (ovData && ovData.moneyError) || ovError;
     box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
     return;
   }
@@ -11206,7 +11221,10 @@ function ovRenderSold() {
   const sold = ovData && ovData.sold;
   const today = ovData && ovData.orders && ovData.orders.today;
   if (!sold) {
-    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty">${ovData ? 'Could not reach Linnworks for today’s orders.' : 'Loading today…'}</div></div>`;
+    // the quick phase answers before today's live fetch: still loading,
+    // not unreachable
+    const msg = ovError || (ovData && !ovData.livePending ? 'Could not reach Linnworks for today’s orders.' : 'Loading today…');
+    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty">${esc(msg)}</div></div>`;
     return;
   }
   const grid = sold.rows.length
@@ -11243,7 +11261,7 @@ function ovRenderLow() {
   const m = ovData && ovData.money;
   const plan = ovData && ovData.lowPlan;
   if (!m || !plan || !plan.ready) {
-    const err = ovData && ovData.moneyError;
+    const err = (ovData && ovData.moneyError) || ovError;
     box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
     return;
   }

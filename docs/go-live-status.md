@@ -26,12 +26,21 @@ is now the FIRST tab and the app's boot page. State as of v1.20.12:
   The CARD's content sets the row height; the chart matches. Hover = one svg
   mousemove mapped through the viewBox scale. Money mode widens padL to 52.
 - **Data**: every range speaks RECEIVED-order language. Day + today card from
-  overviewLiveToday (processed-today headers + open book, 60s cache).
-  Month/Year from userData/overview-history.json — a year of Linnworks
-  processed headers bucketed by dReceivedDate, **cache v4 = per-channel
-  splits** ({ymd: {n,s,c:{chan:{n,s}}}}), 12h TTL, boot-warmed at 15s.
+  overviewLiveToday (processed-today headers + open book fetched side by
+  side, 2min cache, one fetch in flight). Month/Year from
+  userData/overview-history.json — a year of Linnworks processed headers
+  bucketed by dReceivedDate, **cache v4 = per-channel splits**
+  ({ymd: {n,s,c:{chan:{n,s}}}}), 12h TTL, boot-warmed at 3s.
   Money cards cache: userData/overview-cache.json (10min TTL, stale-while-
   refresh). SQLite captures are the fallback everywhere.
+- **Load** is two-phase (2026-10-01, the tab sat on three spinners): the
+  renderer first asks `overviewData({ quick: true })`, which answers without
+  touching Linnworks (money from its cache, today's numbers from the last
+  fetch, `livePending` / `moneyPending` flags), paints, then asks for the
+  full payload. The money refresh starts before the live fetch so a cold
+  cache crunches while today's orders come down. LinnworksClient shares one
+  authenticated session per credentials, so the helpers no longer each pay
+  an Auth round-trip. A failed fetch shows its error instead of a spinner.
 - **Page chrome**: Day/Month/Year pills live in the chart header; page-width
   grip like Stock's (drag rail, dblclick reset, localStorage
   overviewPageWidth); the WINDOW remembers size+maximized across launches

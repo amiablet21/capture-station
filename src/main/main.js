@@ -4126,14 +4126,30 @@ function registerIpc() {
 
   // live "today" on the received-order basis: processed-today headers (small
   // fetch) + the open book — feeds the Day curve and the orders-today card so
-  // every range speaks the same language. 60s cache; SQLite captures stand in
+  // every range speaks the same language. 2min cache; SQLite captures stand in
   // when Linnworks is unreachable.
-  let overviewTodayCache = { at: 0, data: null };
+  // today's live numbers: cached for 2 minutes, one fetch in flight at a
+  // time (the app's Overview and the phone dashboard share it), and the last
+  // copy from today paints the quick phase while a fresh one is fetched
+  const OVERVIEW_TODAY_TTL_MS = 2 * 60 * 1000;
+  let overviewTodayCache = { at: 0, day: '', data: null, promise: null };
+  const overviewTodayStale = () => (overviewTodayCache.data && overviewTodayCache.day === db.localDay()) ? overviewTodayCache.data : null;
   // processed orders never change, so their item lines are fetched once per
   // order and kept for the day (the Sold today grid re-reads every minute)
   let soldLines = { day: '', byOrder: new Map() };
   async function overviewLiveToday(cfg) {
-    if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < 60 * 1000) return overviewTodayCache.data;
+    if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < OVERVIEW_TODAY_TTL_MS) return overviewTodayCache.data;
+    if (overviewTodayCache.promise) return overviewTodayCache.promise;
+    overviewTodayCache.promise = computeOverviewLiveToday(cfg)
+      .then(data => {
+        overviewTodayCache = { at: Date.now(), day: db.localDay(), data, promise: null };
+        return data;
+      })
+      .catch(e => { overviewTodayCache.promise = null; throw e; });
+    return overviewTodayCache.promise;
+  }
+
+  async function computeOverviewLiveToday(cfg) {
     const client = new LinnworksClient(cfg.linnworks);
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
@@ -4142,7 +4158,12 @@ function registerIpc() {
     const seen = new Set();
     const orders = [];
     const soldHeads = [];
-    const heads = await client.listProcessedHeaders(dayStart.toISOString(), new Date().toISOString());
+    // today's processed headers and the open book are independent reads:
+    // fetch them side by side instead of one after the other
+    const [heads, openOrders] = await Promise.all([
+      client.listProcessedHeaders(dayStart.toISOString(), new Date().toISOString()),
+      getOpenOrdersCached(cfg),
+    ]);
     for (const h of heads) {
       const ts = Date.parse(h.receivedOn || h.processedOn);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(h.orderId)) continue;
@@ -4165,7 +4186,7 @@ function registerIpc() {
       r.channels[c] = (r.channels[c] || 0) + qty;
       sold.set(k, r);
     };
-    for (const o of await getOpenOrdersCached(cfg)) {
+    for (const o of openOrders) {
       const ts = Date.parse(o.receivedDate);
       if (Number.isNaN(ts) || db.localDay(new Date(ts)) !== today || seen.has(o.orderId)) continue;
       seen.add(o.orderId);
@@ -4212,13 +4233,11 @@ function registerIpc() {
     const soldList = [...sold.values()].sort((a, b) => b.units - a.units || a.sku.localeCompare(b.sku));
     const unitsByChannel = {};
     for (const r of soldList) for (const [c, n] of Object.entries(r.channels)) unitsByChannel[c] = (unitsByChannel[c] || 0) + n;
-    const data = {
+    return {
       series: { vals, sales, tips },
       today: { total: orders.length, byChannel, totalSales: Math.round(totalSales), byChannelSales },
       sold: { rows: soldList, units: soldList.reduce((a, r) => a + r.units, 0), byChannel: unitsByChannel },
     };
-    overviewTodayCache = { at: Date.now(), data };
-    return data;
   }
 
   async function computeOverviewMoney(cfg) {
@@ -4391,8 +4410,12 @@ function registerIpc() {
     };
   }
 
-  // shared by the in-app Overview tab AND the phone dashboard's /data endpoint
-  async function overviewDataPayload() {
+  // shared by the in-app Overview tab AND the phone dashboard's /data endpoint.
+  // The tab asks twice: `quick` answers at once from what is already in hand
+  // (the money pass from its cache, today's numbers from the last fetch) so
+  // the cards paint immediately; the plain call then brings the live
+  // numbers behind it. Nothing in quick mode waits on Linnworks.
+  async function overviewDataPayload({ quick = false } = {}) {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     // every range speaks the received-order language: Month/Year from the
@@ -4402,8 +4425,23 @@ function registerIpc() {
     if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
       refreshOverviewHistory(cfg).catch(() => { /* stale or SQLite view stands */ });
     }
+    // the money pass starts BEFORE the live fetch so a cold cache crunches
+    // the 30 days while today's orders come down, not after them
+    let money = overviewCache.money;
+    const moneyUsable = !!(money && money.v === 6);
+    let moneyPromise = null;
+    if (!moneyUsable || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+      moneyPromise = refreshOverviewMoney(cfg);
+      moneyPromise.catch(() => { /* stale money stands; the awaiting path reports */ });
+    }
     let live = null;
-    try { live = await overviewLiveToday(cfg); } catch { /* captures fallback */ }
+    let livePending = false;
+    if (quick) {
+      live = overviewTodayStale();
+      livePending = !live || Date.now() - overviewTodayCache.at >= OVERVIEW_TODAY_TTL_MS;
+    } else {
+      try { live = await overviewLiveToday(cfg); } catch { /* captures fallback */ }
+    }
     const sqlToday = db.overviewToday();
     const yday = db.localDay(new Date(Date.now() - 86400000));
     const ydayRec = (overviewHistory.days && overviewHistory.days[yday]) || null;
@@ -4428,18 +4466,20 @@ function registerIpc() {
       historyPending: !hist,
     };
     const sold = live ? live.sold : null;
-    let money = overviewCache.money;
-    if (!money || money.v !== 6 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
-      const p = refreshOverviewMoney(cfg);
-      // stale view answers instantly while a refresh runs; first call (or a
-      // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 6) {
-        try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
-      } else {
-        p.catch(() => { /* stale money stands */ });
+    if (!moneyUsable) {
+      // a stale view answers instantly while a refresh runs; the first call
+      // (or a cache from before the 3-column Overview) waits - except in
+      // quick mode, where the cards say they are crunching and the full
+      // call behind it brings the numbers
+      money = null;
+      if (!quick) {
+        try { money = await moneyPromise; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold, livePending }; }
       }
     }
-    return { ok: true, orders, money, sold, wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money) };
+    return {
+      ok: true, orders, money, sold, livePending, moneyPending: !money,
+      wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money),
+    };
   }
 
   // Running low column: the money pass's list minus the SKUs ignored from
@@ -4500,7 +4540,7 @@ function registerIpc() {
     rows.sort((a, b) => a.coverDays - b.coverDays);
     return { rows, ignored, flight, ...w, ready: !!(money && money.wfsCand) };
   }
-  ipcMain.handle('overview:data', () => overviewDataPayload());
+  ipcMain.handle('overview:data', (_e, opts) => overviewDataPayload(opts || {}));
 
   /* ---------- phone dashboard: the Overview served over LAN ---------- */
   // http://<lan-ip>:8484/?k=<token> — a phone-sized twin of the Overview tab
@@ -4685,7 +4725,10 @@ function registerIpc() {
   });
 
   // warm the money cards shortly after boot so the Overview never sits on
-  // its spinner for the first open of the day
+  // its spinner for the first open of the day (the app opens ON the
+  // Overview, so this runs as soon as the window is up rather than after
+  // the old 15-second grace; the shared session means it costs no extra
+  // authorization)
   setTimeout(() => {
     const cfg = config.load();
     if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
@@ -4696,7 +4739,7 @@ function registerIpc() {
         refreshOverviewHistory(cfg).catch(() => { /* next open retries */ });
       }
     }
-  }, 15000);
+  }, 3000);
 
   /* ---------- Temu lister: template intake + workbook export ---------- */
 

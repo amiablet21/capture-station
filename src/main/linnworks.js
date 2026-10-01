@@ -65,10 +65,21 @@ function orderNetCharge(totalCharge, tax) {
   return Math.round(Math.max(0, total - Math.min(t, total)) * 100) / 100;
 }
 
+// One authenticated session per set of credentials, shared by every client
+// instance. main.js makes a client per helper, and each used to pay an Auth
+// round-trip (plus the call spacing) before its first real call - on the
+// Overview alone that was three or four authorizations per open. A 401
+// re-authorizes once and the fresh token goes back into the pool; clients
+// that still hold the expired one pick the fresh one up instead of
+// authorizing again themselves.
+const sharedSessions = new Map(); // creds key -> { token, server }
+const authInFlight = new Map(); // creds key -> pending auth promise
+const sessionKey = ({ applicationId, token }) => `${applicationId}|${token}`;
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
-    this.session = null; // { token, server }
+    this.session = sharedSessions.get(sessionKey(this.creds)) || null; // { token, server }
     this.lastCallAt = 0;
   }
 
@@ -78,7 +89,20 @@ class LinnworksClient {
     this.lastCallAt = Date.now();
   }
 
+  // one authorization at a time per credentials: parallel helpers that all
+  // start cold share the single round-trip
   async auth() {
+    const key = sessionKey(this.creds);
+    let p = authInFlight.get(key);
+    if (!p) {
+      p = this.authorize().finally(() => authInFlight.delete(key));
+      authInFlight.set(key, p);
+    }
+    this.session = await p;
+    return this.session;
+  }
+
+  async authorize() {
     const { applicationId, applicationSecret, token } = this.creds;
     if (!applicationId || !applicationSecret || !token) {
       throw new LinnworksError('Linnworks credentials are not configured (Settings).');
@@ -101,8 +125,9 @@ class LinnworksClient {
     if (!data.Token || !data.Server) {
       throw new LinnworksError(`Auth response missing Token/Server: ${trim(body)}`, { endpoint: 'Auth' });
     }
-    this.session = { token: data.Token, server: data.Server.replace(/\/+$/, '') };
-    return this.session;
+    const session = { token: data.Token, server: data.Server.replace(/\/+$/, '') };
+    sharedSessions.set(sessionKey(this.creds), session);
+    return session;
   }
 
   async call(endpoint, payload, { method = 'POST' } = {}) {
@@ -123,8 +148,10 @@ class LinnworksClient {
     });
     const body = await res.text();
     if (res.status === 401) {
-      // session expired: re-auth once and retry
-      await this.auth();
+      // session expired: adopt the fresh shared session if another client
+      // already re-authorized, else re-auth once; then retry
+      const fresh = sharedSessions.get(sessionKey(this.creds));
+      if (fresh && fresh !== this.session) this.session = fresh; else await this.auth();
       return this.call(endpoint, payload, { method });
     }
     if (!res.ok) {
