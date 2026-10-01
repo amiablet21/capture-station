@@ -3201,6 +3201,9 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 
 .item-info:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* the clickable ones (PO# customer card, item line card) */
+button.item-info { background: transparent; padding: 0; cursor: pointer; font-family: Georgia, serif; }
+.item-info.is-open { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 /* floating tooltip for [data-tip] elements: fixed-position so no
    overflow:hidden ancestor (like the items cell) can clip it */
@@ -4984,7 +4987,7 @@ th:last-child > .col-grip { right: 0; }
 .cust-info { margin-left: 8px; padding: 0; background: none; cursor: pointer; font-family: Georgia, serif; font-style: italic; font-weight: 400; font-size: 9.5px; line-height: 1; vertical-align: 1px; }
 .cust-info.is-open, .cust-info:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .cust-card { position: fixed; z-index: 80; min-width: 300px; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); box-shadow: 0 8px 24px rgba(47, 52, 55, 0.12); padding: 6px 4px; font-family: var(--font); font-weight: 400; }
-.cust-row { display: grid; grid-template-columns: 62px 1fr 26px; gap: 8px; align-items: start; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); }
+.cust-row { display: grid; grid-template-columns: minmax(62px, max-content) 1fr 26px; gap: 8px; align-items: start; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); }
 .cust-row:last-of-type { border-bottom: none; }
 .cust-l { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding-top: 2px; }
 .cust-v { font-size: 13px; line-height: 1.45; color: var(--text); word-break: break-word; }
