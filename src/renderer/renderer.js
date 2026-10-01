@@ -7859,6 +7859,22 @@ api.on('update:available', (d) => {
   const b = $('updateBtn');
   b.textContent = `Update to v${(d && d.version) || 'latest'}`;
   b.hidden = false;
+  $('updateCheckBtn').hidden = true; // the Update button takes its place
+});
+// "Check for updates" asks GitHub right now instead of waiting for the
+// 4-hour pass (owner 2026-10-01); a find lights the Update button above
+$('updateCheckBtn').addEventListener('click', async () => {
+  const b = $('updateCheckBtn');
+  if (b.disabled) return;
+  b.disabled = true;
+  b.textContent = 'Checking…';
+  const res = await api.updateCheck().catch(err => ({ ok: false, error: err.message }));
+  b.disabled = false;
+  b.textContent = 'Check for updates';
+  if (!res || !res.ok) { toast(res && res.error ? res.error : 'Could not check for updates.', 4000); return; }
+  if (res.update) toast(`v${res.latest} is out — you're on v${res.current}. Click Update to install it.`, 6000);
+  else if (res.building) toast(`v${res.latest} is still building its installer — you're on v${res.current}. Try again in a few minutes.`, 6000);
+  else toast(`You're on v${res.current} — that's the latest.`, 3500);
 });
 $('updateBtn').addEventListener('click', async () => {
   const b = $('updateBtn');

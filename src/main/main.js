@@ -2835,22 +2835,30 @@ function registerIpc() {
     }
     return false;
   };
+  // one check, reported back so the footer's "Check for updates" button
+  // can say what it found (owner 2026-10-01: "instead of waiting for it")
   async function checkForUpdate() {
+    const current = app.getVersion();
     try {
       const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
         headers: { 'User-Agent': 'CaptureStation', Accept: 'application/vnd.github+json' },
       });
-      if (!res.ok) return;
+      if (!res.ok) return { ok: false, current, error: res.status === 403 ? 'GitHub is rate-limiting this station — try again in a few minutes.' : `GitHub answered HTTP ${res.status}.` };
       const j = await res.json();
       const latest = String(j.tag_name || '').replace(/^v/, '');
-      if (!latest || !verNewer(latest, app.getVersion())) return;
+      if (!latest) return { ok: false, current, error: 'No release found.' };
+      if (!verNewer(latest, current)) return { ok: true, current, latest, update: false };
       const want = process.platform === 'darwin' ? /\.dmg$/i : /\.exe$/i;
       const asset = (j.assets || []).find(a => want.test(String(a.name || '')));
-      if (!asset) return; // the platform's installer hasn't finished building yet
+      if (!asset) return { ok: true, current, latest, update: false, building: true }; // the platform's installer hasn't finished building yet
       updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
       if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest });
-    } catch { /* offline or rate-limited: next pass tries again */ }
+      return { ok: true, current, latest, update: true };
+    } catch (e) {
+      return { ok: false, current, error: 'Could not reach GitHub — offline?' }; // next pass tries again
+    }
   }
+  ipcMain.handle('update:check', () => checkForUpdate());
   ipcMain.handle('update:install', async () => {
     if (!updateInfo) return { ok: false, error: 'No update on record — try again in a minute.' };
     try {

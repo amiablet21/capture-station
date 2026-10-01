@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.8 highlights
+
+- **Check for updates** button in the footer, next to the sync line: asks GitHub for the newest release on the spot and says whether you are current, an update is ready (the Update button lights), or its installer is still building. The automatic 4-hour check stays.
+
 ## v1.29.7 highlights
 
 - Returns log: the entry row lines up under the columns again. The v1.29.0 wholesale-invoice styles reused the `.ws-row` / `.ws-cell` class names the Returns entry row already had, which flattened it into a strip of little boxes; those rules are now scoped to the invoice dialog. (First shipped as v1.29.5, which v1.29.6 was cut without; this release carries both.)

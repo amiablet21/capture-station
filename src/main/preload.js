@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('api', {
   pricingGroupIgnore: (parent, child) => ipcRenderer.invoke('pricing:groupIgnore', { parent, child }),
   copyImage: (payload) => ipcRenderer.invoke('util:copyImage', payload),
   updateInstall: () => ipcRenderer.invoke('update:install'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),
   stockHistory: (sku) => ipcRenderer.invoke('stock:history', { sku }),
