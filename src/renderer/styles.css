@@ -1814,6 +1814,9 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
   text-align: left;
 }
 .chs-sku-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+/* no destination in Linnworks (no listing id, no search link): plain text, click copies */
+.chs-sku-link.chs-sku-nolink { border-bottom-color: transparent; cursor: copy; }
+.chs-sku-link.chs-sku-nolink:hover { color: var(--text); border-bottom-color: transparent; }
 
 /* the ⚠ beside the pills: only shows when the picked condition has no SKU */
 .rv-warn {

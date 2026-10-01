@@ -2143,35 +2143,52 @@ function registerIpc() {
     }
   });
 
-  // A listing page for a channel SKU, in the pane or externally. With an
-  // eBay item number (ChannelReferenceId) the exact product page opens;
-  // otherwise the channel's SKU-search template.
-  ipcMain.handle('listing:open', (_e, { sku, channel, external, refId }) => {
-    const cfg = config.load();
-    let url = '';
+  // Where a channel SKU's listing lives. Linnworks' own channel-SKU record
+  // (GetInventoryItemChannelSKUs) carries exactly one listing identifier,
+  // ChannelReferenceId, and no URL - so the public product page needs the
+  // marketplace's numeric item id in that field (eBay item number, Walmart
+  // item id, Temu goods id); without one, the channel's seller-side SKU
+  // search template is the fallback. The id is pulled out of the reference
+  // wherever it sits (eBay variation refs carry a suffix).
+  function listingUrlFor(cfg, { sku, channel, refId }) {
     // "TEMU US" / "EBAY" / "WALMART" column names -> the template keys
     const ch = String(channel || '').toLowerCase();
     const key = ch.includes('walmart') ? 'walmart' : ch.includes('ebay') ? 'ebay' : ch.includes('temu') ? 'temu' : ch;
     const ref = String(refId || '').trim();
+    const digits = (ref.match(/\d{5,20}/) || [''])[0];
     // the public product page when Linnworks carries the marketplace's
     // numeric item id (owner 2026-09-25: click the channel SKU -> product page)
-    if (key === 'ebay' && /^\d{9,15}$/.test(ref)) {
-      url = `https://www.ebay.com/itm/${ref}`;
-    } else if (key === 'walmart' && /^\d{5,15}$/.test(ref)) {
-      url = `https://www.walmart.com/ip/${ref}`;
-    } else if (key === 'temu' && /^\d{6,20}$/.test(ref)) {
-      url = `https://www.temu.com/goods.html?goods_id=${ref}`;
-    } else {
-      const tpl = String((cfg.listingUrlTemplates || {})[key] || '').trim();
-      if (!tpl || !/^https:\/\//i.test(tpl)) return { ok: false, error: 'No listing link set for this channel.' };
-      url = tpl.replaceAll('{sku}', encodeURIComponent(String(sku)));
-    }
+    if (key === 'ebay' && /^\d{9,15}$/.test(digits)) return { url: `https://www.ebay.com/itm/${digits}` };
+    if (key === 'walmart' && /^\d{5,15}$/.test(digits)) return { url: `https://www.walmart.com/ip/${digits}` };
+    if (key === 'temu' && /^\d{6,20}$/.test(digits)) return { url: `https://www.temu.com/goods.html?goods_id=${digits}` };
+    const tpl = String((cfg.listingUrlTemplates || {})[key] || '').trim();
+    if (tpl && /^https:\/\//i.test(tpl)) return { url: tpl.replaceAll('{sku}', encodeURIComponent(String(sku))) };
+    const name = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu' }[key] || (channel || 'this channel');
+    return {
+      url: '',
+      error: ref
+        ? `Linnworks' ${name} reference for this SKU (${ref}) isn't a listing id and no ${name} search link is set.`
+        : `Linnworks holds no ${name} listing id for this SKU and no ${name} search link is set.`,
+    };
+  }
+
+  // A listing page for a channel SKU, in the pane or externally.
+  ipcMain.handle('listing:open', (_e, { sku, channel, external, refId }) => {
+    const cfg = config.load();
+    const { url, error } = listingUrlFor(cfg, { sku, channel, refId });
+    if (!url) return { ok: false, error };
     if (external || cfg.captureOnly) {
       shell.openExternal(url);
       return { ok: true, external: true };
     }
     ensurePane().webContents.loadURL(url).catch(() => { /* nav errors show in-pane */ });
     return { ok: true };
+  });
+  // Which of these channel SKUs can open at all - the popup draws the ones
+  // that can't as plain text (click copies) instead of promising a link.
+  ipcMain.handle('listing:links', (_e, { rows }) => {
+    const cfg = config.load();
+    return { ok: true, linked: (rows || []).map(r => !!listingUrlFor(cfg, r || {}).url) };
   });
   // Which stock items carry a link on each channel — for the per-channel
   // "No eBay / No Walmart" stock filters. Derived from the item-level link

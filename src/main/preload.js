@@ -171,6 +171,7 @@ contextBridge.exposeInMainWorld('api', {
   mappingLink: (channelSku, source, subSource, targetSku, channelRefId) => ipcRenderer.invoke('mapping:link', { channelSku, source, subSource, targetSku, channelRefId }),
   mappingUnlink: (rowId) => ipcRenderer.invoke('mapping:unlink', { rowId }),
   listingOpen: (sku, channel, external, refId) => ipcRenderer.invoke('listing:open', { sku, channel, external, refId }),
+  listingLinks: (rows) => ipcRenderer.invoke('listing:links', { rows }),
   mappingLinkedSets: () => ipcRenderer.invoke('mapping:linkedSets'),
   stockDeleteSku: (stockItemId, sku) => ipcRenderer.invoke('stock:deleteSku', { stockItemId, sku }),
   stockRenameSku: (stockItemId, oldSku, newSku) => ipcRenderer.invoke('stock:renameSku', { stockItemId, oldSku, newSku }),

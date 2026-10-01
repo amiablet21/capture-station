@@ -6933,6 +6933,23 @@ async function openChannelSkus(sku, stockItemId) {
           : '<span class="chs-price chs-price-none" title="No price stored in Linnworks for this listing">—</span>'}
         ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
       </div>`).join('');
+  const my = ++chsSweep;
+  // Rows Linnworks gives no destination for (no listing id in its channel
+  // record and no search link for that channel) lose the link look: a
+  // click on those copies the SKU instead of promising a page.
+  if (res.channels.length) {
+    api.listingLinks(res.channels.map(c => ({ sku: c.sku, channel: (c.source || '').toLowerCase(), refId: c.refId || '' })))
+      .then((v) => {
+        if (my !== chsSweep || !v || !v.ok || !Array.isArray(v.linked)) return;
+        const btns = document.querySelectorAll('#chsList .chs-sku-link');
+        v.linked.forEach((ok, i) => {
+          const b = btns[i];
+          if (!b || ok) return;
+          b.classList.add('chs-sku-nolink');
+          b.title = `Linnworks has no ${channelLabel(b.dataset.lch)} listing id for this SKU — click to copy the SKU`;
+        });
+      }).catch(() => { /* the link look stays; a click still explains */ });
+  }
   // A SKU renamed or ended ON the channel leaves its old link record behind
   // in Linnworks (owner 2026-09-16). Sweep sync-off rows against the
   // channel's current catalog in the background and drop the ones that are
@@ -6942,7 +6959,6 @@ async function openChannelSkus(sku, stockItemId) {
     .filter(c => c.ignoreSync && c.sku)
     .map(c => ({ sku: c.sku, source: c.source, subSource: c.subSource }));
   if (!staleCandidates.length) return;
-  const my = ++chsSweep;
   api.channelSkusGone(staleCandidates).then((v) => {
     if (my !== chsSweep || !v || !v.ok || !v.gone || !v.gone.length) return;
     for (const g of v.gone) {
@@ -6961,11 +6977,16 @@ async function openChannelSkus(sku, stockItemId) {
 $('chsList').addEventListener('click', async (e) => {
   const b = e.target.closest('.chs-sku-link');
   if (!b) return;
+  if (b.classList.contains('chs-sku-nolink')) {
+    copyFromApp(b.dataset.lsku);
+    toast(`${b.dataset.lsku} copied — Linnworks has no ${channelLabel(b.dataset.lch)} listing id for it`);
+    return;
+  }
   const external = $('bDock').hidden;
   const res = await api.listingOpen(b.dataset.lsku, b.dataset.lch, external, b.dataset.lref);
   if (!res.ok) {
     copyFromApp(b.dataset.lsku);
-    toast(`${res.error || 'No listing link for this channel.'} SKU copied instead.`);
+    toast(`${res.error || 'No listing link for this channel.'} SKU copied instead.`, 7000);
     return;
   }
   if (!res.external) {
