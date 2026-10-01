@@ -497,11 +497,11 @@ function render() {
       const thumb = i.img ? `<img class="item-thumb" src="${esc(i.img)}" loading="lazy" alt="" />` : '';
       // the "i" tells the channel SKU and what the line sold for (owner
       // 2026-09-24: "include the price it sold for")
-      const money = (v) => `${!i.currency || i.currency === 'USD' ? '$' : `${i.currency} `}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const sold = i.lineTotal > 0
-        ? (i.qty > 1 ? `Sold for ${money(i.lineTotal / i.qty)} each · ${money(i.lineTotal)} total` : `Sold for ${money(i.lineTotal)}`) : '';
-      const tip = [i.channelSku && i.channelSku !== label ? `Channel SKU: ${i.channelSku}` : '', sold].filter(Boolean).join(' · ');
-      const info = tip ? `<span class="item-info" data-tip="${esc(tip)}">i</span>` : '';
+      // same click-to-open card as the PO#'s "i", with copy buttons for the
+      // channel SKU and the sold price (owner 2026-10-01)
+      const ch = i.channelSku && i.channelSku !== label ? i.channelSku : '';
+      const info = ch || i.lineTotal > 0
+        ? `<button type="button" class="item-info line-info" data-ch="${esc(ch)}" data-total="${i.lineTotal > 0 ? i.lineTotal : ''}" data-qty="${i.qty || 1}" data-cur="${esc(i.currency || 'USD')}" data-sku="${esc(label)}" title="Channel SKU and sold price — click to open">i</button>` : '';
       return linked
         ? `<span class="item-entry">${thumb}${esc(label)}${qty}${info}${lineSub(i)}</span>`
         : `<span class="item-entry item-unmapped" data-tip="Not mapped in Linnworks - stock will NOT deduct when processed">${thumb}⚠ ${esc(label)}${qty}${info}${lineSub(i)}</span>`;
@@ -931,18 +931,40 @@ function closeCustCard() {
 }
 
 function openCustCard(btn, row, meta) {
-  if (custCard && custCard.btn === btn) { closeCustCard(); return; }
-  closeCustCard();
   const c = meta.customer;
   const rows = [];
   if (c.name) rows.push(['Customer', esc(c.name), c.name]);
   if (c.company) rows.push(['Company', esc(c.company), c.company]);
   if (c.address && c.address.length) rows.push(['Ship to', c.address.map(esc).join('<br>'), c.address.join('\n')]);
   if (c.phone) rows.push(['Phone', `<span class="mono">${esc(c.phone)}</span>`, c.phone]);
+  openInfoCard(btn, rows, `${esc(channelLabel(row.channel))} · captured ${fmtTime(row.created_at)}`);
+}
+// the item line's "i": channel SKU and what it sold for, each copyable
+function openLineCard(btn, row) {
+  const d = btn.dataset;
+  const cur = d.cur && d.cur !== 'USD' ? `${d.cur} ` : '$';
+  const fmt = (v) => `${cur}${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const raw = (v) => Number(v).toFixed(2);
+  const rows = [];
+  if (d.ch) rows.push(['Channel SKU', `<span class="mono">${esc(d.ch)}</span>`, d.ch]);
+  const total = Number(d.total) || 0, qty = Number(d.qty) || 1;
+  if (total > 0) {
+    if (qty > 1) {
+      rows.push(['Sold for', `<span class="mono">${fmt(total / qty)}</span> each`, raw(total / qty)]);
+      rows.push(['Line total', `<span class="mono">${fmt(total)}</span> <span class="sh-dim">· ${qty} units</span>`, raw(total)]);
+    } else rows.push(['Sold for', `<span class="mono">${fmt(total)}</span>`, raw(total)]);
+  }
+  openInfoCard(btn, rows, `${esc(d.sku)}${row ? ` · ${esc(channelLabel(row.channel))}` : ''}`);
+}
+// rows: [label, html, rawToCopy]; click the same "i" again, click away or
+// Esc closes; the card flips above the button when the window is short
+function openInfoCard(btn, rows, foot) {
+  if (custCard && custCard.btn === btn) { closeCustCard(); return; }
+  closeCustCard();
   const el = document.createElement('div');
   el.className = 'cust-card';
   el.innerHTML = rows.map(([l, html, raw]) => `<div class="cust-row"><span class="cust-l">${l}</span><span class="cust-v">${html}</span><button type="button" class="btn-icon cust-copy" data-copy="${esc(raw)}" title="Copy the ${l.toLowerCase()}">${ICONS.copy}</button></div>`).join('')
-    + `<div class="cust-foot">${esc(channelLabel(row.channel))} · captured ${fmtTime(row.created_at)}</div>`;
+    + (foot ? `<div class="cust-foot">${foot}</div>` : '');
   document.body.appendChild(el);
   const r = btn.getBoundingClientRect();
   const w = el.offsetWidth, h = el.offsetHeight;
@@ -967,6 +989,12 @@ document.addEventListener('click', (e) => {
 });
 
 $('rowsBody').addEventListener('click', async (e) => {
+  const lineBtn = e.target.closest('button.line-info');
+  if (lineBtn) {
+    const tr = lineBtn.closest('tr');
+    openLineCard(lineBtn, state.rows.find(r => String(r.id) === tr.dataset.id));
+    return;
+  }
   const custBtn = e.target.closest('button.cust-info');
   if (custBtn) {
     const tr = custBtn.closest('tr');
