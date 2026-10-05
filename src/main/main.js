@@ -1010,9 +1010,11 @@ async function exportChannelSkus(channel, condition = '') {
     // a listing linked today is in the file
     let recs = {};
     try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
+    // the Cost column rides along only from a station with the Cost tick
+    const withCost = !!(cfg.pages && cfg.pages.cost);
     const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond, locationId: cfg.linnworks.locationId });
-    if (/\.csv$/i.test(filePath)) fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
-    else fs.writeFileSync(filePath, buildChannelSkuXlsx(rows, `${label} channel SKUs`));
+    if (/\.csv$/i.test(filePath)) fs.writeFileSync(filePath, buildChannelSkuCsv(rows, { cost: withCost }), 'utf8');
+    else fs.writeFileSync(filePath, buildChannelSkuXlsx(rows, `${label} channel SKUs`, { cost: withCost }));
     return { ok: true, path: filePath, count: rows.length, channel: label, condition: cond };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -6087,6 +6089,31 @@ function registerIpc() {
       const client = new LinnworksClient(cfg.linnworks);
       await client.setStockMinimumLevel(stockItemId, cfg.linnworks.locationId, n);
       return { ok: true, minimumLevel: n };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Cost column (owner 2026-10-05): the item's purchase price, editable only
+  // on stations with the Cost tick; every change is a COST line in the
+  // SKU's stock history (delta 0 — never a stock move — with from/to in
+  // data) that rides the shared folder like every other line
+  ipcMain.handle('stock:setCost', async (_e, { stockItemId, sku, cost, from }) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    const n = Math.round((Number(cost) || 0) * 100) / 100;
+    if (!stockItemId || !sku) return { ok: false, error: 'Missing stock item.' };
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
+    try {
+      const client = new LinnworksClient(cfg.linnworks);
+      await client.setPurchasePrice(stockItemId, n);
+      const prev = Math.round((Number(from) || 0) * 100) / 100;
+      recordStockRows([{
+        sku, locationId: cfg.linnworks.locationId, delta: 0, levelAfter: null,
+        reason: 'cost', changeSource: 'Capture Station cost', ref: '', note: '',
+        computer: stockLogComputer(), by: '', data: { from: prev, to: n },
+      }]);
+      return { ok: true, purchasePrice: n };
     } catch (e) {
       return { ok: false, error: e.message };
     }

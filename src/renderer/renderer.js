@@ -55,7 +55,7 @@ if (!window.api) {
     updateRow: async () => ({ ok: true }),
     deleteRow: async () => ({ ok: true }),
     runSync: async () => ({}),
-    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false, wholesale: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
+    getConfig: async () => ({ linnworks: { applicationId: '', applicationSecret: '', token: '', locationId: '', locationName: '' }, dryRun: true, stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' }, settingsPinHash: '', pages: { stock: true, history: true, receiving: false, wholesale: false, cost: false }, receiving: { folder: '', webhookUrl: '' }, stockViews: [{ label: 'Open Box', pattern: 'OPEN[\\s-]?BOX', tint: 'blue' }, { label: 'Used', pattern: '(^|[^A-Za-z])USED($|[^A-Za-z])', tint: 'yellow' }, { label: 'Scrap', pattern: '(^|[^A-Za-z])SCRAP($|[^A-Za-z])', tint: 'red' }], orderPatterns: [], trackingPatterns: [], serialPatterns: [] }),
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
@@ -93,6 +93,7 @@ if (!window.api) {
     wfsReceived: async () => ({ ok: false, error: 'Preview mode' }),
     wfsIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     wfsUnignore: async () => ({ ok: false, error: 'Preview mode' }),
+    setStockCost: async () => ({ ok: false, error: 'Preview mode' }),
     wholesaleCustomers: async () => ({ ok: true, customers: [] }),
     wholesaleCustomerSave: async (rec) => ({ ok: true, customer: { gid: `PREVIEW:${Math.random()}`, name: rec.name, contact: rec.contact || '', email: rec.email || '', phone: rec.phone || '', address: rec.address || '' } }),
     wholesaleCustomerDelete: async () => ({ ok: true }),
@@ -1217,6 +1218,7 @@ async function openSettings() {
   $('setPageReturns').checked = !!pg.returns;
   $('setPageListings').checked = pg.listings !== false;
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
+  $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
@@ -1326,6 +1328,7 @@ $('settingsSave').addEventListener('click', async () => {
       returns: $('setPageReturns').checked,
       listings: $('setPageListings').checked,
       wholesale: $('setPageWholesale').checked,
+      cost: $('setPageCost').checked,
     },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
@@ -2510,6 +2513,9 @@ function stockSeed(data) {
 // column sort: key + direction, toggled by clicking headers
 const STOCK_COLS = {
   sku: { label: 'SKU', get: r => r.sku, text: true },
+  // the item's cost (Linnworks purchase price) — only on stations with the
+  // Cost tick (owner 2026-10-05); sits right after the SKU
+  cost: { label: 'Cost', get: r => Number(r.purchasePrice) || 0 },
   stockLevel: { label: 'In stock', get: r => r.l.stockLevel },
   inOrders: { label: 'In orders', get: r => r.l.inOrders },
   minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
@@ -2525,7 +2531,9 @@ try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'
 
 // user-arranged column ORDER for the main sheet, persisted (owner request
 // 2026-08-12: drag a header to move the column)
-const STOCK_COL_DEFAULT = ['sku', 'stockLevel', 'inOrders', 'minimumLevel', 'available'];
+const STOCK_COL_DEFAULT = ['sku', 'cost', 'stockLevel', 'inOrders', 'minimumLevel', 'available'];
+const costOn = () => !!(state && state.pages && state.pages.cost);
+const fmtCost = (v) => Number(v) > 0 ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 let stockColOrder = STOCK_COL_DEFAULT.slice();
 try {
   const saved = JSON.parse(localStorage.getItem('stockColOrder') || 'null');
@@ -2797,10 +2805,12 @@ function renderStock() {
       </table>${addNewFoot}`
       : (() => {
         // the data columns render in the USER'S order (drag a header to move)
-        const TH_EXTRA = { sku: '', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
+        const TH_EXTRA = { sku: '', cost: 'num th-cost', stockLevel: 'num th-level', inOrders: 'num', minimumLevel: 'num', available: 'num' };
+        const visibleCols = stockColOrder.filter(k => k !== 'cost' || costOn());
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
+            case 'cost': return `<td class="num cell-cost"><button class="stock-num-btn stock-cost-btn${Number(r.purchasePrice) > 0 ? '' : ' is-none'}" data-costsid="${esc(r.stockItemId || '')}" data-costsku="${esc(r.sku)}" data-cost="${Number(r.purchasePrice) || 0}" title="Cost — click to edit">${fmtCost(r.purchasePrice)}</button></td>`;
             case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
@@ -2816,13 +2826,13 @@ function renderStock() {
         <thead><tr>
           <th class="th-gutter">#</th>
           <th class="th-img"></th>
-          ${stockColOrder.map(k => stockTh(k, TH_EXTRA[k])).join('')}
+          ${visibleCols.map(k => stockTh(k, TH_EXTRA[k])).join('')}
         </tr></thead>
         <tbody>${rows.map((r, idx) => `
           <tr class="${r.l.available <= 0 ? 'is-out' : ''}">
             <td class="cell-gutter">${idx + 1}</td>
             ${imgCell(r)}
-            ${stockColOrder.map(k => cellFor(k, r)).join('')}
+            ${visibleCols.map(k => cellFor(k, r)).join('')}
           </tr>`).join('')}</tbody>
       </table>${addNewFoot}`;
       })();
@@ -3218,6 +3228,52 @@ function beginStockEdit(btn) {
 
 // Inline edit of the Min number: same interaction as the stock-level edit,
 // writing through Stock/UpdateStockMinimumLevel.
+// Cost edit in place, the Min column's twin: type, Enter saves, Esc
+// cancels. The old number lives in the history, not the cell.
+function beginStockCostEdit(btn) {
+  const sku = btn.dataset.costsku;
+  const sid = btn.dataset.costsid;
+  const current = Number(btn.dataset.cost) || 0;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '0.01';
+  input.value = current > 0 ? current.toFixed(2) : '';
+  input.placeholder = '0.00';
+  input.className = 'input stock-edit stock-cost-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const apply = (item, v) => { if (item) item.purchasePrice = v; };
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    const n = Math.round((Number(val) || 0) * 100) / 100;
+    if (val === '' && current === 0) { restore(); return; }
+    if (n === current) { restore(); return; }
+    input.disabled = true;
+    const res = await api.setStockCost(sid, sku, n, current);
+    if (!res.ok) { toast(res.error || 'Cost update failed'); restore(); return; }
+    apply(stockCache && stockCache.items.find(i => i.sku === sku), res.purchasePrice);
+    renderStock();
+    toast(`${sku} cost ${fmtCost(current)} → ${fmtCost(res.purchasePrice)}`);
+    pushUndo(`${sku} cost back to ${fmtCost(current)}`, async () => {
+      const r = await api.setStockCost(sid, sku, current, res.purchasePrice);
+      if (!r.ok) throw new Error(r.error || 'Cost update failed');
+      apply(stockCache && stockCache.items.find(i => i.sku === sku), r.purchasePrice);
+      renderStock();
+    });
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
 function beginStockMinEdit(btn) {
   const sku = btn.dataset.minsku;
   const sid = btn.dataset.minsid;
@@ -3639,6 +3695,8 @@ $('stockList').addEventListener('click', async (e) => {
   }
   const ioBtn = e.target.closest('button.stock-io-btn');
   if (ioBtn) { openOpenOrders(ioBtn.dataset.iosku); return; }
+  const costBtn = e.target.closest('button.stock-cost-btn');
+  if (costBtn) { beginStockCostEdit(costBtn); return; }
   const minBtn = e.target.closest('button.stock-min-btn');
   if (minBtn) { beginStockMinEdit(minBtn); return; }
   const skuLink = e.target.closest('.sku-link');
@@ -6223,11 +6281,12 @@ const SH_ACT = {
   removed: { word: 'REMOVED', cls: 'act-removed' },
   shipped: { word: 'SHIPPED', cls: 'act-shipped' },
   wholesale: { word: 'WHOLESALE', cls: 'act-wholesale' },
+  cost: { word: 'COST', cls: 'act-cost' },
   set: { word: 'SET', cls: 'act-set' },
   edited: { word: 'EDITED', cls: 'act-edited' },
   deleted: { word: 'DELETED', cls: 'act-deleted' },
 };
-const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'set', 'edited', 'deleted'];
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'cost', 'set', 'edited', 'deleted'];
 function shActionOf(e) {
   switch (e.reason) {
     case 'sale': return 'sold';
@@ -6240,6 +6299,7 @@ function shActionOf(e) {
     case 'dropship': return 'set';
     case 'wfs': case 'substitution': return 'shipped';
     case 'wholesale': case 'wholesale-void': return 'wholesale';
+    case 'cost': return 'cost';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -6304,6 +6364,11 @@ function shWhat(e, withSku) {
     const setTo = /set to (\d+)/.exec(e.note || '');
     return `${withSku ? `${skuEl(e.sku)} ` : ''}to <b>${e.level_after ?? (setTo ? setTo[1] : '?')}</b>${e.note && !setTo ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
   }
+  if (e.reason === 'cost') {
+    // a cost change: from → to, the unit cost in dollars
+    const d = e.dataObj || {};
+    return `${withSku ? `${skuEl(e.sku)} ` : ''}<span class="sh-dim">${Number(d.from) > 0 ? fmtCost(d.from) : 'no cost'}</span> <span class="sh-arrow">→</span> <b>${fmtCost(d.to)}</b>${e.note ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+  }
   if (e.reason === 'wholesale' || e.reason === 'wholesale-void') {
     // an invoice line: "10 units (Bright Tech · #2041)", a void reads +N
     const who = [e.note, e.ref ? `#${e.ref}` : ''].filter(Boolean).join(' · ');
@@ -6352,7 +6417,7 @@ function shRowHtml(e, withSku, clickable) {
   const isLink = SH_LINK_REASONS.has(e.reason) || !!e.link_gid;
   const deleted = e.eff && e.eff.deleted;
   const canFix = !isSale && !deleted && (SH_EDITABLE.has(e.reason) || isLink);
-  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : e.reason === 'wholesale' || e.reason === 'wholesale-void' ? 'Wholesale' : '';
+  const where = e.reason === 'return' || e.reason === 'return-edit' || e.reason === 'return-delete' ? 'Returns' : e.reason === 'wfs' ? 'WFS Shipments' : e.reason === 'wholesale' || e.reason === 'wholesale-void' ? 'Wholesale' : e.reason === 'cost' ? 'the Cost column' : '';
   const tools = canFix
     ? `<span class="sh-tools">${isLink ? '' : `<button type="button" class="btn-icon sh-edit-btn" title="Edit this line — change the quantity or the SKU">${ICONS.pencil}</button>`}<button type="button" class="btn-icon is-danger sh-del-btn" title="${isLink ? 'Delete this correction — undoes it' : 'Delete this line — takes its stock back out'}">${ICONS.trash}</button></span>`
     : where ? `<span class="sh-tools is-link" title="This line is corrected in ${where}">edit in ${where}</span>` : '';
@@ -6621,7 +6686,7 @@ async function openStockHistory(sku) {
     $('stockHistBody').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`;
     return;
   }
-  shDlg.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
+  shDlg.rows = [...(res.rows || []), ...sales].filter(r => costOn() || r.reason !== 'cost').sort(shNewestFirst);
   const pcs = [...new Set(shDlg.rows.map(e => shPcOf(e)).filter(Boolean))];
   shMenuFill('shPcMenu', pcs);
   renderStockHistory();
@@ -6644,7 +6709,11 @@ function renderStockHistory() {
     : `Nothing logged yet — history starts with the first change made through Capture Station.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`;
   const strip = `<div class="sales-strip sh-strip">
       <div class="sales-stat"><div class="l">In stock</div><div class="v">${lvl ? lvl.stockLevel : '—'}</div><div class="s">${lvl ? `${lvl.available} available · ${lvl.inOrders} in orders` : 'not in the loaded grid'}</div></div>
-      <div class="sales-stat"><div class="l">In · 7 days</div><div class="v is-pos">+${inWeek}</div><div class="s">units added</div></div>
+      ${costOn() ? (() => {
+        const lastCost = rows.find(r => r.reason === 'cost');
+        const from = lastCost && lastCost.dataObj ? Number(lastCost.dataObj.from) : null;
+        return `<div class="sales-stat"><div class="l">Cost now</div><div class="v is-cost">${fmtCost(item ? item.purchasePrice : 0)}</div><div class="s">${lastCost ? `was ${from > 0 ? fmtCost(from) : 'no cost'} · ${retDateUS(lastCost.day)}` : 'no changes logged'}</div></div>`;
+      })() : `<div class="sales-stat"><div class="l">In · 7 days</div><div class="v is-pos">+${inWeek}</div><div class="s">units added</div></div>`}
       <div class="sales-stat"><div class="l">Out · 7 days</div><div class="v is-neg">−${outWeek}</div><div class="s">units removed</div></div>
       <div class="sales-stat"><div class="l">Last touched</div><div class="v is-name">${last ? esc(String(last.computer || '—').toUpperCase()) + (last.by ? ` · ${esc(last.by)}` : '') : '—'}</div><div class="s">${last ? `${retDateUS(last.day)} ${fmtTime(last.created_at)}` : ''}</div></div>
     </div>`;
@@ -6679,7 +6748,7 @@ async function loadHistoryStock() {
   const [res, sales] = await Promise.all([api.stockHistoryRange(from, to), shSalesEvents(from, to)]);
   if (hs.seq !== seq) return;
   if (!res.ok) { $('hsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`; return; }
-  hs.rows = [...(res.rows || []), ...sales].sort(shNewestFirst);
+  hs.rows = [...(res.rows || []), ...sales].filter(r => costOn() || r.reason !== 'cost').sort(shNewestFirst);
   hs.loaded = true;
   const pcs = [...new Set(hs.rows.map(e => shPcOf(e)).filter(Boolean))];
   shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (shPcOf(e)) === v).length });

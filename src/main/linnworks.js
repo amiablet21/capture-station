@@ -264,6 +264,16 @@ class LinnworksClient {
     });
   }
 
+  // The item's cost (owner 2026-10-05): the Linnworks purchase price, so it
+  // is one number on every desktop
+  async setPurchasePrice(stockItemId, price) {
+    await this.call('Inventory/UpdateInventoryItemField', {
+      inventoryItemId: stockItemId,
+      fieldName: 'PurchasePrice',
+      fieldValue: String(Number(price) || 0),
+    });
+  }
+
   // Un-park AND unlock in one go: the PARKED chip covers both states (the
   // router's refusal string does not say which one it hit).
   // ChangeOrderTag with tag:null clears the parked tag; LockOrder false unlocks.

@@ -106,6 +106,7 @@ function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
   for (const r of out) {
     r.condition = conditionOf(views, r.item, { sku: r.channelSku, title: r.title });
     r.inStock = levelOf(r.item);
+    r.cost = r.item && Number(r.item.purchasePrice) > 0 ? Math.round(Number(r.item.purchasePrice) * 100) / 100 : '';
     delete r.item;
   }
   // the Stock page's active chip narrows the file the same way it narrows the grid
@@ -116,10 +117,14 @@ function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
 
 const HEADER = ['Inventory SKU', 'Channel SKU', 'Title', 'Condition', 'In stock', 'Price', 'WFS', 'Source', 'SubSource'];
 
-function buildChannelSkuCsv(rows) {
-  const lines = [HEADER.join(',')];
+// opts.cost: add the Cost column (only a station with the Cost tick asks)
+function buildChannelSkuCsv(rows, opts = {}) {
+  const head = opts.cost ? [...HEADER.slice(0, 5), 'Cost', ...HEADER.slice(5)] : HEADER;
+  const lines = [head.join(',')];
   for (const r of rows) {
-    lines.push([r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource].map(csvEscape).join(','));
+    const cells = [r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource];
+    if (opts.cost) cells.splice(5, 0, r.cost);
+    lines.push(cells.map(csvEscape).join(','));
   }
   return lines.join('\r\n') + '\r\n';
 }
@@ -138,12 +143,17 @@ const XLSX_COLUMNS = [
   { header: 'Source', width: 11, kind: 'text' },
   { header: 'SubSource', width: 19, kind: 'text' },
 ];
-function buildChannelSkuXlsx(rows, sheetName) {
+function buildChannelSkuXlsx(rows, sheetName, opts = {}) {
   const { buildWorkbook } = require('./xlsxwrite.js');
+  const columns = opts.cost ? [...XLSX_COLUMNS.slice(0, 5), { header: 'Cost', width: 10, kind: 'money' }, ...XLSX_COLUMNS.slice(5)] : XLSX_COLUMNS;
   return buildWorkbook({
     sheetName: sheetName || 'Channel SKUs',
-    columns: XLSX_COLUMNS,
-    rows: rows.map(r => [r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource]),
+    columns,
+    rows: rows.map(r => {
+      const cells = [r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource];
+      if (opts.cost) cells.splice(5, 0, r.cost);
+      return cells;
+    }),
   });
 }
 

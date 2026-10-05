@@ -5137,3 +5137,14 @@ th:last-child > .col-grip { right: 0; }
 /* the WHOLESALE pill in Stock history */
 .act-wholesale { color: #0F6E6E; background: #DFF3F2; }
 .sh-act-dot.act-wholesale { background: #0F6E6E; }
+
+/* ---------- Cost column (owner 2026-10-05) ---------- */
+.stock-table .th-cost, .stock-table .cell-cost { background: #FBFAF5; }
+.stock-table .th-cost { color: var(--badge-yellow-text); }
+.stock-table .th-cost:not([style]) { min-width: 92px; }
+.cell-cost .stock-num-btn.is-none { color: var(--faint); }
+.stock-edit.stock-cost-edit { width: 92px; }
+/* the COST pill in Stock history */
+.act-cost { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+.sh-act-dot.act-cost { background: var(--badge-yellow-text); }
+.sh-strip .v.is-cost { color: var(--badge-yellow-text); }

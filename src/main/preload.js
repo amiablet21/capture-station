@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('api', {
   copyImage: (payload) => ipcRenderer.invoke('util:copyImage', payload),
   updateInstall: () => ipcRenderer.invoke('update:install'),
   setStockMin: (stockItemId, level) => ipcRenderer.invoke('stock:setMin', { stockItemId, level }),
+  setStockCost: (stockItemId, sku, cost, from) => ipcRenderer.invoke('stock:setCost', { stockItemId, sku, cost, from }),
   salesQuery: (from, to, force) => ipcRenderer.invoke('sales:query', { from, to, force: !!force }),
   stockHistory: (sku) => ipcRenderer.invoke('stock:history', { sku }),
   stockHistoryToday: () => ipcRenderer.invoke('stock:historyToday'),
