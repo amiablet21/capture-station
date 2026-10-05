@@ -106,22 +106,22 @@
 <div class="sub">One more column on the Stock sheet, carrying each SKU's cost (Linnworks' purchase price). It appears only on stations with the Cost tick in Settings, and only those stations can change it. Every change is a COST line in that SKU's history, with the computer and the before → after, and Cost joins the history's action filter.</div>
 
 <div class="opt">
-  <div class="opt-label"><b>1 · The Stock sheet with the column</b><span>Cost sits after Available, tinted so it reads as money; row 3 is mid-edit</span></div>
+  <div class="opt-label"><b>1 · The Stock sheet with the column</b><span>Cost sits right after the SKU, before In stock; row 3 is mid-edit</span></div>
   <div class="card">
     <table>
-      <thead><tr><th class="gut">#</th><th class="l">SKU</th><th>In stock</th><th>In orders</th><th>Min</th><th>Available</th><th class="cost">Cost</th></tr></thead>
+      <thead><tr><th class="gut">#</th><th class="l">SKU</th><th class="cost">Cost</th><th>In stock</th><th>In orders</th><th>Min</th><th>Available</th></tr></thead>
       <tbody>
-        <tr><td class="gut">1</td><td class="l">X133-64GB-GRAY</td><td>1,964</td><td>12</td><td>400</td><td>1,952</td><td class="cost"><span class="btn-num">$98.40</span></td></tr>
-        <tr><td class="gut">2</td><td class="l">X210-64GB-GRAY</td><td>960</td><td>0</td><td>400</td><td>960</td><td class="cost"><span class="btn-num">$112.00</span></td></tr>
-        <tr><td class="gut">3</td><td class="l">X210-128GB-GRAY</td><td>734</td><td>0</td><td>0</td><td>734</td><td class="cost edit"><span class="from">was $127.50</span><input value="121.00" /></td></tr>
-        <tr><td class="gut">4</td><td class="l">X133-64GB-SILVER</td><td>634</td><td>0</td><td>50</td><td>634</td><td class="cost"><span class="btn-num">$98.40</span></td></tr>
-        <tr><td class="gut">5</td><td class="l">X400-128GB-GRAY</td><td>575</td><td>0</td><td>4</td><td>575</td><td class="cost"><span class="btn-num">$214.00</span><span class="delta up">+$6 this week</span></td></tr>
-        <tr><td class="gut">6</td><td class="l">A15-64GB-BLACK</td><td>14</td><td>0</td><td>0</td><td>14</td><td class="cost"><span class="btn-num dim">—</span></td></tr>
+        <tr><td class="gut">1</td><td class="l">X133-64GB-GRAY</td><td class="cost"><span class="btn-num">$98.40</span></td><td>1,964</td><td>12</td><td>400</td><td>1,952</td></tr>
+        <tr><td class="gut">2</td><td class="l">X210-64GB-GRAY</td><td class="cost"><span class="btn-num">$112.00</span></td><td>960</td><td>0</td><td>400</td><td>960</td></tr>
+        <tr><td class="gut">3</td><td class="l">X210-128GB-GRAY</td><td class="cost edit"><input value="121.00" /></td><td>734</td><td>0</td><td>0</td><td>734</td></tr>
+        <tr><td class="gut">4</td><td class="l">X133-64GB-SILVER</td><td class="cost"><span class="btn-num">$98.40</span></td><td>634</td><td>0</td><td>50</td><td>634</td></tr>
+        <tr><td class="gut">5</td><td class="l">X400-128GB-GRAY</td><td class="cost"><span class="btn-num">$214.00</span></td><td>575</td><td>0</td><td>4</td><td>575</td></tr>
+        <tr><td class="gut">6</td><td class="l">A15-64GB-BLACK</td><td class="cost"><span class="btn-num dim">—</span></td><td>14</td><td>0</td><td>0</td><td>14</td></tr>
       </tbody>
     </table>
-    <div class="foot"><span>6 SKUs</span><span>Stock value at cost <b>$583,146.20</b></span><span>1 SKU without a cost</span></div>
+    
   </div>
-  <div class="cap">Click a cost to edit it in place, exactly like Min: type, Enter saves, Esc cancels, and the old number stays visible beside the box while you type. A dash means no cost set yet. A small pill marks a cost that moved in the last 7 days. The footer sums stock × cost for the SKUs on screen, so the Open Box chip gives the open-box value and the search box gives one SKU's. Stations without the tick see none of this column.</div>
+  <div class="cap">Just the number. Click a cost to edit it in place, exactly like Min: type, Enter saves, Esc cancels. A dash means no cost set yet. What it changed from, when and by whom lives in the history only. Stations without the tick see none of this column.</div>
 </div>
 
 <div class="opt">
@@ -176,7 +176,7 @@
       <label><input type="checkbox" checked> Wholesale</label>
       <label class="new"><input type="checkbox" checked> Cost</label>
     </div>
-    <p>Capture is always on. Cost shows the Cost column, the cost history and the stock-value total on the Stock page; leave it unticked on the packing station.</p>
+    <p>Capture is always on. Cost shows the Cost column and the cost history on the Stock page; leave it unticked on the packing station.</p>
   </div>
   <div class="cap">The cost itself lives in Linnworks as the item's purchase price, so it's one number everywhere and survives reinstalls; the app writes it there and logs the change to the shared stock history. The channel-SKU export gets a Cost column too, but only when exported from a ticked station.</div>
 </div>
