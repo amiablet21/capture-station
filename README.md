@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.9 highlights
+
+- **The Overview works again.** The dial-rows design (v1.29.x) dropped a one-line definition from the Send to WFS panel, so the page threw the moment the sales pass finished and every station sat on "Crunching WFS sales…" forever. Restored.
+- **The Overview answers in seconds, always.** The 30-day sales pass no longer holds the reply; it runs behind the page and the two money columns show what it is doing (which page of orders, how long so far) with the page filling in by itself when it finishes. Today's numbers get an 8-second budget before the station's own captures stand in. When Linnworks refuses (rate limit, bad credentials) the columns and the header say so instead of waiting silently, and the pass is retried a minute later or on Refresh.
+- Linnworks rate limits (429) no longer kill a long walk: the client waits out the window and continues, a few times. At boot the year-of-history pass now waits for the money pass instead of racing it on the same endpoint.
+
 ## v1.29.8 highlights
 
 - **Cost column** on the Stock page (Settings › Pages on this station › Cost, off by default): the item's Linnworks purchase price right after the SKU, click to edit in place like Min. Every change is a COST line in the SKU's Stock history (before → after, computer, time) that rides the shared folder, and Cost joins the history's action filter; a "Cost now" tile shows the current cost and what it was. Unticked stations see no column, no tile and no COST lines. The channel-SKU export gains a Cost column when run from a ticked station.
