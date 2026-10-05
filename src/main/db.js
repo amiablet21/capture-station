@@ -841,7 +841,7 @@ function planStockCorrection({ original, linkMap, change, levelOf, laterSet }) {
   const isLink = STOCK_LOG_LINK_REASONS.has(original.reason) || !!original.link_gid;
   if (!isLink && !STOCK_LOG_EDITABLE.has(original.reason)) {
     const where = original.reason === 'return' || original.reason === 'return-edit' || original.reason === 'return-delete' ? 'Returns'
-      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'wholesale' || original.reason === 'wholesale-void' ? 'Wholesale' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
+      : original.reason === 'wfs' ? 'WFS Shipments' : original.reason === 'wholesale' || original.reason === 'wholesale-void' ? 'Wholesale' : original.reason === 'cost' ? 'the Stock page (Cost column)' : original.reason === 'sale' ? 'the marketplace' : 'Linnworks';
     return { ok: false, error: `This line is corrected in ${where}, not here.` };
   }
   const eff = stockLogEffective(original, linkMap);

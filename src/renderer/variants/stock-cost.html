@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock — Cost column</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06); --grid:#EFEEEC;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --neg-bg:#FDEBEC; --neg-text:#9F2F2D; --pos-bg:#EDF3EC; --pos-text:#346538;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --purple-bg:#F1E9F8; --purple:#6A2E9E; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --r-modal:12px; --r-ctl:6px; --r-card:8px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 70px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:860px; }
+  .opt { margin-bottom:46px; max-width:1000px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .opt-label b { font-size:14px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .cap { font-size:11px; color:var(--faint); margin-top:8px; max-width:900px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* ---- the stock sheet, as it is ---- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  table { border-collapse:collapse; width:100%; }
+  th { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--faint); text-align:right; padding:9px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  th.l { text-align:left; }
+  th.gut, td.gut { width:44px; text-align:center; color:var(--faint); font-family:var(--mono); font-size:11px; background:var(--surface-2); border-right:1px solid var(--border); }
+  td { padding:10px 16px; border-bottom:1px solid var(--grid); text-align:right; font-family:var(--mono); font-size:13px; }
+  td.l { text-align:left; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  th.cost, td.cost { background:#FBFAF5; }
+  th.cost { color:var(--yellow); }
+  .btn-num { display:inline-block; border:1px dashed transparent; border-radius:5px; padding:2px 6px; margin:-2px -6px; }
+  .btn-num:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .edit input { width:84px; text-align:right; font-family:var(--mono); font-size:13px; font-weight:600; padding:3px 8px; border:1.5px solid var(--accent); border-radius:6px; outline:none; box-shadow:0 0 0 3px var(--accent-soft); }
+  .edit .from { font-size:11px; color:var(--faint); margin-right:8px; }
+  .dim { color:var(--faint); font-weight:400; }
+  .delta { font-size:10.5px; font-family:var(--font); font-weight:600; border-radius:999px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+  .delta.up { background:var(--neg-bg); color:var(--neg-text); }
+  .delta.dn { background:var(--pos-bg); color:var(--pos-text); }
+  .foot { padding:8px 16px; font-size:11.5px; color:var(--muted); background:var(--surface-2); border-top:1px solid var(--border); display:flex; gap:18px; }
+  .foot b { font-family:var(--mono); color:var(--text); }
+
+  /* ---- the history dialog pieces ---- */
+  .dlg { width:860px; max-width:100%; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-modal); box-shadow:0 16px 48px rgba(47,52,55,0.10); overflow:hidden; }
+  .dlg-body { padding:20px; }
+  .sales-head { display:flex; align-items:center; gap:10px; }
+  .dlg-title { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+  .sales-sku { font-size:12.5px; color:var(--muted); }
+  .dlg-x { margin-left:auto; color:var(--faint); font-size:12px; }
+  .sales-sub { font-size:11.5px; color:var(--faint); margin:2px 0 14px; }
+  .sh-filters { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px 6px 11px; border-radius:999px; font-size:12.5px; font-weight:500; border:1px solid var(--border); background:var(--surface); color:var(--text); }
+  .pill .caret { font-size:9px; color:var(--faint); }
+  .pill.has-sel { border-color:var(--accent); color:var(--accent-soft-text); background:var(--accent-soft); font-weight:600; }
+  .pill.has-sel .caret { color:var(--accent-soft-text); }
+  .menu { width:220px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-ctl); box-shadow:0 8px 24px rgba(47,52,55,0.08); overflow:hidden; }
+  .mi { display:flex; align-items:center; gap:10px; padding:7px 12px; font-size:12.5px; border-bottom:1px solid var(--border-soft); }
+  .mi:last-child { border-bottom:none; }
+  .mi i { width:14px; height:14px; border:1.5px solid var(--faint); border-radius:3px; display:inline-block; }
+  .mi.on { background:var(--accent-soft); font-weight:600; }
+  .mi.on i { background:var(--accent); border-color:var(--accent); }
+  .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
+  .strip { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--border); border-radius:var(--r-card); margin-bottom:14px; }
+  .stat { padding:10px 14px; min-width:0; }
+  .stat + .stat { border-left:1px solid var(--border-soft); }
+  .stat .l { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--faint); }
+  .stat .v { font-size:21px; font-weight:600; letter-spacing:-0.02em; line-height:1.3; }
+  .stat .v.neg { color:var(--neg-text); }
+  .stat .v.name { font-size:14px; }
+  .stat .v.cost { color:var(--yellow); }
+  .stat .s { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rows .row { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border-soft); border-bottom:none; font-size:13px; }
+  .rows .row:first-child { border-radius:var(--r-ctl) var(--r-ctl) 0 0; }
+  .rows .row:last-child { border-radius:0 0 var(--r-ctl) var(--r-ctl); border-bottom:1px solid var(--border-soft); }
+  .sh-act { width:92px; flex:0 0 auto; display:inline-flex; justify-content:center; font-size:10.5px; font-weight:700; letter-spacing:0.06em; padding:3px 0; border-radius:999px; color:var(--muted); background:var(--surface-2); line-height:1.3; }
+  .act-cost { color:var(--yellow); background:var(--yellow-bg); }
+  .act-sold { color:var(--neg-text); background:var(--neg-bg); }
+  .act-wholesale { color:#0F6E6E; background:#DFF3F2; }
+  .sh-text { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sh-text .dim { color:var(--muted); font-size:11.5px; }
+  .sh-text .arrow { color:var(--faint); }
+  .sh-text .to { font-weight:700; }
+  .sh-when { font-family:var(--mono); font-size:12.5px; white-space:nowrap; }
+  .sh-when .d { color:var(--muted); font-size:11.5px; }
+  .sh-pc { font-size:11px; font-weight:600; color:var(--muted); white-space:nowrap; letter-spacing:0.03em; }
+
+  /* ---- settings ---- */
+  .set { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; width:720px; max-width:100%; }
+  .set .k { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--faint); margin-bottom:8px; }
+  .set .opts { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; }
+  .set .opts label { display:flex; align-items:center; gap:6px; }
+  .set .opts label.new { background:var(--yellow-bg); color:var(--yellow); border-radius:6px; padding:0 8px; font-weight:600; }
+  .set p { font-size:12px; color:var(--muted); margin-top:8px; }
+</style>
+</head>
+<body>
+
+<h1>Stock — a Cost column, on the computers you choose</h1>
+<div class="sub">One more column on the Stock sheet, carrying each SKU's cost (Linnworks' purchase price). It appears only on stations with the Cost tick in Settings, and only those stations can change it. Every change is a COST line in that SKU's history, with the computer and the before → after, and Cost joins the history's action filter.</div>
+
+<div class="opt">
+  <div class="opt-label"><b>1 · The Stock sheet with the column</b><span>Cost sits right after the SKU, before In stock; row 3 is mid-edit</span></div>
+  <div class="card">
+    <table>
+      <thead><tr><th class="gut">#</th><th class="l">SKU</th><th class="cost">Cost</th><th>In stock</th><th>In orders</th><th>Min</th><th>Available</th></tr></thead>
+      <tbody>
+        <tr><td class="gut">1</td><td class="l">X133-64GB-GRAY</td><td class="cost"><span class="btn-num">$98.40</span></td><td>1,964</td><td>12</td><td>400</td><td>1,952</td></tr>
+        <tr><td class="gut">2</td><td class="l">X210-64GB-GRAY</td><td class="cost"><span class="btn-num">$112.00</span></td><td>960</td><td>0</td><td>400</td><td>960</td></tr>
+        <tr><td class="gut">3</td><td class="l">X210-128GB-GRAY</td><td class="cost edit"><input value="121.00" /></td><td>734</td><td>0</td><td>0</td><td>734</td></tr>
+        <tr><td class="gut">4</td><td class="l">X133-64GB-SILVER</td><td class="cost"><span class="btn-num">$98.40</span></td><td>634</td><td>0</td><td>50</td><td>634</td></tr>
+        <tr><td class="gut">5</td><td class="l">X400-128GB-GRAY</td><td class="cost"><span class="btn-num">$214.00</span></td><td>575</td><td>0</td><td>4</td><td>575</td></tr>
+        <tr><td class="gut">6</td><td class="l">A15-64GB-BLACK</td><td class="cost"><span class="btn-num dim">—</span></td><td>14</td><td>0</td><td>0</td><td>14</td></tr>
+      </tbody>
+    </table>
+    
+  </div>
+  <div class="cap">Just the number. Click a cost to edit it in place, exactly like Min: type, Enter saves, Esc cancels. A dash means no cost set yet. What it changed from, when and by whom lives in the history only. Stations without the tick see none of this column.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>2 · Stock history for the SKU</b><span>COST lines sit with the rest; the actions filter gains Cost, ticked here</span></div>
+  <div class="dlg">
+    <div class="dlg-body">
+      <div class="sales-head"><span class="dlg-title">Stock history</span><span class="mono sales-sku">X210-128GB-GRAY</span><span class="dlg-x">✕</span></div>
+      <div class="sales-sub">7 changes logged by Capture Station · 87 sold in the last 30 days</div>
+      <div class="sh-filters">
+        <span class="pill">Everyone<span class="caret">▼</span></span>
+        <span style="display:flex;flex-direction:column;gap:6px"><span class="pill has-sel">Cost<span class="caret">▼</span></span>
+          <span class="menu">
+            <span class="mi"><i></i><span class="dot" style="background:var(--neg-text)"></span>Sold</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--pos-text)"></span>Returned</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--blue)"></span>Added</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--neg-text)"></span>Removed</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--purple)"></span>Shipped</span>
+            <span class="mi"><i></i><span class="dot" style="background:#0F6E6E"></span>Wholesale</span>
+            <span class="mi on"><i></i><span class="dot" style="background:var(--yellow)"></span>Cost</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--yellow)"></span>Set</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--yellow)"></span>Edited</span>
+            <span class="mi"><i></i><span class="dot" style="background:var(--muted)"></span>Deleted</span>
+          </span></span>
+      </div>
+      <div class="strip">
+        <div class="stat"><div class="l">In stock</div><div class="v">734</div><div class="s">734 available · 0 in orders</div></div>
+        <div class="stat"><div class="l">Cost now</div><div class="v cost">$121.00</div><div class="s">was $127.50 · 3 changes this year</div></div>
+        <div class="stat"><div class="l">Out · 7 days</div><div class="v neg">−56</div><div class="s">units removed</div></div>
+        <div class="stat"><div class="l">Last touched</div><div class="v name">IMRAN-MACBOOK-PRO · IM</div><div class="s">10/05/2026 09:41</div></div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="sh-act act-cost">COST</span><span class="sh-text">$127.50 <span class="arrow">→</span> <span class="to">$121.00</span> <span class="dim">· new supplier quote</span></span><span class="sh-when">10/05/2026 <span class="d">09:41</span></span><span class="sh-pc">🖥 IMRAN-MACBOOK-PRO · IM</span></div>
+        <div class="row"><span class="sh-act act-cost">COST</span><span class="sh-text">$119.00 <span class="arrow">→</span> <span class="to">$127.50</span></span><span class="sh-when">08/14/2026 <span class="d">16:02</span></span><span class="sh-pc">🖥 STOCK-ROOM · IM</span></div>
+        <div class="row"><span class="sh-act act-cost">COST</span><span class="sh-text"><span class="dim">no cost</span> <span class="arrow">→</span> <span class="to">$119.00</span> <span class="dim">· first cost entered</span></span><span class="sh-when">06/02/2026 <span class="d">11:15</span></span><span class="sh-pc">🖥 IMRAN-MACBOOK-PRO · IM</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">With the filter off, COST lines sit in date order among SOLD, WHOLESALE and the rest, same pill shape, amber. The Everyone filter narrows them to one computer as usual. A "Cost now" tile replaces "In · 7 days" on stations with the tick so the current cost and its last change are one glance away. The optional note is asked for when you save a change ("new supplier quote"); Enter with an empty note is fine. Stations without the tick never see COST lines or the tile.</div>
+</div>
+
+<div class="opt">
+  <div class="opt-label"><b>3 · Only on chosen computers</b><span>Settings › Pages on this station, next to Wholesale; the Settings PIN keeps it there</span></div>
+  <div class="set">
+    <div class="k">Pages on this station</div>
+    <div class="opts">
+      <label><input type="checkbox" checked> Overview</label>
+      <label><input type="checkbox" checked> Stock</label>
+      <label><input type="checkbox"> Pricing</label>
+      <label><input type="checkbox" checked> History</label>
+      <label><input type="checkbox"> Returns</label>
+      <label><input type="checkbox"> Listings</label>
+      <label><input type="checkbox" checked> Wholesale</label>
+      <label class="new"><input type="checkbox" checked> Cost</label>
+    </div>
+    <p>Capture is always on. Cost shows the Cost column and the cost history on the Stock page; leave it unticked on the packing station.</p>
+  </div>
+  <div class="cap">The cost itself lives in Linnworks as the item's purchase price, so it's one number everywhere and survives reinstalls; the app writes it there and logs the change to the shared stock history. The channel-SKU export gets a Cost column too, but only when exported from a ticked station.</div>
+</div>
+
+</body>
+</html>
