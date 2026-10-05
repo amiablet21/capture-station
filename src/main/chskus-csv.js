@@ -34,7 +34,11 @@ function conditionOf(views, ...subjects) {
 // items: listInventory() rows ({ stockItemId, sku, title })
 // feeds: [{ channel: { source, subSource }, rows: getChannelItems() rows }]
 // recs:  { stockItemId: [{ sku, source, subSource }] } (the unlisted scan's chrecs)
-// opts:  { views: config.stockViews, condition: 'New' | a view label | '' (all) }
+// opts:  { views: config.stockViews, condition: 'New' | a view label | '' (all),
+//          locationId: the primary stock location — the In stock column is
+//          the Linnworks level there, NOT the marketplace's listed qty (owner
+//          2026-10-05: a listing the feed skipped came out blank); every
+//          channel SKU of one inventory item carries the same number }
 function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
   const views = Array.isArray(opts.views) ? opts.views : [];
   const want = String(opts.condition || '').trim().toLowerCase();
@@ -94,8 +98,14 @@ function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
   // MAPPED listings only (owner 2026-09-30: "the mapped channel SKUs, not
   // every Walmart SKU"): a feed row nothing points at is not in the file
   const out = [...rows.values()].filter(r => r.linked === 'yes');
+  const levelOf = (it) => {
+    if (!it || !Array.isArray(it.levels) || !it.levels.length) return '';
+    const lv = (opts.locationId && it.levels.find(l => l.locationId === opts.locationId)) || it.levels[0];
+    return lv ? Number(lv.stockLevel) || 0 : '';
+  };
   for (const r of out) {
     r.condition = conditionOf(views, r.item, { sku: r.channelSku, title: r.title });
+    r.inStock = levelOf(r.item);
     delete r.item;
   }
   // the Stock page's active chip narrows the file the same way it narrows the grid
@@ -104,12 +114,12 @@ function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
       || a.channelSku.localeCompare(b.channelSku, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
-const HEADER = ['Inventory SKU', 'Channel SKU', 'Title', 'Condition', 'Listed qty', 'Price', 'WFS', 'Source', 'SubSource'];
+const HEADER = ['Inventory SKU', 'Channel SKU', 'Title', 'Condition', 'In stock', 'Price', 'WFS', 'Source', 'SubSource'];
 
 function buildChannelSkuCsv(rows) {
   const lines = [HEADER.join(',')];
   for (const r of rows) {
-    lines.push([r.inventorySku, r.channelSku, r.title, r.condition, r.qty, r.price, r.wfs, r.source, r.subSource].map(csvEscape).join(','));
+    lines.push([r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource].map(csvEscape).join(','));
   }
   return lines.join('\r\n') + '\r\n';
 }
@@ -122,7 +132,7 @@ const XLSX_COLUMNS = [
   { header: 'Channel SKU', width: 26, kind: 'text' },
   { header: 'Title', width: 60, kind: 'text' },
   { header: 'Condition', width: 11, kind: 'text' },
-  { header: 'Listed qty', width: 11, kind: 'int' },
+  { header: 'In stock', width: 11, kind: 'int' },
   { header: 'Price', width: 10, kind: 'money' },
   { header: 'WFS', width: 6, kind: 'center' },
   { header: 'Source', width: 11, kind: 'text' },
@@ -133,7 +143,7 @@ function buildChannelSkuXlsx(rows, sheetName) {
   return buildWorkbook({
     sheetName: sheetName || 'Channel SKUs',
     columns: XLSX_COLUMNS,
-    rows: rows.map(r => [r.inventorySku, r.channelSku, r.title, r.condition, r.qty, r.price, r.wfs, r.source, r.subSource]),
+    rows: rows.map(r => [r.inventorySku, r.channelSku, r.title, r.condition, r.inStock, r.price, r.wfs, r.source, r.subSource]),
   });
 }
 

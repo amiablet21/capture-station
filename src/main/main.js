@@ -1010,7 +1010,7 @@ async function exportChannelSkus(channel, condition = '') {
     // a listing linked today is in the file
     let recs = {};
     try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
-    const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond });
+    const rows = buildChannelSkuRows(key, items, feeds, recs, { views: cfg.stockViews, condition: cond, locationId: cfg.linnworks.locationId });
     if (/\.csv$/i.test(filePath)) fs.writeFileSync(filePath, buildChannelSkuCsv(rows), 'utf8');
     else fs.writeFileSync(filePath, buildChannelSkuXlsx(rows, `${label} channel SKUs`));
     return { ok: true, path: filePath, count: rows.length, channel: label, condition: cond };
