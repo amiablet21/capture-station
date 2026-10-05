@@ -11181,19 +11181,39 @@ function enterOverview() {
   ovFetch();
 }
 
+// the main process answers within seconds now (the 30-day sales walk runs
+// behind the page and reports its stage), but a reply that never comes
+// must not pin the page on its first "Loading…" forever: 30s, then the
+// header says so and the next poll tries again
+let ovError = ''; // the last fetch's failure, shown in the header
+let ovQuickTimer = null;
 async function ovFetch() {
   if (ovFetching) return;
   ovFetching = true;
   try {
-    const r = await api.overviewData().catch(() => null);
+    let r;
+    try {
+      r = await Promise.race([
+        api.overviewData(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('The Overview did not answer in 30 seconds.')), 30000)),
+      ]);
+    } catch (e) { r = { ok: false, error: (e && e.message) || 'Could not load the Overview.' }; }
     if (r && r.ok) {
       ovData = r;
+      ovError = '';
       ovUpdatedAt = new Date();
-      if (activePage === 'overview') ovRenderAll();
+    } else {
+      ovError = (r && r.error) || 'Could not load the Overview.';
     }
+    if (activePage === 'overview') ovRenderAll();
   } finally {
     ovFetching = false;
   }
+  // still crunching (or the fetch failed before any data): poll again soon
+  // so the page fills the moment the pass finishes
+  clearTimeout(ovQuickTimer);
+  const waiting = ovError ? !ovData : !!(ovData && (ovData.moneyPending || ovData.livePending));
+  if (waiting && activePage === 'overview') ovQuickTimer = setTimeout(ovFetch, ovError ? 10000 : 4000);
 }
 
 // refresh every minute on the page, and right after a capture lands
@@ -11205,18 +11225,38 @@ function ovRenderAll() {
   ovRenderWfs();
   ovRenderSold();
   ovRenderLow();
-  $('ovUpdated').textContent = ovUpdatedAt
-    ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
+  const upd = $('ovUpdated');
+  upd.classList.toggle('is-err', !!ovError);
+  upd.title = ovError || '';
+  upd.textContent = ovError
+    ? `Could not load: ${ovError}`
+    : ovUpdatedAt ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // bar widths go through the CSSOM: the CSP blocks inline style attributes
   $('ovCols').querySelectorAll('[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+}
+
+// what the money columns say while the sales pass runs (or after it
+// failed): the stage, how far along, how long it has been — so a first
+// open on a station reads as work in progress, not a dead page
+function ovWaitHtml() {
+  if (!ovData) return `<div class="ov-empty ov-wait">${ovError ? esc(ovError) : 'Loading…'}</div>`;
+  const p = ovData.moneyPending;
+  if (p) {
+    const stage = { sales: 'Reading 30 days of sales', inventory: 'Reading the inventory', pace: 'Working out the pace' }[p.stage] || 'Crunching the numbers';
+    const secs = p.since ? Math.max(0, Math.round((Date.now() - p.since) / 1000)) : 0;
+    const el = secs >= 60 ? `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s` : `${secs}s`;
+    return `<div class="ov-empty ov-wait"><span class="ov-wait-dot"></span>${stage}…${p.detail ? ` <span class="ov-wait-det">${esc(p.detail)}</span>` : ''}<span class="ov-wait-t">${el}</span>
+      <div class="ov-wait-note">The first pass on a station walks every order of the last 30 days, which takes a few minutes. The page fills in by itself.</div></div>`;
+  }
+  const err = ovData.moneyError;
+  return `<div class="ov-empty ov-wait is-err">${esc(err || 'Not ready yet.')}<div class="ov-wait-note">Linnworks did not answer the sales pass. It is tried again in a minute, or press Refresh.</div></div>`;
 }
 
 function ovRenderWfs() {
   const box = $('ovWfs');
   const plan = ovData && ovData.wfsPlan;
   if (!plan || !plan.ready) {
-    const err = ovData && ovData.moneyError;
-    box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4><div class="ov-empty">${err ? esc(err) : 'Crunching WFS sales…'}</div>`;
+    box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>${ovWaitHtml()}`;
     return;
   }
   // dial rows (owner pick 2026-09-30, variants/ov-runway.html R3): a ring
@@ -11263,6 +11303,13 @@ function ovRenderWfs() {
         : `<button class="ov-rw-send q" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
     </div>`;
   }).join('');
+  // the dial-rows commit (1f49c66) dropped this definition and kept its use:
+  // the panel threw a ReferenceError the moment the sales pass finished, so
+  // every station sat on "Crunching WFS sales…" for good (owner 2026-10-05:
+  // "I haven't even seen it work at all")
+  const sendUnits = plan.rows.reduce((a, r) => a + (Number(r.send) || 0), 0);
+  const wfsSub = plan.rows.length
+    ? `<span class="sub"><b>${plan.rows.length}</b> SKU${plan.rows.length === 1 ? '' : 's'} · <b>${sendUnits.toLocaleString()}</b> units</span>` : '';
   box.innerHTML = `<h4 class="ov-h-g">Send to WFS${wfsSub}</h4>
     ${plan.rows.length ? `<div class="ov-dlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
     ${undo}
@@ -11275,7 +11322,10 @@ function ovRenderSold() {
   const sold = ovData && ovData.sold;
   const today = ovData && ovData.orders && ovData.orders.today;
   if (!sold) {
-    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty">${ovData ? 'Could not reach Linnworks for today’s orders.' : 'Loading today…'}</div></div>`;
+    const msg = !ovData ? (ovError ? esc(ovError) : 'Loading today…')
+      : ovData.livePending ? '<span class="ov-wait-dot"></span>Reading today’s orders…'
+        : `Could not reach Linnworks for today’s orders.${ovData.liveError ? `<div class="ov-wait-note">${esc(ovData.liveError)}</div>` : ''}`;
+    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty ov-wait">${msg}</div></div>`;
     return;
   }
   const grid = sold.rows.length
@@ -11312,8 +11362,7 @@ function ovRenderLow() {
   const m = ovData && ovData.money;
   const plan = ovData && ovData.lowPlan;
   if (!m || !plan || !plan.ready) {
-    const err = ovData && ovData.moneyError;
-    box.innerHTML = `<h4 class="ov-h-a">Running low</h4><div class="ov-empty">${err ? esc(err) : 'Crunching the sales history…'}</div>`;
+    box.innerHTML = `<h4 class="ov-h-a">Running low</h4>${ovWaitHtml()}`;
     return;
   }
   // dial rows like Send to WFS (variants/ov-runway.html R3): the dial is

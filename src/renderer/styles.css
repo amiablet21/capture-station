@@ -4771,6 +4771,15 @@ th:last-child > .col-grip { right: 0; }
 .ov-more { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .ov-more a { color: #065F46; font-weight: 600; text-decoration: none; cursor: pointer; }
 .ov-empty { padding: 14px 4px; font-size: 11.5px; color: var(--faint); }
+/* waiting on the sales pass: a pulsing dot, the stage, a tabular timer */
+.ov-wait { color: var(--muted); line-height: 1.5; }
+.ov-wait.is-err { color: var(--neg-text); }
+.ov-wait-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 1px; animation: ov-pulse 1.2s ease-in-out infinite; }
+.ov-wait-det { color: var(--faint); font-variant-numeric: tabular-nums; }
+.ov-wait-t { float: right; color: var(--faint); font-variant-numeric: tabular-nums; }
+.ov-wait-note { margin-top: 6px; font-size: 11px; color: var(--faint); }
+.ov-updated.is-err { color: var(--neg-text); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes ov-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
 /* WFS Shipments: where an Overview Send came from, and each past
    shipment's status */

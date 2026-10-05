@@ -105,7 +105,7 @@ class LinnworksClient {
     return this.session;
   }
 
-  async call(endpoint, payload, { method = 'POST' } = {}) {
+  async call(endpoint, payload, { method = 'POST', attempt = 0 } = {}) {
     if (!this.session) await this.auth();
     await this.throttle();
     const url = `${this.session.server}/api/${endpoint}`;
@@ -126,6 +126,15 @@ class LinnworksClient {
       // session expired: re-auth once and retry
       await this.auth();
       return this.call(endpoint, payload, { method });
+    }
+    if (res.status === 429 && (attempt || 0) < 4) {
+      // rate limited: a long walk (30 days of sales, a year of headers)
+      // used to die here and start over on the next open. Wait out the
+      // window Linnworks names (or 5s) and carry on, a few times.
+      const ra = Number(res.headers.get('retry-after'));
+      const wait = Math.min(30000, Math.max(2000, Number.isFinite(ra) && ra > 0 ? ra * 1000 : 5000));
+      await new Promise(r => setTimeout(r, wait));
+      return this.call(endpoint, payload, { method, attempt: (attempt || 0) + 1 });
     }
     if (!res.ok) {
       throw new LinnworksError(`${endpoint} failed (${res.status}): ${trim(body)}`, { status: res.status, endpoint });
@@ -727,9 +736,11 @@ class LinnworksClient {
   // Source, dProcessedOn, TotalPages, no item lines) — the per-item SKU /
   // Quantity / CostIncTax come from Orders/GetOrdersById, batched.
   // Both endpoints are heavy (150/min); the shared throttle spaces the calls.
-  async listProcessedLines(fromIso, toIso) {
+  async listProcessedLines(fromIso, toIso, onProgress) {
     const headers = [];
+    const tell = (p) => { if (typeof onProgress === 'function') { try { onProgress(p); } catch { /* progress is cosmetic */ } } };
     for (let page = 1; ; page++) {
+      tell({ stage: 'pages', page, pages: 0 });
       const data = await this.call('ProcessedOrders/SearchProcessedOrders', {
         request: {
           SearchTerm: '',
@@ -750,17 +761,21 @@ class LinnworksClient {
           reference: o.cReferenceNum || o.ReferenceNum || '', // marketplace order number (stock history's SOLD rows)
         });
       }
+      tell({ stage: 'pages', page, pages: po.TotalPages || 1, orders: headers.length });
       if (!hits.length || page >= (po.TotalPages || 1)) break;
     }
-    return this.linesForOrders(headers);
+    return this.linesForOrders(headers, onProgress);
   }
 
   // Item lines for known processed-order headers ({ orderId, source,
   // processedOn }), 50 orders per GetOrdersById call
-  async linesForOrders(headers) {
+  async linesForOrders(headers, onProgress) {
     const headById = new Map(headers.map(h => [h.orderId, h]));
     const lines = [];
     for (let i = 0; i < headers.length; i += 50) {
+      if (typeof onProgress === 'function') {
+        try { onProgress({ stage: 'orders', done: i, orders: headers.length }); } catch { /* cosmetic */ }
+      }
       const ids = headers.slice(i, i + 50).map(h => h.orderId);
       const full = await this.call('Orders/GetOrdersById', { pkOrderIds: ids });
       for (const order of full || []) {

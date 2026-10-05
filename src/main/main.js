@@ -2021,7 +2021,7 @@ function salesMerge(segment) {
   }
 }
 
-async function querySales(from, to, force) {
+async function querySales(from, to, force, onProgress) {
   const cfg = config.load();
   if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
   const f = Date.parse(`${from}T00:00:00`);
@@ -2039,16 +2039,16 @@ async function querySales(from, to, force) {
     if (salesCache.at && t >= salesCache.from && f <= salesCache.to) {
       // overlap: fetch only the missing head / tail segments
       if (f < salesCache.from) {
-        salesMerge(await client.listProcessedLines(new Date(f).toISOString(), new Date(salesCache.from).toISOString()));
+        salesMerge(await client.listProcessedLines(new Date(f).toISOString(), new Date(salesCache.from).toISOString(), onProgress));
       }
       if (t > salesCache.to) {
-        salesMerge(await client.listProcessedLines(new Date(salesCache.to).toISOString(), new Date(t).toISOString()));
+        salesMerge(await client.listProcessedLines(new Date(salesCache.to).toISOString(), new Date(t).toISOString(), onProgress));
       }
       salesCache.from = Math.min(salesCache.from, f);
       salesCache.to = Math.max(salesCache.to, t);
       salesCache.at = Date.now();
     } else {
-      const lines = await client.listProcessedLines(new Date(f).toISOString(), new Date(t).toISOString());
+      const lines = await client.listProcessedLines(new Date(f).toISOString(), new Date(t).toISOString(), onProgress);
       salesCache = { from: f, to: t, at: Date.now(), lines };
     }
     return { ok: true, lines: salesSlice(f, t) };
@@ -3977,15 +3977,31 @@ function registerIpc() {
     if (j && j.money && j.v === 2) overviewCache = { at: Number(j.at) || 0, money: j.money, promise: null };
   } catch { /* no saved overview yet */ }
 
+  // what the money pass is doing right now, for the Overview's waiting
+  // text (owner 2026-10-05: "I haven't even seen it work at all") — the
+  // first pass on a station walks 30 days of processed orders and the page
+  // used to sit on a blank "Crunching…" the whole time, with no sign of
+  // life and no word when Linnworks said no
+  let overviewProgress = { stage: '', detail: '', since: 0 };
+  const OVERVIEW_RETRY_MS = 60 * 1000; // a failed pass waits this long before another try
   function refreshOverviewMoney(cfg) {
     if (overviewCache.promise) return overviewCache.promise;
-    overviewCache.promise = computeOverviewMoney(cfg)
+    overviewProgress = { stage: 'sales', detail: '', since: Date.now() };
+    const t0 = Date.now();
+    overviewCache.promise = computeOverviewMoney(cfg, (p) => { overviewProgress = { ...overviewProgress, ...p }; })
       .then(m => {
         overviewCache = { at: Date.now(), money: m, promise: null };
         try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
+        console.log(`[overview] money pass done in ${Math.round((Date.now() - t0) / 1000)}s`);
         return m;
       })
-      .catch(e => { overviewCache.promise = null; throw e; });
+      .catch(e => {
+        overviewCache.promise = null;
+        overviewCache.failedAt = Date.now();
+        overviewCache.error = e.message;
+        console.log(`[overview] money pass failed after ${Math.round((Date.now() - t0) / 1000)}s: ${e.message}`);
+        throw e;
+      });
     return overviewCache.promise;
   }
 
@@ -4130,10 +4146,19 @@ function registerIpc() {
   // fetch) + the open book — feeds the Day curve and the orders-today card so
   // every range speaks the same language. 60s cache; SQLite captures stand in
   // when Linnworks is unreachable.
-  let overviewTodayCache = { at: 0, data: null };
+  let overviewTodayCache = { at: 0, data: null, promise: null };
   // processed orders never change, so their item lines are fetched once per
   // order and kept for the day (the Sold today grid re-reads every minute)
   let soldLines = { day: '', byOrder: new Map() };
+  // one live fetch at a time: the page polls every few seconds while it
+  // waits, and each poll used to start its own round of Linnworks calls
+  function overviewLiveTodayShared(cfg) {
+    if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < 60 * 1000) return Promise.resolve(overviewTodayCache.data);
+    if (overviewTodayCache.promise) return overviewTodayCache.promise;
+    const p = overviewLiveToday(cfg).finally(() => { if (overviewTodayCache.promise === p) overviewTodayCache.promise = null; });
+    overviewTodayCache.promise = p;
+    return p;
+  }
   async function overviewLiveToday(cfg) {
     if (overviewTodayCache.data && Date.now() - overviewTodayCache.at < 60 * 1000) return overviewTodayCache.data;
     const client = new LinnworksClient(cfg.linnworks);
@@ -4219,26 +4244,35 @@ function registerIpc() {
       today: { total: orders.length, byChannel, totalSales: Math.round(totalSales), byChannelSales },
       sold: { rows: soldList, units: soldList.reduce((a, r) => a + r.units, 0), byChannel: unitsByChannel },
     };
-    overviewTodayCache = { at: Date.now(), data };
+    overviewTodayCache = { at: Date.now(), data, promise: null };
     return data;
   }
 
-  async function computeOverviewMoney(cfg) {
+  async function computeOverviewMoney(cfg, onProgress) {
+    const tell = (p) => { if (typeof onProgress === 'function') onProgress(p); };
     const client = new LinnworksClient(cfg.linnworks);
     const to = new Date();
     // 30 days of sales (owner 2026-09-23: "make the data pull from the last
     // 30 days") — pace, running low and the WFS channel SKUs all use it
     const WINDOW_DAYS = 30;
     const from = new Date(to.getTime() - WINDOW_DAYS * 86400000);
+    tell({ stage: 'sales', detail: '' });
     const sales = await querySales(
       `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`,
-      `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`
+      `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`,
+      false,
+      (p) => {
+        if (p.stage === 'pages') tell({ stage: 'sales', detail: p.pages ? `page ${p.page} of ${p.pages}` : `page ${p.page}` });
+        else if (p.stage === 'orders') tell({ stage: 'sales', detail: `order ${Math.min(p.orders, p.done + 1).toLocaleString()} of ${p.orders.toLocaleString()}` });
+      }
     );
     if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
     // per-SKU: 4-week qty, revenue, last sale, channels
     const stats = {};
     const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
+    tell({ stage: 'inventory', detail: '' });
     const items = await client.listInventory();
+    tell({ stage: 'pace', detail: '' });
     const homeLoc = cfg.linnworks.locationId;
     // the Walmart-fed WFS location: sales despatched from it are WFS sales
     let wfsLocId = '';
@@ -4393,10 +4427,16 @@ function registerIpc() {
     };
   }
 
-  // shared by the in-app Overview tab AND the phone dashboard's /data endpoint
+  // shared by the in-app Overview tab AND the phone dashboard's /data endpoint.
+  // Answers within seconds, always: the money pass never blocks a reply
+  // (it runs behind the page and reports its stage), and today's live
+  // numbers get a short budget before the SQLite captures stand in — the
+  // page polls again right away while either is still on its way.
+  const OVERVIEW_LIVE_BUDGET_MS = 8000;
   async function overviewDataPayload() {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!cfg.linnworks || !cfg.linnworks.applicationId) return { ok: false, error: 'Linnworks is not connected on this station (Settings).' };
     // every range speaks the received-order language: Month/Year from the
     // processed-header history, Day + the today card from a small live fetch.
     // SQLite captures stand in wherever Linnworks is unreachable.
@@ -4405,7 +4445,13 @@ function registerIpc() {
       refreshOverviewHistory(cfg).catch(() => { /* stale or SQLite view stands */ });
     }
     let live = null;
-    try { live = await overviewLiveToday(cfg); } catch { /* captures fallback */ }
+    let livePending = false;
+    let liveError = '';
+    const budget = new Promise(res => setTimeout(() => res(Symbol.for('ov-budget')), OVERVIEW_LIVE_BUDGET_MS));
+    try {
+      const r = await Promise.race([overviewLiveTodayShared(cfg), budget]);
+      if (r === Symbol.for('ov-budget')) livePending = true; else live = r;
+    } catch (e) { liveError = e.message || 'Linnworks unavailable'; /* captures fallback */ }
     const sqlToday = db.overviewToday();
     const yday = db.localDay(new Date(Date.now() - 86400000));
     const ydayRec = (overviewHistory.days && overviewHistory.days[yday]) || null;
@@ -4430,18 +4476,24 @@ function registerIpc() {
       historyPending: !hist,
     };
     const sold = live ? live.sold : null;
-    let money = overviewCache.money;
-    if (!money || money.v !== 6 || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
-      const p = refreshOverviewMoney(cfg);
-      // stale view answers instantly while a refresh runs; first call (or a
-      // cache from before the 3-column Overview) waits
-      if (!money || money.v !== 6) {
-        try { money = await p; } catch (e) { return { ok: true, orders, money: null, moneyError: e.message, sold }; }
-      } else {
-        p.catch(() => { /* stale money stands */ });
-      }
+    let money = overviewCache.money && overviewCache.money.v === 6 ? overviewCache.money : null;
+    const stale = !money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS;
+    if (stale && !overviewCache.promise && Date.now() - (overviewCache.failedAt || 0) > OVERVIEW_RETRY_MS) {
+      // stale (or missing) money refreshes behind the page; a pass that just
+      // failed waits a minute before it is tried again
+      refreshOverviewMoney(cfg).catch(() => { /* reported through moneyError */ });
     }
-    return { ok: true, orders, money, sold, wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money) };
+    const moneyPending = !money && overviewCache.promise
+      ? { stage: overviewProgress.stage, detail: overviewProgress.detail, since: overviewProgress.since }
+      : null;
+    const moneyError = !money && !overviewCache.promise ? (overviewCache.error || 'Linnworks unavailable') : null;
+    return {
+      ok: true, orders, money, sold,
+      livePending, liveError: live ? '' : liveError,
+      moneyPending, moneyError,
+      moneyAt: money ? overviewCache.at : 0,
+      wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money),
+    };
   }
 
   // Running low column: the money pass's list minus the SKUs ignored from
@@ -4502,7 +4554,9 @@ function registerIpc() {
     rows.sort((a, b) => a.coverDays - b.coverDays);
     return { rows, ignored, flight, ...w, ready: !!(money && money.wfsCand) };
   }
-  ipcMain.handle('overview:data', () => overviewDataPayload());
+  ipcMain.handle('overview:data', async () => {
+    try { return await overviewDataPayload(); } catch (e) { return { ok: false, error: e.message || String(e) }; }
+  });
 
   /* ---------- phone dashboard: the Overview served over LAN ---------- */
   // http://<lan-ip>:8484/?k=<token> — a phone-sized twin of the Overview tab
@@ -4691,12 +4745,17 @@ function registerIpc() {
   setTimeout(() => {
     const cfg = config.load();
     if (!cfg.captureOnly && cfg.linnworks && cfg.linnworks.applicationId) {
-      if (!overviewCache.money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
-        refreshOverviewMoney(cfg).catch(() => { /* next open retries */ });
-      }
-      if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
-        refreshOverviewHistory(cfg).catch(() => { /* next open retries */ });
-      }
+      // the money pass first (the page's columns hang on it), the year of
+      // headers after — both page the same Linnworks endpoint, and side by
+      // side they rate-limited each other
+      const money = (!overviewCache.money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS)
+        ? refreshOverviewMoney(cfg).catch(() => { /* next open retries */ })
+        : Promise.resolve();
+      money.then(() => {
+        if (!overviewHistory.days || Date.now() - overviewHistory.at > OVERVIEW_HISTORY_TTL_MS) {
+          refreshOverviewHistory(cfg).catch(() => { /* next open retries */ });
+        }
+      });
     }
   }, 15000);
 
