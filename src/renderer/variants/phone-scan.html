@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Supply phone — all products as dial rows, search a listing, item card</title>
-<!-- Mockup, 2026-10-06. A phone page for the supply manager, served by the
-     app like the owner's phone page (src/renderer/mobile.html) but with its
-     own token and no sales dollars. Three screens behind a bottom tab bar:
-     Products (every SKU as a Running-low dial row), Search (a shared marketplace link → item
-     card), To order (what he tapped Order on). Same tokens as mobile.html
-     and the Overview's dial rows (variants/ov-runway.html R3). -->
+<title>Supply phone — one list, every product as a Running-low row</title>
+<!-- Mockup, 2026-10-06 (owner: "super barebones"). A phone page for the
+     supply manager, served by the app like the owner's phone page
+     (src/renderer/mobile.html) behind its own token, no sales dollars. ONE
+     screen: every SKU as the Overview's Running-low dial row. No tabs, no
+     search, no order list. A tap opens the row to its channel SKUs with
+     their listed price and qty. Same tokens as mobile.html and the
+     Overview's dial rows (variants/ov-runway.html R3). -->
 <style>
   :root {
     color-scheme: only light;
@@ -25,29 +26,19 @@
   * { box-sizing: border-box; margin: 0; }
   body { background: #ECEBE7; color: var(--text); font-family: 'Geist', system-ui, -apple-system, sans-serif; padding: 28px 24px 60px; }
   h1.pg { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
-  p.lead { color: var(--muted); font-size: 12.5px; max-width: 780px; margin: 6px 0 22px; line-height: 1.55; }
+  p.lead { color: var(--muted); font-size: 12.5px; max-width: 700px; margin: 6px 0 22px; line-height: 1.55; }
   .row { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
   .col { width: 300px; }
   .cap { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 8px 6px; }
   .cap small { display: block; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); margin-top: 2px; }
   .phone { width: 300px; background: #2F3437; border-radius: 32px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,.26); }
-  .screen { background: var(--bg); border-radius: 24px; height: 640px; overflow: hidden; position: relative; padding: 14px 12px 70px; font-size: 12px; }
+  .screen { background: var(--bg); border-radius: 24px; height: 640px; overflow: hidden; position: relative; padding: 14px 12px 20px; font-size: 12px; }
   .notch { width: 92px; height: 22px; background: #2F3437; border-radius: 0 0 14px 14px; margin: -14px auto 8px; }
 
   .head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
   .head h1 { font-size: 15px; font-weight: 600; }
   .head .date { font-size: 10.5px; color: var(--faint); margin-left: auto; }
   .head .date b { color: var(--text); font-weight: 600; }
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 13px; margin-bottom: 9px; }
-  .k { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-  .quiet { text-align: center; color: var(--faint); font-size: 10.5px; margin-top: 6px; }
-
-  /* search + chips (as the Stock tab has them) */
-  .search { display: flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 6px 6px 13px; margin-bottom: 7px; }
-  .search span { color: var(--faint); font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .search span.typed { color: var(--text); }
-  .search .cam { width: 28px; height: 28px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-soft-text); display: grid; place-items: center; font-size: 13px; flex: none; }
-  .search b { font-size: 10.5px; font-weight: 600; background: #EFEEEA; border-radius: 999px; padding: 4px 11px; color: var(--muted); }
   .chips { display: flex; gap: 4px; margin-bottom: 8px; }
   .chips span { font-size: 10px; font-weight: 600; color: var(--muted); border: 1px solid transparent; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
   .chips span.on { background: var(--surface); border-color: var(--border); color: var(--text); }
@@ -55,7 +46,6 @@
   .chips span.low.on { background: var(--neg-bg); border-color: transparent; }
   .chips span.soon { color: var(--amber); }
 
-  /* dial rows — the Overview's Running-low rows, phone-sized */
   .list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .dl { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; padding: 9px 11px; border-bottom: 1px solid #F0EFEC; }
   .dl:last-child { border-bottom: none; }
@@ -78,135 +68,45 @@
   .ord { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px; background: var(--amber); color: #fff; white-space: nowrap; text-align: center; }
   .ord b { font-family: var(--mono); font-weight: 700; margin-left: 5px; }
   .ord.q { background: var(--accent-soft); color: var(--accent-soft-text); }
-  .ord.done { background: #EFEEEA; color: var(--muted); }
   .ign { font-size: 10px; color: var(--faint); text-align: center; }
   .foot { font-size: 10px; color: var(--faint); margin: 8px 6px 0; line-height: 1.4; }
   .more { text-align: center; font-size: 10.5px; color: var(--faint); padding: 8px; }
 
-  /* viewfinder */
-  .vf { position: relative; height: 170px; border-radius: 12px; background: #1E2224; overflow: hidden; margin-bottom: 9px; }
-  .vf .img { position: absolute; inset: 0; background: radial-gradient(120px 80px at 60% 55%, rgba(255,255,255,.10), transparent 70%), linear-gradient(180deg, #2A2F32, #171A1C); }
-  .vf .bars { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 150px; height: 44px; opacity: .55; }
-  .vf .bars span { position: absolute; top: 0; bottom: 0; background: #fff; }
-  .vf .ret { position: absolute; left: 36px; right: 36px; top: 44px; bottom: 44px; }
-  .vf .ret i { position: absolute; width: 18px; height: 18px; border: 2.5px solid #fff; border-radius: 3px; }
-  .vf .ret i.tl { left: -2px; top: -2px; border-right: 0; border-bottom: 0; }
-  .vf .ret i.tr { right: -2px; top: -2px; border-left: 0; border-bottom: 0; }
-  .vf .ret i.bl { left: -2px; bottom: -2px; border-right: 0; border-top: 0; }
-  .vf .ret i.br { right: -2px; bottom: -2px; border-left: 0; border-top: 0; }
-  .vf .line { position: absolute; left: 44px; right: 44px; top: 50%; height: 2px; background: var(--accent); box-shadow: 0 0 10px rgba(4,120,87,.9); animation: sweep 2.2s ease-in-out infinite alternate; }
-  @keyframes sweep { from { top: 38%; } to { top: 62%; } }
-  .vf .hint { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; color: rgba(255,255,255,.72); font-size: 10.5px; }
-  .vf .torch { position: absolute; right: 9px; top: 9px; width: 28px; height: 28px; border-radius: 999px; background: rgba(255,255,255,.14); color: #fff; font-size: 11px; display: grid; place-items: center; }
-  .vf.small { height: 84px; }
-  .vf.small .ret { top: 18px; bottom: 18px; }
-  .vf.found .line { display: none; }
-  .vf.found .ret i { border-color: var(--accent); }
-  .vf.found .hint { color: #8FE3C3; }
-
-  /* item card */
-  .strip { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
-  .ans { margin-bottom: 14px; }
-  .ans + .ans { padding-top: 12px; border-top: 1px dashed var(--border); }
-  .strip .ok.warn { color: var(--amber); background: var(--amber-bg); }
-  .strip .ok.bad { color: var(--neg); background: var(--neg-bg); }
-  .strip .ok { font-size: 10px; font-weight: 700; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 3px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .strip .back { font-size: 11px; color: var(--muted); font-weight: 600; }
-  .strip .next { margin-left: auto; font-size: 10.5px; font-weight: 600; color: #fff; background: var(--accent-soft-text); border-radius: 999px; padding: 5px 12px; flex: none; }
-  .prod { display: flex; gap: 10px; align-items: flex-start; }
-  .thumb { width: 54px; height: 54px; border-radius: 9px; border: 1px solid var(--line); background: #FAFAF8; flex: none; display: grid; place-items: center; color: var(--faint); font-size: 9px; }
-  .prod .t { font-size: 12px; font-weight: 600; line-height: 1.3; }
-  .prod .ids { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
-  .prod .ids b { color: var(--blue); font-weight: 700; }
-  .verdict { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-  .verdict .meta { font-size: 10.5px; color: var(--muted); }
-  .verdict .meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
-  .verdict .meta .out { color: var(--neg); font-weight: 600; }
-  .stock { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; margin: 0 -13px -12px; border-top: 1px solid var(--border); }
-  .stock > div { padding: 7px 4px 9px; text-align: center; }
-  .stock > div + div { border-left: 1px solid var(--border); }
-  .stock .v { font-family: var(--mono); font-size: 14px; font-weight: 700; margin-top: 1px; }
-  .stock .v.dim { color: var(--muted); }
-  .stock .v.neg { color: var(--neg); }
-  .lst { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 9px; }
-  .lst .hd { padding: 7px 12px 5px; display: flex; align-items: baseline; gap: 6px; border-bottom: 1px solid #F0EFEC; }
-  .lst .hd .k { flex: 1; }
-  .lst .hd em { font-style: normal; font-size: 9.5px; color: var(--faint); }
-  .ch { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-bottom: 1px solid #F0EFEC; }
-  .ch:last-child { border-bottom: none; }
-  .ch.hit { background: #F2FAF6; }
-  .ch.none { opacity: .62; }
+  /* the tapped-open row */
+  .dl.open { background: #FAFAF8; }
+  .det { grid-column: 1 / -1; margin: 2px 0 0; border-top: 1px dashed var(--border); padding-top: 7px; }
+  .det .nums { display: flex; gap: 14px; font-size: 10.5px; color: var(--muted); margin-bottom: 6px; }
+  .det .nums b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .ch { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
   .cb { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; width: 50px; flex: none; }
   .cb.walmart { color: #2E86D9; } .cb.ebay { color: #047857; } .cb.temu { color: #C97B12; }
-  .ch .info { min-width: 0; flex: 1; }
-  .ch .csku { font-family: var(--mono); font-size: 10.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ch .cmeta { font-size: 9.5px; color: var(--faint); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ch .cmeta b { font-weight: 600; color: var(--muted); }
-  .wfs { font-size: 8px; font-weight: 700; color: var(--blue); background: var(--blue-bg); border-radius: 999px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; }
-  .ch .cp { margin-left: auto; flex: none; text-align: right; }
-  .ch .cp .p { font-family: var(--mono); font-size: 13.5px; font-weight: 700; }
-  .ch .cp .p.dim { color: var(--faint); font-weight: 600; font-size: 11px; }
+  .ch .csku { font-family: var(--mono); font-size: 10.5px; font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ch .csku.none { color: var(--faint); font-weight: 500; }
+  .ch .wfs { font-size: 8px; font-weight: 700; color: var(--blue); background: var(--blue-bg); border-radius: 999px; padding: 0 6px; flex: none; }
+  .ch .cp { flex: none; text-align: right; }
+  .ch .cp .p { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+  .ch .cp .p.dim { color: var(--faint); font-weight: 600; }
   .ch .cp .q { font-size: 8.5px; color: var(--faint); }
-  .ch .cp .q.low { color: var(--neg); font-weight: 600; }
-  .cost { display: flex; gap: 0; }
-  .cost > div { flex: 1; padding: 8px 12px; }
-  .cost > div + div { border-left: 1px solid #F0EFEC; }
-  .cost .v { font-family: var(--mono); font-size: 13.5px; font-weight: 700; margin-top: 1px; }
-  .cost .s { font-size: 9.5px; color: var(--faint); margin-top: 1px; }
 
-  /* to-order */
-  .ol { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid #F0EFEC; }
-  .ol:last-child { border-bottom: none; }
-  .ol .sku { font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--blue); }
-  .ol .meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
-  .ol .meta b { font-family: var(--mono); color: var(--text); font-weight: 600; }
-  .qty { display: flex; align-items: center; gap: 6px; }
-  .qty span { width: 24px; height: 24px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; font-size: 13px; color: var(--muted); }
-  .qty b { font-family: var(--mono); font-size: 14px; font-weight: 700; min-width: 26px; text-align: center; }
-  .tot { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px; background: #FAFAF8; border-top: 1px solid var(--border); font-size: 10.5px; color: var(--muted); }
-  .tot b { font-family: var(--mono); font-weight: 700; color: var(--text); font-size: 12px; }
-  .tot .r { margin-left: auto; }
-  .tick { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); margin: 10px 4px 8px; }
-  .tick .box { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; font-size: 11px; color: #fff; flex: none; }
-  .tick .box.on { background: var(--accent-soft-text); border-color: var(--accent-soft-text); }
-  .msg { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
-  .msg pre { font-family: var(--mono); font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 3px; white-space: pre-wrap; }
-  .act { display: flex; gap: 7px; margin-top: 9px; }
-  .act span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 8px 0; }
-  .act span.pri { background: var(--accent-soft-text); border-color: var(--accent-soft-text); color: #fff; }
-
-  .tabs { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid #D8D6D0; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 8px 0 18px; }
-  .tabs span { text-align: center; font-size: 11px; font-weight: 600; color: var(--faint); }
-  .tabs span.on { color: var(--accent); }
-  .tabs span i { font-style: normal; font-family: var(--mono); font-size: 8.5px; background: var(--amber); color: #fff; border-radius: 999px; padding: 0 5px; margin-left: 4px; vertical-align: 2px; }
-
-  /* notes */
-  .notes { margin-top: 34px; max-width: 920px; }
+  .notes { margin-top: 34px; max-width: 760px; }
   .notes h2 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
   .notes p, .notes li { font-size: 12px; color: var(--muted); line-height: 1.55; }
   .notes ul { padding-left: 20px; }
   .notes li { margin: 3px 0; }
   .notes li b { color: var(--text); font-weight: 600; }
   .notes code { font-family: var(--mono); font-size: 11px; background: #E4E2DC; border-radius: 4px; padding: 0 4px; color: var(--text); }
-  .notes .opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 6px; }
-  .notes .opt { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
-  .notes .opt h3 { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
-  .notes .opt h3 em { font-style: normal; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; margin-left: 5px; vertical-align: 2px; }
-  .notes .opt p { font-size: 11.5px; }
 </style>
 </head>
 <body>
-  <h1 class="pg">Supply phone — every product as a Running-low row, plus a listing check</h1>
-  <p class="lead">A phone page for your supply manager, served by Capture Station the same way your own phone page is, but with its own token and no sales dollars. <b>Products</b> is the Running-low card from the Overview, extended to every SKU: the same dial (days on hand out of the 7-day lead + 21 cover days), sold / on hand, Faster, and Order <i>n</i> computed the same way. <b>Search</b> takes a link shared from the Walmart (or eBay / Temu) app and says whether we sell that listing, opening the item card: stock, cost, and every channel SKU with its listed price and qty. Tapping Order anywhere adds the line to <b>To order</b>.</p>
+  <h1 class="pg">Supply phone — one list</h1>
+  <p class="lead">A phone page for your supply manager, served by Capture Station like your own phone page but behind its own token, with no sales dollars. One screen and nothing else: every SKU as the Overview's Running-low row, soonest-out first. Same dial (days on hand out of the 7-day lead + 21 cover days), sold / on hand, Faster, Order <i>n</i> from the same math, Ignore for 14 days. Three chips. Tap a row and it opens to its channel SKUs with the listed price and qty.</p>
 
   <div class="row">
-    <!-- ① Products: all SKUs -->
     <div class="col">
-      <div class="cap">1 · Products<small>every SKU, soonest-out first; red = inside the lead time, amber = inside lead + cover, green = fine</small></div>
+      <div class="cap">The list<small>red = inside the lead time, amber = inside lead + cover, green = fine</small></div>
       <div class="phone"><div class="screen">
         <div class="notch"></div>
         <div class="head"><h1>Products</h1><span class="date"><b>212</b> SKUs · 7-day lead</span></div>
-        <div class="search"><span>SKU or title</span></div>
         <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span></div>
         <div class="list">
           <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
@@ -235,158 +135,63 @@
             <div class="keys"><span class="ord q">Fine</span></div></div>
           <div class="more">204 more · keep scrolling</div>
         </div>
-        <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Tap a row for the item card.</div>
-        <nav class="tabs"><span class="on">Products</span><span>Search</span><span>To order<i>3</i></span></nav>
+        <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Pull down to refresh.</div>
       </div></div>
     </div>
 
-    <!-- ② Search -->
     <div class="col">
-      <div class="cap">2 · Search<small>paste a link shared from the Walmart app, or an id, or a title; three answers</small></div>
+      <div class="cap">A row tapped open<small>channel SKUs with the listed price and qty; tap again to close</small></div>
       <div class="phone"><div class="screen">
         <div class="notch"></div>
-        <div class="head"><h1>Search</h1></div>
-        <div class="search"><span class="typed">walmart.com/ip/20183771747?sid=D01…</span><b>Search</b></div>
-        <div class="quiet" style="margin:0 0 9px">a Walmart, eBay or Temu link, or just the item id</div>
-
-        <div class="ans">
-          <div class="strip"><span class="ok">Selling it · Walmart item 20183771747</span></div>
-          <div class="panel" style="margin-bottom:0">
-            <div class="prod">
-              <div class="thumb">img</div>
-              <div class="info">
-                <div class="t">Samsung Galaxy S25 128GB Navy — Unlocked</div>
-                <div class="ids"><b>S25-128GB-NAVY</b> · <span style="color:var(--muted)">S25NAVY128-WM</span></div>
-              </div>
-            </div>
-            <div class="stock" style="margin-top:10px">
-              <div><div class="k">Our price</div><div class="v">$529</div></div>
-              <div><div class="k">On hand</div><div class="v">25</div></div>
-              <div><div class="k">Days</div><div class="v" style="color:var(--amber)">12</div></div>
-              <div><div class="k">Order</div><div class="v" style="color:var(--amber)">35</div></div>
-            </div>
-          </div>
-          <div class="quiet">tap for the full item card (screen 3)</div>
-        </div>
-
-        <div class="ans">
-          <div class="strip"><span class="ok warn">Ours, not linked · Walmart item 5171402288</span></div>
-          <div class="panel" style="margin-bottom:0">
-            <div class="prod">
-              <div class="thumb">img</div>
-              <div class="info">
-                <div class="t">Google Pixel 9 128GB Obsidian — Unlocked</div>
-                <div class="ids"><span style="color:var(--muted)">PIX9OBS128-WM</span> · listed qty 18 · $449</div>
-              </div>
-            </div>
-            <div class="foot" style="margin:8px 0 0">In our Walmart feed but not mapped to an inventory item. Link it on the desktop (Stock › Actions › Mappings).</div>
-          </div>
-        </div>
-
-        <div class="ans">
-          <div class="strip"><span class="ok bad">Not selling this · Walmart item 20183771747</span></div>
-          <div class="search" style="margin-top:2px"><span>search our products by title…</span><b>Go</b></div>
-        </div>
-        <nav class="tabs"><span>Products</span><span class="on">Search</span><span>To order<i>3</i></span></nav>
-      </div></div>
-    </div>
-
-    <!-- ③ Item card -->
-    <div class="col">
-      <div class="cap">3 · Item card<small>from a Search hit, or a tap on any Products row</small></div>
-      <div class="phone"><div class="screen">
-        <div class="notch"></div>
-        <div class="strip"><span class="back">‹ Search</span><span class="ok" style="margin-left:4px">Walmart item 20183771747</span></div>
-        <div class="panel">
-          <div class="prod">
-            <div class="thumb">img</div>
-            <div class="info">
-              <div class="t">Samsung Galaxy S25 128GB Navy — Unlocked</div>
-              <div class="ids"><b>S25-128GB-NAVY</b><br>UPC 887276 832119</div>
-            </div>
-          </div>
-          <div class="verdict">
-            <div class="dl a" style="display:contents"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="40.4 94.2"/></svg><span>12<small>d</small></span></div></div>
-            <div class="meta"><b>63</b> sold · <b>2.1</b>/day<br><span class="out">out Oct 18</span></div>
-            <div class="keys"><span class="ord">Order<b>35</b></span><span class="ign">Ignore</span></div>
-          </div>
-        </div>
-        <div class="panel" style="padding-top:10px">
-          <div class="stock" style="margin-top:0;border-top:none">
-            <div><div class="k">On hand</div><div class="v">25</div></div>
-            <div><div class="k">Shelf</div><div class="v dim">20</div></div>
-            <div><div class="k">WFS</div><div class="v dim">5</div></div>
-            <div><div class="k">In orders</div><div class="v dim">4</div></div>
-          </div>
-        </div>
-        <div class="lst">
-          <div class="cost">
-            <div><div class="k">Cost</div><div class="v">$412.00</div><div class="s">retail $519 · min 20</div></div>
-            <div><div class="k">Also</div><div class="v" style="font-size:11px;color:var(--blue)">S25-128GB-NAVY-OPENBOX</div><div class="s">6 on hand · $469</div></div>
-          </div>
-        </div>
-        <div class="lst">
-          <div class="hd"><span class="k">Listings</span><em>price · listed qty</em></div>
-          <div class="ch"><span class="cb walmart">Walmart</span><div class="info"><div class="csku">S25NAVY128-WM</div><div class="cmeta"><span class="wfs" style="margin:0 4px 0 0">WFS</span>Digital World Shop</div></div><div class="cp"><div class="p">$529.00</div><div class="q">qty 25</div></div></div>
-          <div class="ch"><span class="cb ebay">eBay</span><div class="info"><div class="csku">S25-128GB-NAVY</div><div class="cmeta">item <b>265912883411</b></div></div><div class="cp"><div class="p">$539.99</div><div class="q">qty 20</div></div></div>
-          <div class="ch none"><span class="cb temu">Temu</span><div class="info"><div class="csku" style="color:var(--faint);font-weight:500">Not listed</div></div><div class="cp"><div class="p dim">—</div></div></div>
-        </div>
-        <nav class="tabs"><span>Products</span><span class="on">Search</span><span>To order<i>3</i></span></nav>
-      </div></div>
-    </div>
-
-    <!-- ④ To order -->
-    <div class="col">
-      <div class="cap">4 · To order<small>what he tapped Order on, sent as a message</small></div>
-      <div class="phone"><div class="screen">
-        <div class="notch"></div>
-        <div class="head"><h1>To order</h1><span class="date"><b>4</b> lines · started today</span></div>
+        <div class="head"><h1>Products</h1><span class="date"><b>212</b> SKUs · 7-day lead</span></div>
+        <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span></div>
         <div class="list">
-          <div class="ol"><div><div class="sku">A15-128GB-BLACK</div><div class="meta">0 on hand · 39 sold · cost <b>$148</b></div></div><div class="qty"><span>−</span><b>40</b><span>+</span></div></div>
-          <div class="ol"><div><div class="sku">USED-X133-64GB-GRAY</div><div class="meta">0 on hand · 11 sold · cost <b>$89</b></div></div><div class="qty"><span>−</span><b>15</b><span>+</span></div></div>
-          <div class="ol"><div><div class="sku">S25-128GB-NAVY</div><div class="meta">25 on hand · 63 sold · cost <b>$412</b></div></div><div class="qty"><span>−</span><b>35</b><span>+</span></div></div>
-          <div class="ol"><div><div class="sku">OPEN-BOX-X610-128GB-BLACK</div><div class="meta">1 on hand · 10 sold · cost <b>$96</b></div></div><div class="qty"><span>−</span><b>10</b><span>+</span></div></div>
-          <div class="tot"><span><b>100</b> units</span><span class="r">at last cost <b>$22,710</b></span></div>
+          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
+            <div class="body"><div class="sku">A15-128GB-BLACK</div><div class="meta"><b>39</b> sold · <b>0</b> on hand</div></div>
+            <div class="keys"><span class="ord">Order<b>40</b></span><span class="ign">Ignore</span></div></div>
+          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
+            <div class="body"><div class="sku">USED-X133-64GB-GRAY</div><div class="meta"><b>11</b> sold · <b>0</b> on hand<span class="fast">Faster</span></div></div>
+            <div class="keys"><span class="ord">Order<b>15</b></span><span class="ign">Ignore</span></div></div>
+          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="13.5 94.2"/></svg><span>4<small>d</small></span></div>
+            <div class="body"><div class="sku">OPEN-BOX-X610-128GB-BLACK</div><div class="meta"><b>10</b> sold · <b>1</b> on hand · out <b>Fri</b><span class="fast">Faster</span></div></div>
+            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
+          <div class="dl a open"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="40.4 94.2"/></svg><span>12<small>d</small></span></div>
+            <div class="body"><div class="sku">S25-128GB-NAVY</div><div class="meta"><b>63</b> sold · <b>25</b> on hand · out <b>Oct 18</b></div></div>
+            <div class="keys"><span class="ord">Order<b>35</b></span><span class="ign">Ignore</span></div>
+            <div class="det">
+              <div class="nums"><span>shelf <b>20</b></span><span>WFS <b>5</b></span><span>in orders <b>4</b></span><span>cost <b>$412</b></span></div>
+              <div class="ch"><span class="cb walmart">Walmart</span><span class="csku">S25NAVY128-WM</span><span class="wfs">WFS</span><div class="cp"><div class="p">$529.00</div><div class="q">qty 25</div></div></div>
+              <div class="ch"><span class="cb ebay">eBay</span><span class="csku">S25-128GB-NAVY</span><div class="cp"><div class="p">$539.99</div><div class="q">qty 20</div></div></div>
+              <div class="ch"><span class="cb temu">Temu</span><span class="csku none">Not listed</span><div class="cp"><div class="p dim">—</div></div></div>
+            </div></div>
+          <div class="dl a"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="63.9 94.2"/></svg><span>19<small>d</small></span></div>
+            <div class="body"><div class="sku">PIX9-128-OBS</div><div class="meta"><b>28</b> sold · <b>18</b> on hand · out <b>Oct 25</b></div></div>
+            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
+          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>41<small>d</small></span></div>
+            <div class="body"><div class="sku">IP15-256-BLK</div><div class="meta"><b>20</b> sold · <b>27</b> on hand</div></div>
+            <div class="keys"><span class="ord q">Fine</span></div></div>
+          <div class="more">206 more · keep scrolling</div>
         </div>
-        <label class="tick"><span class="box on">✓</span>Include stock on hand in the message</label>
-        <div class="msg">
-          <div class="k">Message</div>
-          <pre>Order — Oct 6
-A15-128GB-BLACK × 40 (0 on hand)
-USED-X133-64GB-GRAY × 15 (0 on hand)
-S25-128GB-NAVY × 35 (25 on hand)
-OPEN-BOX-X610-128GB-BLACK × 10 (1 on hand)
-100 units</pre>
-        </div>
-        <div class="act"><span>Clear</span><span class="pri">Send message</span></div>
-        <div class="quiet">opens the phone's share sheet: Messages, WhatsApp, email</div>
-        <nav class="tabs"><span>Products</span><span>Search</span><span class="on">To order<i>4</i></span></nav>
+        <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Pull down to refresh.</div>
       </div></div>
     </div>
   </div>
 
   <div class="notes">
-    <h2>What he sees, and where it comes from</h2>
+    <h2>What it is</h2>
     <ul>
-      <li><b>Products</b> is the Running-low computation run over every SKU instead of only the ones inside the lead time: dial = days on hand ÷ (lead + cover), sold over 30 days, on hand = shelf + WFS, Order = pace × (lead + cover) − on hand rounded up to 5, Faster = last 14 days vs the 16 before. Green rows say Fine instead of an Order button. A SKU with no sales in 30 days shows a dash.</li>
-      <li><b>Sorting and chips.</b> Soonest-out first. Three chips only: All, Running low (inside the lead), Soon (inside lead + cover). Search covers SKU and title.</li>
-      <li><b>Search</b> pulls the item id out of a pasted link (<code>walmart.com/ip/&lt;id&gt;</code>, <code>ebay.com/itm/&lt;id&gt;</code>, Temu <code>goods_id</code>) or takes a bare id, and matches it against the channel-mapping rows the app already caches: the marketplace reference id Linnworks keeps per listing, the same id the desktop uses to open the product page when you click a channel SKU. No Linnworks call per check, so it answers instantly. Three answers: selling it (our SKU, price, stock, days, order), ours but not linked to an inventory item, not ours.</li>
-      <li><b>Item card</b> = the dial row again, the warehouse numbers (on hand, shelf, WFS, in orders), cost and retail from Linnworks, condition siblings (-OPENBOX / -USED / -SCRAP, or the New parent), and the listings: channel SKU, the channel's listed price, listed qty, WFS flag, eBay item number. "Not listed" when there is no mapping.</li>
-      <li><b>No sales dollars anywhere.</b> He gets units, prices and costs, never revenue. If cost should also be hidden from him, it is one tick on the desktop (the same Cost tick the Stock page uses).</li>
-      <li><b>Ignore</b> is the Overview's 14-day ignore, shared with the desktop so you both see the same list.</li>
-      <li><b>To order</b>: the Order taps collect into a list with +/− and the last cost. Send message builds a plain text order (SKU × qty per line, units total) and opens the phone's share sheet, so it goes out by Messages, WhatsApp or email; a tick adds each line's stock on hand to the text. Lines ride the shared folder so the desktop can show them too.</li>
+      <li><b>One page, one list.</b> The Running-low computation run over every SKU, not only the ones inside the lead: dial = days on hand ÷ (lead + cover), sold over 30 days, on hand = shelf + WFS, Order = pace × (lead + cover) − on hand rounded up to 5, Faster = last 14 days vs the 16 before. Green rows say Fine. No sales in 30 days shows a dash.</li>
+      <li><b>Chips:</b> All, Running low (inside the lead), Soon (inside lead + cover). Soonest-out first inside each.</li>
+      <li><b>Ignore</b> is the Overview's 14-day ignore, shared with the desktop, so you both see the same list. Order is a number, not a button: it tells him how many.</li>
+      <li><b>Tap a row</b> to open it: shelf / WFS / in orders / cost, then each channel SKU with the channel's listed price, listed qty and WFS flag, from the channel-mapping rows the desktop already caches. "Not listed" where there is no mapping. Cost shows only if the station has the Cost tick.</li>
+      <li><b>No sales dollars anywhere.</b> Units, prices and costs only.</li>
     </ul>
-
-    <h2>One tap from the Walmart app</h2>
-    <p>Copy the link, open the page, paste: three taps. Or one: on iPhone a two-step Siri Shortcut sits in the share sheet of the Walmart app ("Search in Capture Station"), takes the shared link and opens the phone page with the answer already showing. On Android the page itself can be a share target. Both are a few minutes to set up on his phone.</p>
-
     <h2>Anywhere he goes</h2>
     <p>Same as your phone today: Tailscale on his phone and an invite to the tailnet (or a share of just the Capture Station PC), his own QR from the desktop, "Add to Home Screen". The Capture Station PC has to be on with the app running, because the page is served by the app and only the tailnet can reach it. His token is separate from yours, so it can be revoked on its own, and it only opens this page, never your Overview.</p>
-
     <h2>Desktop side</h2>
     <ul>
-      <li>A second phone page (<code>supply.html</code>) on the same :8484 server, behind a second token, with three endpoints: <code>/supply/products</code> (the Running-low pass over all SKUs, cached like the Overview), <code>/supply/search?u=…</code> (the pasted link or id, matched against the channel-mapping and inventory caches the desktop already holds), and <code>/supply/order</code> for the To-order lines.</li>
-      <li>Settings › Pages on this station gains "Supply phone" with its QR, and a "show cost on the supply phone" tick.</li>
+      <li>One new page (<code>supply.html</code>) on the same :8484 server behind a second token, one endpoint (<code>/supply</code>: the Running-low pass over all SKUs plus each item's channel rows, cached like the Overview), and the existing ignore route.</li>
+      <li>Settings › Pages on this station gains "Supply phone" with its QR.</li>
     </ul>
   </div>
 </body>
