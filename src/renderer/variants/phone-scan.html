@@ -166,6 +166,11 @@
   .tot { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px; background: #FAFAF8; border-top: 1px solid var(--border); font-size: 10.5px; color: var(--muted); }
   .tot b { font-family: var(--mono); font-weight: 700; color: var(--text); font-size: 12px; }
   .tot .r { margin-left: auto; }
+  .tick { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text); margin: 10px 4px 8px; }
+  .tick .box { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; font-size: 11px; color: #fff; flex: none; }
+  .tick .box.on { background: var(--accent-soft-text); border-color: var(--accent-soft-text); }
+  .msg { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
+  .msg pre { font-family: var(--mono); font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 3px; white-space: pre-wrap; }
   .act { display: flex; gap: 7px; margin-top: 9px; }
   .act span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 8px 0; }
   .act span.pri { background: var(--accent-soft-text); border-color: var(--accent-soft-text); color: #fff; }
@@ -332,7 +337,7 @@
 
     <!-- ④ To order -->
     <div class="col">
-      <div class="cap">4 · To order<small>what he tapped Order on, ready to send to the supplier</small></div>
+      <div class="cap">4 · To order<small>what he tapped Order on, sent as a message</small></div>
       <div class="phone"><div class="screen">
         <div class="notch"></div>
         <div class="head"><h1>To order</h1><span class="date"><b>4</b> lines · started today</span></div>
@@ -343,12 +348,18 @@
           <div class="ol"><div><div class="sku">OPEN-BOX-X610-128GB-BLACK</div><div class="meta">1 on hand · 10 sold · cost <b>$96</b></div></div><div class="qty"><span>−</span><b>10</b><span>+</span></div></div>
           <div class="tot"><span><b>100</b> units</span><span class="r">at last cost <b>$22,710</b></span></div>
         </div>
-        <div class="act"><span>Clear</span><span>Copy as text</span><span class="pri">Share CSV</span></div>
-        <div class="quiet">the list lives on the phone until cleared; the desktop sees it in the shared folder like the WFS shipments</div>
-        <div class="panel" style="margin-top:14px">
-          <div class="k">Ignored for 14 days</div>
-          <div class="foot" style="margin:4px 0 0">X306-128GB-GREEN, BUDS-3-WHITE <span style="color:var(--blue)">Undo</span></div>
+        <label class="tick"><span class="box on">✓</span>Include stock on hand in the message</label>
+        <div class="msg">
+          <div class="k">Message</div>
+          <pre>Order — Oct 6
+A15-128GB-BLACK × 40 (0 on hand)
+USED-X133-64GB-GRAY × 15 (0 on hand)
+S25-128GB-NAVY × 35 (25 on hand)
+OPEN-BOX-X610-128GB-BLACK × 10 (1 on hand)
+100 units</pre>
         </div>
+        <div class="act"><span>Clear</span><span class="pri">Send message</span></div>
+        <div class="quiet">opens the phone's share sheet: Messages, WhatsApp, email</div>
         <nav class="tabs"><span>Products</span><span>Search</span><span class="on">To order<i>4</i></span></nav>
       </div></div>
     </div>
@@ -363,7 +374,7 @@
       <li><b>Item card</b> = the dial row again, the warehouse numbers (on hand, shelf, WFS, in orders), cost and retail from Linnworks, condition siblings (-OPENBOX / -USED / -SCRAP, or the New parent), and the listings: channel SKU, the channel's listed price, listed qty, WFS flag, eBay item number. "Not listed" when there is no mapping.</li>
       <li><b>No sales dollars anywhere.</b> He gets units, prices and costs, never revenue. If cost should also be hidden from him, it is one tick on the desktop (the same Cost tick the Stock page uses).</li>
       <li><b>Ignore</b> is the Overview's 14-day ignore, shared with the desktop so you both see the same list.</li>
-      <li><b>To order</b> is optional but cheap: the Order taps collect into a list with +/− and the last cost, and Share CSV hands it to the supplier or to you. Lines ride the shared folder so the desktop can show them too.</li>
+      <li><b>To order</b>: the Order taps collect into a list with +/− and the last cost. Send message builds a plain text order (SKU × qty per line, units total) and opens the phone's share sheet, so it goes out by Messages, WhatsApp or email; a tick adds each line's stock on hand to the text. Lines ride the shared folder so the desktop can show them too.</li>
     </ul>
 
     <h2>One tap from the Walmart app</h2>
