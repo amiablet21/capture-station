@@ -3,92 +3,71 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Supply phone — one list, every product as a Running-low row</title>
-<!-- Mockup, 2026-10-06 (owner: "super barebones"). A phone page for the
-     supply manager, served by the app like the owner's phone page
-     (src/renderer/mobile.html) behind its own token, no sales dollars. ONE
-     screen: every SKU as the Overview's Running-low dial row. No tabs, no
-     search, no order list. A tap opens the row to its channel SKUs with
-     their listed price and qty. Same tokens as mobile.html and the
-     Overview's dial rows (variants/ov-runway.html R3). -->
+<title>Supply phone — the Stock sheet on a phone</title>
+<!-- Mockup, 2026-10-06 (owner: "barebones, exactly like the stock room").
+     A phone page for the supply manager, served by the app like the
+     owner's phone page (src/renderer/mobile.html) behind its own token.
+     It IS the desktop Stock sheet: the spreadsheet header band (search +
+     summary), then the Excel-style grid with the row gutter, product
+     image, SKU, In stock, In orders, Min, Available — same order, same
+     styling (styles.css .stock-table), highest stock first, red gutter
+     when out, red Available below Min. Drawn at iPhone width (390). -->
 <style>
   :root {
     color-scheme: only light;
-    --bg: #F7F7F6; --surface: #FFFFFF; --border: #E4E2DC; --line: #EAE8E3;
-    --text: #2F3437; --muted: #6E6B64; --faint: #A5A29C;
-    --accent: #047857; --accent-soft: #DEF0E7; --accent-soft-text: #065F46;
-    --neg: #9F2F2D; --neg-bg: #FDEBEC;
-    --amber: #956400; --amber-bg: #FBF3DB;
-    --blue: #1F6C9F; --blue-bg: #E1F3FE;
-    --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
+    --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
+    --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+    --accent: #047857; --accent-soft: #E3F2EB;
+    --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+    --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   }
   @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
   * { box-sizing: border-box; margin: 0; }
   body { background: #ECEBE7; color: var(--text); font-family: 'Geist', system-ui, -apple-system, sans-serif; padding: 28px 24px 60px; }
   h1.pg { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
-  p.lead { color: var(--muted); font-size: 12.5px; max-width: 700px; margin: 6px 0 22px; line-height: 1.55; }
-  .row { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
-  .col { width: 300px; }
+  p.lead { color: var(--muted); font-size: 12.5px; max-width: 640px; margin: 6px 0 22px; line-height: 1.55; }
   .cap { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 8px 6px; }
   .cap small { display: block; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); margin-top: 2px; }
-  .phone { width: 300px; background: #2F3437; border-radius: 32px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,.26); }
-  .screen { background: var(--bg); border-radius: 24px; height: 640px; overflow: hidden; position: relative; padding: 14px 12px 20px; font-size: 12px; }
-  .notch { width: 92px; height: 22px; background: #2F3437; border-radius: 0 0 14px 14px; margin: -14px auto 8px; }
+  .phone { width: 410px; background: #2F3437; border-radius: 40px; padding: 10px; box-shadow: 0 16px 44px rgba(47,52,55,.26); }
+  .screen { background: var(--canvas); border-radius: 32px; height: 760px; overflow: hidden; position: relative; padding: 14px 12px 20px; font-size: 12px; }
+  .notch { width: 110px; height: 26px; background: #2F3437; border-radius: 0 0 16px 16px; margin: -14px auto 10px; }
 
-  .head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-  .head h1 { font-size: 15px; font-weight: 600; }
-  .head .date { font-size: 10.5px; color: var(--faint); margin-left: auto; }
-  .head .date b { color: var(--text); font-weight: 600; }
-  .chips { display: flex; gap: 4px; margin-bottom: 8px; }
-  .chips span { font-size: 10px; font-weight: 600; color: var(--muted); border: 1px solid transparent; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
-  .chips span.on { background: var(--surface); border-color: var(--border); color: var(--text); }
-  .chips span.low { color: var(--neg); }
-  .chips span.low.on { background: var(--neg-bg); border-color: transparent; }
-  .chips span.soon { color: var(--amber); }
+  /* the spreadsheet header band, as on the desktop Stock page */
+  .sheet { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .band { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .search { flex: 1; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; color: var(--faint); font-size: 12px; background: var(--surface); }
+  .search svg { width: 12px; height: 12px; fill: currentColor; flex: none; }
+  .hint { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+  .hint b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+  .refresh { width: 22px; height: 22px; color: var(--muted); flex: none; }
+  .refresh svg { width: 100%; height: 100%; fill: currentColor; }
 
-  .list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .dl { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; padding: 9px 11px; border-bottom: 1px solid #F0EFEC; }
-  .dl:last-child { border-bottom: none; }
-  .dial { position: relative; width: 38px; height: 38px; }
-  .dial svg { display: block; width: 38px; height: 38px; transform: rotate(-90deg); }
-  .dial .trk { fill: none; stroke: #EFEEEA; stroke-width: 4; }
-  .dial .val { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
-  .dial span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: currentColor; }
-  .dial span small { font-size: 8px; font-weight: 600; color: var(--faint); margin-left: 1px; }
-  .dl.r .dial { color: var(--neg); }
-  .dl.a .dial { color: var(--amber); }
-  .dl.g .dial { color: var(--accent); }
-  .dl.g .dial span { color: var(--accent-soft-text); }
-  .dl .body { min-width: 0; }
-  .dl .sku { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--blue); line-height: 1.25; overflow-wrap: anywhere; }
-  .dl .meta { font-size: 10.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
-  .dl .meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
-  .fast { font-size: 9px; font-weight: 600; line-height: 15px; padding: 0 6px; border-radius: 999px; color: var(--neg); background: var(--neg-bg); margin-left: 4px; vertical-align: 1px; display: inline-block; }
-  .keys { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
-  .ord { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px; background: var(--amber); color: #fff; white-space: nowrap; text-align: center; }
-  .ord b { font-family: var(--mono); font-weight: 700; margin-left: 5px; }
-  .ord.q { background: var(--accent-soft); color: var(--accent-soft-text); }
-  .ign { font-size: 10px; color: var(--faint); text-align: center; }
+  /* the grid: styles.css .stock-table, phone-sized */
+  .wrap { overflow-x: auto; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+  col.c-gut { width: 24px; } col.c-img { width: 40px; } col.c-stock { width: 44px; } col.c-io { width: 48px; } col.c-min { width: 32px; } col.c-avail { width: 44px; }
+  th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-size: 8.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 5px 5px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: normal; line-height: 1.15; vertical-align: bottom; }
+  th:last-child { border-right: none; }
+  th.gut { text-align: center; border-right: 1px solid var(--border); padding: 5px 0; }
+
+  th.num { text-align: right; }
+  th.sorted { color: var(--text); }
+  td { padding: 4px 5px; height: 38px; vertical-align: middle; white-space: nowrap; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
+  td:last-child { border-right: none; }
+  td.gut { text-align: center; font-family: var(--mono); font-size: 10px; color: var(--faint); padding: 0; border-right: 1px solid var(--border); }
+  tr.out td.gut { background: var(--neg-bg); color: var(--neg-text); font-weight: 600; }
+  td.img { padding: 2px 3px 2px 5px; }
+  .pic { display: block; width: 32px; height: 32px; object-fit: contain; border: 1px solid var(--border); border-radius: 4px; background: #FAFAF8; }
+  .pic.ph { display: grid; place-items: center; color: var(--faint); font-size: 8px; }
+  td.sku { font-family: var(--mono); font-weight: 600; font-size: 10.5px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+  td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.avail { font-weight: 600; }
+  tr.out td.avail, td.avail.low { color: var(--neg-text); }
   .foot { font-size: 10px; color: var(--faint); margin: 8px 6px 0; line-height: 1.4; }
-  .more { text-align: center; font-size: 10.5px; color: var(--faint); padding: 8px; }
 
-  /* the tapped-open row */
-  .dl.open { background: #FAFAF8; }
-  .det { grid-column: 1 / -1; margin: 2px 0 0; border-top: 1px dashed var(--border); padding-top: 7px; }
-  .det .nums { display: flex; gap: 14px; font-size: 10.5px; color: var(--muted); margin-bottom: 6px; }
-  .det .nums b { font-family: var(--mono); font-weight: 600; color: var(--text); }
-  .ch { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-  .cb { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; width: 50px; flex: none; }
-  .cb.walmart { color: #2E86D9; } .cb.ebay { color: #047857; } .cb.temu { color: #C97B12; }
-  .ch .csku { font-family: var(--mono); font-size: 10.5px; font-weight: 600; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ch .csku.none { color: var(--faint); font-weight: 500; }
-  .ch .wfs { font-size: 8px; font-weight: 700; color: var(--blue); background: var(--blue-bg); border-radius: 999px; padding: 0 6px; flex: none; }
-  .ch .cp { flex: none; text-align: right; }
-  .ch .cp .p { font-family: var(--mono); font-size: 12px; font-weight: 700; }
-  .ch .cp .p.dim { color: var(--faint); font-weight: 600; }
-  .ch .cp .q { font-size: 8.5px; color: var(--faint); }
-
-  .notes { margin-top: 34px; max-width: 760px; }
+  .notes { margin-top: 34px; max-width: 700px; }
   .notes h2 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
   .notes p, .notes li { font-size: 12px; color: var(--muted); line-height: 1.55; }
   .notes ul { padding-left: 20px; }
@@ -98,99 +77,58 @@
 </style>
 </head>
 <body>
-  <h1 class="pg">Supply phone — one list</h1>
-  <p class="lead">A phone page for your supply manager, served by Capture Station like your own phone page but behind its own token, with no sales dollars. One screen and nothing else: every SKU as the Overview's Running-low row, soonest-out first. Same dial (days on hand out of the 7-day lead + 21 cover days), sold / on hand, Faster, Order <i>n</i> from the same math, Ignore for 14 days. Three chips. Tap a row and it opens to its channel SKUs with the listed price and qty.</p>
+  <h1 class="pg">Supply phone — the Stock sheet</h1>
+  <p class="lead">The desktop Stock page, on his phone. The same spreadsheet: row gutter, product image, SKU, In stock, In orders, Min, Available, in that order, highest stock first, red gutter when a SKU is out, red Available below the minimum. Search at the top, pull down to refresh. Nothing else.</p>
 
-  <div class="row">
-    <div class="col">
-      <div class="cap">The list<small>red = inside the lead time, amber = inside lead + cover, green = fine</small></div>
-      <div class="phone"><div class="screen">
-        <div class="notch"></div>
-        <div class="head"><h1>Products</h1><span class="date"><b>212</b> SKUs · 7-day lead</span></div>
-        <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span></div>
-        <div class="list">
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
-            <div class="body"><div class="sku">A15-128GB-BLACK</div><div class="meta"><b>39</b> sold · <b>0</b> on hand</div></div>
-            <div class="keys"><span class="ord">Order<b>40</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
-            <div class="body"><div class="sku">USED-X133-64GB-GRAY</div><div class="meta"><b>11</b> sold · <b>0</b> on hand<span class="fast">Faster</span></div></div>
-            <div class="keys"><span class="ord">Order<b>15</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="13.5 94.2"/></svg><span>4<small>d</small></span></div>
-            <div class="body"><div class="sku">OPEN-BOX-X610-128GB-BLACK</div><div class="meta"><b>10</b> sold · <b>1</b> on hand · out <b>Fri</b><span class="fast">Faster</span></div></div>
-            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl a"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="40.4 94.2"/></svg><span>12<small>d</small></span></div>
-            <div class="body"><div class="sku">S25-128GB-NAVY</div><div class="meta"><b>63</b> sold · <b>25</b> on hand · out <b>Oct 18</b></div></div>
-            <div class="keys"><span class="ord">Order<b>35</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl a"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="63.9 94.2"/></svg><span>19<small>d</small></span></div>
-            <div class="body"><div class="sku">PIX9-128-OBS</div><div class="meta"><b>28</b> sold · <b>18</b> on hand · out <b>Oct 25</b></div></div>
-            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>41<small>d</small></span></div>
-            <div class="body"><div class="sku">IP15-256-BLK</div><div class="meta"><b>20</b> sold · <b>27</b> on hand</div></div>
-            <div class="keys"><span class="ord q">Fine</span></div></div>
-          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>88<small>d</small></span></div>
-            <div class="body"><div class="sku">BUDS-3-WHITE</div><div class="meta"><b>12</b> sold · <b>35</b> on hand</div></div>
-            <div class="keys"><span class="ord q">Fine</span></div></div>
-          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>—</span></div>
-            <div class="body"><div class="sku">X820-256GB-GRAY-SCRAP</div><div class="meta"><b>0</b> sold · <b>2</b> on hand</div></div>
-            <div class="keys"><span class="ord q">Fine</span></div></div>
-          <div class="more">204 more · keep scrolling</div>
-        </div>
-        <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Pull down to refresh.</div>
-      </div></div>
+  <div class="cap">Stock<small>drawn at iPhone width; every column fits, no sideways scroll</small></div>
+  <div class="phone"><div class="screen">
+    <div class="notch"></div>
+    <div class="sheet">
+      <div class="band">
+        <div class="search"><svg viewBox="0 0 256 256"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>Search SKU, title or barcode</div>
+        <span class="hint"><b>212</b> SKUs · <b>1,840</b> units</span>
+        <span class="refresh"><svg viewBox="0 0 256 256"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></span>
+      </div>
+      <div class="wrap"><table><colgroup><col class="c-gut"><col class="c-img"><col><col class="c-stock"><col class="c-io"><col class="c-min"><col class="c-avail"></colgroup>
+        <thead><tr>
+          <th class="gut">#</th><th class="img"></th><th>SKU</th><th class="num sorted">In stock ↓</th><th class="num">In orders</th><th class="num">Min</th><th class="num">Avail</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="gut">1</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK</td><td class="num">31</td><td class="num">4</td><td class="num">10</td><td class="num avail">27</td></tr>
+          <tr><td class="gut">2</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-WHITE</td><td class="num">36</td><td class="num">1</td><td class="num">5</td><td class="num avail">35</td></tr>
+          <tr><td class="gut">3</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY</td><td class="num">29</td><td class="num">4</td><td class="num">20</td><td class="num avail">25</td></tr>
+          <tr><td class="gut">4</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-256GB-NAVY</td><td class="num">17</td><td class="num">2</td><td class="num">10</td><td class="num avail">15</td></tr>
+          <tr><td class="gut">5</td><td class="img"><span class="pic ph">img</span></td><td class="sku">PIX9-128-OBS</td><td class="num">21</td><td class="num">3</td><td class="num">10</td><td class="num avail">18</td></tr>
+          <tr><td class="gut">6</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X820-256GB-GRAY</td><td class="num">9</td><td class="num">0</td><td class="num">5</td><td class="num avail">9</td></tr>
+          <tr><td class="gut">7</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY-OPENBOX</td><td class="num">6</td><td class="num">0</td><td class="num">0</td><td class="num avail">6</td></tr>
+          <tr><td class="gut">8</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK-OPENBOX</td><td class="num">4</td><td class="num">1</td><td class="num">10</td><td class="num avail low">3</td></tr>
+          <tr><td class="gut">9</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X610-128GB-BLACK</td><td class="num">2</td><td class="num">1</td><td class="num">5</td><td class="num avail low">1</td></tr>
+          <tr><td class="gut">10</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X306-128GB-GREEN</td><td class="num">2</td><td class="num">0</td><td class="num">5</td><td class="num avail low">2</td></tr>
+          <tr><td class="gut">11</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-BLACK</td><td class="num">1</td><td class="num">0</td><td class="num">5</td><td class="num avail low">1</td></tr>
+          <tr class="out"><td class="gut">12</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-128GB-BLACK</td><td class="num">0</td><td class="num">0</td><td class="num">20</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">13</td><td class="img"><span class="pic ph">img</span></td><td class="sku">USED-X133-64GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">14</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X133-128GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">15</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-5G-128GB-BLUEBLACK</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
+        </tbody>
+      </table></div>
     </div>
-
-    <div class="col">
-      <div class="cap">A row tapped open<small>channel SKUs with the listed price and qty; tap again to close</small></div>
-      <div class="phone"><div class="screen">
-        <div class="notch"></div>
-        <div class="head"><h1>Products</h1><span class="date"><b>212</b> SKUs · 7-day lead</span></div>
-        <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span></div>
-        <div class="list">
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
-            <div class="body"><div class="sku">A15-128GB-BLACK</div><div class="meta"><b>39</b> sold · <b>0</b> on hand</div></div>
-            <div class="keys"><span class="ord">Order<b>40</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
-            <div class="body"><div class="sku">USED-X133-64GB-GRAY</div><div class="meta"><b>11</b> sold · <b>0</b> on hand<span class="fast">Faster</span></div></div>
-            <div class="keys"><span class="ord">Order<b>15</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="13.5 94.2"/></svg><span>4<small>d</small></span></div>
-            <div class="body"><div class="sku">OPEN-BOX-X610-128GB-BLACK</div><div class="meta"><b>10</b> sold · <b>1</b> on hand · out <b>Fri</b><span class="fast">Faster</span></div></div>
-            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl a open"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="40.4 94.2"/></svg><span>12<small>d</small></span></div>
-            <div class="body"><div class="sku">S25-128GB-NAVY</div><div class="meta"><b>63</b> sold · <b>25</b> on hand · out <b>Oct 18</b></div></div>
-            <div class="keys"><span class="ord">Order<b>35</b></span><span class="ign">Ignore</span></div>
-            <div class="det">
-              <div class="nums"><span>shelf <b>20</b></span><span>WFS <b>5</b></span><span>in orders <b>4</b></span><span>cost <b>$412</b></span></div>
-              <div class="ch"><span class="cb walmart">Walmart</span><span class="csku">S25NAVY128-WM</span><span class="wfs">WFS</span><div class="cp"><div class="p">$529.00</div><div class="q">qty 25</div></div></div>
-              <div class="ch"><span class="cb ebay">eBay</span><span class="csku">S25-128GB-NAVY</span><div class="cp"><div class="p">$539.99</div><div class="q">qty 20</div></div></div>
-              <div class="ch"><span class="cb temu">Temu</span><span class="csku none">Not listed</span><div class="cp"><div class="p dim">—</div></div></div>
-            </div></div>
-          <div class="dl a"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="63.9 94.2"/></svg><span>19<small>d</small></span></div>
-            <div class="body"><div class="sku">PIX9-128-OBS</div><div class="meta"><b>28</b> sold · <b>18</b> on hand · out <b>Oct 25</b></div></div>
-            <div class="keys"><span class="ord">Order<b>10</b></span><span class="ign">Ignore</span></div></div>
-          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>41<small>d</small></span></div>
-            <div class="body"><div class="sku">IP15-256-BLK</div><div class="meta"><b>20</b> sold · <b>27</b> on hand</div></div>
-            <div class="keys"><span class="ord q">Fine</span></div></div>
-          <div class="more">206 more · keep scrolling</div>
-        </div>
-        <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Pull down to refresh.</div>
-      </div></div>
-    </div>
-  </div>
+    <div class="foot">Tap a column header to sort, as on the desktop. Pull down to refresh.</div>
+  </div></div>
 
   <div class="notes">
     <h2>What it is</h2>
     <ul>
-      <li><b>One page, one list.</b> The Running-low computation run over every SKU, not only the ones inside the lead: dial = days on hand ÷ (lead + cover), sold over 30 days, on hand = shelf + WFS, Order = pace × (lead + cover) − on hand rounded up to 5, Faster = last 14 days vs the 16 before. Green rows say Fine. No sales in 30 days shows a dash.</li>
-      <li><b>Chips:</b> All, Running low (inside the lead), Soon (inside lead + cover). Soonest-out first inside each.</li>
-      <li><b>Ignore</b> is the Overview's 14-day ignore, shared with the desktop, so you both see the same list. Order is a number, not a button: it tells him how many.</li>
-      <li><b>Tap a row</b> to open it: shelf / WFS / in orders / cost, then each channel SKU with the channel's listed price, listed qty and WFS flag, from the channel-mapping rows the desktop already caches. "Not listed" where there is no mapping. Cost shows only if the station has the Cost tick.</li>
-      <li><b>No sales dollars anywhere.</b> Units, prices and costs only.</li>
+      <li><b>The Stock sheet, nothing added.</b> The same rows the desktop Stock page shows (the live Linnworks inventory at Digital World Shop), the same columns in the same order, the same sort (In stock, highest first; tap a header to sort by another column), the same colours: red gutter when a SKU is out, red Available when it is below the minimum.</li>
+      <li><b>Images</b> are the item's Linnworks picture, loaded straight from the Linnworks CDN like the owner's phone page does today.</li>
+      <li><b>Search</b> covers SKU, title and barcode, as on the desktop.</li>
+      <li><b>Read-only.</b> No inline editing of counts, min or cost on his phone; those stay on the desktop. Cost is not shown.</li>
+      <li><b>No sales dollars anywhere.</b></li>
     </ul>
     <h2>Anywhere he goes</h2>
     <p>Same as your phone today: Tailscale on his phone and an invite to the tailnet (or a share of just the Capture Station PC), his own QR from the desktop, "Add to Home Screen". The Capture Station PC has to be on with the app running, because the page is served by the app and only the tailnet can reach it. His token is separate from yours, so it can be revoked on its own, and it only opens this page, never your Overview.</p>
     <h2>Desktop side</h2>
     <ul>
-      <li>One new page (<code>supply.html</code>) on the same :8484 server behind a second token, one endpoint (<code>/supply</code>: the Running-low pass over all SKUs plus each item's channel rows, cached like the Overview), and the existing ignore route.</li>
+      <li>One new page (<code>supply.html</code>) on the same :8484 server behind a second token, reading the existing <code>/stock</code> payload the owner's phone already uses (the 60-second-cached inventory projection), so there is no new Linnworks traffic.</li>
       <li>Settings › Pages on this station gains "Supply phone" with its QR.</li>
     </ul>
   </div>
