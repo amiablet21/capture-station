@@ -9,7 +9,7 @@
      owner's phone page (src/renderer/mobile.html) behind its own token.
      It IS the desktop Stock sheet: the spreadsheet header band (search +
      summary), then the Excel-style grid with the row gutter, product
-     image, SKU, In stock, In orders, Min, Available — same order, same
+     image, SKU, In stock, In orders, Available — same order (Min left out), same
      styling (styles.css .stock-table), highest stock first, red gutter
      when out, red Available below Min. Drawn at iPhone width (390). -->
 <style>
@@ -47,7 +47,7 @@
   /* the grid: styles.css .stock-table, phone-sized */
   .wrap { overflow-x: auto; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
-  col.c-gut { width: 24px; } col.c-img { width: 40px; } col.c-stock { width: 44px; } col.c-io { width: 48px; } col.c-min { width: 32px; } col.c-avail { width: 44px; }
+  col.c-gut { width: 24px; } col.c-img { width: 40px; } col.c-stock { width: 44px; } col.c-io { width: 48px; } col.c-avail { width: 44px; }
   th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-size: 8.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 5px 5px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-soft); white-space: normal; line-height: 1.15; vertical-align: bottom; }
   th:last-child { border-right: none; }
   th.gut { text-align: center; border-right: 1px solid var(--border); padding: 5px 0; }
@@ -78,7 +78,7 @@
 </head>
 <body>
   <h1 class="pg">Supply phone — the Stock sheet</h1>
-  <p class="lead">The desktop Stock page, on his phone. The same spreadsheet: row gutter, product image, SKU, In stock, In orders, Min, Available, in that order, highest stock first, red gutter when a SKU is out, red Available below the minimum. Search at the top, pull down to refresh. Nothing else.</p>
+  <p class="lead">The desktop Stock page, on his phone. The same spreadsheet: row gutter, product image, SKU, In stock, In orders, Available, in that order, highest stock first, red gutter when a SKU is out, red Available when below the Linnworks minimum. Search at the top, pull down to refresh. Nothing else.</p>
 
   <div class="cap">Stock<small>drawn at iPhone width; every column fits, no sideways scroll</small></div>
   <div class="phone"><div class="screen">
@@ -89,26 +89,26 @@
         <span class="hint"><b>212</b> SKUs · <b>1,840</b> units</span>
         <span class="refresh"><svg viewBox="0 0 256 256"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg></span>
       </div>
-      <div class="wrap"><table><colgroup><col class="c-gut"><col class="c-img"><col><col class="c-stock"><col class="c-io"><col class="c-min"><col class="c-avail"></colgroup>
+      <div class="wrap"><table><colgroup><col class="c-gut"><col class="c-img"><col><col class="c-stock"><col class="c-io"><col class="c-avail"></colgroup>
         <thead><tr>
-          <th class="gut">#</th><th class="img"></th><th>SKU</th><th class="num sorted">In stock&nbsp;↓</th><th class="num">In orders</th><th class="num">Min</th><th class="num">Avail</th>
+          <th class="gut">#</th><th class="img"></th><th>SKU</th><th class="num sorted">In stock&nbsp;↓</th><th class="num">In orders</th><th class="num">Avail</th>
         </tr></thead>
         <tbody>
-          <tr><td class="gut">1</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK</td><td class="num">31</td><td class="num">4</td><td class="num">10</td><td class="num avail">27</td></tr>
-          <tr><td class="gut">2</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-WHITE</td><td class="num">36</td><td class="num">1</td><td class="num">5</td><td class="num avail">35</td></tr>
-          <tr><td class="gut">3</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY</td><td class="num">29</td><td class="num">4</td><td class="num">20</td><td class="num avail">25</td></tr>
-          <tr><td class="gut">4</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-256GB-NAVY</td><td class="num">17</td><td class="num">2</td><td class="num">10</td><td class="num avail">15</td></tr>
-          <tr><td class="gut">5</td><td class="img"><span class="pic ph">img</span></td><td class="sku">PIX9-128-OBS</td><td class="num">21</td><td class="num">3</td><td class="num">10</td><td class="num avail">18</td></tr>
-          <tr><td class="gut">6</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X820-256GB-GRAY</td><td class="num">9</td><td class="num">0</td><td class="num">5</td><td class="num avail">9</td></tr>
-          <tr><td class="gut">7</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY-OPENBOX</td><td class="num">6</td><td class="num">0</td><td class="num">0</td><td class="num avail">6</td></tr>
-          <tr><td class="gut">8</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK-OPENBOX</td><td class="num">4</td><td class="num">1</td><td class="num">10</td><td class="num avail low">3</td></tr>
-          <tr><td class="gut">9</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X610-128GB-BLACK</td><td class="num">2</td><td class="num">1</td><td class="num">5</td><td class="num avail low">1</td></tr>
-          <tr><td class="gut">10</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X306-128GB-GREEN</td><td class="num">2</td><td class="num">0</td><td class="num">5</td><td class="num avail low">2</td></tr>
-          <tr><td class="gut">11</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-BLACK</td><td class="num">1</td><td class="num">0</td><td class="num">5</td><td class="num avail low">1</td></tr>
-          <tr class="out"><td class="gut">12</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-128GB-BLACK</td><td class="num">0</td><td class="num">0</td><td class="num">20</td><td class="num avail">0</td></tr>
-          <tr class="out"><td class="gut">13</td><td class="img"><span class="pic ph">img</span></td><td class="sku">USED-X133-64GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
-          <tr class="out"><td class="gut">14</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X133-128GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
-          <tr class="out"><td class="gut">15</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-5G-128GB-BLUEBLACK</td><td class="num">0</td><td class="num">0</td><td class="num">5</td><td class="num avail">0</td></tr>
+          <tr><td class="gut">1</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK</td><td class="num">31</td><td class="num">4</td><td class="num avail">27</td></tr>
+          <tr><td class="gut">2</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-WHITE</td><td class="num">36</td><td class="num">1</td><td class="num avail">35</td></tr>
+          <tr><td class="gut">3</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY</td><td class="num">29</td><td class="num">4</td><td class="num avail">25</td></tr>
+          <tr><td class="gut">4</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-256GB-NAVY</td><td class="num">17</td><td class="num">2</td><td class="num avail">15</td></tr>
+          <tr><td class="gut">5</td><td class="img"><span class="pic ph">img</span></td><td class="sku">PIX9-128-OBS</td><td class="num">21</td><td class="num">3</td><td class="num avail">18</td></tr>
+          <tr><td class="gut">6</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X820-256GB-GRAY</td><td class="num">9</td><td class="num">0</td><td class="num avail">9</td></tr>
+          <tr><td class="gut">7</td><td class="img"><span class="pic ph">img</span></td><td class="sku">S25-128GB-NAVY-OPENBOX</td><td class="num">6</td><td class="num">0</td><td class="num avail">6</td></tr>
+          <tr><td class="gut">8</td><td class="img"><span class="pic ph">img</span></td><td class="sku">IP15-256-BLK-OPENBOX</td><td class="num">4</td><td class="num">1</td><td class="num avail low">3</td></tr>
+          <tr><td class="gut">9</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X610-128GB-BLACK</td><td class="num">2</td><td class="num">1</td><td class="num avail low">1</td></tr>
+          <tr><td class="gut">10</td><td class="img"><span class="pic ph">img</span></td><td class="sku">X306-128GB-GREEN</td><td class="num">2</td><td class="num">0</td><td class="num avail low">2</td></tr>
+          <tr><td class="gut">11</td><td class="img"><span class="pic ph">img</span></td><td class="sku">BUDS-3-BLACK</td><td class="num">1</td><td class="num">0</td><td class="num avail low">1</td></tr>
+          <tr class="out"><td class="gut">12</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-128GB-BLACK</td><td class="num">0</td><td class="num">0</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">13</td><td class="img"><span class="pic ph">img</span></td><td class="sku">USED-X133-64GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">14</td><td class="img"><span class="pic ph">img</span></td><td class="sku">OPEN-BOX-X133-128GB-GRAY</td><td class="num">0</td><td class="num">0</td><td class="num avail">0</td></tr>
+          <tr class="out"><td class="gut">15</td><td class="img"><span class="pic ph">img</span></td><td class="sku">A15-5G-128GB-BLUEBLACK</td><td class="num">0</td><td class="num">0</td><td class="num avail">0</td></tr>
         </tbody>
       </table></div>
     </div>
@@ -118,7 +118,7 @@
   <div class="notes">
     <h2>What it is</h2>
     <ul>
-      <li><b>The Stock sheet, nothing added.</b> The same rows the desktop Stock page shows (the live Linnworks inventory at Digital World Shop), the same columns in the same order, the same sort (In stock, highest first; tap a header to sort by another column), the same colours: red gutter when a SKU is out, red Available when it is below the minimum.</li>
+      <li><b>The Stock sheet, nothing added.</b> The same rows the desktop Stock page shows (the live Linnworks inventory at Digital World Shop), the same columns in the same order (Min left out), the same sort (In stock, highest first; tap a header to sort by another column), the same colours: red gutter when a SKU is out, red Available when it is below the minimum.</li>
       <li><b>Images</b> are the item's Linnworks picture, loaded straight from the Linnworks CDN like the owner's phone page does today.</li>
       <li><b>Search</b> covers SKU, title and barcode, as on the desktop.</li>
       <li><b>Read-only.</b> No inline editing of counts, min or cost on his phone; those stay on the desktop. Cost is not shown.</li>
