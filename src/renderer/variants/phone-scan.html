@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Supply phone — all products as dial rows, scan, item card</title>
+<title>Supply phone — all products as dial rows, search a listing, item card</title>
 <!-- Mockup, 2026-10-06. A phone page for the supply manager, served by the
      app like the owner's phone page (src/renderer/mobile.html) but with its
      own token and no sales dollars. Three screens behind a bottom tab bar:
-     Products (every SKU as a Running-low dial row), Scan (camera → item
+     Products (every SKU as a Running-low dial row), Search (a shared marketplace link → item
      card), To order (what he tapped Order on). Same tokens as mobile.html
      and the Overview's dial rows (variants/ov-runway.html R3). -->
 <style>
@@ -44,7 +44,7 @@
 
   /* search + chips (as the Stock tab has them) */
   .search { display: flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 6px 6px 13px; margin-bottom: 7px; }
-  .search span { color: var(--faint); font-size: 12px; flex: 1; }
+  .search span { color: var(--faint); font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .search span.typed { color: var(--text); }
   .search .cam { width: 28px; height: 28px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-soft-text); display: grid; place-items: center; font-size: 13px; flex: none; }
   .search b { font-size: 10.5px; font-weight: 600; background: #EFEEEA; border-radius: 999px; padding: 4px 11px; color: var(--muted); }
@@ -106,6 +106,10 @@
 
   /* item card */
   .strip { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+  .ans { margin-bottom: 14px; }
+  .ans + .ans { padding-top: 12px; border-top: 1px dashed var(--border); }
+  .strip .ok.warn { color: var(--amber); background: var(--amber-bg); }
+  .strip .ok.bad { color: var(--neg); background: var(--neg-bg); }
   .strip .ok { font-size: 10px; font-weight: 700; color: var(--accent-soft-text); background: var(--accent-soft); border-radius: 999px; padding: 3px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .strip .back { font-size: 11px; color: var(--muted); font-weight: 600; }
   .strip .next { margin-left: auto; font-size: 10.5px; font-weight: 600; color: #fff; background: var(--accent-soft-text); border-radius: 999px; padding: 5px 12px; flex: none; }
@@ -187,8 +191,8 @@
 </style>
 </head>
 <body>
-  <h1 class="pg">Supply phone — every product as a Running-low row</h1>
-  <p class="lead">A phone page for your supply manager, served by Capture Station the same way your own phone page is, but with its own token and no sales dollars. <b>Products</b> is the Running-low card from the Overview, extended to every SKU: the same dial (days on hand out of the 7-day lead + 21 cover days), sold / on hand, Faster, and Order <i>n</i> computed the same way. <b>Scan</b> points the camera at a UPC, shelf label or marketplace label and opens the item's card: stock, cost, and every channel SKU with its listed price and qty. Tapping Order anywhere adds the line to <b>To order</b>.</p>
+  <h1 class="pg">Supply phone — every product as a Running-low row, plus a listing check</h1>
+  <p class="lead">A phone page for your supply manager, served by Capture Station the same way your own phone page is, but with its own token and no sales dollars. <b>Products</b> is the Running-low card from the Overview, extended to every SKU: the same dial (days on hand out of the 7-day lead + 21 cover days), sold / on hand, Faster, and Order <i>n</i> computed the same way. <b>Search</b> takes a link shared from the Walmart (or eBay / Temu) app and says whether we sell that listing, opening the item card: stock, cost, and every channel SKU with its listed price and qty. Tapping Order anywhere adds the line to <b>To order</b>.</p>
 
   <div class="row">
     <!-- ① Products: all SKUs -->
@@ -197,8 +201,8 @@
       <div class="phone"><div class="screen">
         <div class="notch"></div>
         <div class="head"><h1>Products</h1><span class="date"><b>212</b> SKUs · 7-day lead</span></div>
-        <div class="search"><span>SKU, title or UPC</span><span class="cam">▣</span></div>
-        <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span><span>Open box</span><span>Used</span></div>
+        <div class="search"><span>SKU or title</span></div>
+        <div class="chips"><span class="on">All</span><span class="low">Running low · 9</span><span class="soon">Soon · 31</span></div>
         <div class="list">
           <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="0.1 94.2"/></svg><span>0<small>d</small></span></div>
             <div class="body"><div class="sku">A15-128GB-BLACK</div><div class="meta"><b>39</b> sold · <b>0</b> on hand</div></div>
@@ -227,55 +231,67 @@
           <div class="more">204 more · keep scrolling</div>
         </div>
         <div class="foot">Dial = days on hand out of the 7-day lead + 21 days. Tap a row for the item card.</div>
-        <nav class="tabs"><span class="on">Products</span><span>Scan</span><span>To order<i>3</i></span></nav>
+        <nav class="tabs"><span class="on">Products</span><span>Search</span><span>To order<i>3</i></span></nav>
       </div></div>
     </div>
 
-    <!-- ② Scan -->
+    <!-- ② Search -->
     <div class="col">
-      <div class="cap">2 · Scan<small>camera live, type-in fallback, the last few scans</small></div>
+      <div class="cap">2 · Search<small>paste a link shared from the Walmart app, or an id, or a title; three answers</small></div>
       <div class="phone"><div class="screen">
         <div class="notch"></div>
-        <div class="head"><h1>Scan</h1></div>
-        <div class="vf">
-          <div class="img"></div>
-          <div class="bars">
-            <span style="left:0;width:3px"></span><span style="left:6px;width:1px"></span><span style="left:10px;width:4px"></span><span style="left:17px;width:1px"></span><span style="left:21px;width:2px"></span><span style="left:27px;width:4px"></span><span style="left:34px;width:1px"></span><span style="left:38px;width:3px"></span><span style="left:45px;width:1px"></span><span style="left:49px;width:4px"></span><span style="left:57px;width:2px"></span><span style="left:62px;width:1px"></span><span style="left:66px;width:3px"></span><span style="left:73px;width:4px"></span><span style="left:80px;width:1px"></span><span style="left:84px;width:2px"></span><span style="left:90px;width:4px"></span><span style="left:97px;width:1px"></span><span style="left:101px;width:3px"></span><span style="left:108px;width:1px"></span><span style="left:112px;width:4px"></span><span style="left:119px;width:2px"></span><span style="left:124px;width:1px"></span><span style="left:128px;width:3px"></span><span style="left:135px;width:4px"></span><span style="left:142px;width:1px"></span><span style="left:146px;width:3px"></span>
+        <div class="head"><h1>Search</h1></div>
+        <div class="search"><span class="typed">walmart.com/ip/20183771747?sid=D01…</span><b>Search</b></div>
+        <div class="quiet" style="margin:0 0 9px">a Walmart, eBay or Temu link, or just the item id</div>
+
+        <div class="ans">
+          <div class="strip"><span class="ok">Selling it · Walmart item 20183771747</span></div>
+          <div class="panel" style="margin-bottom:0">
+            <div class="prod">
+              <div class="thumb">img</div>
+              <div class="info">
+                <div class="t">Samsung Galaxy S25 128GB Navy — Unlocked</div>
+                <div class="ids"><b>S25-128GB-NAVY</b> · <span style="color:var(--muted)">S25NAVY128-WM</span></div>
+              </div>
+            </div>
+            <div class="stock" style="margin-top:10px">
+              <div><div class="k">Our price</div><div class="v">$529</div></div>
+              <div><div class="k">On hand</div><div class="v">25</div></div>
+              <div><div class="k">Days</div><div class="v" style="color:var(--amber)">12</div></div>
+              <div><div class="k">Order</div><div class="v" style="color:var(--amber)">35</div></div>
+            </div>
           </div>
-          <div class="ret"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-          <div class="line"></div>
-          <div class="torch">⚡</div>
-          <div class="hint">UPC, shelf label or marketplace label</div>
+          <div class="quiet">tap for the full item card (screen 3)</div>
         </div>
-        <div class="search"><span>or type a SKU, channel SKU or UPC</span><b>Go</b></div>
-        <div class="k" style="margin:4px 0 5px 6px">Recent</div>
-        <div class="list">
-          <div class="dl a"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="40.4 94.2"/></svg><span>12<small>d</small></span></div>
-            <div class="body"><div class="sku">S25-128GB-NAVY</div><div class="meta"><b>25</b> on hand · $529 Walmart</div></div>
-            <div class="keys"><span class="ord done">Ordered<b>35</b></span></div></div>
-          <div class="dl r"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="10.1 94.2"/></svg><span>3<small>d</small></span></div>
-            <div class="body"><div class="sku">IP15-256-BLK-OPENBOX</div><div class="meta"><b>3</b> on hand · $639 Walmart</div></div>
-            <div class="keys"><span class="ord">Order<b>10</b></span></div></div>
-          <div class="dl g"><div class="dial"><svg viewBox="0 0 38 38"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="94.2 94.2"/></svg><span>41<small>d</small></span></div>
-            <div class="body"><div class="sku">IP15-256-BLK</div><div class="meta"><b>27</b> on hand · $749 Walmart</div></div>
-            <div class="keys"><span class="ord q">Fine</span></div></div>
+
+        <div class="ans">
+          <div class="strip"><span class="ok warn">Ours, not linked · Walmart item 5171402288</span></div>
+          <div class="panel" style="margin-bottom:0">
+            <div class="prod">
+              <div class="thumb">img</div>
+              <div class="info">
+                <div class="t">Google Pixel 9 128GB Obsidian — Unlocked</div>
+                <div class="ids"><span style="color:var(--muted)">PIX9OBS128-WM</span> · listed qty 18 · $449</div>
+              </div>
+            </div>
+            <div class="foot" style="margin:8px 0 0">In our Walmart feed but not mapped to an inventory item. Link it on the desktop (Stock › Actions › Mappings).</div>
+          </div>
         </div>
-        <div class="quiet">a scan opens the item card (screen 3)</div>
-        <nav class="tabs"><span>Products</span><span class="on">Scan</span><span>To order<i>3</i></span></nav>
+
+        <div class="ans">
+          <div class="strip"><span class="ok bad">Not selling this · Walmart item 20183771747</span></div>
+          <div class="search" style="margin-top:2px"><span>search our products by title…</span><b>Go</b></div>
+        </div>
+        <nav class="tabs"><span>Products</span><span class="on">Search</span><span>To order<i>3</i></span></nav>
       </div></div>
     </div>
 
     <!-- ③ Item card -->
     <div class="col">
-      <div class="cap">3 · Item card<small>after a scan, or a tap on any row</small></div>
+      <div class="cap">3 · Item card<small>from a Search hit, or a tap on any Products row</small></div>
       <div class="phone"><div class="screen">
         <div class="notch"></div>
-        <div class="vf small found">
-          <div class="img"></div>
-          <div class="ret"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-          <div class="hint">✓ 887276 832119 · UPC</div>
-        </div>
-        <div class="strip"><span class="ok">Matched by barcode</span><span class="next">Scan next</span></div>
+        <div class="strip"><span class="back">‹ Search</span><span class="ok" style="margin-left:4px">Walmart item 20183771747</span></div>
         <div class="panel">
           <div class="prod">
             <div class="thumb">img</div>
@@ -310,7 +326,7 @@
           <div class="ch"><span class="cb ebay">eBay</span><div class="info"><div class="csku">S25-128GB-NAVY</div><div class="cmeta">item <b>265912883411</b></div></div><div class="cp"><div class="p">$539.99</div><div class="q">qty 20</div></div></div>
           <div class="ch none"><span class="cb temu">Temu</span><div class="info"><div class="csku" style="color:var(--faint);font-weight:500">Not listed</div></div><div class="cp"><div class="p dim">—</div></div></div>
         </div>
-        <nav class="tabs"><span>Products</span><span class="on">Scan</span><span>To order<i>3</i></span></nav>
+        <nav class="tabs"><span>Products</span><span class="on">Search</span><span>To order<i>3</i></span></nav>
       </div></div>
     </div>
 
@@ -333,7 +349,7 @@
           <div class="k">Ignored for 14 days</div>
           <div class="foot" style="margin:4px 0 0">X306-128GB-GREEN, BUDS-3-WHITE <span style="color:var(--blue)">Undo</span></div>
         </div>
-        <nav class="tabs"><span>Products</span><span>Scan</span><span class="on">To order<i>4</i></span></nav>
+        <nav class="tabs"><span>Products</span><span>Search</span><span class="on">To order<i>4</i></span></nav>
       </div></div>
     </div>
   </div>
@@ -342,27 +358,23 @@
     <h2>What he sees, and where it comes from</h2>
     <ul>
       <li><b>Products</b> is the Running-low computation run over every SKU instead of only the ones inside the lead time: dial = days on hand ÷ (lead + cover), sold over 30 days, on hand = shelf + WFS, Order = pace × (lead + cover) − on hand rounded up to 5, Faster = last 14 days vs the 16 before. Green rows say Fine instead of an Order button. A SKU with no sales in 30 days shows a dash.</li>
-      <li><b>Sorting and chips.</b> Soonest-out first. Running low (inside the lead), Soon (inside lead + cover), and the same condition chips the Stock page has (Open box / Used, from the stockViews patterns). Search covers SKU, title and UPC.</li>
-      <li><b>Scan</b> tries the code as a UPC, an inventory SKU, and a channel SKU on Walmart / eBay / Temu. A channel-SKU hit opens the parent item with that channel's row highlighted.</li>
+      <li><b>Sorting and chips.</b> Soonest-out first. Three chips only: All, Running low (inside the lead), Soon (inside lead + cover). Search covers SKU and title.</li>
+      <li><b>Search</b> pulls the item id out of a pasted link (<code>walmart.com/ip/&lt;id&gt;</code>, <code>ebay.com/itm/&lt;id&gt;</code>, Temu <code>goods_id</code>) or takes a bare id, and matches it against the channel-mapping rows the app already caches: the marketplace reference id Linnworks keeps per listing, the same id the desktop uses to open the product page when you click a channel SKU. No Linnworks call per check, so it answers instantly. Three answers: selling it (our SKU, price, stock, days, order), ours but not linked to an inventory item, not ours.</li>
       <li><b>Item card</b> = the dial row again, the warehouse numbers (on hand, shelf, WFS, in orders), cost and retail from Linnworks, condition siblings (-OPENBOX / -USED / -SCRAP, or the New parent), and the listings: channel SKU, the channel's listed price, listed qty, WFS flag, eBay item number. "Not listed" when there is no mapping.</li>
       <li><b>No sales dollars anywhere.</b> He gets units, prices and costs, never revenue. If cost should also be hidden from him, it is one tick on the desktop (the same Cost tick the Stock page uses).</li>
       <li><b>Ignore</b> is the Overview's 14-day ignore, shared with the desktop so you both see the same list.</li>
       <li><b>To order</b> is optional but cheap: the Order taps collect into a list with +/− and the last cost, and Share CSV hands it to the supplier or to you. Lines ride the shared folder so the desktop can show them too.</li>
     </ul>
 
-    <h2>How the phone reads the barcode</h2>
-    <div class="opts">
-      <div class="opt"><h3>Live camera<em>recommended</em></h3><p>The viewfinder on screen 2. The phone's camera decodes UPC / EAN / Code 128 / QR on the fly (a small decoder bundled into the page, since iPhone Safari has no built-in one). One catch: browsers only open the camera on an <b>https</b> address, and the phone page is plain http over Tailscale today. Tailscale can give the PC a real certificate and a <code>https://…ts.net</code> address in one command (Tailscale Serve), which the Phone QR dialog would then print instead of the raw IP.</p></div>
-      <div class="opt"><h3>Snap a photo</h3><p>Works on the current http address with no setup: tapping the viewfinder opens the phone's camera app, he takes a picture of the barcode, and the page decodes it. One extra tap per scan and a second slower; the fallback when the live camera can't open.</p></div>
-      <div class="opt"><h3>Bluetooth scanner</h3><p>A pocket scanner paired to the phone types into the search box like a keyboard, and Enter looks it up. No camera or https concerns and the fastest for a long shelf walk. Any $30–60 2D scanner does it.</p></div>
-    </div>
+    <h2>One tap from the Walmart app</h2>
+    <p>Copy the link, open the page, paste: three taps. Or one: on iPhone a two-step Siri Shortcut sits in the share sheet of the Walmart app ("Search in Capture Station"), takes the shared link and opens the phone page with the answer already showing. On Android the page itself can be a share target. Both are a few minutes to set up on his phone.</p>
 
     <h2>Anywhere he goes</h2>
     <p>Same as your phone today: Tailscale on his phone and an invite to the tailnet (or a share of just the Capture Station PC), his own QR from the desktop, "Add to Home Screen". The Capture Station PC has to be on with the app running, because the page is served by the app and only the tailnet can reach it. His token is separate from yours, so it can be revoked on its own, and it only opens this page, never your Overview.</p>
 
     <h2>Desktop side</h2>
     <ul>
-      <li>A second phone page (<code>supply.html</code>) on the same :8484 server, behind a second token, with three endpoints: <code>/supply/products</code> (the Running-low pass over all SKUs, cached like the Overview), <code>/supply/lookup?code=…</code> (reusing the inventory and channel-mapping caches the desktop already holds, so a scan answers in well under a second), and <code>/supply/order</code> for the To-order lines.</li>
+      <li>A second phone page (<code>supply.html</code>) on the same :8484 server, behind a second token, with three endpoints: <code>/supply/products</code> (the Running-low pass over all SKUs, cached like the Overview), <code>/supply/search?u=…</code> (the pasted link or id, matched against the channel-mapping and inventory caches the desktop already holds), and <code>/supply/order</code> for the To-order lines.</li>
       <li>Settings › Pages on this station gains "Supply phone" with its QR, and a "show cost on the supply phone" tick.</li>
     </ul>
   </div>
