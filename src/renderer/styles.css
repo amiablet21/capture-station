@@ -5152,7 +5152,12 @@ th:last-child > .col-grip { right: 0; }
 .stock-table .th-cost { color: var(--badge-yellow-text); }
 .stock-table .th-cost:not([style]) { min-width: 92px; }
 .cell-cost .stock-num-btn.is-none { color: var(--faint); }
-.stock-edit.stock-cost-edit { width: 92px; }
+/* the button and the input it swaps for share one size, and the cell is
+   fixed, so opening a cost never shifts the column (owner 2026-10-07) */
+.stock-table .cell-cost { width: 104px; }
+.stock-num-btn.stock-cost-btn, .stock-edit.stock-cost-edit { width: 84px; }
+.stock-edit.stock-cost-edit { -moz-appearance: textfield; }
+.stock-edit.stock-cost-edit::-webkit-inner-spin-button, .stock-edit.stock-cost-edit::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* the COST pill in Stock history */
 .act-cost { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
 .sh-act-dot.act-cost { background: var(--badge-yellow-text); }
