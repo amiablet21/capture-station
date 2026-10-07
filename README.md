@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.11 highlights
+
+- **Returns log entry row lines up again.** The wholesale invoice sheet (v1.29.1) reused two style names the returns entry row already owned, so that row turned into a flex strip of tiny boxes under the wrong headers. The invoice sheet's styles are renamed; the entry row sits under its columns as before.
+
 ## v1.29.10 highlights
 
 - **Cost edits stay put.** The cost button and the box it turns into are the same size and the column is fixed, so clicking a cost no longer shifts the sheet.
