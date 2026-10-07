@@ -198,6 +198,36 @@ function wsPut(kind, rec) {
 }
 const wsNow = () => new Date().toISOString();
 
+// Item costs live in the software, not in Linnworks (owner 2026-10-07):
+// one row per SKU in SQLite, newest write wins, every station's writes
+// appended to costs-<STATION>.jsonl in the shared folder and merged on read
+let costSyncBusy = false;
+function syncCosts() {
+  if (costSyncBusy || !retsync.enabled()) return;
+  costSyncBusy = true;
+  try {
+    for (const rec of retsync.readAux('costs')) { if (rec && rec.sku) db.costUpsert(rec); }
+    retsync.auxBackfill('costs', db.costOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
+  } catch { /* folder unreachable: the local costs stand alone */ }
+  costSyncBusy = false;
+}
+function costPut(sku, cost, by) {
+  const row = db.costUpsert({ sku, cost, updated_at: wsNow(), station: retsync.enabled() ? retsync.stationName() : stockLogComputer(), by: by || '' });
+  if (row) retsync.appendAux('costs', row);
+  return row;
+}
+// the Stock sheet and the exports read `cost` off each inventory item;
+// Linnworks' own purchasePrice no longer drives anything
+function attachCosts(items) {
+  syncCosts();
+  const costs = db.costsAll();
+  for (const it of items || []) {
+    const c = costs[String(it.sku || '').toUpperCase()];
+    it.cost = c ? Number(c.cost) || 0 : 0;
+  }
+  return items;
+}
+
 // the customer's paper: a printable invoice as a PDF the owner picks a
 // place for, then opens (Print / Save as PDF)
 function wholesaleInvoiceHtml(inv, serials) {
@@ -1000,7 +1030,7 @@ async function exportChannelSkus(channel, condition = '') {
   if (canceled || !filePath) return { ok: false, canceled: true };
   try {
     const client = new LinnworksClient(cfg.linnworks);
-    const items = await client.listInventory();
+    const items = attachCosts(await client.listInventory());
     const channels = (await client.getMappingChannels()).filter(c => new RegExp(key, 'i').test(c.source));
     const feeds = [];
     for (const ch of channels) {
@@ -3178,7 +3208,7 @@ function registerIpc() {
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
-      const items = await client.listInventory();
+      const items = attachCosts(await client.listInventory());
       // fresh levels for free: run the low-stock crossing check on them
       runLowStockCheck(items).catch(() => { /* silent */ });
       inheritConditionImages(client, items).catch(() => { /* silent */ });
@@ -4740,6 +4770,14 @@ function registerIpc() {
     return { ok: true, url: urls[0], alts: urls.slice(1), qr, tsUrl, tsQr };
   });
 
+  // the one-time cost move runs a little after boot, from a Cost station
+  setTimeout(() => {
+    const cfg = config.load();
+    if (!cfg.captureOnly && cfg.pages && cfg.pages.cost && cfg.linnworks && cfg.linnworks.applicationId) {
+      moveCostsOffLinnworks(cfg).catch(e => console.log(`[cost] move off Linnworks failed, retries next boot: ${e.message}`));
+    }
+  }, 25000);
+
   // warm the money cards shortly after boot so the Overview never sits on
   // its spinner for the first open of the day
   setTimeout(() => {
@@ -5432,7 +5470,18 @@ function registerIpc() {
       if (existing.some(s => String(s).toUpperCase() === sku)) {
         return { ok: false, error: `${sku} already exists in Linnworks.` };
       }
-      const { stockItemId } = await client.createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice });
+      // the cost stays in the software (owner 2026-10-07): Linnworks' own
+      // purchase price is left at 0, the sheet's value lands in item_costs
+      // with a COST line, from a Cost station
+      const { stockItemId } = await client.createInventoryItem({ sku, title, barcode, retailPrice, purchasePrice: 0 });
+      if (purchasePrice > 0 && cfg.pages && cfg.pages.cost) {
+        costPut(sku, purchasePrice);
+        recordStockRows([{
+          sku, locationId: cfg.linnworks.locationId, delta: 0, levelAfter: null,
+          reason: 'cost', changeSource: 'Capture Station cost', ref: '', note: 'new SKU',
+          computer: stockLogComputer(), by: '', data: { from: 0, to: purchasePrice },
+        }]);
+      }
       if (qty > 0) {
         await client.changeStockLevels([{ sku, delta: qty }], cfg.linnworks.locationId, 'Capture Station new SKU', { note: 'listing created with opening stock' });
       }
@@ -6152,31 +6201,76 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  // Cost column (owner 2026-10-05): the item's purchase price, editable only
-  // on stations with the Cost tick; every change is a COST line in the
-  // SKU's stock history (delta 0 — never a stock move — with from/to in
-  // data) that rides the shared folder like every other line
-  ipcMain.handle('stock:setCost', async (_e, { stockItemId, sku, cost, from }) => {
+  // Cost column (owner 2026-10-05): editable only on stations with the Cost
+  // tick; every change is a COST line in the SKU's stock history (delta 0 —
+  // never a stock move — with from/to in data) that rides the shared folder
+  // like every other line. The cost itself lives in the software (item_costs
+  // + costs-<STATION>.jsonl), never in Linnworks (owner 2026-10-07).
+  ipcMain.handle('stock:setCost', (_e, { sku, cost, from }) => {
     const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
     const n = Math.round((Number(cost) || 0) * 100) / 100;
-    if (!stockItemId || !sku) return { ok: false, error: 'Missing stock item.' };
+    if (!sku) return { ok: false, error: 'Missing stock item.' };
     if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      await client.setPurchasePrice(stockItemId, n);
+      costPut(sku, n);
       const prev = Math.round((Number(from) || 0) * 100) / 100;
       recordStockRows([{
-        sku, locationId: cfg.linnworks.locationId, delta: 0, levelAfter: null,
+        sku, locationId: (cfg.linnworks && cfg.linnworks.locationId) || '', delta: 0, levelAfter: null,
         reason: 'cost', changeSource: 'Capture Station cost', ref: '', note: '',
         computer: stockLogComputer(), by: '', data: { from: prev, to: n },
       }]);
-      return { ok: true, purchasePrice: n };
+      return { ok: true, cost: n };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
+
+  // One-time move OFF Linnworks (owner 2026-10-07: "remove it from there").
+  // Every cost the app wrote to Linnworks left a COST line (from → to), so
+  // per SKU: the latest `to` becomes the software's cost (if none is saved
+  // yet) and Linnworks' purchase price goes back to the first line's `from`
+  // — the value it held before the app touched it (0 for nearly all). Only
+  // an item still showing the app's value is written, so a price someone
+  // typed into Linnworks by hand since is left alone. Idempotent; runs
+  // once per station with the Cost tick, retries next boot if it fails.
+  const costMovePath = () => path.join(app.getPath('userData'), 'cost-move-done.json');
+  async function moveCostsOffLinnworks(cfg) {
+    if (fs.existsSync(costMovePath())) return;
+    syncStockLog();
+    syncCosts();
+    const first = {}; // sku -> pre-app value
+    const latest = {}; // sku -> { to, at, computer }
+    for (const r of db.costLogRows()) {
+      let d = {};
+      try { d = JSON.parse(r.data || '{}'); } catch { /* unreadable line */ }
+      const k = String(r.sku).toUpperCase();
+      if (!(k in first)) first[k] = Math.round((Number(d.from) || 0) * 100) / 100;
+      latest[k] = { to: Math.round((Number(d.to) || 0) * 100) / 100, at: r.created_at, computer: r.computer };
+    }
+    const skus = Object.keys(latest);
+    if (!skus.length) { fs.writeFileSync(costMovePath(), JSON.stringify({ at: new Date().toISOString(), moved: 0 })); return; }
+    // seed the software store from the history where nothing is saved yet
+    for (const k of skus) {
+      if (!db.costGet(k)) {
+        const row = db.costUpsert({ sku: k, cost: latest[k].to, updated_at: latest[k].at, station: latest[k].computer || '' });
+        if (row) retsync.appendAux('costs', row);
+      }
+    }
+    const client = new LinnworksClient(cfg.linnworks);
+    const items = await client.listInventory();
+    let moved = 0;
+    for (const it of items) {
+      const k = String(it.sku || '').toUpperCase();
+      if (!(k in latest) || !it.stockItemId) continue;
+      const cur = Math.round((Number(it.purchasePrice) || 0) * 100) / 100;
+      if (cur === first[k] || Math.abs(cur - latest[k].to) > 0.005) continue; // already back, or hand-edited since
+      await client.setPurchasePrice(it.stockItemId, first[k]);
+      moved++;
+    }
+    fs.writeFileSync(costMovePath(), JSON.stringify({ at: new Date().toISOString(), moved, skus: skus.length }));
+    console.log(`[cost] moved ${moved} purchase price(s) off Linnworks; ${skus.length} SKU(s) carry a software cost`);
+  }
   // Receiving is file + webhook only (no Linnworks), so it works in any mode;
   // the page itself is hidden unless pages.receiving is enabled.
   ipcMain.handle('receiving:finish', (_e, payload) => finishReceiving(payload));
