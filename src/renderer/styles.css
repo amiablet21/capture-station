@@ -5006,6 +5006,10 @@ th:last-child > .col-grip { right: 0; }
 .cell-notes .history-status { margin-left: 0; margin-right: 8px; }
 
 /* ---------- wholesale invoices (owner 2026-09-30) ---------- */
+/* NOTE: the returns log entry row already owns .ws-row / .ws-cell (and
+   .ws-in, .ws-gutter…) — the invoice sheet uses wsi-* so a rule here never
+   lands on that <tr> (owner 2026-10-07: the entry row went flex and lost
+   its columns) */
 .dlg-ws-list { width: min(900px, 94vw); }
 .ws-list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .ws-list-head .dlg-title { margin: 0; }
@@ -5078,12 +5082,12 @@ th:last-child > .col-grip { right: 0; }
 .ws-lines td { padding: 4px 4px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; font-size: 12.5px; }
 .ws-c-sku { width: 210px; } .ws-c-qty { width: 72px; } .ws-c-rate { width: 96px; } .ws-c-amt { width: 104px; } .ws-c-sn { width: 60px; } .ws-c-x { width: 30px; }
 /* cells are plain text you click into — no boxes until focused (owner 2026-09-30) */
-.ws-cell { font-family: var(--font); font-size: 12.5px; width: 100%; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--text); outline: none; }
-.ws-cell.mono { font-family: var(--mono); }
-.ws-cell.r { text-align: right; -moz-appearance: textfield; appearance: textfield; }
-.ws-cell::-webkit-outer-spin-button, .ws-cell::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.ws-cell:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
-.ws-cell::placeholder { color: var(--faint); }
+.wsi-cell { font-family: var(--font); font-size: 12.5px; width: 100%; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--text); outline: none; }
+.wsi-cell.mono { font-family: var(--mono); }
+.wsi-cell.r { text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.wsi-cell::-webkit-outer-spin-button, .wsi-cell::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.wsi-cell:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+.wsi-cell::placeholder { color: var(--faint); }
 .ws-sku { font-weight: 600; }
 .ws-combo { position: relative; display: flex; min-width: 0; }
 .ws-combo .combo-list { left: 0; }
@@ -5106,8 +5110,8 @@ th:last-child > .col-grip { right: 0; }
 .ws-carrier { width: 130px; }
 .ws-shipvia .input.mono { flex: 1; min-width: 0; }
 .ws-tot { font-size: 12.5px; color: var(--muted); }
-.ws-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; min-height: 34px; }
-.ws-row .mono { color: var(--text); }
+.wsi-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; min-height: 34px; }
+.wsi-row .mono { color: var(--text); }
 .ws-ship { width: 84px; height: 28px; padding: 0 8px; text-align: right; font-size: 12px; }
 .ws-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 9px; color: var(--text); font-weight: 600; }
 .ws-total .mono { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }

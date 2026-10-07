@@ -8627,10 +8627,10 @@ async function openWsInvoice(gid) {
 
 function wsLineHtml() {
   return `<tr class="ws-line">
-    <td><div class="ws-combo"><input type="text" class="ws-cell ws-sku mono" placeholder="SKU" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" /><div class="combo-list" hidden></div></div></td>
-    <td><input type="text" class="ws-cell ws-title" maxlength="300" autocomplete="off" aria-label="Description" /></td>
-    <td><input type="number" class="ws-cell ws-qty mono r" min="1" step="1" placeholder="1" aria-label="Qty" /></td>
-    <td><input type="text" class="ws-cell ws-rate mono r" inputmode="decimal" maxlength="12" aria-label="Rate" /></td>
+    <td><div class="ws-combo"><input type="text" class="wsi-cell ws-sku mono" placeholder="SKU" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="SKU" /><div class="combo-list" hidden></div></div></td>
+    <td><input type="text" class="wsi-cell ws-title" maxlength="300" autocomplete="off" aria-label="Description" /></td>
+    <td><input type="number" class="wsi-cell ws-qty mono r" min="1" step="1" placeholder="1" aria-label="Qty" /></td>
+    <td><input type="text" class="wsi-cell ws-rate mono r" inputmode="decimal" maxlength="12" aria-label="Rate" /></td>
     <td class="r ws-amt is-empty">—</td>
     <td class="r"><button type="button" class="ws-sn" title="Serial numbers">${WS_SN_ICON}<span class="n"></span></button></td>
     <td class="r"><button type="button" class="ws-x" title="Remove line">✕</button></td>
