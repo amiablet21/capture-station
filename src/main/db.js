@@ -206,6 +206,13 @@ function open() {
       deleted INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_ws_ser_inv ON wholesale_serials(invoice_gid, sku);
+    CREATE TABLE IF NOT EXISTS item_costs (
+      sku TEXT PRIMARY KEY,
+      cost REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      station TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT ''
+    );
   `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS wfs_ignores (
@@ -1074,6 +1081,44 @@ function wsSerialCounts(invoiceGid) {
 }
 // every record this station authored, newest snapshot each — the one-time
 // seed of its shared-folder file
+/* ---------- item costs: the software's own cost per SKU ---------- */
+// Owner 2026-10-07: "I don't want my cost on Linnworks, remove it from
+// there and put it in the software only." One row per SKU, newest write
+// wins; every station's writes ride the shared folder as costs-<STATION>.jsonl
+// and merge here, so the whole shop sees one cost per SKU.
+function costUpsert(rec) {
+  const d = open();
+  const sku = String(rec && rec.sku || '').trim().toUpperCase();
+  if (!sku) return null;
+  const row = {
+    sku, cost: Math.max(0, Math.round((Number(rec.cost) || 0) * 100) / 100),
+    updated_at: wsIso(rec.updated_at), station: wsStr(rec.station, 60), by: wsStr(rec.by, 80),
+  };
+  const cur = d.prepare('SELECT updated_at FROM item_costs WHERE sku = ?').get(sku);
+  if (cur && String(cur.updated_at) >= row.updated_at) return null;
+  d.prepare(`INSERT INTO item_costs (sku, cost, updated_at, station, by) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(sku) DO UPDATE SET cost = excluded.cost, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by`)
+    .run(row.sku, row.cost, row.updated_at, row.station, row.by);
+  return row;
+}
+function costsAll() {
+  const out = {};
+  for (const r of open().prepare('SELECT * FROM item_costs').all()) out[r.sku] = r;
+  return out;
+}
+function costGet(sku) {
+  return open().prepare('SELECT * FROM item_costs WHERE sku = ?').get(String(sku || '').toUpperCase()) || null;
+}
+function costOwnRows(stations) {
+  const set = new Set((stations || []).filter(Boolean).map(s => String(s).toUpperCase()));
+  return open().prepare('SELECT * FROM item_costs').all().filter(r => set.has(String(r.station).toUpperCase()));
+}
+// every COST history line, oldest first — the one-time move off Linnworks
+// reads the pre-app value (first line's from) and the latest value per SKU
+function costLogRows() {
+  return open().prepare(`SELECT * FROM stock_log WHERE reason = 'cost' ORDER BY id ASC`).all();
+}
+
 function wsOwnRows(table, stations) {
   const set = new Set((stations || []).filter(Boolean).map(s => String(s).toUpperCase()));
   return open().prepare(`SELECT * FROM ${table}`).all().filter(r => set.has(String(r.gid).split(':')[0].toUpperCase()));
@@ -1153,4 +1198,5 @@ module.exports = {
   overviewToday, overviewSeriesDay, overviewSeriesMonth, overviewSeriesYear, overviewRecent,
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
+  costUpsert, costsAll, costGet, costOwnRows, costLogRows,
 };

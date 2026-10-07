@@ -106,7 +106,7 @@ function buildChannelSkuRows(channelKey, items, feeds, recs, opts = {}) {
   for (const r of out) {
     r.condition = conditionOf(views, r.item, { sku: r.channelSku, title: r.title });
     r.inStock = levelOf(r.item);
-    r.cost = r.item && Number(r.item.purchasePrice) > 0 ? Math.round(Number(r.item.purchasePrice) * 100) / 100 : '';
+    r.cost = r.item && Number(r.item.cost) > 0 ? Math.round(Number(r.item.cost) * 100) / 100 : ''; // the software's cost, not Linnworks'
     delete r.item;
   }
   // the Stock page's active chip narrows the file the same way it narrows the grid

@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.12 highlights
+
+- **Cost lives in the software only.** Costs are no longer written to Linnworks' purchase price. Each SKU's cost is kept in the app (one row per SKU, newest write wins) and shared through the log folder as `costs-STATION.jsonl`, so every computer with the shared folder sees the same cost. The COST history lines are unchanged.
+- **Moving off Linnworks.** The first time a Cost station starts on this version it reads every COST line, keeps the latest value as the software's cost, and puts each item's Linnworks purchase price back to what it was before the app first touched it (0 for nearly all). An item whose Linnworks price was changed by hand since is left alone. Runs once, retries next start if Linnworks is unreachable.
+- The New SKU sheet's cost field saves to the software too; Linnworks gets a purchase price of 0. The channel-SKU export's Cost column reads the software's cost.
+
 ## v1.29.11 highlights
 
 - **Returns log entry row lines up again.** The wholesale invoice sheet (v1.29.1) reused two style names the returns entry row already owned, so that row turned into a flex strip of tiny boxes under the wrong headers. The invoice sheet's styles are renamed; the entry row sits under its columns as before.

@@ -1902,7 +1902,7 @@ $('skuCreate').addEventListener('click', async () => {
   const item = {
     sku: res.sku, title: fields.title, barcode: fields.barcode,
     stockItemId: res.stockItemId, retailPrice: fields.retailPrice,
-    purchasePrice: fields.purchasePrice, image: '', category: '', levels: [],
+    purchasePrice: 0, cost: fields.purchasePrice, image: '', category: '', levels: [],
   };
   if (recvItems) {
     recvItems.push(item);
@@ -2515,7 +2515,7 @@ const STOCK_COLS = {
   sku: { label: 'SKU', get: r => r.sku, text: true },
   // the item's cost (Linnworks purchase price) — only on stations with the
   // Cost tick (owner 2026-10-05); sits right after the SKU
-  cost: { label: 'Cost', get: r => Number(r.purchasePrice) || 0 },
+  cost: { label: 'Cost', get: r => Number(r.cost) || 0 },
   stockLevel: { label: 'In stock', get: r => r.l.stockLevel },
   inOrders: { label: 'In orders', get: r => r.l.inOrders },
   minimumLevel: { label: 'Min', get: r => r.l.minimumLevel },
@@ -2810,7 +2810,7 @@ function renderStock() {
         const cellFor = (key, r) => {
           switch (key) {
             case 'sku': return skuCell(r);
-            case 'cost': return `<td class="num cell-cost"><button class="stock-num-btn stock-cost-btn${Number(r.purchasePrice) > 0 ? '' : ' is-none'}" data-costsid="${esc(r.stockItemId || '')}" data-costsku="${esc(r.sku)}" data-cost="${Number(r.purchasePrice) || 0}" title="Cost — click to edit">${fmtCost(r.purchasePrice)}</button></td>`;
+            case 'cost': return `<td class="num cell-cost"><button class="stock-num-btn stock-cost-btn${Number(r.cost) > 0 ? '' : ' is-none'}" data-costsid="${esc(r.stockItemId || '')}" data-costsku="${esc(r.sku)}" data-cost="${Number(r.cost) || 0}" title="Cost — click to edit">${fmtCost(r.cost)}</button></td>`;
             case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
@@ -3243,7 +3243,7 @@ function beginStockCostEdit(btn) {
   input.className = 'input stock-edit stock-cost-edit';
   let done = false;
   const restore = () => { if (input.parentNode) input.replaceWith(btn); };
-  const apply = (item, v) => { if (item) item.purchasePrice = v; };
+  const apply = (item, v) => { if (item) item.cost = v; };
   const commit = async () => {
     if (done) return;
     done = true;
@@ -3254,21 +3254,21 @@ function beginStockCostEdit(btn) {
     input.disabled = true;
     const res = await api.setStockCost(sid, sku, n, current);
     if (!res.ok) { toast(res.error || 'Cost update failed'); restore(); return; }
-    apply(stockCache && stockCache.items.find(i => i.sku === sku), res.purchasePrice);
+    apply(stockCache && stockCache.items.find(i => i.sku === sku), res.cost);
     // the cell updates in place: clicking straight into the next cost
     // (owner's flow, 2026-10-07) opens that edit before this save lands,
     // and renderStock() steps aside while an edit is open — so this row
     // used to sit on its greyed input and look unsaved
-    btn.textContent = fmtCost(res.purchasePrice);
-    btn.dataset.cost = String(res.purchasePrice || 0);
-    btn.classList.toggle('is-none', !(Number(res.purchasePrice) > 0));
+    btn.textContent = fmtCost(res.cost);
+    btn.dataset.cost = String(res.cost || 0);
+    btn.classList.toggle('is-none', !(Number(res.cost) > 0));
     restore();
     renderStock();
-    toast(`${sku} cost ${fmtCost(current)} → ${fmtCost(res.purchasePrice)}`);
+    toast(`${sku} cost ${fmtCost(current)} → ${fmtCost(res.cost)}`);
     pushUndo(`${sku} cost back to ${fmtCost(current)}`, async () => {
-      const r = await api.setStockCost(sid, sku, current, res.purchasePrice);
+      const r = await api.setStockCost(sid, sku, current, res.cost);
       if (!r.ok) throw new Error(r.error || 'Cost update failed');
-      apply(stockCache && stockCache.items.find(i => i.sku === sku), r.purchasePrice);
+      apply(stockCache && stockCache.items.find(i => i.sku === sku), r.cost);
       renderStock();
     });
   };
@@ -6720,7 +6720,7 @@ function renderStockHistory() {
       ${costOn() ? (() => {
         const lastCost = rows.find(r => r.reason === 'cost');
         const from = lastCost && lastCost.dataObj ? Number(lastCost.dataObj.from) : null;
-        return `<div class="sales-stat"><div class="l">Cost now</div><div class="v is-cost">${fmtCost(item ? item.purchasePrice : 0)}</div><div class="s">${lastCost ? `was ${from > 0 ? fmtCost(from) : 'no cost'} · ${retDateUS(lastCost.day)}` : 'no changes logged'}</div></div>`;
+        return `<div class="sales-stat"><div class="l">Cost now</div><div class="v is-cost">${fmtCost(item ? item.cost : 0)}</div><div class="s">${lastCost ? `was ${from > 0 ? fmtCost(from) : 'no cost'} · ${retDateUS(lastCost.day)}` : 'no changes logged'}</div></div>`;
       })() : `<div class="sales-stat"><div class="l">In · 7 days</div><div class="v is-pos">+${inWeek}</div><div class="s">units added</div></div>`}
       <div class="sales-stat"><div class="l">Out · 7 days</div><div class="v is-neg">−${outWeek}</div><div class="s">units removed</div></div>
       <div class="sales-stat"><div class="l">Last touched</div><div class="v is-name">${last ? esc(String(last.computer || '—').toUpperCase()) + (last.by ? ` · ${esc(last.by)}` : '') : '—'}</div><div class="s">${last ? `${retDateUS(last.day)} ${fmtTime(last.created_at)}` : ''}</div></div>
