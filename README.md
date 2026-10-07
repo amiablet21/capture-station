@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.10 highlights
+
+- **Cost edits stay put.** The cost button and the box it turns into are the same size and the column is fixed, so clicking a cost no longer shifts the sheet.
+- **Click off to save a cost.** Type the number and click anywhere (or Tab, or straight into the next row's cost); the cell updates in place as each save lands. Enter still works. Escape cancels.
+- Costs are the item's purchase price in Linnworks, so every station sees the same number the next time it opens the Stock page; the COST history line rides the shared log folder like every other stock change. Nothing goes through Google Drive.
+
 ## v1.29.9 highlights
 
 - **The Overview works again.** The dial-rows design (v1.29.x) dropped a one-line definition from the Send to WFS panel, so the page threw the moment the sales pass finished and every station sat on "Crunching WFS sales…" forever. Restored.

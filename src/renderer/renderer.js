@@ -3255,6 +3255,14 @@ function beginStockCostEdit(btn) {
     const res = await api.setStockCost(sid, sku, n, current);
     if (!res.ok) { toast(res.error || 'Cost update failed'); restore(); return; }
     apply(stockCache && stockCache.items.find(i => i.sku === sku), res.purchasePrice);
+    // the cell updates in place: clicking straight into the next cost
+    // (owner's flow, 2026-10-07) opens that edit before this save lands,
+    // and renderStock() steps aside while an edit is open — so this row
+    // used to sit on its greyed input and look unsaved
+    btn.textContent = fmtCost(res.purchasePrice);
+    btn.dataset.cost = String(res.purchasePrice || 0);
+    btn.classList.toggle('is-none', !(Number(res.purchasePrice) > 0));
+    restore();
     renderStock();
     toast(`${sku} cost ${fmtCost(current)} → ${fmtCost(res.purchasePrice)}`);
     pushUndo(`${sku} cost back to ${fmtCost(current)}`, async () => {
