@@ -11651,7 +11651,7 @@ function ovRenderSold() {
       <div class="ovq-legend-mk">${OV_MK.map(([k, n]) => `<span><i class="cn-${k}"></i>${n} <b class="mono">${ovN(byCh[k] || 0)}</b></span>`).join('')}</div>
     </div>
     <div class="ovq-sold-h"><span>#</span><span>SKU</span><span class="u">Units</span></div>
-    ${rows || '<div class="ovq-note is-tight">Nothing sold yet today.</div>'}
+    <div class="ovq-sold-rows">${rows || '<div class="ovq-note is-tight">Nothing sold yet today.</div>'}</div>
     <div class="ovq-sold-tot"><span></span><span>Total</span><span class="u mono">${ovN(sold.units)}</span></div>`;
   // bar widths go through the CSSOM: the CSP blocks inline style attributes
   box.querySelectorAll('.ovq-share i').forEach(i => { i.style.width = `${i.dataset.w}%`; });

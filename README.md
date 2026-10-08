@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.3 highlights
+
+- **Sold today header stays put.** The units total, orders and SKU counts, the marketplace share bar and the column labels are pinned; only the SKU rows scroll, with the Total row fixed under them.
+
 ## v1.31.2 highlights
 
 - New icon: the lowercase "dws." wordmark on a navy gradient tile (owner's final pick).
