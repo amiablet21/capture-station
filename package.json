@@ -1,6 +1,6 @@
 {
   "name": "capture-station",
-  "version": "1.30.5",
+  "version": "1.30.6",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {
@@ -29,7 +29,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "Capture-Station-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -48,9 +49,17 @@
     },
     "dmg": {
       "artifactName": "${productName} ${version}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "amiablet21",
+        "repo": "capture-station"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "geist": "^1.7.2",
     "qrcode": "^1.5.4"
   }

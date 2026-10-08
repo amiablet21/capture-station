@@ -35,6 +35,8 @@ const EVENTS = [
   'presence:update',
   'stock:imgInherited',
   'update:available',
+  'update:progress',
+  'update:downloaded',
   'browser:resync',
   'pricing:refreshed',
 ];

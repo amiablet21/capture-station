@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.6 highlights
+
+- **Updates install themselves on Windows.** When a new release is out, the app downloads it in the background and the footer button turns into "Restart to update vX". One click closes the app and brings it back on the new version, about twenty seconds, no installer to click through. The Check for updates button and the half-hour check both feed it. The Mac build is unsigned, so the Mac keeps downloading the DMG and opening it.
+- Releases now carry `latest.yml`, the manifest the in-app updater reads, and the Windows installer is named without spaces (`Capture-Station-Setup-1.30.6.exe`). The first move onto this version is a normal install; every version after it arrives in place.
+
 ## v1.30.5 highlights
 
 - **The marketplace pane can no longer spill over the capture list.** The native browser view is now clipped to its own dock and stopped at the sheet's left edge no matter what the layout measures, the main process clamps it to the window as well, and a window resize, maximize or zoom change asks the page to re-measure right away.

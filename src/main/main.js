@@ -11,6 +11,12 @@ const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const presence = require('./presence');
+// in-place updates (owner 2026-10-08: "why can't it update within itself?")
+// — electron-updater downloads the new NSIS build in the background and
+// installs it on restart. Windows only: the Mac build is unsigned, so the
+// Mac keeps downloading the DMG and opening it.
+let autoUpdater = null;
+try { ({ autoUpdater } = require('electron-updater')); } catch { /* dev checkout without the module */ }
 // every local returns save already tells the shared folder (emitRow /
 // emitPutFor / emitDel) — the wrapper tells the LAN peers too, so their
 // rescan fires ahead of the cloud drive (presence pings carry no data)
@@ -2905,6 +2911,12 @@ function registerIpc() {
       const asset = (j.assets || []).find(a => want.test(String(a.name || '')));
       if (!asset) return { ok: true, current, latest, update: false, building: true }; // the platform's installer hasn't finished building yet
       updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
+      if (useAuto() && (j.assets || []).some(a => /^latest\.yml$/i.test(String(a.name || '')))) {
+        // in-place: electron-updater downloads it now and the footer says
+        // "Restart to update" when it is on disk
+        if (updateReady !== latest) autoCheck();
+        return { ok: true, current, latest, update: true, auto: true, ready: updateReady === latest };
+      }
       if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest });
       return { ok: true, current, latest, update: true };
     } catch (e) {
@@ -2912,7 +2924,33 @@ function registerIpc() {
     }
   }
   ipcMain.handle('update:check', () => checkForUpdate());
+  // ---- the in-place path (Windows, packaged): background download, install on restart ----
+  let updateReady = ''; // version downloaded and waiting for a restart
+  let autoBroken = false; // the in-place path failed (no latest.yml, signature, disk): fall back to the installer download
+  const useAuto = () => !!autoUpdater && process.platform === 'win32' && app.isPackaged && !autoBroken;
+  if (autoUpdater && process.platform === 'win32' && app.isPackaged) {
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.logger = null;
+    const tell = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
+    autoUpdater.on('update-available', (info) => tell('update:available', { version: info.version, auto: true }));
+    autoUpdater.on('download-progress', (p) => tell('update:progress', { percent: Math.round(p.percent || 0) }));
+    autoUpdater.on('update-downloaded', (info) => { updateReady = info.version; tell('update:downloaded', { version: info.version }); });
+    autoUpdater.on('error', (e) => {
+      autoBroken = true; // the next check uses the installer-download path
+      console.log(`[update] in-place updater failed, falling back to the installer download: ${e && e.message}`);
+      checkForUpdate().catch(() => {});
+    });
+  }
+  async function autoCheck() {
+    try { await autoUpdater.checkForUpdates(); } catch (e) { autoBroken = true; }
+  }
   ipcMain.handle('update:install', async () => {
+    if (updateReady) {
+      // the new build is on disk: close and let the installer run silently
+      setImmediate(() => autoUpdater.quitAndInstall(true, true));
+      return { ok: true, restart: true, version: updateReady };
+    }
     if (!updateInfo) return { ok: false, error: 'No update on record — try again in a minute.' };
     try {
       const res = await fetch(updateInfo.url, { headers: { 'User-Agent': 'CaptureStation' }, redirect: 'follow' });
