@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.13 highlights
+
+- **Stock history opens at once.** The dialog (and the all-SKU History) used to wait for 30 days of processed orders from Linnworks before showing anything. Now the logged changes appear immediately from the local log, with "reading 30 days of sales…" in the sub-line until the SOLD lines join.
+- **The sales cache stays warm.** Past its 10-minute age the cache is no longer thrown away; only the last day is re-read for orders processed since, so a history open after a quiet spell takes seconds, not minutes. The Overview's sales pass benefits the same way.
+- **The shared log is read incrementally.** Each open only parses what other stations appended since the last pass, instead of re-reading every station's whole stock-log file over the network and re-offering every line to the database.
+
 ## v1.29.12 highlights
 
 - **Cost lives in the software only.** Costs are no longer written to Linnworks' purchase price. Each SKU's cost is kept in the app (one row per SKU, newest write wins) and shared through the log folder as `costs-STATION.jsonl`, so every computer with the shared folder sees the same cost. The COST history lines are unchanged.

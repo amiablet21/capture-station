@@ -6688,16 +6688,29 @@ async function openStockHistory(sku) {
   $('stockHistDialog').showModal();
   const from = salesDayKey(new Date(Date.now() - 29 * 86400000).toISOString());
   const to = salesDayKey(new Date().toISOString());
-  const [res, sales] = await Promise.all([api.stockHistory(sku), shSalesEvents(from, to, sku)]);
+  // the logged changes come from SQLite in a blink; the SOLD lines need 30
+  // days of processed orders from Linnworks, which can take a while on a
+  // cold cache — so the dialog shows the log at once and the sales join
+  // when they arrive (owner 2026-10-08: "why does it take so long")
+  const salesP = shSalesEvents(from, to, sku);
+  const res = await api.stockHistory(sku);
   if (shDlg.seq !== seq || !$('stockHistDialog').open) return;
   if (!res.ok) {
     $('stockHistBody').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`;
     return;
   }
-  shDlg.rows = [...(res.rows || []), ...sales].filter(r => costOn() || r.reason !== 'cost').sort(shNewestFirst);
-  const pcs = [...new Set(shDlg.rows.map(e => shPcOf(e)).filter(Boolean))];
-  shMenuFill('shPcMenu', pcs);
-  renderStockHistory();
+  const logged = (res.rows || []).filter(r => costOn() || r.reason !== 'cost');
+  const show = (sales) => {
+    shDlg.rows = [...logged, ...sales].sort(shNewestFirst);
+    shMenuFill('shPcMenu', [...new Set(shDlg.rows.map(e => shPcOf(e)).filter(Boolean))]);
+    renderStockHistory();
+  };
+  shDlg.salesPending = true;
+  show([]);
+  const sales = await salesP;
+  if (shDlg.seq !== seq || !$('stockHistDialog').open) return;
+  shDlg.salesPending = false;
+  show(sales);
 }
 
 function renderStockHistory() {
@@ -6712,9 +6725,10 @@ function renderStockHistory() {
   }
   const last = rows.find(r => r.reason !== 'sale');
   const logged = rows.filter(r => r.reason !== 'sale');
-  $('stockHistSub').textContent = logged.length
+  $('stockHistSub').textContent = (logged.length
     ? `${logged.length} change${logged.length === 1 ? '' : 's'} logged by Capture Station${rows.length > logged.length ? ` · ${rows.length - logged.length} sold in the last 30 days` : ''}`
-    : `Nothing logged yet — history starts with the first change made through Capture Station.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`;
+    : `Nothing logged yet — history starts with the first change made through Capture Station.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`)
+    + (shDlg.salesPending ? ' · reading 30 days of sales…' : '');
   const strip = `<div class="sales-strip sh-strip">
       <div class="sales-stat"><div class="l">In stock</div><div class="v">${lvl ? lvl.stockLevel : '—'}</div><div class="s">${lvl ? `${lvl.available} available · ${lvl.inOrders} in orders` : 'not in the loaded grid'}</div></div>
       ${costOn() ? (() => {
@@ -6753,15 +6767,24 @@ async function loadHistoryStock() {
   const seq = ++hs.seq;
   $('hsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   const { from, to } = shRangeDays(hs.range);
-  const [res, sales] = await Promise.all([api.stockHistoryRange(from, to), shSalesEvents(from, to)]);
+  // same shape as the one-SKU dialog: the log shows at once, sales join later
+  const salesP = shSalesEvents(from, to);
+  const res = await api.stockHistoryRange(from, to);
   if (hs.seq !== seq) return;
   if (!res.ok) { $('hsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load the history.')}</p>`; return; }
-  hs.rows = [...(res.rows || []), ...sales].filter(r => costOn() || r.reason !== 'cost').sort(shNewestFirst);
-  hs.loaded = true;
-  const pcs = [...new Set(hs.rows.map(e => shPcOf(e)).filter(Boolean))];
-  shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (shPcOf(e)) === v).length });
-  shMenuFill('hsActMenu', SH_ACT_ORDER, { label: shWordCase, dot: k => SH_ACT[k].cls, count: k => hs.rows.filter(e => shActionOf(e) === k).length });
-  renderHistoryStock();
+  const logged = (res.rows || []).filter(r => costOn() || r.reason !== 'cost');
+  const show = (sales) => {
+    hs.rows = [...logged, ...sales].sort(shNewestFirst);
+    hs.loaded = true;
+    const pcs = [...new Set(hs.rows.map(e => shPcOf(e)).filter(Boolean))];
+    shMenuFill('hsPcMenu', pcs, { count: v => hs.rows.filter(e => (shPcOf(e)) === v).length });
+    shMenuFill('hsActMenu', SH_ACT_ORDER, { label: shWordCase, dot: k => SH_ACT[k].cls, count: k => hs.rows.filter(e => shActionOf(e) === k).length });
+    renderHistoryStock();
+  };
+  show([]);
+  const sales = await salesP;
+  if (hs.seq !== seq) return;
+  show(sales);
 }
 
 function renderHistoryStock() {
