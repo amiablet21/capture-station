@@ -183,8 +183,8 @@ function syncWholesale() {
   try {
     const mine = [retsync.stationName(), os.hostname(), stockLogComputer()];
     for (const [prefix, table, fn] of WS_AUX) {
-      for (const rec of retsync.readAux(prefix)) { if (rec && rec.gid) db[fn](rec); }
-      retsync.auxBackfill(prefix, db.wsOwnRows(table, mine));
+      for (const rec of retsync.readAuxNew(prefix, auxState(prefix))) { if (rec && rec.gid) db[fn](rec); }
+      retsync.auxBackfill(prefix, () => db.wsOwnRows(table, mine));
     }
   } catch { /* folder unreachable: the local records stand alone */ }
   wsSyncBusy = false;
@@ -202,12 +202,15 @@ const wsNow = () => new Date().toISOString();
 // one row per SKU in SQLite, newest write wins, every station's writes
 // appended to costs-<STATION>.jsonl in the shared folder and merged on read
 let costSyncBusy = false;
+// how far each shared aux file has been read, per prefix (append-only files)
+const auxStates = {};
+const auxState = (prefix) => (auxStates[prefix] = auxStates[prefix] || {});
 function syncCosts() {
   if (costSyncBusy || !retsync.enabled()) return;
   costSyncBusy = true;
   try {
-    for (const rec of retsync.readAux('costs')) { if (rec && rec.sku) db.costUpsert(rec); }
-    retsync.auxBackfill('costs', db.costOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
+    for (const rec of retsync.readAuxNew('costs', auxState('costs'))) { if (rec && rec.sku) db.costUpsert(rec); }
+    retsync.auxBackfill('costs', () => db.costOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
   } catch { /* folder unreachable: the local costs stand alone */ }
   costSyncBusy = false;
 }
@@ -2060,10 +2063,13 @@ async function querySales(from, to, force, onProgress) {
   if (t - f > 366 * 24 * 3600 * 1000) return { ok: false, error: 'Range too long — one year at most.' };
   try {
     const client = new LinnworksClient(cfg.linnworks);
-    if (force || Date.now() - salesCache.at > SALES_CACHE_TTL_MS) {
-      salesCache = { from: 0, to: 0, at: 0, lines: [] };
-    }
-    if (salesCache.at && f >= salesCache.from && t <= salesCache.to) {
+    if (force) salesCache = { from: 0, to: 0, at: 0, lines: [] };
+    // past the TTL the cache is not thrown away any more (owner 2026-10-08:
+    // every tenth minute the next history open re-walked 30 days of orders):
+    // processed orders never change, so only the last day is re-read for
+    // anything processed since, and the rest stands
+    const stale = !!salesCache.at && Date.now() - salesCache.at > SALES_CACHE_TTL_MS;
+    if (salesCache.at && !stale && f >= salesCache.from && t <= salesCache.to) {
       return { ok: true, lines: salesSlice(f, t), cached: true };
     }
     if (salesCache.at && t >= salesCache.from && f <= salesCache.to) {
@@ -2071,8 +2077,9 @@ async function querySales(from, to, force, onProgress) {
       if (f < salesCache.from) {
         salesMerge(await client.listProcessedLines(new Date(f).toISOString(), new Date(salesCache.from).toISOString(), onProgress));
       }
-      if (t > salesCache.to) {
-        salesMerge(await client.listProcessedLines(new Date(salesCache.to).toISOString(), new Date(t).toISOString(), onProgress));
+      const tailFrom = stale ? Math.min(salesCache.to, Date.now() - 86400000) : salesCache.to;
+      if (t > tailFrom) {
+        salesMerge(await client.listProcessedLines(new Date(tailFrom).toISOString(), new Date(t).toISOString(), onProgress));
       }
       salesCache.from = Math.min(salesCache.from, f);
       salesCache.to = Math.max(salesCache.to, t);
@@ -5216,7 +5223,7 @@ function registerIpc() {
     const st = retsync.stationName() || '';
     const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
     if (!retsync.enabled()) return mine;
-    retsync.auxBackfill('wfs', db.listWfsShipments(1000).slice().reverse()
+    retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
       .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
     const foreign = retsync.readAux('wfs')
       .filter(e => e.station !== st)
@@ -6580,24 +6587,31 @@ function installStockLog() {
 // Then seed this desktop's own shared file once, so its pre-sync rows
 // reach the others.
 let stockLogSyncBusy = false;
+let stockLogSyncedOnce = false;
 function syncStockLog() {
   if (stockLogSyncBusy) return { imported: 0 };
   stockLogSyncBusy = true;
   let imported = 0;
   try {
+    // only what the other stations appended since the last pass is parsed
+    // and inserted (the whole shared log used to be re-read and re-offered
+    // to SQLite on every history open — seconds over a network folder,
+    // owner 2026-10-08); the local bulk-history file is small
     const seen = new Set();
     const bulk = [];
-    for (const e of [...retsync.readAux('stockimports'), ...loadBulkHistFile()]) {
+    const localBulk = stockLogSyncedOnce ? [] : loadBulkHistFile();
+    for (const e of [...retsync.readAuxNew('stockimports', auxState('stockimports')), ...localBulk]) {
       if (!e || !e.id || seen.has(e.id)) continue;
       seen.add(e.id);
       bulk.push(...db.stockRowsFromBulkEntry(e));
     }
-    imported += recordStockRows(bulk, { share: false }).length;
-    const remote = retsync.readAux('stocklog').filter(r => r && r.gid && r.sku);
-    imported += recordStockRows(remote, { share: false }).length;
+    if (bulk.length) imported += recordStockRows(bulk, { share: false }).length;
+    const remote = retsync.readAuxNew('stocklog', auxState('stocklog')).filter(r => r && r.gid && r.sku);
+    if (remote.length) imported += recordStockRows(remote, { share: false }).length;
     if (retsync.enabled()) {
-      retsync.auxBackfill('stocklog', db.stockLogOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
+      retsync.auxBackfill('stocklog', () => db.stockLogOwnRows([retsync.stationName(), os.hostname(), stockLogComputer()]));
     }
+    stockLogSyncedOnce = true;
   } catch { /* the folder was unreachable: the local log stands alone until the next pass */ }
   stockLogSyncBusy = false;
   return { imported };

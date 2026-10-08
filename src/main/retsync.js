@@ -390,12 +390,55 @@ function appendAux(prefix, event) {
 }
 
 // one-time seed: history logged before sync was on joins the shared folder
+// `events` may be a function: the rows are only gathered when the file is
+// actually missing (a full-table read on every history open was most of
+// the dialog's wait, owner 2026-10-08)
 function auxBackfill(prefix, events) {
-  if (!enabled() || !events.length) return;
+  if (!enabled()) return;
   const f = path.join(folder, `${prefix}-${station}.jsonl`);
   try {
-    if (!fs.existsSync(f)) fs.writeFileSync(f, events.map(e => JSON.stringify(e)).join('\n') + '\n');
+    if (fs.existsSync(f)) return;
+    const rows = typeof events === 'function' ? events() : events;
+    if (!rows || !rows.length) return;
+    fs.writeFileSync(f, rows.map(e => JSON.stringify(e)).join('\n') + '\n');
   } catch { /* best effort — the next open retries */ }
+}
+
+// Incremental read of the append-only aux files: `state` remembers how far
+// each file was read, so a pass only parses what other stations appended
+// since. A file that shrank (recreated) is read from the top again.
+function readAuxNew(prefix, state) {
+  if (!enabled()) return [];
+  const out = [];
+  state.files = state.files || {};
+  try {
+    for (const f of fs.readdirSync(folder)) {
+      const m = f.match(new RegExp(`^${prefix}-([A-Z0-9-]+)\\.jsonl$`));
+      if (!m) continue;
+      const full = path.join(folder, f);
+      let size = 0;
+      try { size = fs.statSync(full).size; } catch { continue; }
+      let from = state.files[f] || 0;
+      if (size < from) from = 0;
+      if (size === from) continue;
+      let text = '';
+      const fd = fs.openSync(full, 'r');
+      try {
+        const buf = Buffer.alloc(size - from);
+        fs.readSync(fd, buf, 0, buf.length, from);
+        text = buf.toString('utf8');
+      } finally { fs.closeSync(fd); }
+      // a line still being written lands next pass: only whole lines count
+      const cut = text.lastIndexOf('\n');
+      if (cut < 0) continue;
+      for (const ln of text.slice(0, cut).split('\n')) {
+        if (!ln.trim()) continue;
+        try { out.push({ ...JSON.parse(ln), station: m[1] }); } catch { /* torn line */ }
+      }
+      state.files[f] = from + Buffer.byteLength(text.slice(0, cut + 1), 'utf8');
+    }
+  } catch { /* folder unreachable: the local view stands alone */ }
+  return out;
 }
 
 function readAux(prefix) {
@@ -414,4 +457,4 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux };
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux, readAuxNew };
