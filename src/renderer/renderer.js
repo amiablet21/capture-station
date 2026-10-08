@@ -11357,12 +11357,13 @@ const OV_CHECK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" st
 
 function ovPhrase(r) {
   if (r.kind === 'out') return r.last ? `Out since ${esc(r.last)}` : 'Out of stock';
-  if (r.kind === 'low') return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
-  return `Up ${r.pct}%`;
+  if (r.kind === 'fast') return `Up ${r.pct}%`;
+  if (r.avail + r.atWfs <= 0) return 'Out of stock';
+  return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
 }
 
 function ovRowHtml(r, open, hotAt) {
-  const badge = { out: 'Out', low: 'Low', fast: 'Fast' }[r.kind];
+  const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind];
   const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
   return `<div class="ovq-item">
     <div class="ovq-row${open ? ' is-open' : ''}" data-ovtoggle="${esc(r.sku)}">
@@ -11448,18 +11449,18 @@ function ovRenderList() {
     box.innerHTML = `${head}<div class="ovq-note">Stock levels will show here once Linnworks answers.</div>`;
     return;
   }
-  const rows = ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows;
+  const watch = p.watch || [];
+  // the watch list expands as more of the SAME rows (owner 2026-10-08:
+  // "the same as above but expanded"), not a compact grid
+  const rows = [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])];
   if (ovOpenSku && !rows.some(r => r.sku === ovOpenSku)) ovOpenSku = null;
   const list = rows.length
     ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1)).join('')
     : `<div class="ovq-note">${ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.'}</div>`;
-  const watch = p.watch || [];
-  const watchHtml = ovShowWatch && watch.length
-    ? `<div class="ovq-watch">${watch.map(w => `<div class="ovq-watch-it"><span class="ovq-sku mono" data-ovsku="${esc(w.sku)}" title="Open in Stock">${esc(w.sku)}</span><span class="mono d">${w.daysLeft}d · ${esc(w.outOn || '')}</span></div>`).join('')}</div>`
-    : '';
+  const watchHtml = '';
   const ign = p.ignored || [];
   const foot = `<div class="ovq-foot">
-    ${watch.length ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? 'Hide ' : ''}${watch.length} more under ${lead + cover} days of cover${ovShowWatch ? '' : ' →'}</button>` : '<span></span>'}
+    ${watch.length ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
     ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
   </div>`;
   box.innerHTML = `${head}${list}${watchHtml}${foot}`;
