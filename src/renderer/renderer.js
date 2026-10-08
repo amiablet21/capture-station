@@ -1467,8 +1467,12 @@ function showPage(page) {
     } else if (page === 'temu') {
       enterTemu();
     } else if (page === 'stock') {
-      $('stockSearch').value = '';
-      $('stockSearchClear').hidden = true;
+      // a click-through (Overview SKU, Returns reminder) names the SKU to
+      // land on; it goes into the search box BEFORE the grid draws
+      const pre = stockPendingSearch;
+      stockPendingSearch = '';
+      $('stockSearch').value = pre;
+      $('stockSearchClear').hidden = !pre;
       loadStockViews();
       loadStock().then(() => {
         // the load takes a beat: never yank focus from a field the user has
@@ -2249,6 +2253,7 @@ api.on('browser:download', ({ file, state: dlState }) => {
 /* ---------- stock page ---------- */
 
 let stockCache = null;
+let stockPendingSearch = ''; // SKU to prefill when the Stock page opens next
 
 /* condition view chips: config-driven filters over SKU/title (AND with search) */
 
@@ -2592,18 +2597,28 @@ function applyStockColWidths() {
 
 let stockLoading = false; // a reload in flight: lazy badge loads wait for it
 
-async function loadStock() {
+async function loadStock(opts = {}) {
+  // a grid from an earlier visit draws at once and the fresh levels replace
+  // it when Linnworks answers (owner 2026-10-08: the click from the
+  // Overview "always lags"); only the first open shows the spinner
+  const warm = !!(stockCache && stockCache.items && !opts.fresh);
   stockLoading = true;
-  $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
-  $('stockSummary').textContent = '';
+  if (warm) {
+    renderStockChips();
+    renderStock();
+  } else {
+    $('stockList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
+    $('stockSummary').textContent = '';
+  }
   loadStockDeltas(); // day-over-day sales deltas fill in lazily, never blocking
   loadStockHistToday(); // stock-history dots on the tray clocks, same lazy pattern
   loadReorderStats(); // pads + velocity + Min suggestions, same lazy pattern
   loadUnlisted(); // "not listed" markers on condition SKUs holding returns
   loadChLinked(); // per-channel link sets for the "No eBay/Walmart" chips
-  const res = await api.getStock();
+  const res = await api.getStock({ fresh: !!opts.fresh });
   stockLoading = false;
   if (!res.ok) {
+    if (warm) { toast(res.error || 'Could not refresh stock — showing the last grid.', 4000); return; }
     $('stockList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load stock.')}</p>`;
     return;
   }
@@ -3340,7 +3355,7 @@ function beginStockMinEdit(btn) {
 
 $('stockRefresh').addEventListener('click', () => {
   chLinked = null; // Refresh re-derives the missing-listings sets too
-  loadStock();
+  loadStock({ fresh: true }); // past the one-minute inventory copy
   loadUnlisted(true); // fresh scan: SKUs created a minute ago must appear
 });
 // Every MAPPED listing on one channel as a CSV — inventory SKU, channel
@@ -5195,6 +5210,7 @@ function showUnlistedFor(sku) {
   stockLowActive = false;
   stockDsActive = false;
   stockActiveView = null;
+  stockPendingSearch = sku || ''; // survives the page's settle-enter
   $('stockSearch').value = sku || '';
   $('stockSearchClear').hidden = !sku;
   showPage('stock');
@@ -11524,14 +11540,8 @@ function ovOpenStock(sku, lowView) {
   stockLowActive = !!lowView;
   stockDsActive = false;
   stockActiveView = null;
+  stockPendingSearch = sku || ''; // lands in the search box before the grid draws
   showPage('stock');
-  setTimeout(() => {
-    if (activePage !== 'stock') return;
-    $('stockSearch').value = sku || '';
-    $('stockSearchClear').hidden = !sku;
-    renderStockChips();
-    renderStock();
-  }, 260);
 }
 
 // chart hover: the overlay snaps to the nearest of the 30 days; guide, dot

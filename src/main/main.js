@@ -2113,6 +2113,7 @@ function registerIpc() {
   // Rename a Linnworks SKU in place: the stockItemId anchors everything, so
   // levels/history/links survive; string-matched config follows the rename
   ipcMain.handle('stock:renameSku', async (_e, { stockItemId, oldSku, newSku }) => {
+    invCacheClear();
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
@@ -2162,6 +2163,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('stock:deleteSku', async (_e, { stockItemId, sku }) => {
+    invCacheClear();
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
@@ -3222,24 +3224,43 @@ function registerIpc() {
     }
   }
 
-  ipcMain.handle('stock:get', async () => {
+  // The Stock page re-walked the whole inventory on every tab entry
+  // (owner 2026-10-08: a SKU click from the Overview "always lags"). One
+  // minute of reuse: a second open inside that window answers at once;
+  // every stock change the app makes drops the copy (invCacheClear), and
+  // the Refresh button passes fresh:true.
+  const INV_TTL_MS = 60 * 1000;
+  let invCache = { at: 0, res: null, promise: null };
+  const invCacheClear = () => { invCache = { at: 0, res: null, promise: null }; };
+  invCacheClearHook = invCacheClear;
+  ipcMain.handle('stock:get', async (_e, opts) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const items = attachCosts(await client.listInventory());
-      // fresh levels for free: run the low-stock crossing check on them
-      runLowStockCheck(items).catch(() => { /* silent */ });
-      inheritConditionImages(client, items).catch(() => { /* silent */ });
-      return {
-        ok: true,
-        locationId: cfg.linnworks.locationId,
-        locationName: cfg.linnworks.locationName || 'warehouse',
-        items,
-      };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
+    const fresh = !!(opts && opts.fresh);
+    if (!fresh && invCache.res && Date.now() - invCache.at < INV_TTL_MS) return invCache.res;
+    if (!fresh && invCache.promise) return invCache.promise;
+    const run = (async () => {
+      try {
+        const client = new LinnworksClient(cfg.linnworks);
+        const items = attachCosts(await client.listInventory());
+        // fresh levels for free: run the low-stock crossing check on them
+        runLowStockCheck(items).catch(() => { /* silent */ });
+        inheritConditionImages(client, items).catch(() => { /* silent */ });
+        const res = {
+          ok: true,
+          locationId: cfg.linnworks.locationId,
+          locationName: cfg.linnworks.locationName || 'warehouse',
+          items,
+        };
+        invCache = { at: Date.now(), res, promise: null };
+        return res;
+      } catch (e) {
+        invCache.promise = null;
+        return { ok: false, error: e.message };
+      }
+    })();
+    invCache.promise = run;
+    return run;
   });
   // Shelf tab: the sell-through radar (owner design sessions 2026-08-25 —
   // "what's rotting on the shelf?"; sales-rate upgrade signed off from the
@@ -5564,6 +5585,7 @@ function registerIpc() {
   // Create a new inventory item, optionally with a starting level at the
   // primary location (via the existing UpdateStockLevelsBySKU delta path).
   ipcMain.handle('stock:createSku', async (_e, payload) => {
+    invCacheClear();
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const sku = String((payload && payload.sku) || '').trim().toUpperCase();
@@ -6301,6 +6323,7 @@ function registerIpc() {
   });
   // Minimum (reorder alert) level for one SKU at the primary warehouse.
   ipcMain.handle('stock:setMin', async (_e, { stockItemId, level }) => {
+    invCacheClear();
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
     const n = Number(level);
@@ -6320,6 +6343,7 @@ function registerIpc() {
   // like every other line. The cost itself lives in the software (item_costs
   // + costs-<STATION>.jsonl), never in Linnworks (owner 2026-10-07).
   ipcMain.handle('stock:setCost', (_e, { sku, cost, from }) => {
+    invCacheClear();
     const cfg = config.load();
     if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
     const n = Math.round((Number(cost) || 0) * 100) / 100;
@@ -6655,9 +6679,11 @@ function stockLogReason(changeSource, meta) {
   if (cs.includes('history edit')) return 'edit-qty';
   return 'other';
 }
+let invCacheClearHook = null; // set by registerIpc: drops the Stock page's inventory copy
 // one door for every stock_log write: local db (insert-if-absent by gid),
 // then the shared folder so the other desktops pick the rows up
 function recordStockRows(rows, { share = true } = {}) {
+  if (typeof invCacheClearHook === 'function') invCacheClearHook(); // the Stock page's minute-old copy is stale now
   const inserted = db.logStockChanges(rows);
   if (share) for (const r of inserted) retsync.appendAux('stocklog', r);
   return inserted;
