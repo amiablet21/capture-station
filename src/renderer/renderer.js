@@ -11652,34 +11652,10 @@ $('ovRefreshBtn').addEventListener('click', async () => {
 // (the Phone button left the Overview 2026-09-25; the phone dashboard itself still runs)
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
 
-// page-width grip, same feel as the Stock sheet's: drag the right rail, the
-// centered layout grows both ways so the rail tracks the cursor at 2x
-let ovDrag = null;
-{
-  const savedW = Number(localStorage.getItem('overviewPageWidth')) || 0;
-  if (savedW) $('ovWrap').style.width = `${savedW}px`;
-}
-$('ovGrip').addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  ovDrag = { startX: e.clientX, startW: $('ovWrap').offsetWidth, w: 0 };
-  $('ovGrip').classList.add('is-active');
-});
-window.addEventListener('mousemove', (e) => {
-  if (!ovDrag) return;
-  const w = Math.max(900, ovDrag.startW + (e.clientX - ovDrag.startX) * 2);
-  ovDrag.w = w;
-  $('ovWrap').style.width = `${w}px`;
-});
-window.addEventListener('mouseup', () => {
-  if (!ovDrag) return;
-  if (ovDrag.w) localStorage.setItem('overviewPageWidth', String(ovDrag.w));
-  ovDrag = null;
-  $('ovGrip').classList.remove('is-active');
-});
-$('ovGrip').addEventListener('dblclick', () => {
-  localStorage.removeItem('overviewPageWidth');
-  $('ovWrap').style.width = '';
-});
+// the Overview's page-width grip left (owner 2026-10-08: "unnecessary");
+// a width saved by an earlier drag is forgotten so the page sits at its
+// designed 1160px
+try { localStorage.removeItem('overviewPageWidth'); } catch { /* best effort */ }
 
 /* ==================== Temu lister tab ==================== */
 // Fill Temu's own upload workbook from NEW in-stock SKUs (Temu sells new
