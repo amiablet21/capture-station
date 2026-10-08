@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Capture" />
+<meta name="apple-mobile-web-app-title" content="DWS Stock" />
 <link rel="apple-touch-icon" href="/icon.png" />
 <title>DWS Stock</title>
 <!-- the phone twin of Capture Station (owner-approved three-screen design,
@@ -60,10 +60,64 @@
   .grow .po { font-family: var(--mono); font-weight: 600; font-size: 10px; }
   .grow .sku { font-family: var(--mono); color: var(--muted); font-size: 10px; }
   .grow .tm { font-family: var(--mono); color: var(--faint); font-size: 9.5px; }
-  .money { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .money .panel { margin: 0; padding: 10px 11px; }
-  .money .mv { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 2px; }
-  .mv.r { color: var(--neg); } .mv.a { color: var(--amber); } .mv.g { color: #065F46; }
+  /* design 1a on the phone (owner 2026-10-08 "make the mobile version
+     updated"): three counts, the needs-attention queue, Sold today */
+  .counts { display: flex; align-items: baseline; gap: 18px; padding: 2px 2px 12px; flex-wrap: wrap; }
+  .counts > div { display: flex; align-items: baseline; gap: 6px; }
+  .counts .n { font-size: 28px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .counts .n.r { color: var(--neg); } .counts .n.a { color: var(--amber); } .counts .n.b { color: #1D4ED8; }
+  .counts .l { font-size: 12px; color: var(--text); }
+  .qload { padding: 2px 2px 12px; }
+  .qload .t { font-size: 13px; font-weight: 500; }
+  .qload .d { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .qtrack { height: 4px; border-radius: 2px; background: #EAE8E3; margin-top: 8px; overflow: hidden; }
+  .qfill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 400ms ease; }
+  .qcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+  .qhead { display: flex; align-items: center; padding: 11px 14px; gap: 8px; }
+  .qhead .sub { margin-left: auto; font-size: 10px; color: var(--faint); text-align: right; }
+  .qrow { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 10px 14px; border-top: 1px solid #F0EFEC; }
+  .qrow.open { background: #FBFBFA; }
+  .qbadge { display: inline-block; font-size: 9.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .qbadge.out { background: var(--neg-bg); color: var(--neg); } .qbadge.low { background: var(--amber-bg); color: var(--amber); } .qbadge.fast { background: #DBEAFE; color: #1D4ED8; } .qbadge.watch { background: #EFEEEA; color: var(--muted); }
+  .qsku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qhot { display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 4px; background: #FCEADF; color: #B4501B; font-size: 9px; font-weight: 600; vertical-align: 1px; }
+  .qtitle { color: var(--faint); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .qph { font-size: 11.5px; text-align: right; white-space: nowrap; }
+  .qpanel { display: none; background: #FBFBFA; border-top: 1px solid #F0EFEC; padding: 10px 14px 12px; }
+  .qrow.open + .qpanel { display: block; }
+  .qstats { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+  .qstats .k { font-size: 8.5px; }
+  .qstats .v { font-family: var(--mono); font-size: 15px; font-weight: 600; margin-top: 2px; }
+  .qstats .v.up { color: #1D4ED8; }
+  .qsplit { display: flex; gap: 12px; margin-top: 10px; font-size: 10.5px; color: var(--muted); }
+  .qsplit b { font-family: var(--mono); color: var(--text); }
+  .qsplit i { display: inline-block; width: 6px; height: 6px; border-radius: 999px; margin-right: 4px; vertical-align: 1px; }
+  .qsplit .walmart i { background: #2E86D9; } .qsplit .ebay i { background: #047857; } .qsplit .temu i { background: #C97B12; }
+  .qopen { margin-top: 10px; font-size: 11px; color: var(--accent); font-weight: 600; }
+  .qfoot { padding: 9px 14px; border-top: 1px solid #F0EFEC; font-size: 11px; color: var(--accent); font-weight: 600; }
+  .qnote { padding: 14px; font-size: 11.5px; color: var(--muted); border-top: 1px solid #F0EFEC; }
+  .sold-top { padding: 12px 14px 12px; }
+  .sold-n { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
+  .sold-n b { font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1; }
+  .sold-n span { color: var(--muted); font-size: 12px; }
+  .sold-m { display: flex; align-items: center; gap: 7px; margin-top: 7px; color: var(--muted); font-size: 11px; flex-wrap: wrap; }
+  .sold-m b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .chip { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: #065F46; }
+  .chip.dn { background: var(--neg-bg); color: var(--neg); }
+  .share { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 11px; gap: 2px; }
+  .share i { display: block; height: 100%; }
+  .share .walmart, .legend .walmart i { background: #2E86D9; } .share .ebay, .legend .ebay i { background: #047857; } .share .temu, .legend .temu i { background: #C97B12; }
+  .legend { display: flex; gap: 12px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 6px; height: 6px; border-radius: 999px; margin-right: 4px; vertical-align: 1px; }
+  .legend b { font-family: var(--mono); color: var(--text); }
+  .sold-h, .sold-row, .sold-tot { display: grid; grid-template-columns: 20px minmax(0, 1fr) 40px; gap: 6px; padding: 5px 14px; }
+  .sold-h { background: #F4F3F0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .sold-row { font-family: var(--mono); font-size: 11px; }
+  .sold-row .i { color: var(--faint); } .sold-row .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sold-h .u, .sold-row .u, .sold-tot .u { text-align: right; }
+  .sold-tot { padding: 7px 14px 9px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 600; }
+  .sold-more { padding: 8px 14px; border-top: 1px solid #F0EFEC; font-size: 11px; color: var(--accent); font-weight: 600; text-align: center; }
+  .sec { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 14px 2px 8px; }
   .err { text-align: center; color: var(--neg); font-size: 12px; padding: 30px 10px; }
   .quiet { text-align: center; color: var(--faint); font-size: 11px; padding: 24px 10px; }
   .stale { text-align: center; color: var(--faint); font-size: 10px; margin-top: 4px; }
@@ -137,6 +191,10 @@
         <button data-s="1" class="a1 on">A</button><button data-s="1.15" class="a2">A</button><button data-s="1.3" class="a3">A</button>
       </span>
     </div>
+    <div id="counts" class="counts"></div>
+    <div class="qcard" id="queue"><div class="qhead"><span class="k">Needs attention</span></div><div class="quiet">Loading…</div></div>
+    <div class="qcard" id="soldcard"><div class="sold-top"><span class="k">Sold today</span><div class="quiet">Loading…</div></div></div>
+    <div class="sec">Sales</div>
     <div class="toggles">
       <span class="seg" id="metricSeg"><button data-m="sales" class="on">Gross $</button><button data-m="orders">Orders</button></span>
       <span class="seg" id="rangeSeg" style="margin-left:auto"><button data-r="Day" class="on">Day</button><button data-r="Month">Month</button><button data-r="Year">Year</button></span>
@@ -144,7 +202,6 @@
     <div class="panel" id="card"><div class="quiet">Loading…</div></div>
     <div class="panel"><span class="k" id="chartLabel">Sales</span><div id="chart"></div></div>
     <div class="panel"><span class="k">Latest orders</span><div class="grid" id="feed"></div></div>
-    <div class="money" id="money"></div>
     <div class="stale" id="stamp"></div>
   </div>
 
@@ -271,15 +328,106 @@
       + feed.slice(0, 7).map(r => '<div class="grow"><span class="po">' + esc(r.order) + '</span><span class="sku">'
         + esc(r.sku || '—') + (r.more ? ' +' + r.more : '') + '</span><span class="tm">' + tf(r.at) + '</span></div>').join('');
   }
-  function renderMoney() {
-    const m = data && data.money;
-    if (!m) { $('money').innerHTML = ''; return; }
-    $('money').innerHTML =
-      '<div class="panel"><div class="k">Missed</div><div class="mv r">' + short$(m.missedTotal) + '</div></div>'
-      + '<div class="panel"><div class="k">Buy soon</div><div class="mv a">' + m.buyCount + ' SKUs</div></div>'
-      + '<div class="panel"><div class="k">To WFS</div><div class="mv g">' + m.wfsUnits.toLocaleString('en-US') + '</div></div>';
+  /* ---- design 1a: counts, the queue, Sold today (same /data as the desktop) ---- */
+  let qOpen = null, qWatch = false, soldAll = false;
+  const MK = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+  const n$ = (v) => (Number(v) || 0).toLocaleString('en-US');
+  const plan = () => data && data.stockPlan;
+  const loading = () => !!(data && !data.money && data.moneyPending);
+  const clear = () => { const p = plan(); return !!(p && p.ready && !p.counts.out && !p.counts.low); };
+  function phrase(r) {
+    if (r.kind === 'out') return r.last ? 'Out since ' + esc(r.last) : 'Out of stock';
+    if (r.kind === 'fast') return 'Up ' + r.pct + '%';
+    if (r.avail + r.atWfs <= 0) return 'Out · slow seller';
+    return r.daysLeft + ' day' + (r.daysLeft === 1 ? '' : 's') + ' left';
   }
-  function renderOverview() { renderCard(); renderChart(); renderFeed(); renderMoney(); }
+  function renderCounts() {
+    const box = $('counts');
+    const p = plan();
+    if (!data) { box.innerHTML = '<div class="qload"><span class="t">Loading…</span></div>'; return; }
+    if (loading()) {
+      const mp = data.moneyPending;
+      const head = { sales: 'Reading 30 days of sales', inventory: 'Reading the inventory', pace: 'Working out what’s out, low and selling fast' }[mp.stage] || 'Getting stock levels ready';
+      box.innerHTML = '<div class="qload"><span class="t">' + head + '…</span><span class="d">' + esc(mp.detail || '') + '</span><div class="qtrack"><div class="qfill" style="width:' + Math.round(Math.max(.02, Math.min(1, mp.frac || 0)) * 100) + '%"></div></div></div>';
+      return;
+    }
+    if (!p || !p.ready) { box.innerHTML = '<div class="qload"><span class="t">' + esc(data.moneyError || 'Stock levels are not ready yet.') + '</span></div>'; return; }
+    const c = p.counts;
+    box.innerHTML = '<div><span class="n r">' + c.out + '</span><span class="l">out of stock</span></div>'
+      + '<div><span class="n a">' + c.low + '</span><span class="l">running low</span></div>'
+      + '<div><span class="n b">' + c.fast + '</span><span class="l">selling fast</span></div>';
+  }
+  function rowHtml(r, hotAt) {
+    const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind];
+    const hot = r.perDay > hotAt ? '<span class="qhot">Hot</span>' : '';
+    const open = qOpen === r.sku;
+    const split = r.split || {};
+    const tot = MK.reduce((a, [k]) => a + (split[k] || 0), 0);
+    return '<div class="qrow' + (open ? ' open' : '') + '" data-q="' + esc(r.sku) + '">'
+      + '<div><span class="qbadge ' + r.kind + '">' + badge + '</span></div>'
+      + '<div><div class="qsku">' + esc(r.sku) + hot + '</div>' + (r.title ? '<div class="qtitle">' + esc(r.title) + '</div>' : '') + '</div>'
+      + '<div class="qph">' + phrase(r) + '</div></div>'
+      + '<div class="qpanel"><div class="qstats">'
+      + '<div><div class="k">30 days</div><div class="v">' + n$(r.sold30) + '</div></div>'
+      + '<div><div class="k">Per day</div><div class="v">' + (r.perDay || 0).toFixed(1) + '</div></div>'
+      + '<div><div class="k">Pace</div><div class="v' + (r.pct > 0 ? ' up' : '') + '">' + (r.pct > 0 ? '+' : '') + r.pct + '%</div></div>'
+      + '<div><div class="k">' + (r.avail + r.atWfs > 0 ? 'Days left' : 'Order') + '</div><div class="v">' + (r.avail + r.atWfs > 0 ? r.daysLeft : n$(r.order)) + '</div></div>'
+      + '</div><div class="qsplit">' + MK.map(([k, nm]) => '<span class="' + k + '"><i></i>' + nm + ' <b>' + n$(split[k]) + '</b>' + (tot ? ' ' + Math.round((split[k] || 0) / tot * 100) + '%' : '') + '</span>').join('') + '</div>'
+      + '<div class="qopen" data-qstock="' + esc(r.sku) + '">Open in Stock →</div></div>';
+  }
+  function renderQueue() {
+    const box = $('queue');
+    const p = plan();
+    const lead = (p && p.leadDays) || 7, cover = (p && p.coverDays) || 21;
+    const label = loading() ? 'Getting stock levels ready' : clear() ? 'Selling fast — no action needed' : 'Needs attention';
+    const head = '<div class="qhead"><span class="k">' + label + '</span><span class="sub">lead ' + lead + 'd · target ' + (lead + cover) + 'd</span></div>';
+    if (!data || loading() || !p || !p.ready) { box.innerHTML = head + '<div class="qnote">' + (loading() ? 'This read happens once per station; after that stock levels refresh every 10 minutes.' : 'Stock levels will show here once Linnworks answers.') + '</div>'; return; }
+    const watch = p.watch || [];
+    const rows = [...(clear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(qWatch ? watch : [])];
+    if (qOpen && !rows.some(r => r.sku === qOpen)) qOpen = null;
+    const list = rows.length ? rows.map(r => rowHtml(r, p.hotAt || 1)).join('') : '<div class="qnote">' + (clear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.') + '</div>';
+    const foot = watch.length ? '<div class="qfoot" data-qwatch>' + (qWatch ? 'Hide the ' + watch.length + ' under ' + (lead + cover) + ' days of cover' : watch.length + ' more under ' + (lead + cover) + ' days of cover →') + '</div>' : '';
+    box.innerHTML = head + list + foot;
+  }
+  function renderSold() {
+    const box = $('soldcard');
+    const sold = data && data.sold;
+    const t = data && data.orders && data.orders.today;
+    const head = '<div class="sold-top"><span class="k">Sold today</span>';
+    if (!sold) { box.innerHTML = head + '<div class="qnote" style="border:0;padding:8px 0 0">' + (!data ? 'Loading…' : data.livePending ? 'Reading today’s orders…' : 'Could not reach Linnworks for today’s orders.') + '</div></div>'; return; }
+    const by = sold.byChannel || {};
+    const tot = MK.reduce((a, [k]) => a + (by[k] || 0), 0);
+    const yd = t && Number.isFinite(Number(t.yesterday)) ? t.total - Number(t.yesterday) : null;
+    const chip = yd === null ? '' : '<span class="chip' + (yd < 0 ? ' dn' : '') + '">' + (yd > 0 ? '+' : yd < 0 ? '−' : '') + Math.abs(yd) + ' vs yesterday</span>';
+    const rows = soldAll ? sold.rows : sold.rows.slice(0, 12);
+    box.innerHTML = head
+      + '<div class="sold-n"><b>' + n$(sold.units) + '</b><span>units</span></div>'
+      + '<div class="sold-m">' + (t ? '<span><b>' + n$(t.total) + '</b> order' + (t.total === 1 ? '' : 's') + ' · </span>' : '') + '<span><b>' + sold.rows.length + '</b> SKU' + (sold.rows.length === 1 ? '' : 's') + '</span>' + chip + '</div>'
+      + '<div class="share">' + MK.map(([k]) => '<i class="' + k + '" style="width:' + (tot ? (by[k] || 0) / tot * 100 : 0) + '%"></i>').join('') + '</div>'
+      + '<div class="legend">' + MK.map(([k, nm]) => '<span class="' + k + '"><i></i>' + nm + ' <b>' + n$(by[k]) + '</b></span>').join('') + '</div></div>'
+      + '<div class="sold-h"><span>#</span><span>SKU</span><span class="u">Units</span></div>'
+      + (rows.length ? rows.map((r, i) => '<div class="sold-row"><span class="i">' + (i + 1) + '</span><span class="s"' + (r.unmapped ? ' style="color:var(--amber)"' : ' data-qstock="' + esc(r.sku) + '"') + '>' + (r.unmapped ? '⚠ ' : '') + esc(r.sku) + '</span><span class="u">' + r.units + '</span></div>').join('') : '<div class="qnote">Nothing sold yet today.</div>')
+      + (sold.rows.length > 12 ? '<div class="sold-more" data-soldmore>' + (soldAll ? 'Show fewer' : '+ ' + (sold.rows.length - 12) + ' more') + '</div>' : '')
+      + '<div class="sold-tot"><span></span><span>Total</span><span class="u">' + n$(sold.units) + '</span></div>';
+  }
+  function openStock(sku) {
+    $('sq').value = sku;
+    sview = 'all';
+    [...$('schips').children].forEach(x => x.classList.toggle('on', x.dataset.c === 'all'));
+    editSku = null;
+    showTab('Stock');
+    if (stockData) renderStock();
+    window.scrollTo(0, 0);
+  }
+  $('pgOverview').addEventListener('click', (e) => {
+    const st = e.target.closest('[data-qstock]');
+    if (st) { openStock(st.dataset.qstock); return; }
+    if (e.target.closest('[data-qwatch]')) { qWatch = !qWatch; renderQueue(); return; }
+    if (e.target.closest('[data-soldmore]')) { soldAll = !soldAll; renderSold(); return; }
+    const row = e.target.closest('.qrow');
+    if (row) { qOpen = qOpen === row.dataset.q ? null : row.dataset.q; renderQueue(); }
+  });
+  function renderOverview() { renderCounts(); renderQueue(); renderSold(); renderCard(); renderChart(); renderFeed(); }
 
   /* ---------------- Orders ---------------- */
   function renderOrders() {
@@ -444,11 +592,16 @@
     if (b) showTab(b.dataset.p);
   });
 
+  let soonTimer = null;
   async function refreshOverview() {
     try {
       const r = await fetch('/data' + location.search, { cache: 'no-store' });
       const j = await r.json();
-      if (j && j.ok) { data = j; renderOverview(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString(); }
+      if (j && j.ok) {
+        data = j; renderOverview(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
+        // the desktop is still reading sales or today's orders: ask again soon
+        if ((j.moneyPending || j.livePending) && activeTab === 'Overview') { clearTimeout(soonTimer); soonTimer = setTimeout(refreshOverview, 3000); }
+      }
       else if (!data) $('card').innerHTML = '<div class="err">' + esc((j && j.error) || 'No data.') + '</div>';
     } catch {
       if (!data) $('card').innerHTML = '<div class="err">Can’t reach DWS Stock — is Tailscale on, and the app running?</div>';
