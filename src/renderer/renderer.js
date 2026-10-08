@@ -11192,23 +11192,27 @@ $("ebRefresh").addEventListener("click", () => {
 // Excel-style), Send to WFS (with Send | Ignore per SKU and the shipments on
 // their way), Running low (with an order quantity from the sales pace).
 
+/* ==================== Overview: the status queue (design 1a, owner-approved 2026-10-08) ====================
+   Three big counts (out / running low / selling fast) and ONE urgency-ordered
+   list; a row expands into a 30-day sales chart, week/month totals and the
+   marketplace split. Send to WFS is gone. Sold today stays as the right card.
+   Handoff: design_handoff_overview_1a/README.md (Claude Design). */
 let ovData = null;
 let ovUpdatedAt = null; // when the numbers last came back
 let ovFetching = false;
+let ovError = ''; // the last fetch's failure, shown in the header
+let ovQuickTimer = null;
+let ovOpenSku = null; // the one expanded row
+let ovShowWatch = false;
+let ovTick = null; // 1s ticker for the elapsed time while the first pass runs
+const ovSeries = {}; // sku -> { s, max } for the chart hover
 
 const OV_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const OV_WDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const ovTone = (days) => days < 5 ? 'r' : days < 10 ? 'a' : 'g';
-// the ring dial: an arc of days out of the target, the number inside
-const OV_DIAL_C = 2 * Math.PI * 15;
-function ovDial(days, target, label) {
-  const frac = target > 0 ? Math.max(0, Math.min(1, days / target)) : 0;
-  return `<div class="ov-dial"><svg viewBox="0 0 38 38" aria-hidden="true"><circle class="trk" cx="19" cy="19" r="15"/><circle class="val" cx="19" cy="19" r="15" stroke-dasharray="${(OV_DIAL_C * frac).toFixed(1)} ${OV_DIAL_C.toFixed(1)}"/></svg><span>${label}<small>d</small></span></div>`;
-}
-const ovShortDate = (iso) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : `${OV_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
-};
+const OV_MK = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
+const ovTime = (d) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const ovDayAgo = (n) => { const d = new Date(Date.now() - n * 86400000); return `${OV_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`; };
+const ovN = (n) => Number(n || 0).toLocaleString();
 
 function enterOverview() {
   const d = new Date();
@@ -11217,12 +11221,10 @@ function enterOverview() {
   ovFetch();
 }
 
-// the main process answers within seconds now (the 30-day sales walk runs
-// behind the page and reports its stage), but a reply that never comes
-// must not pin the page on its first "Loading…" forever: 30s, then the
-// header says so and the next poll tries again
-let ovError = ''; // the last fetch's failure, shown in the header
-let ovQuickTimer = null;
+// the main process answers within seconds (the 30-day sales walk runs behind
+// the page and reports its stage), but a reply that never comes must not pin
+// the page on "Loading…" forever: 30s, then the header says so and the next
+// poll tries again
 async function ovFetch() {
   if (ovFetching) return;
   ovFetching = true;
@@ -11257,173 +11259,242 @@ setInterval(() => { if (activePage === 'overview') ovFetch(); }, 60000);
 api.on('order:detected', () => { if (activePage === 'overview') setTimeout(ovFetch, 800); });
 api.on('orders:imported', () => { if (activePage === 'overview') ovFetch(); });
 
+const ovPlan = () => (ovData && ovData.stockPlan) || null;
+const ovReady = () => { const p = ovPlan(); return !!(p && p.ready); };
+const ovLoading = () => !!(ovData && !ovReady() && ovData.moneyPending);
+const ovClear = () => { const p = ovPlan(); return !!(p && p.ready && !p.counts.out && !p.counts.low); };
+// "Linnworks refused the request (rate limit)" — the reason in two words
+function ovReason(err) {
+  const e = String(err || '');
+  if (/429|rate limit|too many/i.test(e)) return 'rate limit';
+  if (/401|403|auth|credential|token/i.test(e)) return 'bad credentials';
+  if (/timeout|timed out|ETIMEDOUT|ECONN|network|fetch failed|did not answer/i.test(e)) return 'no connection';
+  return e.length > 48 ? `${e.slice(0, 46)}…` : e || 'error';
+}
+
 function ovRenderAll() {
-  ovRenderWfs();
-  ovRenderSold();
-  ovRenderLow();
+  // header note
   const upd = $('ovUpdated');
-  upd.classList.toggle('is-err', !!ovError);
+  upd.classList.toggle('is-err', !!ovError && !ovData);
   upd.title = ovError || '';
-  upd.textContent = ovError
-    ? `Could not load: ${ovError}`
-    : ovUpdatedAt ? `Updated ${ovUpdatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
-  // bar widths go through the CSSOM: the CSP blocks inline style attributes
-  $('ovCols').querySelectorAll('[data-w]').forEach(i => { i.style.width = `${i.dataset.w}%`; });
+  upd.textContent = ovError && !ovData ? `Could not load: ${ovError}`
+    : ovLoading() ? `Started ${ovTime(ovData.moneyPending.since || Date.now())}`
+      : ovData && ovData.staleError ? `Updated ${ovTime(ovData.staleError.at)}`
+        : ovUpdatedAt ? `Updated ${ovTime(ovUpdatedAt)}` : '';
+  // banner: a refresh that failed while older figures stand
+  const banner = $('ovBanner');
+  const se = ovData && ovData.staleError;
+  if (se) {
+    banner.textContent = `Linnworks refused the request (${ovReason(se.error)}). Showing figures from ${ovTime(se.at)} — retrying in ${se.retryIn}s, or press Refresh.`;
+    banner.hidden = false;
+  } else if (ovError && ovData) {
+    banner.textContent = `The last refresh failed (${ovReason(ovError)}). Showing figures from ${ovTime(ovUpdatedAt || Date.now())} — the next try is in a minute, or press Refresh.`;
+    banner.hidden = false;
+  } else banner.hidden = true;
+  ovRenderTop();
+  ovRenderList();
+  ovRenderSold();
+  ovTicker();
 }
 
-// what the money columns say while the sales pass runs (or after it
-// failed): the stage, how far along, how long it has been — so a first
-// open on a station reads as work in progress, not a dead page
-function ovWaitHtml() {
-  if (!ovData) return `<div class="ov-empty ov-wait">${ovError ? esc(ovError) : 'Loading…'}</div>`;
-  const p = ovData.moneyPending;
-  if (p) {
-    const stage = { sales: 'Reading 30 days of sales', inventory: 'Reading the inventory', pace: 'Working out the pace' }[p.stage] || 'Crunching the numbers';
-    const secs = p.since ? Math.max(0, Math.round((Date.now() - p.since) / 1000)) : 0;
-    const el = secs >= 60 ? `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s` : `${secs}s`;
-    return `<div class="ov-empty ov-wait"><span class="ov-wait-dot"></span>${stage}…${p.detail ? ` <span class="ov-wait-det">${esc(p.detail)}</span>` : ''}<span class="ov-wait-t">${el}</span>
-      <div class="ov-wait-note">The first pass on a station walks every order of the last 30 days, which takes a few minutes. The page fills in by itself.</div></div>`;
-  }
-  const err = ovData.moneyError;
-  return `<div class="ov-empty ov-wait is-err">${esc(err || 'Not ready yet.')}<div class="ov-wait-note">Linnworks did not answer the sales pass. It is tried again in a minute, or press Refresh.</div></div>`;
+function ovElapsed(since) {
+  const secs = since ? Math.max(0, Math.round((Date.now() - since) / 1000)) : 0;
+  return secs >= 60 ? `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s elapsed` : `${secs}s elapsed`;
+}
+// the elapsed time and the bar move every second while the first pass runs
+function ovTicker() {
+  clearInterval(ovTick);
+  ovTick = null;
+  if (!ovLoading() || activePage !== 'overview') return;
+  ovTick = setInterval(() => {
+    if (!ovLoading() || activePage !== 'overview') { clearInterval(ovTick); ovTick = null; return; }
+    const el = $('ovTop').querySelector('.ovq-elapsed');
+    if (el) el.textContent = ovElapsed(ovData.moneyPending.since);
+  }, 1000);
 }
 
-function ovRenderWfs() {
-  const box = $('ovWfs');
-  const plan = ovData && ovData.wfsPlan;
-  if (!plan || !plan.ready) {
-    box.innerHTML = `<h4 class="ov-h-g">Send to WFS</h4>${ovWaitHtml()}`;
+function ovRenderTop() {
+  const box = $('ovTop');
+  const p = ovPlan();
+  if (!ovData) {
+    box.innerHTML = `<div class="ovq-load"><div class="ovq-load-h"><span class="t">${ovError ? esc(ovError) : 'Loading…'}</span></div></div>`;
     return;
   }
-  // dial rows (owner pick 2026-09-30, variants/ov-runway.html R3): a ring
-  // dial of days at WFS out of the target, SKU + figures, Send N over
-  // Ignore. The SKU shown is the Walmart channel SKU that sold most in the
-  // last 30 days (the Linnworks SKU when they match); more listings show
-  // as +N.
-  const target = plan.targetDays;
-  const rowsHtml = plan.rows.map((r) => {
-    const t = ovTone(r.coverDays);
-    const chs = (r.chSkus || []).filter(c => c.sku.toUpperCase() !== r.sku.toUpperCase());
-    const head = chs.length ? chs[0].sku : r.sku;
-    const tip = [chs.length ? `Linnworks: ${r.sku}` : '', ...chs.map(c => `${c.sku} · ${c.weekly}/wk`),
-      `${r.atWfs} at WFS${r.flightUnits ? ` · ${r.flightUnits} on the way` : ''}`].filter(Boolean).join('\n');
-    const cover = r.coverDays < 0.05 ? '0' : r.coverDays < 10 ? r.coverDays.toFixed(1) : String(Math.round(r.coverDays));
-    return `<div class="ov-dl ${t}" title="${esc(`${cover} days at WFS out of the ${target}-day target`)}">
-      ${ovDial(r.coverDays, target, cover)}
-      <div class="ov-dl-body">
-        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(head)}</span>${chs.length > 1 ? `<span class="ov-wmore" title="${esc(chs.slice(1).map(c => c.sku).join('\n'))}">+${chs.length - 1}</span>` : ''}</div>
-        <div class="ov-dl-meta"><b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${r.atWfs}</b> at WFS${r.flightUnits ? ` · <b>${r.flightUnits}</b> on the way` : ''}</div>
-      </div>
-      <div class="ov-dl-keys"><button class="ov-rw-send" data-ovsend="${esc(r.sku)}" title="Send ${r.send} = ${Math.round(r.perDay * 7)}/wk at WFS × ${target} days − ${r.atWfs} at WFS − ${r.flightUnits || 0} on the way">Send<b>${r.send}</b></button><button class="ov-rw-ign" data-ovignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
+  if (ovLoading()) {
+    const mp = ovData.moneyPending;
+    const head = { sales: 'Reading 30 days of sales…', inventory: 'Reading the inventory…', pace: 'Working out what’s out, low and selling fast…' }[mp.stage] || 'Getting stock levels ready…';
+    box.innerHTML = `<div class="ovq-load">
+      <div class="ovq-load-h"><span class="t">${head}</span><span class="d mono">${esc(mp.detail || '')}</span></div>
+      <div class="ovq-load-bar"><div class="ovq-track"><div class="ovq-fill"></div></div><span class="ovq-elapsed mono">${ovElapsed(mp.since)}</span></div>
     </div>`;
-  }).join('');
-  const undo = plan.ignored.length
-    ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovunignore>Undo</a></div>` : '';
-  const onWay = plan.flight.filter(f => f.status !== 'received').reduce((a, f) => a + f.units, 0);
-  // shipments on their way share the row shape: a blue dial of days out
-  // (full at 14, when an unreceived shipment turns into a Check)
-  const flightHtml = plan.flight.map(f => {
-    const label = { pending: 'Pending', check: 'Check', received: 'Received' }[f.status];
-    const tone = { pending: 'p', check: 'a', received: 'g' }[f.status];
-    const first = f.items[0] || { sku: '' };
-    const days = Math.max(0, Math.floor((Date.now() - Date.parse(f.createdAt)) / 86400000));
-    const tip = f.items.map(i => `${i.sku} ×${i.qty}`).join('\n') + (f.status === 'check' ? '\nNothing marked received in 14+ days - check Seller Center' : '');
-    return `<div class="ov-dl ${tone}" title="${esc(`${days} day${days === 1 ? '' : 's'} out`)}">
-      ${ovDial(days, 14, String(days))}
-      <div class="ov-dl-body">
-        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(first.sku)}" title="${esc(tip)}">${esc(first.sku)}</span>${f.items.length > 1 ? `<span class="ov-wmore" title="${esc(tip)}">+${f.items.length - 1}</span>` : ''}</div>
-        <div class="ov-dl-meta"><b>${f.units.toLocaleString()}</b> units · sent <b>${ovShortDate(f.createdAt)}</b> · ${label}${f.note ? `<span class="sep">·</span>${esc(f.note)}` : ''}</div>
-      </div>
-      <div class="ov-dl-keys">${f.status === 'received'
-        ? `<button class="ov-rw-ign" data-ovunrecv="${f.id}" title="Put it back to Pending">Undo</button>`
-        : `<button class="ov-rw-send q" data-ovrecv="${f.id}" title="Walmart has received it">Received</button>`}</div>
+    box.querySelector('.ovq-fill').style.width = `${Math.round(Math.max(0.02, Math.min(1, mp.frac || 0)) * 100)}%`;
+    return;
+  }
+  if (!p || !p.ready) {
+    const err = ovData.moneyError || 'Stock levels are not ready yet.';
+    box.innerHTML = `<div class="ovq-banner is-inline">Linnworks refused the request (${esc(ovReason(err))}).${ovData.moneyRetryIn ? ` Retrying in ${ovData.moneyRetryIn}s, or press Refresh.` : ' Press Refresh to try again.'}</div>`;
+    return;
+  }
+  if (ovClear()) {
+    box.innerHTML = `<div class="ovq-clear">
+      <div class="ovq-clear-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><div class="ovq-clear-h">Nothing out, nothing running low</div>
+      <div class="ovq-clear-s">Every SKU has more than ${p.leadDays} days on the shelf — longer than a new order takes to land.</div></div>
     </div>`;
+    return;
+  }
+  const c = p.counts;
+  box.innerHTML = `<div class="ovq-counts">
+    <div><span class="n mono r">${c.out}</span><span class="l">out of stock</span></div>
+    <div><span class="n mono a">${c.low}</span><span class="l">running low</span></div>
+    <div><span class="n mono b">${c.fast}</span><span class="l">selling fast</span></div>
+  </div>`;
+}
+
+const OV_CHEV = '<svg class="ovq-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const OV_FLAME = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 3.5 5 6 5 11a5 5 0 0 1-10 0c0-2.2 1-3.8 2.3-5 .2 1.6 1 2.7 2.2 3.2C11 8.5 11.3 5 12 2z"/></svg>';
+const OV_CHECK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function ovPhrase(r) {
+  if (r.kind === 'out') return r.last ? `Out since ${esc(r.last)}` : 'Out of stock';
+  if (r.kind === 'low') return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
+  return `Up ${r.pct}%`;
+}
+
+function ovRowHtml(r, open, hotAt) {
+  const badge = { out: 'Out', low: 'Low', fast: 'Fast' }[r.kind];
+  const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
+  return `<div class="ovq-item">
+    <div class="ovq-row${open ? ' is-open' : ''}" data-ovtoggle="${esc(r.sku)}">
+      <div><span class="ovq-badge ${r.kind}">${badge}</span></div>
+      <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>${hot}</div><div class="ovq-title">${esc(r.title || '')}</div></div>
+      <div class="ovq-l1">${ovPhrase(r)}</div>
+      ${OV_CHEV}
+    </div>
+    ${open ? ovPanelHtml(r) : ''}
+  </div>`;
+}
+
+function ovPanelHtml(r) {
+  const s = Array.isArray(r.series) && r.series.length === 30 ? r.series.map(v => Number(v) || 0) : new Array(30).fill(0);
+  const max = Math.max(...s, 1);
+  const y = (v) => (116 - v / max * 104).toFixed(1);
+  const pts = s.map((v, i) => `${(i / 29 * 600).toFixed(1)},${y(v)}`).join(' ');
+  const pd = r.sold30 / 30;
+  const pr = r.recent / 14;
+  const pp = r.prior / 16;
+  const pct = r.pct;
+  ovSeries[r.sku] = { s, max };
+  const paceCls = pct >= 20 ? 'b' : pct <= -20 ? 'r' : '';
+  const split = r.split || {};
+  const tot = OV_MK.reduce((a, [k]) => a + (Number(split[k]) || 0), 0);
+  const mk = OV_MK.map(([k, name]) => {
+    const n = Number(split[k]) || 0;
+    return `<span class="ovq-mk-it${n ? '' : ' is-zero'}"><i class="cn-${k}"></i>${name}<b class="mono">${ovN(n)}</b><small class="mono">${tot ? Math.round(n / tot * 100) : 0}%</small></span>`;
   }).join('');
-  // the dial-rows commit (1f49c66) dropped this definition and kept its use:
-  // the panel threw a ReferenceError the moment the sales pass finished, so
-  // every station sat on "Crunching WFS sales…" for good (owner 2026-10-05:
-  // "I haven't even seen it work at all")
-  const sendUnits = plan.rows.reduce((a, r) => a + (Number(r.send) || 0), 0);
-  const wfsSub = plan.rows.length
-    ? `<span class="sub"><b>${plan.rows.length}</b> SKU${plan.rows.length === 1 ? '' : 's'} · <b>${sendUnits.toLocaleString()}</b> units</span>` : '';
-  box.innerHTML = `<h4 class="ov-h-g">Send to WFS${wfsSub}</h4>
-    ${plan.rows.length ? `<div class="ov-dlist">${rowsHtml}</div>` : '<div class="ov-empty">Every WFS seller has enough on hand or on the way.</div>'}
-    ${undo}
-    ${plan.flight.length ? `<div class="ov-sec">On the way to WFS<span class="n">${onWay.toLocaleString()} units</span></div><div class="ov-dlist">${flightHtml}</div>` : ''}
-    <div class="ov-more" title="Send = WFS pace × ${target} days − at WFS − on the way">Dial = days at WFS out of the ${target}-day target</div>`;
+  return `<div class="ovq-panel"><div class="ovq-panel-clip"><div class="ovq-panel-in">
+    <div class="ovq-chartwrap">
+      <div class="ovq-legend"><span class="lbl">Units sold per day · last 30 days</span><span class="key"><i class="avg"></i>30-day average</span><span class="key"><i class="band"></i>Last 14 days</span></div>
+      <div class="ovq-chart" data-ovchart="${esc(r.sku)}">
+        <svg viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
+          <rect class="band" x="310" y="0" width="290" height="120"/>
+          <line class="avg" x1="0" x2="600" y1="${y(pd)}" y2="${y(pd)}" vector-effect="non-scaling-stroke"/>
+          <g class="ovq-draw"><polygon class="area" points="0,120 ${pts} 600,120"/><polyline class="line" points="${pts}" vector-effect="non-scaling-stroke"/></g>
+        </svg>
+        <span class="ovq-ymax mono">${max}/day</span>
+        <div class="ovq-guide" hidden></div><div class="ovq-dot" hidden></div>
+        <div class="ovq-tip" hidden><span class="d"></span><span class="v mono"></span></div>
+        <div class="ovq-hit"></div>
+      </div>
+      <div class="ovq-xlabels mono"><span>${ovDayAgo(29)}</span><span>${ovDayAgo(14)}</span><span>Today</span></div>
+    </div>
+    <div class="ovq-figs">
+      <div><div class="k">This week</div><div class="v mono big">${ovN(s.slice(-7).reduce((a, b) => a + b, 0))}</div><div class="s">last 7 days</div></div>
+      <div><div class="k">This month</div><div class="v mono big">${ovN(r.sold30)}</div><div class="s">last 30 days</div></div>
+      <div><div class="k">Per day</div><div class="v mono">${pd.toFixed(1)}</div><div class="s">30-day avg</div></div>
+      <div><div class="k">Pace</div><div class="v mono ${paceCls}">${pct > 0 ? '+' : ''}${pct}%</div><div class="s mono">${pr.toFixed(1)} vs ${pp.toFixed(1)}</div></div>
+    </div>
+    <div class="ovq-mk"><span class="lbl">By marketplace · 30 days</span>${mk}</div>
+  </div></div></div>`;
+}
+
+function ovRenderList() {
+  const box = $('ovList');
+  const p = ovPlan();
+  const lead = (p && p.leadDays) || 7;
+  const cover = (p && p.coverDays) || 21;
+  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const head = `<div class="ovq-card-h"><span class="lbl">${label}</span><span class="sub">Lead time ${lead} days · target ${lead + cover} days on hand</span></div>`;
+  if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
+  if (ovLoading()) {
+    const mp = ovData.moneyPending;
+    const stageIx = { sales: 0, inventory: 1, pace: 2 }[mp.stage] ?? 0;
+    const steps = [
+      ['Sales history, last 30 days', stageIx === 0 ? mp.detail : ''],
+      ['Live inventory read', stageIx > 1 && mp.inventoryCount ? `${ovN(mp.inventoryCount)} SKUs` : stageIx === 1 ? mp.detail : ''],
+      ['Work out what’s out, low and selling fast', ''],
+    ];
+    box.innerHTML = `${head}<div class="ovq-steps">
+      ${steps.map(([t, d], i) => {
+        const st = i < stageIx ? 'done' : i === stageIx ? 'cur' : 'todo';
+        const ico = st === 'done' ? `<span class="ovq-step-ico done">${OV_CHECK}</span>` : st === 'cur' ? '<span class="ovq-step-ico cur"><i></i></span>' : '<span class="ovq-step-ico todo"></span>';
+        return `<div class="ovq-step ${st}">${ico}<span class="t">${t}</span>${d ? `<span class="d mono">${esc(d)}</span>` : ''}</div>`;
+      }).join('')}
+      <div class="ovq-step-note">This long read only happens the first time a station opens the Overview. After that, stock levels refresh every 10 minutes in the background. Today’s sales are already in.</div>
+    </div>`;
+    return;
+  }
+  if (!p || !p.ready) {
+    box.innerHTML = `${head}<div class="ovq-note">Stock levels will show here once Linnworks answers.</div>`;
+    return;
+  }
+  const rows = ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows;
+  if (ovOpenSku && !rows.some(r => r.sku === ovOpenSku)) ovOpenSku = null;
+  const list = rows.length
+    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1)).join('')
+    : `<div class="ovq-note">${ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.'}</div>`;
+  const watch = p.watch || [];
+  const watchHtml = ovShowWatch && watch.length
+    ? `<div class="ovq-watch">${watch.map(w => `<div class="ovq-watch-it"><span class="ovq-sku mono" data-ovsku="${esc(w.sku)}" title="Open in Stock">${esc(w.sku)}</span><span class="mono d">${w.daysLeft}d · ${esc(w.outOn || '')}</span></div>`).join('')}</div>`
+    : '';
+  const ign = p.ignored || [];
+  const foot = `<div class="ovq-foot">
+    ${watch.length ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? 'Hide ' : ''}${watch.length} more under ${lead + cover} days of cover${ovShowWatch ? '' : ' →'}</button>` : '<span></span>'}
+    ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
+  </div>`;
+  box.innerHTML = `${head}${list}${watchHtml}${foot}`;
 }
 
 function ovRenderSold() {
   const box = $('ovSold');
   const sold = ovData && ovData.sold;
   const today = ovData && ovData.orders && ovData.orders.today;
+  const head = '<div class="ovq-sold-top"><div class="lbl">Sold today</div>';
   if (!sold) {
     const msg = !ovData ? (ovError ? esc(ovError) : 'Loading today…')
-      : ovData.livePending ? '<span class="ov-wait-dot"></span>Reading today’s orders…'
-        : `Could not reach Linnworks for today’s orders.${ovData.liveError ? `<div class="ov-wait-note">${esc(ovData.liveError)}</div>` : ''}`;
-    box.innerHTML = `<div><div class="k">Units sold today</div><div class="ov-empty ov-wait">${msg}</div></div>`;
+      : ovData.livePending ? 'Reading today’s orders…'
+        : `Could not reach Linnworks for today’s orders.${ovData.liveError ? ` ${esc(ovData.liveError)}` : ''}`;
+    box.innerHTML = `${head}<div class="ovq-note is-tight">${msg}</div></div>`;
     return;
   }
-  const grid = sold.rows.length
-    ? `<div class="ov-xgrid ov-xgrid-full ov-soldgrid">
-        <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
-        ${sold.rows.map((r, i) => `<div class="ov-feedrow"><span class="xrn">${i + 1}</span>${r.unmapped
-    ? `<span class="xsku item-unmapped" title="${esc(r.sku)} — not mapped in Linnworks, so stock did NOT deduct">⚠ ${esc(r.sku)}</span>`
-    : `<span class="xsku" title="${esc(r.sku)}" data-ovsku="${esc(r.sku)}">${esc(r.sku)}</span>`}<span class="xu">${r.units}</span></div>`).join('')}
-        <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · ${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}</span><span class="xu">${sold.units}</span></div>
-      </div>`
-    : '<div class="ov-empty">Nothing sold yet today.</div>';
-  // the marketplace split rides under the number (polish 2026-09-30): a
-  // share bar in the channel colours, then dot · name · units
-  const chans = [['walmart', 'Walmart'], ['ebay', 'eBay'], ['temu', 'Temu']];
   const byCh = sold.byChannel || {};
-  const chTotal = chans.reduce((a, [k]) => a + (byCh[k] || 0), 0);
-  const share = chans.filter(([k]) => byCh[k] > 0)
-    .map(([k]) => `<i class="cn-${k}" data-w="${(byCh[k] / chTotal * 100).toFixed(1)}"></i>`).join('');
-  const legend = chans.map(([k, n]) => `<span class="cn-${k}">${n} <b>${(byCh[k] || 0).toLocaleString()}</b></span>`).join('');
+  const chTotal = OV_MK.reduce((a, [k]) => a + (byCh[k] || 0), 0);
   const yday = today && Number.isFinite(Number(today.yesterday)) ? today.total - Number(today.yesterday) : null;
-  const vs = yday === null ? '' : yday === 0 ? ' · same as yesterday'
-    : ` · <span class="${yday > 0 ? 'up' : 'down'}">${yday > 0 ? '+' : '−'}${Math.abs(yday)} vs yesterday</span>`;
-  box.innerHTML = `
-    <div><div class="k">Units sold today</div>
-      <div class="big mono">${sold.units.toLocaleString()}</div>
-      <div class="delta">${today ? `${today.total} order${today.total === 1 ? '' : 's'} · ` : ''}${sold.rows.length} SKU${sold.rows.length === 1 ? '' : 's'}${vs}</div>
-      <div class="ov-share">${share}</div>
-      <div class="ov-chlegend">${legend}</div></div>
-    ${grid}`;
-}
-
-function ovRenderLow() {
-  const box = $('ovLow');
-  const m = ovData && ovData.money;
-  const plan = ovData && ovData.lowPlan;
-  if (!m || !plan || !plan.ready) {
-    box.innerHTML = `<h4 class="ov-h-a">Running low</h4>${ovWaitHtml()}`;
-    return;
-  }
-  // dial rows like Send to WFS (variants/ov-runway.html R3): the dial is
-  // days on hand out of the lead time plus the cover days
-  const target = m.leadDays + m.coverDays;
-  const rows = plan.rows.map(r => {
-    const t = ovTone(r.daysLeft);
-    const tip = `${r.avail} on shelf${r.atWfs ? ` · ${r.atWfs} at WFS` : ''} · ${r.perDay.toFixed(1)}/day · out ~${r.outOn}`;
-    return `<div class="ov-dl ${t}" title="${esc(`${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days`)}">
-      ${ovDial(r.daysLeft, target, String(r.daysLeft))}
-      <div class="ov-dl-body">
-        <div class="ov-dl-top"><span class="ov-wsku" data-ovsku="${esc(r.sku)}" title="${esc(tip)}">${esc(r.sku)}</span></div>
-        <div class="ov-dl-meta">${r.faster ? '<span class="ov-wfast" title="Selling faster over the last 14 days">Faster</span>' : ''}<b>${(r.sold30 ?? Math.round(r.perDay * 30)).toLocaleString()}</b> sold · <b>${(r.avail + r.atWfs).toLocaleString()}</b> on hand${r.daysLeft > 0 && r.outOn ? ` · out <b>${esc(String(r.outOn))}</b>` : ''}</div>
-      </div>
-      <div class="ov-dl-keys"><button class="ov-rw-send o" data-ovlowopen="${esc(r.sku)}" title="Open ${esc(r.sku)} in Stock · order ${r.order} = ${r.perDay.toFixed(1)}/day × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Order<b>${r.order}</b></button><button class="ov-rw-ign" data-ovlowignore="${esc(r.sku)}" title="Ignore for ${plan.ignoreDays} days">Ignore</button></div>
-    </div>`;
-  }).join('');
-  const undo = plan.ignored.length
-    ? `<div class="ov-undo">${plan.ignored.length} ignored for ${plan.ignoreDays} days (${plan.ignored.map(r => esc(r.sku)).join(', ')})<a data-ovlowunignore>Undo</a></div>` : '';
-  const lowN = plan.rows.length + (Number(plan.more) || 0);
-  box.innerHTML = `<h4 class="ov-h-a">Running low<span class="sub">${lowN ? `<b>${lowN}</b> SKU${lowN === 1 ? '' : 's'} · ` : ''}${m.leadDays}-day lead time</span></h4>
-    ${plan.rows.length ? `<div class="ov-dlist">${rows}</div>` : '<div class="ov-empty">Nothing runs out inside the lead time.</div>'}
-    ${undo}
-    ${plan.more ? `<div class="ov-more">+ ${plan.more} more — <a data-ovlow>open Stock</a></div>` : ''}
-    <div class="ov-more" title="Order = daily pace × (${m.leadDays}-day lead + ${m.coverDays} days) − stock">Dial = days on hand out of the ${m.leadDays}-day lead + ${m.coverDays} days</div>`;
+  const chip = yday === null ? '' : `<span class="ovq-chip ${yday < 0 ? 'dn' : ''}"><span class="mono">${yday > 0 ? '+' : yday < 0 ? '−' : ''}${Math.abs(yday)}</span> vs yesterday</span>`;
+  const rows = sold.rows.map((r, i) => `<div class="ovq-sold-row"><span class="i">${i + 1}</span>${r.unmapped
+    ? `<span class="item-unmapped" title="${esc(r.sku)} — not mapped in Linnworks, so stock did NOT deduct">⚠ ${esc(r.sku)}</span>`
+    : `<span data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>`}<span class="u">${r.units}</span></div>`).join('');
+  box.innerHTML = `${head}
+      <div class="ovq-sold-n"><span class="mono">${ovN(sold.units)}</span><span>units</span></div>
+      <div class="ovq-sold-m">${today ? `<span><span class="mono">${today.total}</span> order${today.total === 1 ? '' : 's'} · ` : '<span>'}<span class="mono">${sold.rows.length}</span> SKU${sold.rows.length === 1 ? '' : 's'}</span>${chip}</div>
+      <div class="ovq-share">${OV_MK.map(([k]) => `<i class="cn-${k}" data-w="${chTotal ? (byCh[k] || 0) / chTotal * 100 : 0}"></i>`).join('')}</div>
+      <div class="ovq-legend-mk">${OV_MK.map(([k, n]) => `<span><i class="cn-${k}"></i>${n} <b class="mono">${ovN(byCh[k] || 0)}</b></span>`).join('')}</div>
+    </div>
+    <div class="ovq-sold-h"><span>#</span><span>SKU</span><span class="u">Units</span></div>
+    ${rows || '<div class="ovq-note is-tight">Nothing sold yet today.</div>'}
+    <div class="ovq-sold-tot"><span></span><span>Total</span><span class="u mono">${ovN(sold.units)}</span></div>`;
+  // bar widths go through the CSSOM: the CSP blocks inline style attributes
+  box.querySelectorAll('.ovq-share i').forEach(i => { i.style.width = `${i.dataset.w}%`; });
 }
 
 // SKU click-through: Stock page filtered to that SKU (search prefilled after
@@ -11444,46 +11515,52 @@ function ovOpenStock(sku, lowView) {
   }, 260);
 }
 
-// Send: the Stock page with the WFS Shipments dialog pre-filled; saving
-// there returns here, where the shipment shows as Pending
-function ovSendToWfs(sku) {
-  const r = ((ovData && ovData.wfsPlan && ovData.wfsPlan.rows) || []).find(x => x.sku === sku);
-  if (!r) return;
-  showPage('stock');
-  setTimeout(() => {
-    if (activePage !== 'stock') return;
-    openWfs({
-      lines: [{ sku: r.sku, channelSku: (r.chSkus && r.chSkus[0] && r.chSkus[0].sku) || '', gtin: r.gtin, qty: r.send }],
-      note: (r.chSkus || []).length ? `WFS: ${r.chSkus.map(c => c.sku).join(', ')}` : '',
-      from: `From Overview · ${r.sku} sells ${Math.round(r.perDay * 7)}/wk at WFS and has ${r.coverDays.toFixed(1)} days there${r.flightUnits ? ' counting what is on the way' : ''} — ${r.send} brings it to ${ovData.wfsPlan.targetDays} days`,
-    });
-  }, 300);
-}
-
-$('ovCols').addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-ovsend],[data-ovignore],[data-ovunignore],[data-ovrecv],[data-ovunrecv],[data-ovlowopen],[data-ovlowignore],[data-ovlowunignore],[data-ovsku],[data-ovlow]');
-  if (!t) return;
-  if (t.dataset.ovsend) { ovSendToWfs(t.dataset.ovsend); return; }
-  if (t.dataset.ovlowopen) { ovOpenStock(t.dataset.ovlowopen); return; }
-  if (t.dataset.ovsku !== undefined) { if (t.dataset.ovsku) ovOpenStock(t.dataset.ovsku); return; }
-  if (t.hasAttribute('data-ovlow')) { ovOpenStock('', true); return; }
-  if (t.dataset.ovignore) {
-    const r = ovData.wfsPlan.rows.find(x => x.sku === t.dataset.ovignore);
-    await api.wfsIgnore(t.dataset.ovignore, r ? r.perDay : 0);
-  } else if (t.dataset.ovlowignore) {
-    const r = ((ovData.lowPlan && ovData.lowPlan.rows) || []).find(x => x.sku === t.dataset.ovlowignore);
-    await api.lowIgnore(t.dataset.ovlowignore, r ? r.perDay : 0);
-  } else if (t.hasAttribute('data-ovlowunignore')) {
-    await api.lowUnignore();
-  } else if (t.hasAttribute('data-ovunignore')) {
-    await api.wfsUnignore();
-  } else if (t.dataset.ovrecv) {
-    await api.wfsReceived(Number(t.dataset.ovrecv), true);
-  } else if (t.dataset.ovunrecv) {
-    await api.wfsReceived(Number(t.dataset.ovunrecv), false);
-  }
-  await ovFetch();
+// chart hover: the overlay snaps to the nearest of the 30 days; guide, dot
+// and tooltip are positioned through the CSSOM (no inline style attributes)
+$('ovList').addEventListener('mousemove', (e) => {
+  const hit = e.target.closest('.ovq-hit');
+  if (!hit) return;
+  const chart = hit.closest('.ovq-chart');
+  const rec = ovSeries[chart.dataset.ovchart];
+  if (!rec) return;
+  const b = hit.getBoundingClientRect();
+  const i = Math.max(0, Math.min(29, Math.round((e.clientX - b.left) / b.width * 29)));
+  const v = rec.s[i];
+  const x = `${(i / 29 * 100).toFixed(2)}%`;
+  const guide = chart.querySelector('.ovq-guide');
+  const dot = chart.querySelector('.ovq-dot');
+  const tip = chart.querySelector('.ovq-tip');
+  guide.style.left = x; guide.hidden = false;
+  dot.style.left = x; dot.style.top = `${((116 - v / rec.max * 104) * 140 / 120).toFixed(1)}px`; dot.hidden = false;
+  const d = new Date(Date.now() - (29 - i) * 86400000);
+  tip.querySelector('.d').textContent = i === 29 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  tip.querySelector('.v').textContent = `${v} unit${v === 1 ? '' : 's'}`;
+  tip.style.left = x;
+  tip.classList.toggle('at-left', i < 4);
+  tip.classList.toggle('at-right', i > 25);
+  tip.hidden = false;
 });
+$('ovList').addEventListener('mouseout', (e) => {
+  const hit = e.target.closest('.ovq-hit');
+  if (!hit || hit.contains(e.relatedTarget)) return;
+  const chart = hit.closest('.ovq-chart');
+  for (const c of ['.ovq-guide', '.ovq-dot', '.ovq-tip']) chart.querySelector(c).hidden = true;
+});
+
+for (const id of ['ovList', 'ovSold']) {
+  $(id).addEventListener('click', async (e) => {
+    const sku = e.target.closest('[data-ovsku]');
+    if (sku) { e.stopPropagation(); if (sku.dataset.ovsku) ovOpenStock(sku.dataset.ovsku); return; }
+    if (e.target.closest('[data-ovwatch]')) { ovShowWatch = !ovShowWatch; ovRenderList(); return; }
+    if (e.target.closest('[data-ovundo]')) { await api.lowUnignore(); await ovFetch(); return; }
+    if (e.target.closest('.ovq-hit')) return; // the chart overlay is not a toggle
+    const row = e.target.closest('[data-ovtoggle]');
+    if (row) {
+      ovOpenSku = ovOpenSku === row.dataset.ovtoggle ? null : row.dataset.ovtoggle;
+      ovRenderList();
+    }
+  });
+}
 
 $('tabOverview').addEventListener('click', () => showPage('overview'));
 $('ovRefreshBtn').addEventListener('click', async () => {
