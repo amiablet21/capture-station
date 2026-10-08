@@ -64,7 +64,7 @@ contextBridge.exposeInMainWorld('api', {
   getDebugLog: () => ipcRenderer.invoke('debug:get'),
   getHistory: () => ipcRenderer.invoke('history:get'),
   getHistoryRange: (from, to) => ipcRenderer.invoke('history:range', { from, to }),
-  getStock: () => ipcRenderer.invoke('stock:get'),
+  getStock: (opts) => ipcRenderer.invoke('stock:get', opts || {}),
   getStockOpenOrders: (sku) => ipcRenderer.invoke('stock:openOrders', { sku }),
   setStockLevel: (sku, level, prev) => ipcRenderer.invoke('stock:set', { sku, level, prev }),
   stockBulkApply: (payload) => ipcRenderer.invoke('stock:bulkApply', payload),
