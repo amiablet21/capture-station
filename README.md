@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.5 highlights
+
+- **Phone button is back.** The Overview header has the phone button again (it went missing in the v1.30.0 redesign): it shows the Tailscale QR code and link for the phone dashboard.
+
 ## v1.31.4 highlights
 
 - **Phone dashboard on the new Overview.** The phone's Overview now matches the desktop: the three counts, the Needs attention queue (tap a row for 30-day units, per day, pace, days left or suggested order, marketplace split, and a jump to that SKU in Stock), the watch-list toggle, and Sold today with the share bar and the top SKUs. The Missed / Buy soon / To WFS tiles are gone. The sales card, chart and latest orders moved below under a Sales heading. While the desktop is still reading sales, the phone asks again every few seconds instead of once a minute. The home-screen name is DWS Stock.
