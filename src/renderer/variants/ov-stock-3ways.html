@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview stock board — three more directions</title>
+<!--
+  Owner 2026-10-08: "give me more unique designs before pushing this".
+  Three more ways to show the stock-level board that replaces Send to WFS
+  (the first proposal is variants/ov-stock-watch.html). All at the board's
+  real width (820px beside the 300px Units sold today panel), on styles.css.
+    D1 - Shelf wall: a grid of tiles, one per SKU that needs eyes, tinted
+         by urgency, big days-left number, a 14-day sales strip, on hand.
+    D2 - Run-out calendar: a 4-week axis from today; each SKU's bar ends
+         on the day it runs out; the lead-time band at the left is the
+         danger zone (an order placed today lands at its right edge).
+    D3 - Stock ledger: a dense table for people who think in numbers,
+         status rail, inline meter, trend, order qty — sortable.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #F4F3F0; }
+  .pg { padding: 18px 26px 40px; }
+  .opt { margin-bottom: 34px; width: 820px; }
+  .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 8px; }
+  .lbl b { color: var(--text); letter-spacing: .02em; }
+  .bh { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+  .bh h4 { margin: 0; color: var(--text); }
+  .bh .sub { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+  .cnt { display: inline-flex; gap: 10px; font-size: 11px; color: var(--muted); }
+  .cnt b { font-family: var(--mono); font-weight: 700; }
+  .cnt .r b { color: var(--neg-text); } .cnt .a b { color: var(--badge-yellow-text); } .cnt .b b { color: var(--badge-blue-text); }
+
+  /* ---------- D1 shelf wall ---------- */
+  .wall { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tile { position: relative; border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px 9px; background: var(--surface); min-width: 0; cursor: pointer; }
+  .tile:hover { border-color: var(--c); }
+  .tile.r { --c: var(--neg-text); --bg: var(--neg-bg); } .tile.a { --c: var(--badge-yellow-text); --bg: var(--badge-yellow-bg); } .tile.b { --c: var(--badge-blue-text); --bg: var(--badge-blue-bg); }
+  .tile .tag { position: absolute; top: 8px; right: 9px; font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--c); background: var(--bg); padding: 1px 6px; border-radius: 999px; }
+  .tile .days { font-family: var(--mono); font-size: 30px; font-weight: 700; line-height: 1; color: var(--c); letter-spacing: -.02em; }
+  .tile .days small { font-size: 11px; font-weight: 600; color: var(--faint); margin-left: 3px; letter-spacing: 0; }
+  .tile .sku { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--badge-blue-text); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .f { font-size: 10.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .f b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 22px; margin: 8px 0 7px; }
+  .spark i { flex: 1; background: #DEDCD6; border-radius: 2px 2px 0 0; min-height: 2px; }
+  .spark i.hi { background: var(--c); }
+  .tile .key { display: flex; align-items: center; justify-content: space-between; }
+  .tile .key .ov-rw-send { padding: 3px 9px; font-size: 11px; }
+  .tile .key .ov-rw-send.r { background: var(--neg-text); }
+  .tile .key .ov-rw-ign { padding: 1px 6px; }
+  .tile .tr { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--badge-blue-text); }
+
+  /* ---------- D2 run-out calendar ---------- */
+  .cal { position: relative; }
+  .cal-axis { display: grid; grid-template-columns: 150px 1fr 96px; align-items: end; margin-bottom: 4px; }
+  .cal-axis .ticks { position: relative; height: 22px; font-size: 9.5px; color: var(--faint); font-family: var(--mono); }
+  .cal-axis .ticks span { position: absolute; bottom: 0; transform: translateX(-50%); white-space: nowrap; }
+  .cal-axis .ticks span.t0 { transform: none; font-weight: 700; color: var(--text); }
+  .cal-row { display: grid; grid-template-columns: 150px 1fr 96px; align-items: center; gap: 0 10px; padding: 6px 0; border-top: 1px solid var(--border-soft); }
+  .cal-row:hover { background: var(--surface-2); }
+  .cal-row .who { min-width: 0; padding-left: 4px; }
+  .cal-row .who .ov-wsku { display: block; font-size: 11.5px; }
+  .cal-row .who .f { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-row .who .f b { font-family: var(--mono); color: var(--text); font-weight: 600; }
+  .lane { position: relative; height: 26px; }
+  .lane .band { position: absolute; left: 0; top: 0; bottom: 0; width: 25%; background: repeating-linear-gradient(135deg, rgba(159,47,45,.10) 0 3px, transparent 3px 7px); border-right: 1px dashed rgba(159,47,45,.5); }
+  .lane .grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .lane .bar { position: absolute; top: 6px; height: 14px; left: 0; border-radius: 3px; background: var(--c); color: #fff; font-family: var(--mono); font-size: 10px; font-weight: 700; line-height: 14px; padding: 0 6px; white-space: nowrap; box-sizing: border-box; }
+  .lane .bar.out { background: var(--neg-bg); color: var(--neg-text); border: 1px dashed var(--neg-text); width: 25%; text-align: center; }
+  .lane .bar .end { position: absolute; left: 100%; top: -1px; margin-left: 6px; color: var(--c); font-weight: 700; }
+  .lane .fast { position: absolute; top: 21px; height: 3px; left: 0; border-radius: 2px; background: var(--c); opacity: .45; }
+  .cal-row.r { --c: var(--neg-text); } .cal-row.a { --c: var(--badge-yellow-text); } .cal-row.b { --c: var(--badge-blue-text); } .cal-row.g { --c: #9A978F; }
+  .cal-row .key { display: flex; justify-content: flex-end; gap: 4px; }
+  .cal-row .key .ov-rw-send { padding: 3px 9px; font-size: 11px; } .cal-row .key .ov-rw-send.r { background: var(--neg-text); }
+  .cal-legend { display: flex; gap: 16px; font-size: 10.5px; color: var(--muted); margin-top: 8px; }
+  .cal-legend i { display: inline-block; width: 14px; height: 8px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
+
+  /* ---------- D3 stock ledger ---------- */
+  .lg { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .lg th { text-align: left; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 4px 8px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .lg th.n, .lg td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .lg th.s { color: var(--text); }
+  .lg th.s::after { content: ' ▾'; color: var(--faint); }
+  .lg td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  .lg tr:hover td { background: var(--surface-2); }
+  .lg td.rail { padding: 0; width: 4px; }
+  .lg td.rail i { display: block; width: 4px; height: 24px; border-radius: 2px; background: var(--c); }
+  .lg tr.r { --c: var(--neg-text); } .lg tr.a { --c: var(--badge-yellow-text); } .lg tr.b { --c: var(--badge-blue-text); } .lg tr.g { --c: #C9C6BF; }
+  .lg .ov-wsku { font-size: 11.5px; }
+  .lg .st { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c); }
+  .lg td.d b { font-weight: 700; color: var(--c); }
+  .lg .meter { display: inline-block; width: 90px; height: 6px; border-radius: 999px; background: #ECEAE5; vertical-align: middle; position: relative; }
+  .lg .meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--c); }
+  .lg .meter em { position: absolute; top: -3px; bottom: -3px; left: 25%; width: 1px; background: #2F3437; opacity: .5; }
+  .lg .tr { font-family: var(--mono); font-size: 10.5px; font-weight: 700; }
+  .lg .tr.up { color: var(--badge-blue-text); } .lg .tr.dn { color: var(--faint); }
+  .lg td.k { text-align: right; } .lg td.k .ov-rw-send { padding: 2px 9px; font-size: 11px; } .lg td.k .ov-rw-send.r { background: var(--neg-text); }
+  .lg tfoot td { color: var(--muted); font-size: 11px; border: none; padding-top: 8px; }
+  .lg-sum { display: flex; gap: 8px; margin-bottom: 10px; }
+  .lg-sum span { flex: 1; display: flex; align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  .lg-sum b { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+  .lg-sum .r b { color: var(--neg-text); } .lg-sum .a b { color: var(--badge-yellow-text); } .lg-sum .b b { color: var(--badge-blue-text); } .lg-sum .g b { color: #8A8782; }
+</style>
+</head>
+<body>
+<div class="pg">
+
+  <div class="opt" id="d1">
+    <div class="lbl"><b>D1 · Shelf wall</b> — one tile per SKU that needs eyes, tinted by urgency, worst first</div>
+    <div class="ov-panel">
+      <div class="bh"><h4>Stock watch</h4><span class="cnt"><span class="r"><b>2</b> out</span><span class="a"><b>4</b> low</span><span class="b"><b>3</b> fast</span></span><span class="sub">7-day lead · 28-day target · pace from the last 30 days</span></div>
+      <div class="wall">
+        <div class="tile r"><span class="tag">Out · selling</span><div class="days">0<small>days</small></div><div class="sku">X200-64GB-SILVER</div><div class="f"><b>0</b> on hand · <b>2.4</b>/day · last sold Oct 5</div>
+          <div class="spark"><i style="height:40%"></i><i style="height:55%"></i><i style="height:35%"></i><i style="height:70%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:65%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:30%"></i><i class="hi" style="height:10%"></i><i class="hi" style="height:4%"></i><i class="hi" style="height:4%"></i></div>
+          <div class="key"><button class="ov-rw-send r">Order<b>70</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+        <div class="tile r"><span class="tag">Out · selling</span><div class="days">0<small>days</small></div><div class="sku">T510-32GB-BLACK</div><div class="f"><b>0</b> on hand · <b>1.1</b>/day · last sold today</div>
+          <div class="spark"><i style="height:30%"></i><i style="height:25%"></i><i style="height:45%"></i><i style="height:20%"></i><i style="height:50%"></i><i style="height:35%"></i><i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:45%"></i><i style="height:30%"></i><i style="height:50%"></i><i class="hi" style="height:20%"></i></div>
+          <div class="key"><button class="ov-rw-send r">Order<b>35</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+        <div class="tile a"><span class="tag">Running low</span><div class="days">3<small>days</small></div><div class="sku">X133-64GB-GRAY</div><div class="f"><b>38</b> on hand · <b>12.6</b>/day · out Oct 11</div>
+          <div class="spark"><i style="height:30%"></i><i style="height:35%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:45%"></i><i style="height:50%"></i><i style="height:45%"></i><i class="hi" style="height:60%"></i><i class="hi" style="height:70%"></i><i class="hi" style="height:65%"></i><i class="hi" style="height:85%"></i><i class="hi" style="height:80%"></i><i class="hi" style="height:100%"></i><i class="hi" style="height:90%"></i></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>320</b></button><span class="tr">▲ +38%</span></div></div>
+        <div class="tile a"><span class="tag">Running low</span><div class="days">5<small>days</small></div><div class="sku">A15-64GB-BLACK</div><div class="f"><b>14</b> on hand · <b>2.8</b>/day · out Oct 13</div>
+          <div class="spark"><i style="height:50%"></i><i style="height:40%"></i><i style="height:55%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:40%"></i><i style="height:50%"></i><i style="height:45%"></i><i style="height:55%"></i><i style="height:50%"></i><i style="height:40%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:50%"></i></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>70</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+        <div class="tile a"><span class="tag">Running low</span><div class="days">6<small>days</small></div><div class="sku">X115-32GB-WHITE</div><div class="f"><b>9</b> on hand · <b>1.5</b>/day · out Oct 14</div>
+          <div class="spark"><i style="height:60%"></i><i style="height:55%"></i><i style="height:65%"></i><i style="height:50%"></i><i style="height:45%"></i><i style="height:50%"></i><i style="height:40%"></i><i style="height:45%"></i><i style="height:35%"></i><i style="height:40%"></i><i style="height:30%"></i><i style="height:35%"></i><i style="height:30%"></i><i style="height:25%"></i></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>35</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+        <div class="tile a"><span class="tag">Running low</span><div class="days">7<small>days</small></div><div class="sku">X210-128GB-GRAY</div><div class="f"><b>61</b> on hand · <b>8.7</b>/day · out Oct 15</div>
+          <div class="spark"><i style="height:55%"></i><i style="height:60%"></i><i style="height:50%"></i><i style="height:65%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:60%"></i><i style="height:55%"></i><i style="height:65%"></i><i style="height:60%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:60%"></i><i style="height:65%"></i></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>185</b></button><button class="ov-rw-ign">Ignore</button></div></div>
+        <div class="tile b"><span class="tag">Selling fast</span><div class="days">16<small>days</small></div><div class="sku">X133-128GB-GRAY</div><div class="f"><b>118</b> on hand · <b>7.2</b>/day, was <b>4.4</b></div>
+          <div class="spark"><i style="height:30%"></i><i style="height:35%"></i><i style="height:30%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:30%"></i><i style="height:40%"></i><i class="hi" style="height:55%"></i><i class="hi" style="height:65%"></i><i class="hi" style="height:60%"></i><i class="hi" style="height:80%"></i><i class="hi" style="height:75%"></i><i class="hi" style="height:95%"></i><i class="hi" style="height:100%"></i></div>
+          <div class="key"><button class="ov-rw-send q">Order<b>90</b></button><span class="tr">▲ +64%</span></div></div>
+        <div class="tile b"><span class="tag">Selling fast</span><div class="days">19<small>days</small></div><div class="sku">S9-128GB-BLACK</div><div class="f"><b>57</b> on hand · <b>3.0</b>/day, was <b>2.1</b></div>
+          <div class="spark"><i style="height:35%"></i><i style="height:30%"></i><i style="height:40%"></i><i style="height:35%"></i><i style="height:30%"></i><i style="height:45%"></i><i style="height:40%"></i><i class="hi" style="height:50%"></i><i class="hi" style="height:60%"></i><i class="hi" style="height:55%"></i><i class="hi" style="height:70%"></i><i class="hi" style="height:65%"></i><i class="hi" style="height:80%"></i><i class="hi" style="height:75%"></i></div>
+          <div class="key"><button class="ov-rw-send q">Order<b>30</b></button><span class="tr">▲ +41%</span></div></div>
+      </div>
+      <div class="ov-more">Big number = days of stock at today's pace · bars = units sold per day, last 14 days (the jump is highlighted) · <b>11</b> more under 28 days — <a>open Stock</a></div>
+    </div>
+  </div>
+
+  <div class="opt" id="d2">
+    <div class="lbl"><b>D2 · Run-out calendar</b> — four weeks from today; every bar ends on the day the shelf goes empty</div>
+    <div class="ov-panel">
+      <div class="bh"><h4>When it runs out</h4><span class="cnt"><span class="r"><b>2</b> out</span><span class="a"><b>4</b> inside the lead</span><span class="b"><b>3</b> selling fast</span></span><span class="sub">7-day lead · pace from the last 30 days</span></div>
+      <div class="cal">
+        <div class="cal-axis"><span></span><div class="ticks"><span class="t0" style="left:0">Today</span><span style="left:25%">Oct 15 · lead</span><span style="left:50%">Oct 22</span><span style="left:75%">Oct 29</span><span style="left:100%">Nov 5</span></div><span></span></div>
+        <div class="cal-row r"><div class="who"><span class="ov-wsku">X200-64GB-SILVER</span><div class="f"><b>0</b> on hand · <b>2.4</b>/day · last sold Oct 5</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar out">OUT 3 DAYS</span></div>
+          <div class="key"><button class="ov-rw-send r">Order<b>70</b></button></div></div>
+        <div class="cal-row r"><div class="who"><span class="ov-wsku">T510-32GB-BLACK</span><div class="f"><b>0</b> on hand · <b>1.1</b>/day · last sold today</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar out">OUT TODAY</span></div>
+          <div class="key"><button class="ov-rw-send r">Order<b>35</b></button></div></div>
+        <div class="cal-row a"><div class="who"><span class="ov-wsku">X133-64GB-GRAY</span><div class="f"><b>38</b> on hand · <b>12.6</b>/day ▲ 38%</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:11%">3 d<span class="end">Oct 11</span></span></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>320</b></button></div></div>
+        <div class="cal-row a"><div class="who"><span class="ov-wsku">A15-64GB-BLACK</span><div class="f"><b>14</b> on hand · <b>2.8</b>/day</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:18%">5 d<span class="end">Oct 13</span></span></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>70</b></button></div></div>
+        <div class="cal-row a"><div class="who"><span class="ov-wsku">X115-32GB-WHITE</span><div class="f"><b>9</b> on hand · <b>1.5</b>/day ▼ 12%</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:21%">6 d<span class="end">Oct 14</span></span></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>35</b></button></div></div>
+        <div class="cal-row a"><div class="who"><span class="ov-wsku">X210-128GB-GRAY</span><div class="f"><b>61</b> on hand · <b>8.7</b>/day</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:25%">7 d<span class="end">Oct 15</span></span></div>
+          <div class="key"><button class="ov-rw-send o">Order<b>185</b></button></div></div>
+        <div class="cal-row b"><div class="who"><span class="ov-wsku">X133-128GB-GRAY</span><div class="f"><b>118</b> on hand · <b>7.2</b>/day ▲ 64%</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:57%">16 d at the new pace<span class="end">Oct 24</span></span><span class="fast" style="width:96%"></span></div>
+          <div class="key"><button class="ov-rw-send q">Order<b>90</b></button></div></div>
+        <div class="cal-row b"><div class="who"><span class="ov-wsku">S9-128GB-BLACK</span><div class="f"><b>57</b> on hand · <b>3.0</b>/day ▲ 41%</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:68%">19 d<span class="end">Oct 27</span></span><span class="fast" style="width:97%"></span></div>
+          <div class="key"><button class="ov-rw-send q">Order<b>30</b></button></div></div>
+        <div class="cal-row g"><div class="who"><span class="ov-wsku">X133-64GB-SILVER</span><div class="f"><b>96</b> on hand · <b>3.6</b>/day</div></div>
+          <div class="lane"><span class="band"></span><span class="grid" style="left:50%"></span><span class="grid" style="left:75%"></span><span class="bar" style="width:95%">27 d<span class="end">Nov 4</span></span></div>
+          <div class="key"><button class="ov-rw-ign">Watch</button></div></div>
+      </div>
+      <div class="cal-legend"><span><i style="background:repeating-linear-gradient(135deg, rgba(159,47,45,.25) 0 3px, transparent 3px 7px); border:1px dashed rgba(159,47,45,.5)"></i>lead time — an order placed today lands at the dashed line</span><span><i style="background:var(--badge-blue-text);opacity:.45;height:3px"></i>thin line = where it would have run out at the old pace</span></div>
+      <div class="ov-more"><b>11</b> more SKUs run out inside 28 days — <a>open Stock</a></div>
+    </div>
+  </div>
+
+  <div class="opt" id="d3">
+    <div class="lbl"><b>D3 · Stock ledger</b> — a numbers-first table with a status rail, inline meter and trend; click a header to sort</div>
+    <div class="ov-panel">
+      <div class="bh"><h4>Stock ledger</h4><span class="sub">7-day lead · 28-day target · pace from the last 30 days</span></div>
+      <div class="lg-sum"><span class="r"><b>2</b> out &amp; selling</span><span class="a"><b>4</b> running low</span><span class="b"><b>3</b> selling fast</span><span class="g"><b>11</b> under 28 days</span></div>
+      <table class="lg">
+        <thead><tr><th></th><th>SKU</th><th>Status</th><th class="n s">Days</th><th>Cover</th><th class="n">On hand</th><th class="n">Per day</th><th>Trend</th><th>Out on</th><th class="n">Sold 30d</th><th></th></tr></thead>
+        <tbody>
+          <tr class="r"><td class="rail"><i></i></td><td><span class="ov-wsku">X200-64GB-SILVER</span></td><td><span class="st">Out · selling</span></td><td class="n d"><b>0</b></td><td><span class="meter"><em></em></span></td><td class="n">0</td><td class="n">2.4</td><td><span class="tr dn">last Oct 5</span></td><td>—</td><td class="n">71</td><td class="k"><button class="ov-rw-send r">Order<b>70</b></button></td></tr>
+          <tr class="r"><td class="rail"><i></i></td><td><span class="ov-wsku">T510-32GB-BLACK</span></td><td><span class="st">Out · selling</span></td><td class="n d"><b>0</b></td><td><span class="meter"><em></em></span></td><td class="n">0</td><td class="n">1.1</td><td><span class="tr dn">last today</span></td><td>—</td><td class="n">34</td><td class="k"><button class="ov-rw-send r">Order<b>35</b></button></td></tr>
+          <tr class="a"><td class="rail"><i></i></td><td><span class="ov-wsku">X133-64GB-GRAY</span></td><td><span class="st">Running low</span></td><td class="n d"><b>3</b></td><td><span class="meter"><i style="width:11%"></i><em></em></span></td><td class="n">38</td><td class="n">12.6</td><td><span class="tr up">▲ +38%</span></td><td>Oct 11</td><td class="n">379</td><td class="k"><button class="ov-rw-send o">Order<b>320</b></button></td></tr>
+          <tr class="a"><td class="rail"><i></i></td><td><span class="ov-wsku">A15-64GB-BLACK</span></td><td><span class="st">Running low</span></td><td class="n d"><b>5</b></td><td><span class="meter"><i style="width:18%"></i><em></em></span></td><td class="n">14</td><td class="n">2.8</td><td><span class="tr dn">flat</span></td><td>Oct 13</td><td class="n">84</td><td class="k"><button class="ov-rw-send o">Order<b>70</b></button></td></tr>
+          <tr class="a"><td class="rail"><i></i></td><td><span class="ov-wsku">X115-32GB-WHITE</span></td><td><span class="st">Running low</span></td><td class="n d"><b>6</b></td><td><span class="meter"><i style="width:21%"></i><em></em></span></td><td class="n">9</td><td class="n">1.5</td><td><span class="tr dn">▼ −12%</span></td><td>Oct 14</td><td class="n">46</td><td class="k"><button class="ov-rw-send o">Order<b>35</b></button></td></tr>
+          <tr class="a"><td class="rail"><i></i></td><td><span class="ov-wsku">X210-128GB-GRAY</span></td><td><span class="st">Running low</span></td><td class="n d"><b>7</b></td><td><span class="meter"><i style="width:25%"></i><em></em></span></td><td class="n">61</td><td class="n">8.7</td><td><span class="tr dn">flat</span></td><td>Oct 15</td><td class="n">262</td><td class="k"><button class="ov-rw-send o">Order<b>185</b></button></td></tr>
+          <tr class="b"><td class="rail"><i></i></td><td><span class="ov-wsku">X133-128GB-GRAY</span></td><td><span class="st">Selling fast</span></td><td class="n d"><b>16</b></td><td><span class="meter"><i style="width:57%"></i><em></em></span></td><td class="n">118</td><td class="n">7.2</td><td><span class="tr up">▲ +64%</span></td><td>Oct 24</td><td class="n">171</td><td class="k"><button class="ov-rw-send q">Order<b>90</b></button></td></tr>
+          <tr class="b"><td class="rail"><i></i></td><td><span class="ov-wsku">S9-128GB-BLACK</span></td><td><span class="st">Selling fast</span></td><td class="n d"><b>19</b></td><td><span class="meter"><i style="width:68%"></i><em></em></span></td><td class="n">57</td><td class="n">3.0</td><td><span class="tr up">▲ +41%</span></td><td>Oct 27</td><td class="n">76</td><td class="k"><button class="ov-rw-send q">Order<b>30</b></button></td></tr>
+          <tr class="b"><td class="rail"><i></i></td><td><span class="ov-wsku">A05-64GB-BLACK</span></td><td><span class="st">Selling fast</span></td><td class="n d"><b>22</b></td><td><span class="meter"><i style="width:79%"></i><em></em></span></td><td class="n">44</td><td class="n">2.0</td><td><span class="tr up">▲ +27%</span></td><td>Oct 30</td><td class="n">54</td><td class="k"><button class="ov-rw-send q">Order<b>15</b></button></td></tr>
+          <tr class="g"><td class="rail"><i></i></td><td><span class="ov-wsku">X133-64GB-SILVER</span></td><td><span class="st" style="color:var(--faint)">Watch</span></td><td class="n d"><b style="color:var(--muted)">27</b></td><td><span class="meter"><i style="width:95%"></i><em></em></span></td><td class="n">96</td><td class="n">3.6</td><td><span class="tr dn">flat</span></td><td>Nov 4</td><td class="n">108</td><td class="k"><button class="ov-rw-ign">Ignore</button></td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="11">Meter = days on hand out of 28 · tick = the 7-day lead · Order = pace × 28 days − stock, rounded up to 5 · <b>10</b> more under 28 days — <a class="ov-wsku">open Stock</a></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

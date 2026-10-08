@@ -4604,6 +4604,11 @@ th:last-child > .col-grip { right: 0; }
 .ret-page-btn { min-width: 26px; height: 24px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; color: var(--muted); padding: 0 6px; }
 .ret-page-btn:hover { border-color: var(--accent); }
 .ret-page-btn.is-on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 700; }
+/* arrows instead of a row of numbers (owner 2026-10-08) */
+.ret-page-arrow { font-family: var(--font); font-size: 16px; line-height: 1; color: var(--text); min-width: 28px; }
+.ret-page-arrow:disabled { color: var(--faint); border-color: var(--border-soft); cursor: default; }
+.ret-page-arrow:disabled:hover { border-color: var(--border-soft); }
+.ret-pager .ret-pager-meta { margin: 0 4px; }
 .ret-pager-meta { margin-left: 8px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 
 /* one Listings tab: marketplace pills switch between the lister pages */

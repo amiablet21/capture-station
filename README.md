@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.29.14 highlights
+
+- **Returns log pager is two arrows** (‹ 1–50 of 204 ›) instead of a row of numbered buttons.
+- **Returns search finds the model and the condition.** The search box also matches the Linnworks title behind each SKU ("Tab A9", "Galaxy A15") and the condition in either spelling ("open box" or "openbox"), on top of PO, SKU, customer, tracking, received-by and notes.
+- Overview mockups for the stock board that replaces Send to WFS (`variants/ov-stock-watch.html`, `ov-stock-3ways.html`, `ov-stock-simple.html`), awaiting the owner's pick.
+
 ## v1.29.13 highlights
 
 - **Stock history opens at once.** The dialog (and the all-SKU History) used to wait for 30 days of processed orders from Linnworks before showing anything. Now the logged changes appear immediately from the local log, with "reading 30 days of sales…" in the sub-line until the SOLD lines join.
