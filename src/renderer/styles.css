@@ -4644,6 +4644,7 @@ th:last-child > .col-grip { right: 0; }
 /* when the numbers were last fetched (polish 2026-09-30) */
 .ov-updated { margin-left: auto; align-self: center; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ov-refresh svg { width: 13px; height: 13px; }
+.ov-phone { margin-right: 6px; }
 .ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
 @keyframes ovSpin { to { transform: rotate(360deg); } }
 /* own padding + scroll handling: bare dialog content rode the UA defaults and

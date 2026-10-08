@@ -11726,6 +11726,17 @@ $('ovRefreshBtn').addEventListener('click', async () => {
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
 // (the Phone button left the Overview 2026-09-25; the phone dashboard itself still runs)
+// phone dashboard QR (restored 2026-10-08: the button went missing in the
+// design-1a rebuild). Tailscale-only by owner call (2026-08-17): the
+// anywhere address; the WiFi address stands in only if Tailscale is signed out
+$('ovPhoneBtn').addEventListener('click', async () => {
+  const r = await (api.overviewPhone ? api.overviewPhone() : Promise.resolve(null)).catch(() => null);
+  if (!r || !r.ok) { toast((r && r.error) || 'Phone dashboard unavailable'); return; }
+  $('phoneQr').src = r.tsQr || r.qr;
+  $('phoneUrl').textContent = r.tsUrl || r.url;
+  $('phoneQrLbl').textContent = r.tsQr ? 'Anywhere · Tailscale' : 'Shop WiFi only (Tailscale is signed out on this computer)';
+  $('phoneDialog').showModal();
+});
 $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
 
 // the Overview's page-width grip left (owner 2026-10-08: "unnecessary");
