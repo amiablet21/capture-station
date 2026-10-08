@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview — Stock watch (Send to WFS removed)</title>
+<!--
+  Owner 2026-10-08: "remove the Send to WFS column, it is not accurate
+  anyway. I just want the stock level stuff — warnings and such, running
+  low, selling fast." One board replaces the two right-hand columns:
+    - a signal strip: four counts that double as filters (Out & selling,
+      Running low, Selling fast, Watch)
+    - a runway list: one row per SKU that needs eyes, a bar of days on
+      hand against the lead + cover target, a tick at the lead time, the
+      figures underneath, and an Order key that says how many
+  Units sold today stays on the left. Built on the real styles.css.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #F4F3F0; }
+  .pg { width: 1160px; padding: 14px 22px 30px; }
+  .ov-cols { grid-template-columns: 300px 1fr; }
+  /* ---------- stock watch board ---------- */
+  .sw-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+  .sw-h h4 { margin: 0; color: var(--text); }
+  .sw-h .sub { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+  .sw-sig { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .sw-tile { position: relative; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px 9px 13px; background: var(--surface); cursor: pointer; overflow: hidden; }
+  .sw-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+  .sw-tile:hover { background: var(--surface-2); }
+  .sw-tile.is-on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+  .sw-tile .n { font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1; color: var(--c); }
+  .sw-tile .l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text); margin-top: 5px; }
+  .sw-tile .d { font-size: 10.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sw-tile.r { --c: var(--neg-text); } .sw-tile.a { --c: var(--badge-yellow-text); } .sw-tile.b { --c: var(--badge-blue-text); } .sw-tile.g { --c: #8A8782; }
+  .sw-sec { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 12px 0 4px; }
+  .sw-sec i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .sw-sec .n { font-family: var(--mono); color: var(--faint); font-weight: 600; letter-spacing: 0; }
+  .sw-sec .why { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--faint); }
+  .sw-sec.r { --c: var(--neg-text); color: var(--neg-text); } .sw-sec.a { --c: var(--badge-yellow-text); color: var(--badge-yellow-text); } .sw-sec.b { --c: var(--badge-blue-text); color: var(--badge-blue-text); }
+  .sw-list { display: flex; flex-direction: column; }
+  .sw-row { display: grid; grid-template-columns: 1fr 112px; gap: 0 14px; align-items: center; padding: 8px 8px 9px 10px; border-top: 1px solid var(--border-soft); border-radius: 8px; }
+  .sw-row:hover { background: var(--surface-2); }
+  .sw-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sw-top .ov-wsku { font-size: 12px; }
+  .sw-pill { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .sw-pill.r { color: var(--neg-text); background: var(--neg-bg); } .sw-pill.a { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); } .sw-pill.b { color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+  .sw-trend { margin-left: auto; font-family: var(--mono); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .sw-trend.up { color: var(--badge-blue-text); } .sw-trend.dn { color: var(--faint); }
+  .sw-run { display: flex; align-items: center; gap: 9px; margin: 7px 0 5px; }
+  .sw-bar { position: relative; flex: 1; height: 8px; border-radius: 999px; background: #ECEAE5; overflow: visible; }
+  .sw-bar .have { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--c); }
+  .sw-bar .lead { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #2F3437; opacity: .55; }
+  .sw-bar .lead::after { content: 'lead'; position: absolute; top: -12px; left: -9px; font-size: 8.5px; color: var(--faint); letter-spacing: .04em; }
+  .sw-bar .add { position: absolute; top: 0; bottom: 0; border-radius: 0 999px 999px 0; background: repeating-linear-gradient(135deg, var(--c) 0 2px, transparent 2px 5px); opacity: .55; }
+  .sw-days { flex: none; width: 54px; text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+  .sw-days b { font-size: 12px; font-weight: 700; color: var(--c); }
+  .sw-row.r { --c: var(--neg-text); } .sw-row.a { --c: var(--badge-yellow-text); } .sw-row.b { --c: var(--badge-blue-text); }
+  .sw-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sw-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+  .sw-meta .sep { margin: 0 6px; color: var(--faint); }
+  .sw-keys { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+  .sw-keys .ov-rw-send { display: flex; justify-content: space-between; padding: 4px 10px; }
+  .sw-keys .ov-rw-send.r { background: var(--neg-text); } .sw-keys .ov-rw-send.r:hover { background: #822725; }
+  .sw-keys .ov-rw-ign { text-align: center; }
+  .sw-foot { margin-top: 10px; font-size: 11px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .sw-foot b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <div class="ov-head"><h1>Overview</h1><span class="ov-date">Thursday, October 8</span><span class="ov-updated">Updated 9:14 AM</span></div>
+  <div class="ov-cols">
+    <!-- left: unchanged -->
+    <div class="ov-panel ov-today ov-sold">
+      <div><div class="k">Units sold today</div>
+        <div class="big mono">41</div>
+        <div class="delta">27 orders · 9 SKUs · <span class="up">+6 vs yesterday</span></div>
+        <div class="ov-share"><i class="cn-walmart" style="width:64%"></i><i class="cn-ebay" style="width:27%"></i><i class="cn-temu" style="width:9%"></i></div>
+        <div class="ov-chlegend"><span class="cn-walmart">Walmart <b>26</b></span><span class="cn-ebay">eBay <b>11</b></span><span class="cn-temu">Temu <b>4</b></span></div></div>
+      <div class="ov-xgrid ov-xgrid-full ov-soldgrid">
+        <div class="ov-xhead"><span class="xrn">#</span><span>SKU</span><span>Units</span></div>
+        <div class="ov-feedrow"><span class="xrn">1</span><span class="xsku">X133-64GB-GRAY</span><span class="xu">12</span></div>
+        <div class="ov-feedrow"><span class="xrn">2</span><span class="xsku">X210-128GB-GRAY</span><span class="xu">8</span></div>
+        <div class="ov-feedrow"><span class="xrn">3</span><span class="xsku">A15-64GB-BLACK</span><span class="xu">6</span></div>
+        <div class="ov-feedrow"><span class="xrn">4</span><span class="xsku">X200-64GB-SILVER</span><span class="xu">5</span></div>
+        <div class="ov-feedrow"><span class="xrn">5</span><span class="xsku">T510-32GB-BLACK</span><span class="xu">4</span></div>
+        <div class="ov-feedrow"><span class="xrn">6</span><span class="xsku">X115-32GB-WHITE</span><span class="xu">3</span></div>
+        <div class="ov-feedrow tot"><span class="xrn"></span><span>Total · 9 SKUs</span><span class="xu">41</span></div>
+      </div>
+    </div>
+
+    <!-- right: the stock watch board -->
+    <div class="ov-panel">
+      <div class="sw-h"><h4>Stock watch</h4><span class="sub">7-day lead · 21 days cover · pace from the last 30 days</span></div>
+      <div class="sw-sig">
+        <div class="sw-tile r is-on"><div class="n">2</div><div class="l">Out &amp; selling</div><div class="d">sold this month, nothing left</div></div>
+        <div class="sw-tile a is-on"><div class="n">4</div><div class="l">Running low</div><div class="d">gone inside the 7-day lead</div></div>
+        <div class="sw-tile b is-on"><div class="n">3</div><div class="l">Selling fast</div><div class="d">pace up 20%+ in 14 days</div></div>
+        <div class="sw-tile g"><div class="n">11</div><div class="l">Watch</div><div class="d">under 28 days of cover</div></div>
+      </div>
+
+      <div class="sw-sec r"><i></i>Out &amp; selling <span class="n">2</span><span class="why">was selling, shelf is empty — every day costs sales</span></div>
+      <div class="sw-list">
+        <div class="sw-row r">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">X200-64GB-SILVER</span><span class="sw-pill r">Out 3 days</span><span class="sw-trend dn">last sold Oct 5</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="lead" style="left:25%"></span><span class="add" style="left:0;width:100%"></span></div><div class="sw-days"><b>0</b> d</div></div>
+            <div class="sw-meta"><b>0</b> on hand<span class="sep">·</span><b>2.4</b>/day<span class="sep">·</span><b>71</b> sold in 30 days<span class="sep">·</span>missing ≈ <b>$1,380</b>/wk</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send r">Order<b>70</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row r">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">T510-32GB-BLACK</span><span class="sw-pill r">Out today</span><span class="sw-trend dn">last sold Oct 8</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="lead" style="left:25%"></span><span class="add" style="left:0;width:100%"></span></div><div class="sw-days"><b>0</b> d</div></div>
+            <div class="sw-meta"><b>0</b> on hand<span class="sep">·</span><b>1.1</b>/day<span class="sep">·</span><b>34</b> sold in 30 days<span class="sep">·</span>missing ≈ <b>$410</b>/wk</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send r">Order<b>35</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+      </div>
+
+      <div class="sw-sec a"><i></i>Running low <span class="n">4</span><span class="why">runs out before a new order could land (7-day lead)</span></div>
+      <div class="sw-list">
+        <div class="sw-row a">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">X133-64GB-GRAY</span><span class="sw-pill a">3 days left</span><span class="sw-trend up">▲ +38% · faster</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:11%"></span><span class="lead" style="left:25%"></span><span class="add" style="left:11%;width:89%"></span></div><div class="sw-days"><b>3</b> d</div></div>
+            <div class="sw-meta"><b>38</b> on hand<span class="sep">·</span><b>12.6</b>/day<span class="sep">·</span>out <b>Oct 11</b><span class="sep">·</span><b>379</b> sold in 30 days</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send o">Order<b>320</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row a">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">A15-64GB-BLACK</span><span class="sw-pill a">5 days left</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:18%"></span><span class="lead" style="left:25%"></span><span class="add" style="left:18%;width:82%"></span></div><div class="sw-days"><b>5</b> d</div></div>
+            <div class="sw-meta"><b>14</b> on hand<span class="sep">·</span><b>2.8</b>/day<span class="sep">·</span>out <b>Oct 13</b><span class="sep">·</span><b>84</b> sold in 30 days</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send o">Order<b>70</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row a">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">X115-32GB-WHITE</span><span class="sw-pill a">6 days left</span><span class="sw-trend dn">▼ −12%</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:21%"></span><span class="lead" style="left:25%"></span><span class="add" style="left:21%;width:79%"></span></div><div class="sw-days"><b>6</b> d</div></div>
+            <div class="sw-meta"><b>9</b> on hand<span class="sep">·</span><b>1.5</b>/day<span class="sep">·</span>out <b>Oct 14</b><span class="sep">·</span><b>46</b> sold in 30 days</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send o">Order<b>35</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row a">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">X210-128GB-GRAY</span><span class="sw-pill a">7 days left</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:25%"></span><span class="lead" style="left:25%"></span><span class="add" style="left:25%;width:75%"></span></div><div class="sw-days"><b>7</b> d</div></div>
+            <div class="sw-meta"><b>61</b> on hand<span class="sep">·</span><b>8.7</b>/day<span class="sep">·</span>out <b>Oct 15</b><span class="sep">·</span><b>262</b> sold in 30 days</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send o">Order<b>185</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+      </div>
+
+      <div class="sw-sec b"><i></i>Selling fast <span class="n">3</span><span class="why">stock looks fine today, but the pace jumped — it will not stay fine</span></div>
+      <div class="sw-list">
+        <div class="sw-row b">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">X133-128GB-GRAY</span><span class="sw-pill b">16 days left</span><span class="sw-trend up">▲ +64% vs prior 14 d</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:57%"></span><span class="lead" style="left:25%"></span></div><div class="sw-days"><b>16</b> d</div></div>
+            <div class="sw-meta"><b>118</b> on hand<span class="sep">·</span><b>7.2</b>/day now, was <b>4.4</b><span class="sep">·</span>out <b>Oct 24</b> at this pace</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send q">Order<b>90</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row b">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">S9-128GB-BLACK</span><span class="sw-pill b">19 days left</span><span class="sw-trend up">▲ +41% vs prior 14 d</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:68%"></span><span class="lead" style="left:25%"></span></div><div class="sw-days"><b>19</b> d</div></div>
+            <div class="sw-meta"><b>57</b> on hand<span class="sep">·</span><b>3.0</b>/day now, was <b>2.1</b><span class="sep">·</span>out <b>Oct 27</b> at this pace</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send q">Order<b>30</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+        <div class="sw-row b">
+          <div>
+            <div class="sw-top"><span class="ov-wsku">A05-64GB-BLACK</span><span class="sw-pill b">22 days left</span><span class="sw-trend up">▲ +27% vs prior 14 d</span></div>
+            <div class="sw-run"><div class="sw-bar"><span class="have" style="width:79%"></span><span class="lead" style="left:25%"></span></div><div class="sw-days"><b>22</b> d</div></div>
+            <div class="sw-meta"><b>44</b> on hand<span class="sep">·</span><b>2.0</b>/day now, was <b>1.6</b><span class="sep">·</span>out <b>Oct 30</b> at this pace</div>
+          </div>
+          <div class="sw-keys"><button class="ov-rw-send q">Order<b>15</b></button><button class="ov-rw-ign">Ignore 7 d</button></div>
+        </div>
+      </div>
+
+      <div class="sw-foot"><span>Bar = days on hand out of the <b>28-day</b> target (lead + cover) · tick = the lead time</span><span>Order = pace × 28 days − stock, rounded up to 5</span><span><b>11</b> more under 28 days — <a class="ov-wsku">open Stock</a></span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
