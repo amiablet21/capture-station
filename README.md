@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.1 highlights
+
+- **Overview watch list is more of the same rows.** The footer link now reveals the SKUs under 28 days of cover as ordinary rows (grey "Watch" badge, SKU and name, "11 days left", expandable chart) under the Needs attention rows, instead of a compact three-column grid.
+- **Selling fast is ordered by pace.** The fastest sellers (most units a day) come first; the "Up N%" phrase stays.
+- **Condition SKUs stay off the Overview.** Open box, used and scrap listings (prefix or suffix naming, or any SKU a saved condition mapping points at) are resold returns, so they never appear in the queue or the watch list.
+
 ## v1.30.0 highlights
 
 - **New Overview: the status queue** (design 1a from Claude Design, owner-approved 2026-10-08; handoff notes in `docs/design-handoffs/overview-1a-status-queue.md`). Three big counts — out of stock, running low, selling fast — and one urgency-ordered list under "Needs attention": every SKU that is out and still selling (most recent sale first), then every SKU that runs out inside the lead time, then everything selling 20%+ faster than two weeks ago. A row shows a badge, the SKU with a "Hot" tag past 1 a day, the item's name, and one phrase ("Out since Oct 5", "3 days left", "Up 42%"). Click a row to open its 30-day sales chart with the 30-day average and the last 14 days shaded, this week / this month / per day / pace, and the split by marketplace; hover the chart for any day's units. A footer link reveals the rest under 28 days of cover. Sold today stays on the right. Send to WFS is gone from the Overview.

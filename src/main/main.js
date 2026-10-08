@@ -4585,12 +4585,19 @@ function registerIpc() {
     const lead = (money && money.leadDays) || Number((cfg.reorder || {}).leadTimeDays) || 7;
     const cover = (money && money.coverDays) || Number((cfg.reorder || {}).coverDays) || 21;
     const ignores = new Map(db.listWfsIgnores().filter(r => r.sku.startsWith('LOW:')).map(r => [r.sku.slice(4), r]));
+    // SKUs that a saved condition mapping points at are condition SKUs too,
+    // whatever they are named
+    const mappedCond = new Set();
+    try { for (const conds of Object.values(db.getConditionMap())) for (const t of Object.values(conds || {})) if (t) mappedCond.add(String(t).toUpperCase()); } catch { /* no map */ }
     const out = [];
     const low = [];
     const fast = [];
     const watch = [];
     const ignored = [];
     for (const r of (money && money.stock) || []) {
+      // condition SKUs (OPEN-BOX-, USED-, SCRAP-, …) are resold returns:
+      // nothing to reorder, so they never join the queue (owner 2026-10-08)
+      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase())) continue;
       const pr = r.recent / 14;
       const pp = r.prior / 16;
       const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
@@ -4610,8 +4617,9 @@ function registerIpc() {
     }
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
-    fast.sort((a, b) => b.pct - a.pct);
-    watch.sort((a, b) => a.daysLeft - b.daysLeft);
+    // selling fast: the fastest sellers first (owner 2026-10-08)
+    fast.sort((a, b) => b.perDay - a.perDay || b.pct - a.pct);
+    watch.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     return {
       ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored,
       counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length },
