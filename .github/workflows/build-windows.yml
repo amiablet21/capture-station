@@ -54,6 +54,10 @@ jobs:
       - name: Build the NSIS installer
         run: npx electron-builder --win nsis --publish never
 
+      - name: The updater manifest must exist (latest.yml)
+        shell: bash
+        run: test -f dist/latest.yml || { echo "::error::dist/latest.yml missing - the in-app updater needs it"; exit 1; }
+
       - name: Keep the installer as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,7 +80,9 @@ jobs:
           # (v1.27.106, 2026-09-21)
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/latest.yml
           generate_release_notes: true
 
       - name: Make sure the installer really sits on the release (retry the flaky upload)
@@ -91,7 +97,7 @@ jobs:
             || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
           for i in 1 2 3 4; do
             MISSING=0
-            for F in dist/*.exe; do
+            for F in dist/*.exe dist/latest.yml; do
               N="$(basename "$F" | tr ' ' '.')"   # GitHub stores asset names with dots
               if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N"; then
                 MISSING=1
@@ -102,7 +108,7 @@ jobs:
             [ "$MISSING" = "0" ] && exit 0
             sleep 20
           done
-          for F in dist/*.exe; do
+          for F in dist/*.exe dist/latest.yml; do
             N="$(basename "$F" | tr ' ' '.')"
             gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
               || { echo "::error::$N never landed on $TAG after 4 attempts"; exit 1; }
@@ -122,7 +128,7 @@ jobs:
           VER="$(node -p "require('./package.json').version")"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | while read -r A; do
             case "$A" in
-              *"$VER"*) ;;
+              *"$VER"*|latest*.yml) ;;   # latest.yml is what the in-app updater reads — keep it
               *) echo "removing stale asset $A"; gh release delete-asset "$TAG" "$A" --repo "$GITHUB_REPOSITORY" -y ;;
             esac
           done

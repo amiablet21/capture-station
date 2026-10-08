@@ -115,7 +115,7 @@ if (!window.api) {
     chooseReceivingFolder: async () => ({ ok: false, folder: '' }),
     returnsSyncChooseFolder: async () => ({ ok: false, folder: '' }),
     copyText: async () => ({ ok: true }),
-    on: () => {},
+    on: (ch, fn) => { const h = (window.__apiHandlers = window.__apiHandlers || {}); (h[ch] = h[ch] || []).push(fn); }, // preview: handlers kept so a test can fire events
   };
 }
 
@@ -7995,11 +7995,39 @@ async function prHistLoad() {
 
 /* in-app updater: a new release lights the footer button; one click
    downloads the right installer and opens it (owner 2026-09-18) */
+// the footer's update button has two lives: on Windows the new build
+// downloads itself and the button reads "Restart to update"; on the Mac
+// (unsigned build) it downloads the DMG and opens it, as before
+let updateReadyVersion = '';
 api.on('update:available', (d) => {
   const b = $('updateBtn');
-  b.textContent = `Update to v${(d && d.version) || 'latest'}`;
+  if (d && d.auto) {
+    b.textContent = `Downloading v${d.version}…`;
+    b.disabled = true;
+  } else {
+    b.textContent = `Update to v${(d && d.version) || 'latest'}`;
+    b.disabled = false;
+  }
   b.hidden = false;
   $('updateCheckBtn').hidden = true; // the Update button takes its place
+});
+api.on('update:progress', (d) => {
+  const b = $('updateBtn');
+  if (updateReadyVersion) return;
+  b.textContent = `Downloading ${Math.max(0, Math.min(100, Number(d && d.percent) || 0))}%`;
+  b.disabled = true;
+  b.hidden = false;
+  $('updateCheckBtn').hidden = true;
+});
+api.on('update:downloaded', (d) => {
+  const b = $('updateBtn');
+  updateReadyVersion = (d && d.version) || 'latest';
+  b.textContent = `Restart to update v${updateReadyVersion}`;
+  b.disabled = false;
+  b.hidden = false;
+  b.title = 'The new version is downloaded. Click to close the app and come back updated — about 20 seconds.';
+  $('updateCheckBtn').hidden = true;
+  toast(`v${updateReadyVersion} is downloaded — click Restart to update when you have a moment.`, 7000);
 });
 // "Check for updates" asks GitHub right now instead of waiting for the
 // half-hour pass (owner 2026-10-01 / 2026-10-08); a find lights the
@@ -8013,7 +8041,8 @@ $('updateCheckBtn').addEventListener('click', async () => {
   b.disabled = false;
   b.textContent = 'Check for updates';
   if (!res || !res.ok) { toast(res && res.error ? res.error : 'Could not check for updates.', 4000); return; }
-  if (res.update) toast(`v${res.latest} is out — you're on v${res.current}. Click Update to install it.`, 6000);
+  if (res.update && res.auto) toast(res.ready ? `v${res.latest} is downloaded — click Restart to update.` : `v${res.latest} is out — downloading it now; the button says Restart to update when it is ready.`, 6000);
+  else if (res.update) toast(`v${res.latest} is out — you're on v${res.current}. Click Update to install it.`, 6000);
   else if (res.building) toast(`v${res.latest} is still building its installer — you're on v${res.current}. Try again in a few minutes.`, 6000);
   else toast(`You're on v${res.current} — that's the latest.`, 3500);
 });
@@ -8021,14 +8050,15 @@ $('updateBtn').addEventListener('click', async () => {
   const b = $('updateBtn');
   if (b.disabled) return;
   b.disabled = true;
-  b.textContent = 'Downloading…';
+  b.textContent = updateReadyVersion ? 'Restarting…' : 'Downloading…';
   const res = await api.updateInstall();
   if (!res.ok) {
     b.disabled = false;
-    b.textContent = 'Update — retry';
+    b.textContent = updateReadyVersion ? `Restart to update v${updateReadyVersion}` : 'Update — retry';
     toast(res.error || 'Could not download the update.');
     return;
   }
+  if (res.restart) { b.textContent = 'Restarting…'; return; } // the app closes itself and comes back updated
   b.textContent = 'Installer opened';
   toast(`Installer opened — run it through and the app comes back updated (saved to Downloads as ${res.file})`, 9000);
 });
