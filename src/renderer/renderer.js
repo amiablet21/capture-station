@@ -11322,7 +11322,8 @@ function ovRenderTop() {
   }
   if (ovLoading()) {
     const mp = ovData.moneyPending;
-    const head = { sales: 'Reading 30 days of sales…', inventory: 'Reading the inventory…', pace: 'Working out what’s out, low and selling fast…' }[mp.stage] || 'Getting stock levels ready…';
+    // the trailing dots animate from the stylesheet (.ovq-load-h .t::after)
+    const head = { sales: 'Reading 30 days of sales', inventory: 'Reading the inventory', pace: 'Working out what’s out, low and selling fast' }[mp.stage] || 'Getting stock levels ready';
     box.innerHTML = `<div class="ovq-load">
       <div class="ovq-load-h"><span class="t">${head}</span><span class="d mono">${esc(mp.detail || '')}</span></div>
       <div class="ovq-load-bar"><div class="ovq-track"><div class="ovq-fill"></div></div><span class="ovq-elapsed mono">${ovElapsed(mp.since)}</span></div>
