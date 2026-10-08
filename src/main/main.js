@@ -4679,6 +4679,10 @@ function registerIpc() {
       // condition SKUs (OPEN-BOX-, USED-, SCRAP-, …) are resold returns:
       // nothing to reorder, so they never join the queue (owner 2026-10-08)
       if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase())) continue;
+      // dropship-padded SKUs hold no shelf stock by design: nothing to
+      // reorder, so they never show as out or on watch (owner 2026-10-08
+      // asked what a "Watch · Out of stock" row meant — these were most of them)
+      if (r.padded) continue;
       const pr = r.recent / 14;
       const pp = r.prior / 16;
       const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
