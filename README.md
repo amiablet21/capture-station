@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.3 highlights
+
+- **Check for updates button** in the footer, next to the sync line. It asks GitHub right then and says what it found: you are current, an update is ready (the green Update button lights up and installs it), or the release exists but its installer is still building. Carried over from a parallel branch that never reached main.
+- The automatic check runs every 30 minutes instead of every 4 hours (plus once, 20 seconds after launch).
+
 ## v1.30.2 highlights
 
 - **The Overview's first-open loading state moves.** A sheen sweeps the progress bar, the headline's dots cycle, and the current checklist step's ring breathes while the 30-day sales pass runs. All of it switches off under the system's reduced-motion setting.
