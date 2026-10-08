@@ -1,6 +1,10 @@
-# Capture Station
+# DWS Stock
 
-Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
+Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
+
+## v1.31.0 highlights
+
+- **The app is now DWS Stock**, with a new icon (navy tile, white DWS wordmark, orange dot). Window title, installer name (`DWS-Stock-Setup-1.31.0.exe`, `DWS-Stock-1.31.0.dmg`), Start menu / Applications entry, phone dashboard and in-app wording all follow. Installing over Capture Station replaces it (same app identity), and the first launch carries the station's database, settings and caches across to the new data folder, so nothing is set up again. The stock-log reason strings Linnworks shows ("Capture Station return" and friends) are unchanged on purpose: every station's history matching keys on them.
 
 ## v1.30.11 highlights
 
@@ -140,7 +144,7 @@ npm install
 npm start
 ```
 
-Build the installer (`dist/Capture Station Setup x.y.z.exe`):
+Build the installer (`dist/DWS-Stock-Setup-x.y.z.exe`):
 
 ```
 npm run dist

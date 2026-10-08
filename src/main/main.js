@@ -54,6 +54,44 @@ if (process.env.CAPTURE_E2E === '1') {
 // running against the live db beside the first instance (the 2026-09-05
 // corruption, and the duplicate-order minting before it). exit() ends the
 // process before any of that starts, and the whenReady guard backstops it.
+// "DWS Stock" replaced the "Capture Station" product name (owner 2026-10-08).
+// Electron keys the data folder on that name, so the first launch under the
+// new name carries the old folder across — database, settings, caches,
+// window state — and the station starts exactly where it left off. The copy
+// lands in a staging folder and is renamed into place only once complete, so
+// a half-copied database can never be opened. Chromium's own caches are left
+// behind (rebuilt on first run). If anything goes wrong the app keeps using
+// the old folder rather than starting empty.
+const OLD_PRODUCT_DIR = 'Capture Station';
+const SKIP_ON_MOVE = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'blob_storage', 'Service Worker', 'Crashpad', 'logs']);
+function carryUserDataAcross(newDir, oldDir) {
+  if (path.basename(newDir) === OLD_PRODUCT_DIR) return newDir;
+  if (!fs.existsSync(path.join(oldDir, 'capture-station.db'))) return newDir; // nothing to bring
+  if (fs.existsSync(path.join(newDir, 'capture-station.db'))) return newDir; // already here
+  const staging = `${newDir}.moving`;
+  try {
+    fs.rmSync(staging, { recursive: true, force: true });
+    fs.cpSync(oldDir, staging, {
+      recursive: true,
+      filter: (src) => !SKIP_ON_MOVE.has(path.basename(src)) || path.dirname(src) !== oldDir,
+    });
+    fs.rmSync(newDir, { recursive: true, force: true }); // only ever Chromium's empty profile
+    fs.renameSync(staging, newDir);
+    try { fs.writeFileSync(path.join(oldDir, 'MOVED TO DWS STOCK.txt'), `This app is now DWS Stock. Its data was copied to:\n${newDir}\non ${new Date().toISOString()}.\nThis folder is no longer used and can be deleted.\n`); } catch { /* note only */ }
+    return newDir;
+  } catch {
+    try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* best effort */ }
+    return oldDir; // keep running on the old folder
+  }
+}
+if (!IS_TEST_RUN) {
+  try {
+    const cur = app.getPath('userData');
+    const use = carryUserDataAcross(cur, path.join(path.dirname(cur), OLD_PRODUCT_DIR));
+    if (use !== cur) app.setPath('userData', use);
+  } catch { /* default folder */ }
+}
+
 const SECOND_INSTANCE = !IS_TEST_RUN && !app.requestSingleInstanceLock();
 if (SECOND_INSTANCE) {
   app.exit(0);
@@ -444,7 +482,7 @@ function ensurePane() {
   const PANE_SAFE_URL = 'https://seller.walmart.com/orders/manage-orders';
   const paneBlockNote = () => {
     if (win && !win.isDestroyed()) {
-      win.webContents.send('app:notice', { message: 'That Seller Center page is hidden in Capture Station' });
+      win.webContents.send('app:notice', { message: 'That Seller Center page is hidden in DWS Stock' });
     }
   };
   wc.on('will-navigate', (e, u) => {
@@ -6581,7 +6619,7 @@ function createWindow() {
     minWidth: 430,
     minHeight: 640,
     backgroundColor: '#f7f7f6',
-    title: 'Capture Station',
+    title: 'DWS Stock',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -6828,7 +6866,7 @@ function checkDbHealth() {
   const detail = String(health.detail || '').slice(0, 300);
   const choice = dialog.showMessageBoxSync({
     type: 'warning',
-    title: 'Capture Station',
+    title: 'DWS Stock',
     message: 'The local database failed its health check.',
     detail: good
       ? `Problem found: ${detail}\n\nRestore the most recent healthy backup?\n${path.basename(good)}\n\nThe damaged file is kept next to the database either way.`
@@ -6842,7 +6880,7 @@ function checkDbHealth() {
       db.restoreFrom(good);
     } catch (e) {
       dialog.showErrorBox('Restore failed',
-        `${e.message}\n\nUsually this means another Capture Station window is open and holding the database. Close every Capture Station window, then reopen the app and try again. Nothing was changed.`);
+        `${e.message}\n\nUsually this means another DWS Stock window is open and holding the database. Close every DWS Stock window, then reopen the app and try again. Nothing was changed.`);
     }
   }
 }

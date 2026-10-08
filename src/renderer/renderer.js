@@ -724,7 +724,7 @@ function capHistRowHtml(row, num) {
   const stWord = row.status === 'synced'
     ? `<span class="history-status st-synced" title="Pushed to Linnworks at ${when}">Processed ${when}</span>`
     : row.status === 'lw-processed'
-      ? `<span class="history-status st-synced" title="Processed in Linnworks at ${when}, not through Capture Station (label bought on the channel, or processed elsewhere)">Processed in Linnworks ${when}</span>`
+      ? `<span class="history-status st-synced" title="Processed in Linnworks at ${when}, not through DWS Stock (label bought on the channel, or processed elsewhere)">Processed in Linnworks ${when}</span>`
     : row.status === 'open'
       ? '<span class="history-status st-pending" title="Still in Linnworks open orders, nobody captured it yet">Open · not captured</span>'
     : row.status === 'failed'
@@ -6766,8 +6766,8 @@ function renderStockHistory() {
   const last = rows.find(r => r.reason !== 'sale');
   const logged = rows.filter(r => r.reason !== 'sale');
   $('stockHistSub').textContent = (logged.length
-    ? `${logged.length} change${logged.length === 1 ? '' : 's'} logged by Capture Station${rows.length > logged.length ? ` · ${rows.length - logged.length} sold in the last 30 days` : ''}`
-    : `Nothing logged yet — history starts with the first change made through Capture Station.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`)
+    ? `${logged.length} change${logged.length === 1 ? '' : 's'} logged by DWS Stock${rows.length > logged.length ? ` · ${rows.length - logged.length} sold in the last 30 days` : ''}`
+    : `Nothing logged yet — history starts with the first change made through DWS Stock.${rows.length ? ` ${rows.length} sold in the last 30 days.` : ''}`)
     + (shDlg.salesPending ? ' · reading 30 days of sales…' : '');
   const strip = `<div class="sales-strip sh-strip">
       <div class="sales-stat"><div class="l">In stock</div><div class="v">${lvl ? lvl.stockLevel : '—'}</div><div class="s">${lvl ? `${lvl.available} available · ${lvl.inOrders} in orders` : 'not in the loaded grid'}</div></div>

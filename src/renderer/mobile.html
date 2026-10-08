@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Capture" />
 <link rel="apple-touch-icon" href="/icon.png" />
-<title>Capture Station</title>
+<title>DWS Stock</title>
 <!-- the phone twin of Capture Station (owner-approved three-screen design,
      2026-08-17): Overview / Orders / Stock behind a bottom tab bar, served
      over the tailnet. Self-contained on purpose: one file, no assets. -->
@@ -203,7 +203,7 @@
   /* ---------------- Overview (unchanged from the first phone page) ---------------- */
   function renderCard() {
     const t = data && data.orders && data.orders.today;
-    if (!t) { $('card').innerHTML = '<div class="err">No data yet — is Capture Station running?</div>'; return; }
+    if (!t) { $('card').innerHTML = '<div class="err">No data yet — is DWS Stock running?</div>'; return; }
     const isMoney = metric === 'sales' && t.totalSales !== undefined;
     const now = new Date();
     const view = range === 'Day' ? t : ((data.orders.ranges || {})[range] || null);
@@ -451,7 +451,7 @@
       if (j && j.ok) { data = j; renderOverview(); $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString(); }
       else if (!data) $('card').innerHTML = '<div class="err">' + esc((j && j.error) || 'No data.') + '</div>';
     } catch {
-      if (!data) $('card').innerHTML = '<div class="err">Can’t reach Capture Station — is Tailscale on, and the app running?</div>';
+      if (!data) $('card').innerHTML = '<div class="err">Can’t reach DWS Stock — is Tailscale on, and the app running?</div>';
       else $('stamp').textContent = 'connection lost — retrying…';
     }
   }
@@ -459,7 +459,7 @@
     try {
       const r = await fetch('/orders' + location.search, { cache: 'no-store' });
       ordersData = await r.json();
-    } catch { if (!ordersData) ordersData = { ok: false, error: 'Can’t reach Capture Station.' }; }
+    } catch { if (!ordersData) ordersData = { ok: false, error: 'Can’t reach DWS Stock.' }; }
     if (activeTab === 'Orders') renderOrders();
   }
   async function refreshStock(fresh) {
@@ -467,7 +467,7 @@
       const r = await fetch('/stock' + location.search + (fresh ? '&fresh=1' : ''), { cache: 'no-store' });
       const j = await r.json();
       if (!editSku || !j.ok) stockData = j; // never yank an edit out from under a thumb
-    } catch { if (!stockData) stockData = { ok: false, error: 'Can’t reach Capture Station.' }; }
+    } catch { if (!stockData) stockData = { ok: false, error: 'Can’t reach DWS Stock.' }; }
     if (activeTab === 'Stock' && !editSku) renderStock();
   }
 
