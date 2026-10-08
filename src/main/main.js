@@ -4019,11 +4019,11 @@ function registerIpc() {
   // first pass on a station walks 30 days of processed orders and the page
   // used to sit on a blank "Crunching…" the whole time, with no sign of
   // life and no word when Linnworks said no
-  let overviewProgress = { stage: '', detail: '', since: 0 };
+  let overviewProgress = { stage: '', detail: '', since: 0, frac: 0, inventoryCount: 0 };
   const OVERVIEW_RETRY_MS = 60 * 1000; // a failed pass waits this long before another try
   function refreshOverviewMoney(cfg) {
     if (overviewCache.promise) return overviewCache.promise;
-    overviewProgress = { stage: 'sales', detail: '', since: Date.now() };
+    overviewProgress = { stage: 'sales', detail: '', since: Date.now(), frac: 0, inventoryCount: overviewProgress.inventoryCount || 0 };
     const t0 = Date.now();
     overviewCache.promise = computeOverviewMoney(cfg, (p) => { overviewProgress = { ...overviewProgress, ...p }; })
       .then(m => {
@@ -4299,17 +4299,17 @@ function registerIpc() {
       `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`,
       false,
       (p) => {
-        if (p.stage === 'pages') tell({ stage: 'sales', detail: p.pages ? `page ${p.page} of ${p.pages}` : `page ${p.page}` });
-        else if (p.stage === 'orders') tell({ stage: 'sales', detail: `order ${Math.min(p.orders, p.done + 1).toLocaleString()} of ${p.orders.toLocaleString()}` });
+        if (p.stage === 'pages') tell({ stage: 'sales', detail: p.pages ? `page ${p.page} of ${p.pages}` : `page ${p.page}`, frac: p.pages ? Math.min(0.45, p.page / p.pages * 0.45) : 0.02 });
+        else if (p.stage === 'orders') tell({ stage: 'sales', detail: `order ${Math.min(p.orders, p.done + 1).toLocaleString()} of ${p.orders.toLocaleString()}`, frac: 0.45 + (p.orders ? p.done / p.orders : 0) * 0.4 });
       }
     );
     if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
     // per-SKU: 4-week qty, revenue, last sale, channels
     const stats = {};
     const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
-    tell({ stage: 'inventory', detail: '' });
+    tell({ stage: 'inventory', detail: '', frac: 0.88 });
     const items = await client.listInventory();
-    tell({ stage: 'pace', detail: '' });
+    tell({ stage: 'pace', detail: `${items.length.toLocaleString()} SKUs`, frac: 0.96, inventoryCount: items.length });
     const homeLoc = cfg.linnworks.locationId;
     // the Walmart-fed WFS location: sales despatched from it are WFS sales
     let wfsLocId = '';
@@ -4318,15 +4318,23 @@ function registerIpc() {
       if (l) { wfsLocId = String(l.locationId || '').toLowerCase(); break; }
     }
     const nowTs = to.getTime();
+    // the 30 local days of the window, oldest first, for the per-SKU
+    // daily series behind the Overview's expandable rows (design 1a)
+    const dayIdx = {};
+    for (let i = 0; i < WINDOW_DAYS; i++) dayIdx[db.localDay(new Date(nowTs - (WINDOW_DAYS - 1 - i) * 86400000))] = i;
+    const chanKey = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
     for (const l of sales.lines) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
-      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {} };
+      const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {}, series: new Array(WINDOW_DAYS).fill(0), split: { walmart: 0, ebay: 0, temu: 0, other: 0 } };
       s.qty += l.qty;
       s.revenue += l.revenue;
       const ts = Date.parse(l.processedOn) || 0;
       if (ts > s.last) s.last = ts;
       if (l.source) s.channels.add(label(l.source));
+      const di = dayIdx[db.localDay(new Date(ts))];
+      if (di !== undefined) s.series[di] += l.qty;
+      s.split[chanKey(l.source || '')] += l.qty;
       // pace trend: last 14 days vs the rest of the window
       if (nowTs - ts <= 14 * 86400000) s.recent += l.qty; else s.prior += l.qty;
       if (wfsLocId && String(l.locationId || '').toLowerCase() === wfsLocId) {
@@ -4440,6 +4448,30 @@ function registerIpc() {
       }
     }
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    // Overview design 1a (owner-approved 2026-10-08): one row per SKU that
+    // sold in the window, with everything the status queue and its
+    // expanded panel show; the grouping (out / low / fast / watch) happens
+    // per request in overviewStockPlan so ignores apply without a recompute
+    const stock = [];
+    for (const it of items) {
+      const k = String(it.sku).toUpperCase();
+      const s = stats[k];
+      if (!s || s.qty < 1) continue;
+      const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+      const avail = Math.max(0, Number(home.available) || 0);
+      const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+      const atWfs = wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0;
+      const perDay = s.qty / WINDOW_DAYS;
+      const onHand = avail + atWfs;
+      const daysLeft = perDay > 0 ? Math.floor(onHand / perDay) : 9999;
+      stock.push({
+        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty,
+        perDay: Math.round(perDay * 100) / 100, recent: s.recent, prior: s.prior,
+        daysLeft, outOn: fmtDay(nowTs + daysLeft * 86400000), last: s.last ? fmtDay(s.last) : '', lastTs: s.last,
+        series: s.series, split: s.split, padded: !!pads[k],
+        order: Math.max(5, Math.ceil(Math.max(0, perDay * (lead + cover) - onHand) / 5) * 5),
+      });
+    }
     // 25-row cap instead of the old 5-6 (owner 2026-08-25: "I would like to
     // see more products instead of a selection of like 4") — the drawers
     // scroll; the unit total counts EVERYTHING, listed or not
@@ -4451,7 +4483,8 @@ function registerIpc() {
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 6, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku
+      v: 7, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku · v7: + stock rows (design 1a)
+      stock,
       wfsCand,
       // every item's WFS channel SKUs, best seller first - the WFS shipment
       // sheet fills its Channel SKU column from it (owner 2026-09-25)
@@ -4513,7 +4546,7 @@ function registerIpc() {
       historyPending: !hist,
     };
     const sold = live ? live.sold : null;
-    let money = overviewCache.money && overviewCache.money.v === 6 ? overviewCache.money : null;
+    let money = overviewCache.money && overviewCache.money.v === 7 ? overviewCache.money : null;
     const stale = !money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS;
     if (stale && !overviewCache.promise && Date.now() - (overviewCache.failedAt || 0) > OVERVIEW_RETRY_MS) {
       // stale (or missing) money refreshes behind the page; a pass that just
@@ -4521,15 +4554,68 @@ function registerIpc() {
       refreshOverviewMoney(cfg).catch(() => { /* reported through moneyError */ });
     }
     const moneyPending = !money && overviewCache.promise
-      ? { stage: overviewProgress.stage, detail: overviewProgress.detail, since: overviewProgress.since }
+      ? { stage: overviewProgress.stage, detail: overviewProgress.detail, since: overviewProgress.since, frac: overviewProgress.frac || 0, inventoryCount: overviewProgress.inventoryCount || 0 }
       : null;
     const moneyError = !money && !overviewCache.promise ? (overviewCache.error || 'Linnworks unavailable') : null;
+    // a refresh that failed while an older money view stands: the page
+    // keeps the figures and says so in a banner (design 1a error state)
+    const failedAt = overviewCache.failedAt || 0;
+    const staleError = money && overviewCache.error && failedAt > overviewCache.at
+      ? { error: overviewCache.error, at: overviewCache.at, retryIn: Math.max(0, Math.ceil((OVERVIEW_RETRY_MS - (Date.now() - failedAt)) / 1000)) }
+      : null;
     return {
       ok: true, orders, money, sold,
       livePending, liveError: live ? '' : liveError,
-      moneyPending, moneyError,
+      moneyPending, moneyError, staleError,
+      moneyRetryIn: moneyError ? Math.max(0, Math.ceil((OVERVIEW_RETRY_MS - (Date.now() - failedAt)) / 1000)) : 0,
       moneyAt: money ? overviewCache.at : 0,
+      stockPlan: overviewStockPlan(cfg, money),
       wfsPlan: overviewWfsPlan(cfg, money), lowPlan: overviewLowPlan(cfg, money),
+    };
+  }
+
+  // Design 1a (owner-approved 2026-10-08): the status queue. Every SKU that
+  // sold in the window is cut into one of four groups — out & still
+  // selling, running low, selling fast (and not low), watch — with the
+  // Overview's LOW: ignores applied (an ignore lapses when the pace grows
+  // half again). Rows carry the 30-day daily series and marketplace split
+  // for the expanded panel.
+  function overviewStockPlan(cfg, money) {
+    const w = { ignoreDays: 7, ...(cfg.wfs || {}) };
+    const lead = (money && money.leadDays) || Number((cfg.reorder || {}).leadTimeDays) || 7;
+    const cover = (money && money.coverDays) || Number((cfg.reorder || {}).coverDays) || 21;
+    const ignores = new Map(db.listWfsIgnores().filter(r => r.sku.startsWith('LOW:')).map(r => [r.sku.slice(4), r]));
+    const out = [];
+    const low = [];
+    const fast = [];
+    const watch = [];
+    const ignored = [];
+    for (const r of (money && money.stock) || []) {
+      const pr = r.recent / 14;
+      const pp = r.prior / 16;
+      const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
+      const pct = pp > 0 ? Math.round((pr / pp - 1) * 100) : (r.recent >= 3 ? 100 : 0);
+      const row = { ...r, pct, faster: isFast };
+      const weekly = r.sold30 / 30 * 7;
+      let kind = '';
+      if (!r.padded && r.avail <= 0 && r.atWfs <= 0 && weekly >= 1) kind = 'out';
+      else if (!r.padded && r.avail + r.atWfs > 0 && r.daysLeft <= lead) kind = 'low';
+      else if (isFast) kind = 'fast';
+      else if (r.daysLeft <= lead + cover) kind = 'watch';
+      if (!kind) continue;
+      row.kind = kind;
+      const ig = ignores.get(String(r.sku).toUpperCase());
+      if (ig && kind !== 'watch' && !(r.perDay > ig.pace * 1.5)) { ignored.push(row); continue; }
+      ({ out, low, fast, watch })[kind].push(row);
+    }
+    out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+    low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    fast.sort((a, b) => b.pct - a.pct);
+    watch.sort((a, b) => a.daysLeft - b.daysLeft);
+    return {
+      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored,
+      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length },
+      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
     };
   }
 

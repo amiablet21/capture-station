@@ -4620,13 +4620,14 @@ th:last-child > .col-grip { right: 0; }
 .ov-page { flex: 1; overflow-y: auto; }
 /* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
 .ov-sheet-row { display: flex; justify-content: center; align-items: stretch; padding-right: 8px; }
-.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 14px 22px 26px; }
+.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 22px 28px 30px; }
 .ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
-.ov-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.ov-refresh { display: inline-flex; align-items: center; gap: 6px; }
+.ov-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
+.ov-refresh { align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.ov-refresh:hover { color: var(--text); background: var(--surface-2); }
 /* when the numbers were last fetched (polish 2026-09-30) */
-.ov-updated { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.ov-refresh svg { width: 16px; height: 16px; }
+.ov-updated { margin-left: auto; align-self: center; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-refresh svg { width: 13px; height: 13px; }
 .ov-refresh.is-spinning svg { animation: ovSpin 700ms linear infinite; }
 @keyframes ovSpin { to { transform: rotate(360deg); } }
 /* own padding + scroll handling: bare dialog content rode the UA defaults and
@@ -4639,152 +4640,132 @@ th:last-child > .col-grip { right: 0; }
 .phone-qr { display: block; margin: 0 auto 10px; border: 1px solid var(--border); border-radius: 10px; }
 .phone-url { font-size: 10.5px; color: var(--muted); word-break: break-all; overflow-wrap: anywhere; margin-bottom: 10px; user-select: all; }
 .phone-note { font-size: 11px; color: var(--faint); max-width: 300px; margin: 0 auto 14px; line-height: 1.5; }
-.ov-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
-.ov-date { font-size: 11.5px; color: var(--faint); }
+.ov-head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.ov-date { font-size: 12.5px; color: var(--muted); }
 
-/* three columns (owner 2026-09-22, variants/overview-3col.html C1):
-   Sold today | Send to WFS | Running low - sold moved to the left the same
-   day; the WFS column (widest, it carries the buttons) sits in the middle */
-.ov-cols { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: start; }
-.ov-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
-.ov-panel h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); display: flex; align-items: center; }
-.ov-panel h4 .sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--muted); }
-.ov-panel h4.ov-h-g { color: #065F46; }
-.ov-panel h4.ov-h-a { color: var(--badge-yellow-text); }
-
-/* ranked rows in the side columns */
-.ov-t { border-collapse: collapse; width: 100%; font-size: 12px; }
-.ov-t td { padding: 7px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
-.ov-t tr:last-child td { border-bottom: none; }
-.ov-t tbody tr:hover td { background: var(--surface-2); }
-.ov-t td.rr { text-align: right; white-space: nowrap; }
-.ov-rank { width: 16px; color: var(--faint); font-family: var(--mono); font-size: 11px; }
-.ov-meta { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 1px; }
-.ov-t td.rr .ov-meta { font-family: var(--font); color: var(--muted); margin-top: 3px; }
-.ov-faster { color: var(--neg-text); }
-.ov-chs { display: flex; flex-wrap: wrap; gap: 0 10px; color: var(--muted); }
-.ov-chs > span { white-space: nowrap; }
-.ov-chs b { font-weight: 600; color: var(--faint); }
-.ov-bar { height: 3px; background: #EFEEEA; border-radius: 999px; overflow: hidden; margin-top: 5px; }
-.ov-bar i { display: block; height: 100%; border-radius: 999px; }
-.ov-bar i.r { background: var(--neg-text); }
-.ov-bar i.a { background: var(--badge-yellow-text); }
-.ov-bar i.g { background: var(--accent); }
-/* Send | Ignore | Mark received: the app's own buttons at row size */
-.ov-act { display: inline-flex; gap: 4px; margin-top: 4px; }
-.ov-act .btn { font-size: 11.5px; padding: 2px 10px; }
-.ov-badge { font-size: 9.5px; padding: 1px 8px; }
-/* SKU line pieces shared by the Overview rows: the SKU link, the +N
-   listings chip, the Faster flag (a small red pill) */
-.ov-wsku { font-size: 11.5px; font-weight: 700; font-family: var(--mono); color: var(--badge-blue-text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-wmore { font-size: 10px; font-weight: 700; font-family: var(--mono); line-height: 15px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
-.ov-wfast { font-size: 9.5px; font-weight: 600; line-height: 16px; padding: 0 7px; border-radius: 999px; color: var(--neg-text); background: var(--neg-bg); white-space: nowrap; }
-
-/* ---- Dial rows (owner pick 2026-09-30, variants/ov-runway.html R3 over
-   R1 runway rows and R2 ticket stubs). Each SKU is a hairline row: a small
-   ring dial at the left shows days-left as an arc out of the target (30
-   days at WFS; lead + cover for Running low) with the number inside, in
-   the urgency colour (red under 5 days, amber under 10); SKU and figures
-   in the middle; Send N / Order N over a quiet Ignore at the right. ---- */
-.ov-dlist { display: flex; flex-direction: column; margin: 0 -6px; }
-.ov-dl { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-top: 1px solid var(--border-soft); border-radius: 6px; }
-.ov-dl:first-child { border-top: none; }
-.ov-dl:hover { background: var(--surface-2); }
-.ov-dial { position: relative; width: 38px; height: 38px; }
-.ov-dial svg { display: block; width: 38px; height: 38px; transform: rotate(-90deg); }
-.ov-dial .trk { fill: none; stroke: #EFEEEA; stroke-width: 4; }
-.ov-dial .val { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
-.ov-dial span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: currentColor; font-variant-numeric: tabular-nums; }
-.ov-dial span small { font-size: 8px; font-weight: 600; color: var(--faint); margin-left: 1px; }
-.ov-dl.r .ov-dial { color: var(--neg-text); }
-.ov-dl.a .ov-dial { color: var(--badge-yellow-text); }
-.ov-dl.g .ov-dial { color: var(--accent); }
-.ov-dl.g .ov-dial span { color: var(--accent-soft-text); }
-.ov-dl.p .ov-dial { color: #2E86D9; }
-.ov-dl.p .ov-dial span { color: var(--badge-blue-text); }
-.ov-dl-body { min-width: 0; }
-.ov-dl-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ov-dl-top .ov-wsku { font-size: 12px; flex: 0 1 auto; min-width: 0; }
-.ov-dl-meta { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ov-dl-meta b { font-family: var(--mono); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.ov-dl-meta .ov-wfast { margin-right: 6px; vertical-align: 1px; }
-.ov-dl-meta .sep { margin: 0 5px; color: var(--faint); }
-.ov-dl-keys { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
-.ov-rw-send, .ov-rw-ign { font-family: var(--font); border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 120ms var(--ease), color 120ms var(--ease); }
-.ov-rw-send { font-size: 11.5px; font-weight: 600; padding: 3px 11px; background: var(--accent); color: #fff; }
-.ov-rw-send:hover { background: var(--accent-hover); }
-.ov-rw-send b { font-family: var(--mono); font-weight: 700; margin-left: 5px; font-variant-numeric: tabular-nums; }
-.ov-rw-send.o { background: #956400; }
-.ov-rw-send.o:hover { background: #7A5200; }
-.ov-rw-send.q { background: var(--accent-soft); color: var(--accent-soft-text); }
-.ov-rw-send.q:hover { background: #D5EBDF; }
-.ov-rw-ign { font-size: 11px; font-weight: 500; padding: 1px 8px; background: none; color: var(--faint); }
-.ov-rw-ign:hover { background: #EFEEEA; color: var(--text); }
-
-.ov-link { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
-.ov-link:hover { color: var(--text); }
-.ov-undo { font-size: 11px; color: var(--muted); padding: 6px; border-bottom: 1px solid var(--border-soft); }
-.ov-undo a { color: #065F46; font-weight: 600; cursor: pointer; margin-left: 6px; }
-.ov-sec { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 12px 6px 4px; display: flex; }
-.ov-sec .n { margin-left: auto; font-family: var(--mono); }
-
-/* left column: the today card - big number, the sold grid, channel
-   cells pinned to the bottom edge */
-.ov-today { padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
-.ov-today .k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-.ov-today .big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1.1; margin: 4px 0 6px; }
-.ov-today .delta { font-size: 10.5px; color: var(--muted); min-height: 14px; }
-.ov-today .delta .up { color: var(--accent-soft-text); }
-.ov-today .delta .down { color: var(--neg-text); }
-/* the marketplace split rides right under the number (polish 2026-09-30;
-   the three cells under the grid fell off-screen on a long day): a share
-   bar in the channel colours, then dot · name · units */
-.ov-share { display: flex; gap: 2px; height: 6px; border-radius: 999px; overflow: hidden; background: #EFEEEA; margin: 10px 0 8px; }
-.ov-share i { display: block; height: 100%; background: currentColor; }
-.ov-chlegend { display: flex; gap: 14px; font-size: 11px; color: var(--muted); }
-.ov-chlegend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.ov-chlegend span::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.ov-chlegend b { font-family: var(--mono); font-weight: 700; color: var(--text); }
-.cn-walmart { color: #2E86D9; }
-.cn-ebay { color: #047857; }
-.cn-temu { color: #C97B12; }
-
-/* the "full grid" (owner pick 2026-08-17): Excel-style, shaded header row,
-   cell borders both ways - here SKU | Units with row numbers and a total */
-.ov-xgrid { border: 1px solid #E0DED8; border-radius: 6px; overflow: hidden; }
-.ov-xhead { display: grid; background: #F4F3F0; border-bottom: 1px solid #E0DED8; }
-.ov-xhead span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 8px; border-right: 1px solid #E0DED8; }
-.ov-xhead span:last-child { border-right: none; text-align: right; }
-.ov-feedrow { display: grid; border-bottom: 1px solid #EAE8E3; font-size: 11px; background: var(--surface); }
-.ov-feedrow:last-child { border-bottom: none; }
-.ov-feedrow span { padding: 5px 8px; border-right: 1px solid #EAE8E3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-feedrow span:last-child { border-right: none; }
-.ov-soldgrid .ov-xhead, .ov-soldgrid .ov-feedrow { grid-template-columns: 34px 1fr 60px; }
-.ov-soldgrid .xrn { color: var(--faint); text-align: center; text-overflow: clip; background: #F4F3F0; font-family: var(--mono); font-size: 9.5px; }
-.ov-soldgrid .xsku { font-family: var(--mono); font-size: 10.5px; cursor: pointer; }
-.ov-soldgrid .xsku:hover { color: var(--badge-blue-text); }
-.ov-soldgrid .xu { font-family: var(--mono); font-size: 11.5px; font-weight: 700; text-align: right; }
-.ov-soldgrid .tot { background: var(--surface-2); border-top: 1px solid #E0DED8; }
-.ov-soldgrid .tot span { font-weight: 700; }
-
-.ov-sku { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--badge-blue-text); cursor: pointer; }
-.ov-dim { color: var(--muted); }
-.ov-pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
-.ov-pill.r { background: var(--neg-bg); color: var(--neg-text); }
-.ov-pill.a { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
-.ov-pill.g { background: var(--accent-soft); color: var(--accent-soft-text); }
-.ov-more { margin-top: 8px; font-size: 11px; color: var(--muted); }
-.ov-more a { color: #065F46; font-weight: 600; text-decoration: none; cursor: pointer; }
-.ov-empty { padding: 14px 4px; font-size: 11.5px; color: var(--faint); }
-/* waiting on the sales pass: a pulsing dot, the stage, a tabular timer */
-.ov-wait { color: var(--muted); line-height: 1.5; }
-.ov-wait.is-err { color: var(--neg-text); }
-.ov-wait-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 1px; animation: ov-pulse 1.2s ease-in-out infinite; }
-.ov-wait-det { color: var(--faint); font-variant-numeric: tabular-nums; }
-.ov-wait-t { float: right; color: var(--faint); font-variant-numeric: tabular-nums; }
-.ov-wait-note { margin-top: 6px; font-size: 11px; color: var(--faint); }
+/* ---------- design 1a (owner-approved 2026-10-08): three counts, one
+   queue, Sold today on the right. Tokens and sizes per the handoff README. */
+.ovq-banner { background: var(--neg-bg); color: var(--neg-text); border-radius: 6px; padding: 8px 12px; margin: -8px 0 18px; font-size: 12.5px; }
+.ovq-banner.is-inline { margin: 0; }
+.ovq-top { margin-bottom: 20px; padding: 0 2px; }
+.ovq-counts { display: flex; align-items: baseline; gap: 44px; }
+.ovq-counts > div { display: flex; align-items: baseline; gap: 10px; }
+.ovq-counts .n { font-size: 38px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+.ovq-counts .n.r { color: var(--neg-text); } .ovq-counts .n.a { color: var(--badge-yellow-text); } .ovq-counts .n.b { color: var(--badge-blue-text); }
+.ovq-counts .l { font-size: 14px; }
+.ovq-clear { display: flex; align-items: center; gap: 14px; }
+.ovq-clear-ico { width: 38px; height: 38px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
+.ovq-clear-h { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+.ovq-clear-s { color: var(--muted); margin-top: 3px; }
+.ovq-load-h { display: flex; align-items: baseline; gap: 12px; }
+.ovq-load-h .t { font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
+.ovq-load-h .d { font-size: 13px; color: var(--muted); }
+.ovq-load-bar { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.ovq-track { width: 340px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.ovq-fill { height: 100%; width: 2%; background: var(--accent); transition: width 600ms var(--ease); }
+.ovq-elapsed { font-size: 11.5px; color: var(--faint); }
+.ovq-body { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 16px; align-items: start; }
+.ovq-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-width: 0; }
+.ovq-card-h { display: flex; align-items: center; padding: 13px 18px; }
+.ovq-card-h .lbl, .ovq-sold-top .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.ovq-card-h .sub { margin-left: auto; font-size: 11px; color: var(--faint); }
+.ovq-note { border-top: 1px solid var(--border-soft); padding: 16px 18px; font-size: 12.5px; color: var(--muted); }
+.ovq-note.is-tight { border-top: none; padding: 10px 0 0; }
+/* loading checklist */
+.ovq-steps { border-top: 1px solid var(--border-soft); padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.ovq-step { display: flex; align-items: center; gap: 10px; }
+.ovq-step.cur .t { font-weight: 500; } .ovq-step.todo { color: var(--faint); }
+.ovq-step .d { font-size: 11.5px; color: var(--muted); }
+.ovq-step-ico { width: 16px; height: 16px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.ovq-step-ico.done { background: var(--accent-soft); color: var(--accent); }
+.ovq-step-ico.cur { border: 2px solid var(--accent); } .ovq-step-ico.cur i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.ovq-step-ico.todo { border: 1.5px solid #D6D4CF; }
+.ovq-step-note { margin-top: 6px; color: var(--muted); font-size: 12px; max-width: 520px; line-height: 1.5; }
+/* queue rows */
+.ovq-item { border-top: 1px solid var(--border-soft); }
+.ovq-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 12px; gap: 16px; align-items: center; padding: 13px 18px; cursor: pointer; }
+.ovq-row:hover, .ovq-row.is-open { background: #FBFBFA; }
+.ovq-badge { display: inline-block; font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
+.ovq-badge.out { background: var(--neg-bg); color: var(--neg-text); } .ovq-badge.low { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .ovq-badge.fast { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.ovq-who { min-width: 0; }
+.ovq-skuline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ovq-sku { font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ovq-sku:hover { color: var(--accent); }
+.ovq-hot { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 1px 5px 1px 3px; border-radius: 4px; background: #FCEADF; color: #B4501B; font-size: 10px; font-weight: 500; }
+.ovq-title { color: var(--muted); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ovq-l1 { font-size: 13px; min-width: 0; }
+.ovq-chev { color: var(--faint); transition: transform 250ms cubic-bezier(.2, .7, .2, 1); }
+.ovq-row.is-open .ovq-chev { transform: rotate(180deg); }
+/* expanded panel */
+.ovq-panel { display: grid; grid-template-rows: 1fr; background: #FBFBFA; animation: ovqExpand 280ms cubic-bezier(.2, .7, .2, 1) both; }
+.ovq-panel-clip { overflow: hidden; min-height: 0; }
+.ovq-panel-in { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 28px 48px; padding: 14px 26px 26px 86px; animation: ovqRise 320ms cubic-bezier(.2, .7, .2, 1) 50ms both; }
+@keyframes ovqExpand { from { grid-template-rows: 0fr; } to { grid-template-rows: 1fr; } }
+@keyframes ovqRise { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes ovqDraw { from { clip-path: inset(-10px 100% -10px 0); } to { clip-path: inset(-10px 0 -10px 0); } }
+.ovq-chartwrap { min-width: 0; }
+.ovq-legend { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+.ovq-legend .lbl, .ovq-mk .lbl { font-size: 10px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.ovq-legend .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ovq-legend .key { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--faint); white-space: nowrap; flex: none; }
+.ovq-legend .key:first-of-type { margin-left: auto; }
+.ovq-legend .key i.avg { width: 14px; border-top: 1px dashed var(--faint); }
+.ovq-legend .key i.band { width: 10px; height: 10px; background: #F1F0EC; border-radius: 2px; }
+.ovq-chart { position: relative; height: 140px; }
+.ovq-chart svg { display: block; width: 100%; height: 140px; overflow: visible; }
+.ovq-chart .band { fill: #F1F0EC; }
+.ovq-chart .avg { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; }
+.ovq-chart .area { fill: var(--accent-soft); fill-opacity: .8; }
+.ovq-chart .line { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.ovq-draw { animation: ovqDraw 800ms cubic-bezier(.3, .7, .3, 1) 150ms both; }
+.ovq-ymax { position: absolute; left: 4px; top: -2px; font-size: 10px; color: var(--faint); }
+.ovq-hit { position: absolute; inset: 0; cursor: crosshair; }
+.ovq-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(47, 52, 55, .22); pointer-events: none; }
+.ovq-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); box-sizing: border-box; pointer-events: none; }
+.ovq-tip { position: absolute; top: -34px; transform: translateX(-50%); background: var(--text); color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 11px; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); display: flex; gap: 6px; }
+.ovq-tip .d { color: #C9C7C2; } .ovq-tip .v { font-weight: 500; }
+.ovq-tip.at-left { transform: translateX(-8px); } .ovq-tip.at-right { transform: translateX(calc(-100% + 8px)); }
+.ovq-xlabels { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10.5px; color: var(--faint); }
+.ovq-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-content: start; padding-top: 38px; }
+.ovq-figs .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.ovq-figs .v { font-size: 15px; font-weight: 500; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.ovq-figs .v.big { font-size: 22px; }
+.ovq-figs .v.b { color: var(--badge-blue-text); } .ovq-figs .v.r { color: var(--neg-text); }
+.ovq-figs .s { font-size: 11px; color: var(--faint); }
+.ovq-mk { grid-column: 1 / -1; display: flex; align-items: center; gap: 36px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+.ovq-mk-it { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.ovq-mk-it i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.ovq-mk-it b { font-weight: 500; font-variant-numeric: tabular-nums; } .ovq-mk-it small { font-size: 11px; color: var(--faint); }
+.ovq-mk-it.is-zero { color: var(--faint); } .ovq-mk-it.is-zero i { color: #D6D4CF; }
+.cn-walmart { color: #2E86D9; } .cn-ebay { color: #047857; } .cn-temu { color: #C97B12; }
+/* watch list + footer */
+.ovq-watch { border-top: 1px solid var(--border-soft); background: var(--surface-2); padding: 12px 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 20px; }
+.ovq-watch-it { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ovq-watch-it .ovq-sku { font-size: 11.5px; font-weight: 400; }
+.ovq-watch-it .d { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.ovq-foot { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--muted); }
+.ovq-link { border: 0; background: transparent; padding: 0; font-family: var(--font); font-size: 12px; color: var(--accent); cursor: pointer; }
+.ovq-link:hover { color: var(--accent-hover); }
+.ovq-ign { margin-left: auto; display: flex; gap: 6px; align-items: center; } .ovq-ign .dot { color: var(--faint); }
+/* sold today card */
+.ovq-sold-top { padding: 14px 18px; }
+.ovq-sold-n { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+.ovq-sold-n .mono { font-size: 34px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; } .ovq-sold-n span:last-child { color: var(--muted); }
+.ovq-sold-m { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.ovq-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 4px; background: var(--pos-bg); color: var(--pos-text); }
+.ovq-chip.dn { background: var(--neg-bg); color: var(--neg-text); }
+.ovq-share { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 14px; gap: 2px; }
+.ovq-share i { display: block; height: 100%; background: currentColor; }
+.ovq-legend-mk { display: flex; gap: 14px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.ovq-legend-mk span { display: flex; align-items: center; gap: 5px; } .ovq-legend-mk i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; } .ovq-legend-mk b { font-weight: 400; color: var(--text); }
+.ovq-sold-h, .ovq-sold-row, .ovq-sold-tot { display: grid; grid-template-columns: 22px minmax(0, 1fr) 44px; gap: 8px; padding: 5px 18px; }
+.ovq-sold-h { background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 6px 18px; }
+.ovq-sold-row { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.ovq-sold-row:hover { background: var(--surface-2); }
+.ovq-sold-row .i { color: var(--faint); } .ovq-sold-row [data-ovsku] { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ovq-sold-row [data-ovsku]:hover { color: var(--accent); }
+.ovq-sold-h .u, .ovq-sold-row .u, .ovq-sold-tot .u { text-align: right; }
+.ovq-sold-tot { padding: 7px 18px 9px; border-top: 1px solid var(--border); font-size: 11.5px; font-weight: 500; }
 .ov-updated.is-err { color: var(--neg-text); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@keyframes ov-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
 /* WFS Shipments: where an Overview Send came from, and each past
    shipment's status */
