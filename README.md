@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.11 highlights
+
+- **Overview fits the window.** The header and the three counts stay put, and the Needs-attention and Sold-today cards take the rest of the height and scroll inside themselves, with their headers and the total row pinned. Nothing runs under the footer any more, on a short laptop screen or a tall monitor.
+
 ## v1.30.10 highlights
 
 - In-place updater: a failed attempt (manifest missing, dropped connection) now falls back to the installer download for 20 minutes and then tries the in-place path again, instead of staying on installers until the app is restarted.
