@@ -16,7 +16,7 @@
 #   APPLE_TEAM_ID           10-char team id
 # Without them the app builds unsigned: it runs fine, but macOS Gatekeeper
 # makes the first open awkward (System Settings -> Privacy & Security ->
-# Open Anyway, or: xattr -cr "/Applications/Capture Station.app").
+# Open Anyway, or: xattr -cr "/Applications/DWS Stock.app").
 
 name: Build Mac app
 

@@ -1,6 +1,6 @@
 {
   "name": "capture-station",
-  "version": "1.30.11",
+  "version": "1.31.0",
   "description": "Packing station capture app - orders, tracking, serials -> Linnworks",
   "main": "src/main/main.js",
   "scripts": {
@@ -17,10 +17,10 @@
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3"
   },
-  "productName": "Capture Station",
+  "productName": "DWS Stock",
   "build": {
     "appId": "com.digitalworldshop.capturestation",
-    "productName": "Capture Station",
+    "productName": "DWS Stock",
     "files": [
       "src/**/*",
       "package.json"
@@ -30,7 +30,7 @@
         "nsis"
       ],
       "icon": "build/icon.ico",
-      "artifactName": "Capture-Station-Setup-${version}.${ext}"
+      "artifactName": "DWS-Stock-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -48,7 +48,7 @@
       "darkModeSupport": true
     },
     "dmg": {
-      "artifactName": "${productName} ${version}.${ext}"
+      "artifactName": "DWS-Stock-${version}.${ext}"
     },
     "publish": [
       {

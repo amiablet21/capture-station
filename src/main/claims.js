@@ -336,7 +336,7 @@ function phonePage(token, po, pos) {
 </script></body></html>`;
 }
 
-const expiredPage = '<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font-family:sans-serif;padding:40px 20px;text-align:center;color:#2f3437"><h3>This QR code has expired</h3><p style="color:#6b6f76">Open Upload Photos in Capture Station and scan the new one.</p></body>';
+const expiredPage = '<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font-family:sans-serif;padding:40px 20px;text-align:center;color:#2f3437"><h3>This QR code has expired</h3><p style="color:#6b6f76">Open Upload Photos in DWS Stock and scan the new one.</p></body>';
 
 /* ---------- the LISTING photos phone page (eBay lister) ---------- */
 // Capture ONLY: shoot, tap a thumbnail to drop a bad shot, send. All editing
