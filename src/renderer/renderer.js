@@ -8853,7 +8853,11 @@ $('wsShipping').addEventListener('blur', () => { const n = Number($('wsShipping'
 $('wsAddLine').addEventListener('click', () => { const last = $('wsLines').lastElementChild; if (!last || last.querySelector('.ws-sku').value.trim()) wsAddLine(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
 $('wsScanBtn').addEventListener('click', () => { wsGrow(); $('wsLines').lastElementChild.querySelector('.ws-sku').focus(); });
 
-async function wsSave({ thenPrint = false } = {}) {
+// wsiSave, not wsSave: the returns worksheet owns wsSave(), and this
+// second declaration replaced it for the whole script — Enter and the +
+// gutter on a return ran the invoice save instead (owner 2026-10-08:
+// "when he enters the PO# it doesn't query the order")
+async function wsiSave({ thenPrint = false } = {}) {
   if (!wsInv) return;
   const res = $('wsResult');
   const lines = wsLinesData();
@@ -8890,10 +8894,10 @@ async function wsSave({ thenPrint = false } = {}) {
     if (r.ok) toast(`Saved ${r.path}`); else if (!r.canceled) toast(r.error || 'Could not print');
   }
 }
-$('wsSave').addEventListener('click', () => wsSave());
+$('wsSave').addEventListener('click', () => wsiSave());
 $('wsPrint').addEventListener('click', async () => {
   if (wsInv && wsInv.prev && wsInv.prev.voided_at) { const r = await api.wholesalePrint(wsInv.gid); if (r.ok) toast(`Saved ${r.path}`); return; }
-  wsSave({ thenPrint: true });
+  wsiSave({ thenPrint: true });
 });
 async function wsCancel() {
   if (wsInv && !wsInv.prev) await api.wholesaleDiscardDraft(wsInv.gid); // scanned serials on a never-saved invoice go with it
@@ -11441,7 +11445,8 @@ const OV_CHECK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" st
 function ovPhrase(r) {
   if (r.kind === 'out') return r.last ? `Out since ${esc(r.last)}` : 'Out of stock';
   if (r.kind === 'fast') return `Up ${r.pct}%`;
-  if (r.avail + r.atWfs <= 0) return 'Out of stock';
+  // a watch row at zero sold too slowly for the Out group (under one a week)
+  if (r.avail + r.atWfs <= 0) return `Out of stock · slow seller, ${r.sold30} sold in 30 days`;
   return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
 }
 

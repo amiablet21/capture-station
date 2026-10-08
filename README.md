@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.9 highlights
+
+- **Returns worksheet works again.** Since the wholesale invoices arrived (v1.29.1) the invoice sheet's save function carried the same name as the returns worksheet's, and the later one replaced it for the whole app: Enter or the + gutter on a return ran the invoice save, so the return never saved. Renamed; the returns sheet looks the PO up and saves as before.
+- **Overview Watch rows.** Dropship-padded SKUs (no shelf stock by design) no longer appear anywhere on the Overview, and a Watch row at zero now says "Out of stock · slow seller, N sold in 30 days" so it is clear why it is not in the red group.
+
 ## v1.30.8 highlights
 
 - Release fix: the Mac build job swept the Windows updater manifest (`latest.yml`) off the v1.30.6 and v1.30.7 releases after the Windows job had uploaded it. The Mac job now keeps it. This is the first release the in-place updater can actually read, so install it by hand once; the next one arrives in place.
