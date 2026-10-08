@@ -3,6 +3,7 @@ const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const { spawn } = require('node:child_process');
 const config = require('./config');
 const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
@@ -2949,13 +2950,20 @@ function registerIpc() {
       const asset = (j.assets || []).find(a => want.test(String(a.name || '')));
       if (!asset) return { ok: true, current, latest, update: false, building: true }; // the platform's installer hasn't finished building yet
       updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
+      if (useMacAuto()) {
+        // in-place on the Mac too (owner 2026-10-08: "I want it to be like
+        // an update now"): the DMG downloads behind the page and the footer
+        // says "Restart to update" when it is on disk
+        if (macReady.version !== latest) macDownload(latest, asset.browser_download_url, asset.name);
+        return { ok: true, current, latest, update: true, auto: true, ready: macReady.version === latest };
+      }
       if (useAuto() && (j.assets || []).some(a => /^latest\.yml$/i.test(String(a.name || '')))) {
         // in-place: electron-updater downloads it now and the footer says
         // "Restart to update" when it is on disk
         if (updateReady !== latest) autoCheck();
         return { ok: true, current, latest, update: true, auto: true, ready: updateReady === latest };
       }
-      if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest });
+      if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest, current });
       return { ok: true, current, latest, update: true };
     } catch (e) {
       return { ok: false, current, error: 'Could not reach GitHub — offline?' }; // next pass tries again
@@ -2975,7 +2983,7 @@ function registerIpc() {
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = null;
     const tell = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
-    autoUpdater.on('update-available', (info) => tell('update:available', { version: info.version, auto: true }));
+    autoUpdater.on('update-available', (info) => tell('update:available', { version: info.version, current: app.getVersion(), auto: true }));
     autoUpdater.on('download-progress', (p) => tell('update:progress', { percent: Math.round(p.percent || 0) }));
     autoUpdater.on('update-downloaded', (info) => { updateReady = info.version; tell('update:downloaded', { version: info.version }); });
     autoUpdater.on('error', (e) => {
@@ -2987,7 +2995,134 @@ function registerIpc() {
   async function autoCheck() {
     try { await autoUpdater.checkForUpdates(); } catch (e) { autoBrokenAt = Date.now(); }
   }
+  // ---- the Mac in-place path: the build is unsigned, so electron-updater
+  // (Squirrel.Mac) refuses it. Instead the DMG downloads to a temp folder
+  // and "Restart to update" hands a small shell script the job: wait for
+  // the app to exit, mount the DMG, copy the new bundle in beside the old
+  // one, swap them, clear quarantine, relaunch. A copy that fails leaves
+  // the old bundle in place, reopens it and opens the DMG for a hand install.
+  let macReady = { version: '', path: '' };
+  let macDl = { version: '', promise: null };
+  let macBrokenAt = 0;
+  const macBundle = () => {
+    // /Applications/DWS Stock.app/Contents/MacOS/DWS Stock -> the .app
+    const b = path.resolve(process.execPath, '..', '..', '..');
+    return /\.app$/i.test(b) ? b : '';
+  };
+  const macInstallDir = () => {
+    const cur = macBundle();
+    for (const d of [cur ? path.dirname(cur) : '', '/Applications']) {
+      if (!d) continue;
+      try { fs.accessSync(d, fs.constants.W_OK); return d; } catch { /* next */ }
+    }
+    return '';
+  };
+  const useMacAuto = () => process.platform === 'darwin' && app.isPackaged && !!macBundle() && !!macInstallDir() && Date.now() - macBrokenAt > 20 * 60 * 1000;
+  const tellUpd = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
+  async function downloadTo(url, dest, onPct) {
+    const res = await fetch(url, { headers: { 'User-Agent': 'CaptureStation' }, redirect: 'follow' });
+    if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    const tmp = `${dest}.part`;
+    const out = fs.createWriteStream(tmp);
+    let got = 0;
+    let lastPct = -1;
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      got += value.length;
+      if (!out.write(Buffer.from(value))) await new Promise(r => out.once('drain', r));
+      const pct = total ? Math.floor(got / total * 100) : 0;
+      if (pct !== lastPct) { lastPct = pct; onPct(pct); }
+    }
+    await new Promise((resolve, reject) => { out.on('error', reject); out.end(resolve); });
+    if (total && got !== total) throw new Error('Download ended early.');
+    fs.renameSync(tmp, dest);
+  }
+  function macDownload(version, url, name) {
+    if (macDl.promise && macDl.version === version) return macDl.promise;
+    const dir = path.join(app.getPath('temp'), 'dws-stock-update');
+    const dest = path.join(dir, name);
+    macDl = {
+      version,
+      promise: (async () => {
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+          for (const f of fs.readdirSync(dir)) { if (f !== name) { try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch { /* old download */ } } }
+          tellUpd('update:available', { version, current: app.getVersion(), auto: true });
+          if (!fs.existsSync(dest)) await downloadTo(url, dest, (pct) => tellUpd('update:progress', { percent: pct }));
+          macReady = { version, path: dest };
+          tellUpd('update:downloaded', { version });
+        } catch (e) {
+          macBrokenAt = Date.now(); // the installer-download button stands in for a while
+          console.log(`[update] Mac in-place download failed, falling back to the installer download: ${e && e.message}`);
+          try { fs.rmSync(`${dest}.part`, { force: true }); } catch { /* best effort */ }
+          tellUpd('update:available', { version, current: app.getVersion() });
+        } finally {
+          macDl = { version: '', promise: null };
+        }
+      })(),
+    };
+    return macDl.promise;
+  }
+  function macSwap(dmg) {
+    const cur = macBundle();
+    const dir = macInstallDir();
+    if (!cur || !dir) return { ok: false, error: 'Drag DWS Stock into Applications first, then update from there.' };
+    const log = path.join(app.getPath('temp'), 'dws-stock-update', 'install.log');
+    const script = `#!/bin/bash
+# DWS Stock in-place update: runs after the app closes
+PID="$1"; DMG="$2"; CUR="$3"; DIR="$4"
+exec >"$5" 2>&1
+echo "waiting for pid $PID"
+for i in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
+MNT=$(mktemp -d /tmp/dws-stock-update.XXXXXX)
+if ! hdiutil attach -nobrowse -noverify -noautoopen -quiet -mountpoint "$MNT" "$DMG"; then echo "mount failed"; open "$CUR"; open "$DMG"; exit 1; fi
+APP=$(/bin/ls -d "$MNT"/*.app 2>/dev/null | head -1)
+if [ -z "$APP" ]; then echo "no app in dmg"; hdiutil detach "$MNT" -quiet; open "$CUR"; open "$DMG"; exit 1; fi
+NAME=$(basename "$APP")
+DEST="$DIR/$NAME"
+NEW="$DIR/.$NAME.new"
+OLD="$DIR/.$NAME.old"
+rm -rf "$NEW" "$OLD"
+if ditto "$APP" "$NEW"; then
+  xattr -cr "$NEW" 2>/dev/null
+  [ -e "$DEST" ] && mv "$DEST" "$OLD"
+  if mv "$NEW" "$DEST"; then
+    rm -rf "$OLD"
+    if [ "$CUR" != "$DEST" ] && [ -d "$CUR" ]; then rm -rf "$CUR"; fi
+    echo "installed $DEST"
+    hdiutil detach "$MNT" -quiet || hdiutil detach "$MNT" -force -quiet
+    rmdir "$MNT" 2>/dev/null
+    open "$DEST"
+    exit 0
+  fi
+  [ -e "$OLD" ] && mv "$OLD" "$DEST"
+fi
+echo "copy failed"
+rm -rf "$NEW"
+hdiutil detach "$MNT" -quiet || hdiutil detach "$MNT" -force -quiet
+open "$CUR"; open "$DMG"
+exit 1
+`;
+    const sh = path.join(app.getPath('temp'), 'dws-stock-update', 'install.sh');
+    try {
+      fs.writeFileSync(sh, script, { mode: 0o755 });
+      const child = spawn('/bin/bash', [sh, String(process.pid), dmg, cur, dir, log], { detached: true, stdio: 'ignore' });
+      child.unref();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
   ipcMain.handle('update:install', async () => {
+    if (process.platform === 'darwin' && macReady.version && macReady.path && fs.existsSync(macReady.path)) {
+      const r = macSwap(macReady.path);
+      if (!r.ok) return r;
+      setTimeout(() => app.quit(), 400); // the script takes over once this process is gone
+      return { ok: true, restart: true, version: macReady.version };
+    }
     if (updateReady) {
       // the new build is on disk: close and let the installer run silently
       setImmediate(() => autoUpdater.quitAndInstall(true, true));
