@@ -7999,25 +7999,63 @@ async function prHistLoad() {
 // downloads itself and the button reads "Restart to update"; on the Mac
 // (unsigned build) it downloads the DMG and opens it, as before
 let updateReadyVersion = '';
+// the update card (owner 2026-10-08): "Version X is available (you have Y)"
+// with Update now / Close; Update now shows the download percentage and the
+// app restarts itself the moment the new build is on disk. Close keeps the
+// footer button as the quiet way back in.
+let updCardVersion = ''; // version the card is showing
+let updWanted = false; // the owner clicked Update now: restart as soon as it is downloaded
+let updDismissed = ''; // version the card was closed on: it stays closed
+let updAuto = false; // in-place path (downloads itself) vs installer download
+function updCard(msg, buttons) {
+  const c = $('updCard');
+  $('updMsg').innerHTML = msg;
+  $('updActions').hidden = !buttons;
+  c.hidden = false;
+}
+async function updRestart() {
+  updCard(`Restarting into version ${updateReadyVersion}…`, false);
+  $('updateBtn').textContent = 'Restarting…';
+  $('updateBtn').disabled = true;
+  const res = await api.updateInstall();
+  if (!res || !res.ok) {
+    updWanted = false;
+    updCard(`Could not install version ${updateReadyVersion}: ${esc((res && res.error) || 'unknown error')}`, true);
+    $('updGo').textContent = 'Try again';
+    $('updateBtn').textContent = `Restart to update v${updateReadyVersion}`;
+    $('updateBtn').disabled = false;
+  }
+}
 api.on('update:available', (d) => {
   const b = $('updateBtn');
-  if (d && d.auto) {
-    b.textContent = `Downloading v${d.version}…`;
+  const v = (d && d.version) || 'latest';
+  updAuto = !!(d && d.auto);
+  if (updAuto) {
+    b.textContent = `Downloading v${v}…`;
     b.disabled = true;
   } else {
-    b.textContent = `Update to v${(d && d.version) || 'latest'}`;
+    b.textContent = `Update to v${v}`;
     b.disabled = false;
   }
   b.hidden = false;
   $('updateCheckBtn').hidden = true; // the Update button takes its place
+  if (updDismissed === v || updateReadyVersion === v) return;
+  if (updCardVersion !== v) {
+    updCardVersion = v;
+    updWanted = false;
+    $('updGo').textContent = 'Update now';
+    updCard(`Version ${esc(v)} is available${d && d.current ? ` (you have ${esc(d.current)})` : ''}.`, true);
+  }
 });
 api.on('update:progress', (d) => {
   const b = $('updateBtn');
   if (updateReadyVersion) return;
-  b.textContent = `Downloading ${Math.max(0, Math.min(100, Number(d && d.percent) || 0))}%`;
+  const pct = Math.max(0, Math.min(100, Number(d && d.percent) || 0));
+  b.textContent = `Downloading ${pct}%`;
   b.disabled = true;
   b.hidden = false;
   $('updateCheckBtn').hidden = true;
+  if (updWanted) updCard(`Downloading version ${esc(updCardVersion)}… <span class="upd-pct">${pct}%</span>`, false);
 });
 api.on('update:downloaded', (d) => {
   const b = $('updateBtn');
@@ -8027,7 +8065,40 @@ api.on('update:downloaded', (d) => {
   b.hidden = false;
   b.title = 'The new version is downloaded. Click to close the app and come back updated — about 20 seconds.';
   $('updateCheckBtn').hidden = true;
-  toast(`v${updateReadyVersion} is downloaded — click Restart to update when you have a moment.`, 7000);
+  if (updWanted) { updRestart(); return; }
+  if (updDismissed === updateReadyVersion) { toast(`v${updateReadyVersion} is downloaded — click Restart to update when you have a moment.`, 7000); return; }
+  updCardVersion = updateReadyVersion;
+  $('updGo').textContent = 'Restart now';
+  updCard(`Version ${esc(updateReadyVersion)} is downloaded and ready.`, true);
+});
+$('updGo').addEventListener('click', async () => {
+  const g = $('updGo');
+  if (g.disabled) return;
+  updWanted = true;
+  if (updateReadyVersion) { updRestart(); return; } // already on disk: straight to the restart
+  if (updAuto) { updCard(`Downloading version ${esc(updCardVersion)}… <span class="upd-pct">0%</span>`, false); return; } // the download is already running; progress fills in
+  // installer path (no in-place route on this station): download it and open it
+  updCard(`Downloading version ${esc(updCardVersion)}…`, false);
+  $('updateBtn').disabled = true;
+  $('updateBtn').textContent = 'Downloading…';
+  const res = await api.updateInstall();
+  if (!res || !res.ok) {
+    updWanted = false;
+    $('updateBtn').disabled = false;
+    $('updateBtn').textContent = 'Update — retry';
+    updCard(`Could not download version ${esc(updCardVersion)}: ${esc((res && res.error) || 'unknown error')}`, true);
+    $('updGo').textContent = 'Try again';
+    return;
+  }
+  if (res.restart) { updCard(`Restarting into version ${esc(res.version || updCardVersion)}…`, false); return; }
+  $('updateBtn').textContent = 'Installer opened';
+  updCard(`Installer opened — run it through and the app comes back on version ${esc(updCardVersion)}.`, false);
+  setTimeout(() => { $('updCard').hidden = true; }, 9000);
+});
+$('updClose').addEventListener('click', () => {
+  updDismissed = updCardVersion;
+  updWanted = false;
+  $('updCard').hidden = true;
 });
 // "Check for updates" asks GitHub right now instead of waiting for the
 // half-hour pass (owner 2026-10-01 / 2026-10-08); a find lights the

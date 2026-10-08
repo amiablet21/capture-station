@@ -1663,6 +1663,15 @@
   </dialog>
 
   <div id="toast" class="toast" hidden></div>
+  <!-- update card (owner 2026-10-08: "Version X is available ... Update now / Close",
+       then "Downloading version X... 42%", then the app restarts itself) -->
+  <div id="updCard" class="upd-card" hidden role="status">
+    <div class="upd-msg" id="updMsg"></div>
+    <div class="upd-actions" id="updActions">
+      <button class="btn btn-primary upd-go" id="updGo">Update now</button>
+      <button class="btn upd-close" id="updClose">Close</button>
+    </div>
+  </div>
 
   <!-- Upload Photos (claim photos): opened from the 📷 on a returns-log row;
        QR is locked to that PO#. Photos land in Documents\Capture Station\

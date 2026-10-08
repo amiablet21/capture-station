@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.1 highlights
+
+- **Updates happen in the app on the Mac too.** The Mac build is unsigned, so the standard updater refused it; the app now downloads the DMG itself, and "Restart to update" swaps the app bundle in Applications and relaunches, clearing quarantine on the way. The first move onto this version still goes through the DMG (the older app does not know the new route); every version after it arrives in place, on both platforms.
+- **Update card.** A new release shows "Version X is available (you have Y)" with Update now and Close. Update now shows the download percentage and the app restarts itself the moment the build is on disk. Close keeps the footer button as the quiet way back in.
+
 ## v1.31.0 highlights
 
 - **The app is now DWS Stock**, with a new icon (navy tile, white DWS wordmark, orange dot). Window title, installer name (`DWS-Stock-Setup-1.31.0.exe`, `DWS-Stock-1.31.0.dmg`), Start menu / Applications entry, phone dashboard and in-app wording all follow. Installing over Capture Station replaces it (same app identity), and the first launch carries the station's database, settings and caches across to the new data folder, so nothing is set up again. The stock-log reason strings Linnworks shows ("Capture Station return" and friends) are unchanged on purpose: every station's history matching keys on them.
