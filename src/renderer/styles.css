@@ -4621,9 +4621,8 @@ th:last-child > .col-grip { right: 0; }
 /* ---------- Overview tab (approved design: variants/overview-v2.html) ---------- */
 .ov-page { flex: 1; overflow-y: auto; }
 /* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
-.ov-sheet-row { display: flex; justify-content: center; align-items: stretch; padding-right: 8px; }
+.ov-sheet-row { display: flex; justify-content: center; align-items: stretch; }
 .ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 22px 28px 30px; }
-.ov-sheet-row .sheet-grip { margin: 20px 0 26px; }
 .ov-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
 .ov-refresh { align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .ov-refresh:hover { color: var(--text); background: var(--surface-2); }
