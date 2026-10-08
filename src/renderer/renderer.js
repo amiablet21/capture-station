@@ -2072,9 +2072,28 @@ function syncBrowserBounds() {
       return;
     }
     const r = $('bView').getBoundingClientRect();
-    api.browserLayout({ visible: true, x: r.left, y: r.top, width: r.width, height: r.height });
+    // the native view can never reach past its dock or onto the sheet,
+    // whatever the measurement says (owner 2026-10-08: the pane "keeps
+    // breaking" — parked over the capture list's first columns). The dock
+    // clips its DOM children; the native view gets the same clip here, and
+    // the sheet column's left edge is a hard stop.
+    const d = $('bDock').getBoundingClientRect();
+    const sheet = activePage === 'returns' ? $('retMain') : $('capMain');
+    const sheetLeft = sheet && !sheet.hidden ? sheet.getBoundingClientRect().left : Infinity;
+    const right = Math.min(r.right, d.right, sheetLeft - 2, window.innerWidth);
+    const bottom = Math.min(r.bottom, d.bottom, window.innerHeight);
+    const x = Math.max(0, r.left);
+    const y = Math.max(0, r.top);
+    const width = Math.max(0, right - x);
+    const height = Math.max(0, bottom - y);
+    if (width < 40 || height < 40) { api.browserLayout({ visible: false }); return; }
+    api.browserLayout({ visible: true, x, y, width, height });
   });
 }
+// the main process asks for a re-measure after a window resize, maximize
+// or zoom change it saw first — the observers usually beat it, this is
+// the backstop
+api.on('browser:resync', () => { if (!$('bDock').hidden) syncBrowserBounds(); });
 
 // dialogs float above the DOM but under a native view: hide the pane while
 // any <dialog> is open, restore it on close

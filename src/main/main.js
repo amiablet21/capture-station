@@ -549,14 +549,24 @@ function layoutPane(b) {
     win.contentView.addChildView(paneView);
     paneAttached = true;
   }
+  // never past the window's own content box, whatever the renderer sent
+  const [cw, ch] = win.getContentSize();
+  const x = Math.min(cw, Math.max(0, Math.round(b.x || 0)));
+  const y = Math.min(ch, Math.max(0, Math.round(b.y || 0)));
   paneView.setBounds({
-    x: Math.max(0, Math.round(b.x || 0)),
-    y: Math.max(0, Math.round(b.y || 0)),
-    width: Math.max(0, Math.round(b.width || 0)),
-    height: Math.max(0, Math.round(b.height || 0)),
+    x, y,
+    width: Math.max(0, Math.min(cw - x, Math.round(b.width || 0))),
+    height: Math.max(0, Math.min(ch - y, Math.round(b.height || 0))),
   });
   sendPaneState();
   return { ok: true, visible: true };
+}
+// window geometry and zoom changes the renderer's observers might miss:
+// ask it to re-measure the pane (the DOM has to be the one to measure)
+function wirePaneResync(w) {
+  const ask = () => { if (paneAttached && w && !w.isDestroyed()) w.webContents.send('browser:resync'); };
+  for (const ev of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'restore']) w.on(ev, () => setTimeout(ask, 50));
+  w.webContents.on('zoom-changed', () => setTimeout(ask, 50));
 }
 
 /* ---------- product image add (download in-app: progress, cancel) ---------- */
@@ -6541,6 +6551,7 @@ function createWindow() {
     } catch { /* best effort */ }
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  wirePaneResync(win);
   // right-click copy/paste menu, standard across the whole app; in-app copies
   // prime the clipboard watcher so they never re-ingest as order captures
   win.webContents.on('context-menu', (_e, params) => {

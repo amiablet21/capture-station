@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.5 highlights
+
+- **The marketplace pane can no longer spill over the capture list.** The native browser view is now clipped to its own dock and stopped at the sheet's left edge no matter what the layout measures, the main process clamps it to the window as well, and a window resize, maximize or zoom change asks the page to re-measure right away.
+
 ## v1.30.4 highlights
 
 - **The Stock page lands at once.** Clicking a SKU on the Overview (or a reminder on Returns) puts the SKU in the search box and draws the grid from the last visit immediately; Linnworks' fresh levels replace it a moment later. Only the first open of a session shows the spinner, and a failed refresh keeps the last grid with a note instead of a blank page.
