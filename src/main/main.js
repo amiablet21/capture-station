@@ -2926,8 +2926,12 @@ function registerIpc() {
   ipcMain.handle('update:check', () => checkForUpdate());
   // ---- the in-place path (Windows, packaged): background download, install on restart ----
   let updateReady = ''; // version downloaded and waiting for a restart
-  let autoBroken = false; // the in-place path failed (no latest.yml, signature, disk): fall back to the installer download
-  const useAuto = () => !!autoUpdater && process.platform === 'win32' && app.isPackaged && !autoBroken;
+  // the in-place path failed (no latest.yml, a dropped connection, disk):
+  // the installer download stands in for the next 20 minutes, then the
+  // in-place path is tried again — a one-off hiccup must not pin a station
+  // on installers until it is restarted
+  let autoBrokenAt = 0;
+  const useAuto = () => !!autoUpdater && process.platform === 'win32' && app.isPackaged && Date.now() - autoBrokenAt > 20 * 60 * 1000;
   if (autoUpdater && process.platform === 'win32' && app.isPackaged) {
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -2937,13 +2941,13 @@ function registerIpc() {
     autoUpdater.on('download-progress', (p) => tell('update:progress', { percent: Math.round(p.percent || 0) }));
     autoUpdater.on('update-downloaded', (info) => { updateReady = info.version; tell('update:downloaded', { version: info.version }); });
     autoUpdater.on('error', (e) => {
-      autoBroken = true; // the next check uses the installer-download path
+      autoBrokenAt = Date.now(); // the next checks use the installer-download path for a while
       console.log(`[update] in-place updater failed, falling back to the installer download: ${e && e.message}`);
       checkForUpdate().catch(() => {});
     });
   }
   async function autoCheck() {
-    try { await autoUpdater.checkForUpdates(); } catch (e) { autoBroken = true; }
+    try { await autoUpdater.checkForUpdates(); } catch (e) { autoBrokenAt = Date.now(); }
   }
   ipcMain.handle('update:install', async () => {
     if (updateReady) {

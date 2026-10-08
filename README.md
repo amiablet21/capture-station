@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station, built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.30.10 highlights
+
+- In-place updater: a failed attempt (manifest missing, dropped connection) now falls back to the installer download for 20 minutes and then tries the in-place path again, instead of staying on installers until the app is restarted.
+
 ## v1.30.9 highlights
 
 - **Returns worksheet works again.** Since the wholesale invoices arrived (v1.29.1) the invoice sheet's save function carried the same name as the returns worksheet's, and the later one replaced it for the whole app: Enter or the + gutter on a return ran the invoice save, so the return never saved. Renamed; the returns sheet looks the PO up and saves as before.
