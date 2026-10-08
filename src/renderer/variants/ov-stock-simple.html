@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Overview stock board — simplified</title>
+<!--
+  Owner 2026-10-08: "make it more simplified, I don't want it to look
+  complicated." Two stripped-down takes on the stock board that replaces
+  Send to WFS (richer proposals: ov-stock-watch.html, ov-stock-3ways.html):
+    S1 - Plain list: three short groups; each row is a dot, the SKU, one
+         plain sentence, and an Order key. Nothing else.
+    S2 - Three cards: Out / Running low / Selling fast side by side, a
+         count on each, SKUs with a single number underneath.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #F4F3F0; }
+  .pg { padding: 18px 26px 40px; }
+  .opt { margin-bottom: 34px; width: 820px; }
+  .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 8px; }
+  .lbl b { color: var(--text); letter-spacing: .02em; }
+  .bh { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
+  .bh h4 { margin: 0; color: var(--text); }
+  .bh .sub { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+
+  /* S1 plain list */
+  .pl-sec { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 2px; display: flex; align-items: center; gap: 7px; }
+  .pl-sec i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pl-sec .n { font-family: var(--mono); color: var(--faint); font-weight: 600; }
+  .pl-sec.r { color: var(--neg-text); } .pl-sec.a { color: var(--badge-yellow-text); } .pl-sec.b { color: var(--badge-blue-text); }
+  .pl-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-top: 1px solid var(--border-soft); }
+  .pl-row:hover { background: var(--surface-2); border-radius: 6px; }
+  .pl-row .ov-wsku { font-size: 12px; width: 170px; flex: none; }
+  .pl-row .say { font-size: 12px; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-row .say b { font-family: var(--mono); font-weight: 700; }
+  .pl-row.r .say b { color: var(--neg-text); } .pl-row.a .say b { color: var(--badge-yellow-text); } .pl-row.b .say b { color: var(--badge-blue-text); }
+  .pl-row .say small { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .pl-row .ov-rw-send { flex: none; padding: 3px 11px; } .pl-row .ov-rw-send.r { background: var(--neg-text); }
+  .pl-row .ov-rw-ign { flex: none; }
+
+  /* S2 three cards */
+  .tc { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px 13px 10px; min-width: 0; }
+  .card .h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .card .h b { font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; }
+  .card .h span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .card .h small { margin-left: auto; font-size: 10px; color: var(--faint); }
+  .card.r .h b, .card.r .h span { color: var(--neg-text); } .card.a .h b, .card.a .h span { color: var(--badge-yellow-text); } .card.b .h b, .card.b .h span { color: var(--badge-blue-text); }
+  .card .it { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-soft); }
+  .card .it .ov-wsku { flex: 1; min-width: 0; font-size: 11.5px; }
+  .card .it .v { font-family: var(--mono); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .card .it .v small { font-weight: 500; color: var(--faint); margin-left: 3px; }
+  .card.r .it .v { color: var(--neg-text); } .card.a .it .v { color: var(--badge-yellow-text); } .card.b .it .v { color: var(--badge-blue-text); }
+  .card .it a { font-size: 11px; font-weight: 600; color: var(--accent-soft-text); white-space: nowrap; cursor: pointer; }
+  .card .more { font-size: 11px; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--border-soft); }
+  .card .more a { color: #065F46; font-weight: 600; cursor: pointer; }
+  .card .ok { font-size: 11.5px; color: var(--faint); padding: 10px 0 6px; }
+</style>
+</head>
+<body>
+<div class="pg">
+
+  <div class="opt" id="s1">
+    <div class="lbl"><b>S1 · Plain list</b> — a dot, the SKU, one sentence, an Order key</div>
+    <div class="ov-panel">
+      <div class="bh"><h4>Stock</h4><span class="sub">from the last 30 days of sales · 7-day lead</span></div>
+      <div class="pl-sec r"><i></i>Out of stock <span class="n">2</span></div>
+      <div class="pl-row r"><span class="ov-wsku">X200-64GB-SILVER</span><span class="say"><b>0 left</b> · was selling 2 a day<small>last sold Oct 5</small></span><button class="ov-rw-send r">Order<b>70</b></button></div>
+      <div class="pl-row r"><span class="ov-wsku">T510-32GB-BLACK</span><span class="say"><b>0 left</b> · was selling 1 a day<small>last sold today</small></span><button class="ov-rw-send r">Order<b>35</b></button></div>
+      <div class="pl-sec a"><i></i>Running low <span class="n">4</span></div>
+      <div class="pl-row a"><span class="ov-wsku">X133-64GB-GRAY</span><span class="say"><b>3 days left</b> · 38 on hand, 13 a day<small>out Oct 11</small></span><button class="ov-rw-send o">Order<b>320</b></button></div>
+      <div class="pl-row a"><span class="ov-wsku">A15-64GB-BLACK</span><span class="say"><b>5 days left</b> · 14 on hand, 3 a day<small>out Oct 13</small></span><button class="ov-rw-send o">Order<b>70</b></button></div>
+      <div class="pl-row a"><span class="ov-wsku">X115-32GB-WHITE</span><span class="say"><b>6 days left</b> · 9 on hand, 1.5 a day<small>out Oct 14</small></span><button class="ov-rw-send o">Order<b>35</b></button></div>
+      <div class="pl-row a"><span class="ov-wsku">X210-128GB-GRAY</span><span class="say"><b>7 days left</b> · 61 on hand, 9 a day<small>out Oct 15</small></span><button class="ov-rw-send o">Order<b>185</b></button></div>
+      <div class="pl-sec b"><i></i>Selling fast <span class="n">3</span></div>
+      <div class="pl-row b"><span class="ov-wsku">X133-128GB-GRAY</span><span class="say"><b>64% faster</b> than two weeks ago · 16 days left<small>118 on hand</small></span><button class="ov-rw-send q">Order<b>90</b></button></div>
+      <div class="pl-row b"><span class="ov-wsku">S9-128GB-BLACK</span><span class="say"><b>41% faster</b> · 19 days left<small>57 on hand</small></span><button class="ov-rw-send q">Order<b>30</b></button></div>
+      <div class="pl-row b"><span class="ov-wsku">A05-64GB-BLACK</span><span class="say"><b>27% faster</b> · 22 days left<small>44 on hand</small></span><button class="ov-rw-send q">Order<b>15</b></button></div>
+      <div class="ov-more"><b>11</b> more run out inside 4 weeks — <a>open Stock</a></div>
+    </div>
+  </div>
+
+  <div class="opt" id="s2">
+    <div class="lbl"><b>S2 · Three cards</b> — a count and a short list each; one number per SKU</div>
+    <div class="ov-panel">
+      <div class="bh"><h4>Stock</h4><span class="sub">from the last 30 days of sales · 7-day lead</span></div>
+      <div class="tc">
+        <div class="card r"><div class="h"><b>2</b><span>Out of stock</span><small>still selling</small></div>
+          <div class="it"><span class="ov-wsku">X200-64GB-SILVER</span><span class="v">3<small>days out</small></span><a>Order 70</a></div>
+          <div class="it"><span class="ov-wsku">T510-32GB-BLACK</span><span class="v">today</span><a>Order 35</a></div>
+        </div>
+        <div class="card a"><div class="h"><b>4</b><span>Running low</span><small>days left</small></div>
+          <div class="it"><span class="ov-wsku">X133-64GB-GRAY</span><span class="v">3<small>d</small></span><a>Order 320</a></div>
+          <div class="it"><span class="ov-wsku">A15-64GB-BLACK</span><span class="v">5<small>d</small></span><a>Order 70</a></div>
+          <div class="it"><span class="ov-wsku">X115-32GB-WHITE</span><span class="v">6<small>d</small></span><a>Order 35</a></div>
+          <div class="it"><span class="ov-wsku">X210-128GB-GRAY</span><span class="v">7<small>d</small></span><a>Order 185</a></div>
+          <div class="more"><b>11</b> more under 4 weeks — <a>open Stock</a></div>
+        </div>
+        <div class="card b"><div class="h"><b>3</b><span>Selling fast</span><small>vs two weeks ago</small></div>
+          <div class="it"><span class="ov-wsku">X133-128GB-GRAY</span><span class="v">+64%</span><a>Order 90</a></div>
+          <div class="it"><span class="ov-wsku">S9-128GB-BLACK</span><span class="v">+41%</span><a>Order 30</a></div>
+          <div class="it"><span class="ov-wsku">A05-64GB-BLACK</span><span class="v">+27%</span><a>Order 15</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

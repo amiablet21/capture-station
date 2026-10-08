@@ -5361,9 +5361,13 @@ function renderRetLog() {
   retMarkEditing(null); // a re-render closes any editor — the chip lifts
   const box = $('retPastBox');
   const q = $('retLogSearch').value.trim().toLowerCase();
+  // the model (the Linnworks title behind the SKU, e.g. "Galaxy Tab A9")
+  // and the condition in both spellings join the haystack (owner
+  // 2026-10-08: "search by condition as well as phone model")
+  const titleOf = (sku) => { const it = sku && recvBySku ? recvBySku.get(String(sku).toLowerCase()) : null; return it ? it.title : ''; };
   const rows = !q ? retLogAll : retLogAll.filter(({ r, i }) =>
     [r.order_number, r.customer, r.tracking, r.source, r.received_by, r.note,
-     i.sku, i.targetSku, i.note, retCondLabel(i.condition)]
+     i.sku, i.targetSku, i.note, retCondLabel(i.condition), i.condition, titleOf(i.sku), titleOf(i.targetSku)]
       .some(v => String(v || '').toLowerCase().includes(q)));
   $('retLogCount').textContent = retLogAll.length
     ? ` — ${rows.length}${q ? ` of ${retLogAll.length}` : ''} entr${rows.length === 1 ? 'y' : 'ies'}`
@@ -5408,9 +5412,10 @@ function renderRetLog() {
         || `<tr><td colspan="${compact ? 6 : 12}" class="ret-log-none">${noneMsg}</td></tr>`}</tbody>
     </table>
     </div>
-    ${pages > 1 ? `<div class="ret-pager">${Array.from({ length: pages }, (_, p) =>
-      `<button class="ret-page-btn ${p === retLogPage ? 'is-on' : ''}" data-retpage="${p}">${p + 1}</button>`).join('')}
-      <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span></div>` : ''}`;
+    ${pages > 1 ? `<div class="ret-pager">
+      <button class="ret-page-btn ret-page-arrow" data-retpage="${retLogPage - 1}" ${retLogPage === 0 ? 'disabled' : ''} title="Previous page" aria-label="Previous page">‹</button>
+      <span class="ret-pager-meta">${retLogPage * RET_PAGE + 1}–${Math.min(rows.length, (retLogPage + 1) * RET_PAGE)} of ${rows.length}</span>
+      <button class="ret-page-btn ret-page-arrow" data-retpage="${retLogPage + 1}" ${retLogPage >= pages - 1 ? 'disabled' : ''} title="Next page" aria-label="Next page">›</button></div>` : ''}`;
   box.querySelector('.ret-entry-body').appendChild(retEntryRow());
   retPaintPresence(); // chips survive the rebuild
   if (wsFocus) {
@@ -5761,7 +5766,7 @@ let retLogPage = 0;
 $('retLogSearch').addEventListener('input', () => { retLogPage = 0; renderRetLog(); });
 $('retPastBox').addEventListener('click', (e) => {
   const pg = e.target.closest('[data-retpage]');
-  if (pg) { retLogPage = Number(pg.dataset.retpage); renderRetLog(); }
+  if (pg) { if (pg.disabled) return; retLogPage = Number(pg.dataset.retpage); renderRetLog(); }
 });
 
 let retDelCtx = null; // { rid, ii, target } — pending delete confirmation
