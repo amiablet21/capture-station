@@ -11580,9 +11580,9 @@ function ovPanelHtml(r) {
       <div class="ovq-xlabels mono"><span>${ovDayAgo(29)}</span><span>${ovDayAgo(14)}</span><span>Today</span></div>
     </div>
     <div class="ovq-figs">
+      <div><div class="k">Per day</div><div class="v mono big">${pd.toFixed(1)}</div><div class="s">30-day avg</div></div>
       <div><div class="k">This week</div><div class="v mono big">${ovN(s.slice(-7).reduce((a, b) => a + b, 0))}</div><div class="s">last 7 days</div></div>
-      <div><div class="k">This month</div><div class="v mono big">${ovN(r.sold30)}</div><div class="s">last 30 days</div></div>
-      <div><div class="k">Per day</div><div class="v mono">${pd.toFixed(1)}</div><div class="s">30-day avg</div></div>
+      <div><div class="k">This month</div><div class="v mono">${ovN(r.sold30)}</div><div class="s">last 30 days</div></div>
       <div><div class="k">Pace</div><div class="v mono ${paceCls}">${pct > 0 ? '+' : ''}${pct}%</div><div class="s mono">${pr.toFixed(1)} vs ${pp.toFixed(1)}</div></div>
     </div>
     <div class="ovq-mk"><span class="lbl">By marketplace · 30 days</span>${mk}</div>
