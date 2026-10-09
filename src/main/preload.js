@@ -39,6 +39,7 @@ const EVENTS = [
   'update:downloaded',
   'browser:resync',
   'pricing:refreshed',
+  'export:progress',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -61,6 +62,7 @@ contextBridge.exposeInMainWorld('api', {
   setConfig: (patch) => ipcRenderer.invoke('config:set', patch),
   exportCsv: () => ipcRenderer.invoke('csv:export'),
   exportChannelSkus: (channel, condition) => ipcRenderer.invoke('channelSkus:export', { channel, condition: condition || '' }),
+  exportLinnworksSkus: () => ipcRenderer.invoke('skus:export'),
   openCsvFolder: () => ipcRenderer.invoke('csv:openFolder'),
   chooseCsvFolder: () => ipcRenderer.invoke('csv:chooseFolder'),
   testLinnworks: (creds) => ipcRenderer.invoke('linnworks:test', creds),

@@ -157,4 +157,122 @@ function buildChannelSkuXlsx(rows, sheetName, opts = {}) {
   });
 }
 
-module.exports = { LABELS, conditionOf, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx };
+
+/* ---------- Linnworks SKU export (owner 2026-10-09): every inventory item
+   with its channel mappings. Two sheets: SKUs (one row per item, a column
+   per marketplace with the mapped channel SKUs) and Mappings (one row per
+   link). items: listInventory() rows (+ cost); feeds: every mapping channel's
+   scanned catalog; recs: the unlisted scan's link records; extra: per-item
+   getChannelSkus() rows for items the scan did not cover
+   ({ stockItemId: [{ sku, source, subSource, refId, listedQuantity }] }) ---------- */
+const CHANNEL_KEY = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
+const CHANNEL_NAME = { walmart: 'Walmart', ebay: 'eBay', temu: 'Temu', other: 'Other' };
+
+function buildSkuExport(items, feeds, recs, extra, opts = {}) {
+  const byId = new Map((items || []).filter(it => it && it.stockItemId).map(it => [it.stockItemId, it]));
+  const maps = new Map(); // stockItemId|channel key|sub|CHSKU -> mapping row
+  const mkey = (id, ch, sub, sku) => `${id}|${ch}|${String(sub || '').toLowerCase()}|${String(sku || '').toUpperCase()}`;
+  const put = (it, source, subSource, sku, more) => {
+    if (!it || !sku) return;
+    const ch = CHANNEL_KEY(source);
+    const k = mkey(it.stockItemId, ch, subSource, sku);
+    const row = maps.get(k) || { inventorySku: it.sku, stockItemId: it.stockItemId, channel: CHANNEL_NAME[ch], ch, account: subSource || '', channelSku: sku, title: '', qty: '', price: '', wfs: '', listingId: '' };
+    for (const [f, v] of Object.entries(more || {})) if (v !== '' && v != null && (row[f] === '' || row[f] == null)) row[f] = v;
+    maps.set(k, row);
+  };
+  // the catalog feeds know titles, listed qty, price, WFS and the listing id
+  const feedByChSku = new Map(); // channel key|sub|CHSKU -> feed row (for link records the feed also saw)
+  for (const { channel, rows } of feeds || []) {
+    if (!channel) continue;
+    const ch = CHANNEL_KEY(channel.source);
+    for (const f of rows || []) {
+      if (!f || !f.sku) continue;
+      feedByChSku.set(`${ch}|${String(channel.subSource || '').toLowerCase()}|${String(f.sku).toUpperCase()}`, f);
+      const it = f.linkedItemId ? byId.get(f.linkedItemId) : null;
+      if (it) put(it, channel.source, channel.subSource, f.sku, { title: f.title, qty: f.qty, price: f.price || '', wfs: f.wfs ? 'yes' : '', listingId: f.channelRefId || '' });
+    }
+  }
+  // the link records say which item a listing points at
+  const fromRecs = (recMap) => {
+    for (const [stockItemId, list] of Object.entries(recMap || {})) {
+      const it = byId.get(stockItemId);
+      if (!it) continue;
+      for (const r of list || []) {
+        if (!r || !r.sku || !r.source) continue;
+        const f = feedByChSku.get(`${CHANNEL_KEY(r.source)}|${String(r.subSource || '').toLowerCase()}|${String(r.sku).toUpperCase()}`);
+        put(it, r.source, r.subSource, r.sku, {
+          title: f ? f.title : '', qty: f ? f.qty : (r.listedQuantity ?? ''), price: f ? (f.price || '') : '',
+          wfs: f && f.wfs ? 'yes' : '', listingId: (f && f.channelRefId) || r.refId || '',
+        });
+      }
+    }
+  };
+  fromRecs(recs);
+  fromRecs(extra);
+  const mapRows = [...maps.values()].sort((a, b) => a.inventorySku.localeCompare(b.inventorySku, undefined, { numeric: true, sensitivity: 'base' })
+    || a.channel.localeCompare(b.channel) || a.channelSku.localeCompare(b.channelSku, undefined, { numeric: true, sensitivity: 'base' }));
+  const hasOther = mapRows.some(r => r.ch === 'other');
+  const byItem = new Map();
+  for (const r of mapRows) { const l = byItem.get(r.stockItemId) || []; l.push(r); byItem.set(r.stockItemId, l); }
+  const levelOf = (it) => {
+    if (!it || !Array.isArray(it.levels) || !it.levels.length) return null;
+    return (opts.locationId && it.levels.find(l => l.locationId === opts.locationId)) || it.levels[0];
+  };
+  const skuRows = (items || []).filter(it => it && it.sku).map(it => {
+    const lv = levelOf(it) || {};
+    const ms = byItem.get(it.stockItemId) || [];
+    const col = (ch) => ms.filter(m => m.ch === ch).map(m => m.channelSku).join(' | ');
+    return {
+      sku: it.sku, title: it.title || '', barcode: it.barcode || '', category: it.category || '',
+      inStock: Number(lv.stockLevel) || 0, inOrders: Number(lv.inOrders) || 0, available: Number(lv.available) || 0, min: Number(lv.minimumLevel) || 0,
+      cost: Number(it.cost) > 0 ? Math.round(Number(it.cost) * 100) / 100 : '',
+      walmart: col('walmart'), ebay: col('ebay'), temu: col('temu'), other: col('other'), mappings: ms.length,
+    };
+  }).sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: 'base' }));
+  return { skuRows, mapRows, hasOther };
+}
+
+function skuExportColumns(opts) {
+  const cols = [
+    { header: 'SKU', width: 28, kind: 'text', f: 'sku' },
+    { header: 'Title', width: 52, kind: 'text', f: 'title' },
+    { header: 'Barcode', width: 16, kind: 'text', f: 'barcode' },
+    { header: 'Category', width: 16, kind: 'text', f: 'category' },
+    { header: 'In stock', width: 10, kind: 'int', f: 'inStock' },
+    { header: 'In orders', width: 10, kind: 'int', f: 'inOrders' },
+    { header: 'Available', width: 10, kind: 'int', f: 'available' },
+    { header: 'Min', width: 8, kind: 'int', f: 'min' },
+  ];
+  if (opts.cost) cols.push({ header: 'Cost', width: 10, kind: 'money', f: 'cost' });
+  cols.push({ header: 'Walmart SKU', width: 30, kind: 'text', f: 'walmart' }, { header: 'eBay SKU', width: 30, kind: 'text', f: 'ebay' }, { header: 'Temu SKU', width: 30, kind: 'text', f: 'temu' });
+  if (opts.other) cols.push({ header: 'Other SKU', width: 30, kind: 'text', f: 'other' });
+  cols.push({ header: 'Mappings', width: 10, kind: 'int', f: 'mappings' });
+  return cols;
+}
+const MAP_COLUMNS = [
+  { header: 'Inventory SKU', width: 28, kind: 'text', f: 'inventorySku' },
+  { header: 'Channel', width: 10, kind: 'text', f: 'channel' },
+  { header: 'Account', width: 20, kind: 'text', f: 'account' },
+  { header: 'Channel SKU', width: 30, kind: 'text', f: 'channelSku' },
+  { header: 'Channel title', width: 52, kind: 'text', f: 'title' },
+  { header: 'Listed qty', width: 10, kind: 'int', f: 'qty' },
+  { header: 'Price', width: 10, kind: 'money', f: 'price' },
+  { header: 'WFS', width: 6, kind: 'center', f: 'wfs' },
+  { header: 'Listing ID', width: 18, kind: 'text', f: 'listingId' },
+];
+function buildSkuExportXlsx(data, opts = {}) {
+  const { buildWorkbookSheets } = require('./xlsxwrite.js');
+  const skuCols = skuExportColumns({ cost: !!opts.cost, other: data.hasOther });
+  return buildWorkbookSheets([
+    { name: 'SKUs', columns: skuCols, rows: data.skuRows.map(r => skuCols.map(c => r[c.f])) },
+    { name: 'Mappings', columns: MAP_COLUMNS, rows: data.mapRows.map(r => MAP_COLUMNS.map(c => r[c.f])) },
+  ]);
+}
+// CSV cannot hold two sheets: { skus, mappings } — two files
+function buildSkuExportCsv(data, opts = {}) {
+  const skuCols = skuExportColumns({ cost: !!opts.cost, other: data.hasOther });
+  const file = (cols, rows) => [cols.map(c => c.header).join(','), ...rows.map(r => cols.map(c => csvEscape(r[c.f])).join(','))].join('\r\n') + '\r\n';
+  return { skus: file(skuCols, data.skuRows), mappings: file(MAP_COLUMNS, data.mapRows) };
+}
+
+module.exports = { LABELS, conditionOf, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx, buildSkuExport, buildSkuExportXlsx, buildSkuExportCsv };

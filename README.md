@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.16 highlights
+
+- **Export Linnworks SKUs** (Stock → Actions): every inventory item with its channel mappings. An Excel workbook with two sheets: **SKUs** (one row per item: SKU, title, barcode, category, in stock, in orders, available, min, cost on a Cost station, then the mapped Walmart / eBay / Temu SKUs — several on one channel joined with " | " — and a Mappings count) and **Mappings** (one row per link: inventory SKU, channel, account, channel SKU, channel title, listed qty, price, WFS, listing ID). CSV saves the two sheets as two files. Items the unlisted scan skipped (zero stock) get their link records read one by one, with progress on the Actions button, so out-of-stock SKUs carry their mappings too.
+
 ## v1.31.15 highlights
 
 - Overview row panel: the figures read Per day, This week, This month, Pace (owner order).
