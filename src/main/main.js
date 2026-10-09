@@ -2958,6 +2958,13 @@ function registerIpc() {
         if (macReady.version !== latest) macDownload(latest, asset.browser_download_url, asset.name);
         return { ok: true, current, latest, update: true, auto: true, ready: macReady.version === latest };
       }
+      if (process.platform === 'darwin') {
+        // the installer route, and why (owner 2026-10-09: "why is it asking
+        // for an installer?") — the menu shows the reason
+        const why = macWhyNotInPlace();
+        if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest, current, why });
+        return { ok: true, current, latest, update: true, why };
+      }
       if (useAuto() && (j.assets || []).some(a => /^latest\.yml$/i.test(String(a.name || '')))) {
         // in-place: electron-updater downloads it now and the footer says
         // "Restart to update" when it is on disk
@@ -3005,6 +3012,9 @@ function registerIpc() {
   let macReady = { version: '', path: '' };
   let macDl = { version: '', promise: null };
   let macBrokenAt = 0;
+  let macFailReason = ''; // why the installer route is standing in (shown in the update menu)
+  const updLogPath = () => path.join(app.getPath('temp'), 'dws-stock-update', 'update.log');
+  const updLog = (msg) => { try { fs.mkdirSync(path.dirname(updLogPath()), { recursive: true }); fs.appendFileSync(updLogPath(), `${new Date().toISOString()} ${msg}\n`); } catch { /* best effort */ } };
   const macBundle = () => {
     // /Applications/DWS Stock.app/Contents/MacOS/DWS Stock -> the .app
     const b = path.resolve(process.execPath, '..', '..', '..');
@@ -3019,6 +3029,13 @@ function registerIpc() {
     return '';
   };
   const useMacAuto = () => process.platform === 'darwin' && app.isPackaged && !!macBundle() && !!macInstallDir() && Date.now() - macBrokenAt > 20 * 60 * 1000;
+  const macWhyNotInPlace = () => {
+    if (!app.isPackaged) return 'development build';
+    if (!macBundle()) return 'the app is not running from a .app bundle';
+    if (!macInstallDir()) return 'neither the app\'s folder nor Applications is writable — drag DWS Stock into Applications';
+    if (Date.now() - macBrokenAt <= 20 * 60 * 1000) return `the in-place download failed ${Math.round((Date.now() - macBrokenAt) / 60000)} min ago (${macFailReason || 'unknown error'}); it is tried again 20 min after that`;
+    return '';
+  };
   const tellUpd = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
   async function downloadTo(url, dest, onPct) {
     const res = await fetch(url, { headers: { 'User-Agent': 'CaptureStation' }, redirect: 'follow' });
@@ -3050,16 +3067,34 @@ function registerIpc() {
       promise: (async () => {
         try {
           fs.mkdirSync(dir, { recursive: true });
-          for (const f of fs.readdirSync(dir)) { if (f !== name) { try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch { /* old download */ } } }
+          // older downloads go; the logs and the install script stay for diagnosis
+          for (const f of fs.readdirSync(dir)) { if (f !== name && !/^(install|update)\./.test(f)) { try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch { /* old download */ } } }
           tellUpd('update:available', { version, current: app.getVersion(), auto: true });
-          if (!fs.existsSync(dest)) await downloadTo(url, dest, (pct) => tellUpd('update:progress', { percent: pct }));
+          updLog(`download v${version} start ${url}`);
+          // a dropped connection is retried before the installer route stands in
+          let lastErr = null;
+          for (let attempt = 1; attempt <= 3 && !fs.existsSync(dest); attempt++) {
+            try {
+              await downloadTo(url, dest, (pct) => tellUpd('update:progress', { percent: pct }));
+              lastErr = null;
+            } catch (e) {
+              lastErr = e;
+              updLog(`download v${version} attempt ${attempt} failed: ${e && e.message}`);
+              try { fs.rmSync(`${dest}.part`, { force: true }); } catch { /* best effort */ }
+              if (attempt < 3) await new Promise(r => setTimeout(r, 5000 * attempt));
+            }
+          }
+          if (lastErr) throw lastErr;
           macReady = { version, path: dest };
+          updLog(`download v${version} done ${dest}`);
           tellUpd('update:downloaded', { version });
         } catch (e) {
           macBrokenAt = Date.now(); // the installer-download button stands in for a while
-          console.log(`[update] Mac in-place download failed, falling back to the installer download: ${e && e.message}`);
+          macFailReason = String((e && e.message) || e || 'unknown error').slice(0, 160);
+          console.log(`[update] Mac in-place download failed, falling back to the installer download: ${macFailReason}`);
+          updLog(`download v${version} gave up: ${macFailReason}`);
           try { fs.rmSync(`${dest}.part`, { force: true }); } catch { /* best effort */ }
-          tellUpd('update:available', { version, current: app.getVersion() });
+          tellUpd('update:available', { version, current: app.getVersion(), why: macWhyNotInPlace() });
         } finally {
           macDl = { version: '', promise: null };
         }
@@ -3112,6 +3147,7 @@ exit 1
       fs.writeFileSync(sh, script, { mode: 0o755 });
       const child = spawn('/bin/bash', [sh, String(process.pid), dmg, cur, dir, log], { detached: true, stdio: 'ignore' });
       child.unref();
+      updLog(`swap script started for ${dmg} -> ${dir} (current ${cur})`);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };

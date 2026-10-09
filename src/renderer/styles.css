@@ -4220,18 +4220,20 @@ th:last-child > .col-grip { right: 0; }
    rest of the app (owner mockup 2026-10-08) */
 /* update panel, design C (owner pick 2026-10-09): a short menu anchored
    above the version chip; fixed width, no entrance movement */
-.upd-card { position: fixed; bottom: 54px; z-index: 60; width: 300px; max-width: calc(100vw - 28px); box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 6px 0; }
-.upd-it { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px; font-size: 13px; }
+/* size 1 (owner pick 2026-10-09: "make the pop up smaller"): 230px, 12px rows */
+.upd-card { position: fixed; bottom: 54px; z-index: 60; width: 230px; max-width: calc(100vw - 28px); box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 26px rgba(47, 52, 55, .12); padding: 4px 0; }
+.upd-it { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; font-size: 12px; line-height: 1.4; }
 .upd-it .k { color: var(--muted); min-width: 0; }
 .upd-it .v { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .upd-it .v.is-new { color: var(--accent); }
-.upd-it.is-act { background: var(--accent-soft); color: var(--accent); font-weight: 600; justify-content: center; margin: 4px 8px 2px; border-radius: 6px; cursor: pointer; border: 0; width: calc(100% - 16px); font-family: var(--font); }
+.upd-it.is-act { background: var(--accent-soft); color: var(--accent); font-weight: 600; justify-content: center; margin: 3px 6px 1px; border-radius: 5px; cursor: pointer; border: 0; width: calc(100% - 12px); font-family: var(--font); }
 .upd-it.is-act:hover { background: #D6DFEE; }
 .upd-it.is-act:disabled { opacity: .5; cursor: default; }
 .upd-it.is-close { color: var(--muted); justify-content: center; cursor: pointer; border: 0; background: transparent; width: 100%; font-family: var(--font); }
 .upd-it.is-close:hover { color: var(--text); }
-.upd-sep { height: 1px; background: var(--border); margin: 4px 0; }
-.upd-bar { height: 4px; background: #EAE8E3; border-radius: 2px; overflow: hidden; width: 130px; flex: none; }
+.upd-sep { height: 1px; background: var(--border); margin: 3px 0; }
+.upd-bar { height: 4px; background: #EAE8E3; border-radius: 2px; overflow: hidden; width: 90px; flex: none; }
+.upd-it .v.is-faint { color: var(--faint); }
 .upd-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 300ms ease; }
 .toast.is-out {
   opacity: 0;
