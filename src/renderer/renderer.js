@@ -126,6 +126,7 @@ let updWanted = false; // Update now was clicked: restart as soon as the build i
 let updAuto = false; // in-place path (downloads itself) vs installer download
 let updPct = -1; // last download percentage seen
 let updChecking = false;
+let updWhy = ''; // why the installer route is standing in (Mac), shown in the menu
 let updateReadyVersion = ''; // version downloaded and waiting for a restart
 let channelFilter = 'all'; // marketplace chip on the capture list
 let orderSort = 'new'; // capture list Order # header: 'new' | 'old' first
@@ -8058,7 +8059,7 @@ function updShowState() {
   if (updChecking) { updMenu([updRow('Checking for updates', '…')], ''); return; }
   if (updateReadyVersion) { updMenu([you, updRow('Downloaded', `v${updEsc(updateReadyVersion)}`, 'is-new')], 'Restart now'); return; }
   if (updVersion && updAuto && updWanted) { updMenu([`<div class="upd-it"><span class="k">Downloading v${updEsc(updVersion)}</span><span class="upd-bar"><i></i></span></div>`, updRow('Restarts on its own when done', `${Math.max(0, updPct)}%`)], ''); return; }
-  if (updVersion) { updMenu([you, updRow('Available', `v${updEsc(updVersion)}`, 'is-new')], 'Update now'); return; }
+  if (updVersion) { updMenu([you, updRow('Available', `v${updEsc(updVersion)}`, 'is-new'), ...(updWhy ? [`<div class="upd-it"><span class="k">Installer this time: ${esc(updWhy)}.</span></div>`] : [])], 'Update now'); return; }
   updMenu([you, updRow('Latest', `v${updEsc(updCurrent)}`)], '');
 }
 async function updRestart() {
@@ -8073,6 +8074,7 @@ api.on('update:available', (d) => {
   updVersion = (d && d.version) || 'latest';
   if (d && d.current) updCurrent = d.current;
   updAuto = !!(d && d.auto);
+  updWhy = updAuto ? '' : String((d && d.why) || '');
   updChip();
   if (!$('updCard').hidden) updShowState();
 });
@@ -8131,6 +8133,7 @@ $('updateCheckBtn').addEventListener('click', async () => {
   if (res.update) {
     updVersion = res.latest;
     updAuto = !!res.auto;
+    updWhy = updAuto ? '' : String(res.why || '');
     if (res.ready) updateReadyVersion = res.latest;
     updChip();
     updShowState();

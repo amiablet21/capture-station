@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.13 highlights
+
+- **Mac in-place download retries and explains itself.** A dropped download is retried three times before the installer route stands in, and when the installer route is used the update menu says why ("the in-place download failed N min ago (reason); it is tried again 20 min after that"). An update log is kept in the temp folder for diagnosis.
+
 ## v1.31.12 highlights
 
 - **Tab switches feel instant.** Process, the day count, Undo, the marketplace chips, the search band and the due header now flip on the click itself when you move between Overview and Capture. They used to wait for the 120ms settle timer plus a full re-render of the capture list (150ms with 30 rows, closer to half a second with 300). The heavy render now also waits for one painted frame, and the other pages skip the capture re-render altogether.
