@@ -1546,11 +1546,15 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 /* in-app updater button: quiet until a release is newer than this build */
 /* the version chip is a plain ghost button like History beside it (owner
    2026-10-09: "like a square and more contingent with the other buttons") */
-.update-check { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 84px; }
+.update-check { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 84px; display: inline-flex; align-items: center; gap: 8px; }
+/* the dot says the state: grey idle, navy halo while downloading, solid navy when ready */
+.update-check::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #C8C6C0; flex: none; }
+.update-check.is-new::before, .update-check.is-ready::before { background: var(--accent); }
+.update-check.is-dl::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(30, 58, 102, .18); }
+.update-check.is-new, .update-check.is-ready, .update-check.is-dl { color: var(--accent); }
+.update-check .upd-pct { color: var(--accent); }
 .update-check:disabled { color: var(--faint); cursor: default; }
 .update-check:hover:not(:disabled) { color: var(--text); }
-.update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
-.update-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
 
 /* ---------- Pricing tab (owner 2026-09-18) ---------- */
 
@@ -4214,18 +4218,21 @@ th:last-child > .col-grip { right: 0; }
 
 /* update card: floats under the top bar, above everything; same voice as the
    rest of the app (owner mockup 2026-10-08) */
-/* anchored above the footer's update button (owner 2026-10-09) */
-/* a fixed width and no entrance movement: it opens in the same spot every
-   time (owner 2026-10-09: "keeps shifting every time I press it") */
-.upd-card { position: fixed; bottom: 54px; right: 14px; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 16px 20px; width: 400px; max-width: calc(100vw - 28px); box-sizing: border-box; }
-.upd-msg { font-size: 14px; font-weight: 500; }
-.upd-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.upd-go[hidden] { display: none; }
-.upd-card .btn { font-size: 13px; padding: 7px 16px; }
-.upd-card .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.upd-card .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.upd-card .btn-primary:disabled { opacity: .6; }
-.upd-pct { font-variant-numeric: tabular-nums; }
+/* update panel, design C (owner pick 2026-10-09): a short menu anchored
+   above the version chip; fixed width, no entrance movement */
+.upd-card { position: fixed; bottom: 54px; z-index: 60; width: 300px; max-width: calc(100vw - 28px); box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 6px 0; }
+.upd-it { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px; font-size: 13px; }
+.upd-it .k { color: var(--muted); min-width: 0; }
+.upd-it .v { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.upd-it .v.is-new { color: var(--accent); }
+.upd-it.is-act { background: var(--accent-soft); color: var(--accent); font-weight: 600; justify-content: center; margin: 4px 8px 2px; border-radius: 6px; cursor: pointer; border: 0; width: calc(100% - 16px); font-family: var(--font); }
+.upd-it.is-act:hover { background: #D6DFEE; }
+.upd-it.is-act:disabled { opacity: .5; cursor: default; }
+.upd-it.is-close { color: var(--muted); justify-content: center; cursor: pointer; border: 0; background: transparent; width: 100%; font-family: var(--font); }
+.upd-it.is-close:hover { color: var(--text); }
+.upd-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.upd-bar { height: 4px; background: #EAE8E3; border-radius: 2px; overflow: hidden; width: 130px; flex: none; }
+.upd-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 300ms ease; }
 .toast.is-out {
   opacity: 0;
   transform: translateX(-50%) translateY(6px);
