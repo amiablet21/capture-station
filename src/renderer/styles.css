@@ -1544,7 +1544,8 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .bulk-h-fixwrap .combo-list { min-width: 280px; }
 
 /* in-app updater button: quiet until a release is newer than this build */
-.update-check { font-size: 12.5px; color: var(--muted); }
+.update-check { font-size: 12px; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; min-width: 76px; }
+.update-check:disabled { color: var(--faint); cursor: default; }
 .update-check:hover:not(:disabled) { color: var(--text); }
 .update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
 .update-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
@@ -4212,7 +4213,9 @@ th:last-child > .col-grip { right: 0; }
 /* update card: floats under the top bar, above everything; same voice as the
    rest of the app (owner mockup 2026-10-08) */
 /* anchored above the footer's update button (owner 2026-10-09) */
-.upd-card { position: fixed; bottom: 54px; right: 14px; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 16px 20px; min-width: 340px; max-width: min(520px, 92vw); animation: toastin 250ms var(--ease); }
+/* a fixed width and no entrance movement: it opens in the same spot every
+   time (owner 2026-10-09: "keeps shifting every time I press it") */
+.upd-card { position: fixed; bottom: 54px; right: 14px; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 16px 20px; width: 400px; max-width: calc(100vw - 28px); box-sizing: border-box; }
 .upd-msg { font-size: 14px; font-weight: 500; }
 .upd-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .upd-go[hidden] { display: none; }

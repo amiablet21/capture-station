@@ -124,6 +124,7 @@ function buildState() {
     captureOnly: !!cfg.captureOnly,
     pages: cfg.pages,
     csv: lastCsv,
+    version: app.getVersion(), // the footer's version chip (owner 2026-10-09)
     orderMeta,
     orderUrlTemplates: cfg.orderUrlTemplates || {},
     returnUrlTemplates: cfg.returnUrlTemplates || {},

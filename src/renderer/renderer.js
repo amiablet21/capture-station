@@ -120,6 +120,7 @@ if (!window.api) {
 }
 
 let state = null;
+let updCurrent = ''; // this station's version (footer chip, update panel)
 let channelFilter = 'all'; // marketplace chip on the capture list
 let orderSort = 'new'; // capture list Order # header: 'new' | 'old' first
 let trackSort = 'none'; // Tracking header: 'none' | 'untracked' | 'tracked'
@@ -289,6 +290,9 @@ function rowDue(row) {
 }
 
 function render() {
+  // the footer's version chip: "v1.31.8" — pressing it checks for updates
+  // (owner 2026-10-09: "a button that says the recent update instead")
+  if (state && state.version) { updCurrent = state.version; $('updateCheckBtn').textContent = `v${state.version}`; }
   if (!state) return;
 
   // per-install page flags (capture is always on); capture-only wins over all
@@ -8006,7 +8010,6 @@ let updateReadyVersion = '';
 // download percentage and restarts the app when the build is on disk.
 // Downloads still run quietly in the background; the button's text follows.
 let updVersion = ''; // newest version on record
-let updCurrent = ''; // this station's version
 let updWanted = false; // Update now was clicked: restart as soon as the build is on disk
 let updAuto = false; // in-place path (downloads itself) vs installer download
 let updPct = -1; // last download percentage seen
@@ -8103,12 +8106,10 @@ document.addEventListener('mousedown', (e) => {
 $('updateCheckBtn').addEventListener('click', async () => {
   const b = $('updateCheckBtn');
   if (b.disabled) return;
-  b.disabled = true;
-  b.textContent = 'Checking…';
+  b.disabled = true; // the label stays put so the footer never shifts
   updPanel('Checking for updates…', '');
   const res = await (api.updateCheck ? api.updateCheck() : Promise.resolve({ ok: false, error: 'Preview mode' })).catch(err => ({ ok: false, error: err.message }));
   b.disabled = false;
-  b.textContent = 'Check for updates';
   if (!res || !res.ok) { updPanel(esc((res && res.error) || 'Could not check for updates.'), ''); return; }
   if (res.current) updCurrent = res.current;
   if (res.update) {
