@@ -3010,10 +3010,13 @@ function registerIpc() {
       updateInfo = { version: latest, url: asset.browser_download_url, name: asset.name };
       if (useMacAuto()) {
         // in-place on the Mac too (owner 2026-10-08: "I want it to be like
-        // an update now"): the DMG downloads behind the page and the footer
-        // says "Restart to update" when it is on disk
-        if (macReady.version !== latest) macDownload(latest, asset.browser_download_url, asset.name);
-        return { ok: true, current, latest, update: true, auto: true, ready: macReady.version === latest };
+        // an update now"); the DMG downloads only when Update now is pressed
+        // (owner 2026-10-09: "I prefer that I press on the button myself")
+        macPending = { version: latest, url: asset.browser_download_url, name: asset.name };
+        if (macReady.version !== latest && !(macDl.promise && macDl.version === latest)) {
+          if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: latest, current, auto: true });
+        }
+        return { ok: true, current, latest, update: true, auto: true, ready: macReady.version === latest, downloading: !!(macDl.promise && macDl.version === latest) };
       }
       if (process.platform === 'darwin') {
         // the installer route, and why (owner 2026-10-09: "why is it asking
@@ -3044,8 +3047,8 @@ function registerIpc() {
   let autoBrokenAt = 0;
   const useAuto = () => !!autoUpdater && process.platform === 'win32' && app.isPackaged && Date.now() - autoBrokenAt > 20 * 60 * 1000;
   if (autoUpdater && process.platform === 'win32' && app.isPackaged) {
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoDownload = false; // the download waits for Update now (owner 2026-10-09)
+    autoUpdater.autoInstallOnAppQuit = true; // once downloaded, a quit installs it
     autoUpdater.logger = null;
     const tell = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
     autoUpdater.on('update-available', (info) => tell('update:available', { version: info.version, current: app.getVersion(), auto: true }));
@@ -3068,6 +3071,7 @@ function registerIpc() {
   // the old bundle in place, reopens it and opens the DMG for a hand install.
   let macReady = { version: '', path: '' };
   let macDl = { version: '', promise: null };
+  let macPending = { version: '', url: '', name: '' }; // the newest release on record, downloaded on request
   let macBrokenAt = 0;
   let macFailReason = ''; // why the installer route is standing in (shown in the update menu)
   const updLogPath = () => path.join(app.getPath('temp'), 'dws-stock-update', 'update.log');
@@ -3126,7 +3130,6 @@ function registerIpc() {
           fs.mkdirSync(dir, { recursive: true });
           // older downloads go; the logs and the install script stay for diagnosis
           for (const f of fs.readdirSync(dir)) { if (f !== name && !/^(install|update)\./.test(f)) { try { fs.rmSync(path.join(dir, f), { recursive: true, force: true }); } catch { /* old download */ } } }
-          tellUpd('update:available', { version, current: app.getVersion(), auto: true });
           updLog(`download v${version} start ${url}`);
           // a dropped connection is retried before the installer route stands in
           let lastErr = null;
@@ -3210,6 +3213,23 @@ exit 1
       return { ok: false, error: e.message };
     }
   }
+  // Update now: start the download (owner 2026-10-09 — nothing downloads on
+  // its own); progress and update:downloaded follow, the restart is a
+  // separate press (or automatic when the menu's Update now was used)
+  ipcMain.handle('update:download', async () => {
+    if (process.platform === 'darwin') {
+      if (macReady.version && macPending.version === macReady.version) return { ok: true, ready: true, version: macReady.version };
+      if (!macPending.version) return { ok: false, error: 'No update on record — press the version button to check.' };
+      if (!useMacAuto()) return { ok: false, error: macWhyNotInPlace() || 'In-place updates are not available on this station.' };
+      macDownload(macPending.version, macPending.url, macPending.name);
+      return { ok: true, version: macPending.version };
+    }
+    if (useAuto()) {
+      if (updateReady) return { ok: true, ready: true, version: updateReady };
+      try { await autoUpdater.downloadUpdate(); return { ok: true }; } catch (e) { autoBrokenAt = Date.now(); return { ok: false, error: e.message }; }
+    }
+    return { ok: false, error: 'In-place updates are not available on this station.' };
+  });
   ipcMain.handle('update:install', async () => {
     if (process.platform === 'darwin' && macReady.version && macReady.path && fs.existsSync(macReady.path)) {
       const r = macSwap(macReady.path);
