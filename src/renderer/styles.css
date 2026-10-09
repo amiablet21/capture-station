@@ -5183,9 +5183,8 @@ th:last-child > .col-grip { right: 0; }
 .act-wholesale { color: #0F6E6E; background: #DFF3F2; }
 .sh-act-dot.act-wholesale { background: #0F6E6E; }
 
-/* ---------- Cost column (owner 2026-10-05) ---------- */
-.stock-table .th-cost, .stock-table .cell-cost { background: #FBFAF5; }
-.stock-table .th-cost { color: var(--badge-yellow-text); }
+/* ---------- Cost column (owner 2026-10-05; plain like its neighbours since
+   2026-10-09: "make the cost column look normal") ---------- */
 .stock-table .th-cost:not([style]) { min-width: 92px; }
 .cell-cost .stock-num-btn.is-none { color: var(--faint); }
 /* the button and the input it swaps for share one size, and the cell is
