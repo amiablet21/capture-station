@@ -436,6 +436,7 @@ function render() {
   const failedGone = state.rows.filter(r =>
     r.status === 'failed' && String(r.fail_reason || '').startsWith('Not found in open orders')).length;
   $('clearFailedBtn').hidden = activePage !== 'capture' || failedGone === 0;
+  $('clearFailedBtn').dataset.n = String(failedGone); // applyPageChrome reads it on a tab switch
   if (failedGone) $('clearFailedBtn').textContent = `Clear failed · ${failedGone}`;
   if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
@@ -1434,18 +1435,29 @@ function pageFadeIn(page) {
   el.classList.add('page-fadein');
 }
 
+// everything in the chrome that depends on the active page, flipped on the
+// click itself with what was last rendered (owner 2026-10-09: "the buttons
+// like Process are delayed" — they used to wait for the 120ms settle and a
+// full table render). The settle render then refreshes the counts in place.
+function applyPageChrome() {
+  if (!state) return;
+  const cap = activePage === 'capture';
+  $('dayCountBox').classList.toggle('invisible', !cap);
+  $('undoFooterBtn').hidden = state.captureOnly || !cap;
+  $('syncBtn').classList.toggle('invisible', !cap);
+  $('dryRunChip').hidden = !cap || !state.dryRun;
+  $('dueHeader').hidden = !cap || !$('dueHeader').textContent;
+  $('channelChips').hidden = !cap || !$('channelChips').innerHTML;
+  $('clearFailedBtn').hidden = !cap || !(Number($('clearFailedBtn').dataset.n) > 0);
+  $('findBar').hidden = !cap || (state.captureOnly && !state.rows.length);
+  updateScanPanel();
+}
+
 function showPage(page) {
   const switching = activePage !== page;
   activePage = page;
-  if (page !== 'capture') {
-    $('findBar').hidden = true; // render() re-shows on capture
-  } else if (state) {
-    // show the band INSTANTLY with its last-rendered chips — waiting for the
-    // 120ms settle render made the filters pop in late (owner, 2026-08-17);
-    // the settle render then refreshes the counts in place
-    $('findBar').hidden = state.captureOnly && !state.rows.length;
-  }
-  updateScanPanel();
+  if (page !== 'capture') $('findBar').hidden = true;
+  applyPageChrome();
   $('overviewPage').hidden = page !== 'overview';
   $('rowsRow').hidden = page !== 'capture';
   $('stockPage').hidden = page !== 'stock';
@@ -1468,7 +1480,9 @@ function showPage(page) {
   // SETTLES here for a beat, so flying across tabs never stacks re-renders
   // (owner hit the lag rapid-clicking, 2026-08-14)
   clearTimeout(showPageSettle);
-  showPageSettle = setTimeout(() => {
+  // the settle waits for the beat AND for one painted frame, so the chrome
+  // flipped above is on screen before the heavy entry work blocks the thread
+  showPageSettle = setTimeout(() => requestAnimationFrame(() => setTimeout(() => {
     if (activePage !== page) return; // flew past this tab
     if (page === 'overview') {
       enterOverview();
@@ -1500,8 +1514,10 @@ function showPage(page) {
     } else {
       focusScan();
     }
-    if (state) render(); // footer buttons depend on the active page
-  }, switching ? 120 : 0);
+    // the capture list re-renders on arrival (counts, due chips); the other
+    // pages only need the chrome, which is already in place
+    if (state) { if (page === 'capture') render(); else applyPageChrome(); }
+  }, 0)), switching ? 120 : 0);
   if (bReady) applyBrowserPane(); // the pane only exists on the Capture page
   if (switching) pageFadeIn(page);
 }
