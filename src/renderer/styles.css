@@ -694,7 +694,7 @@ body {
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 
 .btn-secondary { background: var(--accent-soft); color: var(--accent-soft-text); }
-.btn-secondary:hover:not(:disabled) { background: #D5EBDF; }
+.btn-secondary:hover:not(:disabled) { background: #D6DFEE; }
 
 .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border); }
 .btn-ghost:hover:not(:disabled) { background: rgba(0, 0, 0, 0.04); }
@@ -1544,7 +1544,9 @@ td.bulk-h-sku[data-bfx] { cursor: text; }
 .bulk-h-fixwrap .combo-list { min-width: 280px; }
 
 /* in-app updater button: quiet until a release is newer than this build */
-.update-check { font-size: 12px; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; min-width: 76px; }
+/* the version chip is a plain ghost button like History beside it (owner
+   2026-10-09: "like a square and more contingent with the other buttons") */
+.update-check { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 84px; }
 .update-check:disabled { color: var(--faint); cursor: default; }
 .update-check:hover:not(:disabled) { color: var(--text); }
 .update-btn { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
