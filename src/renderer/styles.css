@@ -4210,10 +4210,11 @@ th:last-child > .col-grip { right: 0; }
 
 /* update card: floats under the top bar, above everything; same voice as the
    rest of the app (owner mockup 2026-10-08) */
-.upd-card { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 16px 20px; min-width: 340px; max-width: min(520px, 92vw); animation: toastin 250ms var(--ease); }
+/* anchored above the footer's update button (owner 2026-10-09) */
+.upd-card { position: fixed; bottom: 54px; right: 14px; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(47, 52, 55, .12); padding: 16px 20px; min-width: 340px; max-width: min(520px, 92vw); animation: toastin 250ms var(--ease); }
 .upd-msg { font-size: 14px; font-weight: 500; }
 .upd-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.upd-actions[hidden] { display: none; }
+.upd-go[hidden] { display: none; }
 .upd-card .btn { font-size: 13px; padding: 7px 16px; }
 .upd-card .btn-primary { background: #4F5BAA; border-color: #4F5BAA; color: #fff; }
 .upd-card .btn-primary:hover { background: #434E99; border-color: #434E99; }

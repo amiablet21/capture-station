@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.6 highlights
+
+- **Updates live in the footer button only.** Nothing pops up on its own any more. Click the bottom-right button and a small panel opens above it: "You're up to date (v1.31.6)", or "Version X is available (you have Y)" with Update now, which shows the download percentage and restarts the app once the build is on disk. Downloads still run quietly in the background and the button text follows ("Downloading 42%", "Restart to update vX").
+
 ## v1.31.5 highlights
 
 - **Phone button is back.** The Overview header has the phone button again (it went missing in the v1.30.0 redesign): it shows the Tailscale QR code and link for the phone dashboard.
