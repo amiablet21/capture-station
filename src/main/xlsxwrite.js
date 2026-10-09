@@ -88,7 +88,8 @@ function cellXml(ref, v, kind) {
   }
   return `<c r="${ref}" s="${kind === 'center' ? 4 : 0}" t="inlineStr"><is><t xml:space="preserve">${xml(v)}</t></is></c>`;
 }
-function buildWorkbook({ sheetName = 'Sheet1', columns, rows }) {
+// one sheet's XML (frozen header row, autofilter, sized columns)
+function sheetXml(columns, rows) {
   const cols = columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${Number(c.width) || 12}" customWidth="1"/>`).join('');
   const lastCol = colLetter(columns.length - 1);
   const lines = [];
@@ -98,7 +99,7 @@ function buildWorkbook({ sheetName = 'Sheet1', columns, rows }) {
     lines.push(`<row r="${rn}">${columns.map((c, i) => cellXml(`${colLetter(i)}${rn}`, r[i], c.kind)).join('')}</row>`);
   });
   const dim = `A1:${lastCol}${rows.length + 1}`;
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const data = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <dimension ref="${dim}"/>
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>
@@ -109,20 +110,27 @@ function buildWorkbook({ sheetName = 'Sheet1', columns, rows }) {
 <pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
-  const safeName = xml(String(sheetName).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
+  return { data, lastCol, rowCount: rows.length };
+}
+
+// a workbook with several sheets: [{ name, columns, rows }]
+function buildWorkbookSheets(sheets) {
+  const safe = (n) => xml(String(n).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
+  const built = sheets.map((sh, i) => ({ ...sheetXml(sh.columns, sh.rows), name: safe(sh.name || `Sheet${i + 1}`), n: i + 1 }));
   const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <bookViews><workbookView/></bookViews>
-<sheets><sheet name="${safeName}" sheetId="1" r:id="rId1"/></sheets>
-<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${safeName.replace(/'/g, "''")}'!$A$1:$${lastCol}$${rows.length + 1}</definedName></definedNames>
+<sheets>${built.map(b => `<sheet name="${b.name}" sheetId="${b.n}" r:id="rId${b.n}"/>`).join('')}</sheets>
+<definedNames>${built.map((b, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${b.name.replace(/'/g, "''")}'!$A$1:$${b.lastCol}$${b.rowCount + 1}</definedName>`).join('')}</definedNames>
 </workbook>`;
+  const stylesId = built.length + 1;
   const entries = [
     { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+${built.map(b => `<Override PartName="/xl/worksheets/sheet${b.n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n')}
 <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>` },
     { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -132,13 +140,17 @@ function buildWorkbook({ sheetName = 'Sheet1', columns, rows }) {
     { name: 'xl/workbook.xml', data: workbook },
     { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${built.map(b => `<Relationship Id="rId${b.n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${b.n}.xml"/>`).join('\n')}
+<Relationship Id="rId${stylesId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>` },
     { name: 'xl/styles.xml', data: STYLES_XML },
-    { name: 'xl/worksheets/sheet1.xml', data: sheet },
+    ...built.map(b => ({ name: `xl/worksheets/sheet${b.n}.xml`, data: b.data })),
   ];
   return zipCreate(entries);
 }
 
-module.exports = { buildWorkbook, zipCreate, crc32 };
+function buildWorkbook({ sheetName = 'Sheet1', columns, rows }) {
+  return buildWorkbookSheets([{ name: sheetName, columns, rows }]);
+}
+
+module.exports = { buildWorkbook, buildWorkbookSheets, zipCreate, crc32 };

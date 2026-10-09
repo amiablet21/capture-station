@@ -1110,6 +1110,63 @@ async function exportChannelSkus(channel, condition = '') {
   }
 }
 
+// Every Linnworks inventory item with its channel mappings (owner
+// 2026-10-09): SKUs sheet + Mappings sheet. The catalog feeds and the
+// unlisted scan's link records cover the in-stock items; items the scan
+// skipped (zero stock) get their link records read one by one here, with
+// progress, so an out-of-stock SKU's mappings are in the file too.
+async function exportLinnworksSkus() {
+  const { buildSkuExport, buildSkuExportXlsx, buildSkuExportCsv } = require('./chskus-csv.js');
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+  const day = db.localDay();
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Export Linnworks SKUs with channel mappings',
+    defaultPath: path.join(app.getPath('documents'), `linnworks-skus-${day}.xlsx`),
+    filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }, { name: 'CSV (two files)', extensions: ['csv'] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  const tell = (p) => { if (win && !win.isDestroyed()) win.webContents.send('export:progress', p); };
+  try {
+    const client = new LinnworksClient(cfg.linnworks);
+    tell({ stage: 'inventory' });
+    const items = attachCosts(await client.listInventory());
+    const channels = await client.getMappingChannels();
+    const feeds = [];
+    for (const ch of channels) {
+      tell({ stage: 'feed', detail: `${ch.source}${ch.subSource ? ' · ' + ch.subSource : ''}` });
+      try { feeds.push({ channel: ch, rows: await client.getChannelItems(ch.id, ch.source, ch.subSource) }); } catch { /* the link records still export */ }
+    }
+    let recs = {};
+    tell({ stage: 'links' });
+    try { recs = (await runUnlistedScanShared(cfg)).chrecs || {}; } catch { /* feed rows alone */ }
+    // items the scan did not cover and no feed row points at: read their links now
+    const linkedByFeed = new Set();
+    for (const f of feeds) for (const r of f.rows) if (r.linkedItemId) linkedByFeed.add(r.linkedItemId);
+    const todo = items.filter(it => it.stockItemId && !recs[it.stockItemId] && !linkedByFeed.has(it.stockItemId));
+    const extra = {};
+    for (let i = 0; i < todo.length; i++) {
+      tell({ stage: 'items', done: i, total: todo.length });
+      try { extra[todo[i].stockItemId] = await client.getChannelSkus(todo[i].stockItemId); } catch { /* that item exports without mappings */ }
+    }
+    tell({ stage: 'write' });
+    const withCost = !!(cfg.pages && cfg.pages.cost);
+    const data = buildSkuExport(items, feeds, recs, extra, { locationId: cfg.linnworks.locationId });
+    if (/\.csv$/i.test(filePath)) {
+      const csv = buildSkuExportCsv(data, { cost: withCost });
+      fs.writeFileSync(filePath, csv.skus, 'utf8');
+      fs.writeFileSync(filePath.replace(/\.csv$/i, '-mappings.csv'), csv.mappings, 'utf8');
+    } else {
+      fs.writeFileSync(filePath, buildSkuExportXlsx(data, { cost: withCost }));
+    }
+    return { ok: true, path: filePath, skus: data.skuRows.length, mappings: data.mapRows.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    tell({ stage: 'done' });
+  }
+}
+
 /* ---------- sync ---------- */
 
 async function triggerSync(trigger, ids) {
@@ -3435,6 +3492,7 @@ exit 1
   });
   ipcMain.handle('csv:export', () => exportCsv());
   ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
+  ipcMain.handle('skus:export', () => exportLinnworksSkus());
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
       const result = await testConnection(creds || config.load().linnworks);

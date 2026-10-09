@@ -59,6 +59,7 @@ if (!window.api) {
     setConfig: async () => ({}),
     exportCsv: async () => ({ ok: false }),
     exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
+    exportLinnworksSkus: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
@@ -3423,6 +3424,30 @@ async function stockExportChannel(channel) {
     btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
   }
 }
+// every Linnworks SKU with its channel mappings (owner 2026-10-09); the
+// button carries the progress while the link records are read
+async function stockExportLinnworks() {
+  const btn = $('stockActionsBtn');
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    const res = await api.exportLinnworksSkus();
+    if (res.ok) toast(`${res.skus.toLocaleString()} SKUs · ${res.mappings.toLocaleString()} mappings saved to ${res.path.split(/[\\/]/).pop()}`, 5000);
+    else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
+  }
+}
+api.on('export:progress', (p) => {
+  const btn = $('stockActionsBtn');
+  if (!btn.disabled || !p) return;
+  btn.textContent = p.stage === 'inventory' ? 'Reading inventory…'
+    : p.stage === 'feed' ? `Reading ${p.detail || 'channel'}…`
+      : p.stage === 'links' ? 'Reading link records…'
+        : p.stage === 'items' ? `Reading links ${p.done + 1} of ${p.total}…`
+          : p.stage === 'write' ? 'Writing the file…' : 'Exporting…';
+});
 // Actions dropdown (owner pick 2026-09-30, option A): Mappings, WFS
 // Shipments, Bulk import and the channel-SKU exports behind one button, so
 // the band never wraps again. Same in-app <dialog> menu as the Returns tab,
@@ -3444,6 +3469,7 @@ $('stockActionsDlg').addEventListener('click', (e) => {
   else if (act === 'wfs') openWfs();
   else if (act === 'wholesale') openWsList();
   else if (act === 'bulk') bulkOpen();
+  else if (act === 'export:linnworks') stockExportLinnworks();
   else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
 });
 $('stockSearch').addEventListener('input', () => {
