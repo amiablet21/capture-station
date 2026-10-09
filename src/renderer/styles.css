@@ -1,5 +1,5 @@
 /* Capture Station — Return Tracker design system (BRANDING.md):
-   warm monochrome canvas, one emerald accent, hairlines not shadows,
+   warm monochrome canvas, one navy accent, hairlines not shadows,
    compact cockpit density, Geist/Geist Mono, one easing curve. */
 
 @font-face {
@@ -29,11 +29,12 @@
   --muted: #787774;
   --faint: #A5A29C;
 
-  /* the one accent (emerald) */
-  --accent: #047857;
-  --accent-hover: #065F46;
-  --accent-soft: #E3F2EB;
-  --accent-soft-text: #065F46;
+  /* the one accent: the icon's navy (owner 2026-10-09: "I don't want this
+     to be green anymore... a blue color similar to the icon") */
+  --accent: #1E3A66;
+  --accent-hover: #152B4E;
+  --accent-soft: #E4EAF4;
+  --accent-soft-text: #1E3A66;
 
   /* semantic */
   --pos-bg: #EDF3EC; --pos-text: #346538;
@@ -2078,7 +2079,7 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 @keyframes ws-rot { to { transform: rotate(360deg); } }
 .ret-log-table tr.ws-row.is-ready td {
   background: #f0f8f4;
-  box-shadow: inset 0 -2px 0 rgba(4, 120, 87, 0.35);
+  box-shadow: inset 0 -2px 0 rgba(30, 58, 102, 0.35);
 }
 .ret-log-table tr.ws-row.is-ready td.ws-gutter {
   background: var(--accent);
@@ -2468,7 +2469,7 @@ tr.unl-dim:hover td { opacity: 1; }
   font-size: 11px;
   color: var(--accent-soft-text);
   background: transparent;
-  border: 1px dashed rgba(4, 120, 87, 0.35);
+  border: 1px dashed rgba(30, 58, 102, 0.35);
   border-radius: 999px;
   padding: 1px 9px;
   margin-left: 6px;
@@ -4216,8 +4217,8 @@ th:last-child > .col-grip { right: 0; }
 .upd-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .upd-go[hidden] { display: none; }
 .upd-card .btn { font-size: 13px; padding: 7px 16px; }
-.upd-card .btn-primary { background: #4F5BAA; border-color: #4F5BAA; color: #fff; }
-.upd-card .btn-primary:hover { background: #434E99; border-color: #434E99; }
+.upd-card .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.upd-card .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .upd-card .btn-primary:disabled { opacity: .6; }
 .upd-pct { font-variant-numeric: tabular-nums; }
 .toast.is-out {
@@ -4329,7 +4330,7 @@ th:last-child > .col-grip { right: 0; }
 .ebay-varx { position: absolute; top: -7px; right: -7px; width: 17px; height: 17px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; }
 .ebay-shots { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ebay-shot { position: relative; width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--border); background-size: cover; background-position: center; background-color: var(--surface-2); }
-.ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(4,120,87,.85); color: #fff; border-radius: 3px; }
+.ebay-shot.is-main::after { content: 'MAIN'; position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 7px; font-weight: 700; text-align: center; background: rgba(30,58,102,.85); color: #fff; border-radius: 3px; }
 .ebay-shot .x { position: absolute; top: -6px; right: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--neg-bg); color: var(--neg-text); font-size: 9px; font-weight: 700; border: none; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 /* copy the photo to the clipboard for pasting into eBay (owner 2026-09-18) */
 .ebay-shot .cp { position: absolute; top: -6px; left: -6px; width: 15px; height: 15px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 9px; border: 1px solid var(--border); cursor: pointer; line-height: 1; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.12s; }
@@ -4684,7 +4685,7 @@ th:last-child > .col-grip { right: 0; }
 /* the pass is alive: a sheen sweeps the filled part of the bar and the
    current step's ring breathes (owner 2026-10-08: "add an animation") */
 .ovq-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .55) 50%, transparent 100%); transform: translateX(-100%); animation: ovqSheen 1.6s ease-in-out infinite; }
-.ovq-track::after { content: ''; display: block; height: 100%; margin-top: -4px; background: linear-gradient(90deg, transparent, rgba(4, 120, 87, .12), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: ovqScan 2.2s linear infinite; pointer-events: none; }
+.ovq-track::after { content: ''; display: block; height: 100%; margin-top: -4px; background: linear-gradient(90deg, transparent, rgba(30, 58, 102, .12), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: ovqScan 2.2s linear infinite; pointer-events: none; }
 @keyframes ovqSheen { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
 @keyframes ovqScan { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 .ovq-load-h .t::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: ovqDots 1.5s steps(4, end) infinite; }
@@ -4705,7 +4706,7 @@ th:last-child > .col-grip { right: 0; }
 .ovq-step-ico { width: 16px; height: 16px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .ovq-step-ico.done { background: var(--accent-soft); color: var(--accent); }
 .ovq-step-ico.cur { border: 2px solid var(--accent); animation: ovqBreathe 1.4s ease-in-out infinite; } .ovq-step-ico.cur i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: ovqPulse 1.4s ease-in-out infinite; }
-@keyframes ovqBreathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(4, 120, 87, .35); } 50% { box-shadow: 0 0 0 5px rgba(4, 120, 87, 0); } }
+@keyframes ovqBreathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(30, 58, 102, .35); } 50% { box-shadow: 0 0 0 5px rgba(30, 58, 102, 0); } }
 @keyframes ovqPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.7); opacity: .55; } }
 .ovq-step-ico.todo { border: 1.5px solid #D6D4CF; }
 .ovq-step-note { margin-top: 6px; color: var(--muted); font-size: 12px; max-width: 520px; line-height: 1.5; }
