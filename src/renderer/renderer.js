@@ -11722,8 +11722,9 @@ $('ovRefreshBtn').addEventListener('click', async () => {
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
 // (the Phone button left the Overview 2026-09-25; the phone dashboard itself still runs)
-// phone dashboard QR (restored 2026-10-08: the button went missing in the
-// design-1a rebuild). Tailscale-only by owner call (2026-08-17): the
+// phone dashboard QR (restored 2026-10-08, then hidden 2026-10-09: "remove
+// the phone features or hide it for now" — the button carries `hidden` in
+// index.html; drop that attribute to bring it back). Tailscale-only by owner call (2026-08-17): the
 // anywhere address; the WiFi address stands in only if Tailscale is signed out
 $('ovPhoneBtn').addEventListener('click', async () => {
   const r = await (api.overviewPhone ? api.overviewPhone() : Promise.resolve(null)).catch(() => null);
