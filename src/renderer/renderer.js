@@ -8060,7 +8060,7 @@ function updShowState() {
   if (updateReadyVersion) { updMenu([you, updRow('Downloaded', `v${updEsc(updateReadyVersion)}`, 'is-new')], 'Restart now'); return; }
   if (updVersion && updAuto && updWanted) { updMenu([`<div class="upd-it"><span class="k">Downloading v${updEsc(updVersion)}</span><span class="upd-bar"><i></i></span></div>`, updRow('Restarts on its own when done', `${Math.max(0, updPct)}%`)], ''); return; }
   if (updVersion) { updMenu([you, updRow('Available', `v${updEsc(updVersion)}`, 'is-new'), ...(updWhy ? [`<div class="upd-it"><span class="k">Installer this time: ${esc(updWhy)}.</span></div>`] : [])], 'Update now'); return; }
-  updMenu([you, updRow('Latest', `v${updEsc(updCurrent)}`)], '');
+  updMenu([you, updRow('Up to date', '✓', 'is-faint')], '');
 }
 async function updRestart() {
   updMenu([updRow(`Restarting into v${updEsc(updateReadyVersion)}`, '…')], '');
@@ -8141,7 +8141,7 @@ $('updateCheckBtn').addEventListener('click', async () => {
     updMenu([updRow('You have', `v${updEsc(res.current)}`), updRow('Available', `v${updEsc(res.latest)}`, 'is-new'), `<div class="upd-it"><span class="k">Still building its installer — try again in a few minutes.</span></div>`], '');
   } else {
     updChip();
-    updMenu([updRow('You have', `v${updEsc(res.current)}`), updRow('Latest', `v${updEsc(res.current)}`), `<div class="upd-it"><span class="k">You're up to date.</span></div>`], '');
+    updMenu([updRow('You have', `v${updEsc(res.current)}`), updRow('Up to date', '✓', 'is-faint')], '');
   }
 });
 

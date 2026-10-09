@@ -4,6 +4,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.31.13 highlights
 
+- **Smaller update menu** (owner pick, size 1): 230px wide with 12px rows; up to date reads "You have v1.31.13 · Up to date ✓".
 - **Mac in-place download retries and explains itself.** A dropped download is retried three times before the installer route stands in, and when the installer route is used the update menu says why ("the in-place download failed N min ago (reason); it is tried again 20 min after that"). An update log is kept in the temp folder for diagnosis.
 
 ## v1.31.12 highlights
