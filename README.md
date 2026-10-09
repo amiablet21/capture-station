@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.9 highlights
+
+- **Version chip.** The footer's "Check for updates" is now a chip that reads the version you are on (`v1.31.9`); press it to check. The panel above it has a fixed width and no entrance animation, so it opens in the same spot every time (it used to slide sideways on each press).
+
 ## v1.31.8 highlights
 
 - **Navy accent.** The app's green accent is now the icon's navy: buttons, links, hover highlights, focus rings, the row markers, the DS chip, the SKU underline, menu highlights and the loading bar. Semantic greens stay green (synced, done, "new" condition, positive deltas), as do the marketplace colours.
