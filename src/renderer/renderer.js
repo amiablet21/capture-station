@@ -60,6 +60,7 @@ if (!window.api) {
     exportCsv: async () => ({ ok: false }),
     exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     exportLinnworksSkus: async () => ({ ok: false, error: 'Preview mode' }),
+    updateDownload: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
     testLinnworks: async () => ({ ok: false, error: 'Preview mode' }),
@@ -126,6 +127,7 @@ let updVersion = ''; // newest version on record ('' = none newer)
 let updWanted = false; // Update now was clicked: restart as soon as the build is on disk
 let updAuto = false; // in-place path (downloads itself) vs installer download
 let updPct = -1; // last download percentage seen
+let updDownloading = false; // a download is running (started by Update now)
 let updChecking = false;
 let updWhy = ''; // why the installer route is standing in (Mac), shown in the menu
 let updateReadyVersion = ''; // version downloaded and waiting for a restart
@@ -8063,7 +8065,7 @@ function updChip() {
   const b = $('updateCheckBtn');
   b.classList.remove('is-new', 'is-dl', 'is-ready');
   if (updateReadyVersion) { b.innerHTML = `<span class="upd-v">v${updEsc(updateReadyVersion)}</span><span>ready</span>`; b.classList.add('is-ready'); b.title = 'The new version is downloaded. Press to restart into it.'; }
-  else if (updVersion && updAuto) { b.innerHTML = `<span class="upd-v">v${updEsc(updVersion)}</span><span class="upd-pct">${Math.max(0, updPct)}%</span>`; b.classList.add('is-dl'); b.title = 'The new version is downloading in the background.'; }
+  else if (updVersion && updDownloading) { b.innerHTML = `<span class="upd-v">v${updEsc(updVersion)}</span><span class="upd-pct">${Math.max(0, updPct)}%</span>`; b.classList.add('is-dl'); b.title = 'The new version is downloading.'; }
   else if (updVersion) { b.innerHTML = `<span class="upd-v">v${updEsc(updVersion)}</span><span>available</span>`; b.classList.add('is-new'); b.title = 'A new version is out. Press to update.'; }
   else { b.innerHTML = `<span class="upd-v">v${updEsc(updCurrent)}</span>`; b.title = 'This version. Press to check for a newer one (the app also checks on its own every 30 minutes)'; }
 }
@@ -8084,7 +8086,7 @@ function updShowState() {
   const you = updRow('You have', `v${updEsc(updCurrent)}`);
   if (updChecking) { updMenu([updRow('Checking for updates', '…')], ''); return; }
   if (updateReadyVersion) { updMenu([you, updRow('Downloaded', `v${updEsc(updateReadyVersion)}`, 'is-new')], 'Restart now'); return; }
-  if (updVersion && updAuto && updWanted) { updMenu([`<div class="upd-it"><span class="k">Downloading v${updEsc(updVersion)}</span><span class="upd-bar"><i></i></span></div>`, updRow('Restarts on its own when done', `${Math.max(0, updPct)}%`)], ''); return; }
+  if (updVersion && updDownloading) { updMenu([`<div class="upd-it"><span class="k">Downloading v${updEsc(updVersion)}</span><span class="upd-bar"><i></i></span></div>`, updRow(updWanted ? 'Restarts on its own when done' : 'Downloading', `${Math.max(0, updPct)}%`)], ''); return; }
   if (updVersion) { updMenu([you, updRow('Available', `v${updEsc(updVersion)}`, 'is-new'), ...(updWhy ? [`<div class="upd-it"><span class="k">Installer this time: ${esc(updWhy)}.</span></div>`] : [])], 'Update now'); return; }
   updMenu([you, updRow('Up to date', '✓', 'is-faint')], '');
 }
@@ -8106,6 +8108,7 @@ api.on('update:available', (d) => {
 });
 api.on('update:progress', (d) => {
   if (updateReadyVersion) return;
+  updDownloading = true;
   updPct = Math.max(0, Math.min(100, Number(d && d.percent) || 0));
   updChip();
   if (!$('updCard').hidden) {
@@ -8117,6 +8120,7 @@ api.on('update:progress', (d) => {
 api.on('update:downloaded', (d) => {
   updateReadyVersion = (d && d.version) || updVersion || 'latest';
   updVersion = updateReadyVersion;
+  updDownloading = false;
   updChip();
   if (updWanted) { updRestart(); return; } // Update now was clicked: straight into the restart
   if (!$('updCard').hidden) updShowState();
@@ -8127,7 +8131,31 @@ $('updCard').addEventListener('click', async (e) => {
   if (!g || g.disabled) return;
   updWanted = true;
   if (updateReadyVersion) { updRestart(); return; }
-  if (updAuto) { updShowState(); return; } // the download is already running; the bar fills in
+  if (updAuto) {
+    // in-place route: start the download now (nothing downloads on its own —
+    // owner 2026-10-09); the bar fills in from update:progress
+    if (!updDownloading) {
+      updDownloading = true;
+      updPct = 0;
+      updChip();
+      updShowState();
+      const r = await api.updateDownload();
+      if (!r || !r.ok) {
+        updDownloading = false;
+        updWanted = false;
+        updChip();
+        updMenu([updRow(`Could not download v${updEsc(updVersion)}`, ''), `<div class="upd-it"><span class="k">${esc((r && r.error) || 'unknown error')}</span></div>`], 'Try again');
+      } else if (r.ready) {
+        updateReadyVersion = r.version || updVersion;
+        updDownloading = false;
+        updChip();
+        updRestart();
+      }
+      return;
+    }
+    updShowState();
+    return;
+  }
   // installer path (no in-place route on this station): download it and open it
   updMenu([updRow(`Downloading v${updEsc(updVersion)}`, '…')], '');
   const res = await api.updateInstall();
@@ -8160,6 +8188,7 @@ $('updateCheckBtn').addEventListener('click', async () => {
     updVersion = res.latest;
     updAuto = !!res.auto;
     updWhy = updAuto ? '' : String(res.why || '');
+    if (res.downloading) updDownloading = true;
     if (res.ready) updateReadyVersion = res.latest;
     updChip();
     updShowState();
