@@ -11642,7 +11642,7 @@ function ovPanelHtml(r) {
       <div><div class="k">This month</div><div class="v mono">${ovN(r.sold30)}</div><div class="s">last 30 days</div></div>
       <div><div class="k">Pace</div><div class="v mono ${paceCls}">${pct > 0 ? '+' : ''}${pct}%</div><div class="s mono">${pr.toFixed(1)} vs ${pp.toFixed(1)}</div></div>
     </div>
-    <div class="ovq-mk"><span class="lbl">By marketplace · 30 days</span>${mk}${r.kind !== 'watch' ? `<button class="ovq-link ovq-dismiss" data-ovignore="${esc(r.sku)}" data-pace="${Number(r.perDay) || 0}" title="Take this SKU off the list for ${(ovPlan() && ovPlan().ignoreDays) || 7} days — it comes back sooner if it starts selling half again as fast">Dismiss for ${(ovPlan() && ovPlan().ignoreDays) || 7} days</button>` : ''}</div>
+    <div class="ovq-mk"><span class="lbl">By marketplace · 30 days</span>${mk}${r.kind !== 'watch' ? `<button class="ovq-dismiss" data-ovignore="${esc(r.sku)}" data-pace="${Number(r.perDay) || 0}" title="Take this SKU off the list for ${(ovPlan() && ovPlan().ignoreDays) || 7} days — it comes back sooner if it starts selling half again as fast">Dismiss for ${(ovPlan() && ovPlan().ignoreDays) || 7} days</button>` : ''}</div>
   </div></div></div>`;
 }
 
