@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.23 highlights
+
+- Dismiss is a red-outlined button (owner pick C), and the expanded row's bottom spacing is tighter.
+
 ## v1.31.22 highlights
 
 - **Dismiss on the Overview.** Open a row and "Dismiss for 7 days" sits at the right of the marketplace line. The SKU leaves the list for a week (sooner if it starts selling half again as fast), and the "N ignored · Undo" footer brings every dismissed SKU back. Watch rows have no dismiss.
