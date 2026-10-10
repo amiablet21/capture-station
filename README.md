@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.18 highlights
+
+- The Min column is gone from the Stock grid (owner: unnecessary). Minimums still drive the Low chip and the below-minimum tint on Available.
+
 ## v1.31.17 highlights
 
 - **Updates download only when you press Update now.** The app still checks on its own and the chip turns navy with "v1.31.17 available", but nothing downloads until Update now in the chip's menu. Then the percentage fills in and the app restarts itself once the build is on disk. Windows and Mac alike.

@@ -2585,7 +2585,9 @@ try { stockColWidths = JSON.parse(localStorage.getItem('stockColWidths') || '{}'
 
 // user-arranged column ORDER for the main sheet, persisted (owner request
 // 2026-08-12: drag a header to move the column)
-const STOCK_COL_DEFAULT = ['sku', 'cost', 'stockLevel', 'inOrders', 'minimumLevel', 'available'];
+// Min left the grid 2026-10-10 (owner: "unnecessary"); minimums still drive
+// the Low chip and the Below-minimum tint, and old saved orders drop the key
+const STOCK_COL_DEFAULT = ['sku', 'cost', 'stockLevel', 'inOrders', 'available'];
 const costOn = () => !!(state && state.pages && state.pages.cost);
 const fmtCost = (v) => Number(v) > 0 ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 let stockColOrder = STOCK_COL_DEFAULT.slice();
