@@ -99,10 +99,9 @@ body {
   font-weight: 600;
   letter-spacing: -0.02em;
 }
-/* the app icon top-left (owner 2026-10-10): the dws. tile at 28px with a
-   hairline and a soft lift, the name beside it in the accent navy */
-.brand-mark { width: 28px; height: 28px; border-radius: 7px; border: 1px solid rgba(30, 58, 102, .12); box-shadow: 0 1px 2px rgba(47, 52, 55, .08); display: block; }
-.brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--accent); }
+/* the app icon top-left (owner 2026-10-10, icon only): the dws. tile at
+   30px with a hairline and a soft lift */
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(30, 58, 102, .12); box-shadow: 0 1px 2px rgba(47, 52, 55, .08); display: block; }
 
 .topbar-right { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 24px; }
 
