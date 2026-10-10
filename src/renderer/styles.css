@@ -4787,9 +4787,10 @@ th:last-child > .col-grip { right: 0; }
 .ovq-figs .v.big { font-size: 22px; }
 .ovq-figs .v.b { color: var(--badge-blue-text); } .ovq-figs .v.r { color: var(--neg-text); }
 .ovq-figs .s { font-size: 11px; color: var(--faint); }
-.ovq-mk { grid-column: 1 / -1; display: flex; align-items: center; gap: 36px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+.ovq-mk { grid-column: 1 / -1; display: flex; align-items: center; gap: 28px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
 .ovq-mk-it { display: flex; align-items: center; gap: 7px; font-size: 12px; }
-.ovq-dismiss { margin-left: auto; color: var(--muted); }
+.ovq-dismiss { margin-left: auto; color: var(--muted); white-space: nowrap; flex: none; }
+.ovq-mk > .lbl { white-space: nowrap; }
 .ovq-dismiss:hover { color: var(--neg-text); }
 .ovq-mk-it i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .ovq-mk-it b { font-weight: 500; font-variant-numeric: tabular-nums; } .ovq-mk-it small { font-size: 11px; color: var(--faint); }
