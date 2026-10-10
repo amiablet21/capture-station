@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.21 highlights
+
+- **The Tracking column holds its width.** Opening the scan box on a row no longer widens the column: header and cells share one fixed width and the box fits inside it. Long tracking numbers trim with an ellipsis rather than pushing the Notes column.
+
 ## v1.31.20 highlights
 
 - Top-left is the icon alone, no name (owner call).

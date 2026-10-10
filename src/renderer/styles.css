@@ -484,7 +484,11 @@ body {
 .cell-order { max-width: 240px; }
 .cell-order .badge { margin-right: 8px; vertical-align: 1px; }
 .order-num { font-weight: 600; }
-.cell-tracking { color: var(--muted); max-width: 220px; }
+/* a fixed column (owner 2026-10-10: opening the scan box must not widen
+   it): header and cells share one width, the input fits inside it */
+#thTracking, .cell-tracking { width: 264px; min-width: 264px; max-width: 264px; box-sizing: border-box; }
+@media (max-width: 1000px) { #thTracking, .cell-tracking { width: 190px; min-width: 190px; max-width: 190px; } }
+.cell-tracking { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-notes { font-size: 12.5px; color: var(--muted); max-width: 200px; }
 
 .cell-missing { color: var(--faint); font-family: var(--font); font-size: 12px; }
@@ -3240,7 +3244,8 @@ button.item-info { background: transparent; padding: 0; cursor: pointer; font-fa
 
 /* inline tracking scan input in the active row */
 .row-scan-input {
-  width: 220px;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
   padding: 3px 9px;
   font-family: var(--mono);
   font-size: 12.5px;
@@ -4258,7 +4263,7 @@ th:last-child > .col-grip { right: 0; }
   .scanpanel { margin: 0 16px; }
   .rows-row { margin: 12px 16px; }
   .cell-order { max-width: 150px; }
-  .cell-tracking { max-width: 120px; }
+  #thTracking, .cell-tracking { width: 130px; min-width: 130px; max-width: 130px; }
 }
 
 /* ---------- Upload Photos (claim photos) ---------- */
