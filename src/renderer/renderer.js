@@ -313,7 +313,8 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  // Recovery rides the Returns flag too (it reads the Returns log) and is opt-in like Pricing
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -330,6 +331,7 @@ function render() {
   $('tabStock').hidden = !pages.stock;
   $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
+  $('tabRecovery').hidden = !pages.returns || !pages.recovery; // opt-in (owner 2026-10-11), needs Returns
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
@@ -1231,6 +1233,7 @@ async function openSettings() {
   $('setPagePricing').checked = !!pg.pricing; // opt-in: default off
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
+  $('setPageRecovery').checked = !!pg.recovery; // opt-in: default off, needs Returns
   $('setPageListings').checked = pg.listings !== false;
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
@@ -1241,6 +1244,9 @@ async function openSettings() {
   $('setRetSyncStation').value = rsy.station || '';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
+  const rcv2 = cfg.recovery || {};
+  $('setRcEmail').value = rcv2.email || '';
+  $('setRcWebhook').value = rcv2.webhookUrl || '';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
@@ -1302,6 +1308,11 @@ $('chooseCsvBtn').addEventListener('click', async () => {
   if (res.folder) $('setCsvFolder').textContent = res.folder;
 });
 
+// Recovery: the archived Walmart reports live under Documents (spec §3.4)
+$('openRcArchiveBtn').addEventListener('click', async () => {
+  const r = await api.recoveryOpenArchive().catch(e => ({ ok: false, error: e.message }));
+  if (r && !r.ok) toast(r.error || 'Could not open the folder.', 4000);
+});
 $('chooseRecvBtn').addEventListener('click', async () => {
   const res = await api.chooseReceivingFolder();
   if (res.folder) $('setRecvFolder').textContent = res.folder;
@@ -1341,6 +1352,7 @@ $('settingsSave').addEventListener('click', async () => {
       pricing: $('setPagePricing').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
+      recovery: $('setPageRecovery').checked,
       listings: $('setPageListings').checked,
       wholesale: $('setPageWholesale').checked,
       cost: $('setPageCost').checked,
@@ -1348,6 +1360,7 @@ $('settingsSave').addEventListener('click', async () => {
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
+    recovery: { email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim() },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
       applicationSecret: $('setAppSecret').value.trim(),
@@ -1429,7 +1442,7 @@ let activePage = 'capture';
 let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ebay: 'ebayPage', temu: 'temuPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1468,6 +1481,7 @@ function showPage(page) {
   $('pricingPage').hidden = page !== 'pricing';
   $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
+  $('recoveryPage').hidden = page !== 'recovery';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
@@ -1475,6 +1489,7 @@ function showPage(page) {
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
+  $('tabRecovery').classList.toggle('is-active', page === 'recovery');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
@@ -1515,6 +1530,8 @@ function showPage(page) {
     } else if (page === 'returns') {
       applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
+    } else if (page === 'recovery') {
+      enterRecovery();
     } else {
       focusScan();
     }
@@ -1529,6 +1546,7 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabPricing').addEventListener('click', () => showPage('pricing'));
+$('tabRecovery').addEventListener('click', () => showPage('recovery'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -1555,6 +1573,568 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
   const item = e.target.closest('.tab-menu-item');
   $('returnsMenuDlg').close();
   if (item) showPage(item.dataset.page);
+});
+
+/* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
+// docs/recovery/SPEC.md §13 — two screens in one page. Reconcile: drop a
+// Seller Center → Payments report, the three buckets of the period and a
+// tabbed table. Not received: where the refund money went, the Today card,
+// and the tracker with its status sentences and row actions. Every status
+// is derived in the main process on each load; this side only draws.
+const rc = {
+  data: null, run: null, runId: null, sub: 'reconcile', bucket: 'notReceived', tab: 'todo', type: '', q: '',
+  scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
+};
+const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const rcMoney = (n) => '$' + Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rcPlural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+// a period label for the screen: an en dash between the dates
+const rcPeriodName = (label) => String(label || '').replace(' - ', ' – ');
+// "Mon D" from an ISO stamp or a report MM/DD/YYYY date
+function rcMonDay(v) {
+  if (!v) return '';
+  const s = String(v);
+  let d = null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) d = new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+  else { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s); if (m) d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2])); }
+  return d && !isNaN(d.getTime()) ? `${RC_MON[d.getMonth()]} ${d.getDate()}` : '';
+}
+// "today at 8:40 AM" / "yesterday at 8:40 AM" / "Oct 3 at 8:40 AM"
+function rcWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const day = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const yday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const when = day(d) === day(now) ? 'today' : day(d) === day(yday) ? 'yesterday' : `${RC_MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== now.getFullYear() ? `, ${d.getFullYear()}` : ''}`;
+  return `${when} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
+const rcSentence = (t, strong) => t ? `<span class="rc-dot ${esc('is-' + (t.tone || 'grey'))}"></span><span class="rc-lead ${strong ? esc('is-' + t.tone) : ''}">${esc(t.lead)}</span>${t.clause ? `<span class="rc-clause"> — ${esc(t.clause)}</span>` : ''}` : '';
+// the lead takes the tone colour only where the row shouts: red, the amber
+// unpaid-cycles issue, a green approval (the design's calm rows stay plain)
+const rcStrong = (t) => t && (t.tone === 'red' || (t.tone === 'amber' && /^Unpaid/.test(t.lead)) || (t.tone === 'green' && /^Approved/.test(t.lead)));
+
+async function enterRecovery() { await rcLoad(); }
+
+async function rcLoad() {
+  const seq = ++rc.seq;
+  const res = await api.recoveryState().catch(e => ({ ok: false, error: e.message }));
+  if (seq !== rc.seq || activePage !== 'recovery') return;
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not load the Recovery page.', 5000); return; }
+  rc.data = res;
+  const runs = res.runs || [];
+  if (!runs.some(r => r.id === rc.runId)) rc.runId = runs.length ? runs[0].id : null;
+  rc.run = null;
+  if (rc.runId) {
+    const d = await api.recoveryRun(rc.runId).catch(() => null);
+    if (seq !== rc.seq) return;
+    rc.run = d && d.ok ? d.run : null;
+  }
+  await rcLoadSummary(seq);
+  if (seq !== rc.seq) return;
+  rcRender();
+}
+
+async function rcLoadSummary(seq = rc.seq) {
+  if (!rc.data) return;
+  let key = null;
+  if (rc.scope === 'cycle') key = rc.runId;
+  else if (rc.scope === 'month') {
+    const months = rc.data.months || [];
+    if (!months.includes(rc.month)) rc.month = months[0] || '';
+    key = rc.month;
+  }
+  if ((rc.scope === 'cycle' && !key) || (rc.scope === 'month' && !key)) { rc.summary = null; return; }
+  const s = await api.recoverySummary(rc.scope, key).catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.summary = s && s.ok ? s : null;
+}
+
+function rcRender() {
+  if (!rc.data) return;
+  const need = rc.data.today ? rc.data.today.needsAction : 0;
+  $('rcNeedCount').textContent = String(need);
+  $('rcNeedCount').hidden = !need;
+  for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
+  $('rcReconcile').hidden = rc.sub !== 'reconcile';
+  $('rcNotReceived').hidden = rc.sub !== 'notreceived';
+  $('rcImportBtn').hidden = rc.sub !== 'reconcile';
+  $('rcExportBtn').hidden = rc.sub !== 'notreceived';
+  rcRenderReconcile();
+  rcRenderSummary();
+  rcRenderToday();
+  rcRenderList();
+}
+
+/* ----- Reconcile ----- */
+function rcRenderReconcile() {
+  const runs = rc.data.runs || [];
+  const run = rc.run;
+  const empty = !runs.length;
+  $('rcPeriodCard').hidden = empty || !run;
+  $('rcBucketCard').hidden = empty || !run;
+  $('rcEarlier').hidden = runs.length < 2;
+  $('rcDropTitle').textContent = empty ? 'Drop a payment period CSV here' : 'Drop the next period\'s CSV here';
+  if (empty) {
+    $('rcPeriodLabel').textContent = 'Latest period';
+    $('rcPeriodName').textContent = 'Nothing imported yet';
+    $('rcPeriodMeta').textContent = rc.data.logRows
+      ? `Drop a Seller Center → Payments reconciliation CSV to check its refunds against the ${rc.data.logRows.toLocaleString()} returns in the log.`
+      : 'Log returns first — the Returns log is what each refund is checked against.';
+    return;
+  }
+  const meta = runs.find(r => r.id === rc.runId) || runs[0];
+  $('rcPeriodLabel').textContent = meta.id === runs[0].id ? 'Latest period' : 'Period';
+  $('rcPeriodName').textContent = rcPeriodName(meta.label);
+  $('rcPeriodMeta').textContent = `Imported ${rcWhen(meta.ranAt)} · ${rcPlural(meta.totalRefunds, 'refund')} checked against ${Number(meta.logRows || 0).toLocaleString()} returns in the log`;
+
+  // earlier periods: a hairline list, each with its open count and Excel link
+  const others = runs.filter(r => r.id !== meta.id);
+  $('rcEarlier').innerHTML = others.length ? `<div class="rc-label">${meta.id === runs[0].id ? 'Earlier periods' : 'Other periods'}</div>` + others.map(r => `
+    <div class="rc-earlier-row">
+      <button type="button" class="rc-earlier-name" data-rcrun="${esc(r.id)}" title="Show this period">${esc(rcPeriodName(r.label))}</button>
+      <span class="rc-earlier-open ${r.open ? '' : 'is-clear'}">${r.open ? `${r.open} open` : 'clear'}</span>
+      <button type="button" class="rc-link" data-rcexcel="${esc(r.id)}">Excel</button>
+    </div>`).join('') : '';
+
+  if (!run) return;
+  const c = run.counts || {};
+  const b = (k) => c[k] || { count: 0, total: 0 };
+  $('rcPeriodNums').innerHTML = [
+    ['is-navy', b('received'), 'received'], ['is-red', b('notReceived'), 'not received'], ['is-amber', b('wfsWaiting'), 'WFS waiting'],
+  ].map(([tone, x, label]) => `<div><div class="rc-num ${tone}">${x.count}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${rcMoney(x.total)}</div></div>`).join('');
+  rcBar($('rcPeriodBar'), [['is-navy', b('received').total], ['is-red', b('notReceived').total], ['is-amber', b('wfsWaiting').total]]);
+  const total = b('received').total + b('notReceived').total + b('wfsWaiting').total;
+  $('rcPeriodTotal').textContent = `${rcMoney(total)} refunded this period`;
+  const act = b('actionNow').count;
+  $('rcPeriodNeed').textContent = act ? `${act} need${act === 1 ? 's' : ''} action today` : 'nothing needs action today';
+  rcRenderBucket();
+}
+
+// a proportional bar: each segment's flex is its dollars (CSSOM, not an
+// inline attribute, so the CSP is happy); nothing at all draws an empty track
+function rcBar(el, segs) {
+  const live = segs.filter(([, v]) => Number(v) > 0);
+  el.innerHTML = live.map(([tone]) => `<div class="rc-seg ${tone}"></div>`).join('');
+  [...el.children].forEach((d, i) => { d.style.flex = String(Math.round(live[i][1] * 100) / 100); });
+}
+
+const RC_BUCKETS = [['notReceived', 'Not received'], ['wfsWaiting', 'WFS waiting'], ['received', 'Received']];
+const RC_SORT_NOTE = { notReceived: 'sorted: act now first, then biggest refund', wfsWaiting: 'sorted: overdue first, then biggest refund', received: 'sorted: notes first, then biggest refund' };
+function rcRenderBucket() {
+  const run = rc.run;
+  const sum = run.summary || {};
+  $('rcBucketTabs').innerHTML = RC_BUCKETS.map(([k, label]) => {
+    const n = (sum[k] || []).length;
+    const on = rc.bucket === k;
+    return `<button type="button" class="rc-tab ${on ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${on && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`;
+  }).join('') + `<span class="rc-sortnote">${esc(RC_SORT_NOTE[rc.bucket] || '')}</span>`;
+  const rows = sum[rc.bucket] || [];
+  const received = rc.bucket === 'received';
+  const head = received
+    ? '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
+    : '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
+  const body = rows.length ? rows.map(r => {
+    const type = /wfs|walmart-fulfilled/i.test(String(r['Fulfillment Type'] || '')) ? 'WFS' : 'Seller';
+    const days = r['Days Ago'];
+    const refunded = `<span class="rc-mono">${esc(rcMonDay(r['Refund Date']))}</span>${days !== '' && days != null ? ` <span class="rc-muted">· ${days} days ago</span>` : ''}`;
+    const last = received
+      ? (r.Note ? rcSentence({ tone: 'amber', lead: 'Review', clause: r.Note }, false) : rcSentence({ tone: 'green', lead: 'Received', clause: '' }, false))
+      : rcSentence(r.todo, r.todo && r.todo.tone === 'red');
+    const fifth = received ? esc(r['Warehouse Condition'] || '') : esc(String(r['Return Reason'] || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()));
+    return `<tr>
+      <td><div class="rc-po">${esc(r['PO #'])}</div><div class="rc-po-sub">${type}</div></td>
+      <td class="rc-item">${esc(r.Item || '')}</td>
+      <td class="rc-nowrap">${refunded}</td>
+      <td class="rc-mono is-right rc-nowrap">${rcMoney(r['Net Refund (Payable Impact)'])}</td>
+      <td class="rc-muted">${fifth}</td>
+      <td class="rc-nowrap">${last}</td>
+    </tr>`;
+  }).join('') : `<tr class="rc-empty-row"><td colspan="6">${rc.bucket === 'notReceived' ? 'Every refund in this period came back or is waiting on WFS.' : rc.bucket === 'wfsWaiting' ? 'No WFS refunds are waiting on Walmart.' : 'Nothing from this period has come back yet.'}</td></tr>`;
+  $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
+/* ----- Not received: the money bar, the Today card, the list ----- */
+function rcRenderSummary() {
+  const s = rc.summary;
+  for (const b of $('rcScope').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.rcscope === rc.scope);
+  const months = (rc.data && rc.data.months) || [];
+  const pick = $('rcMonthPick');
+  pick.hidden = rc.scope !== 'month' || !months.length;
+  if (!pick.hidden) {
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    pick.innerHTML = months.map(k => `<option value="${esc(k)}" ${k === rc.month ? 'selected' : ''}>${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}</option>`).join('');
+  }
+  if (!s) {
+    $('rcRefunded').textContent = '$0.00';
+    $('rcRefundedSub').textContent = rc.scope === 'cycle' ? 'refunded · no period imported' : 'refunded';
+    rcBar($('rcMoneyBar'), []);
+    $('rcLegend').innerHTML = '';
+    return;
+  }
+  $('rcRefunded').textContent = rcMoney(s.returns);
+  $('rcRefundedSub').textContent = `refunded · ${rc.scope === 'cycle' ? rcPeriodName(s.label).replace(/, \d{4}$/, '') : s.label}`;
+  const segs = [['is-navy', s.received], ['is-blue', s.reimbursed], ['is-amber', s.pendingWfs], ['is-pale', s.pendingSeller], ['is-red', s.loss]];
+  if (s.adjustments) segs.push(['is-grey', s.adjustments]);
+  rcBar($('rcMoneyBar'), segs);
+  const legend = [
+    ['is-navy', s.received, 'came back'], ['is-blue', s.reimbursed, 'Walmart paid back'], ['is-amber', s.pendingWfs, 'waiting on WFS'],
+    ['is-pale', s.pendingSeller, 'being chased'], ['is-red', s.loss, 'lost'],
+  ];
+  if (s.adjustments) legend.push(['is-grey', s.adjustments, 'adjustments']);
+  if (s.disputeWins) legend.push(['', s.disputeWins, `dispute wins · ${rcPlural(s.disputeWinsCount, 'PO')}`]);
+  $('rcLegend').innerHTML = legend.map(([tone, amt, label]) => `<div class="rc-legend-item"><span class="rc-swatch ${tone}"></span><div><div class="rc-legend-amt">${rcMoney(amt)}</div><div class="rc-legend-label">${esc(label)}</div></div></div>`).join('');
+}
+
+function rcRenderToday() {
+  const t = rc.data.today || { toFile: { count: 0, total: 0 }, waiting: { count: 0, total: 0 }, cases: { count: 0, total: 0 } };
+  $('rcTodayNums').innerHTML = [
+    ['is-red', t.toFile, 'to file now'], ['is-amber', t.waiting, 'waiting'], ['is-navy', t.cases, 'cases open'],
+  ].map(([tone, x, label]) => `<div><div class="rc-num ${tone}">${x.count}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${rcMoney(x.total)}</div></div>`).join('');
+}
+
+const RC_TABS = [['todo', 'To do'], ['cases', 'Cases'], ['adjustments', 'Adjustments'], ['reimbursed', 'Reimbursed'], ['lost', 'Lost']];
+function rcMatches(it) {
+  if (it.tab !== rc.tab) return false;
+  if (rc.type && it.type !== rc.type) return false;
+  if (!rc.q) return true;
+  const q = rc.q.toLowerCase();
+  return [it.po, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
+}
+function rcRenderList() {
+  const items = rc.data.items || [];
+  const counts = {};
+  for (const it of items) counts[it.tab] = (counts[it.tab] || 0) + 1;
+  $('rcListTabs').innerHTML = RC_TABS.map(([k, label]) => {
+    const on = rc.tab === k;
+    const n = counts[k] || 0;
+    return `<button type="button" class="rc-tab ${on ? 'is-active' : ''}" data-rctab="${k}">${label} <span class="rc-tab-count ${k === 'todo' && n ? 'is-red' : ''}">${n}</span></button>`;
+  }).join('');
+  for (const b of document.querySelectorAll('.rc-toggle')) b.classList.toggle('is-on', rc.type === b.dataset.rctype);
+  const rows = items.filter(rcMatches);
+  const head = '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Paid back</th><th>Status</th><th></th>';
+  let body;
+  if (rows.length) {
+    body = rows.map(it => {
+      const sub = it.caseOpened
+        ? `${esc(it.type)} · <button type="button" class="rc-po-case" data-rcact="caseId" data-rcpo="${esc(it.po)}" title="Edit the case ID">${it.caseId ? `case ${esc(it.caseId)}` : 'add case ID'}</button>`
+        : esc(it.type);
+      const paid = it.settlementSeen != null
+        ? `<span class="rc-paid" title="${esc(it.settlementDate ? `seen ${rcMonDay(it.settlementDate)}` : '')}${it.settlementKind ? ` · ${esc(it.settlementKind)}` : ''}">${rcMoney(it.settlementSeen)}</span>`
+        : '<span class="rc-faint">—</span>';
+      const st = it.statusText || { lead: it.status, clause: '', tone: 'grey', tooltip: '' };
+      const note = it.note ? `<button type="button" class="rc-note-btn" title="${esc(it.note)}" data-rcact="note" data-rcpo="${esc(it.po)}">Note</button>` : '';
+      const prim = rcPrimary(it);
+      return `<tr data-rcpo="${esc(it.po)}">
+        <td><div class="rc-po">${esc(it.po)}</div><div class="rc-po-sub">${sub}</div></td>
+        <td class="rc-item">${esc(it.item || '')}${note}</td>
+        <td class="rc-nowrap"><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld}d</span>` : ''}</td>
+        <td class="rc-mono is-right rc-nowrap">${rcMoney(it.amount)}</td>
+        <td class="is-right rc-nowrap">${paid}</td>
+        <td class="rc-nowrap" title="${esc(st.tooltip || '')}">${rcSentence(st, rcStrong(st))}</td>
+        <td class="rc-actions">${prim ? `<button type="button" class="rc-btn ${prim.filled ? 'rc-btn-primary rc-btn-row' : 'rc-btn-outline rc-btn-navy'}" data-rcact="${prim.act}" data-rcpo="${esc(it.po)}">${prim.label}</button>` : ''}<button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More actions" title="More actions">⋯</button></td>
+      </tr>`;
+    }).join('');
+  } else {
+    const waiting = rc.data.today ? rc.data.today.waiting.count : 0;
+    let msg;
+    if (rc.q || rc.type) msg = 'Nothing matches.';
+    else if (rc.tab === 'todo') msg = waiting ? `Nothing to file — ${rcPlural(waiting, 'return')} ${waiting === 1 ? 'is' : 'are'} waiting on Walmart.` : (items.length ? 'Nothing to file.' : 'Nothing is outstanding. Import a payment period on the Reconcile screen to check its refunds.');
+    else msg = { cases: 'No open cases.', adjustments: 'No partial adjustments.', reimbursed: 'Walmart has not paid anything back yet.', lost: 'Nothing written off.' }[rc.tab];
+    body = `<tr class="rc-empty-row"><td colspan="7">${esc(msg)}</td></tr>`;
+  }
+  $('rcListTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
+// the one contextual button (§6.6): filled only when the row needs action now
+function rcPrimary(it) {
+  if (it.status !== 'outstanding' || it.adjustment) return null;
+  if (it.caseOpened) return it.caseApproved ? null : { label: 'Mark approved', act: 'approve', filled: false };
+  if (it.wfsWaiting) return null;
+  return { label: 'Open case', act: 'case', filled: !!it.needsAction };
+}
+// the overflow menu per state (§6.6)
+function rcMenuItems(it) {
+  const note = { label: it.note ? 'Edit note' : 'Add note', act: 'note' };
+  const received = { label: 'Mark received', act: 'received' };
+  const loss = { label: 'Write off as a loss', act: 'writeOff' };
+  const remove = { label: 'Remove from the list', act: 'remove', danger: true };
+  let items;
+  if (it.status === 'loss') items = [{ label: 'Un-mark loss', act: 'undoWriteOff' }, note];
+  else if (it.status === 'reimbursed_pending') items = [{ label: 'Undo pending reimbursement', act: 'undoPending' }, note];
+  else if (it.status === 'reimbursed') items = [received, loss, note];
+  else if (it.adjustment) items = [{ label: 'Undo adjustment', act: 'undoAdjustment' }, received, loss, note];
+  else if (it.caseOpened) items = [
+    it.caseApproved ? { label: 'Undo approval', act: 'unapprove' } : { label: 'Mark approved', act: 'approve' },
+    { label: 'Edit case ID', act: 'caseId' }, { label: 'Undo case', act: 'undoCase' }, { label: 'Pending reimbursement', act: 'pending' }, received, loss, note,
+  ];
+  else items = [{ label: 'Open case', act: 'case' }, received, loss, { label: 'Mark adjustment', act: 'adjustment' }, { label: 'Pending reimbursement', act: 'pending' }, note];
+  return [...items, remove];
+}
+
+/* ----- actions ----- */
+const rcItem = (po) => ((rc.data && rc.data.items) || []).find(i => i.po === po);
+async function rcMark(po, action, payload) {
+  const res = await api.recoveryMark(po, action, payload).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not save that.', 4000); return false; }
+  await rcLoad();
+  return true;
+}
+function rcConfirm({ title, body, ok, danger = true }) {
+  return new Promise((resolve) => {
+    const dlg = $('rcConfirmDlg');
+    $('rcConfirmTitle').textContent = title;
+    $('rcConfirmBody').textContent = body;
+    $('rcConfirmOk').textContent = ok || 'Confirm';
+    $('rcConfirmOk').className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+    const done = (v) => { dlg.removeEventListener('close', onClose); resolve(v); };
+    const onClose = () => done(dlg.returnValue === 'ok');
+    dlg.addEventListener('close', onClose);
+    $('rcConfirmOk').onclick = () => dlg.close('ok');
+    $('rcConfirmCancel').onclick = () => dlg.close('');
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+async function rcDoAction(po, act) {
+  const it = rcItem(po);
+  if (!it) return;
+  if (act === 'case' || act === 'caseId') {
+    const dlg = $('rcCaseDlg');
+    $('rcCaseTitle').textContent = act === 'case' ? 'Open a case' : 'Case ID';
+    $('rcCasePo').textContent = `PO ${po} · ${it.item || ''}`;
+    $('rcCaseId').value = it.caseId || '';
+    $('rcCaseOk').textContent = act === 'case' ? 'Open case' : 'Save';
+    dlg.dataset.act = act;
+    dlg.dataset.po = po;
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcCaseId').focus();
+    return;
+  }
+  if (act === 'note') {
+    const dlg = $('rcNoteDlg');
+    $('rcNotePo').textContent = `PO ${po} · ${it.item || ''}`;
+    $('rcNoteText').value = it.note || '';
+    dlg.dataset.po = po;
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcNoteText').focus();
+    return;
+  }
+  if (act === 'received') {
+    // the normal receive popup, prefilled: a return is logged properly and
+    // stock moves; the PO lookup fills the rest (owner decision, spec §12.2)
+    rc.awaitRecv = true;
+    retOpenRecv(po, { sku: it.sku || '', note: it.item || '' });
+    return;
+  }
+  if (act === 'writeOff') {
+    if (!(await rcConfirm({ title: 'Write off as a loss', body: `PO ${po} — ${it.item || ''} · ${rcMoney(it.amount)}. It stays on the Lost tab and in the audit workbook, and nothing is chased.`, ok: 'Write off' }))) return;
+    await rcMark(po, 'writeOff');
+    return;
+  }
+  if (act === 'remove') {
+    if (!(await rcConfirm({ title: 'Remove from the list', body: `Drop PO ${po} from the tracker on every desktop? Re-importing its period brings it back.`, ok: 'Remove' }))) return;
+    await rcMark(po, 'remove');
+    return;
+  }
+  await rcMark(po, act);
+}
+
+/* ----- import ----- */
+function rcProgress(text, state) {
+  const el = $('rcProgress');
+  el.textContent = text || '';
+  el.hidden = !text;
+  el.className = `rc-progress${state ? ` is-${state}` : ''}`;
+}
+async function rcImport(name, text, force) {
+  if (rc.busy) return;
+  rc.busy = true;
+  $('rcDrop').classList.add('is-busy');
+  rcProgress('Reading Walmart report…');
+  const res = await api.recoveryImport(name, text, force).catch(e => ({ ok: false, error: e.message }));
+  rc.busy = false;
+  $('rcDrop').classList.remove('is-busy');
+  if (!res) { rcProgress('The import did not finish.', 'fail'); return; }
+  if (res.noRefunds) { rcProgress(`This report has no refunds (${res.format} format) — nothing was imported.`, 'fail'); return; }
+  if (res.alreadyImported) {
+    rcProgress('');
+    rc.pendingImport = { name, text };
+    $('rcDupBody').textContent = res.sameFile
+      ? `This exact file was already imported as "${rcPeriodName(res.label)}" (${rcWhen(res.ranAt)}). Re-import and replace it?`
+      : `A report for ${rcPeriodName(res.label)} was already imported (${rcWhen(res.ranAt)}). Re-import and replace it?`;
+    $('rcDupDlg').showModal();
+    return;
+  }
+  if (!res.ok) { rcProgress(res.error || 'Could not import that report.', 'fail'); return; }
+  rc.runId = res.id;
+  rc.sub = 'reconcile';
+  rc.bucket = 'notReceived';
+  rcProgress(`Done — ${rcPeriodName(res.label)} is summarized below. Nothing was written to disk; use Download Excel if you want a workbook.`, 'done');
+  await rcLoad();
+}
+async function rcImportFile(file) {
+  if (!file) return;
+  if (!/\.csv$/i.test(file.name)) { rcProgress('That is not a CSV. Drop the reconciliation report from Seller Center → Payments.', 'fail'); return; }
+  let text = '';
+  try { text = await file.text(); } catch (e) { rcProgress(`Could not read the file: ${e.message}`, 'fail'); return; }
+  await rcImport(file.name, text, false);
+}
+async function rcBrowse() {
+  const pick = await api.recoveryImportPick().catch(e => ({ ok: false, error: e.message }));
+  if (!pick || pick.canceled) return;
+  if (!pick.ok) { rcProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  await rcImport(pick.name, pick.text, false);
+}
+
+/* ----- wiring ----- */
+for (const b of document.querySelectorAll('[data-rcsub]')) {
+  b.addEventListener('click', () => { rc.sub = b.dataset.rcsub; if (rc.data) rcRender(); });
+}
+$('rcImportBtn').addEventListener('click', rcBrowse);
+$('rcBrowseBtn').addEventListener('click', rcBrowse);
+// the drop target (the whole page accepts the file; the box shows the state)
+for (const ev of ['dragenter', 'dragover']) {
+  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $('rcDrop').classList.add('is-over'); } });
+}
+$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) $('rcDrop').classList.remove('is-over'); });
+$('recoveryPage').addEventListener('drop', (e) => {
+  e.preventDefault();
+  $('rcDrop').classList.remove('is-over');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) { rc.sub = 'reconcile'; rcRender(); rcImportFile(file); }
+});
+api.on('recovery:progress', ({ text }) => { if (rc.busy) rcProgress(text); });
+$('rcDupSkip').addEventListener('click', () => { $('rcDupDlg').close(); rc.pendingImport = null; rcProgress('Skipped — the imported period stands.', ''); });
+$('rcDupReimport').addEventListener('click', async () => {
+  $('rcDupDlg').close();
+  const p = rc.pendingImport;
+  rc.pendingImport = null;
+  if (p) await rcImport(p.name, p.text, true);
+});
+$('rcExcelBtn').addEventListener('click', async () => {
+  if (!rc.runId) return;
+  const r = await api.recoveryExportRun(rc.runId).catch(e => ({ ok: false, error: e.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+});
+$('rcRemoveBtn').addEventListener('click', async () => {
+  const meta = (rc.data.runs || []).find(r => r.id === rc.runId);
+  if (!meta) return;
+  if (!(await rcConfirm({ title: 'Remove period', body: `Delete the "${rcPeriodName(meta.label)}" run? Its not-received data is removed too.`, ok: 'Delete' }))) return;
+  const r = await api.recoveryRemoveRun(rc.runId).catch(e => ({ ok: false, error: e.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not remove that period.', 4000); return; }
+  rc.runId = null;
+  rcProgress('');
+  await rcLoad();
+});
+$('rcEarlier').addEventListener('click', async (e) => {
+  const sel = e.target.closest('[data-rcrun]');
+  if (sel) { rc.runId = sel.dataset.rcrun; rc.bucket = 'notReceived'; rcProgress(''); await rcLoad(); return; }
+  const xl = e.target.closest('[data-rcexcel]');
+  if (xl) {
+    const r = await api.recoveryExportRun(xl.dataset.rcexcel).catch(err => ({ ok: false, error: err.message }));
+    if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+  }
+});
+$('rcBucketTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcbucket]');
+  if (b) { rc.bucket = b.dataset.rcbucket; rcRenderBucket(); }
+});
+$('rcScope').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rcscope]');
+  if (!b || b.dataset.rcscope === rc.scope) return;
+  rc.scope = b.dataset.rcscope;
+  await rcLoadSummary();
+  rcRenderSummary();
+});
+$('rcMonthPick').addEventListener('change', async () => { rc.month = $('rcMonthPick').value; await rcLoadSummary(); rcRenderSummary(); });
+$('rcListTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rctab]');
+  if (b) { rc.tab = b.dataset.rctab; rcRenderList(); }
+});
+for (const b of document.querySelectorAll('.rc-toggle')) {
+  b.addEventListener('click', () => { rc.type = rc.type === b.dataset.rctype ? '' : b.dataset.rctype; rcRenderList(); });
+}
+$('rcSearch').addEventListener('input', () => { rc.q = $('rcSearch').value.trim(); rcRenderList(); });
+// row actions: the primary button, the case-id line and the note chip act
+// directly; "⋯" opens the per-state menu anchored under the button
+$('rcListTable').addEventListener('click', (e) => {
+  const act = e.target.closest('[data-rcact]');
+  if (act) { rcDoAction(act.dataset.rcpo, act.dataset.rcact); return; }
+  const more = e.target.closest('[data-rcmenu]');
+  if (!more) return;
+  const it = rcItem(more.dataset.rcmenu);
+  if (!it) return;
+  rc.menuPo = it.po;
+  const dlg = $('rcMenuDlg');
+  dlg.innerHTML = rcMenuItems(it).map(m => `<button class="tab-menu-item ${m.danger ? 'is-danger' : ''}" data-rcact="${m.act}">${esc(m.label)}</button>`).join('');
+  dlg.showModal();
+  // anchored under the button; flips above it when the window ends first
+  const r = more.getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  const below = r.bottom + 4 + dlg.offsetHeight <= window.innerHeight - 8;
+  dlg.style.top = `${Math.round(below ? r.bottom + 4 : Math.max(8, r.top - 4 - dlg.offsetHeight))}px`;
+});
+$('rcMenuDlg').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-rcact]');
+  $('rcMenuDlg').close();
+  if (item && rc.menuPo) rcDoAction(rc.menuPo, item.dataset.rcact);
+});
+$('rcCaseCancel').addEventListener('click', () => $('rcCaseDlg').close(''));
+$('rcCaseDlg').addEventListener('close', async () => {
+  const dlg = $('rcCaseDlg');
+  if (dlg.returnValue !== 'ok') return;
+  const po = dlg.dataset.po;
+  const caseId = $('rcCaseId').value.trim();
+  await rcMark(po, dlg.dataset.act === 'case' ? 'case' : 'caseId', { caseId });
+});
+$('rcCaseDlg').querySelector('form').addEventListener('submit', () => { $('rcCaseDlg').returnValue = 'ok'; });
+$('rcNoteCancel').addEventListener('click', () => $('rcNoteDlg').close(''));
+$('rcNoteDlg').querySelector('form').addEventListener('submit', () => { $('rcNoteDlg').returnValue = 'ok'; });
+$('rcNoteDlg').addEventListener('close', async () => {
+  const dlg = $('rcNoteDlg');
+  if (dlg.returnValue !== 'ok') return;
+  await rcMark(dlg.dataset.po, 'note', { note: $('rcNoteText').value });
+});
+// Export menu (Not received): the view as CSV, the scope's workbook, the
+// audit workbook, the mailto list and the make.com digest
+$('rcExportBtn').addEventListener('click', () => {
+  const dlg = $('rcExportDlg');
+  dlg.showModal();
+  const r = $('rcExportBtn').getBoundingClientRect();
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8)))}px`;
+  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+});
+$('rcExportDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcexp]');
+  $('rcExportDlg').close();
+  if (!item || !rc.data) return;
+  const kind = item.dataset.rcexp;
+  let r = null;
+  if (kind === 'csv') {
+    const rows = (rc.data.items || []).filter(rcMatches);
+    if (!rows.length) { toast('Nothing in this view to export.'); return; }
+    const label = `${RC_TABS.find(t => t[0] === rc.tab)[1]}${rc.type ? `_${rc.type}` : ''}`;
+    r = await api.recoveryExportCsv(rows.map(i => i.po), label).catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'summary') {
+    if (!rc.summary) { toast('No scope to export yet.'); return; }
+    r = await api.recoveryExportSummary(rc.scope, rc.scope === 'cycle' ? rc.runId : rc.scope === 'month' ? rc.month : null).catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'audit') {
+    r = await api.recoveryExportAudit().catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'mail') {
+    r = await api.recoveryMailto().catch(err => ({ ok: false, error: err.message }));
+    if (r && r.ok) { toast(`Opening an email with ${rcPlural(r.count, 'item')}`); return; }
+  } else if (kind === 'digest') {
+    r = await api.recoveryDigestSend().catch(err => ({ ok: false, error: err.message }));
+    if (r && r.ok) {
+      if (r.sent) toast(`Digest sent — ${rcPlural(r.count, 'case')} to open`);
+      else toast({ no_url: 'Set the make.com webhook URL in Settings → Recovery first.', nothing_to_send: 'Nothing to send — no case is due.', already_sent: 'That same digest already went out today.' }[r.reason] || `Not sent (${r.reason}).`, 4000);
+      return;
+    }
+  }
+  if (r && r.ok) toast('Saved'); else if (r && !r.canceled) toast(r.error || 'Could not export.', 4000);
 });
 
 /* ---------- Shelf: the returns sell-through radar ---------- */
@@ -4330,6 +4910,7 @@ async function rvCommit() {
   rvFeedback('');
   toast(sku ? `Received ${qty} × ${target}` : `Logged return ${po}`);
   loadRetPast();
+  if (activePage === 'recovery') rcLoad(); // the PO leaves the not-received list
   return true;
 }
 
@@ -5820,6 +6401,7 @@ api.on('returns:syncChanged', (d) => {
   const changes = (d && d.changes) || [];
   if (!changes.length) return;
   for (const c of changes) retFreshGids.add(String(c.gid));
+  if (activePage === 'recovery') { rcLoad(); return; } // a return logged elsewhere may clear a PO
   if (activePage !== 'returns') return; // the next page open reloads anyway
   loadRetPast();
   const news = changes.filter(c => c.op === 'put' && c.kind === 'new').length;

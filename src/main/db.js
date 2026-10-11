@@ -221,6 +221,11 @@ function open() {
       pace REAL NOT NULL DEFAULT 0
     );
   `);
+  // Recovery (2026-10-11): imported Walmart payment periods, their refunds /
+  // payouts / ledger, the not-received tracker and its manual markers —
+  // wm_runs, wm_refunds, wm_payouts, wm_ledger, wm_items, wm_marks,
+  // wm_tombstones (docs/recovery/SPEC.md §10.1)
+  require('./recovery/store').ensureSchema(db);
   return db;
 }
 

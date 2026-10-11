@@ -11,6 +11,7 @@ const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
+const recovery = require('./recovery');
 const presence = require('./presence');
 // in-place updates (owner 2026-10-08: "why can't it update within itself?")
 // — electron-updater downloads the new NSIS build in the background and
@@ -7156,9 +7157,11 @@ app.whenReady().then(() => {
   } catch { /* never block startup on housekeeping */ }
   writeDailyCsv();
   registerIpc();
+  registerRecoveryIpc();
   buildMenu();
   createWindow();
   startRetSync();
+  startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();
   startStockRouter();
@@ -7186,6 +7189,110 @@ app.whenReady().then(() => {
     require('./e2e-test')({ app, win, db, clipboard: testClipboard });
   }
 });
+
+/* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
+// docs/recovery/SPEC.md. The engine lives in ./recovery; this is the Electron
+// skin: dialogs, the archive folder under Documents, the shared folder, and
+// the capture-only gate (the page never exists on a capture-only station).
+function recoveryArchiveDir() {
+  return path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports');
+}
+function startRecovery() {
+  recovery.configure({
+    retsync,
+    listReturns: (n) => db.listReturns(n),
+    config,
+    archiveDir: recoveryArchiveDir(),
+    station: () => stockLogComputer(),
+    stationAliases: () => [os.hostname()],
+    by: () => '',
+  });
+  // the dispute digest also goes out at launch (spec §9.1) — quietly, and
+  // only where the page is on; the 20-hour dedupe keeps it from nagging
+  setTimeout(() => {
+    try {
+      const cfg = config.load();
+      if (!cfg.captureOnly && cfg.pages && cfg.pages.recovery && cfg.pages.returns) recovery.sendDigest().catch(() => {});
+    } catch { /* best effort */ }
+  }, 20000);
+}
+const recoveryGate = () => (config.load().captureOnly ? { ok: false, error: 'Capture-only mode.' } : null);
+const recoveryTry = (fn) => { try { return fn(); } catch (e) { return { ok: false, error: e.message }; } };
+const recoveryFile = (label) => String(label || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, '_');
+async function recoverySaveBuffer(title, defaultName, filters, buffer) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, { title, defaultPath: path.join(app.getPath('documents'), defaultName), filters });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(filePath, buffer); return { ok: true, path: filePath }; } catch (e) { return { ok: false, error: e.message }; }
+}
+const XLSX_FILTER = [{ name: 'Excel workbook', extensions: ['xlsx'] }];
+function registerRecoveryIpc() {
+  ipcMain.handle('recovery:state', () => recoveryGate() || recoveryTry(() => recovery.state()));
+  ipcMain.handle('recovery:run', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.runDetail(id)));
+  ipcMain.handle('recovery:summary', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.summary(scope, key)));
+  // Browse…: pick the report; the text comes back so the renderer runs the
+  // same import call a dropped file does
+  ipcMain.handle('recovery:importPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import a Walmart payment-period report',
+      filters: [{ name: 'Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      return { ok: true, name: path.basename(pick.filePaths[0]), text: fs.readFileSync(pick.filePaths[0], 'utf8') };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:import', async (_e, { name, text, force } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const progress = (t) => { if (win && !win.isDestroyed()) win.webContents.send('recovery:progress', { text: t }); };
+    try {
+      return await recovery.importReport({ name, text, force: !!force }, progress);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:removeRun', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeRun(id)));
+  ipcMain.handle('recovery:mark', (_e, { po, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.mark(po, action, payload || {})));
+  ipcMain.handle('recovery:exportRun', async (_e, { id } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.runWorkbook(id));
+    if (!wb || wb.ok === false) return wb || { ok: false, error: 'Period not found.' };
+    return recoverySaveBuffer('Save the period workbook', `Reconciliation_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportAudit', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const buf = recoveryTry(() => recovery.auditWorkbook());
+    if (!Buffer.isBuffer(buf)) return buf;
+    return recoverySaveBuffer('Save the audit workbook', 'Returns_Not_Received_Audit.xlsx', XLSX_FILTER, buf);
+  });
+  ipcMain.handle('recovery:exportSummary', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.summaryWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the refund summary', `Returns_Summary_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportCsv', async (_e, { pos, label } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const csv = recoveryTry(() => recovery.viewCsv(pos || []));
+    if (typeof csv !== 'string') return csv;
+    return recoverySaveBuffer('Save this list', `Returns_Not_Received_${recoveryFile(label || 'list')}.csv`, [{ name: 'CSV', extensions: ['csv'] }], Buffer.from(csv, 'utf8'));
+  });
+  ipcMain.handle('recovery:digestSend', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { return { ok: true, ...(await recovery.sendDigest({ force: true })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // "Email me this list": the mailto opens here — app:openExternal only
+  // takes https links, and this one is built from our own rows
+  ipcMain.handle('recovery:mailto', () => {
+    if (recoveryGate()) return recoveryGate();
+    const m = recoveryTry(() => recovery.mailto());
+    if (m && m.ok) shell.openExternal(m.mailto);
+    return m;
+  });
+  ipcMain.handle('recovery:openArchive', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { fs.mkdirSync(recoveryArchiveDir(), { recursive: true }); await shell.openPath(recoveryArchiveDir()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+}
 
 app.on('window-all-closed', () => app.quit());
 

@@ -16,6 +16,9 @@
       <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
+      <!-- Recovery (2026-10-11): Walmart payment periods checked against the
+           Returns log — opt-in in Settings, needs Returns -->
+      <button id="tabRecovery" class="tab" hidden>Recovery</button>
       <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
     </nav>
     <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
@@ -287,6 +290,160 @@
       </div>
     </div>
   </section>
+
+  <!-- Recovery: an editorial ledger in two screens (design docs/recovery/design,
+       owner-approved 2026-10-11). Reconcile: drop a Walmart payment-period
+       report, see received / not received / WFS waiting. Not received: every
+       refunded PO that never came back, its dispute window and the payouts. -->
+  <section id="recoveryPage" class="rc-page" hidden>
+    <div class="rc-scroll" id="rcScroll">
+      <div class="rc-main">
+        <div class="rc-head">
+          <h1 class="rc-h1">Recovery</h1>
+          <nav class="rc-subtabs" aria-label="Recovery screens">
+            <button type="button" class="rc-subtab is-active" data-rcsub="reconcile">Reconcile</button>
+            <button type="button" class="rc-subtab" data-rcsub="notreceived">Not received <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
+          </nav>
+          <button id="rcImportBtn" class="rc-btn rc-btn-primary rc-head-action" type="button">Import payment period</button>
+          <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
+        </div>
+
+        <div id="rcReconcile" class="rc-screen">
+          <section class="rc-top">
+            <div class="rc-left">
+              <div>
+                <div class="rc-label" id="rcPeriodLabel">Latest period</div>
+                <div class="rc-period" id="rcPeriodName">Nothing imported yet</div>
+                <div class="rc-period-meta" id="rcPeriodMeta">Drop a Seller Center → Payments reconciliation CSV to check its refunds against the Returns log.</div>
+              </div>
+              <div class="rc-drop" id="rcDrop">
+                <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></div>
+                <div class="rc-drop-text"><div class="rc-drop-title" id="rcDropTitle">Drop the next period's CSV here</div><div class="rc-drop-sub">Seller Center → Payments · nothing is written to disk</div></div>
+                <button id="rcBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+              </div>
+              <div class="rc-progress" id="rcProgress" hidden></div>
+              <div class="rc-earlier" id="rcEarlier" hidden></div>
+            </div>
+            <div class="rc-card" id="rcPeriodCard" hidden>
+              <div class="rc-nums" id="rcPeriodNums"></div>
+              <div>
+                <div class="rc-bar" id="rcPeriodBar"></div>
+                <div class="rc-bar-note"><span id="rcPeriodTotal"></span><span id="rcPeriodNeed"></span></div>
+              </div>
+              <div class="rc-card-actions">
+                <button id="rcExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
+                <button id="rcRemoveBtn" class="rc-btn rc-btn-text" type="button">Remove period</button>
+              </div>
+            </div>
+          </section>
+          <section class="rc-table-card" id="rcBucketCard" hidden>
+            <div class="rc-tabrow" id="rcBucketTabs"></div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
+            <div class="rc-foot">Every one of these is already on the <button type="button" class="rc-link" data-rcsub="notreceived">Not received</button> list, where you open cases and track payouts.</div>
+          </section>
+        </div>
+
+        <div id="rcNotReceived" class="rc-screen" hidden>
+          <section class="rc-top">
+            <div>
+              <div class="rc-label-row">
+                <div class="rc-label">Where the refund money went</div>
+                <div class="rc-scope" id="rcScope" role="group" aria-label="Scope">
+                  <button type="button" data-rcscope="cycle" class="is-on">This period</button>
+                  <button type="button" data-rcscope="month">Month</button>
+                  <button type="button" data-rcscope="all">All time</button>
+                </div>
+                <select id="rcMonthPick" class="rc-month" aria-label="Month" hidden></select>
+              </div>
+              <div class="rc-headline"><span class="rc-headline-amt" id="rcRefunded">$0.00</span> <span class="rc-headline-sub" id="rcRefundedSub">refunded</span></div>
+              <div class="rc-bar rc-bar-lg" id="rcMoneyBar"></div>
+              <div class="rc-legend" id="rcLegend"></div>
+            </div>
+            <div class="rc-card rc-today">
+              <div class="rc-label">Today</div>
+              <div class="rc-nums" id="rcTodayNums"></div>
+              <div class="rc-rule">Seller refunds must be disputed within 45 days. WFS refunds pay themselves back by day 90; if not, you have until day 135 to file.</div>
+            </div>
+          </section>
+          <section class="rc-table-card">
+            <div class="rc-tabrow rc-tabrow-list">
+              <div class="rc-tabs" id="rcListTabs"></div>
+              <div class="rc-list-tools">
+                <button type="button" class="rc-toggle" data-rctype="WFS">WFS only</button>
+                <button type="button" class="rc-toggle" data-rctype="Seller">Seller only</button>
+                <input id="rcSearch" class="rc-search" type="text" placeholder="Search PO, product, case…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" />
+              </div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
+            <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recovery: row actions and the Export menu share the tab-menu dropdown -->
+  <dialog id="rcMenuDlg" class="tab-menu rc-menu"></dialog>
+  <dialog id="rcExportDlg" class="tab-menu rc-menu">
+    <button class="tab-menu-item" data-rcexp="csv">Download CSV (this view)</button>
+    <button class="tab-menu-item" data-rcexp="summary">Download Excel (this scope)</button>
+    <button class="tab-menu-item" data-rcexp="audit">Audit workbook</button>
+    <div class="tab-menu-sep"></div>
+    <button class="tab-menu-item" data-rcexp="mail">Email me this list</button>
+    <button class="tab-menu-item" data-rcexp="digest">Send the cases digest now</button>
+  </dialog>
+  <!-- Open case (optional Walmart case ID) / edit the case ID -->
+  <dialog id="rcCaseDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title" id="rcCaseTitle">Open a case</h2>
+      <p class="dlg-note rc-dlg-po" id="rcCasePo"></p>
+      <label class="field">
+        <span class="field-label">Walmart case ID (optional)</span>
+        <input id="rcCaseId" type="text" class="input mono" placeholder="WM-4471982" autocomplete="off" spellcheck="false" maxlength="40" />
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="rcCaseCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcCaseOk" value="ok" class="btn btn-primary">Open case</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- Add / edit the note pinned to a PO -->
+  <dialog id="rcNoteDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title">Note</h2>
+      <p class="dlg-note rc-dlg-po" id="rcNotePo"></p>
+      <label class="field">
+        <span class="field-label">Pinned to this PO on every desktop</span>
+        <textarea id="rcNoteText" class="input rc-note-text" rows="3" maxlength="500" placeholder="called rep Jun 20, ref #4471"></textarea>
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="rcNoteCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcNoteOk" value="ok" class="btn btn-primary">Save note</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- Write off / Remove period / Remove item: one confirm -->
+  <dialog id="rcConfirmDlg" class="dlg rc-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="rcConfirmTitle"></h2>
+      <p class="rc-confirm-body" id="rcConfirmBody"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcConfirmCancel" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="rcConfirmOk" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </dialog>
+  <!-- The duplicate-period prompt (spec §3.3): Re-import / Skip -->
+  <dialog id="rcDupDlg" class="dlg rc-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Already imported</h2>
+      <p class="rc-confirm-body" id="rcDupBody"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcDupSkip" class="btn btn-ghost">Skip</button>
+        <button type="button" id="rcDupReimport" class="btn btn-primary">Re-import and replace</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Overview: the status queue (design 1a, owner-approved 2026-10-08,
        design_handoff_overview_1a) - three counts, one urgency-ordered list
@@ -829,11 +986,27 @@
         <label class="check"><input id="setPagePricing" type="checkbox" /> Pricing</label>
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
         <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
+        <label class="check"><input id="setPageRecovery" type="checkbox" /> Recovery</label>
         <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
         <label class="check"><input id="setPageWholesale" type="checkbox" /> Wholesale</label>
         <label class="check"><input id="setPageCost" type="checkbox" /> Cost</label>
       </div>
-      <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone. A returns-only station: tick Returns, untick the rest, set a Settings PIN so it stays that way.</p>
+      <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone. A returns-only station: tick Returns, untick the rest, set a Settings PIN so it stays that way. Recovery needs Returns: it checks Walmart's refunds against the Returns log.</p>
+
+      <h3 class="dlg-section">Recovery</h3>
+      <label class="field">
+        <span class="field-label">Alert email ("Email me this list" opens a message to this address)</span>
+        <input id="setRcEmail" type="text" class="input" placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span class="field-label">Make.com webhook URL (optional, receives the cases-to-open digest after each import)</span>
+        <input id="setRcWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="settings-row">
+        <span class="field-label">Imported Walmart reports</span>
+        <span id="setRcArchive" class="test-result mono">Documents\Capture Station\Walmart Reports</span>
+        <button id="openRcArchiveBtn" class="btn btn-ghost" type="button">Open folder</button>
+      </div>
 
       <h3 class="dlg-section">Receiving</h3>
       <div class="settings-row">

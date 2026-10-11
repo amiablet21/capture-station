@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.0 highlights
+
+- **Recovery page.** Drop a Walmart payment-period report (the reconciliation CSV from Seller Center → Payments) and every refunded order is checked against the Returns log; the ones that never came back are listed with their dispute window so they can be chased, and Walmart's payouts show up against them as later periods are imported. Two screens: **Reconcile** (the period's received / not received / WFS waiting with a tabbed table, earlier periods, Download Excel, Remove period) and **Not received** (where the refund money went for this period / a month / all time, the Today card, the tracker with Open case · Mark approved · adjustment · pending reimbursement · write off · note · Mark received, which opens the normal receive popup prefilled). Opt-in in Settings → Pages (needs Returns); never on a capture-only station. Imports and markers ride the shared folder (`wmruns-` / `wmmarks-<STATION>.jsonl`) so every desktop sees the same periods and decisions. Settings → Recovery holds the alert email, the make.com digest webhook and the folder where each period's original CSV is kept. Spec, design and the source it was ported from: `docs/recovery/`.
+
 ## v1.31.23 highlights
 
 - Dismiss is a red-outlined button (owner pick C), and the expanded row's bottom spacing is tighter.

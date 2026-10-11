@@ -74,7 +74,8 @@ const DEFAULTS = {
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
   // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
-  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false },
+  // (Recovery is opt-in too and needs Returns, since it reads the Returns log.)
+  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, recovery: false },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -91,6 +92,10 @@ const DEFAULTS = {
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
   returnsSync: { folder: '', station: '' },
+  // Recovery page: the alert email for "Email me this list", the make.com
+  // webhook the dispute digest POSTs to, and the digest's last-sent memory
+  // (so the same set of cases is not re-sent within 20 hours)
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0 },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {

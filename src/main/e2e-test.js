@@ -1824,6 +1824,23 @@ module.exports = async function run({ app, win, db, clipboard }) {
         claimsT.jpegOrientation(exif));
     }
 
+    // 40. Recovery (2026-10-11): the §11 fixture through parse -> reconcile ->
+    // classify -> store -> tracker on a throwaway db (src/main/recovery/selftest.js),
+    // then the Electron skin: capture-only refuses, the tab is opt-in and off
+    await require('./recovery/selftest')(check);
+    res = await exec('api.recoveryState()');
+    check('recovery:state refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.recoveryImport('x.csv', 'a,b', false)`);
+    check('recovery:import refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const rcUi = await exec(`[$('tabRecovery').hidden, !!$('recoveryPage'), $('recoveryPage').hidden, typeof enterRecovery, !!$('setPageRecovery'), !!$('setRcEmail'), !!$('setRcWebhook')]`);
+    check('recovery: tab hidden until ticked, page section present, settings fields present',
+      rcUi[0] === true && rcUi[1] === true && rcUi[2] === true && rcUi[3] === 'function' && rcUi[4] && rcUi[5] && rcUi[6], rcUi);
+    const rcCfg = await exec('api.getConfig()');
+    check('recovery: config defaults — page off, email and webhook empty',
+      rcCfg && rcCfg.pages && rcCfg.pages.recovery === false && rcCfg.recovery && rcCfg.recovery.email === '' && rcCfg.recovery.webhookUrl === '', rcCfg && rcCfg.recovery);
+    const rcTables = db.open().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'wm_%' ORDER BY name").all().map(r => r.name);
+    check('recovery: schema tables created', JSON.stringify(rcTables) === JSON.stringify(['wm_items', 'wm_ledger', 'wm_marks', 'wm_payouts', 'wm_refunds', 'wm_runs', 'wm_tombstones']), rcTables);
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

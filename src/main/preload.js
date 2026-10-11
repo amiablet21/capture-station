@@ -40,6 +40,7 @@ const EVENTS = [
   'browser:resync',
   'pricing:refreshed',
   'export:progress',
+  'recovery:progress',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -206,6 +207,21 @@ contextBridge.exposeInMainWorld('api', {
   claimsOpenFolder: () => ipcRenderer.invoke('claims:openFolder'),
   presenceEditing: (gid, on) => ipcRenderer.invoke('presence:editing', { gid, on }),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
+  // Recovery: Walmart payment periods checked against the Returns log
+  recoveryState: () => ipcRenderer.invoke('recovery:state'),
+  recoveryRun: (id) => ipcRenderer.invoke('recovery:run', { id }),
+  recoverySummary: (scope, key) => ipcRenderer.invoke('recovery:summary', { scope, key }),
+  recoveryImportPick: () => ipcRenderer.invoke('recovery:importPick'),
+  recoveryImport: (name, text, force) => ipcRenderer.invoke('recovery:import', { name, text, force: !!force }),
+  recoveryRemoveRun: (id) => ipcRenderer.invoke('recovery:removeRun', { id }),
+  recoveryMark: (po, action, payload) => ipcRenderer.invoke('recovery:mark', { po, action, payload: payload || {} }),
+  recoveryExportRun: (id) => ipcRenderer.invoke('recovery:exportRun', { id }),
+  recoveryExportAudit: () => ipcRenderer.invoke('recovery:exportAudit'),
+  recoveryExportSummary: (scope, key) => ipcRenderer.invoke('recovery:exportSummary', { scope, key }),
+  recoveryExportCsv: (pos, label) => ipcRenderer.invoke('recovery:exportCsv', { pos, label }),
+  recoveryDigestSend: () => ipcRenderer.invoke('recovery:digestSend'),
+  recoveryMailto: () => ipcRenderer.invoke('recovery:mailto'),
+  recoveryOpenArchive: () => ipcRenderer.invoke('recovery:openArchive'),
   on: (channel, cb) => {
     if (!EVENTS.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
