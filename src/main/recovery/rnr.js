@@ -278,7 +278,11 @@ function shortStatus(it, today = new Date()) {
   if (it.lost) return out('Open case', 'red', plus(0), 'now', 'lost per Walmart — you can open a case immediately');
   if (it.wfsWaiting) return out('WFS pays', 'blue', plus(it.daysLeft), null, `Walmart pays back by day 90 · ${it.daysLeft} days to go`);
   if (it.wfsDisputeOpen) return out('File with WFS', 'red', plus(it.daysLeft), null, `no auto-reimbursement showed up — file within ${it.daysLeft} days`);
-  if (it.windowClosed) return out('Write off?', 'grey', it.daysLeft == null ? null : plus(it.daysLeft), it.daysLeft == null ? 'closed' : `closed ${monDay(plus(it.daysLeft))}`, 'can no longer file — write it off as a loss');
+  if (it.windowClosed) {
+    // owner 2026-10-12: "Closed · 7 days" — how long ago the window shut
+    const ago = it.daysLeft == null ? null : Math.max(0, -it.daysLeft);
+    return out('Closed', 'grey', ago == null ? null : plus(-ago), ago == null ? '—' : `${ago} ${ago === 1 ? 'day' : 'days'}`, `window closed${ago == null ? '' : ` ${ago} days ago`} — can no longer file; write it off as a loss`);
+  }
   if (it.daysLeft != null) return out(it.needsAction ? 'File now' : 'Wait', it.needsAction ? 'red' : 'amber', plus(it.daysLeft), null, `dispute window closes in ${it.daysLeft} days — 45 days from the refund`);
   return out('Outstanding', 'amber', null, '—', 'no refund date');
 }
