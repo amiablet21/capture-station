@@ -1746,8 +1746,6 @@ async function rcLoad() {
     if (seq !== rc.seq) return;
     rc.run = d && d.ok ? d.run : null;
   }
-  await rcLoadSummary(seq);
-  if (seq !== rc.seq) return;
   if (rc.sub === 'profit') await rcLoadProfit(seq);
   if (seq !== rc.seq) return;
   rcRender();
@@ -1779,13 +1777,10 @@ function rcRender() {
   for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
   $('rcImport').hidden = rc.sub !== 'import';
   $('rcReconcile').hidden = rc.sub !== 'reconcile';
-  $('rcNotReceived').hidden = rc.sub !== 'notreceived';
   $('rcProfit').hidden = rc.sub !== 'profit';
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
   rcRenderImport();
   rcRenderReconcile();
-  rcRenderSummary();
-  rcRenderList();
   rcRenderProfit();
 }
 
@@ -2014,45 +2009,29 @@ function rcRenderImport() {
 
 /* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
-  const runs = rc.data.runs || [];
-  const run = rc.run;
-  const empty = !runs.length;
-  $('rcPeriodEmpty').hidden = !empty;
-  $('rcPeriodCard').hidden = empty || !run;
-  $('rcBucketCard').hidden = empty || !run;
-  $('rcExcelBtn').disabled = empty;
-  $('rcRemoveBtn').disabled = empty;
-  const pick = $('rcReconcilePick');
-  pick.classList.toggle('is-idle', empty);
-  pick.innerHTML = runs.map(r => `<option value="${esc(r.id)}" ${r.id === rc.runId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
-  if (empty) { $('rcPeriodLabel').textContent = 'Period'; return; }
-  const meta = runs.find(r => r.id === rc.runId) || runs[0];
-  $('rcPeriodLabel').textContent = meta.id === runs[0].id ? 'Latest period' : 'Period';
-  if (!run) return;
-
-  // the strip (owner 2026-10-12, Design A): the refunded total with its
-  // bar, the three buckets, and a Today cell with what has happened since
-  // the import — this period's not-received that are still open against
-  // those that came back or were paid
-  const c = run.counts || {};
-  const b = (k) => c[k] || { count: 0, total: 0 };
-  const total = b('received').total + b('notReceived').total + b('wfsWaiting').total;
-  const flagged = b('notReceived').count + b('wfsWaiting').count;
-  const open = meta.open || 0;
-  const resolved = Math.max(0, flagged - open);
-  const act = b('actionNow').count;
-  const cell = (tone, label, n, sub) => `<div class="rc-cell ${tone}"><div class="rc-label">${label}</div><div class="rc-cell-n">${n}</div><div class="rc-cell-sub">${sub}</div></div>`;
-  $('rcPeriodCard').innerHTML = [
-    `<div class="rc-cell"><div class="rc-label">Refunded this period</div><div class="rc-cell-n">${rcMoney(total)} <small>${rcPlural(run.totalRefunds || 0, 'refund')}</small></div><div class="rc-bar" id="rcPeriodBar"></div></div>`,
-    cell('is-navy', 'Received', b('received').count, `${rcMoney(b('received').total)} · back in the Returns log`),
-    cell('is-red', 'Not received', b('notReceived').count, `${rcMoney(b('notReceived').total)} · nothing in the Returns log`),
-    cell('is-amber', 'WFS waiting', b('wfsWaiting').count, `${rcMoney(b('wfsWaiting').total)} · Walmart pays back by day 90`),
-    cell('rc-cell-today', 'Today', `${act} <small>need${act === 1 ? 's' : ''} action</small>`,
-      flagged ? `${rcPlural(open, 'return')} still open · ${resolved} resolved since (came back or paid)` : 'Nothing from this period is outstanding.'),
-  ].join('');
-  rcBar($('rcPeriodBar'), [['is-navy', b('received').total], ['is-red', b('notReceived').total], ['is-amber', b('wfsWaiting').total]]);
-  rcRenderBucket();
+  const items = rc.data.items || [];
+  // not back yet, nothing settled, nothing parked
+  const open = items.filter(it => it.status === 'outstanding' && !it.adjustment);
+  const pending = open.filter(it => it.wfsWaiting);              // WFS inside its 90 days
+  const notReceived = open.filter(it => !it.wfsWaiting);          // seller, and WFS past day 90
+  if (rc.bucket !== 'wfsPending') rc.bucket = 'notReceived';
+  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length]];
+  $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
+    `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
+  const rows = rc.bucket === 'wfsPending' ? pending : notReceived;
+  const head = '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th>';
+  const body = rows.length ? rows.map((it, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
+      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
+      <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
+      <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
+      <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
+      <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
+      <td class="rc-muted">${esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="7">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+  rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
 }
+function rcRenderBucket() { rcRenderReconcile(); }
 
 // a proportional bar: each segment's flex is its dollars (CSSOM, not an
 // inline attribute, so the CSP is happy); nothing at all draws an empty track
@@ -2060,43 +2039,6 @@ function rcBar(el, segs) {
   const live = segs.filter(([, v]) => Number(v) > 0);
   el.innerHTML = live.map(([tone]) => `<div class="rc-seg ${tone}"></div>`).join('');
   [...el.children].forEach((d, i) => { d.style.flex = String(Math.round(live[i][1] * 100) / 100); });
-}
-
-const RC_BUCKETS = [['notReceived', 'Not received'], ['wfsWaiting', 'WFS waiting'], ['received', 'Received']];
-const RC_SORT_NOTE = { notReceived: 'sorted: act now first, then biggest refund', wfsWaiting: 'sorted: overdue first, then biggest refund', received: 'sorted: notes first, then biggest refund' };
-function rcRenderBucket() {
-  const run = rc.run;
-  const sum = run.summary || {};
-  $('rcBucketTabs').innerHTML = RC_BUCKETS.map(([k, label]) => {
-    const n = (sum[k] || []).length;
-    const on = rc.bucket === k;
-    return `<button type="button" class="rc-tab ${on ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${on && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`;
-  }).join('') + `<span class="rc-sortnote">${esc(RC_SORT_NOTE[rc.bucket] || '')}</span>`;
-  const rows = sum[rc.bucket] || [];
-  const received = rc.bucket === 'received';
-  const head = received
-    ? '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
-    : '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
-  const body = rows.length ? rows.map((r, i) => {
-    const type = /wfs|walmart-fulfilled/i.test(String(r['Fulfillment Type'] || '')) ? 'WFS' : 'Seller';
-    const days = r['Days Ago'];
-    const refunded = `<span class="rc-mono">${esc(rcMonDay(r['Refund Date']))}</span>${days !== '' && days != null ? ` <span class="rc-muted">· ${days} days ago</span>` : ''}`;
-    const last = received
-      ? (r.Note ? rcSentence({ tone: 'amber', lead: 'Review', clause: r.Note }, false) : rcSentence({ tone: 'green', lead: 'Received', clause: '' }, false))
-      : rcSentence(r.todo, r.todo && r.todo.tone === 'red');
-    const fifth = received ? esc(r['Warehouse Condition'] || '') : esc(String(r['Return Reason'] || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()));
-    return `<tr>
-      <td class="rc-g">${i + 1}</td>
-      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(r['PO #'])}" title="Open this PO on Walmart">${esc(r['PO #'])}</button></td>
-      <td class="rc-type ${type === 'WFS' ? 'is-wfs' : ''}">${type}</td>
-      <td title="${esc(r.Item || '')}">${rcSkuLine(r.SKU, r.Item)}</td>
-      <td>${refunded}</td>
-      <td class="rc-mono is-right">${rcMoney(r['Net Refund (Payable Impact)'])}</td>
-      <td class="rc-muted">${fifth}</td>
-      <td title="${esc(r.todo && r.todo.lead ? `${r.todo.lead}${r.todo.clause ? ' — ' + r.todo.clause : ''}` : '')}">${last}</td>
-    </tr>`;
-  }).join('') : `<tr class="rc-empty-row"><td colspan="8">${rc.bucket === 'notReceived' ? 'Every refund in this period came back or is waiting on WFS.' : rc.bucket === 'wfsWaiting' ? 'No WFS refunds are waiting on Walmart.' : 'Nothing from this period has come back yet.'}</td></tr>`;
-  $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
 /* ----- Not received: the money bar, the Today card, the list ----- */
@@ -2333,7 +2275,7 @@ async function rcImport(name, text, force) {
   rc.runId = res.id;
   rc.sub = 'import';
   rc.bucket = 'notReceived';
-  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns joined the Not received list.`, 'done');
+  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns are on Reconcile.`, 'done');
   await rcLoad();
 }
 async function rcImportFile(file) {
@@ -2458,7 +2400,6 @@ $('rcDupReimport').addEventListener('click', async () => {
   rc.pendingImport = null;
   if (p) await rcImport(p.name, p.text, true);
 });
-$('rcExcelBtn').addEventListener('click', () => { if (rc.runId) rcExcelPeriod(rc.runId); });
 async function rcRemovePeriod(id) {
   const meta = (rc.data.runs || []).find(r => r.id === id);
   if (!meta) return;
@@ -2474,8 +2415,6 @@ async function rcExcelPeriod(id) {
   const r = await api.recoveryExportRun(id).catch(err => ({ ok: false, error: err.message }));
   if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
 }
-$('rcRemoveBtn').addEventListener('click', () => { if (rc.runId) rcRemovePeriod(rc.runId); });
-$('rcReconcilePick').addEventListener('change', async () => { rc.runId = $('rcReconcilePick').value; rc.profit = null; rc.bucket = 'notReceived'; await rcLoad(); });
 $('rcPeriodsTable').addEventListener('click', async (e) => {
   const open = e.target.closest('[data-rcrun]');
   if (open) { rc.runId = open.dataset.rcrun; rc.sub = 'reconcile'; rc.bucket = 'notReceived'; rc.profit = null; await rcLoad(); return; }
@@ -2488,26 +2427,6 @@ $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
   if (b) { rc.bucket = b.dataset.rcbucket; rcRenderBucket(); }
 });
-$('rcScope').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-rcscope]');
-  if (!b) return;
-  const scope = b.dataset.rcscope;
-  if (scope !== rc.scope) { rc.scope = scope; await rcLoadSummary(); rcRenderSummary(); return; }
-  rcOpenPick('money', scope, b);
-});
-$('rcListTabs').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-rctab]');
-  if (b) { rc.tab = b.dataset.rctab; rcRenderList(); }
-});
-// the two sections no longer fold (owner 2026-10-12: "I don't want it to
-// collapse"); a desktop that had folded one before opens it again
-try { localStorage.removeItem('rcSecs'); } catch { /* best effort */ }
-$('rcSummaryExcelBtn').addEventListener('click', async () => {
-  if (!rc.summary) { toast('No scope to export yet.'); return; }
-  const r = await api.recoveryExportSummary(rc.scope, rcScopeKey(rc.scope, 'money')).catch(err => ({ ok: false, error: err.message }));
-  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
-});
-$('rcSearch').addEventListener('input', () => { rc.q = $('rcSearch').value.trim(); rcRenderList(); });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
 // a PO# opens a two-way menu: the order on Seller Center or its payments
@@ -2531,32 +2450,6 @@ $('rcPoDlg').addEventListener('click', async (e) => {
 $('rcBucketTable').addEventListener('click', (e) => {
   const link = e.target.closest('[data-rcpolink]');
   if (link) rcPoMenu(link);
-});
-$('rcListTable').addEventListener('click', (e) => {
-  const th = e.target.closest('[data-rcsort]');
-  if (th) {
-    let key = th.dataset.rcsort;
-    const remapped = key === 'po' && rc.tab === 'lost'; // PO # on Loss: the lost dollars, biggest first
-    if (remapped) key = '_lost';
-    const first = th.dataset.rctext && key !== '_deadline' && !remapped ? 1 : -1;
-    rc.listSort = rc.listSort && rc.listSort.key === key ? { key, dir: -rc.listSort.dir } : { key, dir: key === '_deadline' ? 1 : first };
-    rcRenderList();
-    return;
-  }
-  const link = e.target.closest('[data-rcpolink]');
-  if (link) { rcPoMenu(link); return; }
-  const act = e.target.closest('[data-rcact]');
-  if (act) { rcDoAction(act.dataset.rcpo, act.dataset.rcact); return; }
-  const more = e.target.closest('[data-rcmenu]');
-  if (!more) return;
-  const it = rcItem(more.dataset.rcmenu);
-  if (!it) return;
-  rc.menuPo = it.po;
-  const dlg = $('rcMenuDlg');
-  dlg.innerHTML = rcMenuItems(it).map(m => `<button class="tab-menu-item ${m.danger ? 'is-danger' : ''}" data-rcact="${m.act}">${esc(m.label)}</button>`).join('');
-  dlg.showModal();
-  // anchored under the button; flips above it when the window ends first
-  rcAnchor(dlg, more.getBoundingClientRect());
 });
 $('rcMenuDlg').addEventListener('click', (e) => {
   const item = e.target.closest('[data-rcact]');

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.18 highlights
+
+- **Reconcile, barebones** (owner: "I quite literally just want to see the item we have not yet received back… then I will tell you what more to add"). Recovery is Import · Reconcile · Profit. Reconcile is two tabs and seven columns: **Not received** — every return not back yet, seller and WFS past its 90 days — and **WFS pending** — every WFS refund still inside its 90 days. PO # · Type · Item · Refunded · Net refund · Reason. No period row, no strip, no chips, no actions; a PO # still opens the Walmart menu. The Not received screen, its strip and its filters are gone (the engine behind them stays, for when they come back).
+
 ## v1.32.17 highlights
 
 - **Search looks across every chip** on Not received (owner: a PO typed under Seller came back "Nothing matches" because that PO sat under Reimbursed). Type a PO, SKU or case ID and the row shows whichever chip it lives under; its Action column says what state it is in.

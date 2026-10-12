@@ -306,8 +306,7 @@
           <h1 class="rc-h1">Recovery</h1>
           <nav class="rc-subtabs" aria-label="Recovery screens">
             <button type="button" class="rc-subtab is-active" data-rcsub="import">Import</button>
-            <button type="button" class="rc-subtab" data-rcsub="reconcile">Reconcile</button>
-            <button type="button" class="rc-subtab" data-rcsub="notreceived">Not received <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
+            <button type="button" class="rc-subtab" data-rcsub="reconcile">Reconcile <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
             <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
           </nav>
           <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
@@ -341,46 +340,13 @@
         </div>
 
         <div id="rcReconcile" class="rc-screen" hidden>
-          <!-- owner 2026-10-12 ("super scrunched", Design A): one toolbar row
-               with the period picker and its two buttons, then a five-cell
-               strip of the period's numbers, then the grid -->
-          <div class="rc-toolbar">
-            <span class="rc-label" id="rcPeriodLabel">Period</span>
-            <div class="rc-toolbar-right">
-              <select id="rcReconcilePick" class="rc-month rc-pick" aria-label="Which period"></select>
-              <button id="rcExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
-              <button id="rcRemoveBtn" class="rc-btn rc-btn-text" type="button">Remove period</button>
-            </div>
-          </div>
-          <div class="rc-empty-line" id="rcPeriodEmpty" hidden>Nothing imported yet. Import a payment period on the Import screen first.</div>
-          <section class="rc-strip" id="rcPeriodCard" hidden></section>
-          <section class="rc-table-card" id="rcBucketCard" hidden>
+          <!-- owner 2026-10-12 ("super barebones, then I will tell you what
+               more to add"): two tabs — every return not back yet (seller,
+               and WFS past its 90 days) and every WFS refund still inside
+               its 90 days — and the seven columns, nothing else -->
+          <section class="rc-table-card" id="rcBucketCard">
             <div class="rc-tabrow" id="rcBucketTabs"></div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
-            <div class="rc-foot">Every one of these is already on the <button type="button" class="rc-link" data-rcsub="notreceived">Not received</button> list, where you open cases and track payouts.</div>
-          </section>
-        </div>
-
-        <div id="rcNotReceived" class="rc-screen" hidden>
-          <!-- owner 2026-10-12 ("make this page look better"): the Profit
-               language — a scope pill, a strip of where the refund money
-               went, one grid with sortable columns -->
-          <div class="rc-toolbar">
-            <span class="rc-label">Where the refund money went</span>
-            <div class="rc-toolbar-right">
-              <div class="rc-seg" id="rcScope" role="group" aria-label="Scope"></div>
-              <button id="rcSummaryExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
-            </div>
-          </div>
-          <section class="rc-strip rc-strip-money" id="rcMoneyStrip"></section>
-          <section class="rc-table-card" id="rcSecList">
-            <div class="rc-list-head">
-              <span class="rc-sec-title rc-sec-title-static">Returns Not Received</span>
-              <div class="rc-chips rc-chips-inline" id="rcListTabs"></div>
-              <div class="search-field rc-search-field"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg><input id="rcSearch" class="search-input" type="text" placeholder="Search PO, SKU, case ID…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" /></div>
-            </div>
-            <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
-            <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
           </section>
         </div>
 
