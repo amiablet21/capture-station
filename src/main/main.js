@@ -7212,6 +7212,10 @@ function startRecovery() {
     station: () => stockLogComputer(),
     stationAliases: () => [os.hostname()],
     by: () => '',
+    // Profit: costs by inventory SKU, and the Walmart SKU -> inventory SKU
+    // map from the Pricing page's last snapshot (channel mappings)
+    costs: () => { syncCosts(); return db.costsAll(); },
+    channelMap: recoveryChannelMap,
   });
   // the dispute digest also goes out at launch (spec §9.1) — quietly, and
   // only where the page is on; the 20-hour dedupe keeps it from nagging
@@ -7221,6 +7225,20 @@ function startRecovery() {
       if (!cfg.captureOnly && cfg.pages && cfg.pages.recovery && cfg.pages.returns) recovery.sendDigest().catch(() => {});
     } catch { /* best effort */ }
   }, 20000);
+}
+// every channel listing's SKU (upper-cased) -> the inventory SKU it maps to,
+// read from pricing-cache.json (written whenever the Pricing page rebuilds)
+function recoveryChannelMap() {
+  const m = new Map();
+  try {
+    const snap = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'pricing-cache.json'), 'utf8'));
+    for (const p of (snap && snap.products) || []) {
+      for (const lines of Object.values(p.channels || {})) {
+        for (const l of lines || []) if (l && l.csku && p.sku) m.set(String(l.csku).toUpperCase(), String(p.sku));
+      }
+    }
+  } catch { /* no snapshot yet: direct SKU matches still work */ }
+  return m;
 }
 const recoveryGate = () => (config.load().captureOnly ? { ok: false, error: 'Capture-only mode.' } : null);
 const recoveryTry = (fn) => { try { return fn(); } catch (e) { return { ok: false, error: e.message }; } };
@@ -7281,6 +7299,13 @@ function registerRecoveryIpc() {
     const csv = recoveryTry(() => recovery.viewCsv(pos || []));
     if (typeof csv !== 'string') return csv;
     return recoverySaveBuffer('Save this list', `Returns_Not_Received_${recoveryFile(label || 'list')}.csv`, [{ name: 'CSV', extensions: ['csv'] }], Buffer.from(csv, 'utf8'));
+  });
+  ipcMain.handle('recovery:profit', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.profit(scope, key)));
+  ipcMain.handle('recovery:exportProfit', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.profitWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the profit workbook', `Profit_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
   });
   ipcMain.handle('recovery:digestSend', async () => {
     if (recoveryGate()) return recoveryGate();

@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.7 highlights
+
+- **Profit, a third Recovery screen.** What Walmart paid for the orders in a period, a month or all time (each order's payout net of Walmart's fees, with its refund taken off) against the cost of the units sold, from the Stock page's Cost column; a refunded unit that came back to the warehouse recovers its cost. A headline profit with margin, a cost-vs-profit bar, orders / units / back-in-stock, a By SKU table (sold, refunded, paid, unit cost, profit, margin; listings without a cost are flagged, not guessed) and a By period table; Download Excel writes the three as sheets. The Walmart SKU reaches the inventory cost directly or through the Pricing page's channel mappings. Each import now keeps its per-order sales; periods imported before this read them back from their archived CSV when it is on this computer, else they ask to be re-imported.
+- The Recovery sheet stops at 1440px and centers (it spanned the whole window in v1.32.6).
+
 ## v1.32.6 highlights
 
 - **Recovery sits at 1:1 like Capture.** No scaling: the design's 13px type as drawn, and the sheet spans the window with Capture's 24px margins instead of a centered column. The extra width goes to the tables (set column proportions, the SKU column up to 520px so names wrap less) and the money story; the right-hand cards keep a sensible width. The Overview keeps its window scale.

@@ -48,7 +48,7 @@ function runEvent(run, ts) {
   return {
     op: 'put', id: run.id, ts,
     run: { ...run, syncTs: undefined },
-    refunds: store.runRefunds(run.id), payouts: store.runPayouts(run.id), ledger: store.runLedger(run.id),
+    refunds: store.runRefunds(run.id), payouts: store.runPayouts(run.id), ledger: store.runLedger(run.id), orders: store.runOrders(run.id),
   };
 }
 
@@ -89,7 +89,7 @@ function applyRunEvent(ev) {
     deleteRunLocal(twin.id, ts);
   }
   const refunds = ev.refunds || [];
-  store.putRun(run, refunds, ev.payouts || [], ev.ledger || []);
+  store.putRun(run, refunds, ev.payouts || [], ev.ledger || [], ev.orders || null);
   store.addItems(trackerItemsFromStored(run, refunds));
 }
 
@@ -176,7 +176,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
     wh_price: r['Warehouse Price'], wh_condition: r['Warehouse Condition'] || '',
   }));
   const payoutRows = Object.entries(parsed.payouts).map(([po, v]) => ({ po, amount: v.amount, date: v.date || '', kind: v.kind || '' }));
-  store.putRun(run, refundRows, payoutRows, parsed.ledger);
+  store.putRun(run, refundRows, payoutRows, parsed.ledger, parsed.orders);
   store.addItems(rnr.trackerRows(seller, wfs).map((r) => rnr.itemFromRow(r, runId, run.ranAt)));
   if (replaced) { try { deps.retsync.appendAux('wmruns', { op: 'del', id: replaced.id, ts: ts - 1 }); } catch { /* offline */ } }
   try { deps.retsync.appendAux('wmruns', runEvent(run, ts)); } catch { /* offline: the local run stands */ }
@@ -333,6 +333,140 @@ function viewCsv(pos) {
   return rnr.buildViewCsv(items.filter((i) => want.has(String(i.po))));
 }
 
+/* ---------- Profit (owner 2026-10-12: "a place for the profit") ---------- */
+// What Walmart paid for each order (sales net of its fees, refunds taken
+// off) against the cost of the units sold. Costs come from the app's own
+// item_costs by inventory SKU; the report's Walmart SKU reaches it either
+// directly or through the Pricing page's channel mappings. A unit that was
+// refunded AND came back to the warehouse recovers its cost (it is stock
+// again); a refunded unit that never came back does not.
+
+// periods imported before Profit existed have no per-order rows: read them
+// back from the period's archived CSV when it is on this computer
+function ensureOrders() {
+  const missing = [];
+  for (const r of store.runsWithoutOrders()) {
+    const f = archivePath(r.label);
+    try {
+      if (!fs.existsSync(f)) { missing.push(r.label); continue; }
+      const parsed = parseReport(fs.readFileSync(f, 'utf8'));
+      store.putOrders(r.id, parsed.orders);
+      if (!parsed.orders.length) missing.push(r.label);
+    } catch { missing.push(r.label); }
+  }
+  return missing;
+}
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+function profit(scope, key) {
+  syncIn();
+  const missingRuns = ensureOrders();
+  const runs = store.listRunMeta();
+  const costs = (deps.costs && deps.costs()) || {};
+  const chan = (deps.channelMap && deps.channelMap()) || new Map();
+  const whPo = warehouse().poSet;
+  const unitCost = (sku) => {
+    const k = String(sku || '').trim().toUpperCase();
+    if (!k) return null;
+    const direct = costs[k];
+    if (direct && Number.isFinite(Number(direct.cost))) return Number(direct.cost);
+    const inv = chan.get(k);
+    const viaMap = inv ? costs[String(inv).toUpperCase()] : null;
+    return viaMap && Number.isFinite(Number(viaMap.cost)) ? Number(viaMap.cost) : null;
+  };
+
+  // the orders and the non-order ledger lines in scope
+  let orders; let ledger; let label;
+  if (scope === 'cycle') {
+    const run = store.getRun(key);
+    orders = run ? store.runOrders(run.id) : [];
+    ledger = run ? store.runLedger(run.id) : [];
+    label = run ? run.label : '';
+  } else if (scope === 'month') {
+    orders = store.allOrders().filter((o) => rnr.monthKeyOf(o.date) === key);
+    ledger = rnr.dedupeLedger(store.allLedger()).filter((t) => rnr.monthKeyOf(t.date) === key);
+    label = monthLabel(String(key));
+  } else {
+    orders = store.allOrders();
+    ledger = rnr.dedupeLedger(store.allLedger());
+    label = 'all time';
+  }
+
+  const bySku = new Map();
+  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0 };
+  const missingSkus = new Set();
+  for (const o of orders) {
+    const cost = unitCost(o.sku);
+    const back = o.refundUnits > 0 && whPo.has(o.po) ? Math.min(o.refundUnits, o.saleUnits) : 0; // came back: cost recovered
+    const costedUnits = Math.max(0, o.saleUnits - back);
+    const cogs = cost === null ? 0 : costedUnits * cost;
+    tot.payout += o.netPayable; tot.orders++; tot.unitsSold += o.saleUnits; tot.unitsRefunded += o.refundUnits; tot.unitsBack += back;
+    if (cost === null) { tot.missingCount++; tot.missingPayout += o.netPayable; missingSkus.add(o.sku || '(no SKU)'); }
+    else { tot.cogs += cogs; tot.costedPayout += o.netPayable; }
+    const k = o.sku || '(no SKU)';
+    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null });
+    const g = bySku.get(k);
+    if (!g.item && o.item) g.item = o.item;
+    g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.payout += o.netPayable; g.cogs += cogs;
+  }
+  const skus = [...bySku.values()].map((g) => ({
+    ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
+    margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
+  })).sort((a, b) => b.payout - a.payout);
+  // Walmart lines that belong to no order: storage, ads, label charges, disputes…
+  const other = r2(ledger.filter((t) => !String(t.po || '').trim()).reduce((a, t) => a + (Number(t.amount) || 0), 0));
+  const profitV = r2(tot.payout - tot.cogs);
+
+  // every period, for the trend (newest first, by the period start)
+  const periods = runs
+    .map((r) => {
+      const os = store.runOrders(r.id);
+      let payout = 0; let cogs = 0; let miss = 0; let units = 0;
+      for (const o of os) {
+        const cost = unitCost(o.sku);
+        const back = o.refundUnits > 0 && whPo.has(o.po) ? Math.min(o.refundUnits, o.saleUnits) : 0;
+        payout += o.netPayable; units += o.saleUnits;
+        if (cost === null) miss++; else cogs += Math.max(0, o.saleUnits - back) * cost;
+      }
+      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), cogs: r2(cogs), profit: r2(payout - cogs), margin: payout > 0 ? Math.round(((payout - cogs) / payout) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
+    })
+    .sort((a, b) => periodStartMs({ label: b.label, ranAt: '' }) - periodStartMs({ label: a.label, ranAt: '' }));
+
+  return {
+    ok: true, scope, key, label,
+    payout: r2(tot.payout), cogs: r2(tot.cogs), profit: profitV,
+    margin: tot.payout > 0 ? Math.round((profitV / tot.payout) * 1000) / 10 : null,
+    orders: tot.orders, unitsSold: tot.unitsSold, unitsRefunded: tot.unitsRefunded, unitsBack: tot.unitsBack,
+    missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
+    costedPayout: r2(tot.costedPayout), other, netAfterOther: r2(profitV + other),
+    skus, periods, missingRuns,
+  };
+}
+
+function profitWorkbook(scope, key) {
+  const { buildWorkbookSheets } = require('../xlsxwrite');
+  const p = profit(scope, key);
+  const money = 'money';
+  return { label: p.label, buffer: buildWorkbookSheets([
+    { name: 'Summary', columns: [{ header: `Profit — ${p.label}`, width: 36, kind: 'text' }, { header: 'Amount', width: 16, kind: money }], rows: [
+      ['Walmart paid (orders net of fees and refunds)', p.payout], ['Cost of goods sold', p.cogs], ['Profit', p.profit], ['Margin %', p.margin ?? ''],
+      ['Other Walmart lines (no order)', p.other], ['Net after other lines', p.netAfterOther],
+      ['Orders', p.orders], ['Units sold', p.unitsSold], ['Units refunded', p.unitsRefunded], ['Units back in stock', p.unitsBack],
+      ['Orders with no cost set', p.missing.orders], ['Their payout', p.missing.payout],
+    ] },
+    { name: 'By SKU', columns: [
+      { header: 'Walmart SKU', width: 26, kind: 'text' }, { header: 'Product', width: 48, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units sold', width: 10, kind: 'int' },
+      { header: 'Refunded', width: 9, kind: 'int' }, { header: 'Back in stock', width: 12, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money }, { header: 'Unit cost', width: 10, kind: money },
+      { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' },
+    ], rows: p.skus.map((g) => [g.sku, g.item, g.orders, g.unitsSold, g.unitsRefunded, g.unitsBack, g.payout, g.costKnown ? g.unitCost : '', g.costKnown ? g.cogs : '', g.costKnown ? g.profit : '', g.margin ?? (g.costKnown ? '' : 'no cost set')]) },
+    { name: 'By period', columns: [
+      { header: 'Period', width: 24, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units', width: 8, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money },
+      { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' }, { header: 'Orders without cost', width: 18, kind: 'int' },
+    ], rows: p.periods.map((x) => [x.label, x.orders, x.units, x.payout, x.cogs, x.profit, x.margin ?? '', x.missingCount]) },
+  ]) };
+}
+
 /* ---------- alerts (§9) ---------- */
 
 function digest() {
@@ -371,7 +505,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, summary, monthLabel,
+  configure, importReport, removeRun, state, runDetail, mark, summary, monthLabel, profit, profitWorkbook,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

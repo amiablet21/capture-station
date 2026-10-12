@@ -1636,6 +1636,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'reconcile', bucket: 'notReceived', tab: 'todo', type: '', q: '',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '',
 };
 const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const rcMoney = (n) => '$' + Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1689,7 +1690,24 @@ async function rcLoad() {
   }
   await rcLoadSummary(seq);
   if (seq !== rc.seq) return;
+  if (rc.sub === 'profit') await rcLoadProfit(seq);
+  if (seq !== rc.seq) return;
   rcRender();
+}
+
+async function rcLoadProfit(seq = rc.seq) {
+  if (!rc.data) return;
+  let key = null;
+  if (rc.profitScope === 'cycle') key = rc.runId;
+  else if (rc.profitScope === 'month') {
+    const months = rc.data.months || [];
+    if (!months.includes(rc.profitMonth)) rc.profitMonth = months[0] || '';
+    key = rc.profitMonth;
+  }
+  if (rc.profitScope !== 'all' && !key) { rc.profit = null; return; }
+  const p = await api.recoveryProfit(rc.profitScope, key).catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.profit = p && p.ok ? p : null;
 }
 
 async function rcLoadSummary(seq = rc.seq) {
@@ -1715,12 +1733,96 @@ function rcRender() {
   for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
   $('rcReconcile').hidden = rc.sub !== 'reconcile';
   $('rcNotReceived').hidden = rc.sub !== 'notreceived';
+  $('rcProfit').hidden = rc.sub !== 'profit';
   $('rcImportBtn').hidden = rc.sub !== 'reconcile';
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
+  $('rcProfitExcelBtn').hidden = rc.sub !== 'profit';
   rcRenderReconcile();
   rcRenderSummary();
   rcRenderToday();
   rcRenderList();
+  rcRenderProfit();
+}
+
+/* ----- Profit ----- */
+const rcPct = (m) => (m == null ? '—' : `${m.toFixed(1)}%`);
+function rcRenderProfit() {
+  if (rc.sub !== 'profit') return;
+  const p = rc.profit;
+  for (const b of $('rcProfitScope').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.rcscope === rc.profitScope);
+  const months = (rc.data && rc.data.months) || [];
+  const pick = $('rcProfitMonth');
+  pick.hidden = rc.profitScope !== 'month' || !months.length;
+  if (!pick.hidden) {
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    pick.innerHTML = months.map(k => `<option value="${esc(k)}" ${k === rc.profitMonth ? 'selected' : ''}>${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}</option>`).join('');
+  }
+  $('rcProfitCardLabel').textContent = { cycle: 'This period', month: 'This month', all: 'All time' }[rc.profitScope];
+  if (!p) {
+    $('rcProfitAmt').textContent = '$0.00';
+    $('rcProfitSub').textContent = 'profit · no period imported';
+    rcBar($('rcProfitBar'), []);
+    $('rcProfitLegend').innerHTML = '';
+    $('rcProfitNums').innerHTML = '';
+    $('rcProfitTabs').innerHTML = '';
+    $('rcProfitTable').innerHTML = '';
+    $('rcProfitFoot').textContent = 'Import a payment period on the Reconcile screen to see its orders.';
+    return;
+  }
+  const scopeLabel = rc.profitScope === 'cycle' ? rcPeriodName(p.label).replace(/, \d{4}$/, '') : p.label;
+  $('rcProfitAmt').textContent = (p.profit < 0 ? '−' : '') + rcMoney(p.profit);
+  $('rcProfitAmt').classList.toggle('rc-neg', p.profit < 0);
+  $('rcProfitSub').textContent = `profit · ${scopeLabel}${p.margin != null ? ` · ${rcPct(p.margin)} margin` : ''}`;
+  // the bar: what Walmart paid, split into cost of goods and what is left
+  const signed = (v) => (v < 0 ? '−' : '') + rcMoney(v);
+  rcBar($('rcProfitBar'), [['is-grey', p.cogs], ['is-navy', Math.max(0, p.profit)]]);
+  const legend = [
+    ['', signed(p.payout), 'Walmart paid in total'],
+    ['is-grey', rcMoney(p.cogs), 'cost of goods sold'],
+    ['is-navy', signed(p.profit), 'profit'],
+  ];
+  if (p.missing.orders) legend.push(['', signed(p.missing.payout), `paid on ${rcPlural(p.missing.orders, 'order')} with no cost set`]);
+  if (p.other) legend.push(['', signed(p.other), 'other Walmart lines (no order)']);
+  $('rcProfitLegend').innerHTML = legend.map(([tone, amt, label]) => `<div class="rc-legend-item"><span class="rc-swatch ${tone}"></span><div><div class="rc-legend-amt">${esc(amt)}</div><div class="rc-legend-label">${esc(label)}</div></div></div>`).join('');
+  $('rcProfitNums').innerHTML = [
+    ['is-navy', p.orders, 'orders', rcMoney(p.payout)],
+    ['is-navy', p.unitsSold, 'units sold', `${p.unitsRefunded} refunded`],
+    ['is-navy', p.unitsBack, 'back in stock', 'cost recovered'],
+  ].map(([tone, n, label, sub]) => `<div><div class="rc-num ${tone}">${n}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${esc(sub)}</div></div>`).join('');
+
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
+    `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
+  $('rcProfitSearch').hidden = rc.profitTab !== 'sku';
+  const money = (v, known = true) => (known ? `${v < 0 ? '−' : ''}${rcMoney(v)}` : '<span class="rc-nocost">no cost set</span>');
+  if (rc.profitTab === 'sku') {
+    const q = rc.profitQ.toLowerCase();
+    const rows = p.skus.filter(g => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q));
+    const head = '<th>SKU</th><th class="is-right">Sold</th><th class="is-right">Refunded</th><th class="is-right">Walmart paid</th><th class="is-right">Unit cost</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
+    const body = rows.length ? rows.map(g => `<tr>
+      <td class="rc-item">${rcSkuCell(g.sku, g.item)}</td>
+      <td class="is-right">${g.unitsSold}</td>
+      <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
+      <td class="is-right">${money(g.payout)}</td>
+      <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
+      <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
+      <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="7">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  } else {
+    const head = '<th>Period</th><th class="is-right">Orders</th><th class="is-right">Units</th><th class="is-right">Walmart paid</th><th class="is-right">Cost of goods</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
+    const body = p.periods.length ? p.periods.map(x => `<tr>
+      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? (x.missingCount ? `<div class="rc-item-sub">${rcPlural(x.missingCount, 'order')} with no cost set</div>` : '') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
+      <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
+      <td class="is-right">${money(x.payout)}</td><td class="is-right">${money(x.cogs)}</td>
+      <td class="is-right ${x.profit < 0 ? 'rc-neg' : ''}">${money(x.profit)}</td><td class="is-right">${rcPct(x.margin)}</td>
+    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="7">No periods imported yet.</td></tr>';
+    $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  }
+  const foot = [];
+  if (p.missing.orders) foot.push(`${rcPlural(p.missing.skus, 'listing')} ${p.missing.skus === 1 ? 'has' : 'have'} no cost yet (${rcPlural(p.missing.orders, 'order')}, ${rcMoney(p.missing.payout)} paid): set it in the Stock page's Cost column and this updates.`);
+  if (p.missingRuns && p.missingRuns.length) foot.push(`${rcPlural(p.missingRuns.length, 'period')} imported before Profit existed and ${p.missingRuns.length === 1 ? 'its' : 'their'} report file is not on this computer — re-import to include ${p.missingRuns.length === 1 ? 'its' : 'their'} sales: ${p.missingRuns.map(rcPeriodName).join(', ')}.`);
+  if (!foot.length) foot.push('Every order in this scope has a cost. Costs live in the Stock page\'s Cost column.');
+  $('rcProfitFoot').textContent = foot.join(' ');
 }
 
 /* ----- Reconcile ----- */
@@ -1934,6 +2036,7 @@ const rcItem = (po) => ((rc.data && rc.data.items) || []).find(i => i.po === po)
 async function rcMark(po, action, payload) {
   const res = await api.recoveryMark(po, action, payload).catch(e => ({ ok: false, error: e.message }));
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save that.', 4000); return false; }
+  rc.profit = null;
   await rcLoad();
   return true;
 }
@@ -2062,8 +2165,28 @@ function rcAnchor(dlg, r) {
 
 /* ----- wiring ----- */
 for (const b of document.querySelectorAll('[data-rcsub]')) {
-  b.addEventListener('click', () => { rc.sub = b.dataset.rcsub; if (rc.data) rcRender(); });
+  b.addEventListener('click', async () => {
+    rc.sub = b.dataset.rcsub;
+    if (!rc.data) return;
+    if (rc.sub === 'profit' && !rc.profit) await rcLoadProfit();
+    rcRender();
+  });
 }
+$('rcProfitScope').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rcscope]');
+  if (!b || b.dataset.rcscope === rc.profitScope) return;
+  rc.profitScope = b.dataset.rcscope;
+  await rcLoadProfit();
+  rcRenderProfit();
+});
+$('rcProfitMonth').addEventListener('change', async () => { rc.profitMonth = $('rcProfitMonth').value; await rcLoadProfit(); rcRenderProfit(); });
+$('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rcRenderProfit(); } });
+$('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
+$('rcProfitExcelBtn').addEventListener('click', async () => {
+  if (!rc.profit) { toast('Nothing to export yet.'); return; }
+  const r = await api.recoveryExportProfit(rc.profitScope, rc.profitScope === 'cycle' ? rc.runId : rc.profitScope === 'month' ? rc.profitMonth : null).catch(err => ({ ok: false, error: err.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+});
 $('rcImportBtn').addEventListener('click', rcBrowse);
 $('rcBrowseBtn').addEventListener('click', rcBrowse);
 // the drop target (the whole page accepts the file; the box shows the state)

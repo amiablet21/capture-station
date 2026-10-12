@@ -97,6 +97,7 @@ module.exports = function run(check) {
   recovery.configure({
     retsync: fakeSync, listReturns: () => returns, config: { load: () => cfg, save: (p) => Object.assign(cfg.recovery, p.recovery || {}) },
     archiveDir: path.join(tmp, 'archive'), station: 'TEST', by: 'IM',
+    costs: () => ({ 'SKU-A': { cost: 70 }, 'INV-Z': { cost: 120 } }), channelMap: () => new Map([['SKU-Z', 'INV-Z']]),
   });
 
   return (async () => {
@@ -176,6 +177,14 @@ module.exports = function run(check) {
     check('recovery: this-period scope reads that run\'s own ledger', cyc.returnsCount === 12 && cyc.label === 'May 16 - May 30, 2026', cyc);
     check('recovery: month keys listed newest first', st.months.length >= 1 && /^\d{4}-\d{2}$/.test(st.months[0]));
 
+    // profit: 001 sold and refunded but back in stock -> cost recovered; 100 via the channel map
+    const pr = recovery.profit('cycle', res.id);
+    const z = pr.skus.find((g) => g.sku === 'SKU-Z');
+    const a = pr.skus.find((g) => g.sku === 'SKU-A');
+    check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
+    check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 0 && a.unitsBack === 1 && a.cogs === 0, a);
+    check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
+    check('recovery: profit workbook builds', recovery.profitWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);
     // exports
     check('recovery: audit workbook builds', recovery.auditWorkbook().readUInt32LE(0) === 0x04034b50);
     check('recovery: summary workbook builds', recovery.summaryWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);

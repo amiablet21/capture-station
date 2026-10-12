@@ -207,6 +207,51 @@ function parseLedger(rows, format) {
   return out;
 }
 
+// ---------- Per-order sales, for Profit ----------
+// One record per PO with the net payable across its SALE and REFUNDED rows
+// (old format: every PO-linked row), units from the rows (new) or Ship
+// Qty (old). The Walmart app's loadOrders, kept so cost per unit sold can
+// be set against what Walmart actually paid.
+function parseOrders(rows, format) {
+  const map = new Map();
+  if (format === 'new') {
+    for (const r of rows) {
+      const type = r['Transaction Type'];
+      if (type !== 'SALE' && type !== 'REFUNDED') continue;
+      const po = String(r['Walmart.com PO #'] ?? '').trim();
+      if (!po) continue;
+      if (!map.has(po)) {
+        map.set(po, { po, item: r['Partner Item name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Date Time']), saleUnits: 0, refundUnits: 0, netPayable: 0 });
+      }
+      const g = map.get(po);
+      if (!g.item && r['Partner Item name']) g.item = r['Partner Item name'];
+      if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
+      g.netPayable += toNum(r['Payable to Partner from Sale']);
+      if (type === 'SALE') g.saleUnits++; else g.refundUnits++;
+    }
+    return [...map.values()];
+  }
+  for (const r of rows) {
+    const po = String(r['Purchase Order #'] ?? '').trim();
+    if (!po) continue;
+    const type = r['Transaction Type'];
+    if (type === 'PaymentSummary') continue;
+    if (!map.has(po)) {
+      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0 });
+    }
+    const g = map.get(po);
+    if (!g.item && r['Partner Item Name']) g.item = r['Partner Item Name'];
+    if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
+    g.netPayable += toNum(r['Amount']);
+    if (r['Amount Type'] === 'Product Price') {
+      const qty = Math.max(1, Math.trunc(Math.abs(Number(r['Ship Qty']))) || 1);
+      if (type === 'Sale') g.saleUnits += qty;
+      else if (type === 'Refund') g.refundUnits += qty;
+    }
+  }
+  return [...map.values()];
+}
+
 // Everything the import needs from one report text, parsed once.
 function parseReport(text) {
   const parsed = parseRefunds(text);
@@ -214,7 +259,8 @@ function parseReport(text) {
     ...parsed,
     payouts: parsePayouts(parsed.rows, parsed.format),
     ledger: parseLedger(parsed.rows, parsed.format),
+    orders: parseOrders(parsed.rows, parsed.format),
   };
 }
 
-module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX };
+module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX };

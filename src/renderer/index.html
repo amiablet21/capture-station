@@ -303,9 +303,11 @@
           <nav class="rc-subtabs" aria-label="Recovery screens">
             <button type="button" class="rc-subtab is-active" data-rcsub="reconcile">Reconcile</button>
             <button type="button" class="rc-subtab" data-rcsub="notreceived">Not received <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
+            <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
           </nav>
           <button id="rcImportBtn" class="rc-btn rc-btn-primary rc-head-action" type="button">Import payment period</button>
           <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
+          <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Download Excel</button>
         </div>
 
         <div id="rcReconcile" class="rc-screen">
@@ -376,6 +378,42 @@
             </div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
             <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
+          </section>
+        </div>
+
+        <!-- Profit (owner 2026-10-12): what Walmart paid for the orders in a
+             scope against the cost of the units sold -->
+        <div id="rcProfit" class="rc-screen" hidden>
+          <section class="rc-top">
+            <div>
+              <div class="rc-label-row">
+                <div class="rc-label">Profit on orders</div>
+                <div class="rc-scope" id="rcProfitScope" role="group" aria-label="Scope">
+                  <button type="button" data-rcscope="cycle" class="is-on">This period</button>
+                  <button type="button" data-rcscope="month">Month</button>
+                  <button type="button" data-rcscope="all">All time</button>
+                </div>
+                <select id="rcProfitMonth" class="rc-month" aria-label="Month" hidden></select>
+              </div>
+              <div class="rc-headline"><span class="rc-headline-amt" id="rcProfitAmt">$0.00</span> <span class="rc-headline-sub" id="rcProfitSub">profit</span></div>
+              <div class="rc-bar rc-bar-lg" id="rcProfitBar"></div>
+              <div class="rc-legend" id="rcProfitLegend"></div>
+            </div>
+            <div class="rc-card rc-today">
+              <div class="rc-label" id="rcProfitCardLabel">This period</div>
+              <div class="rc-nums" id="rcProfitNums"></div>
+              <div class="rc-rule" id="rcProfitRule">Walmart paid = each order's payout net of Walmart's fees, with its refund taken off. Cost comes from the Stock page's Cost column; a refunded unit that came back to the warehouse is stock again, so its cost is not counted.</div>
+            </div>
+          </section>
+          <section class="rc-table-card">
+            <div class="rc-tabrow rc-tabrow-list">
+              <div class="rc-tabs" id="rcProfitTabs"></div>
+              <div class="rc-list-tools">
+                <input id="rcProfitSearch" class="rc-search" type="text" placeholder="Search SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" />
+              </div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-profit" id="rcProfitTable"></table></div>
+            <div class="rc-foot" id="rcProfitFoot"></div>
           </section>
         </div>
       </div>
