@@ -2051,7 +2051,7 @@ function rcRenderReconcile() {
     reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received before the log' }));
   const rows = rcSortRows(sortable, so, 'left');
   const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
-    + rcSortTh(so, 'units', 'Units', true) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
+    + rcSortTh(so, 'units', 'Units', true, false, 1) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
     + (isMarked ? '' : rcSortTh(so, 'left', 'Days left', true, false, 1))
     + (isMarked ? rcSortTh(so, 'markText', 'Mark', false, true) : rcSortTh(so, 'reasonText', 'Reason', false, true)) + '<th></th>';
   const markCell = (it) => {

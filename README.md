@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.23 highlights
+
+- **Units sorts least to greatest** on the first click (owner's ask); a second click flips it. Money and Days left keep their own first directions.
+
 ## v1.32.22 highlights
 
 - **Every Reconcile header sorts** (owner: "clickable column headers, not buttons"). Click PO #, Type, Item, Units, Refunded, Net refund, Days left or Reason to sort; click again to flip. Untouched, Not received and WFS pending run soonest-to-file first, so the red and amber rows sit at the top; the Marked tab runs newest refund first. Switching tabs resets the sort.
