@@ -1845,7 +1845,7 @@ function rcRenderProfit() {
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
     const body = rows.length ? rows.map((g, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-item">${rcSkuCell(g.sku, g.item)}</td>
+      <td class="rc-item" title="${esc(g.item || '')}"><span class="rc-sku">${esc(g.sku)}</span></td>
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
