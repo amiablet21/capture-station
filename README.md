@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.22 highlights
+
+- **Every Reconcile header sorts** (owner: "clickable column headers, not buttons"). Click PO #, Type, Item, Units, Refunded, Net refund, Days left or Reason to sort; click again to flip. Untouched, Not received and WFS pending run soonest-to-file first, so the red and amber rows sit at the top; the Marked tab runs newest refund first. Switching tabs resets the sort.
+
 ## v1.32.21 highlights
 
 - **Days left on Reconcile** (owner: "timers for each of the not received"). A column after Net refund counts the days left in each PO's window: 45 days from the refund for seller returns, 135 for WFS, 90 for WFS pending. The cell shades like Excel conditional formatting: white with 30 or more days, paler to darker yellow under 30, red at 0, and the number keeps counting into the negatives once the window has passed. Hover the cell for which window it is.

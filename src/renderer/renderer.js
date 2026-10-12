@@ -1636,7 +1636,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 // and the tracker with its status sentences and row actions. Every status
 // is derived in the main process on each load; this side only draws.
 const rc = {
-  data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, pickFor: 'profit',
+  data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, reconcileSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
   profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
   year: '', profitYear: '',
@@ -1692,10 +1692,10 @@ function rcSortRows(rows, sort, defaultKey) {
     return dir * c;
   });
 }
-const rcSortTh = (sort, key, label, right, text) => {
+const rcSortTh = (sort, key, label, right, text, first) => {
   const on = sort && sort.key === key;
   const arrow = on ? (sort.dir < 0 ? ' ▾' : ' ▴') : '';
-  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}</th>`;
+  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" data-rcfirst="${first || ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}</th>`;
 };
 // "Mon D" from an ISO stamp or a report MM/DD/YYYY date
 function rcMonDay(v) {
@@ -2011,13 +2011,16 @@ function rcRenderImport() {
    Days left in the window as a plain number; the cell shades like Excel
    conditional formatting: white at 30+, paler to darker yellow under 30,
    red at 0 and below (the number goes negative once the window has passed). */
-function rcDaysCell(it) {
+function rcDaysLeft(it) {
   // the engine stops counting once a case is open or the PO is marked lost;
   // the timer still runs from the refund date so every row has a number
   let d = it.daysLeft;
   if (d == null && it.daysOld != null) d = it.isWfs ? (it.daysOld < 90 ? 90 - it.daysOld : 135 - it.daysOld) : 45 - it.daysOld;
-  if (d == null || !Number.isFinite(Number(d))) return '<td class="rc-mono is-right rc-days rc-muted" title="No refund date to count from">—</td>';
-  const n = Number(d);
+  return d == null || !Number.isFinite(Number(d)) ? null : Number(d);
+}
+function rcDaysCell(it) {
+  const n = rcDaysLeft(it);
+  if (n == null) return '<td class="rc-mono is-right rc-days rc-muted" title="No refund date to count from">—</td>';
   const tier = n <= 0 ? 'is-t0' : n <= 7 ? 'is-t1' : n <= 14 ? 'is-t2' : n <= 29 ? 'is-t3' : '';
   const win = it.wfsWaiting ? 'Walmart pays back by day 90' : it.isWfs ? 'WFS: file within 135 days of the refund' : 'Seller: dispute within 45 days of the refund';
   const tip = n > 0 ? `${n} days left · ${win}` : n === 0 ? `Last day · ${win}` : `Window passed ${-n} days ago · ${win}`;
@@ -2038,8 +2041,19 @@ function rcRenderReconcile() {
   $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
   const isMarked = rc.bucket === 'marked';
-  const rows = isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived);
-  const head = `<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th>${isMarked ? '' : '<th class="is-right">Days left</th>'}<th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
+  // every header sorts (owner 2026-10-12: "clickable column headers, not
+  // buttons"); untouched, the open tabs run soonest-to-file first and the
+  // Marked tab newest refund first
+  const so = rc.reconcileSort || (isMarked ? { key: 'refundTs', dir: -1 } : { key: 'left', dir: 1 });
+  const sortable = (isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived)).map(it => ({ ...it,
+    left: rcDaysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0,
+    refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
+    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received before the log' }));
+  const rows = rcSortRows(sortable, so, 'left');
+  const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
+    + rcSortTh(so, 'units', 'Units', true) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
+    + (isMarked ? '' : rcSortTh(so, 'left', 'Days left', true, false, 1))
+    + (isMarked ? rcSortTh(so, 'markText', 'Mark', false, true) : rcSortTh(so, 'reasonText', 'Reason', false, true)) + '<th></th>';
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
@@ -2483,7 +2497,7 @@ $('rcPeriodsTable').addEventListener('click', async (e) => {
 });
 $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
-  if (b) { rc.bucket = b.dataset.rcbucket; rcRenderBucket(); }
+  if (b) { rc.bucket = b.dataset.rcbucket; rc.reconcileSort = null; rcRenderBucket(); }
 });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
@@ -2508,6 +2522,14 @@ $('rcPoDlg').addEventListener('click', async (e) => {
 $('rcBucketTable').addEventListener('click', (e) => {
   const link = e.target.closest('[data-rcpolink]');
   if (link) { rcPoMenu(link); return; }
+  const th = e.target.closest('[data-rcsort]');
+  if (th) {
+    const key = th.dataset.rcsort;
+    const first = th.dataset.rcfirst ? Number(th.dataset.rcfirst) : (th.dataset.rctext ? 1 : -1);
+    const cur = rc.reconcileSort || (rc.bucket === 'marked' ? { key: 'refundTs', dir: -1 } : { key: 'left', dir: 1 });
+    rc.reconcileSort = cur.key === key ? { key, dir: -cur.dir } : { key, dir: first };
+    rcRenderReconcile(); return;
+  }
   const more = e.target.closest('[data-rcmenu]');
   if (!more) return;
   const it = rcItem(more.dataset.rcmenu);
