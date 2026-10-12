@@ -5,6 +5,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.21 highlights
 
 - **Days left on Reconcile** (owner: "timers for each of the not received"). A column after Net refund counts the days left in each PO's window: 45 days from the refund for seller returns, 135 for WFS, 90 for WFS pending. The cell shades like Excel conditional formatting: white with 30 or more days, paler to darker yellow under 30, red at 0, and the number keeps counting into the negatives once the window has passed. Hover the cell for which window it is.
+- The checkbox column and its selection bar are gone from Reconcile (owner: the file import does the bulk work). The ⋯ on a row still offers **Received before the log** and **Never shipped**, and the Import screen still takes a file of PO numbers.
 
 ## v1.32.20 highlights
 

@@ -1638,7 +1638,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), selected: new Set(), lastSel: null,
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -2039,18 +2039,14 @@ function rcRenderReconcile() {
     `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
   const isMarked = rc.bucket === 'marked';
   const rows = isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived);
-  const visible = new Set(rows.map(it => it.po));
-  for (const po of [...rc.selected]) if (!visible.has(po)) rc.selected.delete(po);
-  const allOn = rows.length > 0 && rows.every(it => rc.selected.has(it.po));
-  const head = `<th class="rc-g">#</th><th class="rc-cbc"><input type="checkbox" id="rcSelAll" ${allOn ? 'checked' : ''} aria-label="Select every row on this tab"></th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th>${isMarked ? '' : '<th class="is-right">Days left</th>'}<th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
+  const head = `<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th>${isMarked ? '' : '<th class="is-right">Days left</th>'}<th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
     return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${never ? 'Never shipped' : 'Received before the log'}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
-  const body = rows.length ? rows.map((it, i) => `<tr class="${rc.selected.has(it.po) ? 'is-sel' : ''}" data-rcrow="${esc(it.po)}">
+  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}">
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-cbc"><input type="checkbox" class="rc-cb" data-rcsel="${esc(it.po)}" ${rc.selected.has(it.po) ? 'checked' : ''} aria-label="Select ${esc(it.po)}"></td>
       <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
       <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
       <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
@@ -2060,17 +2056,9 @@ function rcRenderReconcile() {
       ${isMarked ? '' : rcDaysCell(it)}
       <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);
   rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
-  // the selection bar
-  const n = rc.selected.size;
-  $('rcSelBar').hidden = !n;
-  $('rcSelCount').textContent = `${n} selected`;
-  for (const b of $('rcSelBar').querySelectorAll('[data-rcbulk]')) {
-    const k = b.dataset.rcbulk;
-    if (k === 'undo') b.hidden = !isMarked; else if (k === 'receivedManual' || k === 'neverShipped') b.hidden = isMarked;
-  }
 }
 function rcRenderBucket() { rcRenderReconcile(); }
 
@@ -2495,7 +2483,7 @@ $('rcPeriodsTable').addEventListener('click', async (e) => {
 });
 $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
-  if (b) { rc.bucket = b.dataset.rcbucket; rc.selected.clear(); rc.lastSel = null; rcRenderBucket(); }
+  if (b) { rc.bucket = b.dataset.rcbucket; rcRenderBucket(); }
 });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
@@ -2520,23 +2508,6 @@ $('rcPoDlg').addEventListener('click', async (e) => {
 $('rcBucketTable').addEventListener('click', (e) => {
   const link = e.target.closest('[data-rcpolink]');
   if (link) { rcPoMenu(link); return; }
-  const all = e.target.closest('#rcSelAll');
-  if (all) {
-    const pos = [...$('rcBucketTable').querySelectorAll('[data-rcsel]')].map(x => x.dataset.rcsel);
-    if (all.checked) pos.forEach(po => rc.selected.add(po)); else pos.forEach(po => rc.selected.delete(po));
-    rcRenderReconcile(); return;
-  }
-  const cb = e.target.closest('[data-rcsel]');
-  if (cb) {
-    const pos = [...$('rcBucketTable').querySelectorAll('[data-rcsel]')].map(x => x.dataset.rcsel);
-    const po = cb.dataset.rcsel;
-    if (e.shiftKey && rc.lastSel && pos.includes(rc.lastSel)) {
-      const [i, j] = [pos.indexOf(rc.lastSel), pos.indexOf(po)].sort((x, y) => x - y);
-      for (const p of pos.slice(i, j + 1)) { if (cb.checked) rc.selected.add(p); else rc.selected.delete(p); }
-    } else if (cb.checked) rc.selected.add(po); else rc.selected.delete(po);
-    rc.lastSel = po;
-    rcRenderReconcile(); return;
-  }
   const more = e.target.closest('[data-rcmenu]');
   if (!more) return;
   const it = rcItem(more.dataset.rcmenu);
@@ -2553,30 +2524,6 @@ $('rcBucketTable').addEventListener('click', (e) => {
   dlg.showModal();
   rcAnchor(dlg, more.getBoundingClientRect());
 });
-// the bulk bar (owner 2026-10-12: "can we do a bulk select")
-$('rcSelBar').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-rcbulk]');
-  if (!b) return;
-  const k = b.dataset.rcbulk;
-  if (k === 'clear') { rc.selected.clear(); rcRenderReconcile(); return; }
-  const pos = [...rc.selected];
-  if (!pos.length) return;
-  if (k === 'undo') {
-    const items = pos.map(rcItem).filter(Boolean);
-    const never = items.filter(it => it.status === 'never_shipped').map(it => it.po);
-    const recv = items.filter(it => it.status !== 'never_shipped').map(it => it.po);
-    if (never.length) await api.recoveryMarkMany(never, 'undoNeverShipped', {}).catch(() => null);
-    if (recv.length) await api.recoveryMarkMany(recv, 'undoReceivedManual', {}).catch(() => null);
-    toast(`${rcPlural(pos.length, 'mark')} undone`);
-  } else {
-    const r = await api.recoveryMarkMany(pos, k, {}).catch(err => ({ ok: false, error: err.message }));
-    if (!r || !r.ok) { toast((r && r.error) || 'Could not mark those.', 4000); return; }
-    toast(k === 'neverShipped' ? `${rcPlural(r.count, 'PO')} marked never shipped` : `${rcPlural(r.count, 'PO')} marked received before the log`);
-  }
-  rc.selected.clear();
-  await rcLoad();
-});
-
 $('rcMenuDlg').addEventListener('click', async (e) => {
   const item = e.target.closest('[data-rcact]');
   $('rcMenuDlg').close();
@@ -2592,7 +2539,6 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
   if (['receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
     const r = await api.recoveryMark(rc.menuPo, act, {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
-    rc.selected.delete(rc.menuPo);
     await rcLoad();
     return;
   }
