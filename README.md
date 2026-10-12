@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.21 highlights
+
+- **Days left on Reconcile** (owner: "timers for each of the not received"). A column after Net refund counts the days left in each PO's window: 45 days from the refund for seller returns, 135 for WFS, 90 for WFS pending. The cell shades like Excel conditional formatting: white with 30 or more days, paler to darker yellow under 30, red at 0, and the number keeps counting into the negatives once the window has passed. Hover the cell for which window it is.
+
 ## v1.32.20 highlights
 
 - **Two marks on Reconcile** (owner: returns that came back before the software existed, and refunds on orders that never shipped). The ⋯ on a row offers **Received before the log** and **Never shipped**; a checkbox column with a selection bar marks many at once (shift-click for a range, the header box for the whole tab). A **Marked** tab shows every marked PO with which station set it and when, and undoes it. Received before the log takes the PO off Not received and recovers its cost in Profit, like a logged return would; Never shipped takes it off and charges no cost, since nothing left the warehouse. The Returns sheet is never touched. Marks live in the app's database and the shared folder's mark log, and show in the audit workbook.

@@ -5485,9 +5485,19 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-reconcile th:nth-child(6) { width: 70px; }
 .rc-table-reconcile th:nth-child(7) { width: 160px; }
 .rc-table-reconcile th:nth-child(8) { width: 110px; }
-.rc-table-reconcile th:nth-child(9) { width: 190px; }
+.rc-table-reconcile th:nth-child(9) { width: 84px; }   /* Days left */
+.rc-table-reconcile th:nth-child(10) { width: 190px; } /* Reason */
+.rc-table-reconcile th:nth-child(11) { width: 64px; }
+/* the Marked tab has no countdown: Mark takes the ninth column, ⋯ the tenth */
 .rc-table-reconcile.is-marked th:nth-child(9) { width: 380px; }
-.rc-table-reconcile th:nth-child(10) { width: 64px; }
+.rc-table-reconcile.is-marked th:nth-child(10) { width: 64px; }
+/* the countdown cell shades like Excel conditional formatting (owner
+   2026-10-12: "the closer it is to the day being up, the darker it gets,
+   yellow in between, new is clear"); 0 and negative numbers go red */
+.rc-table tbody tr td.rc-days.is-t3 { background: #FFF6D6; }
+.rc-table tbody tr td.rc-days.is-t2 { background: #F8DF9A; }
+.rc-table tbody tr td.rc-days.is-t1 { background: #E4B347; }
+.rc-table tbody tr td.rc-days.is-t0 { background: #9F2F2D; color: #fff; font-weight: 600; }
 /* bulk select and the two marks (owner 2026-10-12) */
 .rc-table th.rc-cbc, .rc-table td.rc-cbc { width: 34px; padding-left: 4px; padding-right: 4px; text-align: center; }
 .rc-cbc input { width: 14px; height: 14px; accent-color: #1E3A66; vertical-align: -2px; cursor: pointer; margin: 0; }

@@ -2007,6 +2007,23 @@ function rcRenderImport() {
   $('rcPeriodsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
+/* ----- Reconcile: the countdown cell (owner 2026-10-12, "design A") -----
+   Days left in the window as a plain number; the cell shades like Excel
+   conditional formatting: white at 30+, paler to darker yellow under 30,
+   red at 0 and below (the number goes negative once the window has passed). */
+function rcDaysCell(it) {
+  // the engine stops counting once a case is open or the PO is marked lost;
+  // the timer still runs from the refund date so every row has a number
+  let d = it.daysLeft;
+  if (d == null && it.daysOld != null) d = it.isWfs ? (it.daysOld < 90 ? 90 - it.daysOld : 135 - it.daysOld) : 45 - it.daysOld;
+  if (d == null || !Number.isFinite(Number(d))) return '<td class="rc-mono is-right rc-days rc-muted" title="No refund date to count from">—</td>';
+  const n = Number(d);
+  const tier = n <= 0 ? 'is-t0' : n <= 7 ? 'is-t1' : n <= 14 ? 'is-t2' : n <= 29 ? 'is-t3' : '';
+  const win = it.wfsWaiting ? 'Walmart pays back by day 90' : it.isWfs ? 'WFS: file within 135 days of the refund' : 'Seller: dispute within 45 days of the refund';
+  const tip = n > 0 ? `${n} days left · ${win}` : n === 0 ? `Last day · ${win}` : `Window passed ${-n} days ago · ${win}`;
+  return `<td class="rc-mono is-right rc-days ${tier}" title="${esc(tip)}">${n}</td>`;
+}
+
 /* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
   const items = rc.data.items || [];
@@ -2025,7 +2042,7 @@ function rcRenderReconcile() {
   const visible = new Set(rows.map(it => it.po));
   for (const po of [...rc.selected]) if (!visible.has(po)) rc.selected.delete(po);
   const allOn = rows.length > 0 && rows.every(it => rc.selected.has(it.po));
-  const head = `<th class="rc-g">#</th><th class="rc-cbc"><input type="checkbox" id="rcSelAll" ${allOn ? 'checked' : ''} aria-label="Select every row on this tab"></th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th><th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
+  const head = `<th class="rc-g">#</th><th class="rc-cbc"><input type="checkbox" id="rcSelAll" ${allOn ? 'checked' : ''} aria-label="Select every row on this tab"></th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th>${isMarked ? '' : '<th class="is-right">Days left</th>'}<th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
@@ -2040,9 +2057,10 @@ function rcRenderReconcile() {
       <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
+      ${isMarked ? '' : rcDaysCell(it)}
       <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);
   rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
   // the selection bar
