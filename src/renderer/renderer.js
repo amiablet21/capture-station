@@ -2312,27 +2312,9 @@ $('rcListTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rctab]');
   if (b) { rc.tab = b.dataset.rctab; rcRenderList(); }
 });
-// the two sections fold on their title; the choice is remembered per desktop
-const RC_SECS = { summary: 'rcSecSummary', list: 'rcSecList' };
-function rcApplySecs() {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem('rcSecs') || '{}'); } catch { /* defaults */ }
-  for (const [k, id] of Object.entries(RC_SECS)) {
-    const open = saved[k] !== false;
-    $(id).classList.toggle('is-open', open);
-    $(id).querySelector('.rc-sec-title').setAttribute('aria-expanded', String(open));
-  }
-}
-rcApplySecs();
-for (const b of document.querySelectorAll('[data-rcsec]')) {
-  b.addEventListener('click', () => {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem('rcSecs') || '{}'); } catch { /* defaults */ }
-    saved[b.dataset.rcsec] = !$(RC_SECS[b.dataset.rcsec]).classList.contains('is-open');
-    try { localStorage.setItem('rcSecs', JSON.stringify(saved)); } catch { /* best effort */ }
-    rcApplySecs();
-  });
-}
+// the two sections no longer fold (owner 2026-10-12: "I don't want it to
+// collapse"); a desktop that had folded one before opens it again
+try { localStorage.removeItem('rcSecs'); } catch { /* best effort */ }
 $('rcSummaryExcelBtn').addEventListener('click', async () => {
   if (!rc.summary) { toast('No scope to export yet.'); return; }
   const r = await api.recoveryExportSummary(rc.scope, rcScopeKey(rc.scope, 'money')).catch(err => ({ ok: false, error: err.message }));
