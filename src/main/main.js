@@ -7367,6 +7367,21 @@ function registerRecoveryIpc() {
   // findNext is Electron's "begin a new session" flag: true for a new text,
   // false to step through the matches of the current one
   ipcMain.handle('recovery:markMany', (_e, { list, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.markMany(list, action, payload || {})));
+  // a cost typed on the Profit table (owner 2026-10-12: listings whose
+  // Linnworks mapping was removed when they shut down still need a cost).
+  // It is saved under the SKU shown — a Walmart listing or a Linnworks SKU —
+  // in the same cost store the Stock page's Cost column writes, and rides
+  // the shared folder like any other cost; same station gate as that column.
+  ipcMain.handle('recovery:setCost', (_e, { sku, cost } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const cfg = config.load();
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    const k = String(sku || '').trim();
+    const n = Math.round((Number(cost) || 0) * 100) / 100;
+    if (!k) return { ok: false, error: 'Missing SKU.' };
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
+    try { costPut(k, n); return { ok: true, cost: n }; } catch (e) { return { ok: false, error: e.message }; }
+  });
   ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
   ipcMain.handle('recovery:markPick', async () => {
     if (recoveryGate()) return recoveryGate();

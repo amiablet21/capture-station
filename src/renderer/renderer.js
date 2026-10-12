@@ -1879,27 +1879,31 @@ function rcRenderProfit() {
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
+    // "no cost set" is a button: type the cost right here (owner 2026-10-12)
+    const costCell = (g) => g.costKnown ? rcMoney(g.unitCost) : `<button type="button" class="rc-nocost rc-cost-set" data-rccost="${esc(g.sku)}" title="Click to set this SKU's cost">no cost set</button>`;
+    // a listing the Pricing map does not know, marked like Capture's ⚠
+    const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page">⚠</span>';
     const cells = (g) => `
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
       <td class="is-right">${g.commissionPct == null ? '<span class="rc-faint">—</span>' : rcPct(g.commissionPct)}</td>
       <td class="is-right">${money(g.payout)}</td>
-      <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
+      <td class="is-right">${costCell(g)}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
       <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
     const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
     // a Walmart listing row: its own caret opens its POs
     const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
       <td class="rc-g">${nested ? '' : i + 1}</td>
-      <td class="rc-item" title="${esc(g.item || '')}">${caret(g.sku, "Show this SKU's POs")}<span class="rc-sku">${esc(g.sku)}</span></td>${cells(g)}
+      <td class="rc-item" title="${esc(g.item || '')}">${caret(g.sku, "Show this SKU's POs")}<span class="rc-sku">${esc(g.sku)}</span>${!nested && !g.inv ? warn : ''}</td>${cells(g)}
     </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
     const group = (x, i) => {
       const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
-      const note = x.mapped ? `${rcPlural(x.listings.length, 'Walmart listing')}` : 'not in the Pricing map';
+      const note = x.mapped ? `<span class="rc-group-note">${rcPlural(x.listings.length, 'Walmart listing')}</span>` : `${warn}<span class="rc-group-note">not in the Pricing map</span>`;
       return `<tr class="rc-group ${open ? 'is-open' : ''}">
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span><span class="rc-group-note">${note}</span></td>${cells(x)}
+      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span>${note}</td>${cells(x)}
     </tr>${open ? x.listings.filter(g => !q || hit(g) || hit(x)).map(g => listing(g, 0, true)).join('') : ''}`;
     };
     const body = rows.length ? rows.map((g, i) => (byLw ? group(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
@@ -1919,7 +1923,7 @@ function rcRenderProfit() {
     rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
   }
   const foot = [];
-  if (p.missing.orders) foot.push(`${rcPlural(p.missing.skus, 'listing')} ${p.missing.skus === 1 ? 'has' : 'have'} no cost yet (${rcPlural(p.missing.orders, 'order')}, ${rcMoney(p.missing.payout)} paid): set it in the Stock page's Cost column and this updates.`);
+  if (p.missing.orders) foot.push(`${rcPlural(p.missing.skus, 'listing')} ${p.missing.skus === 1 ? 'has' : 'have'} no cost yet (${rcPlural(p.missing.orders, 'order')}, ${rcMoney(p.missing.payout)} paid): click "no cost set" to type it, or set it in the Stock page's Cost column. ⚠ marks a listing the Pricing page does not map to a Linnworks SKU.`);
   if (p.missingRuns && p.missingRuns.length) foot.push(`${rcPlural(p.missingRuns.length, 'period')} imported before Profit existed and ${p.missingRuns.length === 1 ? 'its' : 'their'} report file is not on this computer — re-import to include ${p.missingRuns.length === 1 ? 'its' : 'their'} sales: ${p.missingRuns.map(rcPeriodName).join(', ')}.`);
   if (!foot.length) foot.push('Every order in this scope has a cost. Costs live in the Stock page\'s Cost column.');
   $('rcProfitFoot').textContent = foot.join(' ');
@@ -2340,7 +2344,36 @@ $('rcPickDlg').addEventListener('click', async (e) => {
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
 $('rcProfitGroup').addEventListener('click', (e) => { const b = e.target.closest('[data-rcgroup]'); if (b) { rc.profitGroup = b.dataset.rcgroup; rc.profitSort = null; rcRenderProfit(); } });
+// type a cost into a "no cost set" cell: Enter saves, Escape or blur cancels
+function rcBeginCostEdit(btn) {
+  const sku = btn.dataset.rccost;
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = '0'; input.step = '0.01'; input.placeholder = '0.00';
+  input.className = 'input stock-edit stock-cost-edit rc-cost-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    if (val === '') { restore(); return; }
+    const n = Math.round((Number(val) || 0) * 100) / 100;
+    input.disabled = true;
+    const res = await api.recoverySetCost(sku, n).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { toast((res && res.error) || 'Could not save the cost.', 4000); restore(); return; }
+    toast(`${sku} cost set to ${rcMoney(n)}`);
+    await rcLoadProfit(); rcRenderProfit();
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); done = true; restore(); }
+  });
+  input.addEventListener('blur', () => { if (!done) { done = true; restore(); } });
+  btn.replaceWith(input);
+  input.focus();
+}
 $('rcProfitTable').addEventListener('click', (e) => {
+  const costBtn = e.target.closest('[data-rccost]');
+  if (costBtn) { rcBeginCostEdit(costBtn); return; }
   const tog = e.target.closest('[data-rctoggle]');
   if (tog) { const k = tog.dataset.rctoggle; if (rc.profitOpen.has(k)) { rc.profitOpen.delete(k); rc.profitOpenAll.delete(k); } else rc.profitOpen.add(k); rcRenderProfit(); return; }
   const more = e.target.closest('[data-rcshowall]');

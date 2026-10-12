@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.27 highlights
+
+- **Type a cost on the Profit table** (owner: listings whose Linnworks mapping was removed when they shut down still need a cost). Click "no cost set" in the Unit cost column, type the cost, press Enter. It is saved under that SKU in the same cost store the Stock page's Cost column uses, syncs through the shared folder, and Profit recalculates at once. Same station gate as the Cost column (Settings › Pages › Cost).
+- **⚠ on unmapped listings.** A Walmart listing the Pricing page does not map to a Linnworks SKU carries a yellow ⚠ beside its SKU, in both the grouped and the flat view, like Capture's unmapped-condition mark.
+
 ## v1.32.26 highlights
 
 - **Profit grouped by Linnworks SKU** (owner: "organize it by Linnworks channel SKU"). The By SKU table now lists Linnworks SKUs from the Pricing page's channel map, with the totals of every Walmart listing under them. Open a group for its listings, open a listing for its POs. A listing the map does not know stays on its own row marked "not in the Pricing map". A pill in the tab row switches to the flat Walmart SKU view. The workbook's By SKU sheet gains a Linnworks SKU column.
