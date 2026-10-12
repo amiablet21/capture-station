@@ -95,7 +95,10 @@ const DEFAULTS = {
   // Recovery page: the alert email for "Email me this list", the make.com
   // webhook the dispute digest POSTs to, and the digest's last-sent memory
   // (so the same set of cases is not re-sent within 20 hours)
-  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0 },
+  // codeHash: the access code asked for once per session before the Recovery
+  // tab opens (owner 2026-10-12: "a universal code: 9419"); SHA-256 hex,
+  // changeable in Settings → Recovery, empty = no code
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0, codeHash: 'e83faad6630f2b9e40271ed9143575989697a1345ccd29b4b67d06ffb1498691' },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {

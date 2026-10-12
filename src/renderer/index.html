@@ -433,6 +433,23 @@
       </div>
     </div>
   </dialog>
+  <!-- The access code before the Recovery tab opens (owner 2026-10-12) -->
+  <dialog id="rcCodeDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body" id="rcCodeForm">
+      <h2 class="dlg-title">Recovery</h2>
+      <label class="field">
+        <span class="field-label">Enter the access code</span>
+        <input id="rcCodeInput" type="password" class="input mono" inputmode="numeric" autocomplete="off" />
+      </label>
+      <p class="dlg-note" id="rcCodeError" hidden>Wrong code.</p>
+      <div class="dlg-actions">
+        <!-- Cancel is a plain button: Enter in the field must submit through
+             Open, and implicit submission takes the FIRST submit button -->
+        <button type="button" id="rcCodeCancel" class="btn btn-ghost">Cancel</button>
+        <button value="ok" class="btn btn-primary">Open</button>
+      </div>
+    </form>
+  </dialog>
   <!-- The duplicate-period prompt (spec §3.3): Re-import / Skip -->
   <dialog id="rcDupDlg" class="dlg rc-dlg">
     <div class="dlg-body">
@@ -1002,11 +1019,17 @@
         <span class="field-label">Make.com webhook URL (optional, receives the cases-to-open digest after each import)</span>
         <input id="setRcWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
       </label>
+      <label class="field">
+        <span class="field-label">Access code asked for before the Recovery tab opens (leave blank to keep the current one)</span>
+        <input id="setRcCode" type="password" class="input mono" inputmode="numeric" autocomplete="off" placeholder="••••" />
+      </label>
+      <label class="check"><input id="setRcCodeClear" type="checkbox" /> Remove the access code</label>
       <div class="settings-row">
         <span class="field-label">Imported Walmart reports</span>
         <span id="setRcArchive" class="test-result mono">Documents\Capture Station\Walmart Reports</span>
         <button id="openRcArchiveBtn" class="btn btn-ghost" type="button">Open folder</button>
       </div>
+      <p class="dlg-note">With the shared folder on, each period's original CSV is kept in a Walmart Reports folder inside it, so it reaches Drive and every desktop; otherwise it stays under Documents on this computer.</p>
 
       <h3 class="dlg-section">Receiving</h3>
       <div class="settings-row">

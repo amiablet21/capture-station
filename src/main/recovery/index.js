@@ -114,7 +114,8 @@ function syncIn() {
 /* ---------- import (§3) ---------- */
 
 const safeLabel = (label) => String(label).replace(/[\\/:*?"<>|]/g, '-');
-function archivePath(label) { return path.join(deps.archiveDir, `Walmart_Report_${safeLabel(label)}.csv`); }
+const archiveDir = () => (typeof deps.archiveDir === 'function' ? deps.archiveDir() : deps.archiveDir);
+function archivePath(label) { return path.join(archiveDir(), `Walmart_Report_${safeLabel(label)}.csv`); }
 
 async function importReport({ name, text, force }, onProgress = () => {}) {
   syncIn();
@@ -148,7 +149,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
   // open from Settings; a re-import overwrites the period's file
   let archived = '';
   try {
-    fs.mkdirSync(deps.archiveDir, { recursive: true });
+    fs.mkdirSync(archiveDir(), { recursive: true });
     fs.writeFileSync(archivePath(label), csvText, 'utf8');
     archived = archivePath(label);
   } catch { /* the run keeps everything it parsed */ }
@@ -248,7 +249,7 @@ function state() {
     items: visible.map((it) => ({ ...it, statusText: rnr.statusText(it), tab: rnr.filterOf(it) })),
     today: rnr.todayCounts(visible),
     months: monthKeys(items),
-    settings: { email: cfg.email || '', webhookUrl: cfg.webhookUrl || '', archiveDir: deps.archiveDir, syncOn: !!(deps.retsync && deps.retsync.enabled()) },
+    settings: { email: cfg.email || '', webhookUrl: cfg.webhookUrl || '', archiveDir: archiveDir(), syncOn: !!(deps.retsync && deps.retsync.enabled()) },
     logRows,
   };
 }

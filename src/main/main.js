@@ -7194,7 +7194,13 @@ app.whenReady().then(() => {
 // docs/recovery/SPEC.md. The engine lives in ./recovery; this is the Electron
 // skin: dialogs, the archive folder under Documents, the shared folder, and
 // the capture-only gate (the page never exists on a capture-only station).
+// the original CSV of every period: in the shared folder (Google Drive /
+// OneDrive) when sync is on, so every desktop and the owner's Drive have
+// it (owner 2026-10-12: "the files I upload are being put in the google
+// drive right?"); else under Documents on this computer
 function recoveryArchiveDir() {
+  const st = retsync.status();
+  if (st.enabled && st.folderOk && st.folder) return path.join(st.folder, 'Walmart Reports');
   return path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports');
 }
 function startRecovery() {
@@ -7202,7 +7208,7 @@ function startRecovery() {
     retsync,
     listReturns: (n) => db.listReturns(n),
     config,
-    archiveDir: recoveryArchiveDir(),
+    archiveDir: recoveryArchiveDir, // a function: the folder follows the sync setting
     station: () => stockLogComputer(),
     stationAliases: () => [os.hostname()],
     by: () => '',

@@ -1247,6 +1247,9 @@ async function openSettings() {
   const rcv2 = cfg.recovery || {};
   $('setRcEmail').value = rcv2.email || '';
   $('setRcWebhook').value = rcv2.webhookUrl || '';
+  $('setRcCode').value = '';
+  $('setRcCodeClear').checked = false;
+  $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
@@ -1360,7 +1363,10 @@ $('settingsSave').addEventListener('click', async () => {
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
-    recovery: { email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim() },
+    recovery: {
+      email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim(),
+      ...($('setRcCodeClear').checked ? { codeHash: '' } : $('setRcCode').value.trim() ? { codeHash: await sha256Hex($('setRcCode').value.trim()) } : {}),
+    },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
       applicationSecret: $('setAppSecret').value.trim(),
@@ -1546,7 +1552,34 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabPricing').addEventListener('click', () => showPage('pricing'));
-$('tabRecovery').addEventListener('click', () => showPage('recovery'));
+// the Recovery tab asks for its access code once per session (owner
+// 2026-10-12: "a universal code: 9419" — the hash lives in Settings)
+let rcUnlocked = false;
+$('tabRecovery').addEventListener('click', async () => {
+  if (rcUnlocked) { showPage('recovery'); return; }
+  const cfg = await api.getConfig();
+  const hash = (cfg.recovery || {}).codeHash || '';
+  if (!hash) { rcUnlocked = true; showPage('recovery'); return; }
+  $('rcCodeInput').value = '';
+  $('rcCodeError').hidden = true;
+  $('rcCodeDlg').showModal();
+  $('rcCodeInput').focus();
+});
+$('rcCodeCancel').addEventListener('click', () => $('rcCodeDlg').close());
+$('rcCodeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const cfg = await api.getConfig();
+  const hash = await sha256Hex($('rcCodeInput').value.trim());
+  if (hash !== ((cfg.recovery || {}).codeHash || '')) {
+    $('rcCodeError').hidden = false;
+    $('rcCodeInput').value = '';
+    $('rcCodeInput').focus();
+    return;
+  }
+  rcUnlocked = true;
+  $('rcCodeDlg').close();
+  showPage('recovery');
+});
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
