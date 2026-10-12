@@ -116,8 +116,19 @@ function detectPeriod(rows, refunds) {
 }
 
 // ---------- Refunds (one record per PO) ----------
+// a report whose SKU column is named differently (owner 2026-10-12: a period
+// of 1,304 orders landed under "(no SKU)") — alias the first header that
+// reads like an item id or SKU onto the name the parsers use
+function aliasSkuColumn(rows, columns) {
+  if (columns.includes('Partner Item Id')) return;
+  const alt = columns.find((c) => /^(partner\s*|seller\s*)?(item\s*(id|number|#)|sku(\s*(id|number|#))?)$/i.test(String(c).trim()));
+  if (!alt) return;
+  for (const r of rows) r['Partner Item Id'] = r[alt];
+  columns.push('Partner Item Id');
+}
 function parseRefunds(text) {
   const { rows, columns } = parseCsvText(text);
+  aliasSkuColumn(rows, columns);
   const format = detectFormat(columns);
   const agg = format === 'new' ? parseNewFormat(rows) : parseOldFormat(rows);
   for (const r of agg) {

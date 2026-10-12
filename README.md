@@ -5,6 +5,8 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.14 highlights
 
 - **Price and commission fill in by themselves** for periods imported before v1.32.13 (owner: "why is the avg commission and avg price not showing"). Opening Profit re-reads each such period's archived CSV from the shared folder or this computer and stores the goods price and commission; no re-import needed. A period whose archive is nowhere keeps "—".
+- **A report whose SKU column has another name** ("Partner Item ID", "SKU", "Item ID") is read all the same, so its orders no longer pile up under "(no SKU)".
+- The Imported periods list keeps its gutter narrow and each count with its dollars on one line (owner: "this looks weird").
 
 ## v1.32.13 highlights
 
