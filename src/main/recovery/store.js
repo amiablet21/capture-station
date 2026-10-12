@@ -225,7 +225,7 @@ function runsWithoutOrders() {
 // runs whose orders were stored before v1.32.13 (no goods price on any of
 // them) — ensureOrders re-reads their archived CSV to fill the price in
 function runsWithoutPrices() {
-  return d().prepare('SELECT id, label FROM wm_runs WHERE id IN (SELECT DISTINCT run_id FROM wm_orders) AND id NOT IN (SELECT DISTINCT run_id FROM wm_orders WHERE gross IS NOT NULL)').all();
+  return d().prepare('SELECT id, label FROM wm_runs WHERE id IN (SELECT DISTINCT run_id FROM wm_orders) AND id NOT IN (SELECT DISTINCT run_id FROM wm_orders WHERE gross > 0)').all();
 }
 
 function deleteRunRows(id) {

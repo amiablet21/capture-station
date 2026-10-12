@@ -271,6 +271,11 @@ module.exports = function run(check) {
     check('recovery: archived CSV removed with the run', !fs.existsSync(path.join(tmp, 'archive', 'Walmart_Report_May 16 - May 30, 2026.csv')));
     const again = await recovery.importReport({ name, text: csvText });
     check('recovery: re-import keeps earlier markers (note on 010, write-off on 007)', again.ok && recovery.state().items.find((i) => i.po === '010').note === 'called rep' && recovery.state().items.find((i) => i.po === '007').status === 'loss');
+    // replacing a period in place (owner 2026-10-12: a re-imported period
+    // read "no goods price"): the archive stays and the orders keep their price
+    const replaced = await recovery.importReport({ name, text: csvText, force: true });
+    const prR = recovery.profit('cycle', replaced.id);
+    check('recovery: replacing a period keeps its archive and its goods price', replaced.ok && replaced.replaced && replaced.priced === true && fs.existsSync(path.join(tmp, 'archive', 'Walmart_Report_May 16 - May 30, 2026.csv')) && prR.gross > 0 && prR.priced.unpriced === 0, { replaced: replaced && [replaced.ok, replaced.replaced, replaced.priced, replaced.archived], gross: prR.gross, priced: prR.priced });
 
     // empty Returns log refuses the import
     returns = [];

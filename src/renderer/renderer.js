@@ -2269,7 +2269,7 @@ async function rcImport(name, text, force) {
   rc.runId = res.id;
   rc.sub = 'import';
   rc.bucket = 'notReceived';
-  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns are on Reconcile.`, 'done');
+  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns are on Reconcile.${res.orders && res.priced === false ? ' This file carries no goods price, so Profit shows its payout and cost but no avg price for it.' : ''}`, 'done');
   await rcLoad();
 }
 async function rcImportFile(file) {

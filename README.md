@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.29 highlights
+
+- **Re-importing a period kept losing its archived file.** Replacing a period wrote the new file first and then, cleaning up the old run, deleted the period's archive — the file it had just written. The old run is now replaced before the file is archived, so the archive stays and the goods-price backfill has something to read.
+- A period whose stored orders carry no goods price at all (zero on every order, not only missing) is backfilled from its archive like a pre-v1.32.13 period, and the import message says when a file itself carries no goods price.
+
 ## v1.32.28 highlights
 
 - **Bulk import of payment reports** (owner's ask). Drop several statement CSVs on the Import screen at once, or pick several in the Browse dialog. They import one after another, oldest period first, with a running "Importing 2 of 7" line and a summary at the end. A period already in the list is skipped in a batch; drop it alone to be asked about replacing it.

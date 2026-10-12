@@ -157,6 +157,17 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
     }
   }
 
+  onProgress('Summarizing…');
+  const { rows, counts } = classify(seller, wfs);
+  const summary = toSummary(rows);
+
+  // a re-import of the same period replaces the old run (and its items) —
+  // before the new file is archived: the old run's cleanup removes the
+  // period's archive, which used to take the freshly written one with it
+  const replaced = store.findRunByLabel(label);
+  const ts = Date.now();
+  if (replaced) deleteRunLocal(replaced.id, ts - 1);
+
   // keep the original report, named by its period, in a folder the owner can
   // open from Settings; a re-import overwrites the period's file
   let archived = '';
@@ -165,15 +176,6 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
     fs.writeFileSync(archivePath(label), csvText, 'utf8');
     archived = archivePath(label);
   } catch { /* the run keeps everything it parsed */ }
-
-  onProgress('Summarizing…');
-  const { rows, counts } = classify(seller, wfs);
-  const summary = toSummary(rows);
-
-  // a re-import of the same period replaces the old run (and its items)
-  const replaced = store.findRunByLabel(label);
-  const ts = Date.now();
-  if (replaced) deleteRunLocal(replaced.id, ts - 1);
 
   const runId = crypto.randomUUID();
   const run = {
@@ -196,6 +198,8 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
   const result = {
     ok: true, id: runId, label, format, totalRefunds: refunds.length, sellerCount: seller.length, wfsCount: wfs.length,
     logRows: wh.logRows, counts, replaced: !!replaced, archived,
+    // Profit needs the goods price: say at import time when the file has none
+    orders: parsed.orders.length, priced: parsed.orders.some((o) => Number(o.gross) > 0),
   };
   sendDigest().catch(() => {});
   return result;
