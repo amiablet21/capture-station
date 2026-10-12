@@ -2137,8 +2137,9 @@ function rcInTab(it, tab) {
   return it.tab === tab;
 }
 function rcMatches(it) {
-  if (!rcInTab(it, rc.tab)) return false;
-  if (!rc.q) return true;
+  // a search looks across every chip (owner 2026-10-12: a PO typed under
+  // Seller came back "Nothing matches" because it sat under Reimbursed)
+  if (!rc.q) return rcInTab(it, rc.tab);
   const q = rc.q.toLowerCase();
   return [it.po, it.sku, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
 }

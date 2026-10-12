@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.17 highlights
+
+- **Search looks across every chip** on Not received (owner: a PO typed under Seller came back "Nothing matches" because that PO sat under Reimbursed). Type a PO, SKU or case ID and the row shows whichever chip it lives under; its Action column says what state it is in.
+
 ## v1.32.16 highlights
 
 - **A SKU on Profit opens its POs** (owner: "a dropdown where I can see all the relevant PO#s for each item"). The caret on a By SKU row drops a list of that SKU's orders: PO (click it for the Walmart menu), date, units, refunded, Walmart paid, and a situation — Sold, kept · Refunded, back in stock, cost recovered · Refunded, Open case now · Refunded, Partial payout… Refunds come first; long lists show five sales and a "show all".
