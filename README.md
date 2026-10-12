@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.28 highlights
+
+- **Bulk import of payment reports** (owner's ask). Drop several statement CSVs on the Import screen at once, or pick several in the Browse dialog. They import one after another, oldest period first, with a running "Importing 2 of 7" line and a summary at the end. A period already in the list is skipped in a batch; drop it alone to be asked about replacing it.
+- The new statement layout's goods price is read from its own column or the first price-like column on a SALE row, so a period in that layout is less likely to read "no goods price".
+
 ## v1.32.27 highlights
 
 - **Type a cost on the Profit table** (owner: listings whose Linnworks mapping was removed when they shut down still need a cost). Click "no cost set" in the Unit cost column, type the cost, press Enter. It is saved under that SKU in the same cost store the Stock page's Cost column uses, syncs through the shared folder, and Profit recalculates at once. Same station gate as the Cost column (Settings › Pages › Cost).

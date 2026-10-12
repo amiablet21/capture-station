@@ -7273,14 +7273,16 @@ function registerRecoveryIpc() {
   // same import call a dropped file does
   ipcMain.handle('recovery:importPick', async () => {
     if (recoveryGate()) return recoveryGate();
+    // several at once (owner 2026-10-12: "bulk add payment reports")
     const pick = await dialog.showOpenDialog(win, {
-      title: 'Import a Walmart payment-period report',
+      title: 'Import Walmart payment-period reports',
       filters: [{ name: 'Reconciliation report', extensions: ['csv'] }],
-      properties: ['openFile'],
+      properties: ['openFile', 'multiSelections'],
     });
     if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
     try {
-      return { ok: true, name: path.basename(pick.filePaths[0]), text: fs.readFileSync(pick.filePaths[0], 'utf8') };
+      const files = pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') }));
+      return { ok: true, name: files[0].name, text: files[0].text, files };
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('recovery:import', async (_e, { name, text, force } = {}) => {

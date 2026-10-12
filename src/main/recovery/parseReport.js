@@ -235,6 +235,13 @@ function parseLedger(rows, format) {
 // (old format: every PO-linked row), units from the rows (new) or Ship
 // Qty (old). The Walmart app's loadOrders, kept so cost per unit sold can
 // be set against what Walmart actually paid.
+// the goods price on a SALE row of the new layout: its own column when the
+// report has one, else the first price-like column that carries a number
+const SALE_PRICE_COLS = ['Refunded Retail Sales', 'Retail Sales', 'Retail Price', 'Product Price', 'Item Price', 'Sale Price', 'Gross Sales', 'Gross Sale Amount', 'Order Line Amount'];
+function salePrice(r) {
+  for (const k of SALE_PRICE_COLS) { const v = Math.abs(toNum(r[k])); if (v) return v; }
+  return 0;
+}
 function parseOrders(rows, format) {
   const map = new Map();
   if (format === 'new') {
@@ -252,7 +259,7 @@ function parseOrders(rows, format) {
       g.netPayable += toNum(r['Payable to Partner from Sale']);
       // the new layout carries the retail price on SALE rows too; it has no
       // commission line of its own, so commission stays unknown there
-      if (type === 'SALE') { g.saleUnits++; g.gross += toNum(r['Refunded Retail Sales']); } else g.refundUnits++;
+      if (type === 'SALE') { g.saleUnits++; g.gross += salePrice(r); } else g.refundUnits++;
     }
     return [...map.values()];
   }

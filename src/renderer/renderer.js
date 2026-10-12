@@ -1934,7 +1934,7 @@ function rcRenderProfit() {
 function rcRenderImport() {
   const runs = rc.data.runs || [];
   $('rcPeriodCount').textContent = runs.length ? String(runs.length) : '';
-  $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here' : 'Drop a payment period CSV here';
+  $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here — or several at once' : 'Drop a payment period CSV here — or several at once';
   $('rcImportHint').textContent = rc.data.logRows
     ? `Seller Center → Payments → the period's reconciliation report (CSV) · checked against ${Number(rc.data.logRows).toLocaleString()} returns in the log`
     : 'Log returns first — the Returns log is what each refund is checked against';
@@ -2279,10 +2279,48 @@ async function rcImportFile(file) {
   try { text = await file.text(); } catch (e) { rcProgress(`Could not read the file: ${e.message}`, 'fail'); return; }
   await rcImport(file.name, text, false);
 }
+// several reports at once (owner 2026-10-12: "bulk add payment reports"):
+// one after another, oldest period first so the tracker builds up in order;
+// a period already in the list is skipped (re-import one by one to replace)
+async function rcImportMany(files) {
+  const list = (files || []).filter(f => f && /\.csv$/i.test(f.name));
+  if (!list.length) { rcProgress('Drop the reconciliation reports (CSV) from Seller Center → Payments.', 'fail'); return; }
+  if (list.length === 1) { await rcImport(list[0].name, await list[0].text(), false); return; }
+  if (rc.busy) return;
+  const items = [];
+  for (const f of list) { try { items.push({ name: f.name, text: await f.text() }); } catch { items.push({ name: f.name, text: '' }); } }
+  await rcImportBatch(items);
+}
+async function rcImportBatch(items) {
+  rc.busy = true;
+  $('rcDrop').classList.add('is-busy');
+  const done = []; const skipped = []; const failed = [];
+  // sort by the period start inside the file name when there is one, else as given
+  const stamp = (n) => { const m = String(n).match(/(\d{2})(\d{2})(\d{4})/); return m ? `${m[3]}${m[1]}${m[2]}` : ''; };
+  items.sort((a, b) => stamp(a.name).localeCompare(stamp(b.name)));
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    rcProgress(`Importing ${i + 1} of ${items.length} — ${it.name}…`);
+    const res = await api.recoveryImport(it.name, it.text, false).catch(e => ({ ok: false, error: e.message }));
+    if (res && res.ok) done.push(rcPeriodName(res.label));
+    else if (res && res.alreadyImported) skipped.push(rcPeriodName(res.label));
+    else failed.push(`${it.name}: ${res && res.noRefunds ? 'no refunds in it' : (res && res.error) || 'did not import'}`);
+  }
+  rc.busy = false;
+  $('rcDrop').classList.remove('is-busy');
+  const parts = [];
+  if (done.length) parts.push(`${rcPlural(done.length, 'period')} imported (${done.join(', ')})`);
+  if (skipped.length) parts.push(`${skipped.length} already in the list, left as is (${skipped.join(', ')})`);
+  if (failed.length) parts.push(`${failed.length} failed — ${failed.join('; ')}`);
+  rcProgress(parts.join(' · ') || 'Nothing imported.', failed.length && !done.length ? 'fail' : 'done');
+  rc.sub = 'import';
+  await rcLoad();
+}
 async function rcBrowse() {
   const pick = await api.recoveryImportPick().catch(e => ({ ok: false, error: e.message }));
   if (!pick || pick.canceled) return;
   if (!pick.ok) { rcProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  if (pick.files && pick.files.length > 1) { if (!rc.busy) await rcImportBatch(pick.files); return; }
   await rcImport(pick.name, pick.text, false);
 }
 
@@ -2402,10 +2440,12 @@ $('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').
 $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
   $('rcDrop').classList.remove('is-over');
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+  const file = files[0];
   if (!file) return;
   if (e.target.closest && e.target.closest('#rcMarkDrop')) { rcMarkFile(file.name, null, file); return; }
-  rc.sub = 'import'; rcRender(); rcImportFile(file);
+  rc.sub = 'import'; rcRender();
+  if (files.length > 1) rcImportMany(files); else rcImportFile(file);
 });
 // a file of POs that came back before the Returns log (owner 2026-10-12)
 function rcMarkProgress(text, cls) { const el = $('rcMarkProgress'); el.textContent = text || ''; el.hidden = !text; el.className = `rc-progress ${cls ? 'is-' + cls : ''}`; }
