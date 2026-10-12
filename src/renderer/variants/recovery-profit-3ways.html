@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Recovery — Profit, three designs</title>
+<link rel="stylesheet" href="_base.css" />
+<style>
+  /* Same type scale as the live Recovery page (13px body, 26px numbers,
+     10.5px uppercase labels). The three designs differ in layout only. */
+  body { overflow: auto; height: auto; min-height: 100vh; }
+  .switcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  .switcher .lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+  .opt { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); cursor: pointer; font-family: inherit; }
+  .opt.on { background: #E4EAF4; color: #1E3A66; border-color: transparent; font-weight: 600; }
+  .switcher .note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+  .design { display: none; }
+  .design.on { display: block; }
+
+  /* ---- shared Recovery chrome (unchanged from the live page) ---- */
+  .page { width: 100%; max-width: 1440px; margin: 0 auto; padding: 10px 24px 40px; color: #2F3437; }
+  .head { display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid #EAEAEA; padding-bottom: 10px; }
+  .head h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+  .subtabs { display: flex; gap: 22px; margin-left: 12px; align-items: flex-end; }
+  .subtab { font-size: 12.5px; font-weight: 500; color: #787774; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid transparent; display: flex; gap: 8px; }
+  .subtab.on { font-weight: 600; color: #2F3437; border-bottom-color: #1E3A66; }
+  .subtab .n { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #9F2F2D; }
+  .head .btn { margin-left: auto; margin-bottom: 2px; }
+  .btn { font-family: inherit; font-size: 12.5px; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid #EAEAEA; padding: 6px 12px; background: #fff; color: #2F3437; line-height: 1.55; white-space: nowrap; }
+  .btn-navy { background: #1E3A66; border-color: #1E3A66; color: #fff; }
+  .label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #787774; }
+  .scope { display: inline-flex; background: #EFEEEA; border-radius: 8px; padding: 2px; }
+  .scope span { font-size: 11.5px; padding: 2px 9px; border-radius: 6px; color: #787774; line-height: 1.55; }
+  .scope span.on { background: #fff; color: #2F3437; font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
+  .pick { font-size: 12px; color: #2F3437; border: 1px solid #EAEAEA; border-radius: 6px; background: #fff; padding: 3px 28px 3px 10px; min-width: 200px; position: relative; display: inline-block; }
+  .pick::after { content: ""; position: absolute; right: 10px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid #787774; border-bottom: 1.5px solid #787774; transform: translateY(-70%) rotate(45deg); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .card { background: #fff; border: 1px solid #EAEAEA; border-radius: 8px; }
+  .navy { color: #1E3A66; }
+  .muted { color: #787774; }
+  .faint { color: #A5A29C; }
+  .amber { color: #956400; }
+
+  /* table — shared, roomier than live (44px rows, name under SKU) */
+  .tabrow { display: flex; align-items: center; gap: 22px; padding: 0 16px; border-bottom: 1px solid #EAEAEA; }
+  .tab { font-size: 12.5px; font-weight: 500; color: #787774; padding: 12px 0 10px; display: flex; gap: 8px; align-items: baseline; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.on { font-weight: 600; color: #2F3437; border-bottom-color: #1E3A66; }
+  .tab .n { font-family: var(--mono); font-size: 11.5px; }
+  .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .search { width: 240px; font-size: 12.5px; border: 1px solid #EAEAEA; border-radius: 6px; padding: 5px 10px; background: #fff; color: #A5A29C; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th { text-align: left; padding: 9px 12px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #A5A29C; background: #F9F9F8; border-bottom: 1px solid #EAEAEA; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(0,0,0,.06); vertical-align: middle; height: 46px; }
+  th:first-child, td:first-child { padding-left: 18px; width: 34%; }
+  th:last-child, td:last-child { padding-right: 18px; }
+  .r { text-align: right; }
+  td.r { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .sku { font-family: var(--mono); font-size: 12.5px; }
+  .item { font-size: 11.5px; color: #787774; margin-top: 2px; }
+  .nocost { color: #956400; font-size: 12px; font-family: var(--font); }
+  .foot { padding: 9px 18px; border-top: 1px solid #EAEAEA; font-size: 11.5px; color: #787774; }
+
+  /* ================= A: the statement strip ================= */
+  .a-top { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+  .a-top .scope { margin-left: 6px; }
+  .a-top .pick { margin-left: auto; }
+  .a-headline { margin-top: 10px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .a-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 34px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; color: #1E3A66; }
+  .a-sub { font-size: 13px; color: #787774; }
+  .a-margin { font-family: var(--mono); font-size: 12px; font-weight: 600; color: #346538; background: #EDF3EC; border-radius: 999px; padding: 2px 9px; }
+  .a-strip { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); margin-top: 18px; }
+  .a-cell { padding: 16px 20px 14px; border-right: 1px solid #EAEAEA; }
+  .a-cell:last-child { border-right: 0; }
+  .a-cell .label { margin-bottom: 8px; }
+  .a-cell .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+  .a-cell .s { font-size: 11.5px; color: #787774; margin-top: 7px; }
+  .a-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; gap: 2px; background: #F1F0EC; margin-top: 10px; }
+  .a-bar i { display: block; height: 100%; }
+  .a-note { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: #FBF3DB; color: #5B4300; font-size: 12.5px; }
+  .a-note b { font-weight: 600; }
+  .a-note .btn { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+  .a-table { margin-top: 16px; }
+  .a-how { font-size: 11.5px; color: #787774; margin-top: 12px; max-width: 760px; line-height: 1.55; }
+
+  /* ================= B: the story on the left ================= */
+  .b-top { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; margin-top: 18px; align-items: stretch; }
+  .b-story { padding: 20px 22px 18px; display: flex; flex-direction: column; }
+  .b-story .label-row { display: flex; align-items: center; gap: 12px; }
+  .b-story .pick { min-width: 0; width: auto; margin-top: 10px; align-self: flex-start; }
+  .b-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 32px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; color: #1E3A66; margin-top: 16px; }
+  .b-amt-sub { font-size: 12.5px; color: #787774; margin-top: 6px; }
+  .b-steps { margin-top: 22px; display: flex; flex-direction: column; gap: 14px; }
+  .b-step { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 10px; align-items: baseline; }
+  .b-step .op { font-family: var(--mono); color: #A5A29C; font-size: 14px; }
+  .b-step .t { font-size: 12.5px; }
+  .b-step .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500; }
+  .b-step .bar { grid-column: 2 / 4; height: 6px; border-radius: 999px; background: #F1F0EC; margin-top: 7px; overflow: hidden; }
+  .b-step .bar i { display: block; height: 100%; }
+  .b-step.sum { padding-top: 12px; border-top: 1px solid #EAEAEA; }
+  .b-step.sum .v, .b-step.sum .t { font-weight: 600; color: #1E3A66; }
+  .b-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .b-num { padding: 18px 20px; display: flex; flex-direction: column; }
+  .b-num .label { margin-bottom: 10px; }
+  .b-num .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; color: #1E3A66; }
+  .b-num .s { font-size: 12px; color: #787774; margin-top: 8px; }
+  .b-num.warn .v { color: #956400; }
+  .b-num.warn { background: #FFFDF6; }
+  .b-num .act { margin-top: auto; padding-top: 12px; font-size: 12px; color: #1E3A66; font-weight: 500; }
+  .b-table { margin-top: 20px; }
+
+  /* ================= C: four cards ================= */
+  .c-top { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+  .c-top .pick { margin-left: 4px; }
+  .c-top .how { margin-left: auto; font-size: 12px; color: #787774; }
+  .c-cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-top: 14px; }
+  .c-card { padding: 18px 20px 16px; }
+  .c-card .label { display: flex; align-items: center; gap: 8px; }
+  .c-card .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; margin-top: 12px; }
+  .c-card .s { font-size: 12px; color: #787774; margin-top: 8px; line-height: 1.5; }
+  .c-card.hero { background: #1E3A66; border-color: #1E3A66; color: #fff; }
+  .c-card.hero .label { color: rgba(255,255,255,.7); }
+  .c-card.hero .v { color: #fff; font-size: 28px; }
+  .c-card.hero .s { color: rgba(255,255,255,.72); }
+  .c-card.hero .pill { font-family: var(--mono); font-size: 11px; font-weight: 600; background: rgba(255,255,255,.16); color: #fff; border-radius: 999px; padding: 1px 8px; margin-left: auto; }
+  .c-bar { display: flex; height: 5px; border-radius: 999px; overflow: hidden; gap: 2px; background: rgba(255,255,255,.18); margin-top: 14px; }
+  .c-bar i { display: block; height: 100%; }
+  .c-card .split { display: flex; gap: 18px; margin-top: 12px; }
+  .c-card .split div { display: flex; flex-direction: column; }
+  .c-card .split .v { font-size: 22px; margin-top: 0; }
+  .c-card .split .s { margin-top: 6px; }
+  .c-warn { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 12.5px; color: #5B4300; }
+  .c-warn::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: #D9A400; flex: none; }
+  .c-warn .btn { margin-left: 6px; padding: 3px 9px; font-size: 12px; }
+  .c-table { margin-top: 14px; }
+  .c-table .tabrow { padding: 0 18px; }
+</style>
+</head>
+<body>
+<div class="switcher">
+  <span class="lbl">Profit screen</span>
+  <button class="opt on" data-d="a">A · Statement strip</button>
+  <button class="opt" data-d="b">B · Story on the left</button>
+  <button class="opt" data-d="c">C · Four cards</button>
+  <span class="note">Same numbers, same 13px type as the live page. Only the layout changes.</span>
+</div>
+
+<!-- ============================== A ============================== -->
+<section class="design on" id="d-a">
+<div class="page">
+  <div class="head"><h1>Recovery</h1>
+    <div class="subtabs"><span class="subtab">Import</span><span class="subtab">Reconcile</span><span class="subtab">Not received <span class="n">21</span></span><span class="subtab on">Profit</span></div>
+    <button class="btn">Download Excel</button>
+  </div>
+
+  <div class="a-top">
+    <span class="label">Profit on orders</span>
+    <div class="scope"><span class="on">This period</span><span>Month</span><span>Year</span><span>All time</span></div>
+    <span class="pick">Sep 5 – Sep 19, 2026</span>
+  </div>
+  <div class="a-headline">
+    <span class="a-amt">$473,020.68</span>
+    <span class="a-sub">profit · Sep 5 – Sep 19</span>
+    <span class="a-margin">100.0% margin</span>
+  </div>
+
+  <div class="card a-strip">
+    <div class="a-cell"><div class="label">Walmart paid</div><div class="v">$473,020.68</div><div class="s">net of fees and refunds</div></div>
+    <div class="a-cell"><div class="label">Cost of goods</div><div class="v muted">$0.00</div><div class="s">1 listing with no cost set</div></div>
+    <div class="a-cell"><div class="label">Profit</div><div class="v navy">$473,020.68</div><div class="a-bar"><i style="flex:0 0 0%;background:#C9C6BE"></i><i style="flex:1;background:#1E3A66"></i></div></div>
+    <div class="a-cell"><div class="label">Orders</div><div class="v">1,304</div><div class="s">$473,020.68 paid</div></div>
+    <div class="a-cell"><div class="label">Units sold</div><div class="v">1,208</div><div class="s">126 refunded</div></div>
+    <div class="a-cell"><div class="label">Back in stock</div><div class="v">6</div><div class="s">cost recovered</div></div>
+  </div>
+
+  <div class="a-note"><b>1 listing has no cost yet</b> <span>— $473,020.68 paid on 1,304 orders is counted as profit until you set it.</span><button class="btn">Set cost on Stock</button></div>
+
+  <div class="card a-table">
+    <div class="tabrow"><span class="tab on">By SKU <span class="n">1</span></span><span class="tab">By period <span class="n">2</span></span><div class="tools"><span class="search">Search SKU or product…</span></div></div>
+    <table>
+      <thead><tr><th>SKU</th><th class="r">Sold</th><th class="r">Refunded</th><th class="r">Walmart paid</th><th class="r">Unit cost</th><th class="r">Profit</th><th class="r">Margin</th></tr></thead>
+      <tbody>
+        <tr><td><div class="sku">(no SKU)</div><div class="item">Samsung Galaxy S25 FE 256GB Smartphone (Unlocked) Icy Blue</div></td><td class="r">1,208</td><td class="r">126 <span class="muted">· 6 back</span></td><td class="r">$473,020.68</td><td class="r"><span class="nocost">no cost set</span></td><td class="r faint">—</td><td class="r faint">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="a-how">Walmart paid is each order's payout net of Walmart's fees, with its refund taken off. Cost comes from the Stock page's Cost column; a refunded unit that came back to the warehouse is stock again, so its cost is not counted.</p>
+</div>
+</section>
+
+<!-- ============================== B ============================== -->
+<section class="design" id="d-b">
+<div class="page">
+  <div class="head"><h1>Recovery</h1>
+    <div class="subtabs"><span class="subtab">Import</span><span class="subtab">Reconcile</span><span class="subtab">Not received <span class="n">21</span></span><span class="subtab on">Profit</span></div>
+    <button class="btn">Download Excel</button>
+  </div>
+
+  <div class="b-top">
+    <div class="card b-story">
+      <div class="label-row"><span class="label">Profit on orders</span><div class="scope" style="margin-left:auto"><span class="on">This period</span><span>Month</span><span>Year</span><span>All time</span></div></div>
+      <span class="pick">Sep 5 – Sep 19, 2026</span>
+      <div class="b-amt">$473,020.68</div>
+      <div class="b-amt-sub">profit · 100.0% margin</div>
+      <div class="b-steps">
+        <div class="b-step"><span class="op"></span><span class="t">Walmart paid, net of fees and refunds</span><span class="v">$473,020.68</span><div class="bar"><i style="width:100%;background:#9DA9BF"></i></div></div>
+        <div class="b-step"><span class="op">−</span><span class="t">Cost of the units that left and didn't come back</span><span class="v">$0.00</span><div class="bar"><i style="width:0%;background:#C9C6BE"></i></div></div>
+        <div class="b-step sum"><span class="op">=</span><span class="t">Profit</span><span class="v">$473,020.68</span><div class="bar"><i style="width:100%;background:#1E3A66"></i></div></div>
+      </div>
+    </div>
+    <div class="b-nums">
+      <div class="card b-num"><div class="label">Orders</div><div class="v">1,304</div><div class="s">$473,020.68 paid in this period</div></div>
+      <div class="card b-num"><div class="label">Units sold</div><div class="v">1,208</div><div class="s">126 refunded</div></div>
+      <div class="card b-num"><div class="label">Back in stock</div><div class="v">6</div><div class="s">refunded units that returned to the warehouse, cost recovered</div></div>
+      <div class="card b-num warn"><div class="label">No cost set</div><div class="v">1</div><div class="s">listing · 1,304 orders · $473,020.68 counted as profit until it has a cost</div><div class="act">Set it on the Stock page →</div></div>
+    </div>
+  </div>
+
+  <div class="card b-table">
+    <div class="tabrow"><span class="tab on">By SKU <span class="n">1</span></span><span class="tab">By period <span class="n">2</span></span><div class="tools"><span class="search">Search SKU or product…</span></div></div>
+    <table>
+      <thead><tr><th>SKU</th><th class="r">Sold</th><th class="r">Refunded</th><th class="r">Walmart paid</th><th class="r">Unit cost</th><th class="r">Profit</th><th class="r">Margin</th></tr></thead>
+      <tbody>
+        <tr><td><div class="sku">(no SKU)</div><div class="item">Samsung Galaxy S25 FE 256GB Smartphone (Unlocked) Icy Blue</div></td><td class="r">1,208</td><td class="r">126 <span class="muted">· 6 back</span></td><td class="r">$473,020.68</td><td class="r"><span class="nocost">no cost set</span></td><td class="r faint">—</td><td class="r faint">—</td></tr>
+      </tbody>
+    </table>
+    <div class="foot">Walmart paid is each order's payout net of Walmart's fees, with its refund taken off. A refunded unit that came back to the warehouse is stock again, so its cost is not counted.</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================== C ============================== -->
+<section class="design" id="d-c">
+<div class="page">
+  <div class="head"><h1>Recovery</h1>
+    <div class="subtabs"><span class="subtab">Import</span><span class="subtab">Reconcile</span><span class="subtab">Not received <span class="n">21</span></span><span class="subtab on">Profit</span></div>
+    <button class="btn">Download Excel</button>
+  </div>
+
+  <div class="c-top">
+    <span class="label">Profit on orders</span>
+    <div class="scope"><span class="on">This period</span><span>Month</span><span>Year</span><span>All time</span></div>
+    <span class="pick">Sep 5 – Sep 19, 2026</span>
+    <span class="how">How this is counted</span>
+  </div>
+
+  <div class="c-cards">
+    <div class="card c-card hero"><div class="label">Profit <span class="pill">100.0% margin</span></div><div class="v">$473,020.68</div><div class="s">Sep 5 – Sep 19</div><div class="c-bar"><i style="flex:0 0 0%;background:rgba(255,255,255,.45)"></i><i style="flex:1;background:#fff"></i></div></div>
+    <div class="card c-card"><div class="label">Walmart paid</div><div class="v">$473,020.68</div><div class="s">on 1,304 orders, net of fees and refunds</div></div>
+    <div class="card c-card"><div class="label">Cost of goods</div><div class="v muted">$0.00</div><div class="s">6 refunded units came back, cost recovered</div></div>
+    <div class="card c-card"><div class="label">Units</div><div class="split"><div><div class="v">1,208</div><div class="s">sold</div></div><div><div class="v muted">126</div><div class="s">refunded</div></div></div></div>
+  </div>
+
+  <div class="c-warn">1 listing has no cost yet, so $473,020.68 on 1,304 orders is counted as profit. <button class="btn">Set its cost</button></div>
+
+  <div class="card c-table">
+    <div class="tabrow"><span class="tab on">By SKU <span class="n">1</span></span><span class="tab">By period <span class="n">2</span></span><div class="tools"><span class="search">Search SKU or product…</span></div></div>
+    <table>
+      <thead><tr><th>SKU</th><th class="r">Sold</th><th class="r">Refunded</th><th class="r">Walmart paid</th><th class="r">Unit cost</th><th class="r">Profit</th><th class="r">Margin</th></tr></thead>
+      <tbody>
+        <tr><td><div class="sku">(no SKU)</div><div class="item">Samsung Galaxy S25 FE 256GB Smartphone (Unlocked) Icy Blue</div></td><td class="r">1,208</td><td class="r">126 <span class="muted">· 6 back</span></td><td class="r">$473,020.68</td><td class="r"><span class="nocost">no cost set</span></td><td class="r faint">—</td><td class="r faint">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<script>
+  document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.opt').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.design').forEach(d => d.classList.toggle('on', d.id === 'd-' + b.dataset.d));
+  }));
+</script>
+</body>
+</html>
