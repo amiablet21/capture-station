@@ -5222,7 +5222,10 @@ th:last-child > .col-grip { right: 0; }
 
 .rc-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .rc-scroll { flex: 1; min-height: 0; overflow: auto; }
-.rc-main { width: 100%; max-width: 1100px; margin: 0 auto; padding: 28px 28px 48px; display: flex; flex-direction: column; gap: 32px; font-size: 13px; line-height: 1.55; color: #2F3437; }
+/* owner 2026-10-12 ("everything just seems super condensed" on a 2000px
+   window): the design's 1100px / 13px ledger is scaled up as one piece —
+   every measurement keeps its ratio — and may use up to 1280px before it */
+.rc-main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; display: flex; flex-direction: column; gap: 32px; font-size: 13px; line-height: 1.55; color: #2F3437; zoom: 1.18; }
 .rc-screen { display: flex; flex-direction: column; gap: 32px; }
 
 /* page header: h1, the two underlined sub-tabs, the screen's primary button */
