@@ -34,6 +34,7 @@ function itemFromRow(r, sourceRunId, nowIso) {
     refundDate: r['Refund Date'] || '',
     amount: r2(r['Net Refund (Payable Impact)'] || 0),
     reason: r['Return Reason'] || '',
+    refundedBy: r['Refunded By'] || '', // the statement's Transaction Description: who issued the refund
     lost: isLostReason(r),
     type: typeOf(r['Fulfillment Type']),
     sourceRunId: sourceRunId || null,
@@ -252,6 +253,34 @@ function statusText(it) {
   }
   if (it.daysLeft != null) return { lead: `${it.daysLeft} days left to file`, clause: '', tone: it.needsAction ? 'red' : 'amber', tooltip: `dispute window closes in ${it.daysLeft} days — 45 days from the refund` };
   return { lead: 'Outstanding', clause: 'no refund date', tone: 'amber', tooltip: '' };
+}
+
+// The grid's two short cells (owner 2026-10-12: "I don't want long
+// writings"): an action of a word or two, and a deadline as a date
+function shortStatus(it, today = new Date()) {
+  const plus = (days) => { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (Number(days) || 0)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const out = (action, tone, deadlineAt, deadlineText, tooltip) => ({ action, tone, deadlineAt: deadlineAt || null, deadlineText: deadlineText || (deadlineAt ? monDay(deadlineAt) : '—'), tooltip: tooltip || '' });
+  if (it.status === 'received') return out('Received', 'green', null, '—');
+  if (it.status === 'loss') return out('Written off', 'grey', null, it.writtenOffAt ? monDay(it.writtenOffAt) : '—');
+  if (it.status === 'reimbursed') {
+    const partial = it.settlementSeen < (it.amount || 0) - 0.01;
+    return out(partial ? 'Partial payout' : 'Paid back', partial ? 'amber' : 'green', null, it.settlementDate ? monDay(it.settlementDate) : '—',
+      `${money(it.settlementSeen)} of ${money(it.amount)}${it.settlementKind ? ` · ${it.settlementKind}` : ''}`);
+  }
+  if (it.status === 'reimbursed_pending') return out('Pending payout', 'amber', null, it.reimbursePendingAt ? monDay(it.reimbursePendingAt) : '—', 'auto-confirms when a payout appears in an imported report');
+  if (it.adjustment) return out('Adjustment', 'navy', null, '—', 'self-initiated partial refund · not a return to chase');
+  if (it.caseOpened) {
+    const opened = it.caseOpenedAt ? monDay(it.caseOpenedAt) : '—';
+    if (it.caseIssue) return out(`Unpaid · ${it.cyclesSinceCase} cycles`, 'amber', null, opened, 'no reimbursement after two payment cycles — follow up');
+    if (it.caseApproved) return out('Approved', 'green', null, it.caseApprovedAt ? monDay(it.caseApprovedAt) : opened, 'awaiting payout');
+    return out('Case open', 'blue', null, opened, it.caseId ? `case ${it.caseId}` : 'no case ID yet');
+  }
+  if (it.lost) return out('Open case', 'red', plus(0), 'now', 'lost per Walmart — you can open a case immediately');
+  if (it.wfsWaiting) return out('WFS pays', 'blue', plus(it.daysLeft), null, `Walmart pays back by day 90 · ${it.daysLeft} days to go`);
+  if (it.wfsDisputeOpen) return out('File with WFS', 'red', plus(it.daysLeft), null, `no auto-reimbursement showed up — file within ${it.daysLeft} days`);
+  if (it.windowClosed) return out('Write off?', 'grey', it.daysLeft == null ? null : plus(it.daysLeft), it.daysLeft == null ? 'closed' : `closed ${monDay(plus(it.daysLeft))}`, 'can no longer file — write it off as a loss');
+  if (it.daysLeft != null) return out(it.needsAction ? 'File now' : 'Wait', it.needsAction ? 'red' : 'amber', plus(it.daysLeft), null, `dispute window closes in ${it.daysLeft} days — 45 days from the refund`);
+  return out('Outstanding', 'amber', null, '—', 'no refund date');
 }
 
 // The Reconcile table's "What to do" sentence for a stored summary row (§13.1)
@@ -556,7 +585,7 @@ function mailtoFor(email, items) {
 module.exports = {
   SELLER_DISPUTE_DAYS, WFS_REIMBURSE_DAYS, FILE_WINDOW_DAYS, WFS_DEADLINE, FILE_SOON_DAYS, SELLER_DIGEST_DAYS, WFS_CASES_LINK,
   typeOf, itemFromRow, trackerRows, aggregateSettlements, daysOld, deriveStatus, decorate,
-  blankMarks, applyMarker, hasAnyMarker, filterOf, lostAmount, sortItems, monDay, money, statusText, whatToDo, todayCounts,
+  blankMarks, applyMarker, hasAnyMarker, filterOf, lostAmount, sortItems, monDay, money, statusText, shortStatus, whatToDo, todayCounts,
   monthKeyOf, bucketTotals, isRefundTx, isDisputeWinTx, disputeWinSkipSet, sumDisputeWins, dedupeLedger,
   stageOf, windowText, buildAuditWorkbook, buildSummaryWorkbook, buildViewCsv, sellerReturnLink, buildDigest, mailtoFor,
 };

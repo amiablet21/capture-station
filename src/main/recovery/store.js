@@ -123,6 +123,10 @@ function ensureSchema(db) {
   for (const col of ['gross REAL', 'commission REAL']) {
     try { db.exec(`ALTER TABLE wm_orders ADD COLUMN ${col}`); } catch { /* already there */ }
   }
+  // v1.32.15: who issued the refund, on the stored refund and on the tracker item
+  for (const t of ['wm_refunds', 'wm_items']) {
+    try { db.exec(`ALTER TABLE ${t} ADD COLUMN refunded_by TEXT NOT NULL DEFAULT ''`); } catch { /* already there */ }
+  }
 }
 
 const d = () => {
@@ -176,11 +180,11 @@ function putRun(run, refunds, payouts, ledger, orders) {
       .run(run.id, run.label, run.ranAt, run.csvName || '', run.csvHash || '', run.format || '',
         Number(run.totalRefunds) || 0, Number(run.sellerCount) || 0, Number(run.wfsCount) || 0, Number(run.logRows) || 0,
         JSON.stringify(run.counts || {}), JSON.stringify(run.summary || {}), run.station || '', run.by || '', Number(run.syncTs) || 0);
-    const ir = db.prepare('INSERT INTO wm_refunds (run_id, po, order_no, item, sku, qty, refund_date, retail, net, reason, fulfillment, issues, wh_count, wh_price, wh_condition) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const ir = db.prepare('INSERT INTO wm_refunds (run_id, po, order_no, item, sku, qty, refund_date, retail, net, reason, fulfillment, issues, wh_count, wh_price, wh_condition, refunded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const r of refunds || []) {
       ir.run(run.id, String(r.po || ''), String(r.order_no || ''), String(r.item || ''), String(r.sku || ''), Number(r.qty) || 0, String(r.refund_date || ''),
         Number(r.retail) || 0, Number(r.net) || 0, String(r.reason || ''), String(r.fulfillment || ''), String(r.issues || ''),
-        Number(r.wh_count) || 0, r.wh_price == null ? null : Number(r.wh_price), String(r.wh_condition || ''));
+        Number(r.wh_count) || 0, r.wh_price == null ? null : Number(r.wh_price), String(r.wh_condition || ''), String(r.refunded_by || ''));
     }
     const ip = db.prepare('INSERT INTO wm_payouts (run_id, po, amount, date, kind) VALUES (?, ?, ?, ?, ?)');
     for (const p of payouts || []) ip.run(run.id, String(p.po || ''), Number(p.amount) || 0, String(p.date || ''), String(p.kind || ''));
@@ -241,7 +245,25 @@ function tombstoneTs(id) {
 const refundsOut = (r) => ({
   po: r.po, order_no: r.order_no, item: r.item, sku: r.sku, qty: r.qty, refund_date: r.refund_date, retail: r.retail, net: r.net,
   reason: r.reason, fulfillment: r.fulfillment, issues: r.issues, wh_count: r.wh_count, wh_price: r.wh_price, wh_condition: r.wh_condition,
+  refunded_by: r.refunded_by || '',
 });
+// runs whose stored refunds predate refunded_by — ensureOrders fills them
+// from the archived CSV
+function runsWithoutRefundedBy() {
+  return d().prepare("SELECT id, label FROM wm_runs WHERE id IN (SELECT DISTINCT run_id FROM wm_refunds) AND id NOT IN (SELECT DISTINCT run_id FROM wm_refunds WHERE refunded_by != '')").all();
+}
+function setRefundedBy(runId, byPo) {
+  const db = d();
+  const up = db.prepare('UPDATE wm_refunds SET refunded_by = ? WHERE run_id = ? AND po = ?');
+  const upItem = db.prepare("UPDATE wm_items SET refunded_by = ? WHERE po = ? AND refunded_by = ''");
+  for (const [po, by] of Object.entries(byPo || {})) { if (by) { up.run(by, runId, po); upItem.run(by, po); } }
+}
+// po -> who refunded, for tracker items stored before the column existed
+function refundedByMap() {
+  const m = {};
+  for (const r of d().prepare("SELECT po, refunded_by FROM wm_refunds WHERE refunded_by != ''").all()) m[r.po] = r.refunded_by;
+  return m;
+}
 function runRefunds(id) { return d().prepare('SELECT * FROM wm_refunds WHERE run_id = ?').all(id).map(refundsOut); }
 function runPayouts(id) { return d().prepare('SELECT po, amount, date, kind FROM wm_payouts WHERE run_id = ?').all(id); }
 function runLedger(id) { return d().prepare('SELECT key, po, order_no, type, date, amount FROM wm_ledger WHERE run_id = ?').all(id); }
@@ -258,19 +280,19 @@ function nameByPo() {
 
 const itemOut = (r) => r && ({
   po: r.po, order: r.order_no, item: r.item, sku: r.sku, qty: r.qty, refundDate: r.refund_date, amount: r.amount,
-  reason: r.reason, lost: !!r.lost, type: r.type, sourceRunId: r.source_run_id, addedAt: r.added_at,
+  reason: r.reason, refundedBy: r.refunded_by || '', lost: !!r.lost, type: r.type, sourceRunId: r.source_run_id, addedAt: r.added_at,
 });
 
 // add items for POs not tracked yet; known POs keep everything (§6.1)
 function addItems(items) {
   const db = d();
-  const ins = db.prepare(`INSERT INTO wm_items (po, order_no, item, sku, qty, refund_date, amount, reason, lost, type, source_run_id, added_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(po) DO NOTHING`);
+  const ins = db.prepare(`INSERT INTO wm_items (po, order_no, item, sku, qty, refund_date, amount, reason, lost, type, source_run_id, added_at, refunded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(po) DO NOTHING`);
   let added = 0;
   for (const it of items || []) {
     if (!it.po) continue;
     const r = ins.run(it.po, it.order || '', it.item || '', it.sku || '', Number(it.qty) || 0, it.refundDate || '', Number(it.amount) || 0,
-      it.reason || '', it.lost ? 1 : 0, it.type || 'Seller', it.sourceRunId || '', it.addedAt || new Date().toISOString());
+      it.reason || '', it.lost ? 1 : 0, it.type || 'Seller', it.sourceRunId || '', it.addedAt || new Date().toISOString(), it.refundedBy || '');
     added += Number(r.changes) || 0;
   }
   return added;
@@ -335,7 +357,7 @@ function ownRuns(stations) {
 
 module.exports = {
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
-  runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices,
+  runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices, runsWithoutRefundedBy, setRefundedBy, refundedByMap,
   addItems, listItems, removeItem, pruneOrphans,
   getMarks, allMarks, upsertMarks, ownMarks, ownRuns,
 };

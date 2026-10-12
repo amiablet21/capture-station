@@ -35,6 +35,7 @@ function parseNewFormat(rows) {
         SKU: String(r['Partner Item Id'] ?? '').trim(),
         'Refund Date': r['Transaction Date Time'],
         'Return Reason': r['Return Reason Description'],
+        'Refunded By': r['Transaction Description'] || '',
         'Order #': r['Walmart.com Order #'],
         'Fulfillment Type': r['Fulfillment Type'],
       });
@@ -62,6 +63,9 @@ function parseOldFormat(rows) {
         SKU: String(r['Partner Item Id'] ?? '').trim(),
         'Refund Date': r['Transaction Posted Timestamp'],
         'Return Reason': r['Transaction Reason Description'],
+        // who issued it: Return Refund (the customer through Walmart), Seller
+        // Initiated Returns, Walmart Customer Care Refund (owner 2026-10-12)
+        'Refunded By': r['Transaction Description'] || '',
         'Order #': r['Customer Order #'],
         'Fulfillment Type': r['Fulfillment Type'],
       });

@@ -6912,6 +6912,11 @@ function createWindow() {
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
+  // find in page (owner 2026-10-12: "Ctrl+F / Command+F to search for items"):
+  // Chromium's own find, so matches highlight natively on every page
+  win.webContents.on('found-in-page', (_e, r) => {
+    win.webContents.send('find:result', { matches: r.matches, active: r.activeMatchOrdinal, final: r.finalUpdate });
+  });
   win.webContents.on('did-finish-load', () => {
     if (!pendingNotice) return;
     win.webContents.send('app:notice', { message: pendingNotice });
@@ -7352,6 +7357,14 @@ function registerRecoveryIpc() {
       return await recoverySaveBuffer('Download the returns log', `Returns_log_${stamp}.xlsx`, XLSX_FILTER, buf);
     } catch (e) { return { ok: false, error: e.message }; }
   });
+  // findNext is Electron's "begin a new session" flag: true for a new text,
+  // false to step through the matches of the current one
+  ipcMain.handle('find:start', (_e, { text, forward, fresh }) => {
+    if (!win || !String(text || '')) return { ok: false };
+    win.webContents.findInPage(String(text), { forward: forward !== false, findNext: !!fresh, matchCase: false });
+    return { ok: true };
+  });
+  ipcMain.handle('find:stop', () => { if (win) win.webContents.stopFindInPage('clearSelection'); return { ok: true }; });
   ipcMain.handle('recovery:openArchive', async () => {
     if (recoveryGate()) return recoveryGate();
     try { fs.mkdirSync(recoveryArchiveDir(), { recursive: true }); await shell.openPath(recoveryArchiveDir()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }

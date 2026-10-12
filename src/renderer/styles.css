@@ -5256,6 +5256,9 @@ th:last-child > .col-grip { right: 0; }
 .rc-btn-outline:hover:not(:disabled) { background: #F9F9F8; }
 .rc-btn-outline.rc-btn-navy { color: #1E3A66; }
 .rc-head .rc-btn-outline { padding: 6px 12px; }
+.rc-btn-icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #787774; }
+.rc-btn-icon svg { width: 15px; height: 15px; }
+.rc-btn-icon:hover:not(:disabled) { color: #1E3A66; }
 .rc-btn-text { background: transparent; color: #787774; border-color: transparent; padding: 5px 8px; }
 .rc-btn-text:hover:not(:disabled) { color: #9F2F2D; }
 .rc-link { font-family: inherit; font-size: 12px; color: #1E3A66; background: none; border: none; padding: 0; cursor: pointer; }
@@ -5291,6 +5294,14 @@ th:last-child > .col-grip { right: 0; }
 .rc-cell.is-red .rc-cell-n { color: #9F2F2D; }
 .rc-cell.is-amber .rc-cell-n { color: #956400; }
 .rc-cell-today { background: #FBF7EE; }
+
+/* the Ctrl+F / Command+F find bar: top right, over everything */
+.find-bar { position: fixed; top: 64px; right: 24px; z-index: 60; display: flex; align-items: center; gap: 4px; background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; padding: 5px 6px 5px 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
+.find-bar input { font-family: inherit; font-size: 13px; border: none; outline: none; width: 220px; color: #2F3437; background: none; }
+.find-count { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: #787774; padding: 0 8px; border-left: 1px solid #EAEAEA; white-space: nowrap; min-width: 56px; text-align: center; }
+.find-count.is-none { color: #9F2F2D; }
+.find-btn { font-family: inherit; font-size: 13px; width: 26px; height: 26px; border: none; background: none; color: #787774; border-radius: 6px; cursor: pointer; }
+.find-btn:hover { background: #F1F0EC; color: #2F3437; }
 
 /* Profit (owner 2026-10-12, Design 3): the scope pill, the five-cell strip,
    the two charts */
@@ -5475,13 +5486,27 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-reconcile th:nth-child(7) { width: 150px; }
 .rc-table-reconcile th:nth-child(8) { width: 24%; }
 .rc-table-reconcile td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rc-table-list th:nth-child(2) { width: 12%; }
-.rc-table-list th:nth-child(3) { width: 5%; }
-.rc-table-list th:nth-child(4) { width: 23%; }
-.rc-table-list th:nth-child(5) { width: 9%; }
-.rc-table-list th:nth-child(6) { width: 7%; }
-.rc-table-list th:nth-child(7) { width: 8%; }
-.rc-table-list th:nth-child(9) { width: 150px; }
+/* Not received (owner 2026-10-12, the Profit language): twelve columns,
+   one line per row */
+.rc-table-list th:nth-child(2) { width: 150px; }
+.rc-table-list th:nth-child(3) { width: 62px; }
+.rc-table-list th:nth-child(5) { width: 130px; }
+.rc-table-list th:nth-child(6) { width: 108px; }
+.rc-table-list th:nth-child(7), .rc-table-list th:nth-child(8), .rc-table-list th:nth-child(9) { width: 90px; }
+.rc-table-list th:nth-child(10) { width: 140px; }
+.rc-table-list th:nth-child(11) { width: 124px; }
+.rc-table-list th:nth-child(12) { width: 152px; }
+.rc-table-list td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-strip-money { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.rc-cell.is-lost { background: #FDF3F2; }
+.rc-cell.is-lost .rc-cell-n { color: #9F2F2D; }
+.rc-list-head { display: flex; align-items: center; gap: 14px; padding: 9px 16px; border-bottom: 1px solid #EAEAEA; flex-wrap: wrap; }
+.rc-chips-inline { padding: 0; }
+.rc-list-head .rc-search-field { margin-left: auto; }
+/* the Recovery searches wear the Stock page's pill (owner 2026-10-12: "make
+   the search button better") */
+.rc-search-field { flex: 0 0 260px; width: 260px; height: 30px; padding: 0 11px; gap: 8px; }
+.rc-search-field .search-input { font-size: 12.5px; }
 /* the Import screen's periods list: set widths so the gutter stays a gutter
    and a count and its dollars stay on one line (owner 2026-10-12: "this
    looks weird") */
@@ -5500,7 +5525,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }
 .rc-table td { overflow-wrap: anywhere; }
 .rc-table .rc-nowrap { white-space: normal; }
-.rc-table-list td:nth-child(8) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 
 /* the two collapsible sections of Not received (the Walmart app's shape) */
 .rc-sec { background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; overflow: hidden; }

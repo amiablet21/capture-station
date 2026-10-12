@@ -362,46 +362,25 @@
         </div>
 
         <div id="rcNotReceived" class="rc-screen" hidden>
-          <section class="rc-sec is-open" id="rcSecSummary">
-            <div class="rc-sec-head">
-              <span class="rc-sec-title rc-sec-title-static">Monthly summary</span>
-              <div class="rc-sec-tools">
-                <div class="rc-scope" id="rcScope" role="group" aria-label="Scope">
-                  <button type="button" data-rcscope="cycle" class="is-on">Report</button>
-                  <button type="button" data-rcscope="month">Month</button>
-                  <button type="button" data-rcscope="year">Year</button>
-                  <button type="button" data-rcscope="all">All time</button>
-                </div>
-                <select id="rcMonthPick" class="rc-month" aria-label="Which report, month or year"></select>
-                <button id="rcSummaryExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
-              </div>
+          <!-- owner 2026-10-12 ("make this page look better"): the Profit
+               language — a scope pill, a strip of where the refund money
+               went, one grid with sortable columns -->
+          <div class="rc-toolbar">
+            <span class="rc-label">Where the refund money went</span>
+            <div class="rc-toolbar-right">
+              <div class="rc-seg" id="rcScope" role="group" aria-label="Scope"></div>
+              <button id="rcSummaryExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
             </div>
-            <div class="rc-sec-body rc-top" id="rcSecSummaryBody">
-              <div>
-                <div class="rc-label">Where the refund money went</div>
-                <div class="rc-headline"><span class="rc-headline-amt" id="rcRefunded">$0.00</span> <span class="rc-headline-sub" id="rcRefundedSub">refunded</span></div>
-                <div class="rc-bar rc-bar-lg" id="rcMoneyBar"></div>
-                <div class="rc-legend" id="rcLegend"></div>
-              </div>
-              <div class="rc-card rc-today">
-                <div class="rc-label">Today</div>
-                <div class="rc-nums" id="rcTodayNums"></div>
-                <div class="rc-rule">Seller refunds must be disputed within 45 days. WFS refunds pay themselves back by day 90; if not, you have until day 135 to file.</div>
-              </div>
-            </div>
-          </section>
-          <section class="rc-sec is-open" id="rcSecList">
-            <div class="rc-sec-head">
+          </div>
+          <section class="rc-strip rc-strip-money" id="rcMoneyStrip"></section>
+          <section class="rc-table-card" id="rcSecList">
+            <div class="rc-list-head">
               <span class="rc-sec-title rc-sec-title-static">Returns Not Received</span>
-              <div class="rc-sec-tools">
-                <input id="rcSearch" class="rc-search" type="text" placeholder="Search PO, product, or case ID…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" />
-              </div>
+              <div class="rc-chips rc-chips-inline" id="rcListTabs"></div>
+              <div class="search-field rc-search-field"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg><input id="rcSearch" class="search-input" type="text" placeholder="Search PO, SKU, case ID…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" /></div>
             </div>
-            <div class="rc-sec-body" id="rcSecListBody">
-              <div class="rc-chips" id="rcListTabs"></div>
-              <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
-              <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
-            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
+            <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
           </section>
         </div>
 
@@ -419,7 +398,7 @@
           <section class="rc-strip rc-strip-profit" id="rcProfitStrip" hidden></section>
           <div class="rc-two" id="rcProfitCharts" hidden>
             <section class="rc-chart-card">
-              <div class="rc-chart-head"><span class="rc-chart-title">Where each dollar of sales went</span><span class="rc-chart-sub" id="rcDollarSub"></span></div>
+              <div class="rc-chart-head"><span class="rc-chart-title">Where the sales money went</span><span class="rc-chart-sub" id="rcDollarSub"></span></div>
               <div class="rc-chart-body"><svg class="rc-svg" id="rcDollarChart" width="600" height="180" role="img" aria-label="Where each dollar of sales went"></svg></div>
             </section>
             <section class="rc-chart-card">
@@ -431,9 +410,11 @@
             <div class="rc-tabrow rc-tabrow-list">
               <div class="rc-tabs" id="rcProfitTabs"></div>
               <div class="rc-list-tools">
-                <input id="rcProfitSearch" class="rc-search" type="text" placeholder="Search SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" />
+                <div class="search-field rc-search-field" id="rcProfitSearchWrap"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg><input id="rcProfitSearch" class="search-input" type="text" placeholder="Search SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" /></div>
                 <!-- owner 2026-10-12: "remove the Download Excel on the top right" — the workbook lives with the table now -->
-                <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline" type="button" title="Download this scope as an Excel workbook">Excel</button>
+                <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Download this scope as an Excel workbook" aria-label="Download Excel">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,136v64a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V136a16,16,0,0,1,16-16H84a4,4,0,0,1,4,4v16a4,4,0,0,1-4,4H40v48H216V144H172a4,4,0,0,1-4-4V124a4,4,0,0,1,4-4h52A16,16,0,0,1,240,136ZM119.51,157.49a12,12,0,0,0,17,0l48-48a12,12,0,0,0-17-17L140,120V32a12,12,0,0,0-24,0v88L88.49,92.49a12,12,0,0,0-17,17Z"/></svg>
+                </button>
               </div>
             </div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-profit" id="rcProfitTable"></table></div>
@@ -451,6 +432,7 @@
   <dialog id="rcPickDlg" class="tab-menu rc-menu rc-pick-menu"></dialog>
   <dialog id="rcPoDlg" class="tab-menu rc-menu">
     <button class="tab-menu-item" data-rcgo="order">Order page</button>
+    <button class="tab-menu-item" data-rcgo="return">Return page</button>
     <button class="tab-menu-item" data-rcgo="txn">Transaction page</button>
     <div class="tab-menu-sep"></div>
     <button class="tab-menu-item" data-rcgo="copy">Copy PO #</button>
@@ -1950,6 +1932,14 @@
     <img id="claimsQr" class="claims-qr" alt="Scan with the warehouse phone" />
     <button id="claimsFolder" class="claims-openf">📂 Open the folder</button>
     <div id="claimsErr" class="claims-err" hidden></div>
+  </div>
+  <!-- Ctrl+F / Command+F find bar (owner 2026-10-12) — outside every page, so it stays focusable on all of them -->
+  <div id="pageFindBar" class="find-bar" hidden role="search">
+    <input id="pageFindInput" type="text" placeholder="Find on this page…" autocomplete="off" spellcheck="false" aria-label="Find on this page" />
+    <span id="pageFindCount" class="find-count"></span>
+    <button type="button" id="pageFindPrev" class="find-btn" title="Previous (Shift+Enter)" aria-label="Previous match">▴</button>
+    <button type="button" id="pageFindNext" class="find-btn" title="Next (Enter)" aria-label="Next match">▾</button>
+    <button type="button" id="pageFindClose" class="find-btn" title="Close (Esc)" aria-label="Close find">✕</button>
   </div>
   <script src="renderer.js"></script>
 </body>

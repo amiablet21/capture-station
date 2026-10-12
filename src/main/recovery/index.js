@@ -62,7 +62,7 @@ function trackerItemsFromStored(run, refunds) {
   });
   return picked.map((r) => rnr.itemFromRow({
     'PO #': r.po, 'Order #': r.order_no, Item: r.item, SKU: r.sku, Qty: r.qty, 'Refund Date': r.refund_date,
-    'Net Refund (Payable Impact)': r.net, 'Return Reason': r.reason, 'Fulfillment Type': r.fulfillment,
+    'Net Refund (Payable Impact)': r.net, 'Return Reason': r.reason, 'Refunded By': r.refunded_by || '', 'Fulfillment Type': r.fulfillment,
   }, run.id, run.ranAt));
 }
 
@@ -173,7 +173,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
     po: r['PO #'], order_no: r['Order #'] || '', item: r.Item || '', sku: r.SKU || '', qty: r.Qty || 0, refund_date: r['Refund Date'] || '',
     retail: r['Refunded Retail Sales'] || 0, net: r['Net Refund (Payable Impact)'] || 0, reason: r['Return Reason'] || '',
     fulfillment: r['Fulfillment Type'] || '', issues: r.Issues || '', wh_count: r['Warehouse Count'] || 0,
-    wh_price: r['Warehouse Price'], wh_condition: r['Warehouse Condition'] || '',
+    wh_price: r['Warehouse Price'], wh_condition: r['Warehouse Condition'] || '', refunded_by: r['Refunded By'] || '',
   }));
   const payoutRows = Object.entries(parsed.payouts).map(([po, v]) => ({ po, amount: v.amount, date: v.date || '', kind: v.kind || '' }));
   store.putRun(run, refundRows, payoutRows, parsed.ledger, parsed.orders);
@@ -241,12 +241,14 @@ function state() {
   const sorted = runs.slice().sort((a, b) => periodStartMs(b) - periodStartMs(a) || String(b.ranAt).localeCompare(String(a.ranAt)));
   const openByRun = {};
   for (const it of visible) if (it.status === 'outstanding') openByRun[it.sourceRunId] = (openByRun[it.sourceRunId] || 0) + 1;
+  ensureOrders();
+  const byMap = store.refundedByMap();
   const cfg = cfgRecovery();
   return {
     ok: true,
     runs: sorted.map((r) => ({ ...r, open: openByRun[r.id] || 0 })),
     // each row carries its sentence and its list tab, so the renderer only draws
-    items: visible.map((it) => ({ ...it, statusText: rnr.statusText(it), tab: rnr.filterOf(it), lostAmount: rnr.lostAmount(it) })),
+    items: visible.map((it) => ({ ...it, refundedBy: it.refundedBy || byMap[it.po] || '', statusText: rnr.statusText(it), short: rnr.shortStatus(it), tab: rnr.filterOf(it), lostAmount: rnr.lostAmount(it) })),
     today: rnr.todayCounts(visible),
     months: monthKeys(items),
     years: [...new Set(monthKeys(items).map((k) => k.slice(0, 4)))],
@@ -350,6 +352,7 @@ function viewCsv(pos) {
 // periods imported before Profit existed have no per-order rows: read them
 // back from the period's archived CSV when it is on this computer
 const pricesTried = new Set(); // runs whose archive was looked for once this session
+const byTried = new Set();
 function ensureOrders() {
   const missing = [];
   for (const r of store.runsWithoutOrders()) {
@@ -374,6 +377,17 @@ function ensureOrders() {
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
     } catch { /* next time the file is readable */ }
+  }
+  // likewise who issued each refund, for runs stored before v1.32.15
+  for (const r of store.runsWithoutRefundedBy()) {
+    if (byTried.has(r.id)) continue;
+    byTried.add(r.id);
+    const f = archivePath(r.label);
+    try {
+      if (!fs.existsSync(f)) continue;
+      const parsed = parseReport(fs.readFileSync(f, 'utf8'));
+      store.setRefundedBy(r.id, Object.fromEntries(parsed.refunds.map((x) => [x['PO #'], x['Refunded By'] || ''])));
+    } catch { /* next time */ }
   }
   return missing;
 }
