@@ -1581,8 +1581,11 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
 // number, --page-scale, zooms each page as a whole: 1 at 1280px and below
 // (laptops keep the design's exact measurements), about 1.2 at 2000px,
 // 1.35 at most on very wide monitors.
+// (owner 2026-10-12, second pass: 1.35 on the wide monitor was "very
+// large" — the curve now tops out at the 1.18 first approved, reached
+// around 2150px, and grows more slowly before it)
 function pageScale() {
-  return Math.min(1.35, Math.max(1, 1 + (window.innerWidth - 1280) / 3600));
+  return Math.min(1.18, Math.max(1, 1 + (window.innerWidth - 1280) / 4800));
 }
 function applyPageScale() {
   document.documentElement.style.setProperty('--page-scale', pageScale().toFixed(3));
@@ -1625,6 +1628,11 @@ function rcWhen(iso) {
   const when = day(d) === day(now) ? 'today' : day(d) === day(yday) ? 'yesterday' : `${RC_MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== now.getFullYear() ? `, ${d.getFullYear()}` : ''}`;
   return `${when} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
 }
+// the Item cell: the Walmart channel SKU as the line that reads, the
+// product name under it (owner 2026-10-12)
+const rcSkuCell = (sku, item, extra = '') => sku
+  ? `<div class="rc-sku">${esc(sku)}</div><div class="rc-item-sub">${esc(item || '')}${extra}</div>`
+  : `<div>${esc(item || '')}${extra}</div>`;
 const rcSentence = (t, strong) => t ? `<span class="rc-dot ${esc('is-' + (t.tone || 'grey'))}"></span><span class="rc-lead ${strong ? esc('is-' + t.tone) : ''}">${esc(t.lead)}</span>${t.clause ? `<span class="rc-clause"> — ${esc(t.clause)}</span>` : ''}` : '';
 // the lead takes the tone colour only where the row shouts: red, the amber
 // unpaid-cycles issue, a green approval (the design's calm rows stay plain)
@@ -1748,8 +1756,8 @@ function rcRenderBucket() {
   const rows = sum[rc.bucket] || [];
   const received = rc.bucket === 'received';
   const head = received
-    ? '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
-    : '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
+    ? '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
+    : '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
   const body = rows.length ? rows.map(r => {
     const type = /wfs|walmart-fulfilled/i.test(String(r['Fulfillment Type'] || '')) ? 'WFS' : 'Seller';
     const days = r['Days Ago'];
@@ -1760,7 +1768,7 @@ function rcRenderBucket() {
     const fifth = received ? esc(r['Warehouse Condition'] || '') : esc(String(r['Return Reason'] || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()));
     return `<tr>
       <td><div class="rc-po">${esc(r['PO #'])}</div><div class="rc-po-sub">${type}</div></td>
-      <td class="rc-item">${esc(r.Item || '')}</td>
+      <td class="rc-item">${rcSkuCell(r.SKU, r.Item)}</td>
       <td class="rc-nowrap">${refunded}</td>
       <td class="rc-mono is-right rc-nowrap">${rcMoney(r['Net Refund (Payable Impact)'])}</td>
       <td class="rc-muted">${fifth}</td>
@@ -1815,7 +1823,7 @@ function rcMatches(it) {
   if (rc.type && it.type !== rc.type) return false;
   if (!rc.q) return true;
   const q = rc.q.toLowerCase();
-  return [it.po, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
+  return [it.po, it.sku, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
 }
 function rcRenderList() {
   const items = rc.data.items || [];
@@ -1828,7 +1836,7 @@ function rcRenderList() {
   }).join('');
   for (const b of document.querySelectorAll('.rc-toggle')) b.classList.toggle('is-on', rc.type === b.dataset.rctype);
   const rows = items.filter(rcMatches);
-  const head = '<th>PO</th><th>Item</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Paid back</th><th>Status</th><th></th>';
+  const head = '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Paid back</th><th>Status</th><th></th>';
   let body;
   if (rows.length) {
     body = rows.map(it => {
@@ -1843,7 +1851,7 @@ function rcRenderList() {
       const prim = rcPrimary(it);
       return `<tr data-rcpo="${esc(it.po)}">
         <td><div class="rc-po">${esc(it.po)}</div><div class="rc-po-sub">${sub}</div></td>
-        <td class="rc-item">${esc(it.item || '')}${note}</td>
+        <td class="rc-item">${rcSkuCell(it.sku, it.item, note)}</td>
         <td class="rc-nowrap"><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld}d</span>` : ''}</td>
         <td class="rc-mono is-right rc-nowrap">${rcMoney(it.amount)}</td>
         <td class="is-right rc-nowrap">${paid}</td>
