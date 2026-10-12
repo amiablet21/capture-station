@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.16 highlights
+
+- **A SKU on Profit opens its POs** (owner: "a dropdown where I can see all the relevant PO#s for each item"). The caret on a By SKU row drops a list of that SKU's orders: PO (click it for the Walmart menu), date, units, refunded, Walmart paid, and a situation — Sold, kept · Refunded, back in stock, cost recovered · Refunded, Open case now · Refunded, Partial payout… Refunds come first; long lists show five sales and a "show all".
+- A closed dispute window reads **Closed · 7 days** (owner's wording) instead of the sentence.
+
 ## v1.32.15 highlights
 
 - **Not received in the Profit language** (owner: "make this page also look better"). The scope pill with Download Excel beside it, a strip of where the refund money went (refunded, came back, Walmart paid back, waiting on WFS, being chased, lost in red), then one grid: PO # · Type · SKU · Reason · Refunded · Amount · Paid back · Lost · Action · Deadline. The status sentence is now an action of a word or two ("Open case", "File with WFS", "Wait", "Partial payout", "Write off?") and a deadline date; the long form lives on hover. The fold and the Today card are gone; their numbers sit in the strip.

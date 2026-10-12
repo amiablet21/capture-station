@@ -1638,7 +1638,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null,
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -1881,6 +1881,27 @@ function rcDrawSkus(p) {
   });
   svg.appendChild(rcSvg('line', { x1: zero, x2: zero, y1: topPad, y2: topPad + rows.length * gap, class: 'base' }));
 }
+// the drop-down under a SKU row (owner 2026-10-12): every refund, then the
+// sales — a few at first, all on "show all"
+function rcProfitLines(g) {
+  const lines = g.lines || [];
+  const all = rc.profitOpenAll.has(g.sku);
+  const refunds = lines.filter(l => l.refundUnits > 0);
+  const sales = lines.filter(l => !(l.refundUnits > 0));
+  const shown = all ? lines : [...refunds, ...sales.slice(0, 5)];
+  const hidden = lines.length - shown.length;
+  const row = (l) => `<tr class="rc-subrow">
+      <td class="rc-g"></td>
+      <td><button type="button" class="rc-po rc-po-btn rc-po-sm" data-rcpolink="${esc(l.po)}" title="Open this PO on Walmart">${esc(l.po)}</button><span class="rc-sub-date">${esc(rcMonDay(l.date))}</span></td>
+      <td class="is-right rc-mono">${l.saleUnits || '—'}</td>
+      <td class="is-right rc-mono">${l.refundUnits || '—'}</td>
+      <td class="is-right rc-mono" colspan="3">${(l.net < 0 ? '−' : '') + rcMoney(l.net)}</td>
+      <td colspan="3"><span class="rc-dot is-${esc(l.tone || 'grey')}"></span>${esc(l.situation)}</td>
+    </tr>`;
+  return `<tr class="rc-subhead"><td class="rc-g"></td><td>PO #</td><td class="is-right">Units</td><td class="is-right">Refunded</td><td class="is-right" colspan="3">Walmart paid</td><td colspan="3">Situation</td></tr>`
+    + shown.map(row).join('')
+    + (hidden > 0 ? `<tr class="rc-subfoot"><td class="rc-g"></td><td colspan="9">… ${rcPlural(hidden, 'more order')} sold and kept · <button type="button" class="rc-link" data-rcshowall="${esc(g.sku)}">show all ${lines.length}</button></td></tr>` : '');
+}
 function rcRenderProfit() {
   if (rc.sub !== 'profit') return;
   const p = rc.profit;
@@ -1928,9 +1949,9 @@ function rcRenderProfit() {
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
-    const body = rows.length ? rows.map((g, i) => `<tr>
+    const body = rows.length ? rows.map((g, i) => `<tr class="${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-item" title="${esc(g.item || '')}"><span class="rc-sku">${esc(g.sku)}</span></td>
+      <td class="rc-item" title="${esc(g.item || '')}"><button type="button" class="rc-caret-btn ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}" data-rctoggle="${esc(g.sku)}" aria-label="Show this SKU's POs"><span class="rc-caret"></span></button><span class="rc-sku">${esc(g.sku)}</span></td>
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
@@ -1939,7 +1960,7 @@ function rcRenderProfit() {
       <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
       <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
   } else {
     const s = rc.profitSort;
@@ -2397,6 +2418,12 @@ window.addEventListener('resize', () => {
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
 $('rcProfitTable').addEventListener('click', (e) => {
+  const tog = e.target.closest('[data-rctoggle]');
+  if (tog) { const k = tog.dataset.rctoggle; if (rc.profitOpen.has(k)) { rc.profitOpen.delete(k); rc.profitOpenAll.delete(k); } else rc.profitOpen.add(k); rcRenderProfit(); return; }
+  const more = e.target.closest('[data-rcshowall]');
+  if (more) { rc.profitOpenAll.add(more.dataset.rcshowall); rcRenderProfit(); return; }
+  const link = e.target.closest('[data-rcpolink]');
+  if (link) { rcPoMenu(link); return; }
   const th = e.target.closest('[data-rcsort]');
   if (!th) return;
   const key = th.dataset.rcsort;

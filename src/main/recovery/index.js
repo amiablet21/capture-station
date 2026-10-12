@@ -436,9 +436,22 @@ function profit(scope, key) {
   const bySku = new Map();
   const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false };
   const missingSkus = new Set();
+  // each SKU also lists its POs with a situation (owner 2026-10-12: "a
+  // dropdown where I can see all the relevant PO#s for each item")
+  const trackerByPo = new Map(decoratedItems().items.map((it) => [it.po, it]));
   for (const o of orders) {
     const cost = unitCost(o.sku);
     const back = o.refundUnits > 0 && whPo.has(o.po) ? Math.min(o.refundUnits, o.saleUnits) : 0; // came back: cost recovered
+    let situation = 'Sold, kept'; let tone = 'green';
+    if (o.refundUnits > 0) {
+      if (back > 0) { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
+      else {
+        const it = trackerByPo.get(o.po);
+        if (it) { const sh = rnr.shortStatus(it); situation = `Refunded · ${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; tone = sh.tone; }
+        else { situation = 'Refunded · not received'; tone = 'red'; }
+      }
+    }
+    const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back);
     const cogs = cost === null ? 0 : costedUnits * cost;
     tot.payout += o.netPayable; tot.orders++; tot.unitsSold += o.saleUnits; tot.unitsRefunded += o.refundUnits; tot.unitsBack += back;
@@ -448,14 +461,17 @@ function profit(scope, key) {
     if (cost === null) { tot.missingCount++; tot.missingPayout += o.netPayable; missingSkus.add(o.sku || '(no SKU)'); }
     else { tot.cogs += cogs; tot.costedPayout += o.netPayable; }
     const k = o.sku || '(no SKU)';
-    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false });
+    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false, lines: [] });
     const g = bySku.get(k);
+    g.lines.push(line);
     if (!g.item && o.item) g.item = o.item;
     g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.payout += o.netPayable; g.cogs += cogs;
     g.gross += gross; if (comm !== null) { g.commission += comm; g.commissionKnown = true; }
   }
   const skus = [...bySku.values()].map((g) => ({
     ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
+    // refunds first, then newest sale first
+    lines: g.lines.slice().sort((a, b) => (b.refundUnits > 0) - (a.refundUnits > 0) || String(b.date).localeCompare(String(a.date))),
     // the goods price per unit sold and Walmart's cut of it, from the
     // report's own lines (null where a period predates these columns)
     gross: r2(g.gross), commission: r2(g.commission),
