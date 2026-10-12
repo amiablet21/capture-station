@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.6 highlights
+
+- **Recovery sits at 1:1 like Capture.** No scaling: the design's 13px type as drawn, and the sheet spans the window with Capture's 24px margins instead of a centered column. The extra width goes to the tables (set column proportions, the SKU column up to 520px so names wrap less) and the money story; the right-hand cards keep a sensible width. The Overview keeps its window scale.
+
 ## v1.32.5 highlights
 
 - **Recovery asks for an access code.** Clicking the tab asks for a code once per app session (9419 to start); change or remove it in Settings → Recovery.

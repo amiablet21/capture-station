@@ -5223,14 +5223,13 @@ th:last-child > .col-grip { right: 0; }
 
 .rc-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .rc-scroll { flex: 1; min-height: 0; overflow: auto; }
-/* owner 2026-10-12 ("everything just seems super condensed" on a 2000px
-   window, then "it should adjust to the monitor"): the design's 1100px /
-   13px ledger is scaled as one piece — every measurement keeps its ratio —
-   by --page-scale, which the renderer sets from the window width (1 at
-   1280px, 1.18 at most from about 2150px). Its dialogs ride the same
-   scale. The column may use 1280px of its own before it centers. */
-.rc-main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; display: flex; flex-direction: column; gap: 32px; font-size: 13px; line-height: 1.55; color: #2F3437; zoom: var(--page-scale, 1); }
-.rc-menu, .rc-dlg { zoom: var(--page-scale, 1); }
+/* Owner 2026-10-12, after two rounds of scaling: "the same as the capture
+   page". No zoom — the design's 13px type at 1:1 — and the sheet spans the
+   window with the Capture page's 24px side margins instead of a centered
+   1100px column; the extra width goes to the tables and the money story,
+   while the right-hand cards keep a sensible width. (--page-scale still
+   drives the Overview.) */
+.rc-main { width: 100%; margin: 0; padding: 12px 24px 28px; display: flex; flex-direction: column; gap: 24px; font-size: 13px; line-height: 1.55; color: #2F3437; }
 .rc-screen { display: flex; flex-direction: column; gap: 32px; }
 
 /* page header: h1, the two underlined sub-tabs, the screen's primary button */
@@ -5264,7 +5263,7 @@ th:last-child > .col-grip { right: 0; }
    carries the headline, the bar and six legend entries while the Today card
    holds three numbers — so the left column takes 3/5 of the width and the
    card 2/5; they stack under 960px */
-.rc-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 40px; align-items: start; }
+.rc-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 600px); gap: 40px; align-items: start; }
 @media (max-width: 960px) { .rc-top { grid-template-columns: minmax(0, 1fr); } }
 .rc-left { display: flex; flex-direction: column; gap: 18px; }
 .rc-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #787774; }
@@ -5305,7 +5304,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-num-label { font-size: 12.5px; margin-top: 8px; }
 .rc-num-money { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: #787774; }
 .rc-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: #F1F0EC; }
-.rc-bar-lg { height: 14px; margin-top: 22px; }
+.rc-bar-lg { height: 14px; margin-top: 22px; max-width: 1100px; }
 .rc-seg { min-width: 0; }
 .rc-seg.is-navy, .rc-swatch.is-navy { background: #1E3A66; }
 .rc-seg.is-red, .rc-swatch.is-red { background: #9F2F2D; }
@@ -5325,7 +5324,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-headline { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-top: 8px; }
 .rc-headline-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
 .rc-headline-sub { color: #787774; font-size: 16px; font-weight: 500; }
-.rc-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px 28px; margin-top: 20px; }
+.rc-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px 28px; margin-top: 20px; max-width: 1100px; }
 .rc-legend-item { display: flex; gap: 10px; }
 .rc-swatch { width: 10px; height: 10px; border-radius: 3px; margin-top: 5px; flex: none; }
 .rc-legend-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
@@ -5360,10 +5359,10 @@ th:last-child > .col-grip { right: 0; }
 .rc-po-sub { font-size: 11px; color: #787774; margin-top: 2px; white-space: nowrap; }
 .rc-po-case { font-family: inherit; font-size: 11px; color: #787774; background: none; border: none; padding: 0; cursor: pointer; }
 .rc-po-case:hover { color: #1E3A66; text-decoration: underline; text-underline-offset: 2px; }
-.rc-item { max-width: 280px; }
+.rc-item { max-width: 520px; }
 .rc-sku { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 500; }
 .rc-item-sub { font-size: 11px; color: #787774; margin-top: 2px; line-height: 1.45; }
-.rc-table-list .rc-item { max-width: 260px; }
+.rc-table-list .rc-item { max-width: 520px; }
 .rc-nowrap { white-space: nowrap; }
 .rc-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rc-muted { color: #787774; }
@@ -5396,3 +5395,21 @@ th:last-child > .col-grip { right: 0; }
 .rc-dlg-po { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rc-confirm-body { font-size: 13px; margin: 4px 0 2px; }
 .rc-note-text { font-family: inherit; resize: vertical; min-height: 64px; }
+/* at full width the browser spread the columns thin and far apart — the
+   table takes set proportions so the SKU gets the room and the numbers
+   sit together (owner 2026-10-12: "spaced better") */
+.rc-table { table-layout: fixed; }
+.rc-table-reconcile th:nth-child(1) { width: 14%; }
+.rc-table-reconcile th:nth-child(2) { width: 30%; }
+.rc-table-reconcile th:nth-child(3) { width: 13%; }
+.rc-table-reconcile th:nth-child(4) { width: 9%; }
+.rc-table-reconcile th:nth-child(5) { width: 13%; }
+.rc-table-list th:nth-child(1) { width: 13%; }
+.rc-table-list th:nth-child(2) { width: 29%; }
+.rc-table-list th:nth-child(3) { width: 10%; }
+.rc-table-list th:nth-child(4) { width: 8%; }
+.rc-table-list th:nth-child(5) { width: 8%; }
+.rc-table-list th:nth-child(7) { width: 150px; }
+.rc-table td { overflow-wrap: anywhere; }
+.rc-table .rc-nowrap { white-space: normal; }
+.rc-table-list td:nth-child(6), .rc-table-reconcile td:nth-child(6) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

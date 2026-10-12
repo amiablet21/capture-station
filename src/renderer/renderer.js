@@ -1608,12 +1608,12 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
   if (item) showPage(item.dataset.page);
 });
 
-/* ---------- page scale: Overview and Recovery grow with the window ---------- */
-// Owner 2026-10-12: those two pages read "super condensed" on a 2000px
+/* ---------- page scale: the Overview grows with the window ---------- */
+// Owner 2026-10-12: the Overview read "super condensed" on a 2000px
 // monitor, and the size should follow the screen rather than be fixed. One
-// number, --page-scale, zooms each page as a whole: 1 at 1280px and below
-// (laptops keep the design's exact measurements), about 1.2 at 2000px,
-// 1.35 at most on very wide monitors.
+// number, --page-scale, zooms the page as a whole: 1 at 1280px and below
+// (laptops keep the design's exact measurements), 1.18 at most. (Recovery
+// used it too for a day; it now sits 1:1 like Capture, owner's call.)
 // (owner 2026-10-12, second pass: 1.35 on the wide monitor was "very
 // large" — the curve now tops out at the 1.18 first approved, reached
 // around 2150px, and grows more slowly before it)
@@ -2050,7 +2050,7 @@ async function rcBrowse() {
 // --page-scale like the page, so its own px are window px / scale: sizes
 // are multiplied back and the final position divided before it is set.
 function rcAnchor(dlg, r) {
-  const z = pageScale();
+  const z = 1; // the Recovery menus are no longer zoomed (1:1 like Capture)
   const w = dlg.offsetWidth * z;
   const h = dlg.offsetHeight * z;
   const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
