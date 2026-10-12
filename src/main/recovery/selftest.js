@@ -214,6 +214,24 @@ module.exports = function run(check) {
     db.prepare('UPDATE wm_orders SET gross = NULL, commission = NULL').run();
     const pr2 = recovery.profit('all');
     check('recovery: profit — orders stored before v1.32.13 get their price back from the archived CSV', pr2.gross === pr.gross && pr2.gross > 0, { before: pr.gross, after: pr2.gross });
+    // pending returns are not costed yet (owner 2026-10-12): 006 (WFS) was
+    // refunded 5 days ago (Walmart's 90 days still running), 003 (seller) 60
+    // days ago (window passed) — give both a sold unit of SKU-A ($70, goods
+    // price $90) and see where the cost lands; 007 is written off above
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-A', sale_units = 1, gross = 90 WHERE run_id = ? AND po IN ('003', '006')").run(res.id);
+    const pr3 = recovery.profit('cycle', res.id);
+    const a3 = pr3.skus.find((g) => g.sku === 'SKU-A');
+    const l6 = a3 && a3.lines.find((l) => l.po === '006'); const l3 = a3 && a3.lines.find((l) => l.po === '003');
+    check('recovery: profit — a return inside its window is pending: not costed, carried at risk', a3 && a3.unitsPending === 1 && a3.atRisk === 70 && l6 && l6.pending && /pending/.test(l6.situation) && l6.tone === 'amber', a3 && { pend: a3.unitsPending, risk: a3.atRisk, l6 });
+    check('recovery: profit — a return past its window is lost: costed', a3 && a3.unitsLost === 1 && a3.cogs === 70 && l3 && !l3.pending && /cost charged/.test(l3.situation) && l3.tone === 'red', a3 && { lost: a3.unitsLost, cogs: a3.cogs, l3 });
+    check('recovery: profit — the strip totals carry at risk and lost units', pr3.atRisk.amount === 70 && pr3.atRisk.units === 1 && pr3.lostUnits === 1 && pr3.atRisk.orders >= 1, pr3.atRisk);
+    const per3 = pr3.periods.find((x) => x.id === res.id);
+    check('recovery: profit — the period trend applies the same rule', per3 && per3.atRisk === 70 && per3.cogs === pr3.cogs, per3);
+    // a goods price known on some orders only: goods sold and avg price read
+    // the priced orders, and the strip says how many are missing
+    db.prepare("UPDATE wm_orders SET gross = NULL WHERE run_id = ? AND po = '100'").run(res.id);
+    const pr4 = recovery.profit('cycle', res.id);
+    check('recovery: profit — goods sold and avg price count priced orders only', pr4.priced.unpriced === 1 && pr4.priced.orders === 3 && pr4.gross === 280 && pr4.avgPrice === 93.33, { priced: pr4.priced, avg: pr4.avgPrice, gross: pr4.gross });
     // exports
     check('recovery: audit workbook builds', recovery.auditWorkbook().readUInt32LE(0) === 0x04034b50);
     check('recovery: summary workbook builds', recovery.summaryWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);

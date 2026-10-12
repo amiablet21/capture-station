@@ -478,47 +478,70 @@ function profit(scope, key) {
   }
 
   const bySku = new Map();
-  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false };
+  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false,
+    pricedOrders: 0, unpricedOrders: 0, pricedUnits: 0, commGross: 0, atRisk: 0, atRiskUnits: 0, pendingOrders: 0, lostUnits: 0 };
   const missingSkus = new Set();
   // each SKU also lists its POs with a situation (owner 2026-10-12: "a
   // dropdown where I can see all the relevant PO#s for each item")
   const trackerByPo = new Map(decoratedItems().items.map((it) => [it.po, it]));
   const marksByPo = store.allMarks();
-  for (const o of orders) {
-    const cost = unitCost(o.sku);
+  // how a refunded order stands for costing (owner 2026-10-12: "if a return
+  // is pending, why would you deduct from the profit just yet"):
+  //   back (logged, or marked received before the log) → cost recovered
+  //   never shipped → nothing left the warehouse, nothing to cost
+  //   pending (inside its window, Walmart's 90 days, a case open, parked) →
+  //     not costed yet; its cost is carried as "at risk"
+  //   lost (window passed with no case, marked lost, written off, paid by
+  //     Walmart instead) → costed
+  const standing = (o) => {
     const mk = marksByPo.get(o.po);
     const manual = !!(mk && !mk.removed && mk.receivedManual);
     const never = !!(mk && !mk.removed && mk.neverShipped);
-    // came back (logged, or marked received before the log): cost recovered;
-    // never shipped: nothing left the warehouse, so nothing to cost
-    const back = o.refundUnits > 0 && (whPo.has(o.po) || manual) ? Math.min(o.refundUnits, o.saleUnits) : (never ? o.saleUnits : 0);
+    if (never) return { kind: 'never', back: o.saleUnits, held: 0, it: null };
+    if (!(o.refundUnits > 0)) return { kind: 'kept', back: 0, held: 0, it: null };
+    const units = Math.min(o.refundUnits, o.saleUnits);
+    if (whPo.has(o.po) || manual) return { kind: manual ? 'manual' : 'back', back: units, held: 0, it: null };
+    const it = trackerByPo.get(o.po) || null;
+    const pending = !!it && it.status === 'outstanding' && it.lost !== true && !it.windowClosed
+      && (it.wfsWaiting || it.wfsDisputeOpen || it.caseOpened || it.adjustment || (it.daysLeft != null && it.daysLeft > 0));
+    return pending ? { kind: 'pending', back: 0, held: units, it } : { kind: 'lost', back: 0, held: 0, it };
+  };
+  // a goods price is only known for periods imported with the price
+  // columns (v1.32.13+) whose archive was on hand; an order without one
+  // counts in payout and cost but not in goods sold, avg price or commission
+  const priced = (o) => o.saleUnits > 0 && o.gross !== null && o.gross !== undefined && Number(o.gross) > 0;
+  for (const o of orders) {
+    const cost = unitCost(o.sku);
+    const st = standing(o);
+    const { back, held } = st;
     let situation = 'Sold, kept'; let tone = 'green';
-    if (never) { situation = 'Refunded · never shipped'; tone = 'grey'; }
-    else if (o.refundUnits > 0) {
-      if (manual) { situation = 'Refunded · marked received before the log'; tone = 'navy'; }
-      else if (back > 0) { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
-      else {
-        const it = trackerByPo.get(o.po);
-        if (it) { const sh = rnr.shortStatus(it); situation = `Refunded · ${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; tone = sh.tone; }
-        else { situation = 'Refunded · not received'; tone = 'red'; }
-      }
-    }
-    const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, situation, tone };
-    const costedUnits = Math.max(0, o.saleUnits - back);
+    const when = (it) => { const sh = rnr.shortStatus(it); return `${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; };
+    if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
+    else if (st.kind === 'manual') { situation = 'Refunded · marked received before the log'; tone = 'navy'; }
+    else if (st.kind === 'back') { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
+    else if (st.kind === 'pending') { situation = `Refunded · pending · ${when(st.it)} · not costed yet`; tone = 'amber'; }
+    else if (st.kind === 'lost') { situation = st.it ? `Refunded · ${when(st.it)} · cost charged` : 'Refunded · not received · cost charged'; tone = 'red'; }
+    const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
+    const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;
+    const atRisk = cost === null ? 0 : held * cost;
+    const lostUnits = st.kind === 'lost' ? Math.min(o.refundUnits, o.saleUnits) : 0;
     tot.payout += o.netPayable; tot.orders++; tot.unitsSold += o.saleUnits; tot.unitsRefunded += o.refundUnits; tot.unitsBack += back;
-    const gross = Number.isFinite(Number(o.gross)) && o.gross !== null ? Number(o.gross) : 0;
-    const comm = o.commission === null || o.commission === undefined ? null : Number(o.commission);
-    tot.gross += gross; if (comm !== null) { tot.commission += comm; tot.commissionKnown = true; }
+    tot.atRisk += atRisk; tot.atRiskUnits += held; tot.lostUnits += lostUnits; if (st.kind === 'pending') tot.pendingOrders++;
+    const isPriced = priced(o);
+    const gross = isPriced ? Number(o.gross) : 0;
+    const comm = isPriced && o.commission !== null && o.commission !== undefined ? Number(o.commission) : null;
+    if (isPriced) { tot.pricedOrders++; tot.pricedUnits += o.saleUnits; } else if (o.saleUnits > 0) tot.unpricedOrders++;
+    tot.gross += gross; if (comm !== null) { tot.commission += comm; tot.commGross += gross; tot.commissionKnown = true; }
     if (cost === null) { tot.missingCount++; tot.missingPayout += o.netPayable; missingSkus.add(o.sku || '(no SKU)'); }
     else { tot.cogs += cogs; tot.costedPayout += o.netPayable; }
     const k = o.sku || '(no SKU)';
-    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false, lines: [] });
+    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, lines: [] });
     const g = bySku.get(k);
     g.lines.push(line);
     if (!g.item && o.item) g.item = o.item;
-    g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.payout += o.netPayable; g.cogs += cogs;
-    g.gross += gross; if (comm !== null) { g.commission += comm; g.commissionKnown = true; }
+    g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.unitsPending += held; g.unitsLost += lostUnits; g.atRisk += atRisk; g.payout += o.netPayable; g.cogs += cogs;
+    g.gross += gross; if (isPriced) g.pricedUnits += o.saleUnits; if (comm !== null) { g.commission += comm; g.commGross += gross; g.commissionKnown = true; }
   }
   const skus = [...bySku.values()].map((g) => ({
     ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
@@ -526,9 +549,9 @@ function profit(scope, key) {
     lines: g.lines.slice().sort((a, b) => (b.refundUnits > 0) - (a.refundUnits > 0) || String(b.date).localeCompare(String(a.date))),
     // the goods price per unit sold and Walmart's cut of it, from the
     // report's own lines (null where a period predates these columns)
-    gross: r2(g.gross), commission: r2(g.commission),
-    avgPrice: g.unitsSold > 0 && g.gross > 0 ? r2(g.gross / g.unitsSold) : null,
-    commissionPct: g.commissionKnown && g.gross > 0 ? Math.round((-g.commission / g.gross) * 1000) / 10 : null,
+    gross: r2(g.gross), commission: r2(g.commission), atRisk: r2(g.atRisk),
+    avgPrice: g.pricedUnits > 0 && g.gross > 0 ? r2(g.gross / g.pricedUnits) : null,
+    commissionPct: g.commissionKnown && g.commGross > 0 ? Math.round((-g.commission / g.commGross) * 1000) / 10 : null,
     margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
   // Walmart lines that belong to no order: storage, ads, WFS inventory
@@ -541,14 +564,14 @@ function profit(scope, key) {
   const periods = runs
     .map((r) => {
       const os = store.runOrders(r.id);
-      let payout = 0; let cogs = 0; let miss = 0; let units = 0;
+      let payout = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false;
       for (const o of os) {
         const cost = unitCost(o.sku);
-        const back = o.refundUnits > 0 && whPo.has(o.po) ? Math.min(o.refundUnits, o.saleUnits) : 0;
-        payout += o.netPayable; units += o.saleUnits;
-        if (cost === null) miss++; else cogs += Math.max(0, o.saleUnits - back) * cost;
+        const { back, held } = standing(o);
+        payout += o.netPayable; units += o.saleUnits; if (priced(o)) anyPriced = true;
+        if (cost === null) miss++; else { cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
       }
-      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), cogs: r2(cogs), profit: r2(payout - cogs), margin: payout > 0 ? Math.round(((payout - cogs) / payout) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
+      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), cogs: r2(cogs), profit: r2(payout - cogs), atRisk: r2(atRisk), priced: anyPriced, margin: payout > 0 ? Math.round(((payout - cogs) / payout) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
     })
     .sort((a, b) => periodStartMs({ label: b.label, ranAt: '' }) - periodStartMs({ label: a.label, ranAt: '' }));
 
@@ -558,7 +581,10 @@ function profit(scope, key) {
     margin: tot.payout > 0 ? Math.round((profitV / tot.payout) * 1000) / 10 : null,
     orders: tot.orders, unitsSold: tot.unitsSold, unitsRefunded: tot.unitsRefunded, unitsBack: tot.unitsBack,
     gross: r2(tot.gross), commission: r2(tot.commission),
-    commissionPct: tot.commissionKnown && tot.gross > 0 ? Math.round((-tot.commission / tot.gross) * 1000) / 10 : null,
+    commissionPct: tot.commissionKnown && tot.commGross > 0 ? Math.round((-tot.commission / tot.commGross) * 1000) / 10 : null,
+    avgPrice: tot.pricedUnits > 0 && tot.gross > 0 ? r2(tot.gross / tot.pricedUnits) : null,
+    priced: { orders: tot.pricedOrders, unpriced: tot.unpricedOrders, units: tot.pricedUnits },
+    atRisk: { amount: r2(tot.atRisk), units: tot.atRiskUnits, orders: tot.pendingOrders }, lostUnits: tot.lostUnits,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
     costedPayout: r2(tot.costedPayout), other, netAfterOther: r2(profitV + other),
     skus, periods, missingRuns,
@@ -573,6 +599,7 @@ function profitWorkbook(scope, key) {
     { name: 'Summary', columns: [{ header: `Profit — ${p.label}`, width: 36, kind: 'text' }, { header: 'Amount', width: 16, kind: money }], rows: [
       ['Walmart paid (orders net of fees and refunds)', p.payout], ['Cost of goods sold', p.cogs], ['Profit', p.profit], ['Margin %', p.margin ?? ''],
       ['Other Walmart lines (no order)', p.other], ['Net after other lines', p.netAfterOther],
+      ['At risk (pending returns, not costed yet)', p.atRisk.amount], ['Units pending return', p.atRisk.units], ['Units lost (costed)', p.lostUnits],
       ['Orders', p.orders], ['Units sold', p.unitsSold], ['Units refunded', p.unitsRefunded], ['Units back in stock', p.unitsBack],
       ['Orders with no cost set', p.missing.orders], ['Their payout', p.missing.payout],
     ] },

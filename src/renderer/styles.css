@@ -5312,7 +5312,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #787774; }
 .rc-pick-menu { max-height: 320px; overflow-y: auto; min-width: 220px; }
 .rc-pick-menu .tab-menu-item.is-current { color: #1E3A66; font-weight: 600; }
-.rc-strip-profit { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rc-strip-profit { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .rc-cell.is-hi { background: #F4F6FA; }
 .rc-cell.is-red .rc-cell-n { color: #9F2F2D; }
 .rc-two { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }

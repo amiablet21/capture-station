@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.24 highlights
+
+- **Pending returns are not costed yet** (owner: "if a return is pending, why would you deduct from the profit just yet?"). A refunded unit inside its window (45 days seller, Walmart's 90 days or the 135-day filing window for WFS, a case open, or parked) keeps its cost out of Cost of goods and shows in a new **At risk** cell instead. It is costed the day the window closes with no case, when it is marked lost or written off, or when Walmart pays instead. Back in stock and Never shipped work as before. Each PO's line in the SKU drop-down says which it is.
+- **Goods sold, avg price and commission count priced orders only.** Periods imported before the price columns existed, with no archive on hand, used to drag goods sold down while their payout counted in full (September read Walmart paid $903k against $545k goods sold). The strip now says "N of M orders priced, re-import the rest" and the By period tab marks those periods.
+- The two Profit charts are gone (owner: "not even necessary").
+
 ## v1.32.23 highlights
 
 - **Units sorts least to greatest** on the first click (owner's ask); a second click flips it. Money and Days left keep their own first directions.

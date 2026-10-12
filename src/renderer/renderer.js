@@ -1805,79 +1805,6 @@ function rcRenderScopeSeg(el, scope, key) {
     return `<button type="button" data-rcscope="${k}" class="${on ? 'is-on' : ''}" title="${more ? 'Pick another' : ''}">${esc(on && cur ? cur[1] : label)}${more ? '<span class="rc-seg-caret"></span>' : ''}</button>`;
   }).join('');
 }
-// SVG helpers for the two charts (attributes only — the CSP forbids inline
-// styles): a bar has a 4px rounded data-end and a square baseline
-const rcSvg = (tag, attrs, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
-function rcBarPath(x, y, w, h, dir) {
-  const r = Math.min(4, w / 2, h / 2);
-  if (dir === 'right') return `M${x},${y} H${x + w - r} a${r},${r} 0 0 1 ${r},${r} V${y + h - r} a${r},${r} 0 0 1 -${r},${r} H${x} Z`;
-  return `M${x + w},${y} H${x + r} a${r},${r} 0 0 0 -${r},${r} V${y + h - r} a${r},${r} 0 0 0 ${r},${r} H${x + w} Z`;
-}
-const RC_NAVY = '#1E3A66', RC_RED = '#9F2F2D', RC_PALE = '#7B93BD';
-const rcSvgWidth = (svg, min) => Math.max(min, (svg.parentElement && svg.parentElement.clientWidth) || 0);
-function rcSvgNote(svg, text) {
-  svg.setAttribute('height', 48);
-  svg.appendChild(rcSvg('text', { x: 0, y: 28, class: 'note' }, text));
-}
-// where each dollar of goods sold went: cost of goods, refunds and fees,
-// commission, profit — cents per dollar, one hue, profit emphasised
-function rcDrawDollar(p) {
-  const svg = $('rcDollarChart'); const sub = $('rcDollarSub');
-  svg.innerHTML = '';
-  if (!(p.gross > 0)) { sub.textContent = ''; rcSvgNote(svg, 'Needs the goods price — re-import this period on the Import screen.'); return; }
-  // the new report layout carries no commission line: it then sits inside
-  // refunds & fees rather than showing as 0.0¢
-  const known = p.commissionPct != null;
-  const comm = known ? Math.abs(p.commission || 0) : 0;
-  const fees = Math.max(0, p.gross - comm - p.payout);
-  const rows = [['Cost of goods', p.cogs], [known ? 'Refunds & fees' : 'Commission, refunds & fees', fees], ...(known ? [['Commission', comm]] : []), ['Profit', p.profit]];
-  sub.textContent = `share of ${rcMoney(p.gross)} goods sold`;
-  const W = rcSvgWidth(svg, 420), left = 176, right = 150, top = 6, gap = 38, bh = 20;
-  const H = top + rows.length * gap + 2;
-  svg.setAttribute('width', W); svg.setAttribute('height', H);
-  const pw = W - left - right; const max = Math.max(1, ...rows.map(r => Math.abs(r[1])));
-  rows.forEach(([label, v], i) => {
-    const y = top + i * gap + 8; const w = Math.max(2, (Math.abs(v) / max) * pw); const hi = label === 'Profit';
-    const g = rcSvg('g', {});
-    g.appendChild(rcSvg('title', {}, `${label}: ${(v < 0 ? '−' : '') + rcMoney(v)} · ${(Math.abs(v) / p.gross * 100).toFixed(1)}% of goods sold`));
-    g.appendChild(rcSvg('text', { x: left - 12, y: y + bh / 2 + 4, 'text-anchor': 'end', class: hi ? 'val' : 'ax' }, label));
-    g.appendChild(rcSvg('path', { d: rcBarPath(left, y, w, bh, 'right'), fill: hi ? (v < 0 ? RC_RED : RC_NAVY) : RC_PALE }));
-    g.appendChild(rcSvg('text', { x: left + w + 8, y: y + bh / 2 + 4, class: 'val mono' }, `${(v / p.gross * 100).toFixed(1)}%`));
-    g.appendChild(rcSvg('text', { x: left + w + 50, y: y + bh / 2 + 4, class: 'ax mono' }, (v < 0 ? '−' : '') + rcMoney(v)));
-    svg.appendChild(g);
-  });
-  svg.appendChild(rcSvg('line', { x1: left, x2: left, y1: top, y2: top + rows.length * gap, class: 'base' }));
-}
-// profit by SKU: the top earners in navy to the right, the losers in red
-// to the left of one baseline; a bar click finds the SKU in the table
-function rcDrawSkus(p) {
-  const svg = $('rcSkuChart'); const sub = $('rcSkuSub');
-  svg.innerHTML = '';
-  const costed = p.skus.filter(g => g.costKnown);
-  const top = costed.slice().sort((a, b) => b.profit - a.profit).slice(0, 6).filter(g => g.profit > 0);
-  const bottom = costed.slice().sort((a, b) => a.profit - b.profit).slice(0, 3).filter(g => g.profit < 0 && !top.includes(g)).reverse();
-  const rows = [...top, ...bottom];
-  if (!rows.length) { sub.textContent = ''; rcSvgNote(svg, 'Set costs on the Stock page to see profit by SKU.'); return; }
-  sub.textContent = `top ${top.length}${bottom.length ? ` and bottom ${bottom.length}` : ''} · click a bar to find the SKU below`;
-  const W = rcSvgWidth(svg, 420), left = Math.min(240, Math.round(W * 0.36)), right = 104, topPad = 2, gap = 24, bh = 14;
-  const H = topPad + rows.length * gap + 4;
-  svg.setAttribute('width', W); svg.setAttribute('height', H);
-  const pw = W - left - right;
-  const maxPos = Math.max(0, ...rows.map(g => g.profit)), maxNeg = Math.max(0, ...rows.map(g => -g.profit));
-  const scale = pw / ((maxPos + maxNeg) || 1); const zero = left + maxNeg * scale;
-  rows.forEach((g, i) => {
-    const y = topPad + i * gap + 4; const v = g.profit; const w = Math.max(2, Math.abs(v) * scale);
-    const grp = rcSvg('g', { class: 'bar', 'data-sku': g.sku });
-    grp.appendChild(rcSvg('title', {}, `${g.sku}: ${(v < 0 ? '−' : '') + rcMoney(v)} profit on ${rcPlural(g.unitsSold, 'unit')}${g.margin != null ? ` · ${rcPct(g.margin)} margin` : ''}`));
-    grp.appendChild(rcSvg('text', { x: left - 10, y: y + bh / 2 + 4, 'text-anchor': 'end', class: 'ax mono' }, g.sku.length > 30 ? g.sku.slice(0, 29) + '…' : g.sku));
-    grp.appendChild(rcSvg('path', { d: v >= 0 ? rcBarPath(zero, y, w, bh, 'right') : rcBarPath(zero - w, y, w, bh, 'left'), fill: v >= 0 ? RC_NAVY : RC_RED }));
-    grp.appendChild(rcSvg('text', { x: zero + (v >= 0 ? w + 8 : 8), y: y + bh / 2 + 4, class: 'val mono', fill: v < 0 ? RC_RED : '#2F3437' }, (v < 0 ? '−' : '') + rcMoney(v)));
-    svg.appendChild(grp);
-  });
-  svg.appendChild(rcSvg('line', { x1: zero, x2: zero, y1: topPad, y2: topPad + rows.length * gap, class: 'base' }));
-}
-// the drop-down under a SKU row (owner 2026-10-12): every refund, then the
-// sales — a few at first, all on "show all"
 function rcProfitLines(g) {
   const lines = g.lines || [];
   const all = rc.profitOpenAll.has(g.sku);
@@ -1902,7 +1829,6 @@ function rcRenderProfit() {
   const p = rc.profit;
   rcRenderScopeSeg($('rcProfitScope'), rc.profitScope, rcScopeKey(rc.profitScope, 'profit'));
   $('rcProfitStrip').hidden = !p;
-  $('rcProfitCharts').hidden = !p;
   if (!p) {
     $('rcProfitStrip').innerHTML = '';
     $('rcProfitTabs').innerHTML = '';
@@ -1911,7 +1837,6 @@ function rcRenderProfit() {
     return;
   }
   const signed = (v) => (v < 0 ? '−' : '') + rcMoney(v);
-  const notBack = Math.max(0, p.unitsRefunded - p.unitsBack);
   // against the period before this one (by period start), when one exists
   let delta = '';
   if (rc.profitScope === 'cycle') {
@@ -1922,15 +1847,18 @@ function rcRenderProfit() {
   }
   const cell = (label, v, sub, cls = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
   const priced = p.gross > 0;
+  const partly = priced && p.priced && p.priced.unpriced > 0;
+  const costSub = [p.lostUnits ? `${p.lostUnits} lost ${p.lostUnits === 1 ? 'unit' : 'units'} costed` : '', p.atRisk && p.atRisk.units ? `${p.atRisk.units} pending, not costed` : ''].filter(Boolean).join(' · ') || `${p.unitsBack} back in stock · cost recovered`;
   $('rcProfitStrip').innerHTML = [
-    cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced ? `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.gross / Math.max(1, p.unitsSold))}` : `${rcPlural(p.unitsSold, 'unit')} · price not in this period yet`),
+    cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
+      ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
+      : `${rcPlural(p.unitsSold, 'unit')} · price not in this period yet`),
     cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
-    cell('Cost of goods', rcMoney(p.cogs), notBack ? `${notBack} refunded ${notBack === 1 ? 'unit' : 'units'} not back, still costed` : `${p.unitsBack} back in stock · cost recovered`),
+    cell('Cost of goods', rcMoney(p.cogs), costSub),
+    cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
     cell('Profit', signed(p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin' : 'no margin yet'}${delta}`, 'is-hi' + (p.profit < 0 ? ' is-red' : '')),
     cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid uncounted` : 'every listing is costed'),
   ].join('');
-  rcDrawDollar(p);
-  rcDrawSkus(p);
 
   $('rcProfitTabs').innerHTML = [['sku', 'By SKU', p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
@@ -1964,7 +1892,7 @@ function rcRenderProfit() {
     const periods = s ? rcSortRows(p.periods, s, 'label') : p.periods;
     const body = periods.length ? periods.map((x, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
-      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? (x.missingCount ? `<div class="rc-item-sub">${rcPlural(x.missingCount, 'order')} with no cost set</div>` : '') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
+      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? [x.missingCount ? `${rcPlural(x.missingCount, 'order')} with no cost set` : '', x.priced === false ? 'no goods price — re-import this period' : ''].filter(Boolean).map(t => `<div class="rc-item-sub">${t}</div>`).join('') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
       <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
       <td class="is-right">${money(x.payout)}</td><td class="is-right">${money(x.cogs)}</td>
       <td class="is-right ${x.profit < 0 ? 'rc-neg' : ''}">${money(x.profit)}</td><td class="is-right">${rcPct(x.margin)}</td>
@@ -2390,17 +2318,6 @@ $('rcPickDlg').addEventListener('click', async (e) => {
   if (scope === 'month') rc.profitMonth = v; else if (scope === 'year') rc.profitYear = v;
   await rcLoadProfit();
   rcRenderProfit();
-});
-$('rcSkuChart').addEventListener('click', (e) => {
-  const g = e.target.closest('[data-sku]');
-  if (!g) return;
-  rc.profitQ = g.dataset.sku; $('rcProfitSearch').value = rc.profitQ; rc.profitTab = 'sku';
-  rcRenderProfit();
-});
-let rcResizeT = 0;
-window.addEventListener('resize', () => {
-  clearTimeout(rcResizeT);
-  rcResizeT = setTimeout(() => { if (activePage === 'recovery' && rc.sub === 'profit' && rc.profit) { rcDrawDollar(rc.profit); rcDrawSkus(rc.profit); } }, 120);
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
 $('rcProfitTable').addEventListener('click', (e) => {
