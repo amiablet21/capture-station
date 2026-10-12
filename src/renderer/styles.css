@@ -5321,11 +5321,16 @@ th:last-child > .col-grip { right: 0; }
 .rc-scope { margin-left: auto; display: inline-flex; background: #EFEEEA; border-radius: 8px; padding: 2px; }
 .rc-scope button { font-family: inherit; font-size: 12px; border: none; background: none; padding: 3px 10px; border-radius: 6px; color: #787774; cursor: pointer; line-height: 1.55; }
 .rc-scope button.is-on { background: #FFFFFF; color: #2F3437; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
-.rc-month { font-family: inherit; font-size: 12px; color: #2F3437; border: 1px solid #EAEAEA; border-radius: 6px; background: #FFFFFF; padding: 3px 8px; }
+.rc-month { font-family: inherit; font-size: 12px; color: #2F3437; border: 1px solid #EAEAEA; border-radius: 6px; background: #FFFFFF; padding: 3px 8px; min-width: 220px; max-width: 320px; }
+/* the picker's row is always there (visibility, not display) so the
+   headline under it never moves when the scope changes */
+.rc-pick-row { height: 30px; margin-top: 8px; display: flex; align-items: center; }
+.rc-pick-row .rc-month.is-idle { visibility: hidden; }
+.rc-headline { margin-top: 6px; }
 .rc-headline { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-top: 8px; }
 .rc-headline-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
 .rc-headline-sub { color: #787774; font-size: 16px; font-weight: 500; }
-.rc-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px 28px; margin-top: 20px; max-width: 1100px; }
+.rc-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 28px; margin-top: 20px; max-width: 1100px; min-height: 106px; align-content: start; }
 .rc-legend-item { display: flex; gap: 10px; }
 .rc-swatch { width: 10px; height: 10px; border-radius: 3px; margin-top: 5px; flex: none; }
 .rc-legend-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }

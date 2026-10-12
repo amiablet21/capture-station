@@ -249,6 +249,7 @@ function state() {
     items: visible.map((it) => ({ ...it, statusText: rnr.statusText(it), tab: rnr.filterOf(it) })),
     today: rnr.todayCounts(visible),
     months: monthKeys(items),
+    years: [...new Set(monthKeys(items).map((k) => k.slice(0, 4)))],
     settings: { email: cfg.email || '', webhookUrl: cfg.webhookUrl || '', archiveDir: archiveDir(), syncOn: !!(deps.retsync && deps.retsync.enabled()) },
     logRows,
   };
@@ -299,6 +300,11 @@ function scopeRows(scope, key, items) {
   const all = rnr.dedupeLedger(store.allLedger());
   if (scope === 'month') {
     return { txs: all.filter((t) => rnr.monthKeyOf(t.date) === key), items: items.filter((i) => rnr.monthKeyOf(i.refundDate) === key), label: monthLabel(String(key)) };
+  }
+  if (scope === 'year') {
+    const y = String(key);
+    const yr = (d) => { const k = rnr.monthKeyOf(d); return k ? k.slice(0, 4) : null; };
+    return { txs: all.filter((t) => yr(t.date) === y), items: items.filter((i) => yr(i.refundDate) === y), label: y };
   }
   return { txs: all, items, label: 'all time' };
 }
@@ -387,6 +393,11 @@ function profit(scope, key) {
     orders = store.allOrders().filter((o) => rnr.monthKeyOf(o.date) === key);
     ledger = rnr.dedupeLedger(store.allLedger()).filter((t) => rnr.monthKeyOf(t.date) === key);
     label = monthLabel(String(key));
+  } else if (scope === 'year') {
+    const yr = (d) => { const k = rnr.monthKeyOf(d); return k ? k.slice(0, 4) : null; };
+    orders = store.allOrders().filter((o) => yr(o.date) === String(key));
+    ledger = rnr.dedupeLedger(store.allLedger()).filter((t) => yr(t.date) === String(key));
+    label = String(key);
   } else {
     orders = store.allOrders();
     ledger = rnr.dedupeLedger(store.allLedger());

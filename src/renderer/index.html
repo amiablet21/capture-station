@@ -348,15 +348,19 @@
         <div id="rcNotReceived" class="rc-screen" hidden>
           <section class="rc-top">
             <div>
+              <!-- the filters keep one place: the switch on the label row, the
+                   picker (period / month / year) on a row of its own that
+                   never collapses, so nothing below moves (owner 2026-10-12) -->
               <div class="rc-label-row">
                 <div class="rc-label">Where the refund money went</div>
                 <div class="rc-scope" id="rcScope" role="group" aria-label="Scope">
                   <button type="button" data-rcscope="cycle" class="is-on">This period</button>
                   <button type="button" data-rcscope="month">Month</button>
+                  <button type="button" data-rcscope="year">Year</button>
                   <button type="button" data-rcscope="all">All time</button>
                 </div>
-                <select id="rcMonthPick" class="rc-month" aria-label="Month" hidden></select>
               </div>
+              <div class="rc-pick-row"><select id="rcMonthPick" class="rc-month" aria-label="Which period, month or year"></select></div>
               <div class="rc-headline"><span class="rc-headline-amt" id="rcRefunded">$0.00</span> <span class="rc-headline-sub" id="rcRefundedSub">refunded</span></div>
               <div class="rc-bar rc-bar-lg" id="rcMoneyBar"></div>
               <div class="rc-legend" id="rcLegend"></div>
@@ -391,10 +395,11 @@
                 <div class="rc-scope" id="rcProfitScope" role="group" aria-label="Scope">
                   <button type="button" data-rcscope="cycle" class="is-on">This period</button>
                   <button type="button" data-rcscope="month">Month</button>
+                  <button type="button" data-rcscope="year">Year</button>
                   <button type="button" data-rcscope="all">All time</button>
                 </div>
-                <select id="rcProfitMonth" class="rc-month" aria-label="Month" hidden></select>
               </div>
+              <div class="rc-pick-row"><select id="rcProfitMonth" class="rc-month" aria-label="Which period, month or year"></select></div>
               <div class="rc-headline"><span class="rc-headline-amt" id="rcProfitAmt">$0.00</span> <span class="rc-headline-sub" id="rcProfitSub">profit</span></div>
               <div class="rc-bar rc-bar-lg" id="rcProfitBar"></div>
               <div class="rc-legend" id="rcProfitLegend"></div>

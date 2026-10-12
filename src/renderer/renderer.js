@@ -1637,7 +1637,38 @@ const rc = {
   data: null, run: null, runId: null, sub: 'reconcile', bucket: 'notReceived', tab: 'todo', type: '', q: '',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
   profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '',
+  year: '', profitYear: '',
 };
+// the key a scope reads: the selected period, the chosen month or year
+function rcScopeKey(scope, which) {
+  if (scope === 'cycle') return rc.runId;
+  if (scope === 'month') {
+    const months = (rc.data && rc.data.months) || [];
+    const cur = which === 'profit' ? rc.profitMonth : rc.month;
+    const k = months.includes(cur) ? cur : (months[0] || '');
+    if (which === 'profit') rc.profitMonth = k; else rc.month = k;
+    return k;
+  }
+  if (scope === 'year') {
+    const years = (rc.data && rc.data.years) || [];
+    const cur = which === 'profit' ? rc.profitYear : rc.year;
+    const k = years.includes(cur) ? cur : (years[0] || '');
+    if (which === 'profit') rc.profitYear = k; else rc.year = k;
+    return k;
+  }
+  return null;
+}
+// the picker under the switch: periods, months or years for the scope;
+// idle (invisible, same height) for all time
+const RC_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function rcFillPick(sel, scope, key) {
+  let opts = [];
+  if (scope === 'cycle') opts = ((rc.data && rc.data.runs) || []).map(r => [r.id, rcPeriodName(r.label)]);
+  else if (scope === 'month') opts = ((rc.data && rc.data.months) || []).map(k => [k, `${RC_MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`]);
+  else if (scope === 'year') opts = ((rc.data && rc.data.years) || []).map(y => [y, y]);
+  sel.classList.toggle('is-idle', scope === 'all' || !opts.length);
+  sel.innerHTML = opts.map(([v, label]) => `<option value="${esc(v)}" ${v === key ? 'selected' : ''}>${esc(label)}</option>`).join('');
+}
 const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const rcMoney = (n) => '$' + Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const rcPlural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
@@ -1697,13 +1728,7 @@ async function rcLoad() {
 
 async function rcLoadProfit(seq = rc.seq) {
   if (!rc.data) return;
-  let key = null;
-  if (rc.profitScope === 'cycle') key = rc.runId;
-  else if (rc.profitScope === 'month') {
-    const months = rc.data.months || [];
-    if (!months.includes(rc.profitMonth)) rc.profitMonth = months[0] || '';
-    key = rc.profitMonth;
-  }
+  const key = rcScopeKey(rc.profitScope, 'profit');
   if (rc.profitScope !== 'all' && !key) { rc.profit = null; return; }
   const p = await api.recoveryProfit(rc.profitScope, key).catch(() => null);
   if (seq !== rc.seq) return;
@@ -1712,14 +1737,8 @@ async function rcLoadProfit(seq = rc.seq) {
 
 async function rcLoadSummary(seq = rc.seq) {
   if (!rc.data) return;
-  let key = null;
-  if (rc.scope === 'cycle') key = rc.runId;
-  else if (rc.scope === 'month') {
-    const months = rc.data.months || [];
-    if (!months.includes(rc.month)) rc.month = months[0] || '';
-    key = rc.month;
-  }
-  if ((rc.scope === 'cycle' && !key) || (rc.scope === 'month' && !key)) { rc.summary = null; return; }
+  const key = rcScopeKey(rc.scope, 'money');
+  if (rc.scope !== 'all' && !key) { rc.summary = null; return; }
   const s = await api.recoverySummary(rc.scope, key).catch(() => null);
   if (seq !== rc.seq) return;
   rc.summary = s && s.ok ? s : null;
@@ -1750,14 +1769,8 @@ function rcRenderProfit() {
   if (rc.sub !== 'profit') return;
   const p = rc.profit;
   for (const b of $('rcProfitScope').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.rcscope === rc.profitScope);
-  const months = (rc.data && rc.data.months) || [];
-  const pick = $('rcProfitMonth');
-  pick.hidden = rc.profitScope !== 'month' || !months.length;
-  if (!pick.hidden) {
-    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    pick.innerHTML = months.map(k => `<option value="${esc(k)}" ${k === rc.profitMonth ? 'selected' : ''}>${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}</option>`).join('');
-  }
-  $('rcProfitCardLabel').textContent = { cycle: 'This period', month: 'This month', all: 'All time' }[rc.profitScope];
+  rcFillPick($('rcProfitMonth'), rc.profitScope, rcScopeKey(rc.profitScope, 'profit'));
+  $('rcProfitCardLabel').textContent = { cycle: 'This period', month: 'This month', year: 'This year', all: 'All time' }[rc.profitScope];
   if (!p) {
     $('rcProfitAmt').textContent = '$0.00';
     $('rcProfitSub').textContent = 'profit · no period imported';
@@ -1917,13 +1930,7 @@ function rcRenderBucket() {
 function rcRenderSummary() {
   const s = rc.summary;
   for (const b of $('rcScope').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.rcscope === rc.scope);
-  const months = (rc.data && rc.data.months) || [];
-  const pick = $('rcMonthPick');
-  pick.hidden = rc.scope !== 'month' || !months.length;
-  if (!pick.hidden) {
-    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    pick.innerHTML = months.map(k => `<option value="${esc(k)}" ${k === rc.month ? 'selected' : ''}>${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}</option>`).join('');
-  }
+  rcFillPick($('rcMonthPick'), rc.scope, rcScopeKey(rc.scope, 'money'));
   if (!s) {
     $('rcRefunded').textContent = '$0.00';
     $('rcRefundedSub').textContent = rc.scope === 'cycle' ? 'refunded · no period imported' : 'refunded';
@@ -2179,7 +2186,13 @@ $('rcProfitScope').addEventListener('click', async (e) => {
   await rcLoadProfit();
   rcRenderProfit();
 });
-$('rcProfitMonth').addEventListener('change', async () => { rc.profitMonth = $('rcProfitMonth').value; await rcLoadProfit(); rcRenderProfit(); });
+$('rcProfitMonth').addEventListener('change', async () => {
+  const v = $('rcProfitMonth').value;
+  if (rc.profitScope === 'cycle') { rc.runId = v; rc.profit = null; await rcLoad(); return; }
+  if (rc.profitScope === 'month') rc.profitMonth = v; else if (rc.profitScope === 'year') rc.profitYear = v;
+  await rcLoadProfit();
+  rcRenderProfit();
+});
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rcRenderProfit(); } });
 $('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
 $('rcProfitExcelBtn').addEventListener('click', async () => {
@@ -2243,7 +2256,13 @@ $('rcScope').addEventListener('click', async (e) => {
   await rcLoadSummary();
   rcRenderSummary();
 });
-$('rcMonthPick').addEventListener('change', async () => { rc.month = $('rcMonthPick').value; await rcLoadSummary(); rcRenderSummary(); });
+$('rcMonthPick').addEventListener('change', async () => {
+  const v = $('rcMonthPick').value;
+  if (rc.scope === 'cycle') { rc.runId = v; rc.profit = null; await rcLoad(); return; }
+  if (rc.scope === 'month') rc.month = v; else if (rc.scope === 'year') rc.year = v;
+  await rcLoadSummary();
+  rcRenderSummary();
+});
 $('rcListTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rctab]');
   if (b) { rc.tab = b.dataset.rctab; rcRenderList(); }
