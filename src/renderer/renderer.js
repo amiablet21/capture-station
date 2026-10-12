@@ -1638,7 +1638,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, reconcileSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -1856,11 +1856,13 @@ function rcRenderProfit() {
     cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
-    cell('Profit', signed(p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin' : 'no margin yet'}${delta}`, 'is-hi' + (p.profit < 0 ? ' is-red' : '')),
-    cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid uncounted` : 'every listing is costed'),
+    cell('Profit', signed(p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin on costed orders' : 'no costed order yet'}${delta}`, 'is-hi' + (p.profit < 0 ? ' is-red' : '')),
+    cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid, left out of profit` : 'every listing is costed'),
   ].join('');
 
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
+  $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
+  $('rcProfitGroup').innerHTML = [['lw', 'Linnworks SKU'], ['wm', 'Walmart SKU']].map(([k, label]) => `<button type="button" data-rcgroup="${k}" class="${rc.profitGroup === k ? 'is-on' : ''}">${label}</button>`).join('');
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
@@ -1868,13 +1870,16 @@ function rcRenderProfit() {
   if (rc.profitTab === 'sku') {
     const q = rc.profitQ.toLowerCase();
     const s = rc.profitSort;
-    const rows = rcSortRows(p.skus.filter(g => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q)), s, 'payout');
-    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
+    const byLw = rc.profitGroup === 'lw';
+    const hit = (g) => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q);
+    // grouped by Linnworks SKU (owner 2026-10-12): a group matches the search
+    // when it or any of its listings does
+    const base = byLw ? (p.groups || []).filter(x => hit(x) || x.listings.some(hit)) : p.skus.filter(hit);
+    const rows = rcSortRows(base, s, 'payout');
+    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
-    const body = rows.length ? rows.map((g, i) => `<tr class="${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
-      <td class="rc-g">${i + 1}</td>
-      <td class="rc-item" title="${esc(g.item || '')}"><button type="button" class="rc-caret-btn ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}" data-rctoggle="${esc(g.sku)}" aria-label="Show this SKU's POs"><span class="rc-caret"></span></button><span class="rc-sku">${esc(g.sku)}</span></td>
+    const cells = (g) => `
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
@@ -1882,8 +1887,22 @@ function rcRenderProfit() {
       <td class="is-right">${money(g.payout)}</td>
       <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
-      <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>
-    </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+      <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
+    const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
+    // a Walmart listing row: its own caret opens its POs
+    const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
+      <td class="rc-g">${nested ? '' : i + 1}</td>
+      <td class="rc-item" title="${esc(g.item || '')}">${caret(g.sku, "Show this SKU's POs")}<span class="rc-sku">${esc(g.sku)}</span></td>${cells(g)}
+    </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
+    const group = (x, i) => {
+      const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
+      const note = x.mapped ? `${rcPlural(x.listings.length, 'Walmart listing')}` : 'not in the Pricing map';
+      return `<tr class="rc-group ${open ? 'is-open' : ''}">
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span><span class="rc-group-note">${note}</span></td>${cells(x)}
+    </tr>${open ? x.listings.filter(g => !q || hit(g) || hit(x)).map(g => listing(g, 0, true)).join('') : ''}`;
+    };
+    const body = rows.length ? rows.map((g, i) => (byLw ? group(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
   } else {
     const s = rc.profitSort;
@@ -2320,6 +2339,7 @@ $('rcPickDlg').addEventListener('click', async (e) => {
   rcRenderProfit();
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
+$('rcProfitGroup').addEventListener('click', (e) => { const b = e.target.closest('[data-rcgroup]'); if (b) { rc.profitGroup = b.dataset.rcgroup; rc.profitSort = null; rcRenderProfit(); } });
 $('rcProfitTable').addEventListener('click', (e) => {
   const tog = e.target.closest('[data-rctoggle]');
   if (tog) { const k = tog.dataset.rctoggle; if (rc.profitOpen.has(k)) { rc.profitOpen.delete(k); rc.profitOpenAll.delete(k); } else rc.profitOpen.add(k); rcRenderProfit(); return; }

@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.26 highlights
+
+- **Profit grouped by Linnworks SKU** (owner: "organize it by Linnworks channel SKU"). The By SKU table now lists Linnworks SKUs from the Pricing page's channel map, with the totals of every Walmart listing under them. Open a group for its listings, open a listing for its POs. A listing the map does not know stays on its own row marked "not in the Pricing map". A pill in the tab row switches to the flat Walmart SKU view. The workbook's By SKU sheet gains a Linnworks SKU column.
+- **Profit and margin count costed orders only** (owner: "why are my margins so high"). Payout from a listing with no cost set used to land in Profit as if it were pure margin ($170,664 of it in one period). It is now left out and reported in the No cost set cell; the margin is profit over the payout of costed orders. The By period tab and workbook follow the same rule.
+
 ## v1.32.25 highlights
 
 - **Goods price found in every archive folder.** A period imported before sync moved the archive folder (or on a computer whose Documents folder holds the file) showed "price not in this period yet" because the backfill looked in one folder only. It now checks the current folder, the Documents folder and the shared folder, and looks again on every refresh, so turning sync on or copying a statement in fills the price without a restart. A period still without a file says so on the strip and the By period tab: re-import it on the Import screen.

@@ -462,6 +462,17 @@ function profit(scope, key) {
     const viaMap = inv ? costs[String(inv).toUpperCase()] : null;
     return viaMap && Number.isFinite(Number(viaMap.cost)) ? Number(viaMap.cost) : null;
   };
+  // the Linnworks (inventory) SKU behind a Walmart listing, from the Pricing
+  // page's channel map (owner 2026-10-12: "organize it by Linnworks channel
+  // SKU"); a listing that is itself an inventory SKU maps to itself, one the
+  // map does not know stays on its own
+  const invSku = (sku) => {
+    const k = String(sku || '').trim().toUpperCase();
+    if (!k) return '';
+    if (chan.get(k)) return String(chan.get(k));
+    if (costs[k]) return String(costs[k].sku || sku).trim() || String(sku).trim();
+    return '';
+  };
 
   // the orders and the non-order ledger lines in scope
   let orders; let ledger; let label;
@@ -552,7 +563,7 @@ function profit(scope, key) {
     g.gross += gross; if (isPriced) g.pricedUnits += o.saleUnits; if (comm !== null) { g.commission += comm; g.commGross += gross; g.commissionKnown = true; }
   }
   const skus = [...bySku.values()].map((g) => ({
-    ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
+    ...g, inv: invSku(g.sku), payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
     // refunds first, then newest sale first
     lines: g.lines.slice().sort((a, b) => (b.refundUnits > 0) - (a.refundUnits > 0) || String(b.date).localeCompare(String(a.date))),
     // the goods price per unit sold and Walmart's cut of it, from the
@@ -562,31 +573,53 @@ function profit(scope, key) {
     commissionPct: g.commissionKnown && g.commGross > 0 ? Math.round((-g.commission / g.commGross) * 1000) / 10 : null,
     margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
+  // the same listings grouped under their Linnworks SKU; an unmapped
+  // listing is a group of one, flagged so the owner can map it on Pricing
+  const byInv = new Map();
+  for (const g of skus) {
+    const key = g.inv || g.sku; const mapped = !!g.inv;
+    if (!byInv.has(key)) byInv.set(key, { sku: key, mapped, listings: [], item: '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, unitCost: null, costKnown: false });
+    const x = byInv.get(key);
+    x.listings.push(g); if (!x.item && g.item) x.item = g.item;
+    for (const f of ['orders', 'unitsSold', 'unitsRefunded', 'unitsBack', 'unitsPending', 'unitsLost', 'atRisk', 'payout', 'cogs', 'gross', 'commission', 'pricedUnits', 'commGross']) x[f] += g[f] || 0;
+    if (g.commissionKnown) x.commissionKnown = true;
+    if (g.costKnown) { x.costKnown = true; if (x.unitCost === null) x.unitCost = g.unitCost; }
+  }
+  const groups = [...byInv.values()].map((x) => ({
+    ...x, payout: r2(x.payout), cogs: r2(x.cogs), atRisk: r2(x.atRisk), gross: r2(x.gross), commission: r2(x.commission), profit: r2(x.payout - x.cogs),
+    avgPrice: x.pricedUnits > 0 && x.gross > 0 ? r2(x.gross / x.pricedUnits) : null,
+    commissionPct: x.commissionKnown && x.commGross > 0 ? Math.round((-x.commission / x.commGross) * 1000) / 10 : null,
+    margin: x.costKnown && x.payout > 0 ? Math.round(((x.payout - x.cogs) / x.payout) * 1000) / 10 : null,
+    listings: x.listings.slice().sort((a, b) => b.payout - a.payout),
+  })).sort((a, b) => b.payout - a.payout);
   // Walmart lines that belong to no order: storage, ads, WFS inventory
   // adjustments… but never the transfers to the bank or the summary line
   // (a real report carried −$197,100 of Instant Transfers, 2026-10-12)
   const other = r2(ledger.filter((t) => !String(t.po || '').trim() && !/transfer|paymentsummary|payout/i.test(String(t.type || ''))).reduce((a, t) => a + (Number(t.amount) || 0), 0));
-  const profitV = r2(tot.payout - tot.cogs);
+  // profit is measured on the orders that have a cost: payout from a
+  // listing with no cost set is reported beside it, never counted as profit
+  // (owner 2026-10-12: "why are my margins so high")
+  const profitV = r2(tot.costedPayout - tot.cogs);
 
   // every period, for the trend (newest first, by the period start)
   const periods = runs
     .map((r) => {
       const os = store.runOrders(r.id);
-      let payout = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false;
+      let payout = 0; let costed = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false;
       for (const o of os) {
         const cost = unitCost(o.sku);
         const { back, held } = standing(o);
         payout += o.netPayable; units += o.saleUnits; if (priced(o)) anyPriced = true;
-        if (cost === null) miss++; else { cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
+        if (cost === null) miss++; else { costed += o.netPayable; cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
       }
-      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), cogs: r2(cogs), profit: r2(payout - cogs), atRisk: r2(atRisk), priced: anyPriced, margin: payout > 0 ? Math.round(((payout - cogs) / payout) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
+      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), costedPayout: r2(costed), cogs: r2(cogs), profit: r2(costed - cogs), atRisk: r2(atRisk), priced: anyPriced, margin: costed > 0 ? Math.round(((costed - cogs) / costed) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
     })
     .sort((a, b) => periodStartMs({ label: b.label, ranAt: '' }) - periodStartMs({ label: a.label, ranAt: '' }));
 
   return {
     ok: true, scope, key, label,
     payout: r2(tot.payout), cogs: r2(tot.cogs), profit: profitV,
-    margin: tot.payout > 0 ? Math.round((profitV / tot.payout) * 1000) / 10 : null,
+    margin: tot.costedPayout > 0 ? Math.round((profitV / tot.costedPayout) * 1000) / 10 : null,
     orders: tot.orders, unitsSold: tot.unitsSold, unitsRefunded: tot.unitsRefunded, unitsBack: tot.unitsBack,
     gross: r2(tot.gross), commission: r2(tot.commission),
     commissionPct: tot.commissionKnown && tot.commGross > 0 ? Math.round((-tot.commission / tot.commGross) * 1000) / 10 : null,
@@ -595,7 +628,7 @@ function profit(scope, key) {
     atRisk: { amount: r2(tot.atRisk), units: tot.atRiskUnits, orders: tot.pendingOrders }, lostUnits: tot.lostUnits,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
     costedPayout: r2(tot.costedPayout), other, netAfterOther: r2(profitV + other),
-    skus, periods, missingRuns,
+    skus, groups, periods, missingRuns,
   };
 }
 
@@ -605,17 +638,17 @@ function profitWorkbook(scope, key) {
   const money = 'money';
   return { label: p.label, buffer: buildWorkbookSheets([
     { name: 'Summary', columns: [{ header: `Profit — ${p.label}`, width: 36, kind: 'text' }, { header: 'Amount', width: 16, kind: money }], rows: [
-      ['Walmart paid (orders net of fees and refunds)', p.payout], ['Cost of goods sold', p.cogs], ['Profit', p.profit], ['Margin %', p.margin ?? ''],
+      ['Walmart paid (orders net of fees and refunds)', p.payout], ['Walmart paid on costed orders', p.costedPayout], ['Cost of goods sold', p.cogs], ['Profit (costed orders)', p.profit], ['Margin %', p.margin ?? ''],
       ['Other Walmart lines (no order)', p.other], ['Net after other lines', p.netAfterOther],
       ['At risk (pending returns, not costed yet)', p.atRisk.amount], ['Units pending return', p.atRisk.units], ['Units lost (costed)', p.lostUnits],
       ['Orders', p.orders], ['Units sold', p.unitsSold], ['Units refunded', p.unitsRefunded], ['Units back in stock', p.unitsBack],
       ['Orders with no cost set', p.missing.orders], ['Their payout', p.missing.payout],
     ] },
     { name: 'By SKU', columns: [
-      { header: 'Walmart SKU', width: 26, kind: 'text' }, { header: 'Product', width: 48, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units sold', width: 10, kind: 'int' },
+      { header: 'Linnworks SKU', width: 24, kind: 'text' }, { header: 'Walmart SKU', width: 26, kind: 'text' }, { header: 'Product', width: 48, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units sold', width: 10, kind: 'int' },
       { header: 'Refunded', width: 9, kind: 'int' }, { header: 'Back in stock', width: 12, kind: 'int' }, { header: 'Avg price', width: 10, kind: money }, { header: 'Commission %', width: 12, kind: 'text' }, { header: 'Walmart paid', width: 14, kind: money }, { header: 'Unit cost', width: 10, kind: money },
       { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' },
-    ], rows: p.skus.map((g) => [g.sku, g.item, g.orders, g.unitsSold, g.unitsRefunded, g.unitsBack, g.avgPrice ?? '', g.commissionPct ?? '', g.payout, g.costKnown ? g.unitCost : '', g.costKnown ? g.cogs : '', g.costKnown ? g.profit : '', g.margin ?? (g.costKnown ? '' : 'no cost set')]) },
+    ], rows: p.skus.map((g) => [g.inv || '', g.sku, g.item, g.orders, g.unitsSold, g.unitsRefunded, g.unitsBack, g.avgPrice ?? '', g.commissionPct ?? '', g.payout, g.costKnown ? g.unitCost : '', g.costKnown ? g.cogs : '', g.costKnown ? g.profit : '', g.margin ?? (g.costKnown ? '' : 'no cost set')]) },
     { name: 'By period', columns: [
       { header: 'Period', width: 24, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units', width: 8, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money },
       { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' }, { header: 'Orders without cost', width: 18, kind: 'int' },

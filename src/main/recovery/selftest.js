@@ -193,6 +193,9 @@ module.exports = function run(check) {
     check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
     check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 0 && a.unitsBack === 1 && a.cogs === 0, a);
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
+    check('recovery: profit — the headline profit and margin leave uncosted payout out', pr.profit === Math.round((pr.costedPayout - pr.cogs) * 100) / 100 && Math.abs(pr.payout - pr.costedPayout - pr.missing.payout) < 0.01 && (pr.costedPayout <= 0 || pr.margin === Math.round((pr.profit / pr.costedPayout) * 1000) / 10), { profit: pr.profit, costed: pr.costedPayout, cogs: pr.cogs, missing: pr.missing.payout, margin: pr.margin });
+    const gz = pr.groups.find((x) => x.sku === 'INV-Z'); const ga = pr.groups.find((x) => x.sku === 'SKU-A'); const gb = pr.groups.find((x) => x.sku === 'SKU-B');
+    check('recovery: profit — listings grouped under their Linnworks SKU, unmapped ones on their own', gz && gz.mapped && gz.listings.length === 1 && gz.listings[0].sku === 'SKU-Z' && gz.payout === z.payout && gz.profit === z.profit && ga && ga.mapped && gb && !gb.mapped && z.inv === 'INV-Z', { gz, ga: ga && ga.mapped, gb: gb && gb.mapped, zinv: z && z.inv });
     check('recovery: profit — each SKU lists its POs with a situation', z && Array.isArray(z.lines) && z.lines.length === z.orders && z.lines.every((l) => l.po && l.situation && l.tone), z && z.lines);
     check('recovery: profit — goods price carried per order, commission unknown in the new layout', typeof pr.gross === 'number' && pr.gross > 0 && pr.commissionPct === null && z && z.avgPrice !== null, { gross: pr.gross, pct: pr.commissionPct, z });
     // the two Reconcile marks (v1.32.20)

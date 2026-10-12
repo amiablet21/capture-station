@@ -5550,6 +5550,17 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-profit tr.rc-subfoot td { background: #FBFBFA; color: #787774; font-size: 12px; height: 30px; padding-top: 4px; padding-bottom: 4px; }
 .rc-table-profit th:nth-child(n+3) { width: 8.6%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* grouped by Linnworks SKU (owner 2026-10-12): the group row carries the
+   totals, its Walmart listings sit indented beneath, each with its own POs */
+.rc-seg-sm button { padding: 3px 11px; font-size: 12px; }
+.rc-list-tools { display: flex; align-items: center; gap: 10px; }
+.rc-group-note { margin-left: 10px; font-size: 11.5px; color: #787774; font-weight: 400; }
+.rc-table-profit tr.rc-group td.rc-item .rc-sku { font-weight: 600; }
+.rc-table-profit tr.rc-listing td { background: #FBFBFA; }
+.rc-table-profit tr.rc-listing td.rc-item { padding-left: 34px; }
+.rc-table-profit tr.rc-listing td.rc-item .rc-sku { font-weight: 500; }
+.rc-table-profit tr.rc-listing.is-open td:not(.rc-g) { background: #F4F6FA; }
+.rc-table-profit tr.rc-listing + tr.rc-subhead td:nth-child(2), .rc-table-profit tr.rc-listing ~ tr.rc-subrow td:nth-child(2) { padding-left: 34px; }
 .rc-nocost { color: #A5A29C; font-family: var(--font); font-size: 11.5px; }
 .rc-neg { color: #9F2F2D; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }
