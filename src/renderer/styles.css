@@ -4664,7 +4664,8 @@ th:last-child > .col-grip { right: 0; }
 .ov-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
 .ov-sheet-row { display: flex; justify-content: center; align-items: stretch; flex: 1; min-height: 0; }
-.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 22px 28px 22px; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; }
+/* the Overview scales with the window like Recovery (owner 2026-10-12) */
+.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 22px 28px 22px; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; zoom: var(--page-scale, 1); }
 .ov-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
 .ov-refresh { align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .ov-refresh:hover { color: var(--text); background: var(--surface-2); }
@@ -5223,9 +5224,13 @@ th:last-child > .col-grip { right: 0; }
 .rc-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .rc-scroll { flex: 1; min-height: 0; overflow: auto; }
 /* owner 2026-10-12 ("everything just seems super condensed" on a 2000px
-   window): the design's 1100px / 13px ledger is scaled up as one piece —
-   every measurement keeps its ratio — and may use up to 1280px before it */
-.rc-main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; display: flex; flex-direction: column; gap: 32px; font-size: 13px; line-height: 1.55; color: #2F3437; zoom: 1.18; }
+   window, then "it should adjust to the monitor"): the design's 1100px /
+   13px ledger is scaled as one piece — every measurement keeps its ratio —
+   by --page-scale, which the renderer sets from the window width (1 at
+   1280px, about 1.2 at 2000px, 1.35 at most). Its dialogs ride the same
+   scale. The column may use 1280px of its own before it centers. */
+.rc-main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; display: flex; flex-direction: column; gap: 32px; font-size: 13px; line-height: 1.55; color: #2F3437; zoom: var(--page-scale, 1); }
+.rc-menu, .rc-dlg { zoom: var(--page-scale, 1); }
 .rc-screen { display: flex; flex-direction: column; gap: 32px; }
 
 /* page header: h1, the two underlined sub-tabs, the screen's primary button */

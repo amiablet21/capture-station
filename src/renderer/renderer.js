@@ -1575,6 +1575,22 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
   if (item) showPage(item.dataset.page);
 });
 
+/* ---------- page scale: Overview and Recovery grow with the window ---------- */
+// Owner 2026-10-12: those two pages read "super condensed" on a 2000px
+// monitor, and the size should follow the screen rather than be fixed. One
+// number, --page-scale, zooms each page as a whole: 1 at 1280px and below
+// (laptops keep the design's exact measurements), about 1.2 at 2000px,
+// 1.35 at most on very wide monitors.
+function pageScale() {
+  return Math.min(1.35, Math.max(1, 1 + (window.innerWidth - 1280) / 3600));
+}
+function applyPageScale() {
+  document.documentElement.style.setProperty('--page-scale', pageScale().toFixed(3));
+}
+applyPageScale();
+let pageScaleTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScaleTimer = setTimeout(applyPageScale, 80); });
+
 /* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
 // docs/recovery/SPEC.md §13 — two screens in one page. Reconcile: drop a
 // Seller Center → Payments report, the three buckets of the period and a
@@ -1989,6 +2005,20 @@ async function rcBrowse() {
   await rcImport(pick.name, pick.text, false);
 }
 
+// Place a menu under (or above) an anchor rect. The menu is zoomed by
+// --page-scale like the page, so its own px are window px / scale: sizes
+// are multiplied back and the final position divided before it is set.
+function rcAnchor(dlg, r) {
+  const z = pageScale();
+  const w = dlg.offsetWidth * z;
+  const h = dlg.offsetHeight * z;
+  const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+  const below = r.bottom + 4 + h <= window.innerHeight - 8;
+  const top = below ? r.bottom + 4 : Math.max(8, r.top - 4 - h);
+  dlg.style.left = `${Math.round(left / z)}px`;
+  dlg.style.top = `${Math.round(top / z)}px`;
+}
+
 /* ----- wiring ----- */
 for (const b of document.querySelectorAll('[data-rcsub]')) {
   b.addEventListener('click', () => { rc.sub = b.dataset.rcsub; if (rc.data) rcRender(); });
@@ -2072,10 +2102,7 @@ $('rcListTable').addEventListener('click', (e) => {
   dlg.innerHTML = rcMenuItems(it).map(m => `<button class="tab-menu-item ${m.danger ? 'is-danger' : ''}" data-rcact="${m.act}">${esc(m.label)}</button>`).join('');
   dlg.showModal();
   // anchored under the button; flips above it when the window ends first
-  const r = more.getBoundingClientRect();
-  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8)))}px`;
-  const below = r.bottom + 4 + dlg.offsetHeight <= window.innerHeight - 8;
-  dlg.style.top = `${Math.round(below ? r.bottom + 4 : Math.max(8, r.top - 4 - dlg.offsetHeight))}px`;
+  rcAnchor(dlg, more.getBoundingClientRect());
 });
 $('rcMenuDlg').addEventListener('click', (e) => {
   const item = e.target.closest('[data-rcact]');
@@ -2103,9 +2130,7 @@ $('rcNoteDlg').addEventListener('close', async () => {
 $('rcExportBtn').addEventListener('click', () => {
   const dlg = $('rcExportDlg');
   dlg.showModal();
-  const r = $('rcExportBtn').getBoundingClientRect();
-  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.right - dlg.offsetWidth, window.innerWidth - dlg.offsetWidth - 8)))}px`;
-  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
+  rcAnchor(dlg, $('rcExportBtn').getBoundingClientRect());
 });
 $('rcExportDlg').addEventListener('click', async (e) => {
   const item = e.target.closest('[data-rcexp]');
