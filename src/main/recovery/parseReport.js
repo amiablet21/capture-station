@@ -138,15 +138,23 @@ function parseRefunds(text) {
 // automatic lost-item reimbursement on Fee/Reimbursement (base $100, up to
 // the sale value, capped $500 if insured). The negative "Walmart Shipping
 // Label Service Charge" shares that Amount Type and is excluded by the sign.
-const SETTLEMENT_RX = /dispute|claim|reimbursement|shipping protection|payout/i;
+// Checked against a real Sep 19 – Oct 3 2026 report (2026-10-12): the
+// Walmart app's broad match (any "Fee/Reimbursement" amount type) also
+// caught "Refund for unused label" ($7–8 label credits) and the positive
+// reversals of "Walmart Shipping Label Service Charge", which would have
+// marked a return "paid back". A payout is now: a Dispute Settlement, a
+// claim payout (Shipping Protection), or a lost-item reimbursement — and
+// never a label, fee, storage, advertising or inventory line.
+const SETTLEMENT_RX = /dispute|claim payout|shipping protection|lost ?(item|inventory|in transit|after delivery)|reimbursement for lost/i;
+const NOT_SETTLEMENT_RX = /unused label|label service|fulfillment fee|processing fee|removal fee|storage|advertising|inbound|found ?inventory|wfs charge|wfs refund/i;
 
 function parsePayouts(rows, format) {
   const byPo = {};
   for (const r of rows) {
     const tt = String(r['Transaction Type'] ?? '');
     const desc = String(r['Transaction Description'] ?? r['Transaction Reason Description'] ?? '');
-    const at = String(r['Amount Type'] ?? '');
-    if (!SETTLEMENT_RX.test(tt) && !SETTLEMENT_RX.test(desc) && !SETTLEMENT_RX.test(at)) continue;
+    if (!SETTLEMENT_RX.test(tt) && !SETTLEMENT_RX.test(desc)) continue;
+    if (NOT_SETTLEMENT_RX.test(desc)) continue;
     const po = String((format === 'old' ? r['Purchase Order #'] : r['Walmart.com PO #']) ?? '').trim();
     if (!po) continue;
     const amount = toNum(format === 'old' ? r['Amount'] : r['Payable to Partner from Sale']);
@@ -263,4 +271,4 @@ function parseReport(text) {
   };
 }
 
-module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX };
+module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX, NOT_SETTLEMENT_RX };

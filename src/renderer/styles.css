@@ -5410,12 +5410,13 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-reconcile th:nth-child(3) { width: 13%; }
 .rc-table-reconcile th:nth-child(4) { width: 9%; }
 .rc-table-reconcile th:nth-child(5) { width: 13%; }
-.rc-table-list th:nth-child(1) { width: 13%; }
-.rc-table-list th:nth-child(2) { width: 29%; }
-.rc-table-list th:nth-child(3) { width: 10%; }
-.rc-table-list th:nth-child(4) { width: 8%; }
-.rc-table-list th:nth-child(5) { width: 8%; }
-.rc-table-list th:nth-child(7) { width: 150px; }
+.rc-table-list th:nth-child(1) { width: 12%; }
+.rc-table-list th:nth-child(2) { width: 5%; }
+.rc-table-list th:nth-child(3) { width: 23%; }
+.rc-table-list th:nth-child(4) { width: 9%; }
+.rc-table-list th:nth-child(5) { width: 7%; }
+.rc-table-list th:nth-child(6) { width: 8%; }
+.rc-table-list th:nth-child(8) { width: 150px; }
 .rc-table-profit th:nth-child(1) { width: 34%; }
 .rc-table-profit th:nth-child(n+2) { width: 11%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -5424,4 +5425,24 @@ th:last-child > .col-grip { right: 0; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }
 .rc-table td { overflow-wrap: anywhere; }
 .rc-table .rc-nowrap { white-space: normal; }
-.rc-table-list td:nth-child(6), .rc-table-reconcile td:nth-child(6) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-table-list td:nth-child(7), .rc-table-reconcile td:nth-child(6) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the two collapsible sections of Not received (the Walmart app's shape) */
+.rc-sec { background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 12px; overflow: hidden; }
+.rc-sec-head { display: flex; align-items: center; gap: 16px; padding: 14px 24px; flex-wrap: wrap; }
+.rc-sec.is-open .rc-sec-head { border-bottom: 1px solid #EAEAEA; }
+.rc-sec-title { font-family: inherit; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #2F3437; background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.rc-sec-caret { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #787774; transition: transform 150ms var(--ease); }
+.rc-sec:not(.is-open) .rc-sec-caret { transform: rotate(-90deg); }
+.rc-sec-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rc-sec-tools .rc-scope { margin-left: 0; }
+.rc-sec-tools .rc-month { min-width: 200px; }
+.rc-sec-body.rc-top { padding: 22px 24px 24px; }
+.rc-sec:not(.is-open) .rc-sec-body { display: none; }
+.rc-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 24px 12px; }
+.rc-chip { font-family: inherit; font-size: 12.5px; font-weight: 500; color: #787774; background: #F7F6F3; border: 1px solid #EAEAEA; border-radius: 999px; padding: 5px 13px; cursor: pointer; line-height: 1.5; }
+.rc-chip:hover { color: #2F3437; background: #EFEEEA; }
+.rc-chip.is-on { background: #1E3A66; border-color: #1E3A66; color: #FFFFFF; }
+.rc-chip .rc-chip-n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; margin-left: 4px; opacity: .85; }
+.rc-sec .rc-table-card { border: none; border-radius: 0; }
+.rc-sec .rc-top .rc-legend { max-width: none; }

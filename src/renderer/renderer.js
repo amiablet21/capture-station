@@ -1959,40 +1959,46 @@ function rcRenderToday() {
   ].map(([tone, x, label]) => `<div><div class="rc-num ${tone}">${x.count}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${rcMoney(x.total)}</div></div>`).join('');
 }
 
-const RC_TABS = [['todo', 'To do'], ['cases', 'Cases'], ['adjustments', 'Adjustments'], ['reimbursed', 'Reimbursed'], ['lost', 'Lost']];
+// the chips of the Walmart app: All is the un-actioned to-do, WFS and
+// Seller narrow it, then the states. Loss lists every item carrying lost
+// dollars (write-offs, partial gaps, lost-after-delivery), so the money
+// story's "lost" figure can be seen row by row (owner 2026-10-12).
+const RC_TABS = [['todo', 'All'], ['wfs', 'WFS'], ['seller', 'Seller'], ['cases', 'Open cases'], ['adjustments', 'Partial adjustments'], ['lost', 'Loss'], ['reimbursed', 'Reimbursed']];
+function rcInTab(it, tab) {
+  if (tab === 'todo') return it.tab === 'todo';
+  if (tab === 'wfs') return it.tab === 'todo' && it.type === 'WFS';
+  if (tab === 'seller') return it.tab === 'todo' && it.type !== 'WFS';
+  if (tab === 'lost') return it.tab === 'lost' || (it.lostAmount || 0) > 0;
+  return it.tab === tab;
+}
 function rcMatches(it) {
-  if (it.tab !== rc.tab) return false;
-  if (rc.type && it.type !== rc.type) return false;
+  if (!rcInTab(it, rc.tab)) return false;
   if (!rc.q) return true;
   const q = rc.q.toLowerCase();
   return [it.po, it.sku, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
 }
 function rcRenderList() {
   const items = rc.data.items || [];
-  const counts = {};
-  for (const it of items) counts[it.tab] = (counts[it.tab] || 0) + 1;
   $('rcListTabs').innerHTML = RC_TABS.map(([k, label]) => {
-    const on = rc.tab === k;
-    const n = counts[k] || 0;
-    return `<button type="button" class="rc-tab ${on ? 'is-active' : ''}" data-rctab="${k}">${label} <span class="rc-tab-count ${k === 'todo' && n ? 'is-red' : ''}">${n}</span></button>`;
+    const n = items.filter(it => rcInTab(it, k)).length;
+    return `<button type="button" class="rc-chip ${rc.tab === k ? 'is-on' : ''}" data-rctab="${k}">${label}<span class="rc-chip-n">(${n})</span></button>`;
   }).join('');
-  for (const b of document.querySelectorAll('.rc-toggle')) b.classList.toggle('is-on', rc.type === b.dataset.rctype);
   const rows = items.filter(rcMatches);
-  const head = '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Paid back</th><th>Status</th><th></th>';
+  const head = '<th>PO #</th><th>Type</th><th>Product</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Walmart paid</th><th>Status</th><th></th>';
   let body;
   if (rows.length) {
     body = rows.map(it => {
-      const sub = it.caseOpened
-        ? `${esc(it.type)} · <button type="button" class="rc-po-case" data-rcact="caseId" data-rcpo="${esc(it.po)}" title="Edit the case ID">${it.caseId ? `case ${esc(it.caseId)}` : 'add case ID'}</button>`
-        : esc(it.type);
+      const sub = `<button type="button" class="rc-po-case" data-rcact="caseId" data-rcpo="${esc(it.po)}" title="Edit the case ID">${it.caseId ? `case ${esc(it.caseId)}` : 'add case ID'}</button>`;
       const paid = it.settlementSeen != null
         ? `<span class="rc-paid" title="${esc(it.settlementDate ? `seen ${rcMonDay(it.settlementDate)}` : '')}${it.settlementKind ? ` · ${esc(it.settlementKind)}` : ''}">${rcMoney(it.settlementSeen)}</span>`
         : '<span class="rc-faint">—</span>';
       const st = it.statusText || { lead: it.status, clause: '', tone: 'grey', tooltip: '' };
       const note = it.note ? `<button type="button" class="rc-note-btn" title="${esc(it.note)}" data-rcact="note" data-rcpo="${esc(it.po)}">Note</button>` : '';
       const prim = rcPrimary(it);
+      const lostLine = rc.tab === 'lost' && it.lostAmount ? `<div class="rc-item-sub rc-neg">${rcMoney(it.lostAmount)} lost</div>` : '';
       return `<tr data-rcpo="${esc(it.po)}">
-        <td><div class="rc-po">${esc(it.po)}</div><div class="rc-po-sub">${sub}</div></td>
+        <td><div class="rc-po">${esc(it.po)}</div>${it.caseOpened ? `<div class="rc-po-sub">${sub}</div>` : ''}${lostLine}</td>
+        <td>${esc(it.type)}</td>
         <td class="rc-item">${rcSkuCell(it.sku, it.item, note)}</td>
         <td class="rc-nowrap"><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld}d</span>` : ''}</td>
         <td class="rc-mono is-right rc-nowrap">${rcMoney(it.amount)}</td>
@@ -2004,10 +2010,10 @@ function rcRenderList() {
   } else {
     const waiting = rc.data.today ? rc.data.today.waiting.count : 0;
     let msg;
-    if (rc.q || rc.type) msg = 'Nothing matches.';
-    else if (rc.tab === 'todo') msg = waiting ? `Nothing to file — ${rcPlural(waiting, 'return')} ${waiting === 1 ? 'is' : 'are'} waiting on Walmart.` : (items.length ? 'Nothing to file.' : 'Nothing is outstanding. Import a payment period on the Reconcile screen to check its refunds.');
-    else msg = { cases: 'No open cases.', adjustments: 'No partial adjustments.', reimbursed: 'Walmart has not paid anything back yet.', lost: 'Nothing written off.' }[rc.tab];
-    body = `<tr class="rc-empty-row"><td colspan="7">${esc(msg)}</td></tr>`;
+    if (rc.q) msg = 'Nothing matches.';
+    else if (rc.tab === 'todo' || rc.tab === 'wfs' || rc.tab === 'seller') msg = waiting ? `Nothing to file — ${rcPlural(waiting, 'return')} ${waiting === 1 ? 'is' : 'are'} waiting on Walmart.` : (items.length ? 'Nothing to file.' : 'Nothing not-received yet — import a payment period on the Reconcile screen and any returns that did not arrive will show up here.');
+    else msg = { cases: 'No open cases.', adjustments: 'No partial adjustments.', reimbursed: 'Walmart has not paid anything back yet.', lost: 'Nothing lost: no write-offs, no partial reimbursements, no lost-after-delivery refunds outstanding.' }[rc.tab];
+    body = `<tr class="rc-empty-row"><td colspan="8">${esc(msg)}</td></tr>`;
   }
   $('rcListTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
@@ -2267,9 +2273,32 @@ $('rcListTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rctab]');
   if (b) { rc.tab = b.dataset.rctab; rcRenderList(); }
 });
-for (const b of document.querySelectorAll('.rc-toggle')) {
-  b.addEventListener('click', () => { rc.type = rc.type === b.dataset.rctype ? '' : b.dataset.rctype; rcRenderList(); });
+// the two sections fold on their title; the choice is remembered per desktop
+const RC_SECS = { summary: 'rcSecSummary', list: 'rcSecList' };
+function rcApplySecs() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('rcSecs') || '{}'); } catch { /* defaults */ }
+  for (const [k, id] of Object.entries(RC_SECS)) {
+    const open = saved[k] !== false;
+    $(id).classList.toggle('is-open', open);
+    $(id).querySelector('.rc-sec-title').setAttribute('aria-expanded', String(open));
+  }
 }
+rcApplySecs();
+for (const b of document.querySelectorAll('[data-rcsec]')) {
+  b.addEventListener('click', () => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('rcSecs') || '{}'); } catch { /* defaults */ }
+    saved[b.dataset.rcsec] = !$(RC_SECS[b.dataset.rcsec]).classList.contains('is-open');
+    try { localStorage.setItem('rcSecs', JSON.stringify(saved)); } catch { /* best effort */ }
+    rcApplySecs();
+  });
+}
+$('rcSummaryExcelBtn').addEventListener('click', async () => {
+  if (!rc.summary) { toast('No scope to export yet.'); return; }
+  const r = await api.recoveryExportSummary(rc.scope, rcScopeKey(rc.scope, 'money')).catch(err => ({ ok: false, error: err.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+});
 $('rcSearch').addEventListener('input', () => { rc.q = $('rcSearch').value.trim(); rcRenderList(); });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
@@ -2324,7 +2353,7 @@ $('rcExportDlg').addEventListener('click', async (e) => {
   if (kind === 'csv') {
     const rows = (rc.data.items || []).filter(rcMatches);
     if (!rows.length) { toast('Nothing in this view to export.'); return; }
-    const label = `${RC_TABS.find(t => t[0] === rc.tab)[1]}${rc.type ? `_${rc.type}` : ''}`;
+    const label = RC_TABS.find(t => t[0] === rc.tab)[1];
     r = await api.recoveryExportCsv(rows.map(i => i.po), label).catch(err => ({ ok: false, error: err.message }));
   } else if (kind === 'summary') {
     if (!rc.summary) { toast('No scope to export yet.'); return; }

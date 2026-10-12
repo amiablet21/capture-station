@@ -125,6 +125,7 @@ module.exports = function run(check) {
     check('recovery: WFS inside 90 days waits', by['006'].wfsWaiting === true && by['006'].daysLeft === 85 && by['006'].needsAction === false, by['006']);
     check('recovery: sort = needs action first, then oldest refund', st.items[0].needsAction && st.items.findIndex((i) => !i.needsAction) > st.items.filter((i) => i.needsAction).length - 1);
     check('recovery: Today card counts', st.today.toFile.count === 3 && st.today.waiting.count === 4 && st.today.cases.count === 0, st.today);
+    check('recovery: a lost-after-delivery refund still outstanding counts as lost', st.items.find((i) => i.po === '010').lostAmount === 105.6 && st.items.find((i) => i.po === '011').lostAmount === 0);
 
     // status sentences (§6.6)
     check('recovery: status sentence — lost', rnr.statusText(by['010']).lead === 'Lost' && rnr.statusText(by['010']).clause === 'file now' && rnr.statusText(by['010']).tone === 'red');
@@ -157,21 +158,29 @@ module.exports = function run(check) {
       `"06/01/2026","06/14/2026","Adjustment","Walmart Shipping Label Service Charge","010","O10","${recent}","Tablet J","SKU-J","","-11.12","Fee/Reimbursement","","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Refund","","500","O500","${recent}","Tablet M","SKU-M","No Longer Wanted","-180.00","Product Price","1","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Dispute Settlement","Dispute won","001","O1","${recent}","Tablet A","SKU-A","","30.00","Fee/Reimbursement","","Seller Fulfilled"`,
+      `"06/01/2026","06/14/2026","Adjustment","Refund for unused label","003","O3","${recent}","Tablet C","SKU-C","","7.85","Fee/Reimbursement","","Seller Fulfilled"`,
+      `"06/01/2026","06/14/2026","Adjustment","Walmart Shipping Label Service Charge","003","O3","${recent}","Tablet C","SKU-C","","11.97","Fee/Reimbursement","","Seller Fulfilled"`,
+      `"06/01/2026","06/14/2026","Adjustment","Shipping Protection Claim Payout","011","O11","${recent}","Tablet K","SKU-K","","100.00","Fee/Reimbursement","","Walmart-fulfilled(WFS)"`,
+      `"06/01/2026","06/14/2026","Instant Transfer","Funds paid out upon request","","","${recent}","","","","-5000.00","Net Payable","",""`,
     ].join('\n');
     const p2 = parseReport.parseReport(payoutCsv);
     check('recovery: old-format payouts — positive credit kept, negative label charge dropped', p2.payouts['010'] && p2.payouts['010'].amount === 120.5 && p2.payouts['010'].kind === 'dispute' && !('500' in p2.payouts), p2.payouts);
+    check('recovery: an unused-label credit or a label-charge reversal is not a payout', !('003' in p2.payouts), p2.payouts);
+    check('recovery: a shipping-protection claim payout is', p2.payouts['011'] && p2.payouts['011'].amount === 100 && p2.payouts['011'].kind === 'adjustment', p2.payouts);
     const res2 = await recovery.importReport({ name: 'old_format_reconciliationreport.csv', text: payoutCsv });
     check('recovery: old-format import labels from its Period columns', res2.ok === true && res2.label === 'Jun 1 - Jun 14, 2026', res2);
     returns = [...returns, mk('002', 200, 'Open Box', 6)];
     st = recovery.state();
     check('recovery: settlement money makes 010 reimbursed with the payout visible', st.items.find((i) => i.po === '010').status === 'reimbursed' && st.items.find((i) => i.po === '010').settlementSeen === 120.5);
+    const k11 = st.items.find((i) => i.po === '011');
+    check('recovery: a $100 claim on a $124.80 lost item = partial, the gap is lost', k11.status === 'reimbursed' && k11.lostAmount === 24.8 && /24\.80 lost/.test(k11.statusText.clause), k11 && [k11.status, k11.lostAmount, k11.statusText]);
     check('recovery: a PO logged in the Returns log leaves the list', !st.items.some((i) => i.po === '002'));
     check('recovery: 500 joins the tracker from the second period', st.items.some((i) => i.po === '500' && i.sourceRunId === res2.id));
     check('recovery: runs sorted newest period first', st.runs[0].label === 'Jun 1 - Jun 14, 2026');
 
     // summaries (§8)
     const all = recovery.summary('all');
-    check('recovery: all-time refunds = 12 new-format rows + 1 old-format', all.returnsCount === 13 && all.reimbursed === 105.6 && all.loss === 72, all);
+    check('recovery: all-time refunds = 12 new-format rows + 1 old-format', all.returnsCount === 13 && all.reimbursed === 205.6 && all.loss === 96.8, all);
     check('recovery: dispute win on a received PO counted separately', all.disputeWinsCount === 1 && all.disputeWins === 30, all);
     const cyc = recovery.summary('cycle', res.id);
     check('recovery: this-period scope reads that run\'s own ledger', cyc.returnsCount === 12 && cyc.label === 'May 16 - May 30, 2026', cyc);
@@ -193,7 +202,7 @@ module.exports = function run(check) {
     const dg = recovery.digest();
     check('recovery: digest picks WFS dispute-open and seller <=10 days only (none here)', dg === null, dg && dg.items);
     const mt = recovery.mailto();
-    check('recovery: mailto lists the needs-action items (010 is paid back now)', mt.ok === true && mt.count === 2 && mt.mailto.startsWith('mailto:owner%40example.com?'), mt);
+    check('recovery: mailto lists the needs-action items (010 and 011 are paid back now)', mt.ok === true && mt.count === 1 && mt.mailto.startsWith('mailto:owner%40example.com?'), mt);
 
     // sync apply: a put from another desktop lands with its items; an older
     // copy after a delete does not resurrect the run

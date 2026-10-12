@@ -345,43 +345,53 @@
           </section>
         </div>
 
+        <!-- Not received, in the structure of the Walmart app the owner used
+             before (owner 2026-10-12, "that is what I used before and it
+             worked well"): two collapsible sections — Monthly summary with the
+             scope switch, the period picker and Download Excel in its header;
+             Returns Not Received with the search in its header, a row of
+             count chips, and the old column order -->
         <div id="rcNotReceived" class="rc-screen" hidden>
-          <section class="rc-top">
-            <div>
-              <!-- the filters keep one place: the switch on the label row, the
-                   picker (period / month / year) on a row of its own that
-                   never collapses, so nothing below moves (owner 2026-10-12) -->
-              <div class="rc-label-row">
-                <div class="rc-label">Where the refund money went</div>
+          <section class="rc-sec" id="rcSecSummary">
+            <div class="rc-sec-head">
+              <button type="button" class="rc-sec-title" data-rcsec="summary" aria-expanded="true"><span class="rc-sec-caret"></span>Monthly summary</button>
+              <div class="rc-sec-tools">
                 <div class="rc-scope" id="rcScope" role="group" aria-label="Scope">
-                  <button type="button" data-rcscope="cycle" class="is-on">This period</button>
+                  <button type="button" data-rcscope="cycle" class="is-on">Report</button>
                   <button type="button" data-rcscope="month">Month</button>
                   <button type="button" data-rcscope="year">Year</button>
                   <button type="button" data-rcscope="all">All time</button>
                 </div>
+                <select id="rcMonthPick" class="rc-month" aria-label="Which report, month or year"></select>
+                <button id="rcSummaryExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
               </div>
-              <div class="rc-pick-row"><select id="rcMonthPick" class="rc-month" aria-label="Which period, month or year"></select></div>
-              <div class="rc-headline"><span class="rc-headline-amt" id="rcRefunded">$0.00</span> <span class="rc-headline-sub" id="rcRefundedSub">refunded</span></div>
-              <div class="rc-bar rc-bar-lg" id="rcMoneyBar"></div>
-              <div class="rc-legend" id="rcLegend"></div>
             </div>
-            <div class="rc-card rc-today">
-              <div class="rc-label">Today</div>
-              <div class="rc-nums" id="rcTodayNums"></div>
-              <div class="rc-rule">Seller refunds must be disputed within 45 days. WFS refunds pay themselves back by day 90; if not, you have until day 135 to file.</div>
+            <div class="rc-sec-body rc-top" id="rcSecSummaryBody">
+              <div>
+                <div class="rc-label">Where the refund money went</div>
+                <div class="rc-headline"><span class="rc-headline-amt" id="rcRefunded">$0.00</span> <span class="rc-headline-sub" id="rcRefundedSub">refunded</span></div>
+                <div class="rc-bar rc-bar-lg" id="rcMoneyBar"></div>
+                <div class="rc-legend" id="rcLegend"></div>
+              </div>
+              <div class="rc-card rc-today">
+                <div class="rc-label">Today</div>
+                <div class="rc-nums" id="rcTodayNums"></div>
+                <div class="rc-rule">Seller refunds must be disputed within 45 days. WFS refunds pay themselves back by day 90; if not, you have until day 135 to file.</div>
+              </div>
             </div>
           </section>
-          <section class="rc-table-card">
-            <div class="rc-tabrow rc-tabrow-list">
-              <div class="rc-tabs" id="rcListTabs"></div>
-              <div class="rc-list-tools">
-                <button type="button" class="rc-toggle" data-rctype="WFS">WFS only</button>
-                <button type="button" class="rc-toggle" data-rctype="Seller">Seller only</button>
-                <input id="rcSearch" class="rc-search" type="text" placeholder="Search PO, product, case…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" />
+          <section class="rc-sec" id="rcSecList">
+            <div class="rc-sec-head">
+              <button type="button" class="rc-sec-title" data-rcsec="list" aria-expanded="true"><span class="rc-sec-caret"></span>Returns Not Received</button>
+              <div class="rc-sec-tools">
+                <input id="rcSearch" class="rc-search" type="text" placeholder="Search PO, product, or case ID…" autocomplete="off" spellcheck="false" aria-label="Search the not-received list" />
               </div>
             </div>
-            <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
-            <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
+            <div class="rc-sec-body" id="rcSecListBody">
+              <div class="rc-chips" id="rcListTabs"></div>
+              <div class="rc-table-wrap"><table class="rc-table rc-table-list" id="rcListTable"></table></div>
+              <div class="rc-foot">Received POs never appear here. They leave the list the moment the Returns log has them.</div>
+            </div>
           </section>
         </div>
 

@@ -246,7 +246,7 @@ function state() {
     ok: true,
     runs: sorted.map((r) => ({ ...r, open: openByRun[r.id] || 0 })),
     // each row carries its sentence and its list tab, so the renderer only draws
-    items: visible.map((it) => ({ ...it, statusText: rnr.statusText(it), tab: rnr.filterOf(it) })),
+    items: visible.map((it) => ({ ...it, statusText: rnr.statusText(it), tab: rnr.filterOf(it), lostAmount: rnr.lostAmount(it) })),
     today: rnr.todayCounts(visible),
     months: monthKeys(items),
     years: [...new Set(monthKeys(items).map((k) => k.slice(0, 4)))],
@@ -425,8 +425,10 @@ function profit(scope, key) {
     ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
     margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
-  // Walmart lines that belong to no order: storage, ads, label charges, disputes…
-  const other = r2(ledger.filter((t) => !String(t.po || '').trim()).reduce((a, t) => a + (Number(t.amount) || 0), 0));
+  // Walmart lines that belong to no order: storage, ads, WFS inventory
+  // adjustments… but never the transfers to the bank or the summary line
+  // (a real report carried −$197,100 of Instant Transfers, 2026-10-12)
+  const other = r2(ledger.filter((t) => !String(t.po || '').trim() && !/transfer|paymentsummary|payout/i.test(String(t.type || ''))).reduce((a, t) => a + (Number(t.amount) || 0), 0));
   const profitV = r2(tot.payout - tot.cogs);
 
   // every period, for the trend (newest first, by the period start)

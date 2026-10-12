@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.9 highlights
+
+- **Not received in the Walmart app's structure** (owner: "that is what I used before and it worked well"): a collapsible **Monthly summary** with Report · Month · Year · All time, the period picker and Download Excel in its header, and a collapsible **Returns Not Received** with the search in its header, a row of count chips (All · WFS · Seller · Open cases · Partial adjustments · Loss · Reimbursed) and the old columns (PO # · Type · Product · Refunded · Amount · Walmart paid · Status).
+- **The loss is visible.** The Loss chip lists every item carrying lost dollars, not only write-offs: a partial reimbursement shows "Paid back $100.00 of $153.59 — $53.59 lost" and its lost figure under the PO; a lost-after-delivery refund still outstanding counts too. The chip's rows add up to the money story's "lost".
+- **Payout matching tightened** after a real report: "Refund for unused label" credits and label-charge reversals no longer count as Walmart paying a return back (a Dispute Settlement, a Shipping Protection claim payout or a lost-item reimbursement does). Profit's "other Walmart lines" no longer include the transfers to the bank.
+
 ## v1.32.8 highlights
 
 - **Steadier scope filters on Recovery.** This period · Month · Year · All time stay put on the label row, and a picker on its own row under them (which period, month or year) is always there, so the headline, bar and legend never jump when the scope changes; the legend keeps a fixed three-column grid. Year is new. Picking a period here also selects it on Reconcile and Profit.

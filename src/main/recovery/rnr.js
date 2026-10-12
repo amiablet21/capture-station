@@ -182,6 +182,18 @@ function filterOf(it) {
   if (it.adjustment) return 'adjustments';
   return 'todo';
 }
+// the dollars the money story calls "lost" (bucketTotals): a write-off,
+// the unpaid gap of a partial reimbursement, a lost-after-delivery refund
+// still outstanding. Owner 2026-10-12 ("I can't see the loss"): the Lost
+// tab lists every item carrying such a figure, beside its own tab.
+function lostAmount(it) {
+  if (it.status === 'received') return 0;
+  const amt = it.amount || 0;
+  if (it.status === 'loss') return amt;
+  if (it.status === 'reimbursed') { const gap = amt - Math.min(it.settlementSeen || 0, amt); return gap > 0.01 ? Math.round(gap * 100) / 100 : 0; }
+  if (it.status === 'outstanding' && !it.adjustment && it.lost && /after delivery/i.test(String(it.reason || ''))) return amt;
+  return 0;
+}
 
 // Sort: needs action first, then oldest refund first
 function sortItems(items) {
@@ -210,8 +222,8 @@ function statusText(it) {
     const partial = it.settlementSeen < (it.amount || 0) - 0.01;
     return {
       lead: partial ? `Paid back ${money(it.settlementSeen)} of ${money(it.amount)}` : 'Paid back in full',
-      clause: it.settlementDate ? `seen ${monDay(it.settlementDate)}` : '',
-      tone: 'green',
+      clause: partial ? `${money(it.amount - it.settlementSeen)} lost${it.settlementDate ? ` · seen ${monDay(it.settlementDate)}` : ''}` : (it.settlementDate ? `seen ${monDay(it.settlementDate)}` : ''),
+      tone: partial ? 'amber' : 'green',
       tooltip: it.settlementKind ? `Walmart payout: ${it.settlementKind}` : '',
     };
   }
@@ -544,7 +556,7 @@ function mailtoFor(email, items) {
 module.exports = {
   SELLER_DISPUTE_DAYS, WFS_REIMBURSE_DAYS, FILE_WINDOW_DAYS, WFS_DEADLINE, FILE_SOON_DAYS, SELLER_DIGEST_DAYS, WFS_CASES_LINK,
   typeOf, itemFromRow, trackerRows, aggregateSettlements, daysOld, deriveStatus, decorate,
-  blankMarks, applyMarker, hasAnyMarker, filterOf, sortItems, monDay, money, statusText, whatToDo, todayCounts,
+  blankMarks, applyMarker, hasAnyMarker, filterOf, lostAmount, sortItems, monDay, money, statusText, whatToDo, todayCounts,
   monthKeyOf, bucketTotals, isRefundTx, isDisputeWinTx, disputeWinSkipSet, sumDisputeWins, dedupeLedger,
   stageOf, windowText, buildAuditWorkbook, buildSummaryWorkbook, buildViewCsv, sellerReturnLink, buildDigest, mailtoFor,
 };
