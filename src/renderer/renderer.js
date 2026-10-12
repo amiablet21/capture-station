@@ -2019,16 +2019,17 @@ function rcRenderReconcile() {
   $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
   const rows = rc.bucket === 'wfsPending' ? pending : notReceived;
-  const head = '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th>';
+  const head = '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th>';
   const body = rows.length ? rows.map((it, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
       <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
       <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
       <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
+      <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
       <td class="rc-muted">${esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="7">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="8">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
 }
 function rcRenderBucket() { rcRenderReconcile(); }

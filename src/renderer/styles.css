@@ -5481,9 +5481,10 @@ th:last-child > .col-grip { right: 0; }
 .rc-table { table-layout: fixed; }
 .rc-table-reconcile th:nth-child(2) { width: 160px; }
 .rc-table-reconcile th:nth-child(3) { width: 70px; }
-.rc-table-reconcile th:nth-child(5) { width: 160px; }
-.rc-table-reconcile th:nth-child(6) { width: 110px; }
-.rc-table-reconcile th:nth-child(7) { width: 190px; }
+.rc-table-reconcile th:nth-child(5) { width: 70px; }
+.rc-table-reconcile th:nth-child(6) { width: 160px; }
+.rc-table-reconcile th:nth-child(7) { width: 110px; }
+.rc-table-reconcile th:nth-child(8) { width: 190px; }
 .rc-table-reconcile td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Not received (owner 2026-10-12, the Profit language): twelve columns,
    one line per row */
