@@ -1838,8 +1838,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
     const rcCfg = await exec('api.getConfig()');
     check('recovery: config defaults — page off, email and webhook empty',
       rcCfg && rcCfg.pages && rcCfg.pages.recovery === false && rcCfg.recovery && rcCfg.recovery.email === '' && rcCfg.recovery.webhookUrl === '', rcCfg && rcCfg.recovery);
+    check('recovery: PO# menu — Walmart transaction link template carries {po}',
+      rcCfg && rcCfg.txnUrlTemplates && /^https:\/\/seller\.walmart\.com\/.*\{po\}/.test(rcCfg.txnUrlTemplates.walmart), rcCfg && rcCfg.txnUrlTemplates);
     const rcTables = db.open().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'wm_%' ORDER BY name").all().map(r => r.name);
-    check('recovery: schema tables created', JSON.stringify(rcTables) === JSON.stringify(['wm_items', 'wm_ledger', 'wm_marks', 'wm_payouts', 'wm_refunds', 'wm_runs', 'wm_tombstones']), rcTables);
+    check('recovery: schema tables created', JSON.stringify(rcTables) === JSON.stringify(['wm_items', 'wm_ledger', 'wm_marks', 'wm_orders', 'wm_payouts', 'wm_refunds', 'wm_runs', 'wm_tombstones']), rcTables);
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {

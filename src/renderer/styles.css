@@ -5269,11 +5269,28 @@ th:last-child > .col-grip { right: 0; }
    card 2/5; they stack under 960px */
 .rc-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 560px); gap: 28px; align-items: start; }
 @media (max-width: 960px) { .rc-top { grid-template-columns: minmax(0, 1fr); } }
-.rc-left { display: flex; flex-direction: column; gap: 12px; }
 .rc-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #787774; }
 .rc-label-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rc-period { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin-top: 3px; }
-.rc-period-meta { color: #787774; margin-top: 3px; font-size: 12.5px; }
+
+/* Reconcile (owner 2026-10-12, Design A): a toolbar row, then a strip of
+   five cells across the full width — the refunded total with its bar, the
+   three buckets, and Today — then the grid */
+.rc-toolbar { display: flex; align-items: center; gap: 12px; min-height: 32px; }
+.rc-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.rc-pick { font-size: 13px; padding: 5px 10px; min-width: 240px; }
+.rc-empty-line { color: #787774; }
+.rc-strip { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr 1.2fr; background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; overflow: hidden; }
+.rc-cell { padding: 14px 18px 12px; border-right: 1px solid #EAEAEA; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-cell:last-child { border-right: none; }
+.rc-cell .rc-label { flex: none; margin-bottom: 4px; }
+.rc-cell-n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; }
+.rc-cell-n small { font-family: var(--font); font-size: 13px; font-weight: 500; color: #787774; letter-spacing: 0; margin-left: 6px; }
+.rc-cell-sub { font-size: 12px; color: #787774; margin-top: 4px; }
+.rc-cell .rc-bar { margin-top: 10px; }
+.rc-cell.is-navy .rc-cell-n { color: #1E3A66; }
+.rc-cell.is-red .rc-cell-n { color: #9F2F2D; }
+.rc-cell.is-amber .rc-cell-n { color: #956400; }
+.rc-cell-today { background: #FBF7EE; }
 
 /* the drop target */
 .rc-drop { display: flex; align-items: center; gap: 12px; border: 1.5px dashed #D6D2C9; border-radius: 8px; padding: 10px 14px; background: #FFFFFF; transition: border-color 150ms var(--ease), background 150ms var(--ease); }
@@ -5364,7 +5381,18 @@ th:last-child > .col-grip { right: 0; }
 .rc-table th.is-right, .rc-table td.is-right { text-align: right; }
 .rc-table td { padding: 7px 10px; border-bottom: 1px solid rgba(0, 0, 0, 0.06); vertical-align: middle; height: 34px; }
 .rc-table-list td { padding: 7px 10px; }
+/* spreadsheet grid on every Recovery table (owner 2026-10-12: "excel-y,
+   like the Capture sheet"): cell borders both ways and a numbered gutter */
+.rc-table th, .rc-table td { border-right: 1px solid var(--border-soft); }
+.rc-table th:last-child, .rc-table td:last-child { border-right: none; }
+.rc-table th.rc-g, .rc-table td.rc-g { width: 36px; padding-left: 4px; padding-right: 4px; text-align: center; color: #A5A29C; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; background: #F9F9F8; border-right: 1px solid #EAEAEA; }
+.rc-table tbody tr:hover td:not(.rc-g) { background: #F9F9F8; }
+.rc-type { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #787774; }
+.rc-type.is-wfs { color: #4F6FA3; }
+.rc-sku-name { color: #787774; font-size: 12px; margin-left: 8px; }
 .rc-po { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; }
+.rc-po-btn { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; color: #2F3437; background: none; border: none; padding: 0; cursor: pointer; text-align: left; line-height: inherit; }
+.rc-po-btn:hover { color: #1E3A66; text-decoration: underline; text-underline-offset: 3px; }
 .rc-po-sub { font-size: 11px; color: #787774; margin-top: 1px; white-space: nowrap; }
 .rc-po-case { font-family: inherit; font-size: 11px; color: #787774; background: none; border: none; padding: 0; cursor: pointer; }
 .rc-po-case:hover { color: #1E3A66; text-decoration: underline; text-underline-offset: 2px; }
@@ -5408,27 +5436,29 @@ th:last-child > .col-grip { right: 0; }
    table takes set proportions so the SKU gets the room and the numbers
    sit together (owner 2026-10-12: "spaced better") */
 .rc-table { table-layout: fixed; }
-.rc-table-reconcile th:nth-child(1) { width: 14%; }
-.rc-table-reconcile th:nth-child(2) { width: 26%; }
-.rc-table-reconcile th:nth-child(3) { width: 13%; }
-.rc-table-reconcile th:nth-child(4) { width: 9%; }
-.rc-table-reconcile th:nth-child(5) { width: 11%; }
-.rc-table-list th:nth-child(1) { width: 12%; }
-.rc-table-list th:nth-child(2) { width: 5%; }
-.rc-table-list th:nth-child(3) { width: 23%; }
-.rc-table-list th:nth-child(4) { width: 9%; }
-.rc-table-list th:nth-child(5) { width: 7%; }
-.rc-table-list th:nth-child(6) { width: 8%; }
-.rc-table-list th:nth-child(8) { width: 150px; }
-.rc-table-profit th:nth-child(1) { width: 34%; }
-.rc-table-profit th:nth-child(n+2) { width: 11%; }
+.rc-table-reconcile th:nth-child(2) { width: 160px; }
+.rc-table-reconcile th:nth-child(3) { width: 70px; }
+.rc-table-reconcile th:nth-child(5) { width: 150px; }
+.rc-table-reconcile th:nth-child(6) { width: 105px; }
+.rc-table-reconcile th:nth-child(7) { width: 150px; }
+.rc-table-reconcile th:nth-child(8) { width: 24%; }
+.rc-table-reconcile td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-table-list th:nth-child(2) { width: 12%; }
+.rc-table-list th:nth-child(3) { width: 5%; }
+.rc-table-list th:nth-child(4) { width: 23%; }
+.rc-table-list th:nth-child(5) { width: 9%; }
+.rc-table-list th:nth-child(6) { width: 7%; }
+.rc-table-list th:nth-child(7) { width: 8%; }
+.rc-table-list th:nth-child(9) { width: 150px; }
+.rc-table-profit th:nth-child(2) { width: 31%; }
+.rc-table-profit th:nth-child(n+3) { width: 11%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rc-nocost { color: #A5A29C; font-family: var(--font); font-size: 11.5px; }
 .rc-neg { color: #9F2F2D; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }
 .rc-table td { overflow-wrap: anywhere; }
 .rc-table .rc-nowrap { white-space: normal; }
-.rc-table-list td:nth-child(7), .rc-table-reconcile td:nth-child(6) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-table-list td:nth-child(8) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* the two collapsible sections of Not received (the Walmart app's shape) */
 .rc-sec { background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; overflow: hidden; }

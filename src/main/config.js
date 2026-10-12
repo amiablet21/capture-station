@@ -125,6 +125,12 @@ const DEFAULTS = {
     ebay: '',
     temu: '',
   },
+  // Recovery's PO# menu (owner 2026-10-12: "order page or transaction
+  // page"): its second entry opens the PO in Seller Center's payments
+  // transactions. {po} is replaced; editable in Settings → Recovery.
+  txnUrlTemplates: {
+    walmart: 'https://seller.walmart.com/payments/transactions?searchTerm={po}',
+  },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
   // Walmart: the legacy manage-items URL now redirects into the new Catalog

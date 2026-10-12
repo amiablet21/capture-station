@@ -1204,10 +1204,14 @@ function buildMarketUrl(cfg, channel, po, kind) {
   const ch = String(channel || '').toLowerCase();
   // kind 'case': po carries the dispute case number, and there is no
   // fallback — a case number means nothing to the order-search pages
+  // kind 'txn': the marketplace's payments / transactions search for the
+  // PO (Recovery's PO# menu); no fallback to the order page either
   const tpl = String(kind === 'case'
     ? (cfg.caseUrlTemplates || {})[ch] || ''
-    : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
-      || (cfg.orderUrlTemplates || {})[ch] || ''
+    : kind === 'txn'
+      ? (cfg.txnUrlTemplates || {})[ch] || ''
+      : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+        || (cfg.orderUrlTemplates || {})[ch] || ''
   ).trim();
   if (!tpl || !/^https:\/\//i.test(tpl)) return '';
   if (kind === 'case') return tpl.replace('{case}', encodeURIComponent(String(po)));

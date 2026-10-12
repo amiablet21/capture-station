@@ -338,30 +338,19 @@
         </div>
 
         <div id="rcReconcile" class="rc-screen" hidden>
-          <section class="rc-top">
-            <div class="rc-left">
-              <div>
-                <div class="rc-label-row">
-                  <div class="rc-label" id="rcPeriodLabel">Period</div>
-                </div>
-                <div class="rc-pick-row"><select id="rcReconcilePick" class="rc-month" aria-label="Which period"></select></div>
-                <div class="rc-period" id="rcPeriodName">Nothing imported yet</div>
-                <div class="rc-period-meta" id="rcPeriodMeta">Import a payment period first.</div>
-                <div class="rc-period-meta" id="rcPeriodOpen"></div>
-              </div>
+          <!-- owner 2026-10-12 ("super scrunched", Design A): one toolbar row
+               with the period picker and its two buttons, then a five-cell
+               strip of the period's numbers, then the grid -->
+          <div class="rc-toolbar">
+            <span class="rc-label" id="rcPeriodLabel">Period</span>
+            <div class="rc-toolbar-right">
+              <select id="rcReconcilePick" class="rc-month rc-pick" aria-label="Which period"></select>
+              <button id="rcExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
+              <button id="rcRemoveBtn" class="rc-btn rc-btn-text" type="button">Remove period</button>
             </div>
-            <div class="rc-card" id="rcPeriodCard" hidden>
-              <div class="rc-nums" id="rcPeriodNums"></div>
-              <div>
-                <div class="rc-bar" id="rcPeriodBar"></div>
-                <div class="rc-bar-note"><span id="rcPeriodTotal"></span><span id="rcPeriodNeed"></span></div>
-              </div>
-              <div class="rc-card-actions">
-                <button id="rcExcelBtn" class="rc-btn rc-btn-outline" type="button">Download Excel</button>
-                <button id="rcRemoveBtn" class="rc-btn rc-btn-text" type="button">Remove period</button>
-              </div>
-            </div>
-          </section>
+          </div>
+          <div class="rc-empty-line" id="rcPeriodEmpty" hidden>Nothing imported yet. Import a payment period on the Import screen first.</div>
+          <section class="rc-strip" id="rcPeriodCard" hidden></section>
           <section class="rc-table-card" id="rcBucketCard" hidden>
             <div class="rc-tabrow" id="rcBucketTabs"></div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
@@ -455,6 +444,13 @@
 
   <!-- Recovery: row actions and the Export menu share the tab-menu dropdown -->
   <dialog id="rcMenuDlg" class="tab-menu rc-menu"></dialog>
+  <!-- a PO# opens on Walmart (owner 2026-10-12: "order page or transaction page") -->
+  <dialog id="rcPoDlg" class="tab-menu rc-menu">
+    <button class="tab-menu-item" data-rcgo="order">Order page</button>
+    <button class="tab-menu-item" data-rcgo="txn">Transaction page</button>
+    <div class="tab-menu-sep"></div>
+    <button class="tab-menu-item" data-rcgo="copy">Copy PO #</button>
+  </dialog>
   <dialog id="rcExportDlg" class="tab-menu rc-menu">
     <button class="tab-menu-item" data-rcexp="csv">Download CSV (this view)</button>
     <button class="tab-menu-item" data-rcexp="summary">Download Excel (this scope)</button>
@@ -1089,6 +1085,10 @@
       <label class="field">
         <span class="field-label">Make.com webhook URL (optional, receives the cases-to-open digest after each import)</span>
         <input id="setRcWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span class="field-label">Walmart transaction page a PO# opens ({po} is replaced · if it lands on the wrong page, search a PO under Seller Center → Payments and paste that address here with {po} in place of the number)</span>
+        <input id="setRcTxnUrl" type="text" class="input mono" placeholder="https://seller.walmart.com/payments/…{po}" autocomplete="off" spellcheck="false" />
       </label>
       <label class="field">
         <span class="field-label">Access code asked for before the Recovery tab opens (leave blank to keep the current one)</span>

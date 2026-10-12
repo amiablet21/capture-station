@@ -1247,6 +1247,7 @@ async function openSettings() {
   const rcv2 = cfg.recovery || {};
   $('setRcEmail').value = rcv2.email || '';
   $('setRcWebhook').value = rcv2.webhookUrl || '';
+  $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
   $('setRcCode').value = '';
   $('setRcCodeClear').checked = false;
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
@@ -1363,6 +1364,7 @@ $('settingsSave').addEventListener('click', async () => {
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
+    txnUrlTemplates: { walmart: $('setRcTxnUrl').value.trim() },
     recovery: {
       email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim(),
       ...($('setRcCodeClear').checked ? { codeHash: '' } : $('setRcCode').value.trim() ? { codeHash: await sha256Hex($('setRcCode').value.trim()) } : {}),
@@ -1698,6 +1700,10 @@ function rcWhen(iso) {
 const rcSkuCell = (sku, item, extra = '') => sku
   ? `<div class="rc-sku">${esc(sku)}</div><div class="rc-item-sub">${esc(item || '')}${extra}</div>`
   : `<div>${esc(item || '')}${extra}</div>`;
+// the same on one line for the spreadsheet grids
+const rcSkuLine = (sku, item) => sku
+  ? `<span class="rc-sku">${esc(sku)}</span><span class="rc-sku-name">${esc(item || '')}</span>`
+  : `<span>${esc(item || '')}</span>`;
 const rcSentence = (t, strong) => t ? `<span class="rc-dot ${esc('is-' + (t.tone || 'grey'))}"></span><span class="rc-lead ${strong ? esc('is-' + t.tone) : ''}">${esc(t.lead)}</span>${t.clause ? `<span class="rc-clause"> — ${esc(t.clause)}</span>` : ''}` : '';
 // the lead takes the tone colour only where the row shouts: red, the amber
 // unpaid-cycles issue, a green approval (the design's calm rows stay plain)
@@ -1811,8 +1817,9 @@ function rcRenderProfit() {
   if (rc.profitTab === 'sku') {
     const q = rc.profitQ.toLowerCase();
     const rows = p.skus.filter(g => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q));
-    const head = '<th>SKU</th><th class="is-right">Sold</th><th class="is-right">Refunded</th><th class="is-right">Walmart paid</th><th class="is-right">Unit cost</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
-    const body = rows.length ? rows.map(g => `<tr>
+    const head = '<th class="rc-g">#</th><th>SKU</th><th class="is-right">Sold</th><th class="is-right">Refunded</th><th class="is-right">Walmart paid</th><th class="is-right">Unit cost</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
+    const body = rows.length ? rows.map((g, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
       <td class="rc-item">${rcSkuCell(g.sku, g.item)}</td>
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
@@ -1820,16 +1827,17 @@ function rcRenderProfit() {
       <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
       <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="7">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="8">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
   } else {
-    const head = '<th>Period</th><th class="is-right">Orders</th><th class="is-right">Units</th><th class="is-right">Walmart paid</th><th class="is-right">Cost of goods</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
-    const body = p.periods.length ? p.periods.map(x => `<tr>
+    const head = '<th class="rc-g">#</th><th>Period</th><th class="is-right">Orders</th><th class="is-right">Units</th><th class="is-right">Walmart paid</th><th class="is-right">Cost of goods</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
+    const body = p.periods.length ? p.periods.map((x, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
       <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? (x.missingCount ? `<div class="rc-item-sub">${rcPlural(x.missingCount, 'order')} with no cost set</div>` : '') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
       <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
       <td class="is-right">${money(x.payout)}</td><td class="is-right">${money(x.cogs)}</td>
       <td class="is-right ${x.profit < 0 ? 'rc-neg' : ''}">${money(x.profit)}</td><td class="is-right">${rcPct(x.margin)}</td>
-    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="7">No periods imported yet.</td></tr>';
+    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="8">No periods imported yet.</td></tr>';
     $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
   }
   const foot = [];
@@ -1848,12 +1856,13 @@ function rcRenderImport() {
   $('rcImportHint').textContent = rc.data.logRows
     ? `Seller Center → Payments → the period's reconciliation report (CSV) · checked against ${Number(rc.data.logRows).toLocaleString()} returns in the log`
     : 'Log returns first — the Returns log is what each refund is checked against';
-  const head = '<th>Period</th><th>Imported</th><th class="is-right">Refunds</th><th class="is-right">Received</th><th class="is-right">Not received</th><th class="is-right">WFS waiting</th><th class="is-right">Open today</th><th></th>';
-  const body = runs.length ? runs.map(r => {
+  const head = '<th class="rc-g">#</th><th>Period</th><th>Imported</th><th class="is-right">Refunds</th><th class="is-right">Received</th><th class="is-right">Not received</th><th class="is-right">WFS waiting</th><th class="is-right">Open today</th><th></th>';
+  const body = runs.length ? runs.map((r, i) => {
     const c = r.counts || {};
     const b = (k) => (c[k] || { count: 0, total: 0 });
     const who = [r.station, r.by].filter(Boolean).join(' · ');
     return `<tr>
+      <td class="rc-g">${i + 1}</td>
       <td><button type="button" class="rc-period-link" data-rcrun="${esc(r.id)}" title="Reconcile this period">${esc(rcPeriodName(r.label))}</button></td>
       <td class="rc-muted">${esc(rcWhen(r.ranAt))}${who ? ` <span class="rc-faint">· ${esc(who)}</span>` : ''}</td>
       <td class="is-right rc-mono">${r.totalRefunds}</td>
@@ -1863,7 +1872,7 @@ function rcRenderImport() {
       <td class="is-right rc-mono ${r.open ? 'rc-neg' : 'rc-faint'}">${r.open || 'clear'}</td>
       <td class="rc-period-actions"><button type="button" class="rc-link" data-rcrun="${esc(r.id)}">Reconcile</button><button type="button" class="rc-link" data-rcexcel="${esc(r.id)}">Excel</button><button type="button" class="rc-link is-danger" data-rcremove="${esc(r.id)}">Remove</button></td>
     </tr>`;
-  }).join('') : '<tr class="rc-empty-row"><td colspan="8">No period imported yet.</td></tr>';
+  }).join('') : '<tr class="rc-empty-row"><td colspan="9">No period imported yet.</td></tr>';
   $('rcPeriodsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
@@ -1872,42 +1881,40 @@ function rcRenderReconcile() {
   const runs = rc.data.runs || [];
   const run = rc.run;
   const empty = !runs.length;
+  $('rcPeriodEmpty').hidden = !empty;
   $('rcPeriodCard').hidden = empty || !run;
   $('rcBucketCard').hidden = empty || !run;
+  $('rcExcelBtn').disabled = empty;
+  $('rcRemoveBtn').disabled = empty;
   const pick = $('rcReconcilePick');
   pick.classList.toggle('is-idle', empty);
   pick.innerHTML = runs.map(r => `<option value="${esc(r.id)}" ${r.id === rc.runId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
-  if (empty) {
-    $('rcPeriodLabel').textContent = 'Period';
-    $('rcPeriodName').textContent = 'Nothing imported yet';
-    $('rcPeriodMeta').textContent = 'Import a payment period on the Import screen first.';
-    $('rcPeriodOpen').textContent = '';
-    return;
-  }
+  if (empty) { $('rcPeriodLabel').textContent = 'Period'; return; }
   const meta = runs.find(r => r.id === rc.runId) || runs[0];
   $('rcPeriodLabel').textContent = meta.id === runs[0].id ? 'Latest period' : 'Period';
-  $('rcPeriodName').textContent = rcPeriodName(meta.label);
-  $('rcPeriodMeta').textContent = `Imported ${rcWhen(meta.ranAt)} · ${rcPlural(meta.totalRefunds, 'refund')} checked against ${Number(meta.logRows || 0).toLocaleString()} returns in the log`;
-  // what has happened since: the period's not-received that are still open
-  // today against those that came back or were paid
-  const c0 = meta.counts || {};
-  const flagged = ((c0.notReceived || {}).count || 0) + ((c0.wfsWaiting || {}).count || 0);
-  const resolved = Math.max(0, flagged - (meta.open || 0));
-  $('rcPeriodOpen').textContent = flagged
-    ? `Today: ${rcPlural(meta.open || 0, 'return')} still open · ${resolved} resolved since (came back or paid)`
-    : 'Today: nothing from this period is outstanding.';
-
   if (!run) return;
+
+  // the strip (owner 2026-10-12, Design A): the refunded total with its
+  // bar, the three buckets, and a Today cell with what has happened since
+  // the import — this period's not-received that are still open against
+  // those that came back or were paid
   const c = run.counts || {};
   const b = (k) => c[k] || { count: 0, total: 0 };
-  $('rcPeriodNums').innerHTML = [
-    ['is-navy', b('received'), 'received'], ['is-red', b('notReceived'), 'not received'], ['is-amber', b('wfsWaiting'), 'WFS waiting'],
-  ].map(([tone, x, label]) => `<div><div class="rc-num ${tone}">${x.count}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${rcMoney(x.total)}</div></div>`).join('');
-  rcBar($('rcPeriodBar'), [['is-navy', b('received').total], ['is-red', b('notReceived').total], ['is-amber', b('wfsWaiting').total]]);
   const total = b('received').total + b('notReceived').total + b('wfsWaiting').total;
-  $('rcPeriodTotal').textContent = `${rcMoney(total)} refunded this period`;
+  const flagged = b('notReceived').count + b('wfsWaiting').count;
+  const open = meta.open || 0;
+  const resolved = Math.max(0, flagged - open);
   const act = b('actionNow').count;
-  $('rcPeriodNeed').textContent = act ? `${act} need${act === 1 ? 's' : ''} action today` : 'nothing needs action today';
+  const cell = (tone, label, n, sub) => `<div class="rc-cell ${tone}"><div class="rc-label">${label}</div><div class="rc-cell-n">${n}</div><div class="rc-cell-sub">${sub}</div></div>`;
+  $('rcPeriodCard').innerHTML = [
+    `<div class="rc-cell"><div class="rc-label">Refunded this period</div><div class="rc-cell-n">${rcMoney(total)} <small>${rcPlural(run.totalRefunds || 0, 'refund')}</small></div><div class="rc-bar" id="rcPeriodBar"></div></div>`,
+    cell('is-navy', 'Received', b('received').count, `${rcMoney(b('received').total)} · back in the Returns log`),
+    cell('is-red', 'Not received', b('notReceived').count, `${rcMoney(b('notReceived').total)} · nothing in the Returns log`),
+    cell('is-amber', 'WFS waiting', b('wfsWaiting').count, `${rcMoney(b('wfsWaiting').total)} · Walmart pays back by day 90`),
+    cell('rc-cell-today', 'Today', `${act} <small>need${act === 1 ? 's' : ''} action</small>`,
+      flagged ? `${rcPlural(open, 'return')} still open · ${resolved} resolved since (came back or paid)` : 'Nothing from this period is outstanding.'),
+  ].join('');
+  rcBar($('rcPeriodBar'), [['is-navy', b('received').total], ['is-red', b('notReceived').total], ['is-amber', b('wfsWaiting').total]]);
   rcRenderBucket();
 }
 
@@ -1932,9 +1939,9 @@ function rcRenderBucket() {
   const rows = sum[rc.bucket] || [];
   const received = rc.bucket === 'received';
   const head = received
-    ? '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
-    : '<th>PO</th><th>SKU</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
-  const body = rows.length ? rows.map(r => {
+    ? '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Condition</th><th>Note</th>'
+    : '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th><th>What to do</th>';
+  const body = rows.length ? rows.map((r, i) => {
     const type = /wfs|walmart-fulfilled/i.test(String(r['Fulfillment Type'] || '')) ? 'WFS' : 'Seller';
     const days = r['Days Ago'];
     const refunded = `<span class="rc-mono">${esc(rcMonDay(r['Refund Date']))}</span>${days !== '' && days != null ? ` <span class="rc-muted">· ${days} days ago</span>` : ''}`;
@@ -1943,14 +1950,16 @@ function rcRenderBucket() {
       : rcSentence(r.todo, r.todo && r.todo.tone === 'red');
     const fifth = received ? esc(r['Warehouse Condition'] || '') : esc(String(r['Return Reason'] || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()));
     return `<tr>
-      <td><div class="rc-po">${esc(r['PO #'])}</div><div class="rc-po-sub">${type}</div></td>
-      <td class="rc-item">${rcSkuCell(r.SKU, r.Item)}</td>
-      <td class="rc-nowrap">${refunded}</td>
-      <td class="rc-mono is-right rc-nowrap">${rcMoney(r['Net Refund (Payable Impact)'])}</td>
+      <td class="rc-g">${i + 1}</td>
+      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(r['PO #'])}" title="Open this PO on Walmart">${esc(r['PO #'])}</button></td>
+      <td class="rc-type ${type === 'WFS' ? 'is-wfs' : ''}">${type}</td>
+      <td title="${esc(r.Item || '')}">${rcSkuLine(r.SKU, r.Item)}</td>
+      <td>${refunded}</td>
+      <td class="rc-mono is-right">${rcMoney(r['Net Refund (Payable Impact)'])}</td>
       <td class="rc-muted">${fifth}</td>
-      <td class="rc-nowrap">${last}</td>
+      <td title="${esc(r.todo && r.todo.lead ? `${r.todo.lead}${r.todo.clause ? ' — ' + r.todo.clause : ''}` : '')}">${last}</td>
     </tr>`;
-  }).join('') : `<tr class="rc-empty-row"><td colspan="6">${rc.bucket === 'notReceived' ? 'Every refund in this period came back or is waiting on WFS.' : rc.bucket === 'wfsWaiting' ? 'No WFS refunds are waiting on Walmart.' : 'Nothing from this period has come back yet.'}</td></tr>`;
+  }).join('') : `<tr class="rc-empty-row"><td colspan="8">${rc.bucket === 'notReceived' ? 'Every refund in this period came back or is waiting on WFS.' : rc.bucket === 'wfsWaiting' ? 'No WFS refunds are waiting on Walmart.' : 'Nothing from this period has come back yet.'}</td></tr>`;
   $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
@@ -2012,10 +2021,10 @@ function rcRenderList() {
     return `<button type="button" class="rc-chip ${rc.tab === k ? 'is-on' : ''}" data-rctab="${k}">${label}<span class="rc-chip-n">(${n})</span></button>`;
   }).join('');
   const rows = items.filter(rcMatches);
-  const head = '<th>PO #</th><th>Type</th><th>Product</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Walmart paid</th><th>Status</th><th></th>';
+  const head = '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Product</th><th>Refunded</th><th class="is-right">Amount</th><th class="is-right">Walmart paid</th><th>Status</th><th></th>';
   let body;
   if (rows.length) {
-    body = rows.map(it => {
+    body = rows.map((it, i) => {
       const sub = `<button type="button" class="rc-po-case" data-rcact="caseId" data-rcpo="${esc(it.po)}" title="Edit the case ID">${it.caseId ? `case ${esc(it.caseId)}` : 'add case ID'}</button>`;
       const paid = it.settlementSeen != null
         ? `<span class="rc-paid" title="${esc(it.settlementDate ? `seen ${rcMonDay(it.settlementDate)}` : '')}${it.settlementKind ? ` · ${esc(it.settlementKind)}` : ''}">${rcMoney(it.settlementSeen)}</span>`
@@ -2025,7 +2034,8 @@ function rcRenderList() {
       const prim = rcPrimary(it);
       const lostLine = rc.tab === 'lost' && it.lostAmount ? `<div class="rc-item-sub rc-neg">${rcMoney(it.lostAmount)} lost</div>` : '';
       return `<tr data-rcpo="${esc(it.po)}">
-        <td><div class="rc-po">${esc(it.po)}</div>${it.caseOpened ? `<div class="rc-po-sub">${sub}</div>` : ''}${lostLine}</td>
+        <td class="rc-g">${i + 1}</td>
+        <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button>${it.caseOpened ? `<div class="rc-po-sub">${sub}</div>` : ''}${lostLine}</td>
         <td>${esc(it.type)}</td>
         <td class="rc-item">${rcSkuCell(it.sku, it.item, note)}</td>
         <td class="rc-nowrap"><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld}d</span>` : ''}</td>
@@ -2041,7 +2051,7 @@ function rcRenderList() {
     if (rc.q) msg = 'Nothing matches.';
     else if (rc.tab === 'todo' || rc.tab === 'wfs' || rc.tab === 'seller') msg = waiting ? `Nothing to file — ${rcPlural(waiting, 'return')} ${waiting === 1 ? 'is' : 'are'} waiting on Walmart.` : (items.length ? 'Nothing to file.' : 'Nothing not-received yet — import a payment period on the Reconcile screen and any returns that did not arrive will show up here.');
     else msg = { cases: 'No open cases.', adjustments: 'No partial adjustments.', reimbursed: 'Walmart has not paid anything back yet.', lost: 'Nothing lost: no write-offs, no partial reimbursements, no lost-after-delivery refunds outstanding.' }[rc.tab];
-    body = `<tr class="rc-empty-row"><td colspan="8">${esc(msg)}</td></tr>`;
+    body = `<tr class="rc-empty-row"><td colspan="9">${esc(msg)}</td></tr>`;
   }
   $('rcListTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
 }
@@ -2331,7 +2341,30 @@ $('rcSummaryExcelBtn').addEventListener('click', async () => {
 $('rcSearch').addEventListener('input', () => { rc.q = $('rcSearch').value.trim(); rcRenderList(); });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
+// a PO# opens a two-way menu: the order on Seller Center or its payments
+// transactions (owner 2026-10-12); both go through the marketplace-link
+// templates in config, so a copied address can replace either
+function rcPoMenu(btn) {
+  rc.linkPo = btn.dataset.rcpolink;
+  const dlg = $('rcPoDlg');
+  dlg.showModal();
+  rcAnchor(dlg, btn.getBoundingClientRect());
+}
+$('rcPoDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcgo]');
+  $('rcPoDlg').close();
+  if (!item || !rc.linkPo) return;
+  if (item.dataset.rcgo === 'copy') { try { await navigator.clipboard.writeText(rc.linkPo); toast('PO # copied'); } catch { toast('Could not copy.'); } return; }
+  const r = await api.openOrderPage(rc.linkPo, 'walmart', item.dataset.rcgo === 'txn' ? 'txn' : 'order').catch(() => null);
+  if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
+});
+$('rcBucketTable').addEventListener('click', (e) => {
+  const link = e.target.closest('[data-rcpolink]');
+  if (link) rcPoMenu(link);
+});
 $('rcListTable').addEventListener('click', (e) => {
+  const link = e.target.closest('[data-rcpolink]');
+  if (link) { rcPoMenu(link); return; }
   const act = e.target.closest('[data-rcact]');
   if (act) { rcDoAction(act.dataset.rcpo, act.dataset.rcact); return; }
   const more = e.target.closest('[data-rcmenu]');

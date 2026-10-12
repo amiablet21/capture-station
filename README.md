@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.12 highlights
+
+- **Reconcile as a sheet** (owner: "super scrunched … make the whole thing excel-y like the Capture sheet", Design A of three). One toolbar row holds the period picker with Download Excel and Remove period; the import note is gone. Under it a five-cell strip spreads the period across the full width: refunded total with its bar, received, not received, WFS waiting, and a Today cell with how many need action, how many are still open and how many resolved since. Every Recovery table is now a grid: a numbered gutter, cell borders both ways, one line per row on Reconcile (PO # · Type · Item · Refunded · Net refund · Reason · What to do).
+- **A PO # opens on Walmart** (owner: "order page or transaction page"). Clicking a PO on Reconcile or Not received shows Order page · Transaction page · Copy PO #. The order page uses the Seller Center link the Capture sheet already uses; the transaction page is a new Payments link with {po} in it, editable under Settings → Recovery if Seller Center's address differs.
+
 ## v1.32.11 highlights
 
 - **Import is its own Recovery screen** (owner: "an import tab that does not mix with the reconcile tab"). Import holds the drop target and every imported period in one list, newest first: imported when and by which station, refunds, received / not received / WFS waiting with their dollars, how many are still open today, and Reconcile · Excel · Remove. The header's Import button is gone. Reconcile reads one period, picked from a dropdown, and says how many of its not-received are still open today against how many resolved since.
