@@ -4,6 +4,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.32.14 highlights
 
+- **Profit as a dashboard** (owner: "make it better with graphs", Design 3 of three). A strip of five totals (goods sold, Walmart paid, cost of goods, profit with its change against the last period, listings with no cost), then two charts: **where each dollar of sales went** (cost of goods, refunds and fees, commission, profit, in cents per dollar) and **profit by SKU** (the top earners in navy, the losers in red; a bar click finds the SKU in the table). The scope control is one pill like the page tabs: its active segment names the period, month or year and opens the picker (owner: "make the drop down better and in tune with the design"). The header's Download Excel is gone; an Excel button sits with the table.
 - **Price and commission fill in by themselves** for periods imported before v1.32.13 (owner: "why is the avg commission and avg price not showing"). Opening Profit re-reads each such period's archived CSV from the shared folder or this computer and stores the goods price and commission; no re-import needed. A period whose archive is nowhere keeps "—".
 - **A report whose SKU column has another name** ("Partner Item ID", "SKU", "Item ID") is read all the same, so its orders no longer pile up under "(no SKU)".
 - The Imported periods list keeps its gutter narrow and each count with its dollars on one line (owner: "this looks weird").

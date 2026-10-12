@@ -311,7 +311,6 @@
             <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
           </nav>
           <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
-          <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Download Excel</button>
         </div>
 
         <!-- Import (owner 2026-10-12: "an import tab that does not mix with
@@ -409,33 +408,32 @@
         <!-- Profit (owner 2026-10-12): what Walmart paid for the orders in a
              scope against the cost of the units sold -->
         <div id="rcProfit" class="rc-screen" hidden>
-          <section class="rc-top">
-            <div>
-              <div class="rc-label-row">
-                <div class="rc-label">Profit on orders</div>
-                <div class="rc-scope" id="rcProfitScope" role="group" aria-label="Scope">
-                  <button type="button" data-rcscope="cycle" class="is-on">This period</button>
-                  <button type="button" data-rcscope="month">Month</button>
-                  <button type="button" data-rcscope="year">Year</button>
-                  <button type="button" data-rcscope="all">All time</button>
-                </div>
-              </div>
-              <div class="rc-pick-row"><select id="rcProfitMonth" class="rc-month" aria-label="Which period, month or year"></select></div>
-              <div class="rc-headline"><span class="rc-headline-amt" id="rcProfitAmt">$0.00</span> <span class="rc-headline-sub" id="rcProfitSub">profit</span></div>
-              <div class="rc-bar rc-bar-lg" id="rcProfitBar"></div>
-              <div class="rc-legend" id="rcProfitLegend"></div>
-            </div>
-            <div class="rc-card rc-today">
-              <div class="rc-label" id="rcProfitCardLabel">This period</div>
-              <div class="rc-nums" id="rcProfitNums"></div>
-              <div class="rc-rule" id="rcProfitRule">Walmart paid = each order's payout net of Walmart's fees, with its refund taken off. Cost comes from the Stock page's Cost column; a refunded unit that came back to the warehouse is stock again, so its cost is not counted.</div>
-            </div>
-          </section>
+          <!-- owner 2026-10-12 (Design 3 of three): one segmented scope
+               control whose active segment names the period and opens the
+               picker; a strip of the five totals; where each dollar of sales
+               went; profit by SKU -->
+          <div class="rc-toolbar">
+            <span class="rc-label">Profit on orders</span>
+            <div class="rc-toolbar-right"><div class="rc-seg" id="rcProfitScope" role="group" aria-label="Scope"></div></div>
+          </div>
+          <section class="rc-strip rc-strip-profit" id="rcProfitStrip" hidden></section>
+          <div class="rc-two" id="rcProfitCharts" hidden>
+            <section class="rc-chart-card">
+              <div class="rc-chart-head"><span class="rc-chart-title">Where each dollar of sales went</span><span class="rc-chart-sub" id="rcDollarSub"></span></div>
+              <div class="rc-chart-body"><svg class="rc-svg" id="rcDollarChart" width="600" height="180" role="img" aria-label="Where each dollar of sales went"></svg></div>
+            </section>
+            <section class="rc-chart-card">
+              <div class="rc-chart-head"><span class="rc-chart-title">Profit by SKU</span><span class="rc-chart-sub" id="rcSkuSub"></span></div>
+              <div class="rc-chart-body"><svg class="rc-svg" id="rcSkuChart" width="600" height="180" role="img" aria-label="Profit by SKU"></svg></div>
+            </section>
+          </div>
           <section class="rc-table-card">
             <div class="rc-tabrow rc-tabrow-list">
               <div class="rc-tabs" id="rcProfitTabs"></div>
               <div class="rc-list-tools">
                 <input id="rcProfitSearch" class="rc-search" type="text" placeholder="Search SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" />
+                <!-- owner 2026-10-12: "remove the Download Excel on the top right" — the workbook lives with the table now -->
+                <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline" type="button" title="Download this scope as an Excel workbook">Excel</button>
               </div>
             </div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-profit" id="rcProfitTable"></table></div>
@@ -449,6 +447,8 @@
   <!-- Recovery: row actions and the Export menu share the tab-menu dropdown -->
   <dialog id="rcMenuDlg" class="tab-menu rc-menu"></dialog>
   <!-- a PO# opens on Walmart (owner 2026-10-12: "order page or transaction page") -->
+  <!-- the scope control's picker: periods, months or years -->
+  <dialog id="rcPickDlg" class="tab-menu rc-menu rc-pick-menu"></dialog>
   <dialog id="rcPoDlg" class="tab-menu rc-menu">
     <button class="tab-menu-item" data-rcgo="order">Order page</button>
     <button class="tab-menu-item" data-rcgo="txn">Transaction page</button>

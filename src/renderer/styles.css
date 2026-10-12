@@ -5292,6 +5292,35 @@ th:last-child > .col-grip { right: 0; }
 .rc-cell.is-amber .rc-cell-n { color: #956400; }
 .rc-cell-today { background: #FBF7EE; }
 
+/* Profit (owner 2026-10-12, Design 3): the scope pill, the five-cell strip,
+   the two charts */
+.rc-seg { display: inline-flex; gap: 2px; background: #EFEEEA; border-radius: 10px; padding: 3px; }
+.rc-seg button { font-family: inherit; font-size: 12.5px; font-weight: 500; color: #787774; background: none; border: none; border-radius: 8px; padding: 5px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; line-height: 1.55; white-space: nowrap; }
+.rc-seg button:hover { color: #2F3437; }
+.rc-seg button.is-on { background: #FFFFFF; color: #2F3437; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+.rc-seg-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #787774; }
+.rc-pick-menu { max-height: 320px; overflow-y: auto; min-width: 220px; }
+.rc-pick-menu .tab-menu-item.is-current { color: #1E3A66; font-weight: 600; }
+.rc-strip-profit { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rc-cell.is-hi { background: #F4F6FA; }
+.rc-cell.is-red .rc-cell-n { color: #9F2F2D; }
+.rc-two { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+@media (max-width: 1100px) { .rc-two { grid-template-columns: minmax(0, 1fr); } }
+.rc-chart-card { background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; min-width: 0; }
+.rc-chart-head { display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #EAEAEA; }
+.rc-chart-title { font-size: 13px; font-weight: 600; }
+.rc-chart-sub { font-size: 12px; color: #787774; }
+.rc-chart-body { padding: 12px 16px 14px; overflow: hidden; }
+.rc-svg { display: block; max-width: 100%; }
+.rc-svg text { font-family: var(--font); fill: #2F3437; font-size: 12px; }
+.rc-svg .ax { fill: #A5A29C; font-size: 11px; }
+.rc-svg .val { font-size: 11.5px; font-weight: 600; }
+.rc-svg .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rc-svg .base { stroke: #DAD8D1; stroke-width: 1; }
+.rc-svg .note { fill: #787774; font-size: 12.5px; }
+.rc-svg .bar { cursor: pointer; }
+.rc-svg .bar:hover path { opacity: .82; }
+
 /* the drop target */
 .rc-drop { display: flex; align-items: center; gap: 12px; border: 1.5px dashed #D6D2C9; border-radius: 8px; padding: 10px 14px; background: #FFFFFF; transition: border-color 150ms var(--ease), background 150ms var(--ease); }
 .rc-drop.is-over { border-color: #1E3A66; background: #E4EAF4; }
@@ -5463,6 +5492,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-periods th:nth-child(8) { width: 9%; }
 .rc-table-periods td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rc-table-profit th:nth-child(2) { width: 24%; }
+.rc-table-profit.is-periods th:nth-child(2) { width: 41%; } /* eight columns, not ten */
 .rc-table-profit th:nth-child(n+3) { width: 8.6%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rc-nocost { color: #A5A29C; font-family: var(--font); font-size: 11.5px; }

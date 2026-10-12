@@ -1782,7 +1782,6 @@ function rcRender() {
   $('rcNotReceived').hidden = rc.sub !== 'notreceived';
   $('rcProfit').hidden = rc.sub !== 'profit';
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
-  $('rcProfitExcelBtn').hidden = rc.sub !== 'profit';
   rcRenderImport();
   rcRenderReconcile();
   rcRenderSummary();
@@ -1793,48 +1792,135 @@ function rcRender() {
 
 /* ----- Profit ----- */
 const rcPct = (m) => (m == null ? '—' : `${m.toFixed(1)}%`);
+// the scope control (owner 2026-10-12: "make the drop down better and in
+// tune with the design"): one pill like the page tabs; the active segment
+// names the chosen period / month / year and opens the picker
+const RC_SCOPES = [['cycle', 'This period'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
+function rcScopeOptions(scope) {
+  if (scope === 'cycle') return ((rc.data && rc.data.runs) || []).map(r => [r.id, rcPeriodName(r.label)]);
+  if (scope === 'month') return ((rc.data && rc.data.months) || []).map(k => [k, `${RC_MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`]);
+  if (scope === 'year') return ((rc.data && rc.data.years) || []).map(y => [String(y), String(y)]);
+  return [];
+}
+function rcRenderScopeSeg(el, scope, key) {
+  el.innerHTML = RC_SCOPES.map(([k, label]) => {
+    const on = k === scope;
+    const opts = on ? rcScopeOptions(k) : [];
+    const cur = opts.find(o => String(o[0]) === String(key));
+    const more = on && opts.length > 1;
+    return `<button type="button" data-rcscope="${k}" class="${on ? 'is-on' : ''}" title="${more ? 'Pick another' : ''}">${esc(on && cur ? cur[1] : label)}${more ? '<span class="rc-seg-caret"></span>' : ''}</button>`;
+  }).join('');
+}
+// SVG helpers for the two charts (attributes only — the CSP forbids inline
+// styles): a bar has a 4px rounded data-end and a square baseline
+const rcSvg = (tag, attrs, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
+function rcBarPath(x, y, w, h, dir) {
+  const r = Math.min(4, w / 2, h / 2);
+  if (dir === 'right') return `M${x},${y} H${x + w - r} a${r},${r} 0 0 1 ${r},${r} V${y + h - r} a${r},${r} 0 0 1 -${r},${r} H${x} Z`;
+  return `M${x + w},${y} H${x + r} a${r},${r} 0 0 0 -${r},${r} V${y + h - r} a${r},${r} 0 0 0 ${r},${r} H${x + w} Z`;
+}
+const RC_NAVY = '#1E3A66', RC_RED = '#9F2F2D', RC_PALE = '#7B93BD';
+const rcSvgWidth = (svg, min) => Math.max(min, (svg.parentElement && svg.parentElement.clientWidth) || 0);
+function rcSvgNote(svg, text) {
+  svg.setAttribute('height', 48);
+  svg.appendChild(rcSvg('text', { x: 0, y: 28, class: 'note' }, text));
+}
+// where each dollar of goods sold went: cost of goods, refunds and fees,
+// commission, profit — cents per dollar, one hue, profit emphasised
+function rcDrawDollar(p) {
+  const svg = $('rcDollarChart'); const sub = $('rcDollarSub');
+  svg.innerHTML = '';
+  if (!(p.gross > 0)) { sub.textContent = ''; rcSvgNote(svg, 'Needs the goods price — re-import this period on the Import screen.'); return; }
+  // the new report layout carries no commission line: it then sits inside
+  // refunds & fees rather than showing as 0.0¢
+  const known = p.commissionPct != null;
+  const comm = known ? Math.abs(p.commission || 0) : 0;
+  const fees = Math.max(0, p.gross - comm - p.payout);
+  const rows = [['Cost of goods', p.cogs], [known ? 'Refunds & fees' : 'Commission, refunds & fees', fees], ...(known ? [['Commission', comm]] : []), ['Profit', p.profit]];
+  sub.textContent = `of ${rcMoney(p.gross)} goods sold`;
+  const W = rcSvgWidth(svg, 420), left = 176, right = 150, top = 6, gap = 38, bh = 20;
+  const H = top + rows.length * gap + 2;
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  const pw = W - left - right; const max = Math.max(1, ...rows.map(r => Math.abs(r[1])));
+  rows.forEach(([label, v], i) => {
+    const y = top + i * gap + 8; const w = Math.max(2, (Math.abs(v) / max) * pw); const hi = label === 'Profit';
+    const g = rcSvg('g', {});
+    g.appendChild(rcSvg('title', {}, `${label}: ${(v < 0 ? '−' : '') + rcMoney(v)} · ${(Math.abs(v) / p.gross * 100).toFixed(1)}¢ of each dollar`));
+    g.appendChild(rcSvg('text', { x: left - 12, y: y + bh / 2 + 4, 'text-anchor': 'end', class: hi ? 'val' : 'ax' }, label));
+    g.appendChild(rcSvg('path', { d: rcBarPath(left, y, w, bh, 'right'), fill: hi ? (v < 0 ? RC_RED : RC_NAVY) : RC_PALE }));
+    g.appendChild(rcSvg('text', { x: left + w + 8, y: y + bh / 2 + 4, class: 'val mono' }, `${(v / p.gross * 100).toFixed(1)}¢`));
+    g.appendChild(rcSvg('text', { x: left + w + 50, y: y + bh / 2 + 4, class: 'ax mono' }, (v < 0 ? '−' : '') + rcMoney(v)));
+    svg.appendChild(g);
+  });
+  svg.appendChild(rcSvg('line', { x1: left, x2: left, y1: top, y2: top + rows.length * gap, class: 'base' }));
+}
+// profit by SKU: the top earners in navy to the right, the losers in red
+// to the left of one baseline; a bar click finds the SKU in the table
+function rcDrawSkus(p) {
+  const svg = $('rcSkuChart'); const sub = $('rcSkuSub');
+  svg.innerHTML = '';
+  const costed = p.skus.filter(g => g.costKnown);
+  const top = costed.slice().sort((a, b) => b.profit - a.profit).slice(0, 6).filter(g => g.profit > 0);
+  const bottom = costed.slice().sort((a, b) => a.profit - b.profit).slice(0, 3).filter(g => g.profit < 0 && !top.includes(g)).reverse();
+  const rows = [...top, ...bottom];
+  if (!rows.length) { sub.textContent = ''; rcSvgNote(svg, 'Set costs on the Stock page to see profit by SKU.'); return; }
+  sub.textContent = `top ${top.length}${bottom.length ? ` and bottom ${bottom.length}` : ''} · click a bar to find the SKU below`;
+  const W = rcSvgWidth(svg, 420), left = Math.min(240, Math.round(W * 0.36)), right = 104, topPad = 2, gap = 24, bh = 14;
+  const H = topPad + rows.length * gap + 4;
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  const pw = W - left - right;
+  const maxPos = Math.max(0, ...rows.map(g => g.profit)), maxNeg = Math.max(0, ...rows.map(g => -g.profit));
+  const scale = pw / ((maxPos + maxNeg) || 1); const zero = left + maxNeg * scale;
+  rows.forEach((g, i) => {
+    const y = topPad + i * gap + 4; const v = g.profit; const w = Math.max(2, Math.abs(v) * scale);
+    const grp = rcSvg('g', { class: 'bar', 'data-sku': g.sku });
+    grp.appendChild(rcSvg('title', {}, `${g.sku}: ${(v < 0 ? '−' : '') + rcMoney(v)} profit on ${rcPlural(g.unitsSold, 'unit')}${g.margin != null ? ` · ${rcPct(g.margin)} margin` : ''}`));
+    grp.appendChild(rcSvg('text', { x: left - 10, y: y + bh / 2 + 4, 'text-anchor': 'end', class: 'ax mono' }, g.sku.length > 30 ? g.sku.slice(0, 29) + '…' : g.sku));
+    grp.appendChild(rcSvg('path', { d: v >= 0 ? rcBarPath(zero, y, w, bh, 'right') : rcBarPath(zero - w, y, w, bh, 'left'), fill: v >= 0 ? RC_NAVY : RC_RED }));
+    grp.appendChild(rcSvg('text', { x: zero + (v >= 0 ? w + 8 : 8), y: y + bh / 2 + 4, class: 'val mono', fill: v < 0 ? RC_RED : '#2F3437' }, (v < 0 ? '−' : '') + rcMoney(v)));
+    svg.appendChild(grp);
+  });
+  svg.appendChild(rcSvg('line', { x1: zero, x2: zero, y1: topPad, y2: topPad + rows.length * gap, class: 'base' }));
+}
 function rcRenderProfit() {
   if (rc.sub !== 'profit') return;
   const p = rc.profit;
-  for (const b of $('rcProfitScope').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.rcscope === rc.profitScope);
-  rcFillPick($('rcProfitMonth'), rc.profitScope, rcScopeKey(rc.profitScope, 'profit'));
-  $('rcProfitCardLabel').textContent = { cycle: 'This period', month: 'This month', year: 'This year', all: 'All time' }[rc.profitScope];
+  rcRenderScopeSeg($('rcProfitScope'), rc.profitScope, rcScopeKey(rc.profitScope, 'profit'));
+  $('rcProfitStrip').hidden = !p;
+  $('rcProfitCharts').hidden = !p;
   if (!p) {
-    $('rcProfitAmt').textContent = '$0.00';
-    $('rcProfitSub').textContent = 'profit · no period imported';
-    rcBar($('rcProfitBar'), []);
-    $('rcProfitLegend').innerHTML = '';
-    $('rcProfitNums').innerHTML = '';
+    $('rcProfitStrip').innerHTML = '';
     $('rcProfitTabs').innerHTML = '';
     $('rcProfitTable').innerHTML = '';
-    $('rcProfitFoot').textContent = 'Import a payment period on the Reconcile screen to see its orders.';
+    $('rcProfitFoot').textContent = 'Import a payment period on the Import screen to see its orders.';
     return;
   }
-  const scopeLabel = rc.profitScope === 'cycle' ? rcPeriodName(p.label).replace(/, \d{4}$/, '') : p.label;
-  $('rcProfitAmt').textContent = (p.profit < 0 ? '−' : '') + rcMoney(p.profit);
-  $('rcProfitAmt').classList.toggle('rc-neg', p.profit < 0);
-  $('rcProfitSub').textContent = `profit · ${scopeLabel}${p.margin != null ? ` · ${rcPct(p.margin)} margin` : ''}`;
-  // the bar: what Walmart paid, split into cost of goods and what is left
   const signed = (v) => (v < 0 ? '−' : '') + rcMoney(v);
-  rcBar($('rcProfitBar'), [['is-grey', p.cogs], ['is-navy', Math.max(0, p.profit)]]);
-  const legend = [
-    ['', signed(p.payout), 'Walmart paid in total'],
-    ['is-grey', rcMoney(p.cogs), 'cost of goods sold'],
-    ['is-navy', signed(p.profit), 'profit'],
-  ];
-  if (p.commissionPct != null) legend.push(['', rcMoney(Math.abs(p.commission)), `commission · ${rcPct(p.commissionPct)} of ${rcMoney(p.gross)} in goods sold`]);
-  if (p.missing.orders) legend.push(['', signed(p.missing.payout), `paid on ${rcPlural(p.missing.orders, 'order')} with no cost set`]);
-  if (p.other) legend.push(['', signed(p.other), 'other Walmart lines (no order)']);
-  $('rcProfitLegend').innerHTML = legend.map(([tone, amt, label]) => `<div class="rc-legend-item"><span class="rc-swatch ${tone}"></span><div><div class="rc-legend-amt">${esc(amt)}</div><div class="rc-legend-label">${esc(label)}</div></div></div>`).join('');
-  $('rcProfitNums').innerHTML = [
-    ['is-navy', p.orders, 'orders', rcMoney(p.payout)],
-    ['is-navy', p.unitsSold, 'units sold', `${p.unitsRefunded} refunded`],
-    ['is-navy', p.unitsBack, 'back in stock', 'cost recovered'],
-  ].map(([tone, n, label, sub]) => `<div><div class="rc-num ${tone}">${n}</div><div class="rc-num-label">${label}</div><div class="rc-num-money">${esc(sub)}</div></div>`).join('');
+  const notBack = Math.max(0, p.unitsRefunded - p.unitsBack);
+  // against the period before this one (by period start), when one exists
+  let delta = '';
+  if (rc.profitScope === 'cycle') {
+    const runs = rc.data.runs || []; const i = runs.findIndex(r => r.id === rc.runId);
+    const prevRun = i >= 0 ? runs[i + 1] : null;
+    const prev = prevRun ? (p.periods || []).find(x => x.id === prevRun.id) : null;
+    if (prev && prev.hasOrders) { const d = p.profit - prev.profit; delta = ` · ${d >= 0 ? '▲' : '▼'} ${rcMoney(d)} vs last period`; }
+  }
+  const cell = (label, v, sub, cls = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
+  const priced = p.gross > 0;
+  $('rcProfitStrip').innerHTML = [
+    cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced ? `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.gross / Math.max(1, p.unitsSold))}` : `${rcPlural(p.unitsSold, 'unit')} · price not in this period yet`),
+    cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
+    cell('Cost of goods', rcMoney(p.cogs), notBack ? `${notBack} refunded ${notBack === 1 ? 'unit' : 'units'} not back, still costed` : `${p.unitsBack} back in stock · cost recovered`),
+    cell('Profit', signed(p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin' : 'no margin yet'}${delta}`, 'is-hi' + (p.profit < 0 ? ' is-red' : '')),
+    cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid uncounted` : 'every listing is costed'),
+  ].join('');
+  rcDrawDollar(p);
+  rcDrawSkus(p);
 
   $('rcProfitTabs').innerHTML = [['sku', 'By SKU', p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearch').hidden = rc.profitTab !== 'sku';
+  $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
   const money = (v, known = true) => (known ? `${v < 0 ? '−' : ''}${rcMoney(v)}` : '<span class="rc-nocost">no cost set</span>');
   if (rc.profitTab === 'sku') {
     const q = rc.profitQ.toLowerCase();
@@ -2255,17 +2341,38 @@ for (const b of document.querySelectorAll('[data-rcsub]')) {
 }
 $('rcProfitScope').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-rcscope]');
-  if (!b || b.dataset.rcscope === rc.profitScope) return;
-  rc.profitScope = b.dataset.rcscope;
-  await rcLoadProfit();
-  rcRenderProfit();
+  if (!b) return;
+  const scope = b.dataset.rcscope;
+  if (scope !== rc.profitScope) { rc.profitScope = scope; await rcLoadProfit(); rcRenderProfit(); return; }
+  // the active segment opens the picker
+  const opts = rcScopeOptions(scope);
+  if (opts.length < 2) return;
+  const key = String(rcScopeKey(scope, 'profit'));
+  const dlg = $('rcPickDlg');
+  dlg.innerHTML = opts.map(([v, label]) => `<button class="tab-menu-item ${String(v) === key ? 'is-current' : ''}" data-rcpick="${esc(v)}">${esc(label)}</button>`).join('');
+  dlg.showModal();
+  rcAnchor(dlg, b.getBoundingClientRect());
 });
-$('rcProfitMonth').addEventListener('change', async () => {
-  const v = $('rcProfitMonth').value;
+$('rcPickDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcpick]');
+  $('rcPickDlg').close();
+  if (!item) return;
+  const v = item.dataset.rcpick;
   if (rc.profitScope === 'cycle') { rc.runId = v; rc.profit = null; await rcLoad(); return; }
   if (rc.profitScope === 'month') rc.profitMonth = v; else if (rc.profitScope === 'year') rc.profitYear = v;
   await rcLoadProfit();
   rcRenderProfit();
+});
+$('rcSkuChart').addEventListener('click', (e) => {
+  const g = e.target.closest('[data-sku]');
+  if (!g) return;
+  rc.profitQ = g.dataset.sku; $('rcProfitSearch').value = rc.profitQ; rc.profitTab = 'sku';
+  rcRenderProfit();
+});
+let rcResizeT = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(rcResizeT);
+  rcResizeT = setTimeout(() => { if (activePage === 'recovery' && rc.sub === 'profit' && rc.profit) { rcDrawDollar(rc.profit); rcDrawSkus(rc.profit); } }, 120);
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
 $('rcProfitTable').addEventListener('click', (e) => {
