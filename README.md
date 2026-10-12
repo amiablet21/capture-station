@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.11 highlights
+
+- **Import is its own Recovery screen** (owner: "an import tab that does not mix with the reconcile tab"). Import holds the drop target and every imported period in one list, newest first: imported when and by which station, refunds, received / not received / WFS waiting with their dollars, how many are still open today, and Reconcile · Excel · Remove. The header's Import button is gone. Reconcile reads one period, picked from a dropdown, and says how many of its not-received are still open today against how many resolved since.
+
 ## v1.32.10 highlights
 
 - **Recovery at the Capture sheet's density** (owner: "it looks like it was zoomed in 110–120%"). No zoom was left; the design's own air was the difference. Cells sit at 7px padding on 34px rows, headers at 10.5px, the big numbers at 26px, headlines and the period name at 22px, section titles at 14px, chips and controls a size smaller, and the gaps between sections halved.

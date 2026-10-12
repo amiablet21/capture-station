@@ -5409,10 +5409,10 @@ th:last-child > .col-grip { right: 0; }
    sit together (owner 2026-10-12: "spaced better") */
 .rc-table { table-layout: fixed; }
 .rc-table-reconcile th:nth-child(1) { width: 14%; }
-.rc-table-reconcile th:nth-child(2) { width: 30%; }
+.rc-table-reconcile th:nth-child(2) { width: 26%; }
 .rc-table-reconcile th:nth-child(3) { width: 13%; }
 .rc-table-reconcile th:nth-child(4) { width: 9%; }
-.rc-table-reconcile th:nth-child(5) { width: 13%; }
+.rc-table-reconcile th:nth-child(5) { width: 11%; }
 .rc-table-list th:nth-child(1) { width: 12%; }
 .rc-table-list th:nth-child(2) { width: 5%; }
 .rc-table-list th:nth-child(3) { width: 23%; }
@@ -5449,3 +5449,18 @@ th:last-child > .col-grip { right: 0; }
 .rc-chip .rc-chip-n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; margin-left: 4px; opacity: .85; }
 .rc-sec .rc-table-card { border: none; border-radius: 0; }
 .rc-sec .rc-top .rc-legend { max-width: none; }
+
+/* the Import screen (owner 2026-10-12) */
+.rc-sec-title-static { cursor: default; }
+.rc-small { font-size: 11.5px; }
+.rc-import-body { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.rc-import-body .rc-progress { margin-top: 0; }
+.rc-table-periods th:nth-child(1) { width: 18%; }
+.rc-table-periods th:nth-child(2) { width: 22%; }
+.rc-table-periods th:nth-child(n+3):nth-child(-n+7) { width: 9%; }
+.rc-period-link { font-family: inherit; font-size: 13px; font-weight: 600; color: #1E3A66; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+.rc-period-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.rc-period-actions { text-align: right; white-space: nowrap; }
+.rc-period-actions .rc-link { margin-left: 12px; }
+.rc-period-actions .rc-link.is-danger { color: #9F2F2D; }
+.rc-label-row + .rc-pick-row { margin-top: 4px; }

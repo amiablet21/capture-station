@@ -301,30 +301,54 @@
         <div class="rc-head">
           <h1 class="rc-h1">Recovery</h1>
           <nav class="rc-subtabs" aria-label="Recovery screens">
-            <button type="button" class="rc-subtab is-active" data-rcsub="reconcile">Reconcile</button>
+            <button type="button" class="rc-subtab is-active" data-rcsub="import">Import</button>
+            <button type="button" class="rc-subtab" data-rcsub="reconcile">Reconcile</button>
             <button type="button" class="rc-subtab" data-rcsub="notreceived">Not received <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
             <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
           </nav>
-          <button id="rcImportBtn" class="rc-btn rc-btn-primary rc-head-action" type="button">Import payment period</button>
           <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
           <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Download Excel</button>
         </div>
 
-        <div id="rcReconcile" class="rc-screen">
-          <section class="rc-top">
-            <div class="rc-left">
-              <div>
-                <div class="rc-label" id="rcPeriodLabel">Latest period</div>
-                <div class="rc-period" id="rcPeriodName">Nothing imported yet</div>
-                <div class="rc-period-meta" id="rcPeriodMeta">Drop a Seller Center → Payments reconciliation CSV to check its refunds against the Returns log.</div>
-              </div>
+        <!-- Import (owner 2026-10-12: "an import tab that does not mix with
+             the reconcile tab"): the drop target, then every imported period
+             in one list — the period's home. Reconcile reads one period. -->
+        <div id="rcImport" class="rc-screen">
+          <section class="rc-sec is-open">
+            <div class="rc-sec-head">
+              <span class="rc-sec-title rc-sec-title-static">Import a payment period</span>
+              <div class="rc-sec-tools"><span class="rc-muted rc-small" id="rcImportHint">Seller Center → Payments → the period's reconciliation report (CSV)</span></div>
+            </div>
+            <div class="rc-sec-body rc-import-body">
               <div class="rc-drop" id="rcDrop">
                 <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></div>
-                <div class="rc-drop-text"><div class="rc-drop-title" id="rcDropTitle">Drop the next period's CSV here</div><div class="rc-drop-sub">Seller Center → Payments · nothing is written to disk</div></div>
+                <div class="rc-drop-text"><div class="rc-drop-title" id="rcDropTitle">Drop a payment period CSV here</div><div class="rc-drop-sub">One file per period · the original is kept in the Walmart Reports folder · a period already imported asks before it is replaced</div></div>
                 <button id="rcBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
               </div>
               <div class="rc-progress" id="rcProgress" hidden></div>
-              <div class="rc-earlier" id="rcEarlier" hidden></div>
+            </div>
+          </section>
+          <section class="rc-sec is-open">
+            <div class="rc-sec-head">
+              <span class="rc-sec-title rc-sec-title-static">Imported periods <span class="rc-tab-count" id="rcPeriodCount"></span></span>
+              <div class="rc-sec-tools"><span class="rc-muted rc-small">newest period first · click a period to reconcile it</span></div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-periods" id="rcPeriodsTable"></table></div>
+          </section>
+        </div>
+
+        <div id="rcReconcile" class="rc-screen" hidden>
+          <section class="rc-top">
+            <div class="rc-left">
+              <div>
+                <div class="rc-label-row">
+                  <div class="rc-label" id="rcPeriodLabel">Period</div>
+                </div>
+                <div class="rc-pick-row"><select id="rcReconcilePick" class="rc-month" aria-label="Which period"></select></div>
+                <div class="rc-period" id="rcPeriodName">Nothing imported yet</div>
+                <div class="rc-period-meta" id="rcPeriodMeta">Import a payment period first.</div>
+                <div class="rc-period-meta" id="rcPeriodOpen"></div>
+              </div>
             </div>
             <div class="rc-card" id="rcPeriodCard" hidden>
               <div class="rc-nums" id="rcPeriodNums"></div>
@@ -345,12 +369,6 @@
           </section>
         </div>
 
-        <!-- Not received, in the structure of the Walmart app the owner used
-             before (owner 2026-10-12, "that is what I used before and it
-             worked well"): two collapsible sections — Monthly summary with the
-             scope switch, the period picker and Download Excel in its header;
-             Returns Not Received with the search in its header, a row of
-             count chips, and the old column order -->
         <div id="rcNotReceived" class="rc-screen" hidden>
           <section class="rc-sec" id="rcSecSummary">
             <div class="rc-sec-head">

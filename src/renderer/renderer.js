@@ -1634,7 +1634,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 // and the tracker with its status sentences and row actions. Every status
 // is derived in the main process on each load; this side only draws.
 const rc = {
-  data: null, run: null, runId: null, sub: 'reconcile', bucket: 'notReceived', tab: 'todo', type: '', q: '',
+  data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
   profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '',
   year: '', profitYear: '',
@@ -1750,12 +1750,13 @@ function rcRender() {
   $('rcNeedCount').textContent = String(need);
   $('rcNeedCount').hidden = !need;
   for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
+  $('rcImport').hidden = rc.sub !== 'import';
   $('rcReconcile').hidden = rc.sub !== 'reconcile';
   $('rcNotReceived').hidden = rc.sub !== 'notreceived';
   $('rcProfit').hidden = rc.sub !== 'profit';
-  $('rcImportBtn').hidden = rc.sub !== 'reconcile';
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
   $('rcProfitExcelBtn').hidden = rc.sub !== 'profit';
+  rcRenderImport();
   rcRenderReconcile();
   rcRenderSummary();
   rcRenderToday();
@@ -1839,35 +1840,62 @@ function rcRenderProfit() {
 }
 
 /* ----- Reconcile ----- */
+/* ----- Import: the periods' home ----- */
+function rcRenderImport() {
+  const runs = rc.data.runs || [];
+  $('rcPeriodCount').textContent = runs.length ? String(runs.length) : '';
+  $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here' : 'Drop a payment period CSV here';
+  $('rcImportHint').textContent = rc.data.logRows
+    ? `Seller Center → Payments → the period's reconciliation report (CSV) · checked against ${Number(rc.data.logRows).toLocaleString()} returns in the log`
+    : 'Log returns first — the Returns log is what each refund is checked against';
+  const head = '<th>Period</th><th>Imported</th><th class="is-right">Refunds</th><th class="is-right">Received</th><th class="is-right">Not received</th><th class="is-right">WFS waiting</th><th class="is-right">Open today</th><th></th>';
+  const body = runs.length ? runs.map(r => {
+    const c = r.counts || {};
+    const b = (k) => (c[k] || { count: 0, total: 0 });
+    const who = [r.station, r.by].filter(Boolean).join(' · ');
+    return `<tr>
+      <td><button type="button" class="rc-period-link" data-rcrun="${esc(r.id)}" title="Reconcile this period">${esc(rcPeriodName(r.label))}</button></td>
+      <td class="rc-muted">${esc(rcWhen(r.ranAt))}${who ? ` <span class="rc-faint">· ${esc(who)}</span>` : ''}</td>
+      <td class="is-right rc-mono">${r.totalRefunds}</td>
+      <td class="is-right rc-mono">${b('received').count} <span class="rc-muted">· ${rcMoney(b('received').total)}</span></td>
+      <td class="is-right rc-mono">${b('notReceived').count} <span class="rc-muted">· ${rcMoney(b('notReceived').total)}</span></td>
+      <td class="is-right rc-mono">${b('wfsWaiting').count} <span class="rc-muted">· ${rcMoney(b('wfsWaiting').total)}</span></td>
+      <td class="is-right rc-mono ${r.open ? 'rc-neg' : 'rc-faint'}">${r.open || 'clear'}</td>
+      <td class="rc-period-actions"><button type="button" class="rc-link" data-rcrun="${esc(r.id)}">Reconcile</button><button type="button" class="rc-link" data-rcexcel="${esc(r.id)}">Excel</button><button type="button" class="rc-link is-danger" data-rcremove="${esc(r.id)}">Remove</button></td>
+    </tr>`;
+  }).join('') : '<tr class="rc-empty-row"><td colspan="8">No period imported yet.</td></tr>';
+  $('rcPeriodsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
+/* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
   const runs = rc.data.runs || [];
   const run = rc.run;
   const empty = !runs.length;
   $('rcPeriodCard').hidden = empty || !run;
   $('rcBucketCard').hidden = empty || !run;
-  $('rcEarlier').hidden = runs.length < 2;
-  $('rcDropTitle').textContent = empty ? 'Drop a payment period CSV here' : 'Drop the next period\'s CSV here';
+  const pick = $('rcReconcilePick');
+  pick.classList.toggle('is-idle', empty);
+  pick.innerHTML = runs.map(r => `<option value="${esc(r.id)}" ${r.id === rc.runId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
   if (empty) {
-    $('rcPeriodLabel').textContent = 'Latest period';
+    $('rcPeriodLabel').textContent = 'Period';
     $('rcPeriodName').textContent = 'Nothing imported yet';
-    $('rcPeriodMeta').textContent = rc.data.logRows
-      ? `Drop a Seller Center → Payments reconciliation CSV to check its refunds against the ${rc.data.logRows.toLocaleString()} returns in the log.`
-      : 'Log returns first — the Returns log is what each refund is checked against.';
+    $('rcPeriodMeta').textContent = 'Import a payment period on the Import screen first.';
+    $('rcPeriodOpen').textContent = '';
     return;
   }
   const meta = runs.find(r => r.id === rc.runId) || runs[0];
   $('rcPeriodLabel').textContent = meta.id === runs[0].id ? 'Latest period' : 'Period';
   $('rcPeriodName').textContent = rcPeriodName(meta.label);
   $('rcPeriodMeta').textContent = `Imported ${rcWhen(meta.ranAt)} · ${rcPlural(meta.totalRefunds, 'refund')} checked against ${Number(meta.logRows || 0).toLocaleString()} returns in the log`;
-
-  // earlier periods: a hairline list, each with its open count and Excel link
-  const others = runs.filter(r => r.id !== meta.id);
-  $('rcEarlier').innerHTML = others.length ? `<div class="rc-label">${meta.id === runs[0].id ? 'Earlier periods' : 'Other periods'}</div>` + others.map(r => `
-    <div class="rc-earlier-row">
-      <button type="button" class="rc-earlier-name" data-rcrun="${esc(r.id)}" title="Show this period">${esc(rcPeriodName(r.label))}</button>
-      <span class="rc-earlier-open ${r.open ? '' : 'is-clear'}">${r.open ? `${r.open} open` : 'clear'}</span>
-      <button type="button" class="rc-link" data-rcexcel="${esc(r.id)}">Excel</button>
-    </div>`).join('') : '';
+  // what has happened since: the period's not-received that are still open
+  // today against those that came back or were paid
+  const c0 = meta.counts || {};
+  const flagged = ((c0.notReceived || {}).count || 0) + ((c0.wfsWaiting || {}).count || 0);
+  const resolved = Math.max(0, flagged - (meta.open || 0));
+  $('rcPeriodOpen').textContent = flagged
+    ? `Today: ${rcPlural(meta.open || 0, 'return')} still open · ${resolved} resolved since (came back or paid)`
+    : 'Today: nothing from this period is outstanding.';
 
   if (!run) return;
   const c = run.counts || {};
@@ -2143,9 +2171,9 @@ async function rcImport(name, text, force) {
   }
   if (!res.ok) { rcProgress(res.error || 'Could not import that report.', 'fail'); return; }
   rc.runId = res.id;
-  rc.sub = 'reconcile';
+  rc.sub = 'import';
   rc.bucket = 'notReceived';
-  rcProgress(`Done — ${rcPeriodName(res.label)} is summarized below. Nothing was written to disk; use Download Excel if you want a workbook.`, 'done');
+  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns joined the Not received list.`, 'done');
   await rcLoad();
 }
 async function rcImportFile(file) {
@@ -2206,7 +2234,6 @@ $('rcProfitExcelBtn').addEventListener('click', async () => {
   const r = await api.recoveryExportProfit(rc.profitScope, rc.profitScope === 'cycle' ? rc.runId : rc.profitScope === 'month' ? rc.profitMonth : null).catch(err => ({ ok: false, error: err.message }));
   if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
 });
-$('rcImportBtn').addEventListener('click', rcBrowse);
 $('rcBrowseBtn').addEventListener('click', rcBrowse);
 // the drop target (the whole page accepts the file; the box shows the state)
 for (const ev of ['dragenter', 'dragover']) {
@@ -2217,7 +2244,7 @@ $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
   $('rcDrop').classList.remove('is-over');
   const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) { rc.sub = 'reconcile'; rcRender(); rcImportFile(file); }
+  if (file) { rc.sub = 'import'; rcRender(); rcImportFile(file); }
 });
 api.on('recovery:progress', ({ text }) => { if (rc.busy) rcProgress(text); });
 $('rcDupSkip').addEventListener('click', () => { $('rcDupDlg').close(); rc.pendingImport = null; rcProgress('Skipped — the imported period stands.', ''); });
@@ -2227,29 +2254,31 @@ $('rcDupReimport').addEventListener('click', async () => {
   rc.pendingImport = null;
   if (p) await rcImport(p.name, p.text, true);
 });
-$('rcExcelBtn').addEventListener('click', async () => {
-  if (!rc.runId) return;
-  const r = await api.recoveryExportRun(rc.runId).catch(e => ({ ok: false, error: e.message }));
-  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
-});
-$('rcRemoveBtn').addEventListener('click', async () => {
-  const meta = (rc.data.runs || []).find(r => r.id === rc.runId);
+$('rcExcelBtn').addEventListener('click', () => { if (rc.runId) rcExcelPeriod(rc.runId); });
+async function rcRemovePeriod(id) {
+  const meta = (rc.data.runs || []).find(r => r.id === id);
   if (!meta) return;
   if (!(await rcConfirm({ title: 'Remove period', body: `Delete the "${rcPeriodName(meta.label)}" run? Its not-received data is removed too.`, ok: 'Delete' }))) return;
-  const r = await api.recoveryRemoveRun(rc.runId).catch(e => ({ ok: false, error: e.message }));
+  const r = await api.recoveryRemoveRun(id).catch(e => ({ ok: false, error: e.message }));
   if (!r || !r.ok) { toast((r && r.error) || 'Could not remove that period.', 4000); return; }
-  rc.runId = null;
+  if (rc.runId === id) rc.runId = null;
+  rc.profit = null;
   rcProgress('');
   await rcLoad();
-});
-$('rcEarlier').addEventListener('click', async (e) => {
-  const sel = e.target.closest('[data-rcrun]');
-  if (sel) { rc.runId = sel.dataset.rcrun; rc.bucket = 'notReceived'; rcProgress(''); await rcLoad(); return; }
+}
+async function rcExcelPeriod(id) {
+  const r = await api.recoveryExportRun(id).catch(err => ({ ok: false, error: err.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+}
+$('rcRemoveBtn').addEventListener('click', () => { if (rc.runId) rcRemovePeriod(rc.runId); });
+$('rcReconcilePick').addEventListener('change', async () => { rc.runId = $('rcReconcilePick').value; rc.profit = null; rc.bucket = 'notReceived'; await rcLoad(); });
+$('rcPeriodsTable').addEventListener('click', async (e) => {
+  const open = e.target.closest('[data-rcrun]');
+  if (open) { rc.runId = open.dataset.rcrun; rc.sub = 'reconcile'; rc.bucket = 'notReceived'; rc.profit = null; await rcLoad(); return; }
   const xl = e.target.closest('[data-rcexcel]');
-  if (xl) {
-    const r = await api.recoveryExportRun(xl.dataset.rcexcel).catch(err => ({ ok: false, error: err.message }));
-    if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
-  }
+  if (xl) { await rcExcelPeriod(xl.dataset.rcexcel); return; }
+  const rm = e.target.closest('[data-rcremove]');
+  if (rm) await rcRemovePeriod(rm.dataset.rcremove);
 });
 $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
