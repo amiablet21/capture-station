@@ -405,7 +405,7 @@ function profit(scope, key) {
   }
 
   const bySku = new Map();
-  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0 };
+  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false };
   const missingSkus = new Set();
   for (const o of orders) {
     const cost = unitCost(o.sku);
@@ -413,16 +413,25 @@ function profit(scope, key) {
     const costedUnits = Math.max(0, o.saleUnits - back);
     const cogs = cost === null ? 0 : costedUnits * cost;
     tot.payout += o.netPayable; tot.orders++; tot.unitsSold += o.saleUnits; tot.unitsRefunded += o.refundUnits; tot.unitsBack += back;
+    const gross = Number.isFinite(Number(o.gross)) && o.gross !== null ? Number(o.gross) : 0;
+    const comm = o.commission === null || o.commission === undefined ? null : Number(o.commission);
+    tot.gross += gross; if (comm !== null) { tot.commission += comm; tot.commissionKnown = true; }
     if (cost === null) { tot.missingCount++; tot.missingPayout += o.netPayable; missingSkus.add(o.sku || '(no SKU)'); }
     else { tot.cogs += cogs; tot.costedPayout += o.netPayable; }
     const k = o.sku || '(no SKU)';
-    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null });
+    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false });
     const g = bySku.get(k);
     if (!g.item && o.item) g.item = o.item;
     g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.payout += o.netPayable; g.cogs += cogs;
+    g.gross += gross; if (comm !== null) { g.commission += comm; g.commissionKnown = true; }
   }
   const skus = [...bySku.values()].map((g) => ({
     ...g, payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
+    // the goods price per unit sold and Walmart's cut of it, from the
+    // report's own lines (null where a period predates these columns)
+    gross: r2(g.gross), commission: r2(g.commission),
+    avgPrice: g.unitsSold > 0 && g.gross > 0 ? r2(g.gross / g.unitsSold) : null,
+    commissionPct: g.commissionKnown && g.gross > 0 ? Math.round((-g.commission / g.gross) * 1000) / 10 : null,
     margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
   // Walmart lines that belong to no order: storage, ads, WFS inventory
@@ -451,6 +460,8 @@ function profit(scope, key) {
     payout: r2(tot.payout), cogs: r2(tot.cogs), profit: profitV,
     margin: tot.payout > 0 ? Math.round((profitV / tot.payout) * 1000) / 10 : null,
     orders: tot.orders, unitsSold: tot.unitsSold, unitsRefunded: tot.unitsRefunded, unitsBack: tot.unitsBack,
+    gross: r2(tot.gross), commission: r2(tot.commission),
+    commissionPct: tot.commissionKnown && tot.gross > 0 ? Math.round((-tot.commission / tot.gross) * 1000) / 10 : null,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
     costedPayout: r2(tot.costedPayout), other, netAfterOther: r2(profitV + other),
     skus, periods, missingRuns,
@@ -470,9 +481,9 @@ function profitWorkbook(scope, key) {
     ] },
     { name: 'By SKU', columns: [
       { header: 'Walmart SKU', width: 26, kind: 'text' }, { header: 'Product', width: 48, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units sold', width: 10, kind: 'int' },
-      { header: 'Refunded', width: 9, kind: 'int' }, { header: 'Back in stock', width: 12, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money }, { header: 'Unit cost', width: 10, kind: money },
+      { header: 'Refunded', width: 9, kind: 'int' }, { header: 'Back in stock', width: 12, kind: 'int' }, { header: 'Avg price', width: 10, kind: money }, { header: 'Commission %', width: 12, kind: 'text' }, { header: 'Walmart paid', width: 14, kind: money }, { header: 'Unit cost', width: 10, kind: money },
       { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' },
-    ], rows: p.skus.map((g) => [g.sku, g.item, g.orders, g.unitsSold, g.unitsRefunded, g.unitsBack, g.payout, g.costKnown ? g.unitCost : '', g.costKnown ? g.cogs : '', g.costKnown ? g.profit : '', g.margin ?? (g.costKnown ? '' : 'no cost set')]) },
+    ], rows: p.skus.map((g) => [g.sku, g.item, g.orders, g.unitsSold, g.unitsRefunded, g.unitsBack, g.avgPrice ?? '', g.commissionPct ?? '', g.payout, g.costKnown ? g.unitCost : '', g.costKnown ? g.cogs : '', g.costKnown ? g.profit : '', g.margin ?? (g.costKnown ? '' : 'no cost set')]) },
     { name: 'By period', columns: [
       { header: 'Period', width: 24, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units', width: 8, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money },
       { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' }, { header: 'Orders without cost', width: 18, kind: 'int' },

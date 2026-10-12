@@ -118,6 +118,11 @@ function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_wm_orders_run ON wm_orders(run_id);
   `);
+  // v1.32.13: the goods price and Walmart's commission per order (null on
+  // rows imported before, until that period is re-imported)
+  for (const col of ['gross REAL', 'commission REAL']) {
+    try { db.exec(`ALTER TABLE wm_orders ADD COLUMN ${col}`); } catch { /* already there */ }
+  }
 }
 
 const d = () => {
@@ -194,14 +199,15 @@ function putRun(run, refunds, payouts, ledger, orders) {
 // existed has none until its archived CSV is re-read
 function putOrdersRows(db, runId, orders) {
   db.prepare('DELETE FROM wm_orders WHERE run_id = ?').run(runId);
-  const io = db.prepare('INSERT INTO wm_orders (run_id, po, sku, item, fulfillment, date, sale_units, refund_units, net) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const io = db.prepare('INSERT INTO wm_orders (run_id, po, sku, item, fulfillment, date, sale_units, refund_units, net, gross, commission) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
   for (const o of orders || []) {
     io.run(runId, String(o.po || ''), String(o.sku || ''), String(o.item || ''), String(o.fulfillment || ''), o.date || null,
-      Number(o.saleUnits ?? o.sale_units) || 0, Number(o.refundUnits ?? o.refund_units) || 0, Number(o.netPayable ?? o.net) || 0);
+      Number(o.saleUnits ?? o.sale_units) || 0, Number(o.refundUnits ?? o.refund_units) || 0, Number(o.netPayable ?? o.net) || 0, num(o.gross), num(o.commission));
   }
 }
 function putOrders(runId, orders) { putOrdersRows(d(), runId, orders); }
-const ordersOut = (r) => ({ run_id: r.run_id, po: r.po, sku: r.sku, item: r.item, fulfillment: r.fulfillment, date: r.date, saleUnits: r.sale_units, refundUnits: r.refund_units, netPayable: r.net });
+const ordersOut = (r) => ({ run_id: r.run_id, po: r.po, sku: r.sku, item: r.item, fulfillment: r.fulfillment, date: r.date, saleUnits: r.sale_units, refundUnits: r.refund_units, netPayable: r.net, gross: r.gross ?? null, commission: r.commission ?? null });
 function runOrders(id) { return d().prepare('SELECT * FROM wm_orders WHERE run_id = ?').all(id).map(ordersOut); }
 function allOrders() { return d().prepare('SELECT * FROM wm_orders').all().map(ordersOut); }
 function runsWithoutOrders() {

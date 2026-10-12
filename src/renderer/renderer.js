@@ -1638,7 +1638,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '',
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null,
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -1676,6 +1676,27 @@ const rcMoney = (n) => '$' + Math.abs(Number(n) || 0).toLocaleString('en-US', { 
 const rcPlural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
 // a period label for the screen: an en dash between the dates
 const rcPeriodName = (label) => String(label || '').replace(' - ', ' – ');
+// Profit tables sort on a header click (owner 2026-10-12: "click the column
+// headers to filter by most to least"): numbers start biggest first, text
+// A→Z; a second click flips; rows with no value sit last either way
+function rcSortRows(rows, sort, defaultKey) {
+  const key = (sort && sort.key) || defaultKey;
+  const dir = sort ? sort.dir : -1;
+  const val = (r) => r[key];
+  const isText = rows.some(r => typeof val(r) === 'string');
+  return rows.slice().sort((a, b) => {
+    const x = val(a), y = val(b);
+    const xn = x === null || x === undefined || x === '', yn = y === null || y === undefined || y === '';
+    if (xn && yn) return 0; if (xn) return 1; if (yn) return -1;
+    const c = isText ? String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' }) : Number(x) - Number(y);
+    return dir * c;
+  });
+}
+const rcSortTh = (sort, key, label, right, text) => {
+  const on = sort && sort.key === key;
+  const arrow = on ? (sort.dir < 0 ? ' ▾' : ' ▴') : '';
+  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}</th>`;
+};
 // "Mon D" from an ISO stamp or a report MM/DD/YYYY date
 function rcMonDay(v) {
   if (!v) return '';
@@ -1801,6 +1822,7 @@ function rcRenderProfit() {
     ['is-grey', rcMoney(p.cogs), 'cost of goods sold'],
     ['is-navy', signed(p.profit), 'profit'],
   ];
+  if (p.commissionPct != null) legend.push(['', rcMoney(Math.abs(p.commission)), `commission · ${rcPct(p.commissionPct)} of ${rcMoney(p.gross)} in goods sold`]);
   if (p.missing.orders) legend.push(['', signed(p.missing.payout), `paid on ${rcPlural(p.missing.orders, 'order')} with no cost set`]);
   if (p.other) legend.push(['', signed(p.other), 'other Walmart lines (no order)']);
   $('rcProfitLegend').innerHTML = legend.map(([tone, amt, label]) => `<div class="rc-legend-item"><span class="rc-swatch ${tone}"></span><div><div class="rc-legend-amt">${esc(amt)}</div><div class="rc-legend-label">${esc(label)}</div></div></div>`).join('');
@@ -1816,22 +1838,30 @@ function rcRenderProfit() {
   const money = (v, known = true) => (known ? `${v < 0 ? '−' : ''}${rcMoney(v)}` : '<span class="rc-nocost">no cost set</span>');
   if (rc.profitTab === 'sku') {
     const q = rc.profitQ.toLowerCase();
-    const rows = p.skus.filter(g => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q));
-    const head = '<th class="rc-g">#</th><th>SKU</th><th class="is-right">Sold</th><th class="is-right">Refunded</th><th class="is-right">Walmart paid</th><th class="is-right">Unit cost</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
+    const s = rc.profitSort;
+    const rows = rcSortRows(p.skus.filter(g => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q)), s, 'payout');
+    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
+      + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
+      + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
     const body = rows.length ? rows.map((g, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
       <td class="rc-item">${rcSkuCell(g.sku, g.item)}</td>
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
+      <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
+      <td class="is-right">${g.commissionPct == null ? '<span class="rc-faint">—</span>' : rcPct(g.commissionPct)}</td>
       <td class="is-right">${money(g.payout)}</td>
       <td class="is-right">${g.costKnown ? rcMoney(g.unitCost) : '<span class="rc-nocost">no cost set</span>'}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
       <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="8">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
   } else {
-    const head = '<th class="rc-g">#</th><th>Period</th><th class="is-right">Orders</th><th class="is-right">Units</th><th class="is-right">Walmart paid</th><th class="is-right">Cost of goods</th><th class="is-right">Profit</th><th class="is-right">Margin</th>';
-    const body = p.periods.length ? p.periods.map((x, i) => `<tr>
+    const s = rc.profitSort;
+    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'label', 'Period', false, true) + rcSortTh(s, 'orders', 'Orders', true) + rcSortTh(s, 'units', 'Units', true)
+      + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'cogs', 'Cost of goods', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
+    const periods = s ? rcSortRows(p.periods, s, 'label') : p.periods;
+    const body = periods.length ? periods.map((x, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
       <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? (x.missingCount ? `<div class="rc-item-sub">${rcPlural(x.missingCount, 'order')} with no cost set</div>` : '') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
       <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
@@ -2237,7 +2267,15 @@ $('rcProfitMonth').addEventListener('change', async () => {
   await rcLoadProfit();
   rcRenderProfit();
 });
-$('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rcRenderProfit(); } });
+$('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
+$('rcProfitTable').addEventListener('click', (e) => {
+  const th = e.target.closest('[data-rcsort]');
+  if (!th) return;
+  const key = th.dataset.rcsort;
+  const first = th.dataset.rctext ? 1 : -1; // text A→Z first, numbers biggest first
+  rc.profitSort = rc.profitSort && rc.profitSort.key === key ? { key, dir: -rc.profitSort.dir } : { key, dir: first };
+  rcRenderProfit();
+});
 $('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
 $('rcProfitExcelBtn').addEventListener('click', async () => {
   if (!rc.profit) { toast('Nothing to export yet.'); return; }
@@ -12261,6 +12299,11 @@ $('retFixDialog').addEventListener('close', () => {
 });
 
 /* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
+$('retExportBtn').addEventListener('click', async () => {
+  const r = await api.returnsExport().catch(e => ({ ok: false, error: e.message }));
+  if (r && r.ok) toast('Returns log saved.');
+  else if (r && !r.canceled) toast((r && r.error) || 'Could not save the returns log.', 4000);
+});
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
   loadUnlisted(true); // fresh scan: cards update the moment it lands

@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld('api', {
   returnsLookup: (ref) => ipcRenderer.invoke('returns:lookup', { ref }),
   returnsCreate: (payload) => ipcRenderer.invoke('returns:create', payload),
   returnsList: () => ipcRenderer.invoke('returns:list'),
+  returnsExport: () => ipcRenderer.invoke('returns:export'),
   returnsEditUnit: (payload) => ipcRenderer.invoke('returns:editUnit', payload),
   returnsDeleteUnit: (payload) => ipcRenderer.invoke('returns:deleteUnit', payload),
   returnsTargets: (sku) => ipcRenderer.invoke('returns:targets', { sku }),

@@ -229,13 +229,15 @@ function parseOrders(rows, format) {
       const po = String(r['Walmart.com PO #'] ?? '').trim();
       if (!po) continue;
       if (!map.has(po)) {
-        map.set(po, { po, item: r['Partner Item name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Date Time']), saleUnits: 0, refundUnits: 0, netPayable: 0 });
+        map.set(po, { po, item: r['Partner Item name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Date Time']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: null });
       }
       const g = map.get(po);
       if (!g.item && r['Partner Item name']) g.item = r['Partner Item name'];
       if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
       g.netPayable += toNum(r['Payable to Partner from Sale']);
-      if (type === 'SALE') g.saleUnits++; else g.refundUnits++;
+      // the new layout carries the retail price on SALE rows too; it has no
+      // commission line of its own, so commission stays unknown there
+      if (type === 'SALE') { g.saleUnits++; g.gross += toNum(r['Refunded Retail Sales']); } else g.refundUnits++;
     }
     return [...map.values()];
   }
@@ -245,12 +247,16 @@ function parseOrders(rows, format) {
     const type = r['Transaction Type'];
     if (type === 'PaymentSummary') continue;
     if (!map.has(po)) {
-      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0 });
+      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: 0 });
     }
     const g = map.get(po);
     if (!g.item && r['Partner Item Name']) g.item = r['Partner Item Name'];
     if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
     g.netPayable += toNum(r['Amount']);
+    // what the customer paid for the goods and what Walmart kept of it
+    // (owner 2026-10-12: "the avg commission rate for this product")
+    if (type === 'Sale' && r['Amount Type'] === 'Product Price') g.gross += toNum(r['Amount']);
+    if (type === 'Sale' && r['Amount Type'] === 'Commission on Product') g.commission += toNum(r['Amount']);
     if (r['Amount Type'] === 'Product Price') {
       const qty = Math.max(1, Math.trunc(Math.abs(Number(r['Ship Qty']))) || 1);
       if (type === 'Sale') g.saleUnits += qty;

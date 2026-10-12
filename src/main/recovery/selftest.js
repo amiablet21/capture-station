@@ -193,6 +193,7 @@ module.exports = function run(check) {
     check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
     check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 0 && a.unitsBack === 1 && a.cogs === 0, a);
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
+    check('recovery: profit — goods price carried per order, commission unknown in the new layout', typeof pr.gross === 'number' && pr.gross > 0 && pr.commissionPct === null && z && z.avgPrice !== null, { gross: pr.gross, pct: pr.commissionPct, z });
     check('recovery: profit workbook builds', recovery.profitWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);
     // exports
     check('recovery: audit workbook builds', recovery.auditWorkbook().readUInt32LE(0) === 0x04034b50);

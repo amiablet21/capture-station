@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.13 highlights
+
+- **Profit shows the price and Walmart's cut** (owner: "can you not see from the file what the commission rate is?"). Two new columns on By SKU, Avg price and Commission, come straight from the report's Product Price and Commission on Product lines, so a SKU reads price → commission → Walmart paid → cost → profit; the legend adds the commission total and its % of goods sold. Periods imported before this show "—" until re-imported. The old report layout carries both; the new layout carries the price only.
+- **Click a Profit column header to sort** (owner: "filter by most to least"): numbers start biggest first, text A→Z, a second click flips, rows with no value sit last. Both the By SKU and By period tables.
+- **Download the whole Returns log** from a tray icon next to Refresh on the Returns page: one Excel sheet, one line per returned item, every station's entries when sync is on.
+- **Not received no longer folds** (owner: "I don't want it to collapse"): Monthly summary and Returns Not Received are plain titles, always open.
+
 ## v1.32.12 highlights
 
 - **Reconcile as a sheet** (owner: "super scrunched … make the whole thing excel-y like the Capture sheet", Design A of three). One toolbar row holds the period picker with Download Excel and Remove period; the import note is gone. Under it a five-cell strip spreads the period across the full width: refunded total with its bar, received, not received, WFS waiting, and a Today cell with how many need action, how many are still open and how many resolved since. Every Recovery table is now a grid: a numbered gutter, cell borders both ways, one line per row on Reconcile (PO # · Type · Item · Refunded · Net refund · Reason · What to do).

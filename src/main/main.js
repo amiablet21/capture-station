@@ -7323,6 +7323,35 @@ function registerRecoveryIpc() {
     if (m && m.ok) shell.openExternal(m.mailto);
     return m;
   });
+  // Returns page (owner 2026-10-12: "an option next to Users to download all
+  // the returns"): the whole log as one Excel sheet, one line per item. Not
+  // Recovery-gated — the log exists on every station.
+  ipcMain.handle('returns:export', async () => {
+    try {
+      const rows = retsync.enabled() ? retsync.list() : db.listReturns(1e9);
+      const day = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? String(iso || '').slice(0, 10) : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`; };
+      const label = (c) => ({ new: 'New', open: 'Open box', used: 'Used', scrap: 'Scrap', damaged: 'Damaged' })[String(c || '').toLowerCase()] || String(c || '');
+      const lines = [];
+      for (const r of rows.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))) {
+        const items = Array.isArray(r.items) && r.items.length ? r.items : [{}];
+        for (const it of items) {
+          lines.push([day(r.created_at), r.order_number || '', r.customer || '', r.tracking || '', it.sku || '', label(it.condition), it.targetSku || '',
+            Number(it.qty) || (it.sku ? 1 : 0), it.price === '' || it.price == null ? '' : Number(String(it.price).replace(/[$,\s]/g, '')) || 0,
+            r.received_by || '', r.station || '', r.source || '', [r.note, it.note].filter(Boolean).join(' · '), r.unmatched ? 'yes' : '']);
+        }
+      }
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Returns log', columns: [
+        { header: 'Date received', width: 13, kind: 'text' }, { header: 'PO #', width: 20, kind: 'text' }, { header: 'Customer', width: 24, kind: 'text' },
+        { header: 'Tracking #', width: 22, kind: 'text' }, { header: 'Returned SKU', width: 26, kind: 'text' }, { header: 'Condition', width: 11, kind: 'text' },
+        { header: 'Logged as', width: 30, kind: 'text' }, { header: 'Units', width: 7, kind: 'int' }, { header: 'Price', width: 10, kind: 'money' },
+        { header: 'Received by', width: 12, kind: 'text' }, { header: 'Station', width: 18, kind: 'text' }, { header: 'Source', width: 10, kind: 'text' },
+        { header: 'Note', width: 36, kind: 'text' }, { header: 'Unmatched', width: 10, kind: 'text' },
+      ], rows: lines }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer('Download the returns log', `Returns_log_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
   ipcMain.handle('recovery:openArchive', async () => {
     if (recoveryGate()) return recoveryGate();
     try { fs.mkdirSync(recoveryArchiveDir(), { recursive: true }); await shell.openPath(recoveryArchiveDir()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
