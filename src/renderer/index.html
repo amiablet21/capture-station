@@ -328,6 +328,15 @@
                 <button id="rcBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
               </div>
               <div class="rc-progress" id="rcProgress" hidden></div>
+              <!-- owner 2026-10-12: returns that came back before the Returns
+                   log existed, marked received in Recovery alone from a file
+                   of PO numbers (any header; an optional date column) -->
+              <div class="rc-drop rc-drop-mark" id="rcMarkDrop">
+                <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></div>
+                <div class="rc-drop-text"><div class="rc-drop-title">Mark received from a file</div><div class="rc-drop-sub">A CSV or text file of PO numbers that came back before the Returns log existed · an optional date column · the Returns sheet is not touched</div></div>
+                <button id="rcMarkBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+              </div>
+              <div class="rc-progress" id="rcMarkProgress" hidden></div>
             </div>
           </section>
           <section class="rc-sec is-open">
@@ -346,6 +355,14 @@
                its 90 days — and the seven columns, nothing else -->
           <section class="rc-table-card" id="rcBucketCard">
             <div class="rc-tabrow" id="rcBucketTabs"></div>
+            <div class="rc-selbar" id="rcSelBar" hidden>
+              <span class="rc-selbar-n" id="rcSelCount">0 selected</span>
+              <button type="button" class="rc-btn rc-btn-primary rc-btn-row" data-rcbulk="receivedManual">Received before the log</button>
+              <button type="button" class="rc-btn rc-btn-outline" data-rcbulk="neverShipped">Never shipped</button>
+              <button type="button" class="rc-btn rc-btn-outline" data-rcbulk="undo" hidden>Undo marks</button>
+              <button type="button" class="rc-btn rc-btn-text" data-rcbulk="clear">Clear</button>
+              <span class="rc-selbar-hint">Shift-click selects a range · the header box selects the whole tab</span>
+            </div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
           </section>
         </div>

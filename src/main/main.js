@@ -7359,6 +7359,14 @@ function registerRecoveryIpc() {
   });
   // findNext is Electron's "begin a new session" flag: true for a new text,
   // false to step through the matches of the current one
+  ipcMain.handle('recovery:markMany', (_e, { list, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.markMany(list, action, payload || {})));
+  ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
+  ipcMain.handle('recovery:markPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, { title: 'A file of PO numbers that came back before the Returns log', filters: [{ name: 'CSV or text', extensions: ['csv', 'txt'] }], properties: ['openFile'] });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, name: path.basename(pick.filePaths[0]), text: fs.readFileSync(pick.filePaths[0], 'utf8') }; } catch (e) { return { ok: false, error: e.message }; }
+  });
   ipcMain.handle('find:start', (_e, { text, forward, fresh }) => {
     if (!win || !String(text || '')) return { ok: false };
     win.webContents.findInPage(String(text), { forward: forward !== false, findNext: !!fresh, matchCase: false });

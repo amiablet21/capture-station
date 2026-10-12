@@ -195,6 +195,21 @@ module.exports = function run(check) {
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
     check('recovery: profit — each SKU lists its POs with a situation', z && Array.isArray(z.lines) && z.lines.length === z.orders && z.lines.every((l) => l.po && l.situation && l.tone), z && z.lines);
     check('recovery: profit — goods price carried per order, commission unknown in the new layout', typeof pr.gross === 'number' && pr.gross > 0 && pr.commissionPct === null && z && z.avgPrice !== null, { gross: pr.gross, pct: pr.commissionPct, z });
+    // the two Reconcile marks (v1.32.20)
+    const m1 = rnr.applyMarker(null, 'receivedManual', { on: '2026-09-01' }, '2026-10-12T10:00:00.000Z');
+    check('recovery: marks — received before the log carries the day it came back', m1.receivedManual && m1.receivedOn === '2026-09-01' && !m1.neverShipped, m1);
+    const m2 = rnr.applyMarker(m1, 'neverShipped', {}, '2026-10-12T10:00:00.000Z');
+    check('recovery: marks — never shipped clears received-before-the-log', m2.neverShipped && !m2.receivedManual && !m2.receivedOn, m2);
+    check('recovery: marks — derived statuses', rnr.deriveStatus({ po: 'X', receivedManual: true }, new Set()) === 'received' && rnr.deriveStatus({ po: 'X', neverShipped: true }, new Set()) === 'never_shipped');
+    const mf = recovery.markFile('PO Number,Date received\n003,09/02/2026\n007,\n999999999999999,\nabc,');
+    check('recovery: markFile finds the PO column and matches the tracker', mf.ok && mf.found === 3 && mf.matched.length === 2 && mf.matched[0].on === '2026-09-02' && mf.unmatched.length === 1, mf);
+    const mf2 = recovery.markFile('003\n007\n');
+    check('recovery: markFile reads a headerless list', mf2.ok && mf2.found === 2 && mf2.matched.length === 2, mf2);
+    const mm = recovery.markMany([{ po: '003', on: '2026-09-02' }], 'receivedManual', {});
+    const st2 = recovery.state();
+    const it2 = st2.items.find((i) => i.po === '003');
+    check('recovery: a marked PO reads received before the log and stays visible for the Marked tab', mm.count === 1 && it2 && it2.status === 'received' && it2.receivedManual && it2.receivedOn === '2026-09-02', it2 && { status: it2.status, rm: it2.receivedManual, on: it2.receivedOn });
+    recovery.mark('003', 'undoReceivedManual', {});
     check('recovery: profit workbook builds', recovery.profitWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);
     db.prepare('UPDATE wm_orders SET gross = NULL, commission = NULL').run();
     const pr2 = recovery.profit('all');

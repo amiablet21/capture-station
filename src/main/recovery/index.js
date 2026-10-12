@@ -11,6 +11,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const store = require('./store');
 const rnr = require('./rnr');
+const { parseCsvText } = require('./csv');
+const { parseRefundDate } = require('./parseReport');
 const { parseReport } = require('./parseReport');
 const { findIssues, returnsToWarehouseRows } = require('./reconcile');
 const { classify, toSummary, buildRunWorkbook } = require('./classify');
@@ -237,7 +239,9 @@ function stripMeta(m) {
 function state() {
   syncIn();
   const { items, runs, logRows } = decoratedItems();
-  const visible = items.filter((i) => i.status !== 'received');
+  // logged returns leave the page; a PO marked received before the log
+  // stays visible on the Marked tab (owner 2026-10-12)
+  const visible = items.filter((i) => i.status !== 'received' || i.receivedManual);
   const sorted = runs.slice().sort((a, b) => periodStartMs(b) - periodStartMs(a) || String(b.ranAt).localeCompare(String(a.ranAt)));
   const openByRun = {};
   for (const it of visible) if (it.status === 'outstanding') openByRun[it.sourceRunId] = (openByRun[it.sourceRunId] || 0) + 1;
@@ -279,6 +283,46 @@ function mark(po, action, payload = {}) {
   store.upsertMarks(rec);
   try { deps.retsync.appendAux('wmmarks', rec); } catch { /* offline */ }
   return { ok: true };
+}
+
+// the same mark on many POs at once (owner 2026-10-12: bulk select, and a
+// CSV of what came back before the Returns log existed)
+function markMany(list, action, payload = {}) {
+  let done = 0;
+  for (const x of list || []) {
+    const po = typeof x === 'string' ? x : x && x.po;
+    const r = mark(po, action, { ...payload, ...(x && x.on ? { on: x.on } : {}) });
+    if (r.ok) done++;
+  }
+  return { ok: true, count: done };
+}
+// a file of POs to mark received: finds the PO column (any header, or the
+// column whose values look like POs), an optional date column, and says
+// which POs are on the tracker before anything is written
+function markFile(text) {
+  const { rows, columns } = parseCsvText(String(text || ''));
+  // a bare run of digits (a date with slashes or dashes is not one)
+  const looksPo = (v) => /^\s*\d{3,16}\s*$/.test(String(v || ''));
+  const clean = (v) => String(v || '').trim();
+  let poCol = columns.find((c) => /\b(po|purchase\s*order|order)\b/i.test(c));
+  if (!poCol) poCol = columns.find((c) => rows.filter((r) => looksPo(r[c])).length >= Math.max(1, rows.length / 2));
+  const dateCol = columns.find((c) => /date|received|arrived/i.test(c));
+  const list = [];
+  if (poCol) {
+    if (looksPo(poCol)) list.push({ po: clean(poCol), on: null }); // a headerless list: the "header" is the first PO
+    for (const r of rows) { if (looksPo(r[poCol])) list.push({ po: clean(r[poCol]), on: dateCol ? isoDay(r[dateCol]) : null }); }
+  }
+  const seen = new Set(); const pos = list.filter((x) => (seen.has(x.po) ? false : (seen.add(x.po), true)));
+  const items = new Map(decoratedItems().items.map((it) => [it.po, it]));
+  const matched = pos.filter((x) => items.has(x.po) && items.get(x.po).status !== 'received');
+  const already = pos.filter((x) => items.has(x.po) && items.get(x.po).status === 'received').length;
+  const unmatched = pos.filter((x) => !items.has(x.po)).map((x) => x.po);
+  return { ok: true, found: pos.length, matched, already, unmatched };
+}
+function isoDay(v) {
+  const s = String(v || '').trim(); if (!s) return null;
+  const d = /^\d{4}-\d{2}-\d{2}/.test(s) ? new Date(s.slice(0, 10) + 'T00:00:00') : parseRefundDate(s.slice(0, 10));
+  return d && !Number.isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 }
 
 /* ---------- summaries (§8) ---------- */
@@ -439,12 +483,20 @@ function profit(scope, key) {
   // each SKU also lists its POs with a situation (owner 2026-10-12: "a
   // dropdown where I can see all the relevant PO#s for each item")
   const trackerByPo = new Map(decoratedItems().items.map((it) => [it.po, it]));
+  const marksByPo = store.allMarks();
   for (const o of orders) {
     const cost = unitCost(o.sku);
-    const back = o.refundUnits > 0 && whPo.has(o.po) ? Math.min(o.refundUnits, o.saleUnits) : 0; // came back: cost recovered
+    const mk = marksByPo.get(o.po);
+    const manual = !!(mk && !mk.removed && mk.receivedManual);
+    const never = !!(mk && !mk.removed && mk.neverShipped);
+    // came back (logged, or marked received before the log): cost recovered;
+    // never shipped: nothing left the warehouse, so nothing to cost
+    const back = o.refundUnits > 0 && (whPo.has(o.po) || manual) ? Math.min(o.refundUnits, o.saleUnits) : (never ? o.saleUnits : 0);
     let situation = 'Sold, kept'; let tone = 'green';
-    if (o.refundUnits > 0) {
-      if (back > 0) { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
+    if (never) { situation = 'Refunded · never shipped'; tone = 'grey'; }
+    else if (o.refundUnits > 0) {
+      if (manual) { situation = 'Refunded · marked received before the log'; tone = 'navy'; }
+      else if (back > 0) { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
       else {
         const it = trackerByPo.get(o.po);
         if (it) { const sh = rnr.shortStatus(it); situation = `Refunded · ${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; tone = sh.tone; }
@@ -574,7 +626,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, summary, monthLabel, profit, profitWorkbook,
+  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

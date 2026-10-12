@@ -123,6 +123,11 @@ function ensureSchema(db) {
   for (const col of ['gross REAL', 'commission REAL']) {
     try { db.exec(`ALTER TABLE wm_orders ADD COLUMN ${col}`); } catch { /* already there */ }
   }
+  // v1.32.20: the two Reconcile marks — received before the Returns log
+  // existed (with the day it came back, when known), and never shipped
+  for (const col of ['received_manual INTEGER NOT NULL DEFAULT 0', 'received_manual_at TEXT', 'received_on TEXT', 'never_shipped INTEGER NOT NULL DEFAULT 0', 'never_shipped_at TEXT']) {
+    try { db.exec(`ALTER TABLE wm_marks ADD COLUMN ${col}`); } catch { /* already there */ }
+  }
   // v1.32.15: who issued the refund, on the stored refund and on the tracker item
   for (const t of ['wm_refunds', 'wm_items']) {
     try { db.exec(`ALTER TABLE ${t} ADD COLUMN refunded_by TEXT NOT NULL DEFAULT ''`); } catch { /* already there */ }
@@ -316,6 +321,8 @@ const marksOut = (r) => r && ({
   reimbursePending: !!r.reimburse_pending, reimbursePendingAt: r.reimburse_pending_at || null,
   writtenOff: !!r.written_off, writtenOffAt: r.written_off_at || null,
   note: r.note || null, noteAt: r.note_at || null,
+  receivedManual: !!r.received_manual, receivedManualAt: r.received_manual_at || null, receivedOn: r.received_on || null,
+  neverShipped: !!r.never_shipped, neverShippedAt: r.never_shipped_at || null,
   updated_at: r.updated_at, station: r.station, by: r.by, removed: !!r.removed,
 });
 function getMarks(po) { return marksOut(d().prepare('SELECT * FROM wm_marks WHERE po = ?').get(String(po || ''))); }
@@ -334,16 +341,20 @@ function upsertMarks(rec) {
   const cur = db.prepare('SELECT updated_at FROM wm_marks WHERE po = ?').get(po);
   if (cur && String(cur.updated_at) >= updatedAt) return null;
   db.prepare(`INSERT INTO wm_marks (po, case_opened, case_opened_at, case_id, case_approved, case_approved_at, adjustment, adjustment_at,
-      reimburse_pending, reimburse_pending_at, written_off, written_off_at, note, note_at, updated_at, station, by, removed)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      reimburse_pending, reimburse_pending_at, written_off, written_off_at, note, note_at, updated_at, station, by, removed,
+      received_manual, received_manual_at, received_on, never_shipped, never_shipped_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(po) DO UPDATE SET case_opened = excluded.case_opened, case_opened_at = excluded.case_opened_at, case_id = excluded.case_id,
       case_approved = excluded.case_approved, case_approved_at = excluded.case_approved_at, adjustment = excluded.adjustment, adjustment_at = excluded.adjustment_at,
       reimburse_pending = excluded.reimburse_pending, reimburse_pending_at = excluded.reimburse_pending_at, written_off = excluded.written_off, written_off_at = excluded.written_off_at,
-      note = excluded.note, note_at = excluded.note_at, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed`)
+      note = excluded.note, note_at = excluded.note_at, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed,
+      received_manual = excluded.received_manual, received_manual_at = excluded.received_manual_at, received_on = excluded.received_on,
+      never_shipped = excluded.never_shipped, never_shipped_at = excluded.never_shipped_at`)
     .run(po, rec.caseOpened ? 1 : 0, rec.caseOpenedAt || null, rec.caseId || null, rec.caseApproved ? 1 : 0, rec.caseApprovedAt || null,
       rec.adjustment ? 1 : 0, rec.adjustmentAt || null, rec.reimbursePending ? 1 : 0, rec.reimbursePendingAt || null,
       rec.writtenOff ? 1 : 0, rec.writtenOffAt || null, rec.note || null, rec.noteAt || null, updatedAt,
-      String(rec.station || '').slice(0, 60), String(rec.by || '').slice(0, 80), rec.removed ? 1 : 0);
+      String(rec.station || '').slice(0, 60), String(rec.by || '').slice(0, 80), rec.removed ? 1 : 0,
+      rec.receivedManual ? 1 : 0, rec.receivedManualAt || null, rec.receivedOn || null, rec.neverShipped ? 1 : 0, rec.neverShippedAt || null);
   return getMarks(po);
 }
 function ownMarks(stations) {

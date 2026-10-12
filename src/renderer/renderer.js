@@ -1638,7 +1638,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), selected: new Set(), lastSel: null,
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -2014,23 +2014,45 @@ function rcRenderReconcile() {
   const open = items.filter(it => it.status === 'outstanding' && !it.adjustment);
   const pending = open.filter(it => it.wfsWaiting);              // WFS inside its 90 days
   const notReceived = open.filter(it => !it.wfsWaiting);          // seller, and WFS past day 90
-  if (rc.bucket !== 'wfsPending') rc.bucket = 'notReceived';
-  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length]];
+  // the two marks (owner 2026-10-12): received before the Returns log, never shipped
+  const marked = items.filter(it => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped');
+  if (!['notReceived', 'wfsPending', 'marked'].includes(rc.bucket) || (rc.bucket === 'marked' && !marked.length)) rc.bucket = 'notReceived';
+  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length], ...(marked.length ? [['marked', 'Marked', marked.length]] : [])];
   $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
-  const rows = rc.bucket === 'wfsPending' ? pending : notReceived;
-  const head = '<th class="rc-g">#</th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th><th>Reason</th>';
-  const body = rows.length ? rows.map((it, i) => `<tr>
+  const isMarked = rc.bucket === 'marked';
+  const rows = isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived);
+  const visible = new Set(rows.map(it => it.po));
+  for (const po of [...rc.selected]) if (!visible.has(po)) rc.selected.delete(po);
+  const allOn = rows.length > 0 && rows.every(it => rc.selected.has(it.po));
+  const head = `<th class="rc-g">#</th><th class="rc-cbc"><input type="checkbox" id="rcSelAll" ${allOn ? 'checked' : ''} aria-label="Select every row on this tab"></th><th>PO #</th><th>Type</th><th>Item</th><th class="is-right">Units</th><th>Refunded</th><th class="is-right">Net refund</th><th>${isMarked ? 'Mark' : 'Reason'}</th><th></th>`;
+  const markCell = (it) => {
+    const never = it.status === 'never_shipped';
+    const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
+    return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${never ? 'Never shipped' : 'Received before the log'}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
+  };
+  const body = rows.length ? rows.map((it, i) => `<tr class="${rc.selected.has(it.po) ? 'is-sel' : ''}" data-rcrow="${esc(it.po)}">
       <td class="rc-g">${i + 1}</td>
+      <td class="rc-cbc"><input type="checkbox" class="rc-cb" data-rcsel="${esc(it.po)}" ${rc.selected.has(it.po) ? 'checked' : ''} aria-label="Select ${esc(it.po)}"></td>
       <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
       <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
       <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
       <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
-      <td class="rc-muted">${esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="8">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+      <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
+      <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+  $('rcBucketTable').classList.toggle('is-marked', isMarked);
   rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+  // the selection bar
+  const n = rc.selected.size;
+  $('rcSelBar').hidden = !n;
+  $('rcSelCount').textContent = `${n} selected`;
+  for (const b of $('rcSelBar').querySelectorAll('[data-rcbulk]')) {
+    const k = b.dataset.rcbulk;
+    if (k === 'undo') b.hidden = !isMarked; else if (k === 'receivedManual' || k === 'neverShipped') b.hidden = isMarked;
+  }
 }
 function rcRenderBucket() { rcRenderReconcile(); }
 
@@ -2391,7 +2413,36 @@ $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
   $('rcDrop').classList.remove('is-over');
   const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) { rc.sub = 'import'; rcRender(); rcImportFile(file); }
+  if (!file) return;
+  if (e.target.closest && e.target.closest('#rcMarkDrop')) { rcMarkFile(file.name, null, file); return; }
+  rc.sub = 'import'; rcRender(); rcImportFile(file);
+});
+// a file of POs that came back before the Returns log (owner 2026-10-12)
+function rcMarkProgress(text, cls) { const el = $('rcMarkProgress'); el.textContent = text || ''; el.hidden = !text; el.className = `rc-progress ${cls ? 'is-' + cls : ''}`; }
+async function rcMarkFile(name, text, file) {
+  if (file) {
+    if (!/\.(csv|txt)$/i.test(file.name)) { rcMarkProgress('Drop a CSV or text file of PO numbers.', 'fail'); return; }
+    try { text = await file.text(); } catch (err) { rcMarkProgress(`Could not read the file: ${err.message}`, 'fail'); return; }
+  }
+  const r = await api.recoveryMarkFile(text).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { rcMarkProgress((r && r.error) || 'Could not read that file.', 'fail'); return; }
+  if (!r.found) { rcMarkProgress('No PO numbers found in that file.', 'fail'); return; }
+  const parts = [`${rcPlural(r.found, 'PO')} in the file`, `${r.matched.length} on the Not received list`];
+  if (r.already) parts.push(`${r.already} already received`);
+  if (r.unmatched.length) parts.push(`${r.unmatched.length} not tracked (ignored)`);
+  if (!r.matched.length) { rcMarkProgress(parts.join(' · ') + ' — nothing to mark.', 'fail'); return; }
+  const ok = await rcConfirm({ title: 'Mark received before the log', body: `${parts.join(' · ')}. They are marked in Recovery only; the Returns sheet is not touched.`, ok: `Mark ${r.matched.length} received`, danger: false });
+  if (!ok) { rcMarkProgress(''); return; }
+  const m = await api.recoveryMarkMany(r.matched, 'receivedManual', {}).catch(err => ({ ok: false, error: err.message }));
+  if (!m || !m.ok) { rcMarkProgress((m && m.error) || 'Could not mark those.', 'fail'); return; }
+  rcMarkProgress(`Done — ${rcPlural(m.count, 'PO')} marked received before the log${r.unmatched.length ? ` · not tracked: ${r.unmatched.slice(0, 8).join(', ')}${r.unmatched.length > 8 ? '…' : ''}` : ''}.`, 'done');
+  await rcLoad();
+}
+$('rcMarkBrowseBtn').addEventListener('click', async () => {
+  const pick = await api.recoveryMarkPick().catch(err => ({ ok: false, error: err.message }));
+  if (!pick || pick.canceled) return;
+  if (!pick.ok) { rcMarkProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  await rcMarkFile(pick.name, pick.text, null);
 });
 api.on('recovery:progress', ({ text }) => { if (rc.busy) rcProgress(text); });
 $('rcDupSkip').addEventListener('click', () => { $('rcDupDlg').close(); rc.pendingImport = null; rcProgress('Skipped — the imported period stands.', ''); });
@@ -2426,7 +2477,7 @@ $('rcPeriodsTable').addEventListener('click', async (e) => {
 });
 $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
-  if (b) { rc.bucket = b.dataset.rcbucket; rcRenderBucket(); }
+  if (b) { rc.bucket = b.dataset.rcbucket; rc.selected.clear(); rc.lastSel = null; rcRenderBucket(); }
 });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
@@ -2450,12 +2501,84 @@ $('rcPoDlg').addEventListener('click', async (e) => {
 });
 $('rcBucketTable').addEventListener('click', (e) => {
   const link = e.target.closest('[data-rcpolink]');
-  if (link) rcPoMenu(link);
+  if (link) { rcPoMenu(link); return; }
+  const all = e.target.closest('#rcSelAll');
+  if (all) {
+    const pos = [...$('rcBucketTable').querySelectorAll('[data-rcsel]')].map(x => x.dataset.rcsel);
+    if (all.checked) pos.forEach(po => rc.selected.add(po)); else pos.forEach(po => rc.selected.delete(po));
+    rcRenderReconcile(); return;
+  }
+  const cb = e.target.closest('[data-rcsel]');
+  if (cb) {
+    const pos = [...$('rcBucketTable').querySelectorAll('[data-rcsel]')].map(x => x.dataset.rcsel);
+    const po = cb.dataset.rcsel;
+    if (e.shiftKey && rc.lastSel && pos.includes(rc.lastSel)) {
+      const [i, j] = [pos.indexOf(rc.lastSel), pos.indexOf(po)].sort((x, y) => x - y);
+      for (const p of pos.slice(i, j + 1)) { if (cb.checked) rc.selected.add(p); else rc.selected.delete(p); }
+    } else if (cb.checked) rc.selected.add(po); else rc.selected.delete(po);
+    rc.lastSel = po;
+    rcRenderReconcile(); return;
+  }
+  const more = e.target.closest('[data-rcmenu]');
+  if (!more) return;
+  const it = rcItem(more.dataset.rcmenu);
+  if (!it) return;
+  rc.menuPo = it.po;
+  const marked = (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped';
+  const items = marked
+    ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : 'undoReceivedManual', 'Undo this mark']]
+    : [['receivedManual', 'Received before the log'], ['neverShipped', 'Never shipped']];
+  const dlg = $('rcMenuDlg');
+  dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
+    + '<div class="tab-menu-sep"></div>'
+    + [['go:order', 'Order page'], ['go:return', 'Return page'], ['go:txn', 'Transaction page'], ['go:copy', 'Copy PO #']].map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${label}</button>`).join('');
+  dlg.showModal();
+  rcAnchor(dlg, more.getBoundingClientRect());
 });
-$('rcMenuDlg').addEventListener('click', (e) => {
+// the bulk bar (owner 2026-10-12: "can we do a bulk select")
+$('rcSelBar').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rcbulk]');
+  if (!b) return;
+  const k = b.dataset.rcbulk;
+  if (k === 'clear') { rc.selected.clear(); rcRenderReconcile(); return; }
+  const pos = [...rc.selected];
+  if (!pos.length) return;
+  if (k === 'undo') {
+    const items = pos.map(rcItem).filter(Boolean);
+    const never = items.filter(it => it.status === 'never_shipped').map(it => it.po);
+    const recv = items.filter(it => it.status !== 'never_shipped').map(it => it.po);
+    if (never.length) await api.recoveryMarkMany(never, 'undoNeverShipped', {}).catch(() => null);
+    if (recv.length) await api.recoveryMarkMany(recv, 'undoReceivedManual', {}).catch(() => null);
+    toast(`${rcPlural(pos.length, 'mark')} undone`);
+  } else {
+    const r = await api.recoveryMarkMany(pos, k, {}).catch(err => ({ ok: false, error: err.message }));
+    if (!r || !r.ok) { toast((r && r.error) || 'Could not mark those.', 4000); return; }
+    toast(k === 'neverShipped' ? `${rcPlural(r.count, 'PO')} marked never shipped` : `${rcPlural(r.count, 'PO')} marked received before the log`);
+  }
+  rc.selected.clear();
+  await rcLoad();
+});
+
+$('rcMenuDlg').addEventListener('click', async (e) => {
   const item = e.target.closest('[data-rcact]');
   $('rcMenuDlg').close();
-  if (item && rc.menuPo) rcDoAction(rc.menuPo, item.dataset.rcact);
+  if (!item || !rc.menuPo) return;
+  const act = item.dataset.rcact;
+  if (act.startsWith('go:')) {
+    const kind = act.slice(3);
+    if (kind === 'copy') { try { await navigator.clipboard.writeText(rc.menuPo); toast('PO # copied'); } catch { toast('Could not copy.'); } return; }
+    const r = await api.openOrderPage(rc.menuPo, 'walmart', kind).catch(() => null);
+    if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
+    return;
+  }
+  if (['receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
+    const r = await api.recoveryMark(rc.menuPo, act, {}).catch(err => ({ ok: false, error: err.message }));
+    if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
+    rc.selected.delete(rc.menuPo);
+    await rcLoad();
+    return;
+  }
+  rcDoAction(rc.menuPo, act);
 });
 $('rcCaseCancel').addEventListener('click', () => $('rcCaseDlg').close(''));
 $('rcCaseDlg').addEventListener('close', async () => {

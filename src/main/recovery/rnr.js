@@ -81,6 +81,11 @@ function daysOld(refundDate, today) {
 // Walmart; then expected; otherwise still outstanding (§6.2).
 function deriveStatus(it, warehousePoSet) {
   if (warehousePoSet.has(it.po)) return 'received';
+  // owner 2026-10-12: a return that came back before the Returns log
+  // existed is marked received in Recovery alone; a refund on an order that
+  // never shipped has no return to wait for
+  if (it.receivedManual) return 'received';
+  if (it.neverShipped) return 'never_shipped';
   if (it.writtenOff) return 'loss';
   if ((it.settlementSeen || 0) > 0) return 'reimbursed';
   if (it.reimbursePending) return 'reimbursed_pending';
@@ -142,6 +147,7 @@ const blankMarks = () => ({
   caseOpened: false, caseOpenedAt: null, caseId: null, caseApproved: false, caseApprovedAt: null,
   adjustment: false, adjustmentAt: null, reimbursePending: false, reimbursePendingAt: null,
   writtenOff: false, writtenOffAt: null, note: null, noteAt: null,
+  receivedManual: false, receivedManualAt: null, receivedOn: null, neverShipped: false, neverShippedAt: null,
 });
 function applyMarker(current, action, payload = {}, nowIso = new Date().toISOString()) {
   const m = { ...blankMarks(), ...(current || {}) };
@@ -163,6 +169,10 @@ function applyMarker(current, action, payload = {}, nowIso = new Date().toISOStr
     case 'undoPending': m.reimbursePending = false; m.reimbursePendingAt = null; break;
     case 'writeOff': m.writtenOff = true; m.writtenOffAt = nowIso; break;
     case 'undoWriteOff': m.writtenOff = false; m.writtenOffAt = null; break;
+    case 'receivedManual': m.receivedManual = true; m.receivedManualAt = nowIso; m.receivedOn = payload.on ? String(payload.on).slice(0, 10) : null; m.neverShipped = false; m.neverShippedAt = null; break;
+    case 'undoReceivedManual': m.receivedManual = false; m.receivedManualAt = null; m.receivedOn = null; break;
+    case 'neverShipped': m.neverShipped = true; m.neverShippedAt = nowIso; m.receivedManual = false; m.receivedManualAt = null; m.receivedOn = null; clearCase(); break;
+    case 'undoNeverShipped': m.neverShipped = false; m.neverShippedAt = null; break;
     case 'note': {
       const t = String(payload.note || '').trim();
       m.note = t || null; m.noteAt = t ? nowIso : null;
@@ -172,11 +182,12 @@ function applyMarker(current, action, payload = {}, nowIso = new Date().toISOStr
   }
   return m;
 }
-const hasAnyMarker = (m) => !!(m && (m.caseOpened || m.caseApproved || m.caseId || m.adjustment || m.reimbursePending || m.writtenOff || m.note));
+const hasAnyMarker = (m) => !!(m && (m.caseOpened || m.caseApproved || m.caseId || m.adjustment || m.reimbursePending || m.writtenOff || m.note || m.receivedManual || m.neverShipped));
 
 // every item lives in exactly one list tab (§6.5)
 function filterOf(it) {
   if (it.status === 'received') return 'received';
+  if (it.status === 'never_shipped') return 'never';
   if (it.status === 'loss') return 'lost';
   if (it.status === 'reimbursed' || it.status === 'reimbursed_pending') return 'reimbursed';
   if (it.caseOpened) return 'cases';
@@ -218,6 +229,8 @@ const money = (n) => `$${Math.abs(Number(n) || 0).toLocaleString('en-US', { mini
 // The status sentence (§6.6): a bold lead in the tone colour, a muted clause,
 // the tooltip. tone: red | amber | green | blue | navy | grey
 function statusText(it) {
+  if (it.status === 'received' && it.receivedManual) return { lead: 'Received before the log', clause: it.receivedOn ? `on ${monDay(it.receivedOn)}` : monDay(it.receivedManualAt), tone: 'green', tooltip: 'marked in Recovery; not in the Returns log' };
+  if (it.status === 'never_shipped') return { lead: 'Never shipped', clause: monDay(it.neverShippedAt), tone: 'grey', tooltip: 'refund only — no return to wait for' };
   if (it.status === 'loss') return { lead: 'Written off', clause: monDay(it.writtenOffAt), tone: 'grey', tooltip: '' };
   if (it.status === 'reimbursed') {
     const partial = it.settlementSeen < (it.amount || 0) - 0.01;
@@ -260,7 +273,8 @@ function statusText(it) {
 function shortStatus(it, today = new Date()) {
   const plus = (days) => { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (Number(days) || 0)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const out = (action, tone, deadlineAt, deadlineText, tooltip) => ({ action, tone, deadlineAt: deadlineAt || null, deadlineText: deadlineText || (deadlineAt ? monDay(deadlineAt) : '—'), tooltip: tooltip || '' });
-  if (it.status === 'received') return out('Received', 'green', null, '—');
+  if (it.status === 'received') return out(it.receivedManual ? 'Received before the log' : 'Received', 'green', null, it.receivedOn ? monDay(it.receivedOn) : (it.receivedManualAt ? monDay(it.receivedManualAt) : '—'), it.receivedManual ? 'marked in Recovery; not in the Returns log' : '');
+  if (it.status === 'never_shipped') return out('Never shipped', 'grey', null, it.neverShippedAt ? monDay(it.neverShippedAt) : '—', 'refund only — no return to wait for');
   if (it.status === 'loss') return out('Written off', 'grey', null, it.writtenOffAt ? monDay(it.writtenOffAt) : '—');
   if (it.status === 'reimbursed') {
     const partial = it.settlementSeen < (it.amount || 0) - 0.01;
@@ -330,7 +344,7 @@ function bucketTotals(refundTxs, items) {
   for (const x of refundTxs) { t.returns += Math.abs(x.amount || 0); t.returnsCount++; }
   for (const it of items) {
     const amt = it.amount || 0;
-    if (it.status === 'received') continue;
+    if (it.status === 'received' || it.status === 'never_shipped') continue; // nothing to come back
     t.notReceived += amt;
     if (it.status === 'loss') { t.loss += amt; t.lossCount++; }
     else if (it.status === 'reimbursed') {
@@ -376,7 +390,8 @@ function dedupeLedger(rows) {
 
 // ----- stage wording shared by the exports (§7) -----
 function stageOf(it) {
-  if (it.status === 'received') return 'Received';
+  if (it.status === 'received') return it.receivedManual ? 'Received (marked, before the log)' : 'Received';
+  if (it.status === 'never_shipped') return 'Never shipped';
   if (it.status === 'loss') return 'Loss (written off)';
   if (it.status === 'reimbursed') return it.settlementSeen && it.settlementSeen < (it.amount || 0) - 0.01 ? 'Reimbursed (partial)' : 'Reimbursed';
   if (it.status === 'reimbursed_pending') return 'Pending reimbursement';
