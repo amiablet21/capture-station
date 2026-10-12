@@ -5453,6 +5453,15 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-list th:nth-child(6) { width: 7%; }
 .rc-table-list th:nth-child(7) { width: 8%; }
 .rc-table-list th:nth-child(9) { width: 150px; }
+/* the Import screen's periods list: set widths so the gutter stays a gutter
+   and a count and its dollars stay on one line (owner 2026-10-12: "this
+   looks weird") */
+.rc-table-periods th:nth-child(2) { width: 17%; }
+.rc-table-periods th:nth-child(3) { width: 15%; }
+.rc-table-periods th:nth-child(4) { width: 8%; }
+.rc-table-periods th:nth-child(5), .rc-table-periods th:nth-child(6), .rc-table-periods th:nth-child(7) { width: 13%; }
+.rc-table-periods th:nth-child(8) { width: 9%; }
+.rc-table-periods td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rc-table-profit th:nth-child(2) { width: 24%; }
 .rc-table-profit th:nth-child(n+3) { width: 8.6%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }

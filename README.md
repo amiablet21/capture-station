@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.14 highlights
+
+- **Price and commission fill in by themselves** for periods imported before v1.32.13 (owner: "why is the avg commission and avg price not showing"). Opening Profit re-reads each such period's archived CSV from the shared folder or this computer and stores the goods price and commission; no re-import needed. A period whose archive is nowhere keeps "—".
+
 ## v1.32.13 highlights
 
 - **Profit shows the price and Walmart's cut** (owner: "can you not see from the file what the commission rate is?"). Two new columns on By SKU, Avg price and Commission, come straight from the report's Product Price and Commission on Product lines, so a SKU reads price → commission → Walmart paid → cost → profit; the legend adds the commission total and its % of goods sold. Periods imported before this show "—" until re-imported. The old report layout carries both; the new layout carries the price only.

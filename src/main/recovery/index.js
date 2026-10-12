@@ -349,6 +349,7 @@ function viewCsv(pos) {
 
 // periods imported before Profit existed have no per-order rows: read them
 // back from the period's archived CSV when it is on this computer
+const pricesTried = new Set(); // runs whose archive was looked for once this session
 function ensureOrders() {
   const missing = [];
   for (const r of store.runsWithoutOrders()) {
@@ -359,6 +360,20 @@ function ensureOrders() {
       store.putOrders(r.id, parsed.orders);
       if (!parsed.orders.length) missing.push(r.label);
     } catch { missing.push(r.label); }
+  }
+  // orders stored before v1.32.13 have no goods price or commission (owner
+  // 2026-10-12: "why is the avg commission and avg price not showing"):
+  // fill them from the archived CSV when it is on this computer or in the
+  // shared folder; a run with no archive keeps its orders, prices unknown
+  for (const r of store.runsWithoutPrices()) {
+    if (pricesTried.has(r.id)) continue;
+    pricesTried.add(r.id);
+    const f = archivePath(r.label);
+    try {
+      if (!fs.existsSync(f)) continue;
+      const parsed = parseReport(fs.readFileSync(f, 'utf8'));
+      if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
+    } catch { /* next time the file is readable */ }
   }
   return missing;
 }

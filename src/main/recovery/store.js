@@ -213,6 +213,11 @@ function allOrders() { return d().prepare('SELECT * FROM wm_orders').all().map(o
 function runsWithoutOrders() {
   return d().prepare('SELECT id, label FROM wm_runs WHERE id NOT IN (SELECT DISTINCT run_id FROM wm_orders)').all();
 }
+// runs whose orders were stored before v1.32.13 (no goods price on any of
+// them) — ensureOrders re-reads their archived CSV to fill the price in
+function runsWithoutPrices() {
+  return d().prepare('SELECT id, label FROM wm_runs WHERE id IN (SELECT DISTINCT run_id FROM wm_orders) AND id NOT IN (SELECT DISTINCT run_id FROM wm_orders WHERE gross IS NOT NULL)').all();
+}
 
 function deleteRunRows(id) {
   const db = d();
@@ -330,7 +335,7 @@ function ownRuns(stations) {
 
 module.exports = {
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
-  runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders,
+  runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices,
   addItems, listItems, removeItem, pruneOrphans,
   getMarks, allMarks, upsertMarks, ownMarks, ownRuns,
 };

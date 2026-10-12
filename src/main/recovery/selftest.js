@@ -195,6 +195,9 @@ module.exports = function run(check) {
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
     check('recovery: profit — goods price carried per order, commission unknown in the new layout', typeof pr.gross === 'number' && pr.gross > 0 && pr.commissionPct === null && z && z.avgPrice !== null, { gross: pr.gross, pct: pr.commissionPct, z });
     check('recovery: profit workbook builds', recovery.profitWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);
+    db.prepare('UPDATE wm_orders SET gross = NULL, commission = NULL').run();
+    const pr2 = recovery.profit('all');
+    check('recovery: profit — orders stored before v1.32.13 get their price back from the archived CSV', pr2.gross === pr.gross && pr2.gross > 0, { before: pr.gross, after: pr2.gross });
     // exports
     check('recovery: audit workbook builds', recovery.auditWorkbook().readUInt32LE(0) === 0x04034b50);
     check('recovery: summary workbook builds', recovery.summaryWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);

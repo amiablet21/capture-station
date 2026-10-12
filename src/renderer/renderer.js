@@ -1894,7 +1894,7 @@ function rcRenderImport() {
     return `<tr>
       <td class="rc-g">${i + 1}</td>
       <td><button type="button" class="rc-period-link" data-rcrun="${esc(r.id)}" title="Reconcile this period">${esc(rcPeriodName(r.label))}</button></td>
-      <td class="rc-muted">${esc(rcWhen(r.ranAt))}${who ? ` <span class="rc-faint">· ${esc(who)}</span>` : ''}</td>
+      <td class="rc-muted" title="${esc(who)}"><div>${esc(rcWhen(r.ranAt))}</div>${who ? `<div class="rc-item-sub">${esc(who)}</div>` : ''}</td>
       <td class="is-right rc-mono">${r.totalRefunds}</td>
       <td class="is-right rc-mono">${b('received').count} <span class="rc-muted">· ${rcMoney(b('received').total)}</span></td>
       <td class="is-right rc-mono">${b('notReceived').count} <span class="rc-muted">· ${rcMoney(b('notReceived').total)}</span></td>
