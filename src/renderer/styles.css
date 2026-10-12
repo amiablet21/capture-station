@@ -5260,7 +5260,12 @@ th:last-child > .col-grip { right: 0; }
 .rc-foot .rc-link { font-size: inherit; }
 
 /* two-column top section */
-.rc-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 40px; align-items: start; }
+/* owner 2026-10-12 ("super scrunched" with real numbers): the money story
+   carries the headline, the bar and six legend entries while the Today card
+   holds three numbers — so the left column takes 3/5 of the width and the
+   card 2/5; they stack under 960px */
+.rc-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 40px; align-items: start; }
+@media (max-width: 960px) { .rc-top { grid-template-columns: minmax(0, 1fr); } }
 .rc-left { display: flex; flex-direction: column; gap: 18px; }
 .rc-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #787774; }
 .rc-label-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -5300,7 +5305,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-num-label { font-size: 12.5px; margin-top: 8px; }
 .rc-num-money { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: #787774; }
 .rc-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: #F1F0EC; }
-.rc-bar-lg { height: 14px; margin-top: 18px; }
+.rc-bar-lg { height: 14px; margin-top: 22px; }
 .rc-seg { min-width: 0; }
 .rc-seg.is-navy, .rc-swatch.is-navy { background: #1E3A66; }
 .rc-seg.is-red, .rc-swatch.is-red { background: #9F2F2D; }
@@ -5320,7 +5325,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-headline { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-top: 8px; }
 .rc-headline-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
 .rc-headline-sub { color: #787774; font-size: 16px; font-weight: 500; }
-.rc-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 12px 20px; margin-top: 16px; }
+.rc-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px 28px; margin-top: 20px; }
 .rc-legend-item { display: flex; gap: 10px; }
 .rc-swatch { width: 10px; height: 10px; border-radius: 3px; margin-top: 5px; flex: none; }
 .rc-legend-amt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
