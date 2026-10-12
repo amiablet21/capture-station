@@ -460,11 +460,13 @@ function profit(scope, key) {
   const unitCost = (sku) => {
     const k = String(sku || '').trim().toUpperCase();
     if (!k) return null;
-    const direct = costs[k];
-    if (direct && Number.isFinite(Number(direct.cost))) return Number(direct.cost);
+    // a cost of $0 is a cleared cost, not a free unit (owner 2026-10-12: a
+    // listing read 100% margin on a $0.00 cost): it counts as not set
+    const known = (c) => (c && Number.isFinite(Number(c.cost)) && Number(c.cost) > 0 ? Number(c.cost) : null);
+    const direct = known(costs[k]);
+    if (direct !== null) return direct;
     const inv = chan.get(k);
-    const viaMap = inv ? costs[String(inv).toUpperCase()] : null;
-    return viaMap && Number.isFinite(Number(viaMap.cost)) ? Number(viaMap.cost) : null;
+    return inv ? known(costs[String(inv).toUpperCase()]) : null;
   };
   // the Linnworks (inventory) SKU behind a Walmart listing, from the Pricing
   // page's channel map (owner 2026-10-12: "organize it by Linnworks channel
@@ -474,7 +476,7 @@ function profit(scope, key) {
     const k = String(sku || '').trim().toUpperCase();
     if (!k) return '';
     if (chan.get(k)) return String(chan.get(k));
-    if (costs[k]) return String(costs[k].sku || sku).trim() || String(sku).trim();
+    if (costs[k] && Number(costs[k].cost) > 0) return String(costs[k].sku || sku).trim() || String(sku).trim();
     return '';
   };
 
@@ -556,12 +558,17 @@ function profit(scope, key) {
     const { back, held } = st;
     let situation = 'Sold, kept'; let tone = 'green';
     const when = (it) => { const sh = rnr.shortStatus(it); return `${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; };
-    const where = st.elsewhere ? ' (refund in another period)' : (!(o.saleUnits > 0) && o.refundUnits > 0 ? ' (sold in another period)' : '');
-    if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
+    const soldHere = (Number(o.saleUnits) || 0) > 0;
+    const where = st.elsewhere ? ' (refund in another period)' : (!soldHere && o.refundUnits > 0 ? ' (sold in another period)' : '');
+    // the cost words belong to the row that sold the unit; a refund row in a
+    // later period only carries the payout hit
+    const costNote = (t) => (soldHere ? ` · ${t}` : '');
+    if (!soldHere && !(o.refundUnits > 0)) { situation = 'Walmart adjustment on this PO · no units'; tone = 'grey'; }
+    else if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
     else if (st.kind === 'manual') { situation = `Refunded${where} · marked received before the log`; tone = 'navy'; }
-    else if (st.kind === 'back') { situation = `Refunded${where} · back in stock · cost recovered`; tone = 'navy'; }
-    else if (st.kind === 'pending') { situation = `Refunded${where} · pending · ${when(st.it)} · not costed yet`; tone = 'amber'; }
-    else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)} · cost charged` : `Refunded${where} · not received · cost charged`; tone = 'red'; }
+    else if (st.kind === 'back') { situation = `Refunded${where} · back in stock${costNote('cost recovered')}`; tone = 'navy'; }
+    else if (st.kind === 'pending') { situation = `Refunded${where} · pending · ${when(st.it)}${costNote('not costed yet')}`; tone = 'amber'; }
+    else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)}${costNote('cost charged')}` : `Refunded${where} · not received${costNote('cost charged')}`; tone = 'red'; }
     const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;

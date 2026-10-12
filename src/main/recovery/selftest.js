@@ -99,7 +99,7 @@ module.exports = function run(check) {
   recovery.configure({
     retsync: fakeSync, listReturns: () => returns, config: { load: () => cfg, save: (p) => Object.assign(cfg.recovery, p.recovery || {}) },
     archiveDir: path.join(tmp, 'archive'), archiveDirs: () => [path.join(tmp, 'archive-before-sync')], station: 'TEST', by: 'IM',
-    costs: () => ({ 'SKU-A': { cost: 70 }, 'INV-Z': { cost: 120 } }), channelMap: () => new Map([['SKU-Z', 'INV-Z']]),
+    costs: () => ({ 'SKU-A': { cost: 70 }, 'INV-Z': { cost: 120 }, 'SKU-B': { cost: 0 } }), channelMap: () => new Map([['SKU-Z', 'INV-Z']]),
   });
 
   return (async () => {
@@ -192,6 +192,8 @@ module.exports = function run(check) {
     const pr = recovery.profit('cycle', res.id);
     const z = pr.skus.find((g) => g.sku === 'SKU-Z');
     const a = pr.skus.find((g) => g.sku === 'SKU-A');
+    const b0 = pr.skus.find((g) => g.sku === 'SKU-B');
+    check('recovery: profit — a $0 cost reads as no cost set, never as 100% margin', b0 && b0.costKnown === false && b0.profit === undefined || (b0 && !b0.costKnown), b0 && { known: b0.costKnown, cost: b0.unitCost });
     check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
     check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 96 && a.unitsBack === 1 && a.cogs === 0 && a.lines.find((l) => l.po === '001').back, a);
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 13, pr.missing);

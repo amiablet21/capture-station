@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.31 highlights
+
+- **A $0 cost no longer reads as 100% margin.** A cleared cost ($0.00) counts as no cost set, so the listing shows "no cost set" and stays out of profit until a real cost is typed.
+- **Clearer PO lines.** A refund row whose sale was in another period no longer says "not costed yet" or "cost charged" — those words belong to the row that sold the unit. A PO row that is only a Walmart adjustment (no units sold or refunded, a label charge or fee) reads "Walmart adjustment on this PO" instead of "Sold, kept".
+
 ## v1.32.30 highlights
 
 - **A return of an earlier period's sale now recovers its cost** (owner: "why is my margin so low" on August). A PO's sale and its refund usually land in different payment periods, so the app held them as two rows and judged each on its own: the sale row never saw the refund, so a unit that came back, or was still pending, kept its full cost charged forever, while the refund row carried the payout hit with no relief. The standing is now judged on the whole PO across every period. The relief (back in stock, pending, never shipped) lands on the row that sold the unit, in that period, and the refund row keeps its payout hit in its own period. Each PO's line says "refund in another period" or "sold in another period" when that is the case.
