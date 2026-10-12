@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.10 highlights
+
+- **Recovery at the Capture sheet's density** (owner: "it looks like it was zoomed in 110–120%"). No zoom was left; the design's own air was the difference. Cells sit at 7px padding on 34px rows, headers at 10.5px, the big numbers at 26px, headlines and the period name at 22px, section titles at 14px, chips and controls a size smaller, and the gaps between sections halved.
+
 ## v1.32.9 highlights
 
 - **Not received in the Walmart app's structure** (owner: "that is what I used before and it worked well"): a collapsible **Monthly summary** with Report · Month · Year · All time, the period picker and Download Excel in its header, and a collapsible **Returns Not Received** with the search in its header, a row of count chips (All · WFS · Seller · Open cases · Partial adjustments · Loss · Reimbursed) and the old columns (PO # · Type · Product · Refunded · Amount · Walmart paid · Status).
