@@ -40,6 +40,8 @@ module.exports = function run(check) {
     `"011","O11","REFUNDED","${recent}","Tablet K","SKU-K","Lost in Transit","-130.00","-124.80","Walmart-fulfilled(WFS)"`,
     `"001","O1","SALE","${recent}","Tablet A","SKU-A","","100.00","96.00","Seller Fulfilled"`,
     `"100","O100","SALE","${recent}","Tablet Z","SKU-Z","","200.00","192.00","Seller Fulfilled"`,
+    // 500 sells here; its refund lands in the next period's (old-format) report
+    `"500","O500","SALE","${recent}","Tablet M","SKU-A","","100.00","96.00","Seller Fulfilled"`,
   ];
   const csvText = '﻿' + [header, ...rows].join('\r\n') + '\r\n';
 
@@ -60,7 +62,7 @@ module.exports = function run(check) {
   check('recovery: filename payment date -> paid-17..paid-3', formatPeriod(fromName.start, fromName.end) === 'May 16 - May 30, 2026', fromName);
   const pl = parsePeriodLabel('Dec 28, 2025 - Jan 5, 2026');
   check('recovery: label parses back to dates', pl.start.getFullYear() === 2025 && pl.end.getMonth() === 0 && pl.end.getDate() === 5, pl);
-  check('recovery: ledger carries Refund rows mapped from REFUNDED', parsed.ledger.filter((t) => t.type === 'Refund').length === 12 && parsed.ledger.filter((t) => t.type === 'Sale').length === 2);
+  check('recovery: ledger carries Refund rows mapped from REFUNDED', parsed.ledger.filter((t) => t.type === 'Refund').length === 12 && parsed.ledger.filter((t) => t.type === 'Sale').length === 3);
 
   // ----- reconcile -----
   const warehouse = returnsToWarehouseRows(returns);
@@ -191,8 +193,14 @@ module.exports = function run(check) {
     const z = pr.skus.find((g) => g.sku === 'SKU-Z');
     const a = pr.skus.find((g) => g.sku === 'SKU-A');
     check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
-    check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 0 && a.unitsBack === 1 && a.cogs === 0, a);
-    check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 12, pr.missing);
+    check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 96 && a.unitsBack === 1 && a.cogs === 0 && a.lines.find((l) => l.po === '001').back, a);
+    check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 13, pr.missing);
+    // 500 sold in this period, refunded in the next (owner 2026-10-12: the
+    // standing is judged on the whole PO; the relief lands on the sale row)
+    const l500 = a && a.lines.find((l) => l.po === '500');
+    const pr2nd = recovery.profit('cycle', res2.id); const m500 = pr2nd.skus.find((g) => g.sku === 'SKU-M'); const l500r = m500 && m500.lines.find((l) => l.po === '500');
+    check('recovery: profit — a refund in a later period still counts against the sale row (pending, not costed, at risk)', l500 && l500.pending && /refund in another period/.test(l500.situation) && a.unitsPending === 1 && a.atRisk === 70, l500 && { l500, pend: a.unitsPending, risk: a.atRisk });
+    check('recovery: profit — the refund row in the later period carries the payout hit only', l500r && !l500r.pending && /sold in another period/.test(l500r.situation) && m500.cogs === 0, { l500r, cogs: m500 && m500.cogs });
     check('recovery: profit — the headline profit and margin leave uncosted payout out', pr.profit === Math.round((pr.costedPayout - pr.cogs) * 100) / 100 && Math.abs(pr.payout - pr.costedPayout - pr.missing.payout) < 0.01 && (pr.costedPayout <= 0 || pr.margin === Math.round((pr.profit / pr.costedPayout) * 1000) / 10), { profit: pr.profit, costed: pr.costedPayout, cogs: pr.cogs, missing: pr.missing.payout, margin: pr.margin });
     const gz = pr.groups.find((x) => x.sku === 'INV-Z'); const ga = pr.groups.find((x) => x.sku === 'SKU-A'); const gb = pr.groups.find((x) => x.sku === 'SKU-B');
     check('recovery: profit — listings grouped under their Linnworks SKU, unmapped ones on their own', gz && gz.mapped && gz.listings.length === 1 && gz.listings[0].sku === 'SKU-Z' && gz.payout === z.payout && gz.profit === z.profit && ga && ga.mapped && gb && !gb.mapped && z.inv === 'INV-Z', { gz, ga: ga && ga.mapped, gb: gb && gb.mapped, zinv: z && z.inv });
@@ -225,16 +233,16 @@ module.exports = function run(check) {
     const pr3 = recovery.profit('cycle', res.id);
     const a3 = pr3.skus.find((g) => g.sku === 'SKU-A');
     const l6 = a3 && a3.lines.find((l) => l.po === '006'); const l3 = a3 && a3.lines.find((l) => l.po === '003');
-    check('recovery: profit — a return inside its window is pending: not costed, carried at risk', a3 && a3.unitsPending === 1 && a3.atRisk === 70 && l6 && l6.pending && /pending/.test(l6.situation) && l6.tone === 'amber', a3 && { pend: a3.unitsPending, risk: a3.atRisk, l6 });
+    check('recovery: profit — a return inside its window is pending: not costed, carried at risk', a3 && a3.unitsPending === 2 && a3.atRisk === 140 && l6 && l6.pending && /pending/.test(l6.situation) && l6.tone === 'amber', a3 && { pend: a3.unitsPending, risk: a3.atRisk, l6 });
     check('recovery: profit — a return past its window is lost: costed', a3 && a3.unitsLost === 1 && a3.cogs === 70 && l3 && !l3.pending && /cost charged/.test(l3.situation) && l3.tone === 'red', a3 && { lost: a3.unitsLost, cogs: a3.cogs, l3 });
-    check('recovery: profit — the strip totals carry at risk and lost units', pr3.atRisk.amount === 70 && pr3.atRisk.units === 1 && pr3.lostUnits === 1 && pr3.atRisk.orders >= 1, pr3.atRisk);
+    check('recovery: profit — the strip totals carry at risk and lost units', pr3.atRisk.amount === 140 && pr3.atRisk.units === 2 && pr3.lostUnits === 1 && pr3.atRisk.orders >= 1, pr3.atRisk);
     const per3 = pr3.periods.find((x) => x.id === res.id);
-    check('recovery: profit — the period trend applies the same rule', per3 && per3.atRisk === 70 && per3.cogs === pr3.cogs, per3);
+    check('recovery: profit — the period trend applies the same rule', per3 && per3.atRisk === 140 && per3.cogs === pr3.cogs, per3);
     // a goods price known on some orders only: goods sold and avg price read
     // the priced orders, and the strip says how many are missing
     db.prepare("UPDATE wm_orders SET gross = NULL WHERE run_id = ? AND po = '100'").run(res.id);
     const pr4 = recovery.profit('cycle', res.id);
-    check('recovery: profit — goods sold and avg price count priced orders only', pr4.priced.unpriced === 1 && pr4.priced.orders === 3 && pr4.gross === 280 && pr4.avgPrice === 93.33, { priced: pr4.priced, avg: pr4.avgPrice, gross: pr4.gross });
+    check('recovery: profit — goods sold and avg price count priced orders only', pr4.priced.unpriced === 1 && pr4.priced.orders === 4 && pr4.gross === 380 && pr4.avgPrice === 95, { priced: pr4.priced, avg: pr4.avgPrice, gross: pr4.gross });
     // the archive moved folders (sync turned on after the import): the
     // price backfill still finds the statement in the earlier folder
     const archived = path.join(tmp, 'archive', 'Walmart_Report_May 16 - May 30, 2026.csv');

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.30 highlights
+
+- **A return of an earlier period's sale now recovers its cost** (owner: "why is my margin so low" on August). A PO's sale and its refund usually land in different payment periods, so the app held them as two rows and judged each on its own: the sale row never saw the refund, so a unit that came back, or was still pending, kept its full cost charged forever, while the refund row carried the payout hit with no relief. The standing is now judged on the whole PO across every period. The relief (back in stock, pending, never shipped) lands on the row that sold the unit, in that period, and the refund row keeps its payout hit in its own period. Each PO's line says "refund in another period" or "sold in another period" when that is the case.
+
 ## v1.32.29 highlights
 
 - **Re-importing a period kept losing its archived file.** Replacing a period wrote the new file first and then, cleaning up the old run, deleted the period's archive — the file it had just written. The old run is now replaced before the file is archived, so the archive stays and the goods-price backfill has something to read.

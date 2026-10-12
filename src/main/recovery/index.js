@@ -516,18 +516,35 @@ function profit(scope, key) {
   //     not costed yet; its cost is carried as "at risk"
   //   lost (window passed with no case, marked lost, written off, paid by
   //     Walmart instead) → costed
+  // a PO's sale and its refund often land in different payment periods, so
+  // one PO is two stored rows: the sale row (units sold, no refund) and the
+  // refund row (the refund, no units). The standing is judged on the PO as
+  // a whole, across every period, and the cost relief lands on the row that
+  // carries the sold units — where the cost was charged — while the refund
+  // row keeps its payout hit in its own period (owner 2026-10-12: August's
+  // margin looked low because returns of July sales never recovered a cost)
+  const wholePo = new Map();
+  for (const o of store.allOrders()) {
+    const w = wholePo.get(o.po) || { saleUnits: 0, refundUnits: 0 };
+    w.saleUnits += Number(o.saleUnits) || 0; w.refundUnits += Number(o.refundUnits) || 0;
+    wholePo.set(o.po, w);
+  }
   const standing = (o) => {
+    const w = wholePo.get(o.po) || o;
     const mk = marksByPo.get(o.po);
     const manual = !!(mk && !mk.removed && mk.receivedManual);
     const never = !!(mk && !mk.removed && mk.neverShipped);
-    if (never) return { kind: 'never', back: o.saleUnits, held: 0, it: null };
-    if (!(o.refundUnits > 0)) return { kind: 'kept', back: 0, held: 0, it: null };
-    const units = Math.min(o.refundUnits, o.saleUnits);
-    if (whPo.has(o.po) || manual) return { kind: manual ? 'manual' : 'back', back: units, held: 0, it: null };
+    // the relief this row can take: only its own sold units
+    const own = (n) => Math.min(Number(o.saleUnits) || 0, n);
+    if (never) return { kind: 'never', back: Number(o.saleUnits) || 0, held: 0, it: null, elsewhere: false };
+    if (!(w.refundUnits > 0)) return { kind: 'kept', back: 0, held: 0, it: null, elsewhere: false };
+    const elsewhere = !(o.refundUnits > 0); // this row sold it; the refund sits in another period
+    const units = Math.min(w.refundUnits, w.saleUnits);
+    if (whPo.has(o.po) || manual) return { kind: manual ? 'manual' : 'back', back: own(units), held: 0, it: null, elsewhere };
     const it = trackerByPo.get(o.po) || null;
     const pending = !!it && it.status === 'outstanding' && it.lost !== true && !it.windowClosed
       && (it.wfsWaiting || it.wfsDisputeOpen || it.caseOpened || it.adjustment || (it.daysLeft != null && it.daysLeft > 0));
-    return pending ? { kind: 'pending', back: 0, held: units, it } : { kind: 'lost', back: 0, held: 0, it };
+    return pending ? { kind: 'pending', back: 0, held: own(units), it, elsewhere } : { kind: 'lost', back: 0, held: 0, it, elsewhere };
   };
   // a goods price is only known for periods imported with the price
   // columns (v1.32.13+) whose archive was on hand; an order without one
@@ -539,16 +556,18 @@ function profit(scope, key) {
     const { back, held } = st;
     let situation = 'Sold, kept'; let tone = 'green';
     const when = (it) => { const sh = rnr.shortStatus(it); return `${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; };
+    const where = st.elsewhere ? ' (refund in another period)' : (!(o.saleUnits > 0) && o.refundUnits > 0 ? ' (sold in another period)' : '');
     if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
-    else if (st.kind === 'manual') { situation = 'Refunded · marked received before the log'; tone = 'navy'; }
-    else if (st.kind === 'back') { situation = 'Refunded · back in stock · cost recovered'; tone = 'navy'; }
-    else if (st.kind === 'pending') { situation = `Refunded · pending · ${when(st.it)} · not costed yet`; tone = 'amber'; }
-    else if (st.kind === 'lost') { situation = st.it ? `Refunded · ${when(st.it)} · cost charged` : 'Refunded · not received · cost charged'; tone = 'red'; }
+    else if (st.kind === 'manual') { situation = `Refunded${where} · marked received before the log`; tone = 'navy'; }
+    else if (st.kind === 'back') { situation = `Refunded${where} · back in stock · cost recovered`; tone = 'navy'; }
+    else if (st.kind === 'pending') { situation = `Refunded${where} · pending · ${when(st.it)} · not costed yet`; tone = 'amber'; }
+    else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)} · cost charged` : `Refunded${where} · not received · cost charged`; tone = 'red'; }
     const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;
     const atRisk = cost === null ? 0 : held * cost;
-    const lostUnits = st.kind === 'lost' ? Math.min(o.refundUnits, o.saleUnits) : 0;
+    // a lost unit is counted on the row that sold it, once
+    const lostUnits = st.kind === 'lost' ? Math.min((wholePo.get(o.po) || o).refundUnits, Number(o.saleUnits) || 0) : 0;
     tot.payout += o.netPayable; tot.orders++; tot.unitsSold += o.saleUnits; tot.unitsRefunded += o.refundUnits; tot.unitsBack += back;
     tot.atRisk += atRisk; tot.atRiskUnits += held; tot.lostUnits += lostUnits; if (st.kind === 'pending') tot.pendingOrders++;
     const isPriced = priced(o);
