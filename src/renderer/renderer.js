@@ -1852,7 +1852,7 @@ function rcRenderProfit() {
   $('rcProfitStrip').innerHTML = [
     cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
-      : `${rcPlural(p.unitsSold, 'unit')} · price not in this period yet`),
+      : `${rcPlural(p.unitsSold, 'unit')} · no goods price — re-import this period on the Import screen`),
     cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),

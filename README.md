@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.25 highlights
+
+- **Goods price found in every archive folder.** A period imported before sync moved the archive folder (or on a computer whose Documents folder holds the file) showed "price not in this period yet" because the backfill looked in one folder only. It now checks the current folder, the Documents folder and the shared folder, and looks again on every refresh, so turning sync on or copying a statement in fills the price without a restart. A period still without a file says so on the strip and the By period tab: re-import it on the Import screen.
+
 ## v1.32.24 highlights
 
 - **Pending returns are not costed yet** (owner: "if a return is pending, why would you deduct from the profit just yet?"). A refunded unit inside its window (45 days seller, Walmart's 90 days or the 135-day filing window for WFS, a case open, or parked) keeps its cost out of Cost of goods and shows in a new **At risk** cell instead. It is costed the day the window closes with no case, when it is marked lost or written off, or when Walmart pays instead. Back in stock and Never shipped work as before. Each PO's line in the SKU drop-down says which it is.

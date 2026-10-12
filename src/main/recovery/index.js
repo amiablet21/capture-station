@@ -118,6 +118,16 @@ function syncIn() {
 const safeLabel = (label) => String(label).replace(/[\\/:*?"<>|]/g, '-');
 const archiveDir = () => (typeof deps.archiveDir === 'function' ? deps.archiveDir() : deps.archiveDir);
 function archivePath(label) { return path.join(archiveDir(), `Walmart_Report_${safeLabel(label)}.csv`); }
+// the archived statement for a period, wherever it was saved: the current
+// archive folder first, then the other folders this app has used (the
+// Documents folder before sync was turned on, the shared folder after) —
+// a period imported before sync moved the folder still has its file
+function findArchive(label) {
+  const name = `Walmart_Report_${safeLabel(label)}.csv`;
+  const dirs = [archiveDir(), ...((typeof deps.archiveDirs === 'function' ? deps.archiveDirs() : deps.archiveDirs) || [])];
+  for (const d of dirs) { if (!d) continue; const f = path.join(d, name); try { if (fs.existsSync(f)) return f; } catch { /* next */ } }
+  return null;
+}
 
 async function importReport({ name, text, force }, onProgress = () => {}) {
   syncIn();
@@ -395,14 +405,14 @@ function viewCsv(pos) {
 
 // periods imported before Profit existed have no per-order rows: read them
 // back from the period's archived CSV when it is on this computer
-const pricesTried = new Set(); // runs whose archive was looked for once this session
+const pricesTried = new Set(); // run + file read once this session (a file found elsewhere is read again)
 const byTried = new Set();
 function ensureOrders() {
   const missing = [];
   for (const r of store.runsWithoutOrders()) {
-    const f = archivePath(r.label);
+    const f = findArchive(r.label);
     try {
-      if (!fs.existsSync(f)) { missing.push(r.label); continue; }
+      if (!f) { missing.push(r.label); continue; }
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       store.putOrders(r.id, parsed.orders);
       if (!parsed.orders.length) missing.push(r.label);
@@ -413,22 +423,20 @@ function ensureOrders() {
   // fill them from the archived CSV when it is on this computer or in the
   // shared folder; a run with no archive keeps its orders, prices unknown
   for (const r of store.runsWithoutPrices()) {
-    if (pricesTried.has(r.id)) continue;
-    pricesTried.add(r.id);
-    const f = archivePath(r.label);
+    const f = findArchive(r.label); // looked for on every call: the folder may appear later
+    if (!f || pricesTried.has(`${r.id}|${f}`)) continue;
     try {
-      if (!fs.existsSync(f)) continue;
+      pricesTried.add(`${r.id}|${f}`);
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
     } catch { /* next time the file is readable */ }
   }
   // likewise who issued each refund, for runs stored before v1.32.15
   for (const r of store.runsWithoutRefundedBy()) {
-    if (byTried.has(r.id)) continue;
-    byTried.add(r.id);
-    const f = archivePath(r.label);
+    const f = findArchive(r.label);
+    if (!f || byTried.has(`${r.id}|${f}`)) continue;
     try {
-      if (!fs.existsSync(f)) continue;
+      byTried.add(`${r.id}|${f}`);
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       store.setRefundedBy(r.id, Object.fromEntries(parsed.refunds.map((x) => [x['PO #'], x['Refunded By'] || ''])));
     } catch { /* next time */ }

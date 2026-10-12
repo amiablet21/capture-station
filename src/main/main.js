@@ -7218,6 +7218,13 @@ function startRecovery() {
     listReturns: (n) => db.listReturns(n),
     config,
     archiveDir: recoveryArchiveDir, // a function: the folder follows the sync setting
+    // every folder a statement may have been archived in, for periods
+    // imported before the folder moved (owner 2026-10-12: a period with no
+    // goods price although its file was uploaded)
+    archiveDirs: () => {
+      const st = retsync.status();
+      return [path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports'), st.folder ? path.join(st.folder, 'Walmart Reports') : ''];
+    },
     station: () => stockLogComputer(),
     stationAliases: () => [os.hostname()],
     by: () => '',

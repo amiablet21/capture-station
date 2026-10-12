@@ -96,7 +96,7 @@ module.exports = function run(check) {
   const cfg = { recovery: { email: 'owner@example.com', webhookUrl: '' } };
   recovery.configure({
     retsync: fakeSync, listReturns: () => returns, config: { load: () => cfg, save: (p) => Object.assign(cfg.recovery, p.recovery || {}) },
-    archiveDir: path.join(tmp, 'archive'), station: 'TEST', by: 'IM',
+    archiveDir: path.join(tmp, 'archive'), archiveDirs: () => [path.join(tmp, 'archive-before-sync')], station: 'TEST', by: 'IM',
     costs: () => ({ 'SKU-A': { cost: 70 }, 'INV-Z': { cost: 120 } }), channelMap: () => new Map([['SKU-Z', 'INV-Z']]),
   });
 
@@ -232,6 +232,15 @@ module.exports = function run(check) {
     db.prepare("UPDATE wm_orders SET gross = NULL WHERE run_id = ? AND po = '100'").run(res.id);
     const pr4 = recovery.profit('cycle', res.id);
     check('recovery: profit — goods sold and avg price count priced orders only', pr4.priced.unpriced === 1 && pr4.priced.orders === 3 && pr4.gross === 280 && pr4.avgPrice === 93.33, { priced: pr4.priced, avg: pr4.avgPrice, gross: pr4.gross });
+    // the archive moved folders (sync turned on after the import): the
+    // price backfill still finds the statement in the earlier folder
+    const archived = path.join(tmp, 'archive', 'Walmart_Report_May 16 - May 30, 2026.csv');
+    const moved = path.join(tmp, 'archive-before-sync', 'Walmart_Report_May 16 - May 30, 2026.csv');
+    fs.mkdirSync(path.dirname(moved), { recursive: true }); fs.renameSync(archived, moved);
+    db.prepare('UPDATE wm_orders SET gross = NULL, commission = NULL WHERE run_id = ?').run(res.id);
+    const pr5 = recovery.profit('cycle', res.id);
+    check('recovery: profit — the price backfill reads an archive from the folder used before sync', pr5.gross > 0 && pr5.priced.unpriced === 0, { gross: pr5.gross, priced: pr5.priced });
+    fs.renameSync(moved, archived);
     // exports
     check('recovery: audit workbook builds', recovery.auditWorkbook().readUInt32LE(0) === 0x04034b50);
     check('recovery: summary workbook builds', recovery.summaryWorkbook('all').buffer.readUInt32LE(0) === 0x04034b50);
