@@ -13489,22 +13489,54 @@ function pageFindOpen() {
 function pageFindClose() {
   pageFindBar.hidden = true;
   pageFindLast = '';
+  pageFindHits = []; pageFindIx = -1;
   $('pageFindCount').textContent = '';
-  api.findStop().catch(() => {});
+  pageFindPaint();
+}
+// Find runs in the page itself with the CSS Custom Highlight API (Chromium's
+// own find-in-page also matched the text typed in this bar and kept
+// grabbing the selection, so a letter at a time would not type — owner
+// 2026-10-13). Text nodes of the visible page are scanned, the bar and
+// hidden parts skipped; matches are painted through ::highlight, nothing
+// in the DOM changes and the input keeps its focus.
+let pageFindHits = []; let pageFindIx = -1;
+function pageFindCollect(text) {
+  const q = text.toLowerCase(); const hits = [];
+  const skip = (el) => !el || el === pageFindBar || el.closest('#pageFindBar, script, style, [hidden], dialog:not([open])');
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      const el = n.parentElement;
+      if (skip(el) || !n.nodeValue || !n.nodeValue.toLowerCase().includes(q)) return NodeFilter.FILTER_REJECT;
+      // off-screen pages are display:none: no boxes
+      return el.getClientRects().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const v = n.nodeValue.toLowerCase(); let at = v.indexOf(q);
+    while (at >= 0) { const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + q.length); hits.push(r); at = v.indexOf(q, at + q.length); }
+  }
+  return hits;
+}
+function pageFindPaint() {
+  if (!('highlights' in CSS)) return;
+  CSS.highlights.set('pagefind', new Highlight(...pageFindHits));
+  CSS.highlights.set('pagefind-active', new Highlight(...(pageFindIx >= 0 && pageFindHits[pageFindIx] ? [pageFindHits[pageFindIx]] : [])));
 }
 // a new text starts a search; the same text again steps to the next match
 function pageFindRun(step, forward = true) {
   const text = $('pageFindInput').value;
-  if (!text.trim()) { $('pageFindCount').textContent = ''; api.findStop().catch(() => {}); pageFindLast = ''; return; }
+  if (!text.trim()) { $('pageFindCount').textContent = ''; $('pageFindCount').classList.remove('is-none'); pageFindLast = ''; pageFindHits = []; pageFindIx = -1; pageFindPaint(); return; }
   const fresh = !(step && text === pageFindLast);
   pageFindLast = text;
-  api.findStart(text, forward, fresh).catch(() => {});
+  if (fresh) { pageFindHits = pageFindCollect(text); pageFindIx = pageFindHits.length ? 0 : -1; }
+  else if (pageFindHits.length) pageFindIx = (pageFindIx + (forward ? 1 : -1) + pageFindHits.length) % pageFindHits.length;
+  pageFindPaint();
+  const n = pageFindHits.length;
+  $('pageFindCount').textContent = n ? `${pageFindIx + 1} of ${n}` : 'no matches';
+  $('pageFindCount').classList.toggle('is-none', !n);
+  const r = pageFindHits[pageFindIx];
+  if (r) { const el = r.startContainer.parentElement; if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' }); }
 }
-api.on('find:result', (r) => {
-  if (!r || pageFindBar.hidden) return;
-  $('pageFindCount').textContent = r.matches ? `${Math.max(1, r.active || 0)} of ${r.matches}` : 'no matches';
-  $('pageFindCount').classList.toggle('is-none', !r.matches);
-});
 $('pageFindInput').addEventListener('input', () => pageFindRun(false));
 $('pageFindInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); pageFindRun(true, !e.shiftKey); }

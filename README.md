@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.33 highlights
+
+- **Find on page (Ctrl+F / Cmd+F) types properly again** (owner: "I can't type one letter at a time"). Chromium's own find also matched the text in the find box and kept taking the selection. Find now runs in the page itself: matches are painted with the browser's highlight API, pale for every match and amber for the current one, the box keeps its focus, and the bar's own text is never a match.
+
 ## v1.32.32 highlights
 
 - **Received, from the ⋯ menu on Reconcile** (owner's ask). Marks the PO received today. It is a mark only: nothing is written to the Returns log and no Linnworks quantity moves. Profit treats it as back in stock. The Marked tab shows "Received · came back <date>" and can undo it. Received before the log and Never shipped stay as they were.

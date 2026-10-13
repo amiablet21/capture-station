@@ -5300,6 +5300,9 @@ th:last-child > .col-grip { right: 0; }
 .find-bar input { font-family: inherit; font-size: 13px; border: none; outline: none; width: 220px; color: #2F3437; background: none; }
 .find-count { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: #787774; padding: 0 8px; border-left: 1px solid #EAEAEA; white-space: nowrap; min-width: 56px; text-align: center; }
 .find-count.is-none { color: #9F2F2D; }
+/* the page's own find (CSS Custom Highlight API): every match pale, the active one amber */
+::highlight(pagefind) { background-color: #FFF3C4; color: #2F3437; }
+::highlight(pagefind-active) { background-color: #F5B544; color: #2F3437; }
 .find-btn { font-family: inherit; font-size: 13px; width: 26px; height: 26px; border: none; background: none; color: #787774; border-radius: 6px; cursor: pointer; }
 .find-btn:hover { background: #F1F0EC; color: #2F3437; }
 
