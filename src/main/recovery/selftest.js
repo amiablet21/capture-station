@@ -171,6 +171,10 @@ module.exports = function run(check) {
     check('recovery: a shipping-protection claim payout is', p2.payouts['011'] && p2.payouts['011'].amount === 100 && p2.payouts['011'].kind === 'adjustment', p2.payouts);
     const res2 = await recovery.importReport({ name: 'old_format_reconciliationreport.csv', text: payoutCsv });
     check('recovery: old-format import labels from its Period columns', res2.ok === true && res2.label === 'Jun 1 - Jun 14, 2026', res2);
+    // the statement as Walmart lays it out (v1.32.39)
+    const stm = recovery.statement('cycle', res2.id);
+    const secOf = (n) => stm.sections.find((s) => s.name === n);
+    check('recovery: statement — refunds, adjustments and the transfer land in their sections', stm.ok && stm.hasLines && secOf('Refunds') && secOf('Refunds').lines.some((l) => l.label === 'Product price' && l.amount === -180) && secOf('Adjustments') && secOf('Adjustments').lines.some((l) => /Dispute/.test(l.label) && l.amount === 150.5) && secOf('Adjustments').lines.some((l) => /Label Service Charge/.test(l.label)) && stm.paid.length === 1 && stm.paid[0].amount === 5000, { sections: stm.sections, paid: stm.paid });
     returns = [...returns, mk('002', 200, 'Open Box', 6)];
     st = recovery.state();
     check('recovery: settlement money makes 010 reimbursed with the payout visible', st.items.find((i) => i.po === '010').status === 'reimbursed' && st.items.find((i) => i.po === '010').settlementSeen === 120.5);

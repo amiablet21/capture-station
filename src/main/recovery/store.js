@@ -117,6 +117,17 @@ function ensureSchema(db) {
       net REAL NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_wm_orders_run ON wm_orders(run_id);
+    CREATE TABLE IF NOT EXISTS wm_lines (
+      run_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT '',
+      desc TEXT NOT NULL DEFAULT '',
+      amount_type TEXT NOT NULL DEFAULT '',
+      date TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      count INTEGER NOT NULL DEFAULT 0,
+      pos INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_wm_lines_run ON wm_lines(run_id);
   `);
   // v1.32.13: the goods price and Walmart's commission per order (null on
   // rows imported before, until that period is re-imported)
@@ -176,7 +187,19 @@ function findRunByHash(hash) {
 
 // one import's whole payload in one transaction: the run row + its
 // refunds, payouts and ledger. Replaces any run with the same id.
-function putRun(run, refunds, payouts, ledger, orders) {
+function putLinesRows(db, runId, lines) {
+  db.prepare('DELETE FROM wm_lines WHERE run_id = ?').run(runId);
+  const il = db.prepare('INSERT INTO wm_lines (run_id, type, desc, amount_type, date, amount, count, pos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const l of lines || []) il.run(runId, String(l.type || ''), String(l.desc || ''), String(l.amountType ?? l.amount_type ?? ''), l.date || null, Number(l.amount) || 0, Number(l.count) || 0, Number(l.pos) || 0);
+}
+function putLines(runId, lines) { putLinesRows(d(), runId, lines); }
+const linesOut = (r) => ({ run_id: r.run_id, type: r.type, desc: r.desc, amountType: r.amount_type, date: r.date, amount: r.amount, count: r.count, pos: r.pos });
+function runLines(id) { return d().prepare('SELECT * FROM wm_lines WHERE run_id = ?').all(id).map(linesOut); }
+function allLines() { return d().prepare('SELECT * FROM wm_lines').all().map(linesOut); }
+function runsWithoutLines() {
+  return d().prepare('SELECT id, label FROM wm_runs WHERE id NOT IN (SELECT DISTINCT run_id FROM wm_lines)').all();
+}
+function putRun(run, refunds, payouts, ledger, orders, lines) {
   const db = d();
   const tx = db.prepare('BEGIN');
   tx.run();
@@ -198,6 +221,7 @@ function putRun(run, refunds, payouts, ledger, orders) {
     const il = db.prepare('INSERT INTO wm_ledger (run_id, key, po, order_no, type, date, amount) VALUES (?, ?, ?, ?, ?, ?, ?)');
     for (const t of ledger || []) il.run(run.id, String(t.key || ''), String(t.po || ''), String(t.order_no || t.order || ''), String(t.type || ''), t.date || null, Number(t.amount) || 0);
     if (orders) putOrdersRows(db, run.id, orders);
+    if (lines) putLinesRows(db, run.id, lines);
     db.prepare('DELETE FROM wm_tombstones WHERE id = ?').run(run.id);
     db.prepare('COMMIT').run();
   } catch (e) {
@@ -232,7 +256,7 @@ function runsWithoutPrices() {
 
 function deleteRunRows(id) {
   const db = d();
-  for (const t of ['wm_refunds', 'wm_payouts', 'wm_ledger', 'wm_orders']) db.prepare(`DELETE FROM ${t} WHERE run_id = ?`).run(id);
+  for (const t of ['wm_refunds', 'wm_payouts', 'wm_ledger', 'wm_orders', 'wm_lines']) db.prepare(`DELETE FROM ${t} WHERE run_id = ?`).run(id);
   db.prepare('DELETE FROM wm_items WHERE source_run_id = ?').run(id);
   db.prepare('DELETE FROM wm_runs WHERE id = ?').run(id);
 }
@@ -371,6 +395,7 @@ function ownRuns(stations) {
 module.exports = {
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
   runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices, runsWithoutRefundedBy, setRefundedBy, refundedByMap,
+  putLines, runLines, allLines, runsWithoutLines,
   addItems, listItems, removeItem, pruneOrphans,
   getMarks, allMarks, upsertMarks, ownMarks, ownRuns,
 };

@@ -1762,6 +1762,34 @@ async function rcLoadProfit(seq = rc.seq) {
   const p = await api.recoveryProfit(rc.profitScope, key).catch(() => null);
   if (seq !== rc.seq) return;
   rc.profit = p && p.ok ? p : null;
+  const st = await api.recoveryStatement(rc.profitScope, key).catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.statement = st && st.ok ? st : null;
+}
+// the statement view: Walmart's sections, lines and totals, in Walmart's order
+function rcRenderStatement() {
+  const box = $('rcStatement'); const st = rc.statement;
+  const on = rc.profitTab === 'statement';
+  box.hidden = !on; $('rcProfitTable').hidden = on;
+  if (!on) return;
+  if (!st || !st.hasLines) { box.innerHTML = '<div class="rc-st-note">No statement lines for this scope yet — re-import the period on the Import screen and they fill in.</div>'; return; }
+  const money = (v) => `${v < 0 ? '−' : ''}${rcMoney(v)}`;
+  const section = (s) => `<section class="rc-st-sec">
+    <h3 class="rc-st-h">${esc(s.name)}</h3>
+    ${s.lines.map(l => `<div class="rc-st-row"><span class="rc-st-l">${esc(l.label)}${l.count > 1 ? ` <span class="rc-muted rc-small">· ${l.count} lines</span>` : ''}</span><span class="rc-st-v rc-mono ${l.amount < 0 ? 'is-neg' : ''}">${money(l.amount)}</span></div>`).join('')}
+    <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono ${s.total < 0 ? 'is-neg' : ''}">${money(s.total)}</span></div>
+  </section>`;
+  const paid = st.paid.length ? `<section class="rc-st-sec">
+    <h3 class="rc-st-h">Paid to you</h3>
+    ${st.paid.map(p => `<div class="rc-st-row"><span class="rc-st-l">${esc(p.date ? rcMonDay(p.date) + (String(p.date).slice(0, 4) ? `, ${String(p.date).slice(0, 4)}` : '') : 'Transfer')}</span><span class="rc-st-v rc-mono">${money(p.amount)}</span></div>`).join('')}
+    <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono">${money(st.paidTotal)}</span></div>
+  </section>` : '';
+  const head = `<div class="rc-st-top">
+    <div><div class="rc-st-k">Statement</div><div class="rc-st-n">${esc(st.scope === 'cycle' ? rcPeriodName(st.label) : st.label)}</div></div>
+    <div class="rc-st-sum"><div class="rc-st-k">Activity</div><div class="rc-st-n rc-mono ${st.activity < 0 ? 'is-neg' : ''}">${money(st.activity)}</div><div class="rc-muted rc-small">sales + refunds + fees + adjustments</div></div>
+    ${st.payable != null ? `<div class="rc-st-sum"><div class="rc-st-k">Total payable</div><div class="rc-st-n rc-mono">${money(st.payable)}</div><div class="rc-muted rc-small">${st.scope === 'cycle' ? "the period's summary line" : `${rcPlural(st.runs || 0, 'period')} added up`}</div></div>` : ''}
+  </div>`;
+  box.innerHTML = head + '<div class="rc-st-grid">' + st.sections.map(section).join('') + paid + '</div>';
 }
 
 async function rcLoadSummary(seq = rc.seq) {
@@ -1864,9 +1892,11 @@ function rcRenderProfit() {
     cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid, left out of profit` : 'every listing is costed'),
   ].join('');
 
-  $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
   $('rcProfitGroup').innerHTML = [['lw', 'Linnworks SKU'], ['wm', 'Walmart SKU']].map(([k, label]) => `<button type="button" data-rcgroup="${k}" class="${rc.profitGroup === k ? 'is-on' : ''}">${label}</button>`).join('');
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length]].map(([k, label, n]) =>
+  rcRenderStatement();
+  $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
+  $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement';
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', rc.statement && rc.statement.hasLines ? rc.statement.sections.length : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');

@@ -5580,6 +5580,20 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-profit tr.rc-subfoot td { background: #FBFBFA; color: #787774; font-size: 12px; height: 30px; padding-top: 4px; padding-bottom: 4px; }
 .rc-table-profit th:nth-child(n+3) { width: 8.6%; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* the Statement tab (owner 2026-10-13): Walmart's sections, two columns */
+.rc-statement { padding: 6px 18px 18px; }
+.rc-st-top { display: flex; gap: 40px; align-items: flex-start; padding: 12px 0 16px; border-bottom: 1px solid #EAEAEA; }
+.rc-st-k { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: #A5A29C; }
+.rc-st-n { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.rc-st-n.is-neg, .rc-st-v.is-neg { color: #9F2F2D; }
+.rc-st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+.rc-st-sec { padding: 14px 0 6px; border-bottom: 1px solid #F1F0EC; }
+.rc-st-h { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.rc-st-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 13px; }
+.rc-st-row.is-total { border-top: 1px solid #EAEAEA; margin-top: 4px; padding-top: 8px; font-weight: 600; }
+.rc-st-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 16px; }
+.rc-st-v { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc-st-note { padding: 18px 0; font-size: 12.5px; color: #787774; }
 /* grouped by Linnworks SKU (owner 2026-10-12): the group row carries the
    totals, its Walmart listings sit indented beneath, each with its own POs */
 .rc-seg-sm button { padding: 3px 11px; font-size: 12px; }

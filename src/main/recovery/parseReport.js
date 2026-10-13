@@ -143,7 +143,39 @@ function parseRefunds(text) {
     r['Net Refund (Payable Impact)'] = -r['Net Refund (Payable Impact)'];
     r.refundDateParsed = parseRefundDate(r['Refund Date']);
   }
-  return { refunds: agg, format, period: detectPeriod(rows, agg), rows, columns };
+  return { refunds: agg, format, period: detectPeriod(rows, agg), rows, columns, lines: parseStatementLines(rows, format) };
+}
+
+// The statement as Walmart lays it out (owner 2026-10-13: "a 1 to 1 of what
+// I see on Walmart"): every CSV line summed by transaction type, Walmart's
+// description, amount type and day. Small per period, enough to rebuild the
+// Sales / Refunds / Fees / Adjustments / Paid to you sections for any scope.
+function parseStatementLines(rows, format) {
+  const map = new Map();
+  const add = (type, desc, amountType, date, amount, po) => {
+    const k = `${type}|${desc}|${amountType}|${date || ''}`;
+    const g = map.get(k) || { type, desc, amountType, date: date || null, amount: 0, count: 0, pos: 0 };
+    g.amount += amount; g.count++; if (po) g.pos++;
+    map.set(k, g);
+  };
+  if (format === 'new') {
+    for (const r of rows) {
+      const raw = String(r['Transaction Type'] ?? '').trim();
+      if (!raw) continue;
+      add(NEW_FORMAT_TYPE_LABELS[raw] || raw, '', 'Payable to partner', toIsoDay(r['Transaction Date Time']), toNum(r['Payable to Partner from Sale']), String(r['Walmart.com PO #'] ?? '').trim());
+    }
+  } else {
+    for (const r of rows) {
+      const type = String(r['Transaction Type'] ?? '').trim();
+      if (!type) continue;
+      const desc = String(r['Transaction Description'] ?? '').trim();
+      const at = String(r['Amount Type'] ?? '').trim();
+      // the summary line carries the period's payable in its own column
+      const amount = type === 'PaymentSummary' ? toNum(r['Total Payable']) : toNum(r['Amount']);
+      add(type, desc, at, toIsoDay(r['Transaction Posted Timestamp']), amount, String(r['Purchase Order #'] ?? '').trim());
+    }
+  }
+  return [...map.values()].map((g) => ({ ...g, amount: Math.round(g.amount * 100) / 100 }));
 }
 
 // ---------- Walmart payouts ("Walmart paid you back") ----------
@@ -303,4 +335,4 @@ function parseReport(text) {
   };
 }
 
-module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX, NOT_SETTLEMENT_RX };
+module.exports = { parseReport, parseRefunds, parsePayouts, parseLedger, parseOrders, parseStatementLines, detectFormat, parseRefundDate, toIsoDay, toNum, SETTLEMENT_RX, NOT_SETTLEMENT_RX };

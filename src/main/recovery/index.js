@@ -50,7 +50,7 @@ function runEvent(run, ts) {
   return {
     op: 'put', id: run.id, ts,
     run: { ...run, syncTs: undefined },
-    refunds: store.runRefunds(run.id), payouts: store.runPayouts(run.id), ledger: store.runLedger(run.id), orders: store.runOrders(run.id),
+    refunds: store.runRefunds(run.id), payouts: store.runPayouts(run.id), ledger: store.runLedger(run.id), orders: store.runOrders(run.id), lines: store.runLines(run.id),
   };
 }
 
@@ -91,7 +91,7 @@ function applyRunEvent(ev) {
     deleteRunLocal(twin.id, ts);
   }
   const refunds = ev.refunds || [];
-  store.putRun(run, refunds, ev.payouts || [], ev.ledger || [], ev.orders || null);
+  store.putRun(run, refunds, ev.payouts || [], ev.ledger || [], ev.orders || null, ev.lines || null);
   store.addItems(trackerItemsFromStored(run, refunds));
 }
 
@@ -190,7 +190,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
     wh_price: r['Warehouse Price'], wh_condition: r['Warehouse Condition'] || '', refunded_by: r['Refunded By'] || '',
   }));
   const payoutRows = Object.entries(parsed.payouts).map(([po, v]) => ({ po, amount: v.amount, date: v.date || '', kind: v.kind || '' }));
-  store.putRun(run, refundRows, payoutRows, parsed.ledger, parsed.orders);
+  store.putRun(run, refundRows, payoutRows, parsed.ledger, parsed.orders, parsed.lines);
   store.addItems(rnr.trackerRows(seller, wfs).map((r) => rnr.itemFromRow(r, runId, run.ranAt)));
   if (replaced) { try { deps.retsync.appendAux('wmruns', { op: 'del', id: replaced.id, ts: ts - 1 }); } catch { /* offline */ } }
   try { deps.retsync.appendAux('wmruns', runEvent(run, ts)); } catch { /* offline: the local run stands */ }
@@ -411,6 +411,7 @@ function viewCsv(pos) {
 // back from the period's archived CSV when it is on this computer
 const pricesTried = new Set(); // run + file read once this session (a file found elsewhere is read again)
 const byTried = new Set();
+const linesTried = new Set();
 function ensureOrders() {
   const missing = [];
   for (const r of store.runsWithoutOrders()) {
@@ -434,6 +435,16 @@ function ensureOrders() {
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
     } catch { /* next time the file is readable */ }
+  }
+  // the statement lines, for runs stored before v1.32.39
+  for (const r of store.runsWithoutLines()) {
+    const f = findArchive(r.label);
+    if (!f || linesTried.has(`${r.id}|${f}`)) continue;
+    try {
+      linesTried.add(`${r.id}|${f}`);
+      const parsed = parseReport(fs.readFileSync(f, 'utf8'));
+      if (parsed.lines.length) store.putLines(r.id, parsed.lines);
+    } catch { /* next time */ }
   }
   // likewise who issued each refund, for runs stored before v1.32.15
   for (const r of store.runsWithoutRefundedBy()) {
@@ -691,6 +702,71 @@ function profit(scope, key) {
   };
 }
 
+// The statement, laid out as Walmart's Payments page lays it out (owner
+// 2026-10-13): Sales and Refunds by amount type, Fees and Adjustments by
+// Walmart's own description, Paid to you by day, and the period's payable.
+// This period reads that statement 1:1; Month, Year and All time add the
+// statements up.
+const STATEMENT_AMOUNT_LABELS = {
+  'Product Price': 'Product price', Shipping: 'Shipping', 'Product tax': 'Net tax collected', 'Other tax (Fees)': 'Other taxes (fee)',
+  'Commission on Product': 'Net commission', 'Commission on Shipping': 'Net commission', 'Product tax withheld': 'Net tax withheld',
+  'Total Walmart Funded Savings': 'Total Walmart funded savings', 'Promo Code': 'Promo code', 'Payable to partner': 'Payable to partner',
+};
+const STATEMENT_SALES_ORDER = ['Product price', 'Shipping', 'Net tax collected', 'Other taxes (fee)', 'Net commission', 'Net tax withheld', 'Total Walmart funded savings', 'Promo code', 'Payable to partner'];
+function statement(scope, key) {
+  syncIn();
+  ensureOrders();
+  const yr = (d) => { const k = rnr.monthKeyOf(d); return k ? k.slice(0, 4) : null; };
+  let lines; let label; let runs = [];
+  if (scope === 'cycle') {
+    const run = store.getRun(key);
+    lines = run ? store.runLines(run.id) : []; label = run ? run.label : ''; runs = run ? [run] : [];
+  } else if (scope === 'month') {
+    lines = store.allLines().filter((l) => rnr.monthKeyOf(l.date) === key); label = monthLabel(String(key));
+  } else if (scope === 'year') {
+    lines = store.allLines().filter((l) => yr(l.date) === String(key)); label = String(key);
+  } else {
+    lines = store.allLines(); label = 'all time';
+  }
+  const sections = new Map();
+  const put = (section, name, amount, count, order) => {
+    const s = sections.get(section) || { name: section, lines: new Map(), total: 0, order };
+    const l = s.lines.get(name) || { label: name, amount: 0, count: 0 };
+    l.amount += amount; l.count += count; s.lines.set(name, l); s.total += amount;
+    sections.set(section, s);
+  };
+  let payable = 0; let payableSeen = false;
+  const paid = [];
+  for (const l of lines) {
+    const t = l.type;
+    if (t === 'PaymentSummary') { payable += l.amount; payableSeen = true; continue; }
+    if (t === 'Sale' || t === 'Refund') { put(t === 'Sale' ? 'Sales' : 'Refunds', STATEMENT_AMOUNT_LABELS[l.amountType] || l.amountType || l.desc || t, l.amount, l.count, t === 'Sale' ? 1 : 2); continue; }
+    if (t === 'Instant Transfer' || /payout|transfer/i.test(t)) { paid.push({ date: l.date, amount: -l.amount, desc: l.desc }); continue; }
+    if (t === 'Service Fee') { put('Fees', l.desc || l.amountType || t, l.amount, l.count, 3); continue; }
+    if (t === 'Adjustment' || t === 'Dispute Settlement') { put('Adjustments', l.desc || t, l.amount, l.count, 4); continue; }
+    put('Other activities', l.desc || l.amountType || t, l.amount, l.count, 5);
+  }
+  const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const out = [...sections.values()].sort((a, b) => a.order - b.order).map((s) => ({
+    name: s.name, total: r2(s.total),
+    lines: [...s.lines.values()].sort((a, b) => {
+      const ia = STATEMENT_SALES_ORDER.indexOf(a.label); const ib = STATEMENT_SALES_ORDER.indexOf(b.label);
+      if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      return Math.abs(b.amount) - Math.abs(a.amount);
+    }).map((l) => ({ label: l.label, amount: r2(l.amount), count: l.count })),
+  }));
+  const activity = r2(out.reduce((a, s) => a + s.total, 0));
+  // by day, newest first; the bank transfers are negative lines on the statement
+  const paidByDay = new Map();
+  for (const p of paid) { const k = p.date || ''; paidByDay.set(k, r2((paidByDay.get(k) || 0) + p.amount)); }
+  const paidOut = [...paidByDay.entries()].sort((a, b) => String(b[0]).localeCompare(String(a[0]))).map(([date, amount]) => ({ date, amount }));
+  return {
+    ok: true, scope, key, label, runs: runs.length, sections: out, activity,
+    payable: payableSeen ? r2(payable) : null, paid: paidOut, paidTotal: r2(paidOut.reduce((a, p) => a + p.amount, 0)),
+    hasLines: lines.length > 0,
+  };
+}
+
 function profitWorkbook(scope, key) {
   const { buildWorkbookSheets } = require('../xlsxwrite');
   const p = profit(scope, key);
@@ -753,7 +829,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook,
+  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

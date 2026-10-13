@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.39 highlights
+
+- **Statement tab on Profit** (owner: "a 1 to 1 of what I see on Walmart"). The payment statement laid out as Walmart's Payments page lays it out: Sales and Refunds by line (product price, net tax collected, other taxes, net commission, net tax withheld, Walmart funded savings), Fees and Adjustments by Walmart's own description (shipping label service charge, return shipping charge, dispute settlement, shipping protection claim…), Paid to you by day, each with its total, plus the period's total payable. This period reads the statement 1:1; Month, Year and All time add statements up. Periods imported before this version fill in from their archived file, or on re-import.
+
 ## v1.32.38 highlights
 
 - **Highlight a row on Reconcile** (owner: "see which one I am working on" while switching to the Walmart tabs). Click anywhere on a row to turn it yellow; click again to clear. The ⋯ menu has Highlight row / Remove highlight too. Highlights stay through tab switches, sorting and restarts, per computer.

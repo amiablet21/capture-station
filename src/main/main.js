@@ -7345,6 +7345,7 @@ function registerRecoveryIpc() {
     return recoverySaveBuffer('Save this list', `Returns_Not_Received_${recoveryFile(label || 'list')}.csv`, [{ name: 'CSV', extensions: ['csv'] }], Buffer.from(csv, 'utf8'));
   });
   ipcMain.handle('recovery:profit', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.profit(scope, key)));
+  ipcMain.handle('recovery:statement', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.statement(scope, key)));
   ipcMain.handle('recovery:exportProfit', async (_e, { scope, key } = {}) => {
     if (recoveryGate()) return recoveryGate();
     const wb = recoveryTry(() => recovery.profitWorkbook(scope, key));
