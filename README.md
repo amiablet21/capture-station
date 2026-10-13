@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.54 highlights
+
+- The Import list's rows carry only Remove (owner: "the Reconcile and Excel things are not necessary"). Clicking the period's name still opens it on Reconcile.
+
 ## v1.32.53 highlights
 
 - Profit's Linnworks SKU rows drop the "1 Walmart listing" words (owner: "compress it"); a SKU with several listings shows a small count pill instead, and the SKU cell never wraps.

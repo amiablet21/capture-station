@@ -2038,7 +2038,7 @@ function rcRenderImport() {
       <td class="is-right rc-mono">${b('notReceived').count} <span class="rc-muted">· ${rcMoney(b('notReceived').total)}</span></td>
       <td class="is-right rc-mono">${b('wfsWaiting').count} <span class="rc-muted">· ${rcMoney(b('wfsWaiting').total)}</span></td>
       <td class="is-right rc-mono ${r.open ? 'rc-neg' : 'rc-faint'}">${r.open || 'clear'}</td>
-      <td class="rc-period-actions"><button type="button" class="rc-link" data-rcrun="${esc(r.id)}">Reconcile</button><button type="button" class="rc-link" data-rcexcel="${esc(r.id)}">Excel</button><button type="button" class="rc-link is-danger" data-rcremove="${esc(r.id)}">Remove</button></td>
+      <td class="rc-period-actions"><button type="button" class="rc-link is-danger" data-rcremove="${esc(r.id)}">Remove</button></td>
     </tr>`;
   }).join('') : '<tr class="rc-empty-row"><td colspan="9">No period imported yet.</td></tr>';
   $('rcPeriodsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
