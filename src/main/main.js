@@ -5002,11 +5002,27 @@ exit 1
     // better with under the target days on hand, out-of-stock sellers
     // included, soonest-out first; the quantity covers the target at today's
     // pace less what is on hand at the warehouse and WFS
+    // Buy now scans every selling SKU, not only the queue: under the unit
+    // floor (Settings, 50 by default) OR under the target days on hand, at
+    // the set pace or better (1 a day by default); the quantity brings it to
+    // the larger of the floor and the target's worth of sales
     const target = lead + cover;
-    const buy = [...out, ...low, ...fast, ...watch]
-      .filter(r => r.perDay >= 1 && (r.avail + r.atWfs <= 0 || r.daysLeft <= target))
-      .map(r => ({ ...r, buyQty: Math.max(0, Math.ceil(r.perDay * target - Math.max(0, r.avail + r.atWfs))) }))
-      .sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    const buyUnits = Number((cfg.reorder || {}).buyUnits ?? 50);
+    const buyPace = Number((cfg.reorder || {}).buyPace ?? 1);
+    const buy = [];
+    for (const r of (money && money.stock) || []) {
+      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded) continue;
+      const onHand = Math.max(0, (r.avail || 0) + (r.atWfs || 0));
+      if (!(r.perDay >= buyPace && buyPace > 0) && !(buyPace <= 0 && r.sold30 > 0)) continue;
+      if (!(onHand <= buyUnits || onHand <= 0 || r.daysLeft <= target)) continue;
+      const kind = onHand <= 0 ? 'out' : r.daysLeft <= lead ? 'low' : r.daysLeft <= target ? 'watch' : 'stock';
+      const want = Math.max(Math.ceil(r.perDay * target), buyUnits);
+      const row = { ...r, kind, pct: 0, buyQty: Math.max(0, want - onHand), onHand };
+      const queued = [...out, ...low, ...fast, ...watch].find(x => x.sku === r.sku);
+      if (queued) { row.kind = queued.kind; row.pct = queued.pct; row.faster = queued.faster; }
+      buy.push(row);
+    }
+    buy.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // selling fast: the fastest sellers first (owner 2026-10-08)
@@ -5015,7 +5031,7 @@ exit 1
     return {
       ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
       counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
-      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
+      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1, buyUnits, buyPace,
     };
   }
 

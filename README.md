@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.35 highlights
+
+- **Buy now by units, across every SKU** (owner: "we should buy if we have less than 30–50 units left"). The cut now scans every selling SKU, not just the attention queue: under the unit floor OR under the target days on hand, at the set pace or better. Settings › Reorder gains "Buy now when under (units)", 50 by default, and "selling at least (a day)", 1 by default. The BUY quantity brings the SKU to the larger of the floor and the target's worth of sales, less what is on hand. A SKU with no other flag shows a green Stock badge.
+- The Needs attention header keeps one label whatever chip is on, so the chips no longer shift when clicked.
+
 ## v1.32.34 highlights
 
 - **A return goes home to the period that sold the unit** (owner: "margin should be based on products sold and their COGS, not the returns"). A refund usually posts in a later statement than its sale; it now counts in the sale's period, and the two halves merge into one line per PO. A unit sold, refunded and back on the shelf reads $0 in the period it sold; a kept unit reads its real margin; a unit never back is costed where it sold. The later period no longer shows a loss for phones sold earlier. All time is unchanged. A refund whose sale predates the first imported statement stays where it posted and says so.

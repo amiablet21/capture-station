@@ -1139,6 +1139,13 @@
         <span class="field-label">Buy coverage (days)</span>
         <input id="setCoverDays" type="number" min="1" step="1" class="input input-time mono" />
       </div>
+      <!-- the Overview's Buy now cut (owner 2026-10-13: "buy if we have less than 30-50 units left") -->
+      <div class="settings-row">
+        <span class="field-label">Buy now when under (units)</span>
+        <input id="setBuyUnits" type="number" min="0" step="1" class="input input-time mono" />
+        <span class="field-label">and selling at least (a day)</span>
+        <input id="setBuyPace" type="number" min="0" step="0.1" class="input input-time mono" />
+      </div>
       <div class="settings-row">
         <span class="field-label">Settings PIN (empty = no PIN)</span>
         <input id="setPin" type="password" class="input input-time mono" inputmode="numeric" autocomplete="off" placeholder="unchanged" />

@@ -4743,6 +4743,8 @@ th:last-child > .col-grip { right: 0; }
 .ovq-badge { display: inline-block; font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
 .ovq-badge.out { background: var(--neg-bg); color: var(--neg-text); } .ovq-badge.low { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .ovq-badge.fast { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ovq-badge.watch { background: #EFEEEA; color: var(--muted); }
+.ovq-badge.stock { background: #EAF3EA; color: #346538; }
+.ovq-card-h .lbl { min-width: 128px; }
 /* the Buy now cut (owner 2026-10-13): chips in the card header, the pace and
    on-hand under the phrase, and the quantity to order as a pill */
 .ovq-counts .n.g { color: #346538; }

@@ -1265,6 +1265,8 @@ async function openSettings() {
   $('setReorderAuto').checked = !!rc.auto;
   $('setLeadDays').value = String(rc.leadTimeDays || 7);
   $('setCoverDays').value = String(rc.coverDays || 21);
+  $('setBuyUnits').value = String(rc.buyUnits ?? 50);
+  $('setBuyPace').value = String(rc.buyPace ?? 1);
   const sr = cfg.stockRouting || {};
   $('setRouting').checked = !!sr.enabled;
   const fsel = $('setFallbackLoc');
@@ -1388,6 +1390,8 @@ $('settingsSave').addEventListener('click', async () => {
       auto: $('setReorderAuto').checked,
       leadTimeDays: Math.max(1, parseInt($('setLeadDays').value, 10) || 7),
       coverDays: Math.max(1, parseInt($('setCoverDays').value, 10) || 21),
+      buyUnits: Math.max(0, parseInt($('setBuyUnits').value, 10) || 0),
+      buyPace: Math.max(0, Number($('setBuyPace').value) || 0),
     },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
@@ -12675,7 +12679,7 @@ function ovPhrase(r) {
 }
 
 function ovRowHtml(r, open, hotAt, buy) {
-  const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind];
+  const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch', stock: 'Stock' }[r.kind] || 'Stock';
   const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
   const p = ovPlan() || {};
   const target = (p.leadDays || 7) + (p.coverDays || 21);
@@ -12743,11 +12747,12 @@ function ovRenderList() {
   const lead = (p && p.leadDays) || 7;
   const cover = (p && p.coverDays) || 21;
   const buyMode = ovFilter === 'buy';
-  const label = ovLoading() ? 'Getting stock levels ready' : buyMode ? 'Buy now' : ovClear() ? 'Selling fast — no action needed yet' : 'Needs attention';
+  // one label whatever the chip, so the chips never shift (owner 2026-10-13)
+  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode ? 'Selling fast — no action needed yet' : 'Needs attention';
   const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
   const chips = p && p.ready ? `<div class="ovq-chips">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast']].map(([k, t]) =>
     `<button type="button" class="ovq-chip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? ` <b>${nBuy}</b>` : ''}</button>`).join('')}</div>` : '';
-  const sub = buyMode ? `at least 1 a day · under ${lead + cover} days on hand · lead ${lead} days` : `Lead time ${lead} days · target ${lead + cover} days on hand`;
+  const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : `Lead time ${lead} days · target ${lead + cover} days on hand`;
   const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
   if (ovLoading()) {
@@ -12787,7 +12792,7 @@ function ovRenderList() {
   const ign = p.ignored || [];
   const foot = buyMode ? `<div class="ovq-foot">
     ${rows.length ? '<button class="ovq-link" data-ovbuyxlsx>Download this list as Excel</button>' : '<span></span>'}
-    <span class="ovq-ign">Order quantity = sales per day × ${lead + cover} days − on hand (warehouse + WFS)</span>
+    <span class="ovq-ign">Order quantity = the larger of ${(p && p.buyUnits) ?? 50} units and sales per day × ${lead + cover} days, minus on hand (warehouse + WFS)</span>
   </div>` : `<div class="ovq-foot">
     ${watch.length && ovFilter === 'all' ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
     ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
