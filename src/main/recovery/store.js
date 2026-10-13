@@ -208,6 +208,9 @@ function putLines(runId, lines) { putLinesRows(d(), runId, lines); }
 const linesOut = (r) => ({ run_id: r.run_id, type: r.type, desc: r.desc, amountType: r.amount_type, date: r.date, amount: r.amount, count: r.count, pos: r.pos });
 function runLines(id) { return d().prepare('SELECT * FROM wm_lines WHERE run_id = ?').all(id).map(linesOut); }
 function allLines() { return d().prepare('SELECT * FROM wm_lines').all().map(linesOut); }
+function runsWithoutNotes() {
+  return d().prepare('SELECT id, label FROM wm_runs WHERE id IN (SELECT DISTINCT run_id FROM wm_orders) AND id NOT IN (SELECT DISTINCT run_id FROM wm_orders WHERE note IS NOT NULL)').all();
+}
 function runsWithoutLines() {
   return d().prepare('SELECT id, label FROM wm_runs WHERE id NOT IN (SELECT DISTINCT run_id FROM wm_lines)').all();
 }
@@ -430,7 +433,7 @@ function ownRuns(stations) {
 module.exports = {
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
   runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices, runsWithoutRefundedBy, setRefundedBy, refundedByMap,
-  putLines, runLines, allLines, runsWithoutLines,
+  putLines, runLines, allLines, runsWithoutLines, runsWithoutNotes,
   upsertExpense, getExpense, allExpenses, ownExpenses,
   addItems, listItems, removeItem, pruneOrphans,
   getMarks, allMarks, upsertMarks, ownMarks, ownRuns,

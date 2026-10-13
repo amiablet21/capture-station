@@ -451,6 +451,7 @@ function viewCsv(pos) {
 const pricesTried = new Set(); // run + file read once this session (a file found elsewhere is read again)
 const byTried = new Set();
 const linesTried = new Set();
+const notesTried = new Set();
 function ensureOrders() {
   const missing = [];
   for (const r of store.runsWithoutOrders()) {
@@ -474,6 +475,16 @@ function ensureOrders() {
       const parsed = parseReport(fs.readFileSync(f, 'utf8'));
       if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
     } catch { /* next time the file is readable */ }
+  }
+  // the fee wording on orders stored before v1.32.32 (note column NULL)
+  for (const r of store.runsWithoutNotes()) {
+    const f = findArchive(r.label);
+    if (!f || notesTried.has(`${r.id}|${f}`)) continue;
+    try {
+      notesTried.add(`${r.id}|${f}`);
+      const parsed = parseReport(fs.readFileSync(f, 'utf8'));
+      if (parsed.orders.length) store.putOrders(r.id, parsed.orders);
+    } catch { /* next time */ }
   }
   // the statement lines, for runs stored before v1.32.39
   for (const r of store.runsWithoutLines()) {
@@ -642,12 +653,14 @@ function profit(scope, key) {
     // later period only carries the payout hit
     const costNote = (t) => (soldHere ? ` · ${t}` : '');
     if (!soldHere && !(o.refundUnits > 0)) { situation = o.note ? `${o.note} · no units` : 'Walmart adjustment on this PO · no units'; tone = 'grey'; }
-    else if (o.note && !(o.refundUnits > 0) && !(wholePo.get(o.po) || o).refundUnits) { situation = `Sold, kept · ${o.note}`; }
     else if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
     else if (st.kind === 'manual') { situation = `Refunded${where} · marked received before the log`; tone = 'navy'; }
     else if (st.kind === 'back') { situation = `Refunded${where} · back in stock${costNote('cost recovered')}`; tone = 'navy'; }
     else if (st.kind === 'pending') { situation = `Refunded${where} · pending · ${when(st.it)}${costNote('not costed yet')}`; tone = 'amber'; }
     else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)}${costNote('cost charged')}` : `Refunded${where} · not received${costNote('cost charged')}`; tone = 'red'; }
+    // the statement's own words for the PO's fee lines (owner 2026-10-13:
+    // "include if this is a shipping label charge") ride on every row
+    if (o.note && soldHere) situation += ` · ${o.note}`;
     const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.42 highlights
+
+- **Fee wording on every PO line** (owner: "include if this is a shipping label charge"). A PO that sold or refunded and also carries a fee line now says so at the end of its situation, in Walmart's words: "… · Walmart Shipping Label Service Charge", "… · Walmart Return Shipping Charge". Periods imported before the wording existed fill in from their archived file.
+
 ## v1.32.41 highlights
 
 - The eye now sits beside the scope pill and blurs the dashboard strip only (owner: "just the top part, not everything below"); the tables, statement and PO drop-downs stay readable.
