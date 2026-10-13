@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.37 highlights
+
+- **Walmart paid tab on Reconcile** (owner: a lost-in-transit PO with a partial payout was nowhere on Reconcile). Every PO Walmart paid something on — a shipping protection claim, a dispute, a reversal — in full or in part, with what was paid and when, the payout's kind, and a **Still lost** column for the gap. Sorted by the gap, largest first, so the ones worth a UPS claim or a case sit at the top. The ⋯ menu works there as on the other tabs.
+
 ## v1.32.36 highlights
 
 - The ⋯ menu on Reconcile offers **Received** and **Never shipped** only; "Received before the log" is gone from the menu (owner: unnecessary with Received). Earlier marks keep working and read "Received" on the Marked tab. The file import on the Import screen still takes a list of PO numbers with an optional date.

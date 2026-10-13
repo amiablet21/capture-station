@@ -5508,6 +5508,12 @@ th:last-child > .col-grip { right: 0; }
 /* the Marked tab has no countdown: Mark takes the eighth column, ⋯ the ninth */
 .rc-table-reconcile.is-marked th:nth-child(8) { width: 380px; }
 .rc-table-reconcile.is-marked th:nth-child(9) { width: 64px; }
+/* the Walmart paid tab: payout and the gap take the countdown's place */
+.rc-table-reconcile.is-paid th:nth-child(8) { width: 250px; }
+.rc-table-reconcile.is-paid th:nth-child(9) { width: 96px; }
+.rc-table-reconcile.is-paid th:nth-child(10) { width: 170px; }
+.rc-table-reconcile.is-paid th:nth-child(11) { width: 64px; }
+.rc-paid-cell .rc-muted { font-family: var(--font); font-size: 11.5px; }
 /* the countdown cell shades like Excel conditional formatting (owner
    2026-10-12: "the closer it is to the day being up, the darker it gets,
    yellow in between, new is clear"); 0 and negative numbers go red */

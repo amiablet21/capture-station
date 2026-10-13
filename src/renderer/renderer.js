@@ -1973,6 +1973,15 @@ function rcDaysLeft(it) {
   if (d == null && it.daysOld != null) d = it.isWfs ? (it.daysOld < 90 ? 90 - it.daysOld : 135 - it.daysOld) : 45 - it.daysOld;
   return d == null || !Number.isFinite(Number(d)) ? null : Number(d);
 }
+// the Walmart paid tab: what Walmart paid on the PO and when, and the gap
+// that is still lost (a UPS claim or a case can still chase it)
+function rcPaidCells(it) {
+  const paid = Number(it.settlementSeen) || 0; const gap = Number(it.lostAmount) || 0;
+  const when = it.settlementDate ? ` <span class="rc-muted">· ${esc(rcMonDay(it.settlementDate))}</span>` : '';
+  const kind = it.settlementKind ? ` <span class="rc-muted">· ${esc(it.settlementKind)}</span>` : '';
+  return `<td class="rc-mono is-right rc-paid-cell" title="${esc(it.status === 'reimbursed_pending' ? 'Marked as pending reimbursement' : `Walmart paid ${rcMoney(paid)} on this PO`)}">${it.status === 'reimbursed_pending' ? '<span class="rc-muted">pending</span>' : rcMoney(paid)}${when}${kind}</td>
+    <td class="rc-mono is-right ${gap > 0 ? 'rc-neg' : 'rc-muted'}">${gap > 0 ? rcMoney(gap) : '—'}</td>`;
+}
 function rcDaysCell(it) {
   const n = rcDaysLeft(it);
   if (n == null) return '<td class="rc-mono is-right rc-days rc-muted" title="No refund date to count from">—</td>';
@@ -1991,23 +2000,29 @@ function rcRenderReconcile() {
   const notReceived = open.filter(it => !it.wfsWaiting);          // seller, and WFS past day 90
   // the two marks (owner 2026-10-12): received before the Returns log, never shipped
   const marked = items.filter(it => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped');
-  if (!['notReceived', 'wfsPending', 'marked'].includes(rc.bucket) || (rc.bucket === 'marked' && !marked.length)) rc.bucket = 'notReceived';
-  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length], ...(marked.length ? [['marked', 'Marked', marked.length]] : [])];
+  // Walmart paid something on the PO — a claim, a dispute, a reversal — in
+  // full or in part (owner 2026-10-13: a lost-in-transit PO with a partial
+  // payout was nowhere on Reconcile; the gap can still go to UPS or a case)
+  const paid = items.filter(it => it.status === 'reimbursed' || it.status === 'reimbursed_pending');
+  if (!['notReceived', 'wfsPending', 'marked', 'paid'].includes(rc.bucket) || (rc.bucket === 'marked' && !marked.length) || (rc.bucket === 'paid' && !paid.length)) rc.bucket = 'notReceived';
+  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length], ...(paid.length ? [['paid', 'Walmart paid', paid.length]] : []), ...(marked.length ? [['marked', 'Marked', marked.length]] : [])];
   $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
   const isMarked = rc.bucket === 'marked';
+  const isPaid = rc.bucket === 'paid';
   // every header sorts (owner 2026-10-12: "clickable column headers, not
   // buttons"); untouched, the open tabs run soonest-to-file first and the
   // Marked tab newest refund first
-  const so = rc.reconcileSort || (isMarked ? { key: 'refundTs', dir: -1 } : { key: 'left', dir: 1 });
-  const sortable = (isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived)).map(it => ({ ...it,
+  const so = rc.reconcileSort || (isMarked ? { key: 'refundTs', dir: -1 } : isPaid ? { key: 'gap', dir: -1 } : { key: 'left', dir: 1 });
+  const sortable = (isMarked ? marked : isPaid ? paid : (rc.bucket === 'wfsPending' ? pending : notReceived)).map(it => ({ ...it,
     left: rcDaysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0,
     refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
+    paid: Number(it.settlementSeen) || 0, gap: Number(it.lostAmount) || 0,
     reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received' }));
   const rows = rcSortRows(sortable, so, 'left');
   const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
     + rcSortTh(so, 'units', 'Units', true, false, 1) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
-    + (isMarked ? '' : rcSortTh(so, 'left', 'Days left', true, false, 1))
+    + (isMarked ? '' : isPaid ? rcSortTh(so, 'paid', 'Walmart paid', true) + rcSortTh(so, 'gap', 'Still lost', true) : rcSortTh(so, 'left', 'Days left', true, false, 1))
     + (isMarked ? rcSortTh(so, 'markText', 'Mark', false, true) : rcSortTh(so, 'reasonText', 'Reason', false, true)) + '<th></th>';
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
@@ -2023,11 +2038,12 @@ function rcRenderReconcile() {
       <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
-      ${isMarked ? '' : rcDaysCell(it)}
+      ${isMarked ? '' : isPaid ? rcPaidCells(it) : rcDaysCell(it)}
       <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
-    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="10">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);
+  $('rcBucketTable').classList.toggle('is-paid', isPaid);
   rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
 }
 function rcRenderBucket() { rcRenderReconcile(); }
