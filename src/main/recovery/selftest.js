@@ -158,7 +158,7 @@ module.exports = function run(check) {
       '"Period Start Date","Period End Date","Transaction Type","Transaction Description","Purchase Order #","Customer Order #","Transaction Posted Timestamp","Partner Item Name","Partner Item Id","Transaction Reason Description","Amount","Amount Type","Ship Qty","Fulfillment Type"',
       `"06/01/2026","06/14/2026","Dispute Settlement","Dispute won","010","O10","${recent}","Tablet J","SKU-J","","120.50","Fee/Reimbursement","","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Adjustment","Walmart Shipping Label Service Charge","010","O10","${recent}","Tablet J","SKU-J","","-11.12","Fee/Reimbursement","","Seller Fulfilled"`,
-      `"06/01/2026","06/14/2026","Refund","","500","O500","${recent}","Tablet M","SKU-M","No Longer Wanted","-180.00","Product Price","1","Seller Fulfilled"`,
+      `"06/01/2026","06/14/2026","Refund","Walmart Customer Care Refund","500","O500","${recent}","Tablet M","SKU-M","No Longer Wanted","-180.00","Product Price","1","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Dispute Settlement","Dispute won","001","O1","${recent}","Tablet A","SKU-A","","30.00","Fee/Reimbursement","","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Adjustment","Refund for unused label","003","O3","${recent}","Tablet C","SKU-C","","7.85","Fee/Reimbursement","","Seller Fulfilled"`,
       `"06/01/2026","06/14/2026","Adjustment","Walmart Shipping Label Service Charge","003","O3","${recent}","Tablet C","SKU-C","","11.97","Fee/Reimbursement","","Seller Fulfilled"`,
@@ -183,7 +183,7 @@ module.exports = function run(check) {
     check('recovery: statements — one per imported period, newest first, each with its sections', sts.ok && sts.statements.length >= 2 && sts.statements[0].id === res2.id && sts.statements.every((x) => Array.isArray(x.sections) && typeof x.activity === 'number'), { n: sts.statements.length, first: sts.statements[0] && sts.statements[0].label });
     const stm = recovery.statement('cycle', res2.id);
     const secOf = (n) => stm.sections.find((s) => s.name === n);
-    check('recovery: statement — refunds, adjustments and the transfer land in their sections', stm.ok && stm.hasLines && secOf('Refunds') && secOf('Refunds').lines.some((l) => l.label === 'Product price' && l.amount === -180) && secOf('Adjustments') && secOf('Adjustments').lines.some((l) => /Dispute/.test(l.label) && l.amount === 150.5) && secOf('Adjustments').lines.some((l) => /Label Service Charge/.test(l.label)) && stm.paid.length === 1 && stm.paid[0].amount === 5000, { sections: stm.sections, paid: stm.paid });
+    check('recovery: statement — refunds, adjustments and the transfer land in their sections', stm.ok && stm.hasLines && secOf('Refunds') && secOf('Refunds').lines.some((l) => l.label === 'Product price' && l.amount === -180 && l.by.length === 1 && l.by[0].label === 'Walmart Customer Care issued' && l.by[0].amount === -180) && secOf('Adjustments') && secOf('Adjustments').lines.some((l) => /Dispute/.test(l.label) && l.amount === 150.5) && secOf('Adjustments').lines.some((l) => /Label Service Charge/.test(l.label)) && stm.paid.length === 1 && stm.paid[0].amount === 5000, { sections: stm.sections, paid: stm.paid });
     returns = [...returns, mk('002', 200, 'Open Box', 6)];
     st = recovery.state();
     check('recovery: settlement money makes 010 reimbursed with the payout visible', st.items.find((i) => i.po === '010').status === 'reimbursed' && st.items.find((i) => i.po === '010').settlementSeen === 120.5);

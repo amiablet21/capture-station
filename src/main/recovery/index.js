@@ -775,6 +775,9 @@ const STATEMENT_AMOUNT_LABELS = {
   'Commission on Product': 'Net commission', 'Commission on Shipping': 'Net commission', 'Product tax withheld': 'Net tax withheld',
   'Total Walmart Funded Savings': 'Total Walmart funded savings', 'Promo Code': 'Promo code', 'Payable to partner': 'Payable to partner',
 };
+// the issuer of a refund, from the statement's Transaction Description
+const REFUND_ISSUERS = { 'return refund': 'Customer returns', 'seller initiated returns': 'Seller issued', 'walmart customer care refund': 'Walmart Customer Care issued' };
+const refundIssuer = (desc) => { const d = String(desc || '').trim(); if (!d) return ''; return REFUND_ISSUERS[d.toLowerCase()] || d; };
 const STATEMENT_SALES_ORDER = ['Product price', 'Shipping', 'Net tax collected', 'Other taxes (fee)', 'Net commission', 'Net tax withheld', 'Total Walmart funded savings', 'Promo code', 'Payable to partner'];
 function statement(scope, key) {
   syncIn();
@@ -806,10 +809,13 @@ function statements() {
 
 function buildStatement(lines, label, scope, key, runs, exps) {
   const sections = new Map();
-  const put = (section, name, amount, count, order) => {
+  const put = (section, name, amount, count, order, issuer) => {
     const s = sections.get(section) || { name: section, lines: new Map(), total: 0, order };
-    const l = s.lines.get(name) || { label: name, amount: 0, count: 0 };
+    const l = s.lines.get(name) || { label: name, amount: 0, count: 0, by: new Map() };
     l.amount += amount; l.count += count; s.lines.set(name, l); s.total += amount;
+    // who issued a refund (owner 2026-10-13): the statement's own words,
+    // folded to three — the customer, the seller, Walmart Customer Care
+    if (issuer) { const b = l.by.get(issuer) || { label: issuer, amount: 0, count: 0 }; b.amount += amount; b.count += count; l.by.set(issuer, b); }
     sections.set(section, s);
   };
   let payable = 0; let payableSeen = false;
@@ -817,7 +823,7 @@ function buildStatement(lines, label, scope, key, runs, exps) {
   for (const l of lines) {
     const t = l.type;
     if (t === 'PaymentSummary') { payable += l.amount; payableSeen = true; continue; }
-    if (t === 'Sale' || t === 'Refund') { put(t === 'Sale' ? 'Sales' : 'Refunds', STATEMENT_AMOUNT_LABELS[l.amountType] || l.amountType || l.desc || t, l.amount, l.count, t === 'Sale' ? 1 : 2); continue; }
+    if (t === 'Sale' || t === 'Refund') { put(t === 'Sale' ? 'Sales' : 'Refunds', STATEMENT_AMOUNT_LABELS[l.amountType] || l.amountType || l.desc || t, l.amount, l.count, t === 'Sale' ? 1 : 2, t === 'Refund' ? refundIssuer(l.desc) : ''); continue; }
     if (t === 'Instant Transfer' || /payout|transfer/i.test(t)) { paid.push({ date: l.date, amount: -l.amount, desc: l.desc }); continue; }
     if (t === 'Service Fee') { put('Fees', l.desc || l.amountType || t, l.amount, l.count, 3); continue; }
     if (t === 'Adjustment' || t === 'Dispute Settlement') { put('Adjustments', l.desc || t, l.amount, l.count, 4); continue; }
@@ -830,7 +836,7 @@ function buildStatement(lines, label, scope, key, runs, exps) {
       const ia = STATEMENT_SALES_ORDER.indexOf(a.label); const ib = STATEMENT_SALES_ORDER.indexOf(b.label);
       if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
       return Math.abs(b.amount) - Math.abs(a.amount);
-    }).map((l) => ({ label: l.label, amount: r2(l.amount), count: l.count })),
+    }).map((l) => ({ label: l.label, amount: r2(l.amount), count: l.count, by: l.by && (l.by.size > 1 || (l.by.size === 1 && !l.by.has('Customer returns'))) ? [...l.by.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).map((b) => ({ label: b.label, amount: r2(b.amount), count: b.count })) : [] })),
   }));
   // the owner's own expenses, as a section of their own
   if (exps.length) {

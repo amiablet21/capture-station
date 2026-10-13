@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.49 highlights
+
+- **Who issued the refund** (owner: "does it say who issued the refund?", design A). Reconcile's Reason cell ends with one word from the statement's own description: Customer in grey, Seller in navy, Customer Care in amber; hover for Walmart's wording. On the Statement tab the Refunds line splits by issuer — Customer returns, Seller issued, Walmart Customer Care issued — with counts and dollars; new-format imports keep the description from now on.
+- The Profit page's unmapped-listing triangle stands alone; the "not in the Pricing map" words are gone (owner: "unnecessary"). Hover the triangle for the note.
+
 ## v1.32.48 highlights
 
 - **Case flag on Reconcile** (owner: "if I open up a case, I want to be able to mark them so I can come back to it", design B). The ⋯ menu's "Case opened…" takes an optional Walmart case ID and marks the row: a navy bar on its edge, a flag beside the PO, "· case 14d" after the reason. Click the flag for the case card: when it was opened and from which station, the ID with copy, the refund and what is still lost, and the ways out — open the case on Walmart, change the ID, close the case. The mark syncs to every desktop like Received and Never shipped; the yellow click-highlight stays per computer.

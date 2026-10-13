@@ -1801,7 +1801,8 @@ function rcRenderStatement() {
   const cell = (v) => v == null ? '<td class="is-right rc-mono rc-muted">—</td>' : `<td class="is-right rc-mono ${v < 0 ? 'is-neg' : ''}">${money(v)}</td>`;
   const section = (s) => `<section class="rc-st-sec">
     <h3 class="rc-st-h">${esc(s.name)}</h3>
-    ${s.lines.map(l => `<div class="rc-st-row"><span class="rc-st-l">${esc(l.label)}${l.count > 1 ? ` <span class="rc-muted rc-small">· ${l.count} lines</span>` : ''}</span><span class="rc-st-v rc-mono ${l.amount < 0 ? 'is-neg' : ''}">${money(l.amount)}</span></div>`).join('')}
+    ${s.lines.map(l => `<div class="rc-st-row"><span class="rc-st-l">${esc(l.label)}${l.count > 1 ? ` <span class="rc-muted rc-small">· ${l.count} lines</span>` : ''}</span><span class="rc-st-v rc-mono ${l.amount < 0 ? 'is-neg' : ''}">${money(l.amount)}</span></div>`
+      + (l.by || []).map(b => `<div class="rc-st-row rc-st-by ${/Customer Care/.test(b.label) ? 'is-care' : ''}"><span class="rc-st-l">${esc(b.label)} <span class="rc-muted rc-small">· ${b.count}</span></span><span class="rc-st-v rc-mono">${money(b.amount)}</span></div>`).join('')).join('')}
     <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono ${s.total < 0 ? 'is-neg' : ''}">${money(s.total)}</span></div>
   </section>`;
   const paidSec = (st) => st.paid.length ? `<section class="rc-st-sec">
@@ -1981,7 +1982,7 @@ function rcRenderProfit() {
     </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
     const group = (x, i) => {
       const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
-      const note = x.mapped ? `<span class="rc-group-note">${rcPlural(x.listings.length, 'Walmart listing')}</span>` : `${warn}<span class="rc-group-note">not in the Pricing map</span>`;
+      const note = x.mapped ? `<span class="rc-group-note">${rcPlural(x.listings.length, 'Walmart listing')}</span>` : warn; // the triangle alone (owner 2026-10-13: the words are unnecessary)
       return `<tr class="rc-group ${open ? 'is-open' : ''}">
       <td class="rc-g">${i + 1}</td>
       <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span>${note}</td>${cells(x)}
@@ -2075,6 +2076,14 @@ function rcHlToggle(po) {
   if (rcHl.has(po)) rcHl.delete(po); else rcHl.add(po);
   try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ }
   for (const tr of $('rcBucketTable').querySelectorAll(`tr[data-rcrow="${CSS.escape(po)}"]`)) tr.classList.toggle('is-hl', rcHl.has(po));
+}
+// who issued the refund, one word after the reason (owner 2026-10-13, design
+// A): the customer in grey, the seller in navy, Customer Care in amber
+function rcIssuerWord(it) {
+  const d = String(it.refundedBy || '').trim().toLowerCase();
+  if (!d) return '';
+  const [word, cls] = /customer care/.test(d) ? ['Customer Care', 'is-care'] : /seller/.test(d) ? ['Seller', 'is-seller'] : /return refund|customer/.test(d) ? ['Customer', 'is-customer'] : [String(it.refundedBy).trim(), 'is-customer'];
+  return ` <span class="rc-by ${cls}">· ${esc(word)}</span>`;
 }
 const RC_FLAG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h1.5v18H5zM7.5 4h10.2l-2.6 4 2.6 4H7.5z"/></svg>';
 function rcDaysSince(iso) {
@@ -2172,7 +2181,7 @@ function rcRenderReconcile() {
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
       ${isMarked ? '' : isPaid ? rcPaidCells(it) : rcDaysCell(it)}
-      <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + caseSub(it)}</td>
+      <td class="${isMarked ? '' : 'rc-muted'}" title="${esc(isMarked ? '' : [String(it.reason || ''), it.refundedBy ? `refunded by: ${it.refundedBy}` : ''].filter(Boolean).join(' · '))}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + rcIssuerWord(it) + caseSub(it)}</td>
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
     </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);

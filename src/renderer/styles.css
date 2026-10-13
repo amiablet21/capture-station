@@ -5482,6 +5482,14 @@ th:last-child > .col-grip { right: 0; }
 .rc-flag { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px; border: none; background: none; color: #1E3A66; cursor: pointer; vertical-align: -2px; border-radius: 4px; }
 .rc-flag:hover { background: #E4EAF3; }
 .rc-case-sub { font-size: 11.5px; color: #1E3A66; white-space: nowrap; }
+/* who issued the refund (owner 2026-10-13, design A) */
+.rc-by { font-size: 11.5px; white-space: nowrap; }
+.rc-by.is-customer { color: #787774; }
+.rc-by.is-seller { color: #1E3A66; }
+.rc-by.is-care { color: #956400; font-weight: 500; }
+.rc-table-reconcile td:nth-child(9) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-st-by .rc-st-l { padding-left: 18px; color: #787774; } .rc-st-by .rc-st-v { color: #787774; }
+.rc-st-by.is-care .rc-st-l, .rc-st-by.is-care .rc-st-v { color: #956400; }
 .rc-case-pop { min-width: 300px; max-width: 360px; padding: 10px 8px 6px; }
 .rc-cp-h { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 0 6px 6px; }
 .rc-cp-flag { display: inline-flex; color: #1E3A66; }
@@ -5546,7 +5554,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-table-reconcile th:nth-child(6) { width: 160px; }  /* Refunded */
 .rc-table-reconcile th:nth-child(7) { width: 110px; }  /* Net refund */
 .rc-table-reconcile th:nth-child(8) { width: 84px; }   /* Days left */
-.rc-table-reconcile th:nth-child(9) { width: 190px; }  /* Reason */
+.rc-table-reconcile th:nth-child(9) { width: 236px; }  /* Reason · who issued it */
 .rc-table-reconcile th:nth-child(10) { width: 64px; }
 /* the Marked tab has no countdown: Mark takes the eighth column, ⋯ the ninth */
 .rc-table-reconcile.is-marked th:nth-child(8) { width: 380px; }
@@ -5554,7 +5562,7 @@ th:last-child > .col-grip { right: 0; }
 /* the Walmart paid tab: payout and the gap take the countdown's place */
 .rc-table-reconcile.is-paid th:nth-child(8) { width: 250px; }
 .rc-table-reconcile.is-paid th:nth-child(9) { width: 96px; }
-.rc-table-reconcile.is-paid th:nth-child(10) { width: 170px; }
+.rc-table-reconcile.is-paid th:nth-child(10) { width: 216px; }
 .rc-table-reconcile.is-paid th:nth-child(11) { width: 64px; }
 .rc-paid-cell .rc-muted { font-family: var(--font); font-size: 11.5px; }
 /* the countdown cell shades like Excel conditional formatting (owner

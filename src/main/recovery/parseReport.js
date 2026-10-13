@@ -162,7 +162,8 @@ function parseStatementLines(rows, format) {
     for (const r of rows) {
       const raw = String(r['Transaction Type'] ?? '').trim();
       if (!raw) continue;
-      add(NEW_FORMAT_TYPE_LABELS[raw] || raw, '', 'Payable to partner', toIsoDay(r['Transaction Date Time']), toNum(r['Payable to Partner from Sale']), String(r['Walmart.com PO #'] ?? '').trim());
+      // a refund keeps who issued it (owner 2026-10-13); the label stays by amount type
+      add(NEW_FORMAT_TYPE_LABELS[raw] || raw, raw === 'REFUNDED' ? String(r['Transaction Description'] ?? '').trim() : '', 'Payable to partner', toIsoDay(r['Transaction Date Time']), toNum(r['Payable to Partner from Sale']), String(r['Walmart.com PO #'] ?? '').trim());
     }
   } else {
     for (const r of rows) {
