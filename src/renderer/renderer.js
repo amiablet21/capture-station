@@ -1840,21 +1840,24 @@ const rcPct = (m) => (m == null ? '—' : `${m.toFixed(1)}%`);
 // the scope control (owner 2026-10-12: "make the drop down better and in
 // tune with the design"): one pill like the page tabs; the active segment
 // names the chosen period / month / year and opens the picker
-const RC_SCOPES = [['cycle', 'This period'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
+const RC_SCOPES = [['cycle', 'Period'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
 function rcScopeOptions(scope) {
   if (scope === 'cycle') return ((rc.data && rc.data.runs) || []).map(r => [r.id, rcPeriodName(r.label)]);
   if (scope === 'month') return ((rc.data && rc.data.months) || []).map(k => [k, `${RC_MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`]);
   if (scope === 'year') return ((rc.data && rc.data.years) || []).map(y => [String(y), String(y)]);
   return [];
 }
+// the scope control never changes width (owner 2026-10-13: "this keeps
+// shifting"): the segments keep their short names and the period, month or
+// year in play sits in its own pill to the LEFT, where growing or shrinking
+// moves nothing else
 function rcRenderScopeSeg(el, scope, key) {
-  el.innerHTML = RC_SCOPES.map(([k, label]) => {
-    const on = k === scope;
-    const opts = on ? rcScopeOptions(k) : [];
-    const cur = opts.find(o => String(o[0]) === String(key));
-    const more = on && opts.length > 1;
-    return `<button type="button" data-rcscope="${k}" class="${on ? 'is-on' : ''}" title="${more ? 'Pick another' : ''}">${esc(on && cur ? cur[1] : label)}${more ? '<span class="rc-seg-caret"></span>' : ''}</button>`;
-  }).join('');
+  const opts = rcScopeOptions(scope);
+  const cur = opts.find(o => String(o[0]) === String(key));
+  const more = opts.length > 1;
+  const when = scope === 'all' ? 'Every period imported' : cur ? cur[1] : opts.length ? opts[0][1] : 'Nothing imported yet';
+  el.innerHTML = `<button type="button" class="rc-when" data-rcwhen${more ? '' : ' disabled'} title="${more ? 'Pick another' : ''}">${esc(when)}${more ? '<span class="rc-seg-caret"></span>' : ''}</button>`
+    + `<div class="rc-seg">${RC_SCOPES.map(([k, label]) => `<button type="button" data-rcscope="${k}" class="${k === scope ? 'is-on' : ''}">${esc(label)}</button>`).join('')}</div>`;
 }
 function rcProfitLines(g) {
   const lines = g.lines || [];
@@ -1938,7 +1941,8 @@ function rcRenderProfit() {
     // "no cost set" is a button: type the cost right here (owner 2026-10-12)
     const costCell = (g) => g.costKnown ? rcMoney(g.unitCost) : `<button type="button" class="rc-nocost rc-cost-set" data-rccost="${esc(g.sku)}" title="Click to set this SKU's cost">no cost set</button>`;
     // a listing the Pricing map does not know, marked like Capture's ⚠
-    const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page">⚠</span>';
+    // a drawn triangle, not the ⚠ glyph, so it sits dead centre in the circle (owner 2026-10-13)
+    const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></svg></span>';
     const cells = (g) => `
       <td class="is-right">${g.unitsSold}</td>
       <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
@@ -2429,11 +2433,13 @@ for (const b of document.querySelectorAll('[data-rcsub]')) {
   });
 }
 $('rcProfitScope').addEventListener('click', async (e) => {
+  const w = e.target.closest('[data-rcwhen]');
+  if (w) { rcOpenPick('profit', rc.profitScope, w); return; }
   const b = e.target.closest('[data-rcscope]');
   if (!b) return;
   const scope = b.dataset.rcscope;
   if (scope !== rc.profitScope) { rc.profitScope = scope; await rcLoadProfit(); rcRenderProfit(); return; }
-  rcOpenPick('profit', scope, b);
+  rcOpenPick('profit', scope, $('rcProfitScope').querySelector('[data-rcwhen]') || b);
 });
 // the picker under a scope pill's active segment: periods, months or years
 function rcOpenPick(which, scope, anchor) {
@@ -12879,8 +12885,8 @@ function ovRenderList() {
   // one label whatever the chip, so the chips never shift (owner 2026-10-13)
   const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode ? 'Selling fast — no action needed yet' : 'Needs attention';
   const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
-  const chips = p && p.ready ? `<div class="ovq-chips">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast']].map(([k, t]) =>
-    `<button type="button" class="ovq-chip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? ` <b>${nBuy}</b>` : ''}</button>`).join('')}</div>` : '';
+  const chips = p && p.ready ? `<div class="ovq-filter">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast']].map(([k, t]) =>
+    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? `<b>${nBuy}</b>` : ''}</button>`).join('')}</div>` : '';
   const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : `Lead time ${lead} days · target ${lead + cover} days on hand`;
   const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }

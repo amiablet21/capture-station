@@ -4749,11 +4749,15 @@ th:last-child > .col-grip { right: 0; }
    on-hand under the phrase, and the quantity to order as a pill */
 .ovq-counts .n.g { color: #346538; }
 .ovq-card-h { gap: 18px; }
-.ovq-chips { display: flex; gap: 6px; }
-.ovq-chip { font-family: var(--font); font-size: 12px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1.5; }
-.ovq-chip:hover { color: var(--text); }
-.ovq-chip.is-on { background: #1E3A66; border-color: #1E3A66; color: #fff; }
-.ovq-chip b { font-weight: 600; margin-left: 3px; }
+/* the filters are a segmented control like the page tabs (owner 2026-10-13:
+   "the filters look ugly", design A). Their own class: .ovq-chip is the
+   "vs yesterday" chip in the Sold today card and its rule used to win here */
+.ovq-filter { display: flex; gap: 2px; background: #EFEEEA; border-radius: 9px; padding: 3px; }
+.ovq-fchip { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 3px 12px; cursor: pointer; line-height: 1.5; white-space: nowrap; }
+.ovq-fchip:hover { color: var(--text); }
+.ovq-fchip.is-on { background: var(--surface); color: #1E3A66; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.1); }
+.ovq-fchip b { font-weight: 500; color: var(--faint); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.ovq-fchip.is-on b { color: #1E3A66; }
 .ovq-row.is-buy { grid-template-columns: 52px minmax(0, 1.4fr) minmax(0, 1fr) 96px 12px; }
 .ovq-why { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 .ovq-buycell { text-align: right; }
@@ -5311,9 +5315,11 @@ th:last-child > .col-grip { right: 0; }
 .rc-cell-today { background: #FBF7EE; }
 
 /* the Ctrl+F / Command+F find bar: top right, over everything */
-.find-bar { position: fixed; top: 64px; right: 24px; z-index: 60; display: flex; align-items: center; gap: 4px; background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; padding: 5px 6px 5px 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
-.find-bar input { font-family: inherit; font-size: 13px; border: none; outline: none; width: 220px; color: #2F3437; background: none; }
-.find-count { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: #787774; padding: 0 8px; border-left: 1px solid #EAEAEA; white-space: nowrap; min-width: 56px; text-align: center; }
+/* a set width (owner 2026-10-13: "it keeps expanding"): the box is 440px
+   whatever is typed or counted; the input flexes, the count has a fixed slot */
+.find-bar { position: fixed; top: 64px; right: 24px; z-index: 60; width: 440px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px; padding: 5px 6px 5px 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
+.find-bar input { font-family: inherit; font-size: 13px; border: none; outline: none; flex: 1; min-width: 0; width: auto; color: #2F3437; background: none; }
+.find-count { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: #787774; padding: 0 6px; border-left: 1px solid #EAEAEA; white-space: nowrap; width: 110px; flex: none; box-sizing: border-box; text-align: center; overflow: hidden; text-overflow: ellipsis; }
 .find-count.is-none { color: #9F2F2D; }
 /* the page's own find (CSS Custom Highlight API): every match pale, the active one amber */
 ::highlight(pagefind) { background-color: #FFF3C4; color: #2F3437; }
@@ -5327,6 +5333,12 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg button { font-family: inherit; font-size: 12.5px; font-weight: 500; color: #787774; background: none; border: none; border-radius: 8px; padding: 5px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; line-height: 1.55; white-space: nowrap; }
 .rc-seg button:hover { color: #2F3437; }
 .rc-seg button.is-on { background: #FFFFFF; color: #2F3437; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+/* the scope bar never shifts (owner 2026-10-13): the date pill on the left
+   has a floor width and the segments to its right keep fixed names */
+.rc-scopebar { display: inline-flex; align-items: center; gap: 8px; }
+.rc-when { font-family: inherit; font-size: 12.5px; font-weight: 600; color: #2F3437; background: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 10px; padding: 5px 12px; min-width: 190px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; white-space: nowrap; cursor: pointer; line-height: 1.55; font-variant-numeric: tabular-nums; }
+.rc-when:hover { border-color: #D6D4CF; }
+.rc-when:disabled { cursor: default; color: #787774; font-weight: 500; }
 .rc-seg-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #787774; }
 .rc-pick-menu { max-height: 320px; overflow-y: auto; min-width: 220px; }
 .rc-pick-menu .tab-menu-item.is-current { color: #1E3A66; font-weight: 600; }
@@ -5625,7 +5637,8 @@ button.rc-cost-set { background: none; border: 1px dashed transparent; border-ra
 button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: var(--badge-yellow-bg); }
 .rc-cost-edit { width: 84px; text-align: right; }
 /* an unmapped listing, marked like Capture's ⚠ */
-.rc-warn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-size: 10.5px; line-height: 1; vertical-align: -3px; cursor: help; }
+.rc-warn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); color: var(--badge-yellow-text); line-height: 0; vertical-align: -4px; cursor: help; box-sizing: border-box; }
+.rc-warn svg { display: block; }
 .rc-warn + .rc-group-note { margin-left: 6px; }
 .rc-neg { color: #9F2F2D; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }

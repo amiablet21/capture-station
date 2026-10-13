@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.44 highlights
+
+- **Nothing on the screen shifts any more** (owner: "this keeps shifting", "it keeps expanding", "just make it set"). The Profit scope control is now a date pill of a set width on the left ("Sep 13 – Sep 27, 2026 ▾", "October 2026 ▾") beside a segmented Period / Month / Year / All time switch whose names never change. The Cmd+F find box is a set 440px however much you type and whatever the count says.
+- **The Overview filters are a segmented control** like the page tabs (owner: "the filters look ugly"): one soft track, a white pill on the one you are on, the Buy now count in quiet grey. A clash with the "vs yesterday" chip in the Sold today card had been painting them green.
+- The warning triangle on an unmapped Profit row is drawn, not typed, so it sits dead centre in its circle.
+
 ## v1.32.43 highlights
 
 - **Marks and expenses reach every desktop even when the first write missed** (owner: a file of marks did not show up on the other computers). A station's own marks file in the shared folder is rebuilt whenever it holds fewer lines than the marks the station has — an append that failed while the folder was unreachable, or marks made before sync was on — so the other desktops pick them up on their next refresh. Same for expenses. Nothing needs re-uploading.
