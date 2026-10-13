@@ -2711,9 +2711,7 @@ $('rcBucketTable').addEventListener('click', (e) => {
     : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped']]; // owner 2026-10-13: one Received
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
-    + '<div class="tab-menu-sep"></div>'
-    + `<button class="tab-menu-item" data-rcact="hl">${rcHl.has(it.po) ? 'Remove highlight' : 'Highlight row'}</button>`
-    + '<div class="tab-menu-sep"></div>'
+    + '<div class="tab-menu-sep"></div>' // highlight is a click on the row, not a menu item (owner 2026-10-13: "unnecessary")
     + [['go:order', 'Order page'], ['go:return', 'Return page'], ['go:txn', 'Transaction page'], ['go:copy', 'Copy PO #']].map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${label}</button>`).join('');
   dlg.showModal();
   rcAnchor(dlg, more.getBoundingClientRect());
@@ -2730,7 +2728,6 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
-  if (act === 'hl') { rcHlToggle(rc.menuPo); return; }
   if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.46 highlights
+
+- The ⋯ menu on Reconcile no longer carries Highlight row / Remove highlight (owner: "unnecessary"); a click on the row still toggles the highlight.
+
 ## v1.32.45 highlights
 
 - **The Statement tab lists every statement** (owner: "click on a statement and just have a dropdown with all the information"). One row per imported period, newest first, with Sales, Refunds, Fees, Adjustments, Activity, Total payable and Paid to you across; click a row and it drops down to Walmart's sections, one to one. The scope pill does not apply to this tab.
