@@ -2,11 +2,15 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.41 highlights
+
+- The eye now sits beside the scope pill and blurs the dashboard strip only (owner: "just the top part, not everything below"); the tables, statement and PO drop-downs stay readable.
+
 ## v1.32.40 highlights
 
 - **Expenses on Profit** (owner: "outside shipping labels, packing stuff"). An Expenses tab lists your own costs with date, category, note, optional SKU and who entered it; **+ Add expense** opens a small form. Expenses come off profit in the period they fall in: a new Expenses cell on the strip, Profit now reads after expenses, the Statement tab gains a "Your expenses" section, and the workbook an Expenses sheet. Entries sync through the shared folder like marks; Remove takes one off every desktop.
 - **Margin shading on the SKU table** (owner's ask): under 10% red, 10 to 15% yellow, 15% or better green, on the Linnworks group, its listings and the flat view alike; the column still sorts.
-- **The eye** (owner's ask): a button beside the Excel download blurs every number on Profit — the strip, the tables, the statement, the PO drop-downs — for a screen share or a visitor. Press it again to show them. Remembered per computer.
+- **The eye** (owner's ask): a button beside the scope pill blurs the dashboard strip's numbers (just the top part, the tables stay readable) for a screen share or a visitor. Press it again to show them. Remembered per computer.
 
 ## v1.32.39 highlights
 

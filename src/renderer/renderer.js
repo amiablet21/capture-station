@@ -2514,7 +2514,7 @@ function rcApplyBlur() {
   let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; } catch { /* private mode */ }
   $('recoveryPage').classList.toggle('is-blur', on);
   $('rcBlurBtn').classList.toggle('is-on', on);
-  $('rcBlurBtn').title = on ? 'Show the numbers' : 'Hide the numbers';
+  $('rcBlurBtn').title = on ? 'Show the dashboard numbers' : 'Hide the dashboard numbers';
 }
 $('rcBlurBtn').addEventListener('click', () => {
   let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; localStorage.setItem(rcBlurKey, on ? '0' : '1'); } catch { /* private mode */ }
