@@ -1985,7 +1985,8 @@ function rcRenderProfit() {
     </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
     const group = (x, i) => {
       const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
-      const note = x.mapped ? `<span class="rc-group-note">${rcPlural(x.listings.length, 'Walmart listing')}</span>` : warn; // the triangle alone (owner 2026-10-13: the words are unnecessary)
+      // one listing needs no words; more get a small count pill (owner 2026-10-13: "compress it")
+      const note = x.mapped ? (x.listings.length > 1 ? `<span class="rc-group-n" title="${x.listings.length} Walmart listings under this SKU">${x.listings.length}</span>` : '') : warn;
       return `<tr class="rc-group ${open ? 'is-open' : ''}">
       <td class="rc-g">${i + 1}</td>
       <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span>${note}</td>${cells(x)}

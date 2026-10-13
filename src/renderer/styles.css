@@ -5690,6 +5690,8 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg-sm button { padding: 3px 11px; font-size: 12px; }
 .rc-list-tools { display: flex; align-items: center; gap: 10px; }
 .rc-group-note { margin-left: 10px; font-size: 11.5px; color: #787774; font-weight: 400; }
+.rc-group-n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; margin-left: 8px; border-radius: 999px; background: #EFEEEA; color: #787774; font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: -3px; }
+.rc-table-profit td.rc-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rc-table-profit tr.rc-group td.rc-item .rc-sku { font-weight: 600; }
 .rc-table-profit tr.rc-listing td { background: #FBFBFA; }
 .rc-table-profit tr.rc-listing td.rc-item { padding-left: 34px; }
