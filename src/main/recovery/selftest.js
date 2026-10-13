@@ -195,14 +195,14 @@ module.exports = function run(check) {
     const b0 = pr.skus.find((g) => g.sku === 'SKU-B');
     check('recovery: profit — a $0 cost reads as no cost set, never as 100% margin', b0 && b0.costKnown === false && b0.profit === undefined || (b0 && !b0.costKnown), b0 && { known: b0.costKnown, cost: b0.unitCost });
     check('recovery: profit — SKU-Z costed through the channel map', z && z.payout === 192 && z.cogs === 120 && z.profit === 72 && z.margin === 37.5, z);
-    check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === 96 && a.unitsBack === 1 && a.cogs === 0 && a.lines.find((l) => l.po === '001').back, a);
+    check('recovery: profit — a refunded unit that came back recovers its cost', a && a.payout === -84 && a.unitsBack === 1 && a.cogs === 0 && a.lines.find((l) => l.po === '001').back, a);
     check('recovery: profit — orders without a cost are counted, not costed', pr.missing.orders === 10 && pr.missing.skus === 10 && pr.orders === 13, pr.missing);
     // 500 sold in this period, refunded in the next (owner 2026-10-12: the
     // standing is judged on the whole PO; the relief lands on the sale row)
     const l500 = a && a.lines.find((l) => l.po === '500');
-    const pr2nd = recovery.profit('cycle', res2.id); const m500 = pr2nd.skus.find((g) => g.sku === 'SKU-M'); const l500r = m500 && m500.lines.find((l) => l.po === '500');
-    check('recovery: profit — a refund in a later period still counts against the sale row (pending, not costed, at risk)', l500 && l500.pending && /refund in another period/.test(l500.situation) && a.unitsPending === 1 && a.atRisk === 70, l500 && { l500, pend: a.unitsPending, risk: a.atRisk });
-    check('recovery: profit — the refund row in the later period carries the payout hit only', l500r && !l500r.pending && /sold in another period/.test(l500r.situation) && m500.cogs === 0, { l500r, cogs: m500 && m500.cogs });
+    const pr2nd = recovery.profit('cycle', res2.id);
+    check('recovery: profit — a refund posted in a later period goes home to the sale: one line, pending, not costed, at risk', l500 && l500.pending && l500.saleUnits === 1 && l500.refundUnits === 1 && l500.net === -84 && /in a later period/.test(l500.situation) && a.unitsPending === 1 && a.atRisk === 70, l500 && { l500, pend: a.unitsPending, risk: a.atRisk });
+    check('recovery: profit — the later period no longer carries that refund', !pr2nd.skus.some((g) => g.lines.some((l) => l.po === '500')), pr2nd.skus.map((g) => g.lines.map((l) => l.po)));
     check('recovery: profit — the headline profit and margin leave uncosted payout out', pr.profit === Math.round((pr.costedPayout - pr.cogs) * 100) / 100 && Math.abs(pr.payout - pr.costedPayout - pr.missing.payout) < 0.01 && (pr.costedPayout <= 0 || pr.margin === Math.round((pr.profit / pr.costedPayout) * 1000) / 10), { profit: pr.profit, costed: pr.costedPayout, cogs: pr.cogs, missing: pr.missing.payout, margin: pr.margin });
     const gz = pr.groups.find((x) => x.sku === 'INV-Z'); const ga = pr.groups.find((x) => x.sku === 'SKU-A'); const gb = pr.groups.find((x) => x.sku === 'SKU-B');
     check('recovery: profit — listings grouped under their Linnworks SKU, unmapped ones on their own', gz && gz.mapped && gz.listings.length === 1 && gz.listings[0].sku === 'SKU-Z' && gz.payout === z.payout && gz.profit === z.profit && ga && ga.mapped && gb && !gb.mapped && z.inv === 'INV-Z', { gz, ga: ga && ga.mapped, gb: gb && gb.mapped, zinv: z && z.inv });

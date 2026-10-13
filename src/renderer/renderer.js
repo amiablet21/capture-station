@@ -12512,6 +12512,7 @@ let ovError = ''; // the last fetch's failure, shown in the header
 let ovQuickTimer = null;
 let ovOpenSku = null; // the one expanded row
 let ovShowWatch = false;
+let ovFilter = 'all'; // all | buy | out | low | fast (owner 2026-10-13: the Buy now cut)
 let ovTick = null; // 1s ticker for the elapsed time while the first pass runs
 const ovSeries = {}; // sku -> { s, max } for the chart hover
 
@@ -12657,6 +12658,7 @@ function ovRenderTop() {
     <div><span class="n mono r">${c.out}</span><span class="l">out of stock</span></div>
     <div><span class="n mono a">${c.low}</span><span class="l">running low</span></div>
     <div><span class="n mono b">${c.fast}</span><span class="l">selling fast</span></div>
+    <div><span class="n mono g">${c.buy || 0}</span><span class="l">to buy now</span></div>
   </div>`;
 }
 
@@ -12672,14 +12674,20 @@ function ovPhrase(r) {
   return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
 }
 
-function ovRowHtml(r, open, hotAt) {
+function ovRowHtml(r, open, hotAt, buy) {
   const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind];
   const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
+  const p = ovPlan() || {};
+  const target = (p.leadDays || 7) + (p.coverDays || 21);
+  // the Buy now cut adds the pace, what is on hand and the quantity to order
+  const why = buy ? `<div class="ovq-why">${(Number(r.perDay) || 0).toFixed(1)}/day · ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand</div>` : '';
+  const pill = buy ? `<div class="ovq-buycell"><span class="ds-pill ovq-buy ${r.daysLeft <= (p.leadDays || 7) ? 'is-hot' : 'is-warm'}" title="${(Number(r.perDay) || 0).toFixed(1)} a day × ${target} days − ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand">BUY ${ovN(r.buyQty)}</span></div>` : '';
   return `<div class="ovq-item">
-    <div class="ovq-row${open ? ' is-open' : ''}" data-ovtoggle="${esc(r.sku)}">
+    <div class="ovq-row${open ? ' is-open' : ''}${buy ? ' is-buy' : ''}" data-ovtoggle="${esc(r.sku)}">
       <div><span class="ovq-badge ${r.kind}">${badge}</span></div>
       <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>${hot}</div><div class="ovq-title">${esc(r.title || '')}</div></div>
-      <div class="ovq-l1">${ovPhrase(r)}</div>
+      <div class="ovq-l1">${ovPhrase(r)}${why}</div>
+      ${pill}
       ${OV_CHEV}
     </div>
     ${open ? ovPanelHtml(r) : ''}
@@ -12734,8 +12742,13 @@ function ovRenderList() {
   const p = ovPlan();
   const lead = (p && p.leadDays) || 7;
   const cover = (p && p.coverDays) || 21;
-  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() ? 'Selling fast — no action needed yet' : 'Needs attention';
-  const head = `<div class="ovq-card-h"><span class="lbl">${label}</span><span class="sub">Lead time ${lead} days · target ${lead + cover} days on hand</span></div>`;
+  const buyMode = ovFilter === 'buy';
+  const label = ovLoading() ? 'Getting stock levels ready' : buyMode ? 'Buy now' : ovClear() ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
+  const chips = p && p.ready ? `<div class="ovq-chips">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast']].map(([k, t]) =>
+    `<button type="button" class="ovq-chip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? ` <b>${nBuy}</b>` : ''}</button>`).join('')}</div>` : '';
+  const sub = buyMode ? `at least 1 a day · under ${lead + cover} days on hand · lead ${lead} days` : `Lead time ${lead} days · target ${lead + cover} days on hand`;
+  const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
   if (ovLoading()) {
     const mp = ovData.moneyPending;
@@ -12762,15 +12775,21 @@ function ovRenderList() {
   const watch = p.watch || [];
   // the watch list expands as more of the SAME rows (owner 2026-10-08:
   // "the same as above but expanded"), not a compact grid
-  const rows = [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])];
+  const rows = buyMode ? (p.buy || [])
+    : ovFilter === 'all' ? [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])]
+      : p.rows.filter(r => r.kind === ovFilter);
   if (ovOpenSku && !rows.some(r => r.sku === ovOpenSku)) ovOpenSku = null;
+  const empty = buyMode ? 'Nothing sells a unit a day and runs under the target. Nothing to buy.' : ovFilter !== 'all' ? 'Nothing in this group.' : ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.';
   const list = rows.length
-    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1)).join('')
-    : `<div class="ovq-note">${ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.'}</div>`;
+    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1, buyMode)).join('')
+    : `<div class="ovq-note">${empty}</div>`;
   const watchHtml = '';
   const ign = p.ignored || [];
-  const foot = `<div class="ovq-foot">
-    ${watch.length ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
+  const foot = buyMode ? `<div class="ovq-foot">
+    ${rows.length ? '<button class="ovq-link" data-ovbuyxlsx>Download this list as Excel</button>' : '<span></span>'}
+    <span class="ovq-ign">Order quantity = sales per day × ${lead + cover} days − on hand (warehouse + WFS)</span>
+  </div>` : `<div class="ovq-foot">
+    ${watch.length && ovFilter === 'all' ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
     ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
   </div>`;
   box.innerHTML = `${head}${list}${watchHtml}${foot}`;
@@ -12857,6 +12876,14 @@ for (const id of ['ovList', 'ovSold']) {
     const sku = e.target.closest('[data-ovsku]');
     if (sku) { e.stopPropagation(); if (sku.dataset.ovsku) ovOpenStock(sku.dataset.ovsku); return; }
     if (e.target.closest('[data-ovwatch]')) { ovShowWatch = !ovShowWatch; ovRenderList(); return; }
+    const chip = e.target.closest('[data-ovfilter]');
+    if (chip) { ovFilter = chip.dataset.ovfilter; ovOpenSku = null; ovRenderList(); return; }
+    if (e.target.closest('[data-ovbuyxlsx]')) {
+      const p = ovPlan(); const rows = (p && p.buy) || [];
+      const r = await api.overviewExportBuy(rows.map(x => ({ sku: x.sku, title: x.title, buyQty: x.buyQty, perDay: x.perDay, avail: x.avail, atWfs: x.atWfs, daysLeft: x.daysLeft, sold30: x.sold30, kind: x.kind })), (p.leadDays || 7) + (p.coverDays || 21), p.leadDays || 7).catch(err => ({ ok: false, error: err.message }));
+      if (r && r.ok) toast('Buy list saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
+      return;
+    }
     if (e.target.closest('[data-ovundo]')) { await api.lowUnignore(); await ovFetch(); return; }
     // dismiss (owner 2026-10-10: "where can we see a dismiss button") — the
     // ignore feature the design-1a rebuild kept in code; the footer's Undo

@@ -4743,6 +4743,19 @@ th:last-child > .col-grip { right: 0; }
 .ovq-badge { display: inline-block; font-size: 10.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
 .ovq-badge.out { background: var(--neg-bg); color: var(--neg-text); } .ovq-badge.low { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); } .ovq-badge.fast { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
 .ovq-badge.watch { background: #EFEEEA; color: var(--muted); }
+/* the Buy now cut (owner 2026-10-13): chips in the card header, the pace and
+   on-hand under the phrase, and the quantity to order as a pill */
+.ovq-counts .n.g { color: #346538; }
+.ovq-card-h { gap: 18px; }
+.ovq-chips { display: flex; gap: 6px; }
+.ovq-chip { font-family: var(--font); font-size: 12px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1.5; }
+.ovq-chip:hover { color: var(--text); }
+.ovq-chip.is-on { background: #1E3A66; border-color: #1E3A66; color: #fff; }
+.ovq-chip b { font-weight: 600; margin-left: 3px; }
+.ovq-row.is-buy { grid-template-columns: 52px minmax(0, 1.4fr) minmax(0, 1fr) 96px 12px; }
+.ovq-why { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.ovq-buycell { text-align: right; }
+.ovq-buy { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
 .ovq-who { min-width: 0; }
 .ovq-skuline { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ovq-sku { font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.34 highlights
+
+- **A return goes home to the period that sold the unit** (owner: "margin should be based on products sold and their COGS, not the returns"). A refund usually posts in a later statement than its sale; it now counts in the sale's period, and the two halves merge into one line per PO. A unit sold, refunded and back on the shelf reads $0 in the period it sold; a kept unit reads its real margin; a unit never back is costed where it sold. The later period no longer shows a loss for phones sold earlier. All time is unchanged. A refund whose sale predates the first imported statement stays where it posted and says so.
+- **Buy now on the Overview** (owner's pick). Chips in the Needs attention header: All, Buy now, Out, Low, Fast. Buy now lists every SKU selling at least one a day with under the target days on hand, out-of-stock sellers included, soonest-out first, each with a BUY quantity: sales per day × target days − on hand at the warehouse and WFS. Red when inside the lead time, yellow otherwise. The count row gains "to buy now" and the footer downloads the list as Excel.
+
 ## v1.32.33 highlights
 
 - **Find on page (Ctrl+F / Cmd+F) types properly again** (owner: "I can't type one letter at a time"). Chromium's own find also matched the text in the find box and kept taking the selection. Find now runs in the page itself: matches are painted with the browser's highlight API, pale for every match and amber for the current one, the box keeps its focus, and the bar's own text is never a match.

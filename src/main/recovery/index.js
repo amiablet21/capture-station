@@ -480,24 +480,52 @@ function profit(scope, key) {
     return '';
   };
 
-  // the orders and the non-order ledger lines in scope
+  // every stored row, and where each one belongs. A refund usually posts in
+  // a later statement than its sale; it goes home to the period that sold
+  // the unit, and the two halves merge into one row per PO (owner
+  // 2026-10-13: "margin should be based on products sold and their COGS,
+  // not the returns"). A refund whose sale predates the first imported
+  // statement has no home and stays where it posted; a fee-only row (no
+  // units) is a charge of its own period and stays too.
+  const allRows = store.allOrders();
+  const saleHome = new Map();
+  for (const o of allRows) if (o.saleUnits > 0 && !saleHome.has(o.po)) saleHome.set(o.po, { run: o.run_id, date: o.date });
+  const homeOf = (o) => (!(o.saleUnits > 0) && o.refundUnits > 0 && saleHome.has(o.po) ? saleHome.get(o.po) : { run: o.run_id, date: o.date });
+  const mergeRows = (rows) => {
+    const by = new Map();
+    for (const o of rows) {
+      const m = by.get(o.po) || { po: o.po, run_id: o.run_id, sku: o.sku, item: o.item, fulfillment: o.fulfillment, date: o.date, saleUnits: 0, refundUnits: 0, netPayable: 0, gross: null, commission: null, note: '', moved: false, orphan: false };
+      m.saleUnits += Number(o.saleUnits) || 0; m.refundUnits += Number(o.refundUnits) || 0; m.netPayable += Number(o.netPayable) || 0;
+      // the goods price and the commission describe the sale: the sale row
+      // carries them, a refund row's reversal is already inside its payout
+      if (o.saleUnits > 0 && o.gross !== null && o.gross !== undefined) m.gross = (m.gross ?? 0) + Number(o.gross);
+      if (o.saleUnits > 0 && o.commission !== null && o.commission !== undefined) m.commission = (m.commission ?? 0) + Number(o.commission);
+      if (o.note && !m.note.includes(o.note)) m.note = m.note ? `${m.note} · ${o.note}` : o.note;
+      // the sale row names the row: its SKU, date and period
+      if (o.saleUnits > 0) { m.sku = o.sku; m.item = o.item || m.item; m.date = o.date; m.run_id = o.run_id; }
+      if (!(o.saleUnits > 0) && o.refundUnits > 0) { if (saleHome.has(o.po)) { if (saleHome.get(o.po).run !== o.run_id) m.moved = true; } else m.orphan = true; }
+      by.set(o.po, m);
+    }
+    return [...by.values()];
+  };
+  const rowsIn = (fn) => mergeRows(allRows.filter((o) => fn(homeOf(o))));
+  const yr = (d) => { const k = rnr.monthKeyOf(d); return k ? k.slice(0, 4) : null; };
   let orders; let ledger; let label;
   if (scope === 'cycle') {
     const run = store.getRun(key);
-    orders = run ? store.runOrders(run.id) : [];
+    orders = run ? rowsIn((h) => h.run === run.id) : [];
     ledger = run ? store.runLedger(run.id) : [];
     label = run ? run.label : '';
   } else if (scope === 'month') {
-    orders = store.allOrders().filter((o) => rnr.monthKeyOf(o.date) === key);
+    orders = rowsIn((h) => rnr.monthKeyOf(h.date) === key);
     ledger = rnr.dedupeLedger(store.allLedger()).filter((t) => rnr.monthKeyOf(t.date) === key);
     label = monthLabel(String(key));
   } else if (scope === 'year') {
-    const yr = (d) => { const k = rnr.monthKeyOf(d); return k ? k.slice(0, 4) : null; };
-    orders = store.allOrders().filter((o) => yr(o.date) === String(key));
+    orders = rowsIn((h) => yr(h.date) === String(key));
     ledger = rnr.dedupeLedger(store.allLedger()).filter((t) => yr(t.date) === String(key));
     label = String(key);
   } else {
-    orders = store.allOrders();
+    orders = mergeRows(allRows);
     ledger = rnr.dedupeLedger(store.allLedger());
     label = 'all time';
   }
@@ -526,7 +554,7 @@ function profit(scope, key) {
   // row keeps its payout hit in its own period (owner 2026-10-12: August's
   // margin looked low because returns of July sales never recovered a cost)
   const wholePo = new Map();
-  for (const o of store.allOrders()) {
+  for (const o of allRows) {
     const w = wholePo.get(o.po) || { saleUnits: 0, refundUnits: 0 };
     w.saleUnits += Number(o.saleUnits) || 0; w.refundUnits += Number(o.refundUnits) || 0;
     wholePo.set(o.po, w);
@@ -559,7 +587,7 @@ function profit(scope, key) {
     let situation = 'Sold, kept'; let tone = 'green';
     const when = (it) => { const sh = rnr.shortStatus(it); return `${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; };
     const soldHere = (Number(o.saleUnits) || 0) > 0;
-    const where = st.elsewhere ? ' (refund in another period)' : (!soldHere && o.refundUnits > 0 ? ' (sold in another period)' : '');
+    const where = o.moved ? ' in a later period' : (o.orphan ? ' (sold before the first statement)' : (st.elsewhere ? ' (refund not in a statement yet)' : ''));
     // the cost words belong to the row that sold the unit; a refund row in a
     // later period only carries the payout hit
     const costNote = (t) => (soldHere ? ` · ${t}` : '');
@@ -635,7 +663,7 @@ function profit(scope, key) {
   // every period, for the trend (newest first, by the period start)
   const periods = runs
     .map((r) => {
-      const os = store.runOrders(r.id);
+      const os = rowsIn((h) => h.run === r.id);
       let payout = 0; let costed = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false;
       for (const o of os) {
         const cost = unitCost(o.sku);

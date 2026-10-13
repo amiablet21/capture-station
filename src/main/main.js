@@ -4997,14 +4997,24 @@ exit 1
       if (ig && kind !== 'watch' && !(r.perDay > ig.pace * 1.5)) { ignored.push(row); continue; }
       ({ out, low, fast, watch })[kind].push(row);
     }
+    // Buy now (owner 2026-10-13: "which products to buy that sell at least
+    // one a day and are running low"): any queued SKU at the Hot pace or
+    // better with under the target days on hand, out-of-stock sellers
+    // included, soonest-out first; the quantity covers the target at today's
+    // pace less what is on hand at the warehouse and WFS
+    const target = lead + cover;
+    const buy = [...out, ...low, ...fast, ...watch]
+      .filter(r => r.perDay >= 1 && (r.avail + r.atWfs <= 0 || r.daysLeft <= target))
+      .map(r => ({ ...r, buyQty: Math.max(0, Math.ceil(r.perDay * target - Math.max(0, r.avail + r.atWfs))) }))
+      .sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // selling fast: the fastest sellers first (owner 2026-10-08)
     fast.sort((a, b) => b.perDay - a.perDay || b.pct - a.pct);
     watch.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     return {
-      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored,
-      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length },
+      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
+      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
       leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
     };
   }
@@ -7340,6 +7350,19 @@ function registerRecoveryIpc() {
   // Returns page (owner 2026-10-12: "an option next to Users to download all
   // the returns"): the whole log as one Excel sheet, one line per item. Not
   // Recovery-gated — the log exists on every station.
+  // the Buy now list as a workbook: the purchase list to send off
+  ipcMain.handle('overview:exportBuy', async (_e, { rows, target, lead } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Buy now', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Buy', width: 8, kind: 'int' },
+        { header: 'Sales per day', width: 13, kind: 'text' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' }, { header: 'Days left', width: 10, kind: 'int' },
+        { header: 'Sold 30 days', width: 12, kind: 'int' }, { header: 'Status', width: 10, kind: 'text' },
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.buyQty) || 0, String(Number(r.perDay) || 0), Number(r.avail) || 0, Number(r.atWfs) || 0, Number(r.daysLeft) || 0, Number(r.sold30) || 0, { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind] || '']) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Buy now — ${target || ''} days of cover, ${lead || ''} days lead`, `Buy_now_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
   ipcMain.handle('returns:export', async () => {
     try {
       const rows = retsync.enabled() ? retsync.list() : db.listReturns(1e9);
