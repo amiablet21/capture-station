@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.36 highlights
+
+- The ⋯ menu on Reconcile offers **Received** and **Never shipped** only; "Received before the log" is gone from the menu (owner: unnecessary with Received). Earlier marks keep working and read "Received" on the Marked tab. The file import on the Import screen still takes a list of PO numbers with an optional date.
+
 ## v1.32.35 highlights
 
 - **Buy now by units, across every SKU** (owner: "we should buy if we have less than 30–50 units left"). The cut now scans every selling SKU, not just the attention queue: under the unit floor OR under the target days on hand, at the set pace or better. Settings › Reorder gains "Buy now when under (units)", 50 by default, and "selling at least (a day)", 1 by default. The BUY quantity brings the SKU to the larger of the floor and the target's worth of sales, less what is on hand. A SKU with no other flag shows a green Stock badge.

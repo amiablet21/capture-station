@@ -2003,7 +2003,7 @@ function rcRenderReconcile() {
   const sortable = (isMarked ? marked : (rc.bucket === 'wfsPending' ? pending : notReceived)).map(it => ({ ...it,
     left: rcDaysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0,
     refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
-    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received before the log' }));
+    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received' }));
   const rows = rcSortRows(sortable, so, 'left');
   const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
     + rcSortTh(so, 'units', 'Units', true, false, 1) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
@@ -2012,7 +2012,7 @@ function rcRenderReconcile() {
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
-    const label = never ? 'Never shipped' : (it.receivedOn ? 'Received' : 'Received before the log');
+    const label = never ? 'Never shipped' : 'Received';
     return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
   const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}">
@@ -2555,7 +2555,7 @@ $('rcBucketTable').addEventListener('click', (e) => {
     ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : 'undoReceivedManual', 'Undo this mark']]
     // Received (today) is a mark only: it never logs a return or moves a
     // Linnworks quantity (owner 2026-10-13: "do not add the actual qty")
-    : [['receivedToday', 'Received'], ['receivedManual', 'Received before the log'], ['neverShipped', 'Never shipped']];
+    : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped']]; // owner 2026-10-13: one Received
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
     + '<div class="tab-menu-sep"></div>'
