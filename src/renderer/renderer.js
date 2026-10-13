@@ -1642,7 +1642,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, reconcileSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(),
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(), rcFilters: {}, rcSortable: [], filterCol: '', filterDraft: {}, filterQ: '',
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -1696,10 +1696,13 @@ function rcSortRows(rows, sort, defaultKey) {
     return dir * c;
   });
 }
-const rcSortTh = (sort, key, label, right, text, first) => {
+const RC_FUNNEL = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
+const rcSortTh = (sort, key, label, right, text, first, filter) => {
   const on = sort && sort.key === key;
   const arrow = on ? (sort.dir < 0 ? ' ▾' : ' ▴') : '';
-  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" data-rcfirst="${first || ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}</th>`;
+  const fOn = filter && rc.rcFilters && rc.rcFilters[key] && rc.rcFilters[key].size || (filter && key === 'reasonText' && rc.rcFilters && rc.rcFilters.by && rc.rcFilters.by.size);
+  const funnel = filter ? `<button type="button" class="rc-fl-btn ${fOn ? 'is-on' : ''}" data-rcfilter="${key}" title="Filter ${label.toLowerCase()}" aria-label="Filter ${label.toLowerCase()}">${RC_FUNNEL}</button>` : '';
+  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''} ${filter ? 'rc-th-fl' : ''} ${fOn ? 'is-filtered' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" data-rcfirst="${first || ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}${funnel}</th>`;
 };
 // "Mon D" from an ISO stamp or a report MM/DD/YYYY date
 function rcMonDay(v) {
@@ -2128,6 +2131,107 @@ $('rcCasePop').addEventListener('click', async (e) => {
   rcDoAction(po, act);
 });
 
+/* ----- Reconcile column filters (owner 2026-10-13: "a clickable filter for
+   each column"): a funnel in every header opens a tick-list of that column's
+   values with counts; the picks stack across columns, show as chips under
+   the tabs, and clear when the tab changes ----- */
+const RC_FILTER_LABELS = { po: 'PO #', type: 'Type', sku: 'Item', units: 'Units', refundTs: 'Refunded', amount: 'Net refund', left: 'Days left', paid: 'Walmart paid', gap: 'Still lost', reasonText: 'Reason', by: 'Issued by', markText: 'Mark' };
+const RC_MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const rcMoneyBand = (v) => { const n = Number(v) || 0; return n < 100 ? ['a', 'Under $100'] : n < 250 ? ['b', '$100 – $250'] : n < 500 ? ['c', '$250 – $500'] : n < 1000 ? ['d', '$500 – $1,000'] : ['e', 'Over $1,000']; };
+const rcIssuerKey = (it) => { const d = String(it.refundedBy || '').toLowerCase(); return !d ? ['', '—'] : /customer care/.test(d) ? ['care', 'Customer Care'] : /seller/.test(d) ? ['seller', 'Seller'] : ['customer', 'Customer']; };
+// each column's filter value for a row: [key, label]
+function rcFilterValue(col, r) {
+  switch (col) {
+    case 'po': return [r.po, r.po];
+    case 'type': return [r.type || '', r.type || '—'];
+    case 'sku': return [r.sku || r.item || '', r.sku || r.item || '—'];
+    case 'units': return [String(r.units), String(r.units)];
+    case 'refundTs': { if (r.refundTs == null) return ['', '—']; const d = new Date(r.refundTs); return [`${d.getFullYear()}-${d.getMonth()}`, `${RC_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`]; }
+    case 'amount': return rcMoneyBand(r.amount);
+    case 'paid': return r.paid > 0 ? rcMoneyBand(r.paid) : ['0', 'Pending'];
+    case 'gap': return r.gap > 0 ? rcMoneyBand(r.gap) : ['0', 'Nothing lost'];
+    case 'left': { const n = r.left; return n == null ? ['', '—'] : n <= 0 ? ['0', 'Window passed'] : n <= 7 ? ['1', 'This week (1–7)'] : n <= 14 ? ['2', '8–14 days'] : n <= 29 ? ['3', '15–29 days'] : ['4', '30 days or more']; }
+    case 'reasonText': { const t = String(r.reasonText || '').toLowerCase(); return [t, t ? t.replace(/^./, c => c.toUpperCase()) : '—']; }
+    case 'by': return rcIssuerKey(r);
+    case 'markText': return [r.markText, r.markText];
+    default: return ['', ''];
+  }
+}
+const rcFilterCols = (list) => Object.keys(rc.rcFilters || {}).filter(c => rc.rcFilters[c] && rc.rcFilters[c].size);
+function rcApplyFilters(list, except) {
+  const cols = rcFilterCols().filter(c => c !== except);
+  if (!cols.length) return list;
+  return list.filter(r => cols.every(c => rc.rcFilters[c].has(rcFilterValue(c, r)[0])));
+}
+const rcFilterOrder = (col) => col === 'left' || col === 'amount' || col === 'paid' || col === 'gap' || col === 'units' ? ((a, b) => (col === 'units' ? Number(a.key) - Number(b.key) : String(a.key).localeCompare(String(b.key)))) : col === 'refundTs' ? ((a, b) => b.ts - a.ts) : ((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+// the values of one column over the rows the OTHER filters leave, with counts
+function rcFilterOptions(col) {
+  const m = new Map();
+  for (const r of rcApplyFilters(rc.rcSortable || [], col)) {
+    const [k, label] = rcFilterValue(col, r);
+    const g = m.get(k) || { key: k, label, n: 0, ts: col === 'refundTs' ? (r.refundTs || 0) : 0 };
+    g.n++; m.set(k, g);
+  }
+  return [...m.values()].sort(rcFilterOrder(col));
+}
+function rcOpenFilter(col, anchor) {
+  rc.filterCol = col;
+  rc.filterDraft = { [col]: new Set(rc.rcFilters[col] || []) };
+  if (col === 'reasonText') rc.filterDraft.by = new Set(rc.rcFilters.by || []);
+  rc.filterQ = '';
+  const dlg = $('rcFilterDlg');
+  rcPaintFilter();
+  dlg.showModal();
+  const r = anchor.getBoundingClientRect();
+  rcAnchor(dlg, r);
+  dlg.querySelector('input[type="search"]')?.focus();
+}
+function rcPaintFilter() {
+  const dlg = $('rcFilterDlg'); const col = rc.filterCol;
+  const q = rc.filterQ.toLowerCase();
+  const section = (c, title) => {
+    const opts = rcFilterOptions(c).filter(o => !q || o.label.toLowerCase().includes(q));
+    const sel = rc.filterDraft[c];
+    return `<div class="rc-fl-h">${title}</div>` + (opts.length ? opts.map(o => `<label class="rc-fl-opt ${sel.has(o.key) ? 'is-on' : ''}"><input type="checkbox" data-rcflcol="${c}" data-rcflkey="${esc(o.key)}" ${sel.has(o.key) ? 'checked' : ''}> <span class="rc-fl-lab">${esc(o.label)}</span><span class="rc-fl-n">${o.n}</span></label>`).join('') : '<div class="rc-fl-none">Nothing matches</div>');
+  };
+  const many = rcFilterOptions(col).length > 8 || col === 'po' || col === 'sku';
+  dlg.innerHTML = `${many ? `<input type="search" class="rc-fl-search" placeholder="Search…" value="${esc(rc.filterQ)}" aria-label="Search values">` : ''}
+    <div class="rc-fl-list">${section(col, RC_FILTER_LABELS[col] || col)}${col === 'reasonText' ? `<div class="rc-fl-sep"></div>${section('by', 'Issued by')}` : ''}</div>
+    <div class="rc-fl-foot"><button type="button" class="rc-link" data-rcflact="clear">Clear</button><button type="button" class="rc-fl-ok" data-rcflact="done">Done</button></div>`;
+}
+$('rcFilterDlg').addEventListener('input', (e) => {
+  if (e.target.matches('.rc-fl-search')) { rc.filterQ = e.target.value; const at = e.target.selectionStart; rcPaintFilter(); const i = $('rcFilterDlg').querySelector('.rc-fl-search'); if (i) { i.focus(); try { i.setSelectionRange(at, at); } catch { /* fine */ } } }
+});
+$('rcFilterDlg').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-rcflcol]');
+  if (!cb) return;
+  const set = rc.filterDraft[cb.dataset.rcflcol];
+  if (cb.checked) set.add(cb.dataset.rcflkey); else set.delete(cb.dataset.rcflkey);
+  cb.closest('.rc-fl-opt').classList.toggle('is-on', cb.checked);
+});
+$('rcFilterDlg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcflact]');
+  if (!b) { if (e.target === e.currentTarget) $('rcFilterDlg').close(); return; }
+  if (b.dataset.rcflact === 'clear') { for (const c of Object.keys(rc.filterDraft)) rc.filterDraft[c] = new Set(); }
+  for (const c of Object.keys(rc.filterDraft)) { if (rc.filterDraft[c].size) rc.rcFilters[c] = rc.filterDraft[c]; else delete rc.rcFilters[c]; }
+  $('rcFilterDlg').close();
+  rcRenderReconcile();
+});
+function rcRenderFilterBar(shown, total) {
+  const bar = $('rcFilterBar');
+  const cols = rcFilterCols();
+  bar.hidden = !cols.length;
+  if (!cols.length) { bar.innerHTML = ''; return; }
+  const chips = cols.map(c => { const keys = [...rc.rcFilters[c]]; const labels = keys.map(k => { const o = rcFilterOptions(c).find(x => x.key === k); return o ? o.label : k; }); const text = labels.length > 2 ? `${labels.slice(0, 2).join(', ')} +${labels.length - 2}` : labels.join(', '); return `<span class="rc-fl-chip">${esc(RC_FILTER_LABELS[c] || c)}: ${esc(text)}<button type="button" data-rcflx="${c}" aria-label="Remove this filter">×</button></span>`; }).join('');
+  bar.innerHTML = `<span class="rc-fl-bar-l">Filtered</span>${chips}<button type="button" class="rc-link" data-rcflx="*">Clear all</button><span class="rc-fl-bar-n">${shown} of ${total} rows</span>`;
+}
+$('rcFilterBar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcflx]');
+  if (!b) return;
+  if (b.dataset.rcflx === '*') rc.rcFilters = {}; else { delete rc.rcFilters[b.dataset.rcflx]; if (b.dataset.rcflx === 'reasonText') delete rc.rcFilters.by; }
+  rcRenderReconcile();
+});
+
 /* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
   const items = rc.data.items || [];
@@ -2157,11 +2261,14 @@ function rcRenderReconcile() {
     refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
     paid: Number(it.settlementSeen) || 0, gap: Number(it.lostAmount) || 0,
     reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : it.status === 'loss' ? 'Loss' : 'Received' }));
-  const rows = rcSortRows(sortable, so, 'left');
-  const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
-    + rcSortTh(so, 'units', 'Units', true, false, 1) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
-    + (isMarked ? '' : isPaid ? rcSortTh(so, 'paid', 'Walmart paid', true) + rcSortTh(so, 'gap', 'Still lost', true) : rcSortTh(so, 'left', 'Days left', true, false, 1))
-    + (isMarked ? rcSortTh(so, 'markText', 'Mark', false, true) : rcSortTh(so, 'reasonText', 'Reason', false, true)) + '<th></th>';
+  rc.rcSortable = sortable;
+  const rows = rcSortRows(rcApplyFilters(sortable), so, 'left');
+  rcRenderFilterBar(rows.length, sortable.length);
+  const fTh = (key, label, right, text, first) => rcSortTh(so, key, label, right, text, first, true);
+  const head = '<th class="rc-g">#</th>' + fTh('po', 'PO #', false, true) + fTh('type', 'Type', false, true) + fTh('sku', 'Item', false, true)
+    + fTh('units', 'Units', true, false, 1) + fTh('refundTs', 'Refunded', false) + fTh('amount', 'Net refund', true)
+    + (isMarked ? '' : isPaid ? fTh('paid', 'Walmart paid', true) + fTh('gap', 'Still lost', true) : fTh('left', 'Days left', true, false, 1))
+    + (isMarked ? fTh('markText', 'Mark', false, true) : fTh('reasonText', 'Reason', false, true)) + '<th></th>';
   const markCell = (it) => {
     const never = it.status === 'never_shipped'; const loss = it.status === 'loss';
     const paidBack = loss && (Number(it.settlementSeen) || 0) > 0 ? `Walmart paid ${rcMoney(it.settlementSeen)} · ${rcMoney(it.lostAmount || 0)} lost` : '';
@@ -2719,7 +2826,7 @@ $('rcPeriodsTable').addEventListener('click', async (e) => {
 });
 $('rcBucketTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-rcbucket]');
-  if (b) { rc.bucket = b.dataset.rcbucket; rc.reconcileSort = null; rcRenderBucket(); }
+  if (b) { rc.bucket = b.dataset.rcbucket; rc.reconcileSort = null; rc.rcFilters = {}; rcRenderBucket(); }
 });
 // row actions: the primary button, the case-id line and the note chip act
 // directly; "⋯" opens the per-state menu anchored under the button
@@ -2746,6 +2853,8 @@ $('rcBucketTable').addEventListener('click', (e) => {
   if (link) { rcPoMenu(link); return; }
   const fl = e.target.closest('[data-rccase]');
   if (fl) { rcOpenCasePop(fl.dataset.rccase, fl); return; }
+  const fb = e.target.closest('[data-rcfilter]');
+  if (fb) { rcOpenFilter(fb.dataset.rcfilter, fb); return; }
   const th = e.target.closest('[data-rcsort]');
   if (th) {
     const key = th.dataset.rcsort;

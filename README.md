@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.51 highlights
+
+- **Column filters on Reconcile** (owner: "a clickable filter for each column"). Every header carries a small funnel — faint until hovered, navy when that column is filtered. Click it for a tick-list of the column's values with counts (a search box on long lists): PO #, Type, Item, Units, Refunded by month, Net refund / Walmart paid / Still lost by dollar band, Days left by window (passed, this week, 8–14, 15–29, 30+), Reason with an Issued by section, Mark. Picks stack across columns; a bar under the tabs shows each one as a chip with an ×, Clear all and "N of M rows". Switching tabs clears them. Clicking the header text still sorts.
+
 ## v1.32.50 highlights
 
 - **Loss is a mark** (owner: "I need a loss section … perhaps in the marked column"). The ⋯ menu on Reconcile offers Loss beside Received and Never shipped; after a confirm the row moves to the Marked tab with a red Loss chip, the date, what Walmart already paid on it, and "cost charged on Profit". Undo from the same menu. On the Profit page the unit's cost stays charged on the row that sold it ("Refunded · Marked as loss · Oct 13 · cost charged"), it counts in "lost units costed" under Cost of goods, and the refund already sits in Walmart paid. A loss with a partial payout only counts the gap as lost.
