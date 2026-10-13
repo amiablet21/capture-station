@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.48 highlights
+
+- **Case flag on Reconcile** (owner: "if I open up a case, I want to be able to mark them so I can come back to it", design B). The ⋯ menu's "Case opened…" takes an optional Walmart case ID and marks the row: a navy bar on its edge, a flag beside the PO, "· case 14d" after the reason. Click the flag for the case card: when it was opened and from which station, the ID with copy, the refund and what is still lost, and the ways out — open the case on Walmart, change the ID, close the case. The mark syncs to every desktop like Received and Never shipped; the yellow click-highlight stays per computer.
+
 ## v1.32.47 highlights
 
 - The PO# menu's Transaction page opens Seller Center's PO search (`payments/transactions?searchType=poNo&searchValue=…`) instead of the free-text search box (owner: "make the transaction searches like this"). Saved settings still on the old link move over on their own; Settings → Recovery can still change it.

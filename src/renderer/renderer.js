@@ -2076,6 +2076,49 @@ function rcHlToggle(po) {
   try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ }
   for (const tr of $('rcBucketTable').querySelectorAll(`tr[data-rcrow="${CSS.escape(po)}"]`)) tr.classList.toggle('is-hl', rcHl.has(po));
 }
+const RC_FLAG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h1.5v18H5zM7.5 4h10.2l-2.6 4 2.6 4H7.5z"/></svg>';
+function rcDaysSince(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso); if (!Number.isFinite(t)) return null;
+  const a = new Date(t); const b = new Date();
+  const day = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.max(0, Math.round((day(b) - day(a)) / 86400000));
+}
+// the case card under the flag (owner 2026-10-13: "when you click on the
+// flag, will it tell you the case"): when, by which station, the ID, and
+// the ways out — open it on Walmart, change the ID, close the case
+function rcOpenCasePop(po, anchor) {
+  const it = rcItem(po); if (!it || !it.caseOpened) return;
+  const d = rcDaysSince(it.caseOpenedAt);
+  const age = d == null ? '' : d === 0 ? 'opened today' : `${d} ${d === 1 ? 'day' : 'days'} ago`;
+  const who = it.station ? ` · from ${esc(it.station)}` : '';
+  const dlg = $('rcCasePop');
+  rc.casePo = po;
+  dlg.innerHTML = `<div class="rc-cp-h"><span class="rc-cp-flag">${RC_FLAG}</span>Case on PO <span class="rc-mono">${esc(po)}</span></div>
+    <div class="rc-cp-line">Opened <b>${esc(rcMonDay(it.caseOpenedAt) || '—')}</b>${age ? ` · ${age}` : ''}${who}</div>
+    <div class="rc-cp-line">Case ID: ${it.caseId ? `<span class="rc-mono rc-cp-id">${esc(it.caseId)}</span> <button type="button" class="rc-link" data-rccp="copy">copy</button>` : '<span class="rc-muted">none yet</span> <button type="button" class="rc-link" data-rccp="caseId">add it</button>'}</div>
+    ${it.sku ? `<div class="rc-cp-line rc-muted">${esc(it.sku)}${it.amount ? ` · ${rcMoney(it.amount)} refunded` : ''}${it.lostAmount ? ` · ${rcMoney(it.lostAmount)} still lost` : ''}</div>` : ''}
+    <div class="tab-menu-sep"></div>
+    ${it.caseId ? '<button class="tab-menu-item" data-rccp="open">Open the case on Walmart</button>' : ''}
+    <button class="tab-menu-item" data-rccp="caseId">${it.caseId ? 'Change the case ID' : 'Add the case ID'}</button>
+    <button class="tab-menu-item" data-rccp="undoCase">Case closed · take the flag off</button>`;
+  dlg.showModal();
+  const r = anchor.getBoundingClientRect();
+  rcAnchor(dlg, r);
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`; // hangs from the flag's left edge
+}
+$('rcCasePop').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rccp]');
+  if (!b) { if (e.target === e.currentTarget) $('rcCasePop').close(); return; }
+  const act = b.dataset.rccp; const po = rc.casePo; const it = rcItem(po);
+  $('rcCasePop').close();
+  if (!it) return;
+  if (act === 'copy') { try { await navigator.clipboard.writeText(it.caseId || ''); toast('Case ID copied'); } catch { toast('Could not copy.'); } return; }
+  if (act === 'open') { const r = await api.openOrderPage(it.caseId, 'walmart', 'case').catch(() => null); if (!r || !r.ok) toast((r && r.error) || 'Could not open the case.', 4000); return; }
+  if (act === 'undoCase') { await rcMark(po, 'undoCase', {}); return; }
+  rcDoAction(po, act);
+});
+
 /* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
   const items = rc.data.items || [];
@@ -2115,16 +2158,21 @@ function rcRenderReconcile() {
     const label = never ? 'Never shipped' : 'Received';
     return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
-  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}" class="${rcHl.has(it.po) ? 'is-hl' : ''}">
+  // an open case (owner 2026-10-13, design B): a navy bar on the row's edge,
+  // a flag by the PO that opens the case card, the case's age after the reason
+  const caseAge = (it) => { const d = rcDaysSince(it.caseOpenedAt); return d == null ? '' : d === 0 ? 'today' : `${d}d`; };
+  const flag = (it) => it.caseOpened ? `<button type="button" class="rc-flag" data-rccase="${esc(it.po)}" title="${esc(`Case opened ${rcMonDay(it.caseOpenedAt)}${it.caseId ? ` · #${it.caseId}` : ''} · click for the case`)}" aria-label="Case details">${RC_FLAG}</button>` : '';
+  const caseSub = (it) => it.caseOpened ? ` <span class="rc-case-sub">· case ${caseAge(it)}</span>` : '';
+  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}" class="${rcHl.has(it.po) ? 'is-hl' : ''} ${it.caseOpened ? 'is-case' : ''}">
       <td class="rc-g">${i + 1}</td>
-      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
+      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button>${flag(it)}</td>
       <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
       <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
       <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
       <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
       <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
       ${isMarked ? '' : isPaid ? rcPaidCells(it) : rcDaysCell(it)}
-      <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase()))}</td>
+      <td class="${isMarked ? '' : 'rc-muted'}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + caseSub(it)}</td>
       <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
     </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
   $('rcBucketTable').classList.toggle('is-marked', isMarked);
@@ -2685,6 +2733,8 @@ $('rcPoDlg').addEventListener('click', async (e) => {
 $('rcBucketTable').addEventListener('click', (e) => {
   const link = e.target.closest('[data-rcpolink]');
   if (link) { rcPoMenu(link); return; }
+  const fl = e.target.closest('[data-rccase]');
+  if (fl) { rcOpenCasePop(fl.dataset.rccase, fl); return; }
   const th = e.target.closest('[data-rcsort]');
   if (th) {
     const key = th.dataset.rcsort;
@@ -2709,8 +2759,12 @@ $('rcBucketTable').addEventListener('click', (e) => {
     // Received (today) is a mark only: it never logs a return or moves a
     // Linnworks quantity (owner 2026-10-13: "do not add the actual qty")
     : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped']]; // owner 2026-10-13: one Received
+  // the case mark (owner 2026-10-13, design B): opened asks for an optional
+  // ID; once set the menu offers the ID and the close
+  const caseItems = marked ? [] : it.caseOpened ? [['caseId', it.caseId ? 'Case ID…' : 'Add the case ID…'], ['undoCase', 'Case closed']] : [['case', 'Case opened…']];
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
+    + (caseItems.length ? '<div class="tab-menu-sep"></div>' + caseItems.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('') : '')
     + '<div class="tab-menu-sep"></div>' // highlight is a click on the row, not a menu item (owner 2026-10-13: "unnecessary")
     + [['go:order', 'Order page'], ['go:return', 'Return page'], ['go:txn', 'Transaction page'], ['go:copy', 'Copy PO #']].map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${label}</button>`).join('');
   dlg.showModal();
@@ -2728,7 +2782,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
-  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
+  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
