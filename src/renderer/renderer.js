@@ -1991,6 +1991,14 @@ function rcDaysCell(it) {
   return `<td class="rc-mono is-right rc-days ${tier}" title="${esc(tip)}">${n}</td>`;
 }
 
+// highlighted rows, per computer (localStorage): the POs being worked on
+const rcHl = new Set((() => { try { return JSON.parse(localStorage.getItem('rcHighlight') || '[]'); } catch { return []; } })());
+function rcHlToggle(po) {
+  if (!po) return;
+  if (rcHl.has(po)) rcHl.delete(po); else rcHl.add(po);
+  try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ }
+  for (const tr of $('rcBucketTable').querySelectorAll(`tr[data-rcrow="${CSS.escape(po)}"]`)) tr.classList.toggle('is-hl', rcHl.has(po));
+}
 /* ----- Reconcile: one period's result ----- */
 function rcRenderReconcile() {
   const items = rc.data.items || [];
@@ -2030,7 +2038,7 @@ function rcRenderReconcile() {
     const label = never ? 'Never shipped' : 'Received';
     return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
-  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}">
+  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}" class="${rcHl.has(it.po) ? 'is-hl' : ''}">
       <td class="rc-g">${i + 1}</td>
       <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button></td>
       <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
@@ -2561,6 +2569,11 @@ $('rcBucketTable').addEventListener('click', (e) => {
     rc.reconcileSort = cur.key === key ? { key, dir: -cur.dir } : { key, dir: first };
     rcRenderReconcile(); return;
   }
+  // a click on the row itself (not a button, link or input) highlights it,
+  // so the one being worked on stays marked across tab switches and the
+  // Walmart tabs in the browser (owner 2026-10-13); kept per computer
+  const cell = e.target.closest('td');
+  if (cell && !e.target.closest('button, a, input') && cell.closest('tr[data-rcrow]')) { rcHlToggle(cell.closest('tr[data-rcrow]').dataset.rcrow); return; }
   const more = e.target.closest('[data-rcmenu]');
   if (!more) return;
   const it = rcItem(more.dataset.rcmenu);
@@ -2574,6 +2587,8 @@ $('rcBucketTable').addEventListener('click', (e) => {
     : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped']]; // owner 2026-10-13: one Received
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
+    + '<div class="tab-menu-sep"></div>'
+    + `<button class="tab-menu-item" data-rcact="hl">${rcHl.has(it.po) ? 'Remove highlight' : 'Highlight row'}</button>`
     + '<div class="tab-menu-sep"></div>'
     + [['go:order', 'Order page'], ['go:return', 'Return page'], ['go:txn', 'Transaction page'], ['go:copy', 'Copy PO #']].map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${label}</button>`).join('');
   dlg.showModal();
@@ -2591,6 +2606,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
+  if (act === 'hl') { rcHlToggle(rc.menuPo); return; }
   if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
