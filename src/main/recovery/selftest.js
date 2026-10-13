@@ -94,7 +94,7 @@ module.exports = function run(check) {
   const db = new DatabaseSync(path.join(tmp, 'test.db'));
   store.ensureSchema(db);
   const auxLog = [];
-  const fakeSync = { enabled: () => false, stationName: () => 'TEST', appendAux: (p, e) => { auxLog.push([p, e]); return true; }, readAuxNew: () => [], auxBackfill: () => {}, list: () => [] };
+  const fakeSync = { enabled: () => false, stationName: () => 'TEST', appendAux: (p, e) => { auxLog.push([p, e]); return true; }, readAuxNew: () => [], auxBackfill: () => {}, auxEnsure: () => false, list: () => [] };
   const cfg = { recovery: { email: 'owner@example.com', webhookUrl: '' } };
   recovery.configure({
     retsync: fakeSync, listReturns: () => returns, config: { load: () => cfg, save: (p) => Object.assign(cfg.recovery, p.recovery || {}) },

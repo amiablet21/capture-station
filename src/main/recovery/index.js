@@ -109,8 +109,12 @@ function syncIn() {
     for (const ev of deps.retsync.readAuxNew('wmmarks', auxState('wmmarks'))) { if (ev && ev.po) store.upsertMarks(ev); }
     for (const ev of deps.retsync.readAuxNew('wmexpenses', auxState('wmexpenses'))) { if (ev && ev.id) store.upsertExpense(ev); }
     deps.retsync.auxBackfill('wmruns', () => store.ownRuns(mine()).map((r) => runEvent(r, r.syncTs || Date.parse(r.ranAt) || Date.now())));
-    deps.retsync.auxBackfill('wmmarks', () => store.ownMarks(mine()));
-    deps.retsync.auxBackfill('wmexpenses', () => store.ownExpenses(mine()));
+    // own marks and expenses: the file is rebuilt whenever it falls short
+    // of the rows this station holds (an append that failed, marks made
+    // before sync was on); every other desktop reads it on its next pass
+    const ensure = deps.retsync.auxEnsure || ((p, fn) => deps.retsync.auxBackfill(p, fn));
+    ensure('wmmarks', () => store.ownMarks(mine()));
+    ensure('wmexpenses', () => store.ownExpenses(mine()));
   } catch { /* folder unreachable: the local tables stand alone */ }
   syncBusy = false;
 }
