@@ -2008,7 +2008,8 @@ function rcRenderReconcile() {
   const markCell = (it) => {
     const never = it.status === 'never_shipped';
     const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
-    return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${never ? 'Never shipped' : 'Received before the log'}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
+    const label = never ? 'Never shipped' : (it.receivedOn ? 'Received' : 'Received before the log');
+    return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
   const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}">
       <td class="rc-g">${i + 1}</td>
@@ -2548,7 +2549,9 @@ $('rcBucketTable').addEventListener('click', (e) => {
   const marked = (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped';
   const items = marked
     ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : 'undoReceivedManual', 'Undo this mark']]
-    : [['receivedManual', 'Received before the log'], ['neverShipped', 'Never shipped']];
+    // Received (today) is a mark only: it never logs a return or moves a
+    // Linnworks quantity (owner 2026-10-13: "do not add the actual qty")
+    : [['receivedToday', 'Received'], ['receivedManual', 'Received before the log'], ['neverShipped', 'Never shipped']];
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
     + '<div class="tab-menu-sep"></div>'
@@ -2568,8 +2571,9 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
-  if (['receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
-    const r = await api.recoveryMark(rc.menuPo, act, {}).catch(err => ({ ok: false, error: err.message }));
+  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped'].includes(act)) {
+    const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
     await rcLoad();
     return;

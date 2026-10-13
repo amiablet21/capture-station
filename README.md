@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.32 highlights
+
+- **Received, from the ⋯ menu on Reconcile** (owner's ask). Marks the PO received today. It is a mark only: nothing is written to the Returns log and no Linnworks quantity moves. Profit treats it as back in stock. The Marked tab shows "Received · came back <date>" and can undo it. Received before the log and Never shipped stay as they were.
+- **The statement's own wording on fee lines.** A PO row that is only a fee or a reversal reads with Walmart's words, such as "Walmart Return Shipping Charge" or "Customer Return Reversal", instead of a generic adjustment. Takes effect when a period is re-imported.
+
 ## v1.32.31 highlights
 
 - **A $0 cost no longer reads as 100% margin.** A cleared cost ($0.00) counts as no cost set, so the listing shows "no cost set" and stays out of profit until a real cost is typed.
