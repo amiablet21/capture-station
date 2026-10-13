@@ -171,6 +171,13 @@ module.exports = function run(check) {
     check('recovery: a shipping-protection claim payout is', p2.payouts['011'] && p2.payouts['011'].amount === 100 && p2.payouts['011'].kind === 'adjustment', p2.payouts);
     const res2 = await recovery.importReport({ name: 'old_format_reconciliationreport.csv', text: payoutCsv });
     check('recovery: old-format import labels from its Period columns', res2.ok === true && res2.label === 'Jun 1 - Jun 14, 2026', res2);
+    // the owner's own expenses (v1.32.40): dated, taken off profit in their period, in the statement
+    const ex = recovery.addExpense({ date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`, amount: 12.5, category: 'Shipping labels', note: 'UPS' });
+    const prx = recovery.profit('all');
+    check('recovery: expenses — added, totalled and taken off profit', ex.ok && prx.expenses.count === 1 && prx.expenses.total === 12.5 && prx.netProfit === Math.round((prx.profit - 12.5) * 100) / 100 && recovery.statement('all').sections.some((s) => s.name === 'Your expenses' && s.total === -12.5), { ex, exp: prx.expenses, net: prx.netProfit, profit: prx.profit });
+    check('recovery: expenses — a bad amount is refused', recovery.addExpense({ date: '2026-10-01', amount: 0 }).ok === false);
+    const rmx = recovery.removeExpense(ex.id);
+    check('recovery: expenses — removed everywhere', rmx.ok && recovery.profit('all').expenses.count === 0 && auxLog.some(([p, e]) => p === 'wmexpenses' && e.id === ex.id && e.removed), { rmx, log: auxLog.filter(([p]) => p === 'wmexpenses').length });
     // the statement as Walmart lays it out (v1.32.39)
     const stm = recovery.statement('cycle', res2.id);
     const secOf = (n) => stm.sections.find((s) => s.name === n);

@@ -7414,6 +7414,8 @@ function registerRecoveryIpc() {
   // It is saved under the SKU shown — a Walmart listing or a Linnworks SKU —
   // in the same cost store the Stock page's Cost column writes, and rides
   // the shared folder like any other cost; same station gate as that column.
+  ipcMain.handle('recovery:expenseAdd', (_e, rec = {}) => recoveryGate() || recoveryTry(() => recovery.addExpense(rec || {})));
+  ipcMain.handle('recovery:expenseRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeExpense(id)));
   ipcMain.handle('recovery:setCost', (_e, { sku, cost } = {}) => {
     if (recoveryGate()) return recoveryGate();
     const cfg = config.load();

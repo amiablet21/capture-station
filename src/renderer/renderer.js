@@ -1766,11 +1766,30 @@ async function rcLoadProfit(seq = rc.seq) {
   if (seq !== rc.seq) return;
   rc.statement = st && st.ok ? st : null;
 }
+// the Expenses tab: the owner's own costs in this scope, newest first
+function rcRenderExpenses() {
+  const on = rc.profitTab === 'expenses';
+  if (!on) return;
+  const p = rc.profit; const list = (p && p.expenses && p.expenses.list) || [];
+  const head = '<th class="rc-g">#</th><th>Date</th><th>Category</th><th>Note</th><th>SKU</th><th class="is-right">Amount</th><th>Entered by</th><th></th>';
+  const body = list.length ? list.map((e, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-mono">${esc(rcMonDay(e.date))}, ${esc(String(e.date).slice(0, 4))}</td>
+      <td>${esc(e.category)}</td>
+      <td class="rc-muted">${esc(e.note || '')}</td>
+      <td class="rc-mono">${esc(e.sku || '')}</td>
+      <td class="is-right rc-mono">${rcMoney(e.amount)}</td>
+      <td class="rc-muted">${esc([e.station, e.by].filter(Boolean).join(' · '))}</td>
+      <td class="rc-actions"><button type="button" class="rc-link" data-rcexpdel="${esc(e.id)}">Remove</button></td>
+    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="8">No expenses in this scope. Add outside shipping labels, packaging, supplies and the like; they come off profit in the period they fall in.</td></tr>';
+  rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+}
 // the statement view: Walmart's sections, lines and totals, in Walmart's order
 function rcRenderStatement() {
   const box = $('rcStatement'); const st = rc.statement;
   const on = rc.profitTab === 'statement';
   box.hidden = !on; $('rcProfitTable').hidden = on;
+  $('rcProfitTable').classList.toggle('is-expenses', rc.profitTab === 'expenses');
   if (!on) return;
   if (!st || !st.hasLines) { box.innerHTML = '<div class="rc-st-note">No statement lines for this scope yet — re-import the period on the Import screen and they fill in.</div>'; return; }
   const money = (v) => `${v < 0 ? '−' : ''}${rcMoney(v)}`;
@@ -1875,7 +1894,7 @@ function rcRenderProfit() {
     const runs = rc.data.runs || []; const i = runs.findIndex(r => r.id === rc.runId);
     const prevRun = i >= 0 ? runs[i + 1] : null;
     const prev = prevRun ? (p.periods || []).find(x => x.id === prevRun.id) : null;
-    if (prev && prev.hasOrders) { const d = p.profit - prev.profit; delta = ` · ${d >= 0 ? '▲' : '▼'} ${rcMoney(d)} vs last period`; }
+    if (prev && prev.hasOrders) { const d = (p.netProfit ?? p.profit) - prev.profit; delta = ` · ${d >= 0 ? '▲' : '▼'} ${rcMoney(d)} vs last period`; }
   }
   const cell = (label, v, sub, cls = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
   const priced = p.gross > 0;
@@ -1888,15 +1907,18 @@ function rcRenderProfit() {
     cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
-    cell('Profit', signed(p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin on costed orders' : 'no costed order yet'}${delta}`, 'is-hi' + (p.profit < 0 ? ' is-red' : '')),
+    cell('Expenses', rcMoney(p.expenses ? p.expenses.total : 0), p.expenses && p.expenses.count ? `${rcPlural(p.expenses.count, 'entry', 'entries')} · ${p.expenses.byCategory.slice(0, 2).map(c => `${c.category.toLowerCase()} ${rcMoney(c.amount)}`).join(' · ')}` : 'none in this scope · add on the Expenses tab'),
+    cell('Profit', signed(p.netProfit ?? p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin after expenses' : 'no costed order yet'}${delta}`, 'is-hi' + ((p.netProfit ?? p.profit) < 0 ? ' is-red' : '')),
     cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid, left out of profit` : 'every listing is costed'),
   ].join('');
 
   $('rcProfitGroup').innerHTML = [['lw', 'Linnworks SKU'], ['wm', 'Walmart SKU']].map(([k, label]) => `<button type="button" data-rcgroup="${k}" class="${rc.profitGroup === k ? 'is-on' : ''}">${label}</button>`).join('');
   rcRenderStatement();
+  rcRenderExpenses();
   $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
-  $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement';
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', rc.statement && rc.statement.hasLines ? rc.statement.sections.length : 0]].map(([k, label, n]) =>
+  $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement' || rc.profitTab === 'expenses';
+  $('rcExpAddBtn').hidden = rc.profitTab !== 'expenses';
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', rc.statement && rc.statement.hasLines ? rc.statement.sections.length : 0], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
@@ -1925,7 +1947,7 @@ function rcRenderProfit() {
       <td class="is-right">${money(g.payout)}</td>
       <td class="is-right">${costCell(g)}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
-      <td class="is-right">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
+      <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
     const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
     // a Walmart listing row: its own caret opens its POs
     const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
@@ -1942,7 +1964,7 @@ function rcRenderProfit() {
     };
     const body = rows.length ? rows.map((g, i) => (byLw ? group(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
-  } else {
+  } else if (rc.profitTab === 'period') {
     const s = rc.profitSort;
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'label', 'Period', false, true) + rcSortTh(s, 'orders', 'Orders', true) + rcSortTh(s, 'units', 'Units', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'cogs', 'Cost of goods', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
@@ -2485,6 +2507,51 @@ $('rcProfitTable').addEventListener('click', (e) => {
   rcRenderProfit();
 });
 $('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
+// the eye (owner 2026-10-13): blur every number on Profit for a screen
+// share or a visitor; the toggle is remembered per computer
+const rcBlurKey = 'rcProfitBlur';
+function rcApplyBlur() {
+  let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; } catch { /* private mode */ }
+  $('recoveryPage').classList.toggle('is-blur', on);
+  $('rcBlurBtn').classList.toggle('is-on', on);
+  $('rcBlurBtn').title = on ? 'Show the numbers' : 'Hide the numbers';
+}
+$('rcBlurBtn').addEventListener('click', () => {
+  let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; localStorage.setItem(rcBlurKey, on ? '0' : '1'); } catch { /* private mode */ }
+  rcApplyBlur();
+});
+rcApplyBlur();
+// add / remove an expense (owner 2026-10-13)
+$('rcExpAddBtn').addEventListener('click', () => {
+  const dlg = $('rcExpDlg');
+  const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  $('rcExpDate').value = iso; $('rcExpAmount').value = ''; $('rcExpNote').value = ''; $('rcExpSku').value = '';
+  const cats = (rc.profit && rc.profit.expenses && rc.profit.expenses.categories) || ['Shipping labels', 'Packaging', 'Supplies', 'Software', 'Advertising', 'Other'];
+  $('rcExpCat').innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  dlg.returnValue = '';
+  dlg.showModal();
+  setTimeout(() => $('rcExpAmount').focus(), 0);
+});
+$('rcExpCancel').addEventListener('click', () => $('rcExpDlg').close(''));
+$('rcExpDlg').querySelector('form').addEventListener('submit', (e) => {
+  if (!(Number($('rcExpAmount').value) > 0)) { e.preventDefault(); toast('Enter an amount above 0.'); return; }
+  $('rcExpDlg').returnValue = 'ok';
+});
+$('rcExpDlg').addEventListener('close', async () => {
+  if ($('rcExpDlg').returnValue !== 'ok') return;
+  const r = await api.recoveryExpenseAdd({ date: $('rcExpDate').value, amount: Number($('rcExpAmount').value), category: $('rcExpCat').value, note: $('rcExpNote').value, sku: $('rcExpSku').value }).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not add the expense.', 4000); return; }
+  toast('Expense added');
+  await rcLoadProfit(); rcRenderProfit();
+});
+$('rcProfitTable').addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-rcexpdel]');
+  if (!del) return;
+  if (!(await rcConfirm({ title: 'Remove this expense', body: 'It comes off every desktop. You can add it again.', ok: 'Remove' }))) return;
+  const r = await api.recoveryExpenseRemove(del.dataset.rcexpdel).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not remove it.', 4000); return; }
+  await rcLoadProfit(); rcRenderProfit();
+});
 $('rcProfitExcelBtn').addEventListener('click', async () => {
   if (!rc.profit) { toast('Nothing to export yet.'); return; }
   const r = await api.recoveryExportProfit(rc.profitScope, rc.profitScope === 'cycle' ? rc.runId : rc.profitScope === 'month' ? rc.profitMonth : null).catch(err => ({ ok: false, error: err.message }));

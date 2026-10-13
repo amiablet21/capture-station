@@ -119,6 +119,8 @@ contextBridge.exposeInMainWorld('api', {
   returnsExport: () => ipcRenderer.invoke('returns:export'),
   recoveryMarkMany: (list, action, payload) => ipcRenderer.invoke('recovery:markMany', { list, action, payload }),
   recoverySetCost: (sku, cost) => ipcRenderer.invoke('recovery:setCost', { sku, cost }),
+  recoveryExpenseAdd: (rec) => ipcRenderer.invoke('recovery:expenseAdd', rec),
+  recoveryExpenseRemove: (id) => ipcRenderer.invoke('recovery:expenseRemove', { id }),
   recoveryMarkFile: (text) => ipcRenderer.invoke('recovery:markFile', { text }),
   recoveryMarkPick: () => ipcRenderer.invoke('recovery:markPick'),
   findStart: (text, forward, fresh) => ipcRenderer.invoke('find:start', { text, forward, fresh }),

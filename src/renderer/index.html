@@ -377,8 +377,13 @@
               <div class="rc-list-tools">
                 <!-- owner 2026-10-12: group the listings under their Linnworks SKU, or see them flat -->
                 <div class="rc-seg rc-seg-sm" id="rcProfitGroup" hidden></div>
+                <button id="rcExpAddBtn" class="rc-btn rc-btn-outline" type="button" hidden>+ Add expense</button>
                 <div class="search-field rc-search-field" id="rcProfitSearchWrap"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg><input id="rcProfitSearch" class="search-input" type="text" placeholder="Search SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" /></div>
                 <!-- owner 2026-10-12: "remove the Download Excel on the top right" — the workbook lives with the table now -->
+                <!-- the eye: blur every number on Profit (owner 2026-10-13) -->
+                <button id="rcBlurBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Hide the numbers" aria-label="Hide or show the numbers">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"/></svg>
+                </button>
                 <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Download this scope as an Excel workbook" aria-label="Download Excel">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,136v64a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V136a16,16,0,0,1,16-16H84a4,4,0,0,1,4,4v16a4,4,0,0,1-4,4H40v48H216V144H172a4,4,0,0,1-4-4V124a4,4,0,0,1,4-4h52A16,16,0,0,1,240,136ZM119.51,157.49a12,12,0,0,0,17,0l48-48a12,12,0,0,0-17-17L140,120V32a12,12,0,0,0-24,0v88L88.49,92.49a12,12,0,0,0-17,17Z"/></svg>
                 </button>
@@ -426,6 +431,24 @@
       <div class="dlg-actions">
         <button type="button" id="rcCaseCancel" class="btn btn-ghost">Cancel</button>
         <button type="submit" id="rcCaseOk" value="ok" class="btn btn-primary">Open case</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- an expense outside Walmart (owner 2026-10-13): labels, packing, supplies… -->
+  <dialog id="rcExpDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title">Add an expense</h2>
+      <p class="dlg-note">Taken off profit in the period it falls in · shared with every desktop</p>
+      <div class="settings-row">
+        <label class="field"><span class="field-label">Date</span><input id="rcExpDate" type="date" class="input mono" /></label>
+        <label class="field"><span class="field-label">Amount</span><input id="rcExpAmount" type="number" min="0" step="0.01" class="input mono" placeholder="0.00" /></label>
+      </div>
+      <label class="field"><span class="field-label">Category</span><select id="rcExpCat" class="input"></select></label>
+      <label class="field"><span class="field-label">Note (optional)</span><input id="rcExpNote" type="text" class="input" maxlength="200" placeholder="UPS labels, week of Oct 6" autocomplete="off" /></label>
+      <label class="field"><span class="field-label">SKU (optional)</span><input id="rcExpSku" type="text" class="input mono" maxlength="60" placeholder="X210-64GB-GRAY" autocomplete="off" spellcheck="false" /></label>
+      <div class="dlg-actions">
+        <button type="button" id="rcExpCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcExpOk" value="ok" class="btn btn-primary">Add expense</button>
       </div>
     </form>
   </dialog>

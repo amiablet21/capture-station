@@ -107,8 +107,10 @@ function syncIn() {
   try {
     for (const ev of deps.retsync.readAuxNew('wmruns', auxState('wmruns'))) applyRunEvent(ev);
     for (const ev of deps.retsync.readAuxNew('wmmarks', auxState('wmmarks'))) { if (ev && ev.po) store.upsertMarks(ev); }
+    for (const ev of deps.retsync.readAuxNew('wmexpenses', auxState('wmexpenses'))) { if (ev && ev.id) store.upsertExpense(ev); }
     deps.retsync.auxBackfill('wmruns', () => store.ownRuns(mine()).map((r) => runEvent(r, r.syncTs || Date.parse(r.ranAt) || Date.now())));
     deps.retsync.auxBackfill('wmmarks', () => store.ownMarks(mine()));
+    deps.retsync.auxBackfill('wmexpenses', () => store.ownExpenses(mine()));
   } catch { /* folder unreachable: the local tables stand alone */ }
   syncBusy = false;
 }
@@ -297,6 +299,43 @@ function mark(po, action, payload = {}) {
   store.upsertMarks(rec);
   try { deps.retsync.appendAux('wmmarks', rec); } catch { /* offline */ }
   return { ok: true };
+}
+
+// the owner's own expenses (owner 2026-10-13: "outside shipping labels,
+// packing stuff"): dated, categorised, taken off profit in the period they
+// fall in, synced through the shared folder like marks
+const EXPENSE_CATEGORIES = ['Shipping labels', 'Packaging', 'Supplies', 'Software', 'Advertising', 'Other'];
+function addExpense({ id, date, category, note, amount, sku } = {}) {
+  const n = Math.round((Number(amount) || 0) * 100) / 100;
+  if (!(n > 0)) return { ok: false, error: 'Enter an amount above 0.' };
+  const day = String(date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Pick a date.' };
+  const rec = { id: String(id || '').trim() || crypto.randomUUID(), date: day, category: String(category || 'Other').trim() || 'Other', note: String(note || '').trim().slice(0, 200), sku: String(sku || '').trim().toUpperCase(), amount: n, updated_at: now(), station: station(), by: byName(), removed: false };
+  store.upsertExpense(rec);
+  try { deps.retsync.appendAux('wmexpenses', rec); } catch { /* offline */ }
+  return { ok: true, id: rec.id };
+}
+function removeExpense(id) {
+  const cur = store.getExpense(id);
+  if (!cur) return { ok: false, error: 'That expense is already gone.' };
+  const rec = { ...cur, removed: true, updated_at: now(), station: station(), by: byName() };
+  store.upsertExpense(rec);
+  try { deps.retsync.appendAux('wmexpenses', rec); } catch { /* offline */ }
+  return { ok: true };
+}
+// the expenses that fall inside a scope: a period's own dates, a month, a year, or all
+function expensesIn(scope, key) {
+  const all = store.allExpenses();
+  const dayMs = (d) => { const t = Date.parse(`${d}T00:00:00`); return Number.isFinite(t) ? t : NaN; };
+  if (scope === 'cycle') {
+    const run = store.getRun(key);
+    if (!run) return [];
+    const a = periodStartMs(run); const b = periodEndMs(run) + 86399999;
+    return all.filter((e) => { const t = dayMs(e.date); return t >= a && t <= b; });
+  }
+  if (scope === 'month') return all.filter((e) => String(e.date).slice(0, 7) === String(key));
+  if (scope === 'year') return all.filter((e) => String(e.date).slice(0, 4) === String(key));
+  return all;
 }
 
 // the same mark on many POs at once (owner 2026-10-12: bulk select, and a
@@ -670,6 +709,11 @@ function profit(scope, key) {
   // listing with no cost set is reported beside it, never counted as profit
   // (owner 2026-10-12: "why are my margins so high")
   const profitV = r2(tot.costedPayout - tot.cogs);
+  // the owner's own expenses in this scope come off the top
+  const expList = expensesIn(scope, key);
+  const expTotal = r2(expList.reduce((a, e) => a + (Number(e.amount) || 0), 0));
+  const byCat = new Map();
+  for (const e of expList) byCat.set(e.category || 'Other', r2((byCat.get(e.category || 'Other') || 0) + (Number(e.amount) || 0)));
 
   // every period, for the trend (newest first, by the period start)
   const periods = runs
@@ -689,7 +733,9 @@ function profit(scope, key) {
   return {
     ok: true, scope, key, label,
     payout: r2(tot.payout), cogs: r2(tot.cogs), profit: profitV,
-    margin: tot.costedPayout > 0 ? Math.round((profitV / tot.costedPayout) * 1000) / 10 : null,
+    margin: tot.costedPayout > 0 ? Math.round(((profitV - expTotal) / tot.costedPayout) * 1000) / 10 : null,
+    expenses: { total: expTotal, count: expList.length, list: expList, byCategory: [...byCat.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount), categories: EXPENSE_CATEGORIES },
+    netProfit: r2(profitV - expTotal),
     orders: tot.orders, unitsSold: tot.unitsSold, unitsRefunded: tot.unitsRefunded, unitsBack: tot.unitsBack,
     gross: r2(tot.gross), commission: r2(tot.commission),
     commissionPct: tot.commissionKnown && tot.commGross > 0 ? Math.round((-tot.commission / tot.commGross) * 1000) / 10 : null,
@@ -755,6 +801,13 @@ function statement(scope, key) {
       return Math.abs(b.amount) - Math.abs(a.amount);
     }).map((l) => ({ label: l.label, amount: r2(l.amount), count: l.count })),
   }));
+  // the owner's own expenses, as a section of their own
+  const exps = expensesIn(scope, key);
+  if (exps.length) {
+    const byCat = new Map();
+    for (const e of exps) byCat.set(e.category || 'Other', (byCat.get(e.category || 'Other') || 0) + (Number(e.amount) || 0));
+    out.push({ name: 'Your expenses', total: r2(-[...byCat.values()].reduce((a, v) => a + v, 0)), lines: [...byCat.entries()].sort((a, b) => b[1] - a[1]).map(([category, amount]) => ({ label: category, amount: r2(-amount), count: exps.filter((e) => (e.category || 'Other') === category).length })) });
+  }
   const activity = r2(out.reduce((a, s) => a + s.total, 0));
   // by day, newest first; the bank transfers are negative lines on the statement
   const paidByDay = new Map();
@@ -775,6 +828,7 @@ function profitWorkbook(scope, key) {
     { name: 'Summary', columns: [{ header: `Profit — ${p.label}`, width: 36, kind: 'text' }, { header: 'Amount', width: 16, kind: money }], rows: [
       ['Walmart paid (orders net of fees and refunds)', p.payout], ['Walmart paid on costed orders', p.costedPayout], ['Cost of goods sold', p.cogs], ['Profit (costed orders)', p.profit], ['Margin %', p.margin ?? ''],
       ['Other Walmart lines (no order)', p.other], ['Net after other lines', p.netAfterOther],
+      ['Your expenses', p.expenses.total], ['Profit after expenses', p.netProfit],
       ['At risk (pending returns, not costed yet)', p.atRisk.amount], ['Units pending return', p.atRisk.units], ['Units lost (costed)', p.lostUnits],
       ['Orders', p.orders], ['Units sold', p.unitsSold], ['Units refunded', p.unitsRefunded], ['Units back in stock', p.unitsBack],
       ['Orders with no cost set', p.missing.orders], ['Their payout', p.missing.payout],
@@ -788,6 +842,9 @@ function profitWorkbook(scope, key) {
       { header: 'Period', width: 24, kind: 'text' }, { header: 'Orders', width: 8, kind: 'int' }, { header: 'Units', width: 8, kind: 'int' }, { header: 'Walmart paid', width: 14, kind: money },
       { header: 'Cost of goods', width: 14, kind: money }, { header: 'Profit', width: 12, kind: money }, { header: 'Margin %', width: 9, kind: 'text' }, { header: 'Orders without cost', width: 18, kind: 'int' },
     ], rows: p.periods.map((x) => [x.label, x.orders, x.units, x.payout, x.cogs, x.profit, x.margin ?? '', x.missingCount]) },
+    { name: 'Expenses', columns: [
+      { header: 'Date', width: 12, kind: 'text' }, { header: 'Category', width: 16, kind: 'text' }, { header: 'Note', width: 40, kind: 'text' }, { header: 'SKU', width: 24, kind: 'text' }, { header: 'Amount', width: 12, kind: money }, { header: 'Entered by', width: 16, kind: 'text' },
+    ], rows: p.expenses.list.map((e) => [e.date, e.category, e.note, e.sku, e.amount, [e.station, e.by].filter(Boolean).join(' · ')]) },
   ]) };
 }
 
@@ -829,7 +886,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement,
+  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, addExpense, removeExpense,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

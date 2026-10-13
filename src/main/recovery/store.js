@@ -128,6 +128,18 @@ function ensureSchema(db) {
       pos INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_wm_lines_run ON wm_lines(run_id);
+    CREATE TABLE IF NOT EXISTS wm_expenses (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      sku TEXT NOT NULL DEFAULT '',
+      amount REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT '',
+      station TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT '',
+      removed INTEGER NOT NULL DEFAULT 0
+    );
   `);
   // v1.32.13: the goods price and Walmart's commission per order (null on
   // rows imported before, until that period is re-imported)
@@ -198,6 +210,29 @@ function runLines(id) { return d().prepare('SELECT * FROM wm_lines WHERE run_id 
 function allLines() { return d().prepare('SELECT * FROM wm_lines').all().map(linesOut); }
 function runsWithoutLines() {
   return d().prepare('SELECT id, label FROM wm_runs WHERE id NOT IN (SELECT DISTINCT run_id FROM wm_lines)').all();
+}
+// the owner's own expenses outside Walmart (owner 2026-10-13: outside
+// shipping labels, packing…): one row each, newest write wins, synced
+// through the shared folder like marks; a removal is a tombstoned row
+const expenseOut = (r) => (r ? { id: r.id, date: r.date, category: r.category, note: r.note, sku: r.sku, amount: Number(r.amount) || 0, updated_at: r.updated_at, station: r.station, by: r.by, removed: !!r.removed } : null);
+function upsertExpense(rec) {
+  const db = d();
+  const id = String(rec && rec.id || '').trim();
+  if (!id) return null;
+  const updatedAt = rec.updated_at && !Number.isNaN(Date.parse(rec.updated_at)) ? new Date(rec.updated_at).toISOString() : new Date().toISOString();
+  const cur = db.prepare('SELECT updated_at FROM wm_expenses WHERE id = ?').get(id);
+  if (cur && String(cur.updated_at) >= updatedAt) return null;
+  const row = { id, date: String(rec.date || '').slice(0, 10), category: String(rec.category || ''), note: String(rec.note || ''), sku: String(rec.sku || ''), amount: Math.round((Number(rec.amount) || 0) * 100) / 100, updated_at: updatedAt, station: String(rec.station || ''), by: String(rec.by || ''), removed: rec.removed ? 1 : 0 };
+  db.prepare(`INSERT INTO wm_expenses (id, date, category, note, sku, amount, updated_at, station, by, removed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET date = excluded.date, category = excluded.category, note = excluded.note, sku = excluded.sku, amount = excluded.amount, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed`)
+    .run(row.id, row.date, row.category, row.note, row.sku, row.amount, row.updated_at, row.station, row.by, row.removed);
+  return expenseOut(row);
+}
+function getExpense(id) { return expenseOut(d().prepare('SELECT * FROM wm_expenses WHERE id = ?').get(String(id || ''))); }
+function allExpenses() { return d().prepare('SELECT * FROM wm_expenses WHERE removed = 0 ORDER BY date DESC, updated_at DESC').all().map(expenseOut); }
+function ownExpenses(stations) {
+  const set = new Set((stations || []).filter(Boolean).map((s) => String(s).toUpperCase()));
+  return d().prepare('SELECT * FROM wm_expenses').all().map(expenseOut).filter((r) => set.has(String(r.station).toUpperCase()));
 }
 function putRun(run, refunds, payouts, ledger, orders, lines) {
   const db = d();
@@ -396,6 +431,7 @@ module.exports = {
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
   runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices, runsWithoutRefundedBy, setRefundedBy, refundedByMap,
   putLines, runLines, allLines, runsWithoutLines,
+  upsertExpense, getExpense, allExpenses, ownExpenses,
   addItems, listItems, removeItem, pruneOrphans,
   getMarks, allMarks, upsertMarks, ownMarks, ownRuns,
 };

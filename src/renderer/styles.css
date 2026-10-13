@@ -5330,7 +5330,24 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #787774; }
 .rc-pick-menu { max-height: 320px; overflow-y: auto; min-width: 220px; }
 .rc-pick-menu .tab-menu-item.is-current { color: #1E3A66; font-weight: 600; }
-.rc-strip-profit { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.rc-strip-profit { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rc-strip-profit .rc-cell-n { font-size: 24px; }
+/* the eye (owner 2026-10-13): every number on Profit blurred until it is pressed again */
+#recoveryPage.is-blur .rc-strip-profit .rc-cell-n,
+#recoveryPage.is-blur .rc-table-profit td.is-right,
+#recoveryPage.is-blur .rc-table-profit .rc-subrow td.rc-mono,
+#recoveryPage.is-blur .rc-st-v, #recoveryPage.is-blur .rc-st-n.rc-mono,
+#recoveryPage.is-blur .rc-table-periods td.rc-mono,
+#recoveryPage.is-blur .rc-table-reconcile td.rc-mono:not(:first-child) { filter: blur(7px); user-select: none; }
+#rcBlurBtn.is-on { background: #1E3A66; border-color: #1E3A66; color: #fff; }
+/* margin shading (owner 2026-10-13): under 10% red, 10 to 15% yellow, 15%+ green */
+.rc-table tbody tr td.rc-margin.is-lo { background: #F8DEDD; color: #7A1F1D; }
+.rc-table tbody tr td.rc-margin.is-mid { background: #FFF3C4; color: #5A4300; }
+.rc-table tbody tr td.rc-margin.is-hi { background: #E3F0E4; color: #1F4D2B; }
+/* the Expenses tab's table: free widths, the note takes the room */
+.rc-table-profit.is-expenses th:nth-child(2) { width: 120px; } .rc-table-profit.is-expenses th:nth-child(3) { width: 140px; }
+.rc-table-profit.is-expenses th:nth-child(n+4) { width: auto; } .rc-table-profit.is-expenses th:nth-child(5) { width: 180px; } .rc-table-profit.is-expenses th:nth-child(6) { width: 110px; } .rc-table-profit.is-expenses th:nth-child(7) { width: 170px; } .rc-table-profit.is-expenses th:nth-child(8) { width: 90px; }
+.rc-table-profit.is-expenses td.is-right { font-family: var(--mono); }
 .rc-cell.is-hi { background: #F4F6FA; }
 .rc-cell.is-red .rc-cell-n { color: #9F2F2D; }
 .rc-two { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
