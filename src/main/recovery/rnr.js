@@ -201,7 +201,8 @@ function filterOf(it) {
 function lostAmount(it) {
   if (it.status === 'received') return 0;
   const amt = it.amount || 0;
-  if (it.status === 'loss') return amt;
+  // a loss keeps whatever Walmart already paid on the PO (owner 2026-10-13)
+  if (it.status === 'loss') { const gap = amt - Math.min(it.settlementSeen || 0, amt); return gap > 0.01 ? Math.round(gap * 100) / 100 : 0; }
   if (it.status === 'reimbursed') { const gap = amt - Math.min(it.settlementSeen || 0, amt); return gap > 0.01 ? Math.round(gap * 100) / 100 : 0; }
   if (it.status === 'outstanding' && !it.adjustment && it.lost && /after delivery/i.test(String(it.reason || ''))) return amt;
   return 0;
@@ -231,7 +232,7 @@ const money = (n) => `$${Math.abs(Number(n) || 0).toLocaleString('en-US', { mini
 function statusText(it) {
   if (it.status === 'received' && it.receivedManual) return { lead: 'Received before the log', clause: it.receivedOn ? `on ${monDay(it.receivedOn)}` : monDay(it.receivedManualAt), tone: 'green', tooltip: 'marked in Recovery; not in the Returns log' };
   if (it.status === 'never_shipped') return { lead: 'Never shipped', clause: monDay(it.neverShippedAt), tone: 'grey', tooltip: 'refund only — no return to wait for' };
-  if (it.status === 'loss') return { lead: 'Written off', clause: monDay(it.writtenOffAt), tone: 'grey', tooltip: '' };
+  if (it.status === 'loss') return { lead: 'Marked as loss', clause: monDay(it.writtenOffAt), tone: 'red', tooltip: 'the cost is charged on the Profit page' };
   if (it.status === 'reimbursed') {
     const partial = it.settlementSeen < (it.amount || 0) - 0.01;
     return {
@@ -275,7 +276,7 @@ function shortStatus(it, today = new Date()) {
   const out = (action, tone, deadlineAt, deadlineText, tooltip) => ({ action, tone, deadlineAt: deadlineAt || null, deadlineText: deadlineText || (deadlineAt ? monDay(deadlineAt) : '—'), tooltip: tooltip || '' });
   if (it.status === 'received') return out(it.receivedManual ? 'Received before the log' : 'Received', 'green', null, it.receivedOn ? monDay(it.receivedOn) : (it.receivedManualAt ? monDay(it.receivedManualAt) : '—'), it.receivedManual ? 'marked in Recovery; not in the Returns log' : '');
   if (it.status === 'never_shipped') return out('Never shipped', 'grey', null, it.neverShippedAt ? monDay(it.neverShippedAt) : '—', 'refund only — no return to wait for');
-  if (it.status === 'loss') return out('Written off', 'grey', null, it.writtenOffAt ? monDay(it.writtenOffAt) : '—');
+  if (it.status === 'loss') return out('Marked as loss', 'red', null, it.writtenOffAt ? monDay(it.writtenOffAt) : '—', 'the cost is charged on the Profit page');
   if (it.status === 'reimbursed') {
     const partial = it.settlementSeen < (it.amount || 0) - 0.01;
     return out(partial ? 'Partial payout' : 'Paid back', partial ? 'amber' : 'green', null, it.settlementDate ? monDay(it.settlementDate) : '—',
@@ -392,7 +393,7 @@ function dedupeLedger(rows) {
 function stageOf(it) {
   if (it.status === 'received') return it.receivedManual ? 'Received (marked, before the log)' : 'Received';
   if (it.status === 'never_shipped') return 'Never shipped';
-  if (it.status === 'loss') return 'Loss (written off)';
+  if (it.status === 'loss') return 'Loss (marked)';
   if (it.status === 'reimbursed') return it.settlementSeen && it.settlementSeen < (it.amount || 0) - 0.01 ? 'Reimbursed (partial)' : 'Reimbursed';
   if (it.status === 'reimbursed_pending') return 'Pending reimbursement';
   if (it.adjustment) return 'Partial adjustment';

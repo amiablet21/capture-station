@@ -5577,6 +5577,7 @@ th:last-child > .col-grip { right: 0; }
 .rc-mark-chip { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 9px; margin-right: 6px; }
 .rc-mark-chip.is-recv { color: #346538; background: #EAF3EA; }
 .rc-mark-chip.is-never { color: #1E3A66; background: #E4EAF4; }
+.rc-mark-chip.is-loss { color: #9F2F2D; background: #F8DEDD; }
 .rc-drop-mark { margin-top: 2px; }
 .rc-drop-mark .rc-drop-ico { background: #EAF3EA; color: #346538; }
 .rc-table-reconcile td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

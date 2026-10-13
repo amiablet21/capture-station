@@ -2136,7 +2136,8 @@ function rcRenderReconcile() {
   const pending = open.filter(it => it.wfsWaiting);              // WFS inside its 90 days
   const notReceived = open.filter(it => !it.wfsWaiting);          // seller, and WFS past day 90
   // the two marks (owner 2026-10-12): received before the Returns log, never shipped
-  const marked = items.filter(it => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped');
+  // …and Loss (owner 2026-10-13: "perhaps in the marked column"): the cost is charged on Profit
+  const marked = items.filter(it => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped' || it.status === 'loss');
   // Walmart paid something on the PO — a claim, a dispute, a reversal — in
   // full or in part (owner 2026-10-13: a lost-in-transit PO with a partial
   // payout was nowhere on Reconcile; the gap can still go to UPS or a case)
@@ -2155,17 +2156,18 @@ function rcRenderReconcile() {
     left: rcDaysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0,
     refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
     paid: Number(it.settlementSeen) || 0, gap: Number(it.lostAmount) || 0,
-    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : 'Received' }));
+    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : it.status === 'loss' ? 'Loss' : 'Received' }));
   const rows = rcSortRows(sortable, so, 'left');
   const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'Item', false, true)
     + rcSortTh(so, 'units', 'Units', true, false, 1) + rcSortTh(so, 'refundTs', 'Refunded', false) + rcSortTh(so, 'amount', 'Net refund', true)
     + (isMarked ? '' : isPaid ? rcSortTh(so, 'paid', 'Walmart paid', true) + rcSortTh(so, 'gap', 'Still lost', true) : rcSortTh(so, 'left', 'Days left', true, false, 1))
     + (isMarked ? rcSortTh(so, 'markText', 'Mark', false, true) : rcSortTh(so, 'reasonText', 'Reason', false, true)) + '<th></th>';
   const markCell = (it) => {
-    const never = it.status === 'never_shipped';
-    const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(never ? it.neverShippedAt : it.receivedManualAt)].filter(Boolean).join(' · ');
-    const label = never ? 'Never shipped' : 'Received';
-    return `<span class="rc-mark-chip ${never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
+    const never = it.status === 'never_shipped'; const loss = it.status === 'loss';
+    const paidBack = loss && (Number(it.settlementSeen) || 0) > 0 ? `Walmart paid ${rcMoney(it.settlementSeen)} · ${rcMoney(it.lostAmount || 0)} lost` : '';
+    const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(loss ? it.writtenOffAt : never ? it.neverShippedAt : it.receivedManualAt), paidBack, loss ? 'cost charged on Profit' : ''].filter(Boolean).join(' · ');
+    const label = loss ? 'Loss' : never ? 'Never shipped' : 'Received';
+    return `<span class="rc-mark-chip ${loss ? 'is-loss' : never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
   };
   // an open case (owner 2026-10-13, design B): a navy bar on the row's edge,
   // a flag by the PO that opens the case card, the case's age after the reason
@@ -2390,7 +2392,7 @@ async function rcDoAction(po, act) {
     return;
   }
   if (act === 'writeOff') {
-    if (!(await rcConfirm({ title: 'Write off as a loss', body: `PO ${po} — ${it.item || ''} · ${rcMoney(it.amount)}. It stays on the Lost tab and in the audit workbook, and nothing is chased.`, ok: 'Write off' }))) return;
+    if (!(await rcConfirm({ title: 'Mark as a loss', body: `PO ${po} — ${it.item || ''} · ${rcMoney(it.amount)}. The unit's cost is charged on the Profit page, the row moves to Marked, and nothing is chased. Undo from the Marked tab.`, ok: 'Mark loss' }))) return;
     await rcMark(po, 'writeOff');
     return;
   }
@@ -2762,12 +2764,13 @@ $('rcBucketTable').addEventListener('click', (e) => {
   const it = rcItem(more.dataset.rcmenu);
   if (!it) return;
   rc.menuPo = it.po;
-  const marked = (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped';
+  const marked = (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped' || it.status === 'loss';
   const items = marked
-    ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : 'undoReceivedManual', 'Undo this mark']]
+    ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : it.status === 'loss' ? 'undoWriteOff' : 'undoReceivedManual', 'Undo this mark']]
     // Received (today) is a mark only: it never logs a return or moves a
-    // Linnworks quantity (owner 2026-10-13: "do not add the actual qty")
-    : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped']]; // owner 2026-10-13: one Received
+    // Linnworks quantity (owner 2026-10-13: "do not add the actual qty");
+    // Loss charges the unit's cost on Profit (owner 2026-10-13)
+    : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped'], ['writeOff', 'Loss']]; // owner 2026-10-13: one Received
   // the case mark (owner 2026-10-13, design B): opened asks for an optional
   // ID; once set the menu offers the ID and the close
   const caseItems = marked ? [] : it.caseOpened ? [['caseId', it.caseId ? 'Case ID…' : 'Add the case ID…'], ['undoCase', 'Case closed']] : [['case', 'Case opened…']];
@@ -2791,7 +2794,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
-  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase'].includes(act)) {
+  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase', 'undoWriteOff'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
