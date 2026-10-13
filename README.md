@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.52 highlights
+
+- The Days left, Units, Net refund and Still lost headers are wider so the filter funnel no longer sits on the words (owner: "the filter is kind of glitching right here").
+
 ## v1.32.51 highlights
 
 - **Column filters on Reconcile** (owner: "a clickable filter for each column"). Every header carries a small funnel — faint until hovered, navy when that column is filtered. Click it for a tick-list of the column's values with counts (a search box on long lists): PO #, Type, Item, Units, Refunded by month, Net refund / Walmart paid / Still lost by dollar band, Days left by window (passed, this week, 8–14, 15–29, 30+), Reason with an Issued by section, Mark. Picks stack across columns; a bar under the tabs shows each one as a chip with an ×, Clear all and "N of M rows". Switching tabs clears them. Clicking the header text still sorts.
