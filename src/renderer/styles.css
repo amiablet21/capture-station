@@ -5448,8 +5448,8 @@ th:last-child > .col-grip { right: 0; }
 /* a highlighted row (owner 2026-10-13: "see which one I am working on"):
    a click on the row toggles it; stays until clicked again */
 .rc-table-reconcile tbody tr { cursor: default; }
-.rc-table-reconcile tbody tr.is-hl td:not(.rc-g) { background: #FFF3C4; }
-.rc-table-reconcile tbody tr.is-hl:hover td:not(.rc-g) { background: #FBEAA8; }
+.rc-table-reconcile tbody tr.is-hl td:not(.rc-g):not(.rc-days) { background: #FFF3C4; }
+.rc-table-reconcile tbody tr.is-hl:hover td:not(.rc-g):not(.rc-days) { background: #FBEAA8; }
 .rc-table-reconcile tbody tr.is-hl td.rc-g { background: #F5D27A; color: #5A4300; }
 .rc-table th.rc-th-sort { cursor: pointer; user-select: none; }
 .rc-table th.rc-th-sort:hover { color: #2F3437; }
