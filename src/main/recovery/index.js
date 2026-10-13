@@ -563,7 +563,8 @@ function profit(scope, key) {
     // the cost words belong to the row that sold the unit; a refund row in a
     // later period only carries the payout hit
     const costNote = (t) => (soldHere ? ` · ${t}` : '');
-    if (!soldHere && !(o.refundUnits > 0)) { situation = 'Walmart adjustment on this PO · no units'; tone = 'grey'; }
+    if (!soldHere && !(o.refundUnits > 0)) { situation = o.note ? `${o.note} · no units` : 'Walmart adjustment on this PO · no units'; tone = 'grey'; }
+    else if (o.note && !(o.refundUnits > 0) && !(wholePo.get(o.po) || o).refundUnits) { situation = `Sold, kept · ${o.note}`; }
     else if (st.kind === 'never') { situation = 'Refunded · never shipped'; tone = 'grey'; }
     else if (st.kind === 'manual') { situation = `Refunded${where} · marked received before the log`; tone = 'navy'; }
     else if (st.kind === 'back') { situation = `Refunded${where} · back in stock${costNote('cost recovered')}`; tone = 'navy'; }

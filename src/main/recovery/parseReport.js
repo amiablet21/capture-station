@@ -269,12 +269,16 @@ function parseOrders(rows, format) {
     const type = r['Transaction Type'];
     if (type === 'PaymentSummary') continue;
     if (!map.has(po)) {
-      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: 0 });
+      map.set(po, { po, item: r['Partner Item Name'] || '', sku: String(r['Partner Item Id'] || '').trim(), fulfillment: r['Fulfillment Type'] || '', date: toIsoDay(r['Transaction Posted Timestamp']), saleUnits: 0, refundUnits: 0, netPayable: 0, gross: 0, commission: 0, note: '' });
     }
     const g = map.get(po);
     if (!g.item && r['Partner Item Name']) g.item = r['Partner Item Name'];
     if (!g.sku && r['Partner Item Id']) g.sku = String(r['Partner Item Id']).trim();
     g.netPayable += toNum(r['Amount']);
+    // the statement's own wording for the other lines on a PO — a return
+    // shipping charge, a customer return reversal, a label charge (owner
+    // 2026-10-13: "show the statement wording on those rows")
+    if (type !== 'Sale' && type !== 'Refund') { const d = String(r['Transaction Description'] || '').trim(); if (d && !g.note.includes(d)) g.note = g.note ? `${g.note} · ${d}` : d; }
     // what the customer paid for the goods and what Walmart kept of it
     // (owner 2026-10-12: "the avg commission rate for this product")
     if (type === 'Sale' && r['Amount Type'] === 'Product Price') g.gross += toNum(r['Amount']);
