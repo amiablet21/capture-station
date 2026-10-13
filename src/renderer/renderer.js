@@ -2576,8 +2576,25 @@ async function rcImportBatch(items) {
     rcProgress(`Importing ${i + 1} of ${items.length} — ${it.name}…`);
     const res = await api.recoveryImport(it.name, it.text, false).catch(e => ({ ok: false, error: e.message }));
     if (res && res.ok) done.push(rcPeriodName(res.label));
-    else if (res && res.alreadyImported) skipped.push(rcPeriodName(res.label));
+    else if (res && res.alreadyImported) { skipped.push(rcPeriodName(res.label)); it._skipped = true; }
     else failed.push(`${it.name}: ${res && res.noRefunds ? 'no refunds in it' : (res && res.error) || 'did not import'}`);
+  }
+  // periods already in the list: ask once for the whole batch, then replace
+  // them in place (owner 2026-10-13: a re-import of every period at once)
+  const again = items.filter((it, i) => items[i]._skipped);
+  if (again.length) {
+    rc.busy = false; $('rcDrop').classList.remove('is-busy');
+    const ok = await rcConfirm({ title: `Replace ${rcPlural(again.length, 'period')} already in the list?`, body: `${skipped.join(', ')}. Each period is swapped for the file you dropped; marks, cases and expenses on its POs stay.`, ok: 'Replace', danger: false });
+    if (ok) {
+      rc.busy = true; $('rcDrop').classList.add('is-busy');
+      for (let i = 0; i < again.length; i++) {
+        const it = again[i];
+        rcProgress(`Replacing ${i + 1} of ${again.length} — ${it.name}…`);
+        const res = await api.recoveryImport(it.name, it.text, true).catch(e => ({ ok: false, error: e.message }));
+        if (res && res.ok) { done.push(rcPeriodName(res.label)); const k = skipped.indexOf(rcPeriodName(res.label)); if (k >= 0) skipped.splice(k, 1); }
+        else failed.push(`${it.name}: ${(res && res.error) || 'did not import'}`);
+      }
+    }
   }
   rc.busy = false;
   $('rcDrop').classList.remove('is-busy');

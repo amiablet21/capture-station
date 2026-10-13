@@ -5,6 +5,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.54 highlights
 
 - The Import list's rows carry only Remove (owner: "the Reconcile and Excel things are not necessary"). Clicking the period's name still opens it on Reconcile.
+- **A batch re-import replaces** (owner dropped all seven files and got "9 already in the list, left as is"). When files in a batch belong to periods already imported, the app asks once — "Replace 7 periods already in the list?" — and on Replace swaps each one in place, marks kept. Files that are not payment reports (an inventory reconciliation, say) are reported as failed and ignored.
 
 ## v1.32.53 highlights
 
