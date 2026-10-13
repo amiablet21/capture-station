@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.45 highlights
+
+- **The Statement tab lists every statement** (owner: "click on a statement and just have a dropdown with all the information"). One row per imported period, newest first, with Sales, Refunds, Fees, Adjustments, Activity, Total payable and Paid to you across; click a row and it drops down to Walmart's sections, one to one. The scope pill does not apply to this tab.
+- The Refunded column on By SKU keeps "232 · 83 back" on one line (owner: "it looks weird and compressed").
+- Hover a PO line's situation on the Profit page and the full sentence shows (owner: "I want to hover my mouse over and read, this is too long").
+- The "re-import" notes say which one period's file to bring in again; it is never everything.
+
 ## v1.32.44 highlights
 
 - **Nothing on the screen shifts any more** (owner: "this keeps shifting", "it keeps expanding", "just make it set"). The Profit scope control is now a date pill of a set width on the left ("Sep 13 – Sep 27, 2026 ▾", "October 2026 ▾") beside a segmented Period / Month / Year / All time switch whose names never change. The Cmd+F find box is a set 440px however much you type and whatever the count says.

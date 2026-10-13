@@ -791,6 +791,20 @@ function statement(scope, key) {
   } else {
     lines = store.allLines(); label = 'all time';
   }
+  return buildStatement(lines, label, scope, key, runs, expensesIn(scope, key));
+}
+
+// every imported statement, newest period first, each with its full
+// breakdown (owner 2026-10-13: "click on a statement and just have a
+// dropdown with all the information"); the scope pill does not apply here
+function statements() {
+  syncIn();
+  ensureOrders();
+  const runs = store.listRunMeta().slice().sort((a, b) => periodStartMs(b) - periodStartMs(a) || String(b.ranAt).localeCompare(String(a.ranAt)));
+  return { ok: true, statements: runs.map((run) => ({ id: run.id, ranAt: run.ranAt, ...buildStatement(store.runLines(run.id), run.label, 'cycle', run.id, [run], expensesIn('cycle', run.id)) })) };
+}
+
+function buildStatement(lines, label, scope, key, runs, exps) {
   const sections = new Map();
   const put = (section, name, amount, count, order) => {
     const s = sections.get(section) || { name: section, lines: new Map(), total: 0, order };
@@ -819,7 +833,6 @@ function statement(scope, key) {
     }).map((l) => ({ label: l.label, amount: r2(l.amount), count: l.count })),
   }));
   // the owner's own expenses, as a section of their own
-  const exps = expensesIn(scope, key);
   if (exps.length) {
     const byCat = new Map();
     for (const e of exps) byCat.set(e.category || 'Other', (byCat.get(e.category || 'Other') || 0) + (Number(e.amount) || 0));
@@ -903,7 +916,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, addExpense, removeExpense,
+  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, addExpense, removeExpense,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

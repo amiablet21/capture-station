@@ -232,6 +232,7 @@ contextBridge.exposeInMainWorld('api', {
   recoveryExportCsv: (pos, label) => ipcRenderer.invoke('recovery:exportCsv', { pos, label }),
   recoveryProfit: (scope, key) => ipcRenderer.invoke('recovery:profit', { scope, key }),
   recoveryStatement: (scope, key) => ipcRenderer.invoke('recovery:statement', { scope, key }),
+  recoveryStatements: () => ipcRenderer.invoke('recovery:statements'),
   recoveryExportProfit: (scope, key) => ipcRenderer.invoke('recovery:exportProfit', { scope, key }),
   recoveryDigestSend: () => ipcRenderer.invoke('recovery:digestSend'),
   recoveryMailto: () => ipcRenderer.invoke('recovery:mailto'),

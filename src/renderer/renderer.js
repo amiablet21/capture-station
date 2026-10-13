@@ -1642,7 +1642,7 @@ window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScal
 const rc = {
   data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, reconcileSort: null, pickFor: 'profit',
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
-  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(),
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(),
   year: '', profitYear: '',
 };
 // the key a scope reads: the selected period, the chosen month or year
@@ -1762,9 +1762,9 @@ async function rcLoadProfit(seq = rc.seq) {
   const p = await api.recoveryProfit(rc.profitScope, key).catch(() => null);
   if (seq !== rc.seq) return;
   rc.profit = p && p.ok ? p : null;
-  const st = await api.recoveryStatement(rc.profitScope, key).catch(() => null);
+  const st = await api.recoveryStatements().catch(() => null);
   if (seq !== rc.seq) return;
-  rc.statement = st && st.ok ? st : null;
+  rc.statements = st && st.ok ? st.statements : null;
 }
 // the Expenses tab: the owner's own costs in this scope, newest first
 function rcRenderExpenses() {
@@ -1785,31 +1785,52 @@ function rcRenderExpenses() {
   rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
 }
 // the statement view: Walmart's sections, lines and totals, in Walmart's order
+// the Statement tab: every imported statement as a row, newest first; click
+// one and it drops down to Walmart's sections (owner 2026-10-13: "click on
+// a statement and just have a dropdown with all the information")
 function rcRenderStatement() {
-  const box = $('rcStatement'); const st = rc.statement;
+  const box = $('rcStatement');
   const on = rc.profitTab === 'statement';
   box.hidden = !on; $('rcProfitTable').hidden = on;
   $('rcProfitTable').classList.toggle('is-expenses', rc.profitTab === 'expenses');
   if (!on) return;
-  if (!st || !st.hasLines) { box.innerHTML = '<div class="rc-st-note">No statement lines for this scope yet — re-import the period on the Import screen and they fill in.</div>'; return; }
+  const list = (rc.statements || []).filter(st => st.hasLines);
+  box.classList.toggle('has-list', list.length > 0);
+  if (!list.length) { box.innerHTML = '<div class="rc-st-note">No statements yet — import a payment report on the Import screen. Periods imported before v1.32.33 fill in from their archived file; if one stays empty, import that period\'s file again.</div>'; return; }
   const money = (v) => `${v < 0 ? '−' : ''}${rcMoney(v)}`;
+  const cell = (v) => v == null ? '<td class="is-right rc-mono rc-muted">—</td>' : `<td class="is-right rc-mono ${v < 0 ? 'is-neg' : ''}">${money(v)}</td>`;
   const section = (s) => `<section class="rc-st-sec">
     <h3 class="rc-st-h">${esc(s.name)}</h3>
     ${s.lines.map(l => `<div class="rc-st-row"><span class="rc-st-l">${esc(l.label)}${l.count > 1 ? ` <span class="rc-muted rc-small">· ${l.count} lines</span>` : ''}</span><span class="rc-st-v rc-mono ${l.amount < 0 ? 'is-neg' : ''}">${money(l.amount)}</span></div>`).join('')}
     <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono ${s.total < 0 ? 'is-neg' : ''}">${money(s.total)}</span></div>
   </section>`;
-  const paid = st.paid.length ? `<section class="rc-st-sec">
+  const paidSec = (st) => st.paid.length ? `<section class="rc-st-sec">
     <h3 class="rc-st-h">Paid to you</h3>
     ${st.paid.map(p => `<div class="rc-st-row"><span class="rc-st-l">${esc(p.date ? rcMonDay(p.date) + (String(p.date).slice(0, 4) ? `, ${String(p.date).slice(0, 4)}` : '') : 'Transfer')}</span><span class="rc-st-v rc-mono">${money(p.amount)}</span></div>`).join('')}
     <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono">${money(st.paidTotal)}</span></div>
   </section>` : '';
-  const head = `<div class="rc-st-top">
-    <div><div class="rc-st-k">Statement</div><div class="rc-st-n">${esc(st.scope === 'cycle' ? rcPeriodName(st.label) : st.label)}</div></div>
-    <div class="rc-st-sum"><div class="rc-st-k">Activity</div><div class="rc-st-n rc-mono ${st.activity < 0 ? 'is-neg' : ''}">${money(st.activity)}</div><div class="rc-muted rc-small">sales + refunds + fees + adjustments</div></div>
-    ${st.payable != null ? `<div class="rc-st-sum"><div class="rc-st-k">Total payable</div><div class="rc-st-n rc-mono">${money(st.payable)}</div><div class="rc-muted rc-small">${st.scope === 'cycle' ? "the period's summary line" : `${rcPlural(st.runs || 0, 'period')} added up`}</div></div>` : ''}
-  </div>`;
-  box.innerHTML = head + '<div class="rc-st-grid">' + st.sections.map(section).join('') + paid + '</div>';
+  const sec = (st, name) => { const x = st.sections.find(z => z.name === name); return x ? x.total : null; };
+  const rows = list.map((st, i) => {
+    const open = rc.stOpen.has(st.id);
+    const row = `<tr class="rc-st-tr ${open ? 'is-open' : ''}" data-rcst="${esc(st.id)}">
+      <td class="rc-g rc-muted rc-mono">${i + 1}</td>
+      <td><button type="button" class="rc-caret-btn ${open ? 'is-open' : ''}" aria-label="${open ? 'Close' : 'Open'} this statement"><span class="rc-caret"></span></button><span class="rc-st-name">${esc(rcPeriodName(st.label))}</span></td>
+      ${cell(sec(st, 'Sales'))}${cell(sec(st, 'Refunds'))}${cell(sec(st, 'Fees'))}${cell(sec(st, 'Adjustments'))}${cell(st.activity)}${cell(st.payable)}${cell(st.paidTotal || null)}
+    </tr>`;
+    const detail = open ? `<tr class="rc-st-detail"><td class="rc-g"></td><td colspan="8"><div class="rc-st-grid">${st.sections.map(section).join('')}${paidSec(st)}</div></td></tr>` : '';
+    return row + detail;
+  }).join('');
+  box.innerHTML = `<table class="rc-table rc-table-st"><thead><tr>
+    <th class="rc-g">#</th><th>Statement</th><th class="is-right">Sales</th><th class="is-right">Refunds</th><th class="is-right">Fees</th><th class="is-right">Adjustments</th><th class="is-right">Activity</th><th class="is-right">Total payable</th><th class="is-right">Paid to you</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
+$('rcStatement').addEventListener('click', (e) => {
+  const tr = e.target.closest('[data-rcst]');
+  if (!tr || e.target.closest('a, button:not(.rc-caret-btn)')) return;
+  const id = tr.dataset.rcst;
+  if (rc.stOpen.has(id)) rc.stOpen.delete(id); else rc.stOpen.add(id);
+  rcRenderStatement();
+});
 
 async function rcLoadSummary(seq = rc.seq) {
   if (!rc.data) return;
@@ -1872,7 +1893,7 @@ function rcProfitLines(g) {
       <td class="is-right rc-mono">${l.saleUnits || '—'}</td>
       <td class="is-right rc-mono">${l.refundUnits || '—'}</td>
       <td class="is-right rc-mono" colspan="3">${(l.net < 0 ? '−' : '') + rcMoney(l.net)}</td>
-      <td colspan="3"><span class="rc-dot is-${esc(l.tone || 'grey')}"></span>${esc(l.situation)}</td>
+      <td colspan="3" title="${esc(l.situation)}"><span class="rc-dot is-${esc(l.tone || 'grey')}"></span>${esc(l.situation)}</td>
     </tr>`;
   return `<tr class="rc-subhead"><td class="rc-g"></td><td>PO #</td><td class="is-right">Units</td><td class="is-right">Refunded</td><td class="is-right" colspan="3">Walmart paid</td><td colspan="3">Situation</td></tr>`
     + shown.map(row).join('')
@@ -1906,7 +1927,7 @@ function rcRenderProfit() {
   $('rcProfitStrip').innerHTML = [
     cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
-      : `${rcPlural(p.unitsSold, 'unit')} · no goods price — re-import this period on the Import screen`),
+      : `${rcPlural(p.unitsSold, 'unit')} · no goods price in this import — import this one period's file again on the Import screen`),
     cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
@@ -1921,7 +1942,7 @@ function rcRenderProfit() {
   $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
   $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement' || rc.profitTab === 'expenses';
   $('rcExpAddBtn').hidden = rc.profitTab !== 'expenses';
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', rc.statement && rc.statement.hasLines ? rc.statement.sections.length : 0], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
@@ -1945,7 +1966,7 @@ function rcRenderProfit() {
     const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></svg></span>';
     const cells = (g) => `
       <td class="is-right">${g.unitsSold}</td>
-      <td class="is-right">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
+      <td class="is-right rc-nowrap">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
       <td class="is-right">${g.commissionPct == null ? '<span class="rc-faint">—</span>' : rcPct(g.commissionPct)}</td>
       <td class="is-right">${money(g.payout)}</td>
@@ -1975,7 +1996,7 @@ function rcRenderProfit() {
     const periods = s ? rcSortRows(p.periods, s, 'label') : p.periods;
     const body = periods.length ? periods.map((x, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
-      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? [x.missingCount ? `${rcPlural(x.missingCount, 'order')} with no cost set` : '', x.priced === false ? 'no goods price — re-import this period' : ''].filter(Boolean).map(t => `<div class="rc-item-sub">${t}</div>`).join('') : '<div class="rc-item-sub">no sales data — re-import this period</div>'}</td>
+      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? [x.missingCount ? `${rcPlural(x.missingCount, 'order')} with no cost set` : '', x.priced === false ? 'no goods price in this import — import this one period\'s file again' : ''].filter(Boolean).map(t => `<div class="rc-item-sub">${t}</div>`).join('') : '<div class="rc-item-sub">no sales data in this import — import this one period\'s file again</div>'}</td>
       <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
       <td class="is-right">${money(x.payout)}</td><td class="is-right">${money(x.cogs)}</td>
       <td class="is-right ${x.profit < 0 ? 'rc-neg' : ''}">${money(x.profit)}</td><td class="is-right">${rcPct(x.margin)}</td>

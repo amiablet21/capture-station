@@ -7346,6 +7346,7 @@ function registerRecoveryIpc() {
   });
   ipcMain.handle('recovery:profit', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.profit(scope, key)));
   ipcMain.handle('recovery:statement', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.statement(scope, key)));
+  ipcMain.handle('recovery:statements', () => recoveryGate() || recoveryTry(() => recovery.statements()));
   ipcMain.handle('recovery:exportProfit', async (_e, { scope, key } = {}) => {
     if (recoveryGate()) return recoveryGate();
     const wb = recoveryTry(() => recovery.profitWorkbook(scope, key));

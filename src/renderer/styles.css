@@ -5604,6 +5604,9 @@ th:last-child > .col-grip { right: 0; }
 .rc-sub-date { font-family: var(--mono); font-size: 11.5px; color: #787774; margin-left: 8px; }
 .rc-table-profit tr.rc-subfoot td { background: #FBFBFA; color: #787774; font-size: 12px; height: 30px; padding-top: 4px; padding-bottom: 4px; }
 .rc-table-profit th:nth-child(n+3) { width: 8.6%; }
+.rc-table-profit th:nth-child(4) { width: 10.5%; } /* "232 · 83 back" on one line (owner 2026-10-13: "compressed") */
+.rc-table-profit th:nth-child(2) { width: 22%; }
+.rc-nowrap { white-space: nowrap; }
 .rc-table-profit td.is-right { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 /* the Statement tab (owner 2026-10-13): Walmart's sections, two columns */
 .rc-statement { padding: 6px 18px 18px; }
@@ -5619,6 +5622,19 @@ th:last-child > .col-grip { right: 0; }
 .rc-st-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 16px; }
 .rc-st-v { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rc-st-note { padding: 18px 0; font-size: 12.5px; color: #787774; }
+/* the statements list (owner 2026-10-13): one row per imported statement, the
+   drop-down holds Walmart's sections */
+.rc-statement.has-list { padding: 0; }
+.rc-table-st th:nth-child(1), .rc-table-st td.rc-g { width: 44px; }
+.rc-table-st th:nth-child(2) { width: auto; }
+.rc-table-st th:nth-child(n+3) { width: 11%; }
+.rc-table-st tr.rc-st-tr { cursor: pointer; }
+.rc-table-st tr.rc-st-tr:hover td { background: #FBFBFA; }
+.rc-table-st tr.rc-st-tr.is-open td:not(.rc-g) { background: #F4F6FA; }
+.rc-table-st .rc-st-name { font-weight: 500; }
+.rc-table-st td.is-neg { color: #9F2F2D; }
+.rc-table-st tr.rc-st-detail td { background: #FBFBFA; padding: 6px 18px 14px; vertical-align: top; }
+.rc-table-st tr.rc-st-detail .rc-st-grid { max-width: 1100px; }
 /* grouped by Linnworks SKU (owner 2026-10-12): the group row carries the
    totals, its Walmart listings sit indented beneath, each with its own POs */
 .rc-seg-sm button { padding: 3px 11px; font-size: 12px; }
