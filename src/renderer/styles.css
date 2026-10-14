@@ -5830,3 +5830,5 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .btn-with-ico { display: inline-flex; align-items: center; gap: 7px; }
 .btn-with-ico svg { width: 14px; height: 14px; }
 .pr-eye svg { width: 14px; height: 14px; }
+#rowsGrip { display: none !important; }
+.cap-main { max-width: 100%; }

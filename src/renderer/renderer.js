@@ -3536,7 +3536,8 @@ function applyBrowserPane() {
     // capture's saved width belongs to capMain (band + sheet as ONE column
     // since 2026-08-17); pinning the inner rowsMain froze the grip drag —
     // the outer shell moved, the table did not (owner report 2026-08-25)
-    applySheetWidth($('capMain'), 'captureSheetWidth');
+    // the Orders list is always full width (owner 2026-10-14: the drag bar "is useless"); an old saved width is dropped
+    localStorage.removeItem('captureSheetWidth'); $('capMain').style.width = '';
     $('rowsMain').style.width = ''; // clear the stale inner pin once
     applySheetWidth($('retMain'), 'retSheetWidth');
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
@@ -5141,7 +5142,7 @@ function alignCaptureToolbar() {
 
 let rowsDrag = null;
 {
-  applySheetWidth($('capMain'), 'captureSheetWidth');
+  localStorage.removeItem('captureSheetWidth'); $('capMain').style.width = '';
   requestAnimationFrame(alignCaptureToolbar);
 }
 
