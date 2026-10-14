@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.61 highlights
+
+- **A renamed statement gets Walmart's own period name.** The downloaded report carries the period on its summary rows — one per week paid and one for the whole statement — plus the odd adjustment row with a window of its own; the app now takes the widest of them, so SEPT_5_-_19.csv imports as "Sep 5 – Sep 19, 2026" exactly as Walmart names it, and lands on the period already in the list. Checked against the owner's three September files: three periods, no twins, 2546 orders priced, Goods sold above Walmart paid.
+
 ## v1.32.60 highlights
 
 - **A renamed statement replaces its period instead of doubling it** (owner dropped SEPT_5_-_19.csv and got "Sep 3 – Oct 2" and "Aug 26 – Sep 18" beside the periods they should have replaced). Walmart's downloaded file carries the period on its weekly summary rows only, so a file without Walmart's own name is now named from the span of all those rows; and a file whose weeks overlap a period already imported (60% or more of the shorter span) is that period — it asks to replace, keeps the known label, and every stray twin covering those weeks goes with it.

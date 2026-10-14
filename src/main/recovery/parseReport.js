@@ -100,16 +100,19 @@ function toIsoDay(s) {
 // Report period: old format carries explicit Period Start/End Date columns;
 // otherwise fall back to the min/max refund date across the report.
 function detectPeriod(rows, refunds) {
-  // the Period columns sit on Walmart's weekly summary rows only (one per
-  // week paid), blank elsewhere: the report's period is the span of all of
-  // them, not the first one found (owner 2026-10-14: a renamed two-week file
-  // came in as one week and doubled the period)
-  let start = null; let end = null;
+  // the Period columns sit on Walmart's summary rows only, blank elsewhere:
+  // one row per week paid plus one for the whole statement (09/05–09/19
+  // beside 09/05–09/11 and 09/12–09/18), and the odd adjustment row with a
+  // window of its own. The statement's period is the widest span on offer
+  // (owner 2026-10-14: a renamed file named itself from the first row
+  // found and sat beside the period it should have replaced)
+  let start = null; let end = null; let widest = -1;
   for (const r of rows) {
     const a = parseRefundDate(String(r['Period Start Date'] ?? '').slice(0, 10));
     const b = parseRefundDate(String(r['Period End Date'] ?? '').slice(0, 10));
-    if (a && (!start || a < start)) start = a;
-    if (b && (!end || b > end)) end = b;
+    if (!a || !b || b < a) continue;
+    const span = b - a;
+    if (span > widest) { widest = span; start = a; end = b; }
   }
   if (start && end) return { start, end, explicit: true };
   // fallback: min/max refund date — misleading for new-format files (refund
