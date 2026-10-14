@@ -5743,7 +5743,7 @@ button.rc-cost-set { background: none; border: 1px dashed transparent; border-ra
 button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: var(--badge-yellow-bg); }
 .rc-cost-edit { width: 84px; text-align: right; }
 /* an unmapped listing, marked like Capture's ⚠ */
-.rc-warn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); color: var(--badge-yellow-text); line-height: 0; vertical-align: -4px; cursor: help; box-sizing: border-box; }
+.rc-warn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; border: 1px solid var(--badge-yellow-text); background: var(--badge-yellow-bg); color: var(--badge-yellow-text); line-height: 0; vertical-align: middle; position: relative; top: -1px; cursor: help; box-sizing: border-box; }
 .rc-warn svg { display: block; }
 .rc-warn + .rc-group-note { margin-left: 6px; }
 .rc-neg { color: #9F2F2D; }
