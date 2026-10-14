@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.63 highlights
+
+- **By SKU is grouped by Linnworks SKU only.** The Linnworks / Walmart switch is gone; the Walmart listings sit under each group as before. The search reads the Linnworks SKU, the product name and every Walmart (channel) SKU.
+- **An audit guide for the Profit page.** docs/recovery/PROFIT-LOGIC.md spells out every rule in plain words and three checks to run against Walmart's own numbers. The Walmart paid cell now also shows the statement lines on no order (storage, ads, adjustments) kept aside, so Walmart paid ties back to the statement's Activity.
+
 ## v1.32.62 highlights
 
 - **A refund of a sale made before your first statement no longer drags profit down while the unit is back.** Its sale income was never counted, so the whole refund used to land on profit even with the unit back on the shelf. It is now left out of profit while the return is back in stock, pending or never shipped, and counted only once it is lost. The line says "not counted against profit" or "counted against profit", the Walmart paid cell says how much was left out, and Walmart paid itself still matches the statement to the cent.

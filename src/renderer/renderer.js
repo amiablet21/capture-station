@@ -1934,7 +1934,11 @@ function rcRenderProfit() {
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
       : `${rcPlural(p.unitsSold, 'unit')} · no goods price in this import — import this one period's file again on the Import screen`),
     cell('Walmart paid', signed(p.payout), (p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees')
-      + (p.heldOut && p.heldOut.amount > 0 ? ` · ${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement, not counted while the units are back or pending` : '')),
+      + (p.heldOut && p.heldOut.amount > 0 ? ` · ${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement, not counted while the units are back or pending` : '')
+      // the statement lines on no order (storage, ads, WFS inventory
+      // adjustments) sit outside Walmart paid; shown so the owner can tie
+      // Walmart paid back to the statement's Activity (audit guide §2)
+      + (p.other ? ` · ${p.other < 0 ? '−' : ''}${rcMoney(p.other)} on no order (storage, ads, adjustments) kept aside` : '')),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
     cell('Expenses', rcMoney(p.expenses ? p.expenses.total : 0), p.expenses && p.expenses.count ? `${rcPlural(p.expenses.count, 'entry', 'entries')} · ${p.expenses.byCategory.slice(0, 2).map(c => `${c.category.toLowerCase()} ${rcMoney(c.amount)}`).join(' · ')}` : 'none in this scope · add on the Expenses tab'),
@@ -1942,13 +1946,11 @@ function rcRenderProfit() {
     cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid, left out of profit` : 'every listing is costed'),
   ].join('');
 
-  $('rcProfitGroup').innerHTML = [['lw', 'Linnworks SKU'], ['wm', 'Walmart SKU']].map(([k, label]) => `<button type="button" data-rcgroup="${k}" class="${rc.profitGroup === k ? 'is-on' : ''}">${label}</button>`).join('');
   rcRenderStatement();
   rcRenderExpenses();
-  $('rcProfitGroup').hidden = rc.profitTab !== 'sku';
   $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement' || rc.profitTab === 'expenses';
   $('rcExpAddBtn').hidden = rc.profitTab !== 'expenses';
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', rc.profitGroup === 'lw' ? (p.groups || []).length : p.skus.length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', (p.groups || []).length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
@@ -1956,11 +1958,13 @@ function rcRenderProfit() {
   if (rc.profitTab === 'sku') {
     const q = rc.profitQ.toLowerCase();
     const s = rc.profitSort;
-    const byLw = rc.profitGroup === 'lw';
+    // always grouped by Linnworks SKU (owner 2026-10-14: "I want to have
+    // only linnworks setting"); the Walmart listings sit under each group
+    const byLw = true;
+    // the search reads the Linnworks SKU, the product name, and every
+    // Walmart (channel) SKU under the group
     const hit = (g) => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q);
-    // grouped by Linnworks SKU (owner 2026-10-12): a group matches the search
-    // when it or any of its listings does
-    const base = byLw ? (p.groups || []).filter(x => hit(x) || x.listings.some(hit)) : p.skus.filter(hit);
+    const base = (p.groups || []).filter(x => hit(x) || x.listings.some(hit));
     const rows = rcSortRows(base, s, 'payout');
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
@@ -2723,7 +2727,6 @@ $('rcPickDlg').addEventListener('click', async (e) => {
   rcRenderProfit();
 });
 $('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
-$('rcProfitGroup').addEventListener('click', (e) => { const b = e.target.closest('[data-rcgroup]'); if (b) { rc.profitGroup = b.dataset.rcgroup; rc.profitSort = null; rcRenderProfit(); } });
 // type a cost into a "no cost set" cell: Enter saves, Escape or blur cancels
 function rcBeginCostEdit(btn) {
   const sku = btn.dataset.rccost;
