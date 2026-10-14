@@ -2107,6 +2107,21 @@ function rcHlClear(pos) {
   for (const po of pos || []) if (rcHl.delete(po)) changed = true;
   if (changed) { try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ } }
 }
+// a click anywhere off the rows (owner 2026-10-14: "if I click off
+// somewhere else, it stops highlighting") clears every highlight; a click
+// inside a row, a menu or a dialog leaves them
+function rcHlClearAll() {
+  if (!rcHl.size) return;
+  rcHl.clear();
+  try { localStorage.setItem('rcHighlight', '[]'); } catch { /* private mode */ }
+  for (const tr of document.querySelectorAll('#rcBucketTable tr.is-hl')) tr.classList.remove('is-hl');
+}
+document.addEventListener('click', (e) => {
+  if (activePage !== 'recovery' || !rcHl.size) return;
+  if (!(e.target instanceof Element)) return;
+  if (e.target.closest('tr[data-rcrow], dialog, .rc-menu, .tab-menu, button, a, input, select, textarea, label')) return;
+  rcHlClearAll();
+});
 function rcHlToggle(po) {
   if (!po) return;
   if (rcHl.has(po)) rcHl.delete(po); else rcHl.add(po);
