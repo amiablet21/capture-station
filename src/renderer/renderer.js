@@ -2556,14 +2556,23 @@ function rcProgress(text, state) {
   el.hidden = !text;
   el.className = `rc-progress${state ? ` is-${state}` : ''}`;
 }
+// a stuck busy flag used to swallow every later drop in silence (owner
+// 2026-10-14: "I dropped it but nothing happened"): the flag now carries a
+// timestamp, says so when it blocks, and lets go after two minutes
+function rcBusyNow() {
+  if (!rc.busy) return false;
+  if (Date.now() - (rc.busyAt || 0) > 120000) { rc.busy = false; $('rcDrop').classList.remove('is-busy'); return false; }
+  rcProgress('Still working on the last import — try again in a moment.', 'fail');
+  return true;
+}
 async function rcImport(name, text, force) {
-  if (rc.busy) return;
-  rc.busy = true;
+  if (rcBusyNow()) return;
+  rc.busy = true; rc.busyAt = Date.now();
   $('rcDrop').classList.add('is-busy');
-  rcProgress('Reading Walmart report…');
-  const res = await api.recoveryImport(name, text, force).catch(e => ({ ok: false, error: e.message }));
-  rc.busy = false;
-  $('rcDrop').classList.remove('is-busy');
+  rcProgress(`Reading ${name}…`);
+  let res;
+  try { res = await api.recoveryImport(name, text, force).catch(e => ({ ok: false, error: e.message })); }
+  finally { rc.busy = false; $('rcDrop').classList.remove('is-busy'); }
   if (!res) { rcProgress('The import did not finish.', 'fail'); return; }
   if (res.noRefunds) { rcProgress(`This report has no refunds (${res.format} format) — nothing was imported.`, 'fail'); return; }
   if (res.alreadyImported) {
@@ -2596,13 +2605,16 @@ async function rcImportMany(files) {
   const list = (files || []).filter(f => f && /\.csv$/i.test(f.name));
   if (!list.length) { rcProgress('Drop the reconciliation reports (CSV) from Seller Center → Payments.', 'fail'); return; }
   if (list.length === 1) { await rcImport(list[0].name, await list[0].text(), false); return; }
-  if (rc.busy) return;
+  if (rcBusyNow()) return;
   const items = [];
   for (const f of list) { try { items.push({ name: f.name, text: await f.text() }); } catch { items.push({ name: f.name, text: '' }); } }
   await rcImportBatch(items);
 }
 async function rcImportBatch(items) {
-  rc.busy = true;
+  try { await rcImportBatchInner(items); } finally { rc.busy = false; $('rcDrop').classList.remove('is-busy'); }
+}
+async function rcImportBatchInner(items) {
+  rc.busy = true; rc.busyAt = Date.now();
   $('rcDrop').classList.add('is-busy');
   const done = []; const skipped = []; const failed = [];
   // sort by the period start inside the file name when there is one, else as given
@@ -2623,7 +2635,7 @@ async function rcImportBatch(items) {
     rc.busy = false; $('rcDrop').classList.remove('is-busy');
     const ok = await rcConfirm({ title: `Replace ${rcPlural(again.length, 'period')} already in the list?`, body: `${skipped.join(', ')}. Each period is swapped for the file you dropped; marks, cases and expenses on its POs stay.`, ok: 'Replace', danger: false });
     if (ok) {
-      rc.busy = true; $('rcDrop').classList.add('is-busy');
+      rc.busy = true; rc.busyAt = Date.now(); $('rcDrop').classList.add('is-busy');
       for (let i = 0; i < again.length; i++) {
         const it = again[i];
         rcProgress(`Replacing ${i + 1} of ${again.length} — ${it.name}…`);
@@ -2647,7 +2659,7 @@ async function rcBrowse() {
   const pick = await api.recoveryImportPick().catch(e => ({ ok: false, error: e.message }));
   if (!pick || pick.canceled) return;
   if (!pick.ok) { rcProgress(pick.error || 'Could not open that file.', 'fail'); return; }
-  if (pick.files && pick.files.length > 1) { if (!rc.busy) await rcImportBatch(pick.files); return; }
+  if (pick.files && pick.files.length > 1) { if (!rcBusyNow()) await rcImportBatch(pick.files); return; }
   await rcImport(pick.name, pick.text, false);
 }
 
@@ -2811,12 +2823,16 @@ for (const ev of ['dragenter', 'dragover']) {
   $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $('rcDrop').classList.add('is-over'); } });
 }
 $('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) $('rcDrop').classList.remove('is-over'); });
+// a file dropped anywhere else must not open in the window (it used to
+// look like nothing happened, or worse, the CSV replaced the page)
+window.addEventListener('dragover', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
+window.addEventListener('drop', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !e.defaultPrevented) e.preventDefault(); });
 $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
   $('rcDrop').classList.remove('is-over');
   const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
   const file = files[0];
-  if (!file) return;
+  if (!file) { rcProgress('Nothing readable was dropped — drop the CSV file itself, not a link to it.', 'fail'); return; }
   if (e.target.closest && e.target.closest('#rcMarkDrop')) { rcMarkFile(file.name, null, file); return; }
   rc.sub = 'import'; rcRender();
   if (files.length > 1) rcImportMany(files); else rcImportFile(file);

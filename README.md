@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.60 highlights
+
+- **A renamed statement replaces its period instead of doubling it** (owner dropped SEPT_5_-_19.csv and got "Sep 3 – Oct 2" and "Aug 26 – Sep 18" beside the periods they should have replaced). Walmart's downloaded file carries the period on its weekly summary rows only, so a file without Walmart's own name is now named from the span of all those rows; and a file whose weeks overlap a period already imported (60% or more of the shorter span) is that period — it asks to replace, keeps the known label, and every stray twin covering those weeks goes with it.
+- **The drop zone never goes quiet** (owner: "I dropped it but nothing happened"). A stuck busy flag used to swallow later drops in silence; it now says so, lets go after two minutes, and a file dropped anywhere else on the window is caught rather than opened in it.
+
 ## v1.32.59 highlights
 
 - **Composites work** (owner: the case listing X210-64GB-GRAY-CASE-USBC draws from X210-64GB-GRAY). The Stock page lists a composite parent again — it had vanished the moment the item became a composite — with a navy "composite" tag and a read-only count that is what its parts can cover; a count typed on it is refused ("adjust the parts instead"). A composite's sale credits its parts: the tablet's pace on Overview counts the case listing's sales, so Buy now orders tablets for both and never the composite. Was selling and the six-month store count the parts the same way.

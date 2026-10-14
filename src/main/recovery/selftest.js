@@ -171,6 +171,16 @@ module.exports = function run(check) {
     check('recovery: a shipping-protection claim payout is', p2.payouts['011'] && p2.payouts['011'].amount === 100 && p2.payouts['011'].kind === 'adjustment', p2.payouts);
     const res2 = await recovery.importReport({ name: 'old_format_reconciliationreport.csv', text: payoutCsv });
     check('recovery: old-format import labels from its Period columns', res2.ok === true && res2.label === 'Jun 1 - Jun 14, 2026', res2);
+    // the same weeks under another name (owner 2026-10-14): a renamed download
+    // whose Period columns run a day short is the period already imported —
+    // it asks to replace, keeps the known label, and leaves no twin behind
+    const renamed = payoutCsv.replace(/"06\/01\/2026","06\/14\/2026"/g, '"06/02/2026","06/13/2026"');
+    const twinAsk = await recovery.importReport({ name: 'JUNE_1_-_14.csv', text: renamed });
+    const runsBefore = recovery.state().runs.length;
+    const twinDone = await recovery.importReport({ name: 'JUNE_1_-_14.csv', text: renamed, force: true });
+    const runsAfter = recovery.state().runs.length;
+    check('recovery: a renamed file covering the same weeks replaces that period under its known name', twinAsk.alreadyImported === true && twinAsk.label === 'Jun 1 - Jun 14, 2026' && twinDone.ok === true && twinDone.label === 'Jun 1 - Jun 14, 2026' && runsAfter === runsBefore, { twinAsk, twinDone: twinDone && twinDone.label, runsBefore, runsAfter });
+    res2.id = twinDone.id; // the period's run id moved with the replacement
     // the owner's own expenses (v1.32.40): dated, taken off profit in their period, in the statement
     const ex = recovery.addExpense({ date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`, amount: 12.5, category: 'Shipping labels', note: 'UPS' });
     const prx = recovery.profit('all');

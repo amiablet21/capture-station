@@ -158,6 +158,26 @@ function findArchive(label) {
   return null;
 }
 
+// the imported runs whose weeks overlap a period by at least 60% of the
+// shorter span, shortest span first (the 14-day label from a filename beats
+// a wider span read out of a file's transactions)
+function runsOverlapping(period, label) {
+  if (!period || !period.start || !period.end) return [];
+  const day = 86400000;
+  const a0 = period.start.getTime(); const a1 = period.end.getTime();
+  const out = [];
+  for (const run of store.listRunMeta()) {
+    if (run.label === label) continue;
+    const { start, end } = parsePeriodLabel(run.label);
+    if (!start || !end) continue;
+    const b0 = start.getTime(); const b1 = end.getTime();
+    const overlap = (Math.min(a1, b1) - Math.max(a0, b0)) / day + 1;
+    const shorter = Math.min(a1 - a0, b1 - b0) / day + 1;
+    if (overlap >= 0.6 * shorter) out.push({ ...run, span: (b1 - b0) / day + 1 });
+  }
+  return out.sort((x, y) => x.span - y.span || String(x.ranAt).localeCompare(String(y.ranAt)));
+}
+
 async function importReport({ name, text, force }, onProgress = () => {}) {
   syncIn();
   const wh = warehouse();
@@ -174,13 +194,20 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
   onProgress(`Found ${refunds.length} refunded POs (${format} format). Checking against returns log…`);
   const { seller, wfs } = findIssues(refunds, wh.rows);
 
-  const label =
+  let label =
     formatPeriod(period.start, period.end) ||
     String(name || 'report').replace(/\.csv$/i, '').replace('Digital_World_Shop_10001467995_MP_', '').replace('_reconciliationreport', '');
 
   const csvHash = crypto.createHash('sha256').update(csvText).digest('hex');
+  // the same weeks under another name are the same period (owner
+  // 2026-10-14: a renamed download named itself from its own columns, a day
+  // off the filename's label, and sat beside the period it should have
+  // replaced). The known period keeps its name; every run covering those
+  // weeks is replaced, so a stray duplicate goes with it.
+  const twins = runsOverlapping(period, label);
+  if (twins.length) label = twins[0].label;
   if (!force) {
-    const dup = store.findRunByHash(csvHash) || store.findRunByLabel(label);
+    const dup = store.findRunByHash(csvHash) || store.findRunByLabel(label) || twins[0];
     if (dup) {
       return { alreadyImported: true, sameFile: dup.csvHash === csvHash, label: dup.label, ranAt: dup.ranAt, csvName: dup.csvName || '' };
     }
@@ -196,6 +223,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
   const replaced = store.findRunByLabel(label);
   const ts = Date.now();
   if (replaced) deleteRunLocal(replaced.id, ts - 1);
+  for (const t of twins) if (!replaced || t.id !== replaced.id) deleteRunLocal(t.id, ts - 1);
 
   // keep the original report, named by its period, in a folder the owner can
   // open from Settings; a re-import overwrites the period's file
