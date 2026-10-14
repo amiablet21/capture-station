@@ -5603,6 +5603,9 @@ th:last-child > .col-grip { right: 0; }
 .rc-menu .tab-menu-item.is-danger { color: #9F2F2D; }
 .rc-menu .tab-menu-item.is-danger:hover { background: #FDEBEC; }
 .rc-dlg { width: min(420px, 92vw); }
+#rcPayDlg { width: min(560px, 94vw); }
+.rc-pay-grid { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 10px; }
+.rc-pay-grid .field { margin: 0; }
 .rc-dlg-po { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rc-confirm-body { font-size: 13px; margin: 4px 0 2px; }
 .rc-note-text { font-family: inherit; resize: vertical; min-height: 64px; }

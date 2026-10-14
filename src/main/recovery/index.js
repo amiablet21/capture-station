@@ -619,7 +619,7 @@ function profit(scope, key) {
   }
 
   const bySku = new Map();
-  const tot = { payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false,
+  const tot = { recovered: 0, payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false,
     pricedOrders: 0, unpricedOrders: 0, pricedUnits: 0, commGross: 0, atRisk: 0, atRiskUnits: 0, pendingOrders: 0, lostUnits: 0 };
   const missingSkus = new Set();
   // each SKU also lists its POs with a situation (owner 2026-10-12: "a
@@ -668,6 +668,7 @@ function profit(scope, key) {
   // columns (v1.32.13+) whose archive was on hand; an order without one
   // counts in payout and cost but not in goods sold, avg price or commission
   const priced = (o) => o.saleUnits > 0 && o.gross !== null && o.gross !== undefined && Number(o.gross) > 0;
+  const recoveredSeen = new Set(); const recoveredByRun = new Map();
   for (const o of orders) {
     const cost = unitCost(o.sku);
     const st = standing(o);
@@ -688,6 +689,18 @@ function profit(scope, key) {
     // the statement's own words for the PO's fee lines (owner 2026-10-13:
     // "include if this is a shipping label charge") ride on every row
     if (o.note && soldHere) situation += ` · ${o.note}`;
+    // a payout typed by hand (owner 2026-10-14): Walmart's own lands on a
+    // later statement, so only money from outside Walmart — the shipping
+    // insurance, the carrier — is added to profit here, once per PO
+    const mkPaid = marksByPo.get(o.po);
+    let recovered = 0;
+    if (mkPaid && !mkPaid.removed && mkPaid.paidOut > 0 && !recoveredSeen.has(o.po)) {
+      recoveredSeen.add(o.po);
+      const outside = !/walmart/i.test(String(mkPaid.paidOutBy || 'Walmart'));
+      if (outside) recovered = Math.round(mkPaid.paidOut * 100) / 100;
+      situation += ` · ${outside ? `${mkPaid.paidOutBy} paid $${mkPaid.paidOut.toFixed(2)}` : `Walmart paid $${mkPaid.paidOut.toFixed(2)} (marked by hand)`}`;
+    }
+    tot.recovered += recovered; recoveredByRun.set(o.run_id, (recoveredByRun.get(o.run_id) || 0) + recovered);
     const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;
@@ -748,7 +761,7 @@ function profit(scope, key) {
   // profit is measured on the orders that have a cost: payout from a
   // listing with no cost set is reported beside it, never counted as profit
   // (owner 2026-10-12: "why are my margins so high")
-  const profitV = r2(tot.costedPayout - tot.cogs);
+  const profitV = r2(tot.costedPayout - tot.cogs + tot.recovered);
   // the owner's own expenses in this scope come off the top
   const expList = expensesIn(scope, key);
   const expTotal = r2(expList.reduce((a, e) => a + (Number(e.amount) || 0), 0));
@@ -766,7 +779,8 @@ function profit(scope, key) {
         payout += o.netPayable; units += o.saleUnits; if (priced(o)) anyPriced = true;
         if (cost === null) miss++; else { costed += o.netPayable; cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
       }
-      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), costedPayout: r2(costed), cogs: r2(cogs), profit: r2(costed - cogs), atRisk: r2(atRisk), priced: anyPriced, margin: costed > 0 ? Math.round(((costed - cogs) / costed) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
+      const rec = r2(recoveredByRun.get(r.id) || 0);
+      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), costedPayout: r2(costed), cogs: r2(cogs), profit: r2(costed - cogs + rec), recovered: rec, atRisk: r2(atRisk), priced: anyPriced, margin: costed > 0 ? Math.round(((costed - cogs + rec) / costed) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
     })
     .sort((a, b) => periodStartMs({ label: b.label, ranAt: '' }) - periodStartMs({ label: a.label, ranAt: '' }));
 
@@ -783,7 +797,7 @@ function profit(scope, key) {
     priced: { orders: tot.pricedOrders, unpriced: tot.unpricedOrders, units: tot.pricedUnits },
     atRisk: { amount: r2(tot.atRisk), units: tot.atRiskUnits, orders: tot.pendingOrders }, lostUnits: tot.lostUnits,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
-    costedPayout: r2(tot.costedPayout), other, netAfterOther: r2(profitV + other),
+    costedPayout: r2(tot.costedPayout), recovered: r2(tot.recovered), other, netAfterOther: r2(profitV + other),
     skus, groups, periods, missingRuns,
   };
 }

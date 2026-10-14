@@ -179,6 +179,13 @@ module.exports = function run(check) {
     const rmx = recovery.removeExpense(ex.id);
     check('recovery: expenses — removed everywhere', rmx.ok && recovery.profit('all').expenses.count === 0 && auxLog.some(([p, e]) => p === 'wmexpenses' && e.id === ex.id && e.removed), { rmx, log: auxLog.filter(([p]) => p === 'wmexpenses').length });
     // the statement as Walmart lays it out (v1.32.39)
+    // a payout typed by hand (owner 2026-10-14): the row moves to Walmart paid, the gap is what is still lost, outside money reaches profit
+    const beforePay = recovery.profit('all').profit;
+    const pay = recovery.mark('006', 'paidOut', { amount: 50, by: 'Shipping protection', on: '2026-10-10' });
+    const it006 = recovery.state().items.find((x) => x.po === '006');
+    const afterPay = recovery.profit('all');
+    check('recovery: paid out by hand — reimbursed with the gap, insurance money added to profit', pay.ok && it006 && it006.status === 'reimbursed' && it006.settlementSeen === 50 && /Shipping protection/.test(it006.settlementKind || '') && it006.lostAmount === Math.round((it006.amount - 50) * 100) / 100 && afterPay.recovered === 50 && Math.round((afterPay.profit - beforePay) * 100) / 100 >= 50 - 0.01, { pay, it006: it006 && { status: it006.status, seen: it006.settlementSeen, kind: it006.settlementKind, lost: it006.lostAmount, amount: it006.amount }, recovered: afterPay.recovered, d: afterPay.profit - beforePay });
+    recovery.mark('006', 'undoPaidOut', {});
     const ss = recovery.syncStatus();
     check('recovery: sync status — answers with sync off, and resync is safe', ss.ok && ss.enabled === false && recovery.resync().ok, ss);
     const sts = recovery.statements();

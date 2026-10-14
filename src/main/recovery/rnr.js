@@ -100,11 +100,14 @@ function deriveStatus(it, warehousePoSet) {
 function decorate(items, { warehousePoSet = new Set(), settlements = {}, cycleEnds = [], today = new Date() } = {}) {
   return items.map((raw) => {
     const s = settlements[raw.po];
+    // a payout typed by hand stands in until a statement carries the real
+    // one (owner 2026-10-14); a statement's figure wins once it lands
+    const hand = !(s && s.amount > 0) && raw.paidOut > 0 ? { amount: raw.paidOut, date: raw.paidOutOn || null, kind: `${raw.paidOutBy || 'Walmart'}` } : null;
     const it = {
       ...raw,
-      settlementSeen: s && s.amount > 0 ? s.amount : null,
-      settlementDate: s && s.amount > 0 ? (s.date || null) : null,
-      settlementKind: s && s.amount > 0 ? (s.kind || null) : null,
+      settlementSeen: s && s.amount > 0 ? s.amount : hand ? hand.amount : null,
+      settlementDate: s && s.amount > 0 ? (s.date || null) : hand ? hand.date : null,
+      settlementKind: s && s.amount > 0 ? (s.kind || null) : hand ? hand.kind : null,
     };
     it.status = deriveStatus(it, warehousePoSet);
     const days = daysOld(it.refundDate, today);
@@ -148,6 +151,9 @@ const blankMarks = () => ({
   adjustment: false, adjustmentAt: null, reimbursePending: false, reimbursePendingAt: null,
   writtenOff: false, writtenOffAt: null, note: null, noteAt: null,
   receivedManual: false, receivedManualAt: null, receivedOn: null, neverShipped: false, neverShippedAt: null,
+  // a payout typed by hand (owner 2026-10-14: a case approved, or the
+  // shipping insurance / the carrier paid): the amount, who paid, the day
+  paidOut: 0, paidOutBy: null, paidOutAt: null, paidOutOn: null,
 });
 function applyMarker(current, action, payload = {}, nowIso = new Date().toISOString()) {
   const m = { ...blankMarks(), ...(current || {}) };
@@ -173,6 +179,15 @@ function applyMarker(current, action, payload = {}, nowIso = new Date().toISOStr
     case 'undoReceivedManual': m.receivedManual = false; m.receivedManualAt = null; m.receivedOn = null; break;
     case 'neverShipped': m.neverShipped = true; m.neverShippedAt = nowIso; m.receivedManual = false; m.receivedManualAt = null; m.receivedOn = null; clearCase(); break;
     case 'undoNeverShipped': m.neverShipped = false; m.neverShippedAt = null; break;
+    case 'paidOut': {
+      const n = Math.round((Number(payload.amount) || 0) * 100) / 100;
+      if (!(n > 0)) throw new Error('Enter the amount that was paid.');
+      m.paidOut = n; m.paidOutBy = String(payload.by || 'Walmart').trim().slice(0, 40) || 'Walmart'; m.paidOutAt = nowIso; m.paidOutOn = payload.on ? String(payload.on).slice(0, 10) : nowIso.slice(0, 10);
+      if (m.caseOpened) { m.caseApproved = true; m.caseApprovedAt = nowIso; }
+      m.reimbursePending = false; m.reimbursePendingAt = null; m.writtenOff = false; m.writtenOffAt = null;
+      break;
+    }
+    case 'undoPaidOut': m.paidOut = 0; m.paidOutBy = null; m.paidOutAt = null; m.paidOutOn = null; break;
     case 'note': {
       const t = String(payload.note || '').trim();
       m.note = t || null; m.noteAt = t ? nowIso : null;
@@ -182,7 +197,7 @@ function applyMarker(current, action, payload = {}, nowIso = new Date().toISOStr
   }
   return m;
 }
-const hasAnyMarker = (m) => !!(m && (m.caseOpened || m.caseApproved || m.caseId || m.adjustment || m.reimbursePending || m.writtenOff || m.note || m.receivedManual || m.neverShipped));
+const hasAnyMarker = (m) => !!(m && (m.caseOpened || m.caseApproved || m.caseId || m.adjustment || m.reimbursePending || m.writtenOff || m.note || m.receivedManual || m.neverShipped || m.paidOut > 0));
 
 // every item lives in exactly one list tab (§6.5)
 function filterOf(it) {

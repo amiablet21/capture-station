@@ -153,6 +153,10 @@ function ensureSchema(db) {
   for (const col of ['received_manual INTEGER NOT NULL DEFAULT 0', 'received_manual_at TEXT', 'received_on TEXT', 'never_shipped INTEGER NOT NULL DEFAULT 0', 'never_shipped_at TEXT']) {
     try { db.exec(`ALTER TABLE wm_marks ADD COLUMN ${col}`); } catch { /* already there */ }
   }
+  // v1.32.57: a payout typed by hand (case approved, insurance, carrier)
+  for (const col of ['paid_out REAL NOT NULL DEFAULT 0', 'paid_out_by TEXT', 'paid_out_at TEXT', 'paid_out_on TEXT']) {
+    try { db.exec(`ALTER TABLE wm_marks ADD COLUMN ${col}`); } catch { /* already there */ }
+  }
   // v1.32.15: who issued the refund, on the stored refund and on the tracker item
   for (const t of ['wm_refunds', 'wm_items']) {
     try { db.exec(`ALTER TABLE ${t} ADD COLUMN refunded_by TEXT NOT NULL DEFAULT ''`); } catch { /* already there */ }
@@ -387,6 +391,7 @@ const marksOut = (r) => r && ({
   note: r.note || null, noteAt: r.note_at || null,
   receivedManual: !!r.received_manual, receivedManualAt: r.received_manual_at || null, receivedOn: r.received_on || null,
   neverShipped: !!r.never_shipped, neverShippedAt: r.never_shipped_at || null,
+  paidOut: Number(r.paid_out) || 0, paidOutBy: r.paid_out_by || null, paidOutAt: r.paid_out_at || null, paidOutOn: r.paid_out_on || null,
   updated_at: r.updated_at, station: r.station, by: r.by, removed: !!r.removed,
 });
 function getMarks(po) { return marksOut(d().prepare('SELECT * FROM wm_marks WHERE po = ?').get(String(po || ''))); }
@@ -406,19 +411,21 @@ function upsertMarks(rec) {
   if (cur && String(cur.updated_at) >= updatedAt) return null;
   db.prepare(`INSERT INTO wm_marks (po, case_opened, case_opened_at, case_id, case_approved, case_approved_at, adjustment, adjustment_at,
       reimburse_pending, reimburse_pending_at, written_off, written_off_at, note, note_at, updated_at, station, by, removed,
-      received_manual, received_manual_at, received_on, never_shipped, never_shipped_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      received_manual, received_manual_at, received_on, never_shipped, never_shipped_at, paid_out, paid_out_by, paid_out_at, paid_out_on)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(po) DO UPDATE SET case_opened = excluded.case_opened, case_opened_at = excluded.case_opened_at, case_id = excluded.case_id,
       case_approved = excluded.case_approved, case_approved_at = excluded.case_approved_at, adjustment = excluded.adjustment, adjustment_at = excluded.adjustment_at,
       reimburse_pending = excluded.reimburse_pending, reimburse_pending_at = excluded.reimburse_pending_at, written_off = excluded.written_off, written_off_at = excluded.written_off_at,
       note = excluded.note, note_at = excluded.note_at, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed,
       received_manual = excluded.received_manual, received_manual_at = excluded.received_manual_at, received_on = excluded.received_on,
-      never_shipped = excluded.never_shipped, never_shipped_at = excluded.never_shipped_at`)
+      never_shipped = excluded.never_shipped, never_shipped_at = excluded.never_shipped_at,
+      paid_out = excluded.paid_out, paid_out_by = excluded.paid_out_by, paid_out_at = excluded.paid_out_at, paid_out_on = excluded.paid_out_on`)
     .run(po, rec.caseOpened ? 1 : 0, rec.caseOpenedAt || null, rec.caseId || null, rec.caseApproved ? 1 : 0, rec.caseApprovedAt || null,
       rec.adjustment ? 1 : 0, rec.adjustmentAt || null, rec.reimbursePending ? 1 : 0, rec.reimbursePendingAt || null,
       rec.writtenOff ? 1 : 0, rec.writtenOffAt || null, rec.note || null, rec.noteAt || null, updatedAt,
       String(rec.station || '').slice(0, 60), String(rec.by || '').slice(0, 80), rec.removed ? 1 : 0,
-      rec.receivedManual ? 1 : 0, rec.receivedManualAt || null, rec.receivedOn || null, rec.neverShipped ? 1 : 0, rec.neverShippedAt || null);
+      rec.receivedManual ? 1 : 0, rec.receivedManualAt || null, rec.receivedOn || null, rec.neverShipped ? 1 : 0, rec.neverShippedAt || null,
+      Number(rec.paidOut) || 0, rec.paidOutBy || null, rec.paidOutAt || null, rec.paidOutOn || null);
   return getMarks(po);
 }
 function ownMarks(stations) {

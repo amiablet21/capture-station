@@ -444,6 +444,24 @@
       </div>
     </form>
   </dialog>
+  <!-- a payout typed by hand (owner 2026-10-14): case approved, insurance, carrier -->
+  <dialog id="rcPayDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title">Paid out</h2>
+      <p class="dlg-note rc-dlg-po" id="rcPayPo"></p>
+      <div class="rc-pay-grid">
+        <label class="field"><span class="field-label">Amount paid</span><input id="rcPayAmt" type="number" class="input mono" min="0.01" step="0.01" placeholder="0.00" required /></label>
+        <label class="field"><span class="field-label">Paid by</span><select id="rcPayBy" class="input"><option>Walmart</option><option>Shipping protection</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>Other</option></select></label>
+        <label class="field"><span class="field-label">On</span><input id="rcPayOn" type="date" class="input" /></label>
+      </div>
+      <p class="dlg-note" id="rcPayGap"></p>
+      <p class="dlg-note rc-small" id="rcPayNote"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcPayCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcPayOk" value="ok" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
   <!-- an expense outside Walmart (owner 2026-10-13): labels, packing, supplies… -->
   <dialog id="rcExpDlg" class="dlg rc-dlg">
     <form method="dialog" class="dlg-body">

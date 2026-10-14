@@ -1927,7 +1927,7 @@ function rcRenderProfit() {
   const cell = (label, v, sub, cls = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
   const priced = p.gross > 0;
   const partly = priced && p.priced && p.priced.unpriced > 0;
-  const costSub = [p.lostUnits ? `${p.lostUnits} lost ${p.lostUnits === 1 ? 'unit' : 'units'} costed` : '', p.atRisk && p.atRisk.units ? `${p.atRisk.units} pending, not costed` : ''].filter(Boolean).join(' · ') || `${p.unitsBack} back in stock · cost recovered`;
+  const costSub = [p.lostUnits ? `${p.lostUnits} lost ${p.lostUnits === 1 ? 'unit' : 'units'} costed` : '', p.atRisk && p.atRisk.units ? `${p.atRisk.units} pending, not costed` : '', p.recovered > 0 ? `${rcMoney(p.recovered)} paid back by insurance or a carrier` : ''].filter(Boolean).join(' · ') || `${p.unitsBack} back in stock · cost recovered`;
   $('rcProfitStrip').innerHTML = [
     cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
@@ -2500,6 +2500,19 @@ async function rcDoAction(po, act) {
     $('rcCaseId').focus();
     return;
   }
+  if (act === 'paidOut') {
+    const dlg = $('rcPayDlg');
+    $('rcPayPo').textContent = `PO ${po} · ${it.item || ''} · refund ${rcMoney(it.amount)}`;
+    $('rcPayAmt').value = it.paidOut > 0 ? String(it.paidOut) : '';
+    $('rcPayBy').value = it.paidOutBy || (it.caseOpened ? 'Walmart' : 'Shipping protection');
+    const today = new Date(); $('rcPayOn').value = it.paidOutOn || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    dlg.dataset.po = po; dlg.dataset.amount = String(it.amount || 0);
+    rcPayGapPaint();
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcPayAmt').focus();
+    return;
+  }
   if (act === 'note') {
     const dlg = $('rcNoteDlg');
     $('rcNotePo').textContent = `PO ${po} · ${it.item || ''}`;
@@ -2918,7 +2931,9 @@ $('rcBucketTable').addEventListener('click', (e) => {
     : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped'], ['writeOff', 'Loss']]; // owner 2026-10-13: one Received
   // the case mark (owner 2026-10-13, design B): opened asks for an optional
   // ID; once set the menu offers the ID and the close
-  const caseItems = marked ? [] : it.caseOpened ? [['caseId', it.caseId ? 'Case ID…' : 'Add the case ID…'], ['undoCase', 'Case closed']] : [['case', 'Case opened…']];
+  const caseItems = marked ? [] : [...(it.caseOpened ? [['caseId', it.caseId ? 'Case ID…' : 'Add the case ID…'], ['undoCase', 'Case closed']] : [['case', 'Case opened…']]),
+    // a payout typed by hand (owner 2026-10-14): case approved, or the insurance / carrier paid
+    ...(it.paidOut > 0 ? [['paidOut', 'Change the payout…'], ['undoPaidOut', 'Undo the payout']] : [['paidOut', 'Paid out…']])];
   const dlg = $('rcMenuDlg');
   dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
     + (caseItems.length ? '<div class="tab-menu-sep"></div>' + caseItems.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('') : '')
@@ -2939,7 +2954,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
     return;
   }
-  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase', 'undoWriteOff'].includes(act)) {
+  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase', 'undoWriteOff', 'undoPaidOut'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
@@ -2957,6 +2972,22 @@ $('rcCaseDlg').addEventListener('close', async () => {
   await rcMark(po, dlg.dataset.act === 'case' ? 'case' : 'caseId', { caseId });
 });
 $('rcCaseDlg').querySelector('form').addEventListener('submit', () => { $('rcCaseDlg').returnValue = 'ok'; });
+// the payout dialog: the gap line follows the amount as it is typed
+function rcPayGapPaint() {
+  const dlg = $('rcPayDlg'); const refund = Number(dlg.dataset.amount) || 0; const paid = Number($('rcPayAmt').value) || 0;
+  const by = $('rcPayBy').value; const gap = Math.round((refund - paid) * 100) / 100;
+  $('rcPayGap').textContent = paid > 0 ? (gap > 0.009 ? `Refund ${rcMoney(refund)} · paid ${rcMoney(paid)} · ${rcMoney(gap)} still lost` : `Refund ${rcMoney(refund)} · paid ${rcMoney(paid)} · nothing lost`) : `Refund ${rcMoney(refund)}`;
+  $('rcPayNote').textContent = /walmart/i.test(by) ? 'A Walmart payout reaches Profit through the next statement, so it is not added twice; the row moves to Walmart paid now.' : `Money from ${by} is outside Walmart's statements, so it is added to Profit on this PO.`;
+}
+$('rcPayAmt').addEventListener('input', rcPayGapPaint);
+$('rcPayBy').addEventListener('change', rcPayGapPaint);
+$('rcPayCancel').addEventListener('click', () => $('rcPayDlg').close(''));
+$('rcPayDlg').querySelector('form').addEventListener('submit', () => { $('rcPayDlg').returnValue = 'ok'; });
+$('rcPayDlg').addEventListener('close', async () => {
+  const dlg = $('rcPayDlg');
+  if (dlg.returnValue !== 'ok') return;
+  await rcMark(dlg.dataset.po, 'paidOut', { amount: Number($('rcPayAmt').value) || 0, by: $('rcPayBy').value, on: $('rcPayOn').value });
+});
 $('rcNoteCancel').addEventListener('click', () => $('rcNoteDlg').close(''));
 $('rcNoteDlg').querySelector('form').addEventListener('submit', () => { $('rcNoteDlg').returnValue = 'ok'; });
 $('rcNoteDlg').addEventListener('close', async () => {
