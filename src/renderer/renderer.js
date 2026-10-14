@@ -1933,7 +1933,8 @@ function rcRenderProfit() {
     cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
       : `${rcPlural(p.unitsSold, 'unit')} · no goods price in this import — import this one period's file again on the Import screen`),
-    cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees'),
+    cell('Walmart paid', signed(p.payout), (p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees')
+      + (p.heldOut && p.heldOut.amount > 0 ? ` · ${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement, not counted while the units are back or pending` : '')),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
     cell('Expenses', rcMoney(p.expenses ? p.expenses.total : 0), p.expenses && p.expenses.count ? `${rcPlural(p.expenses.count, 'entry', 'entries')} · ${p.expenses.byCategory.slice(0, 2).map(c => `${c.category.toLowerCase()} ${rcMoney(c.amount)}`).join(' · ')}` : 'none in this scope · add on the Expenses tab'),

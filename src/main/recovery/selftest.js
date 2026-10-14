@@ -128,6 +128,13 @@ module.exports = function run(check) {
     check('recovery: sort = needs action first, then oldest refund', st.items[0].needsAction && st.items.findIndex((i) => !i.needsAction) > st.items.filter((i) => i.needsAction).length - 1);
     check('recovery: Today card counts', st.today.toFile.count === 3 && st.today.waiting.count === 4 && st.today.cases.count === 0, st.today);
     check('recovery: a lost-after-delivery refund still outstanding counts as lost', st.items.find((i) => i.po === '010').lostAmount === 105.6 && st.items.find((i) => i.po === '011').lostAmount === 0);
+    // on Profit a "lost" refund inside its window is pending, not costed
+    // (owner 2026-10-14): give 010 a sold unit, read its line, put it back
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-A', sale_units = 1 WHERE run_id = ? AND po = '010'").run(res.id);
+    const prL = recovery.profit('cycle', res.id);
+    const l010 = prL.skus.flatMap((x) => x.lines || []).find((l) => l.po === '010');
+    check('recovery: profit — a lost-reason refund still inside its window is pending, not charged', !!l010 && l010.pending === true && /pending/.test(l010.situation) && l010.tone === 'amber', l010);
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-J', sale_units = 0 WHERE run_id = ? AND po = '010'").run(res.id);
 
     // status sentences (§6.6)
     check('recovery: status sentence — lost', rnr.statusText(by['010']).lead === 'Lost' && rnr.statusText(by['010']).clause === 'file now' && rnr.statusText(by['010']).tone === 'red');
@@ -269,9 +276,24 @@ module.exports = function run(check) {
     const l6 = a3 && a3.lines.find((l) => l.po === '006'); const l3 = a3 && a3.lines.find((l) => l.po === '003');
     check('recovery: profit — a return inside its window is pending: not costed, carried at risk', a3 && a3.unitsPending === 2 && a3.atRisk === 140 && l6 && l6.pending && /pending/.test(l6.situation) && l6.tone === 'amber', a3 && { pend: a3.unitsPending, risk: a3.atRisk, l6 });
     check('recovery: profit — a return past its window is lost: costed', a3 && a3.unitsLost === 1 && a3.cogs === 70 && l3 && !l3.pending && /cost charged/.test(l3.situation) && l3.tone === 'red', a3 && { lost: a3.unitsLost, cogs: a3.cogs, l3 });
+    // a refund of a sale before the first statement (owner 2026-10-14): 002
+    // (refund only, pending, $192) is left out of profit, 010 (refund only,
+    // paid back by Walmart → lost) is counted; the statement total carries both
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-A' WHERE run_id = ? AND po IN ('002', '010')").run(res.id);
+    const pr3b = recovery.profit('cycle', res.id); const a3b = pr3b.skus.find((g) => g.sku === 'SKU-A');
+    const l2o = a3b && a3b.lines.find((l) => l.po === '002'); const l10o = a3b && a3b.lines.find((l) => l.po === '010');
+    check('recovery: profit — a pre-tracking refund is left out of profit while the unit is back or pending, counted once lost',
+      l2o && l2o.notCounted === true && /sold before the first statement/.test(l2o.situation) && /not counted against profit/.test(l2o.situation) && l10o && l10o.notCounted === false && /· counted against profit/.test(l10o.situation)
+      && pr3b.heldOut.amount === 192 && pr3b.heldOut.orders === 1 && pr3b.payout === pr3.payout && Math.abs(pr3b.payout - pr3b.costedPayout - pr3b.missing.payout + 192) < 0.01
+      && a3b.heldOut === 192 && a3b.profit === Math.round((a3b.payout - a3b.cogs + 192) * 100) / 100 && pr3b.profit === Math.round((pr3b.costedPayout - pr3b.cogs) * 100) / 100 && a3b.atRisk === 140 && pr3b.lostUnits === 1,
+      { l2o, l10o, held: pr3b.heldOut, payout: pr3b.payout, costed: pr3b.costedPayout, miss: pr3b.missing.payout, a3: a3b && { payout: a3b.payout, cogs: a3b.cogs, profit: a3b.profit, heldOut: a3b.heldOut, risk: a3b.atRisk } });
+    const per3b = pr3b.periods.find((x) => x.id === res.id);
+    check('recovery: profit — the period trend leaves the same refund out', per3b && per3b.heldOut === 192 && per3b.profit === pr3b.profit, per3b);
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-B' WHERE run_id = ? AND po = '002'").run(res.id);
+    db.prepare("UPDATE wm_orders SET sku = 'SKU-J' WHERE run_id = ? AND po = '010'").run(res.id);
     check('recovery: profit — the strip totals carry at risk and lost units', pr3.atRisk.amount === 140 && pr3.atRisk.units === 2 && pr3.lostUnits === 1 && pr3.atRisk.orders >= 1, pr3.atRisk);
     const per3 = pr3.periods.find((x) => x.id === res.id);
-    check('recovery: profit — the period trend applies the same rule', per3 && per3.atRisk === 140 && per3.cogs === pr3.cogs, per3);
+    check('recovery: profit — the period trend applies the same rule', per3 && per3.atRisk === 140 && per3.cogs === pr3.cogs && per3.heldOut === 0 && per3.profit === pr3.profit, per3);
     // a goods price known on some orders only: goods sold and avg price read
     // the priced orders, and the strip says how many are missing
     db.prepare("UPDATE wm_orders SET gross = NULL WHERE run_id = ? AND po = '100'").run(res.id);

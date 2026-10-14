@@ -648,7 +648,7 @@ function profit(scope, key) {
 
   const bySku = new Map();
   const tot = { recovered: 0, payout: 0, cogs: 0, orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, missingCount: 0, missingPayout: 0, costedPayout: 0, gross: 0, commission: 0, commissionKnown: false,
-    pricedOrders: 0, unpricedOrders: 0, pricedUnits: 0, commGross: 0, atRisk: 0, atRiskUnits: 0, pendingOrders: 0, lostUnits: 0 };
+    pricedOrders: 0, unpricedOrders: 0, pricedUnits: 0, commGross: 0, atRisk: 0, atRiskUnits: 0, pendingOrders: 0, lostUnits: 0, heldOut: 0, heldOutOrders: 0 };
   const missingSkus = new Set();
   // each SKU also lists its POs with a situation (owner 2026-10-12: "a
   // dropdown where I can see all the relevant PO#s for each item")
@@ -688,10 +688,23 @@ function profit(scope, key) {
     const units = Math.min(w.refundUnits, w.saleUnits);
     if (whPo.has(o.po) || manual) return { kind: manual ? 'manual' : 'back', back: own(units), held: 0, it: null, elsewhere };
     const it = trackerByPo.get(o.po) || null;
-    const pending = !!it && it.status === 'outstanding' && it.lost !== true && !it.windowClosed
-      && (it.wfsWaiting || it.wfsDisputeOpen || it.caseOpened || it.adjustment || (it.daysLeft != null && it.daysLeft > 0));
+    // a "lost" refund (Lost in transit, Lost after delivery) waits out its
+    // window like any other before its cost is charged (owner 2026-10-14:
+    // "it doesn't reduce from profit until I mark the lost return, right");
+    // Reconcile still chases it from day one — only the costing waits
+    const lostInside = !!it && it.lost === true && it.daysOld != null && it.daysOld < (it.isWfs ? 135 : 45);
+    const pending = !!it && it.status === 'outstanding' && !it.windowClosed
+      && (it.wfsWaiting || it.wfsDisputeOpen || it.caseOpened || it.adjustment || (it.daysLeft != null && it.daysLeft > 0) || lostInside);
     return pending ? { kind: 'pending', back: 0, held: own(units), it, elsewhere } : { kind: 'lost', back: 0, held: 0, it, elsewhere };
   };
+  // a refund of a sale made before the first imported statement has no sale
+  // income here to cancel against, so its whole amount would land on profit
+  // even with the unit back on the shelf (owner 2026-10-14: "you are
+  // removing from the profit even though it was returned back to us?"). It
+  // is left out of profit while the unit is back, pending or never shipped,
+  // and counted only once the return is lost. "Walmart paid" still shows
+  // the statement's own total.
+  const notCounted = (o, st) => !!o.orphan && st.kind !== 'lost';
   // a goods price is only known for periods imported with the price
   // columns (v1.32.13+) whose archive was on hand; an order without one
   // counts in payout and cost but not in goods sold, avg price or commission
@@ -701,6 +714,7 @@ function profit(scope, key) {
     const cost = unitCost(o.sku);
     const st = standing(o);
     const { back, held } = st;
+    const heldOut = notCounted(o, st);
     let situation = 'Sold, kept'; let tone = 'green';
     const when = (it) => { const sh = rnr.shortStatus(it); return `${sh.action}${sh.deadlineText && sh.deadlineText !== '—' ? ` · ${sh.deadlineText}` : ''}`; };
     const soldHere = (Number(o.saleUnits) || 0) > 0;
@@ -714,6 +728,7 @@ function profit(scope, key) {
     else if (st.kind === 'back') { situation = `Refunded${where} · back in stock${costNote('cost recovered')}`; tone = 'navy'; }
     else if (st.kind === 'pending') { situation = `Refunded${where} · pending · ${when(st.it)}${costNote('not costed yet')}`; tone = 'amber'; }
     else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)}${costNote('cost charged')}` : `Refunded${where} · not received${costNote('cost charged')}`; tone = 'red'; }
+    if (o.orphan) situation += heldOut ? ' · not counted against profit' : ' · counted against profit';
     // the statement's own words for the PO's fee lines (owner 2026-10-13:
     // "include if this is a shipping label charge") ride on every row
     if (o.note && soldHere) situation += ` · ${o.note}`;
@@ -729,7 +744,7 @@ function profit(scope, key) {
       situation += ` · ${outside ? `${mkPaid.paidOutBy} paid $${mkPaid.paidOut.toFixed(2)}` : `Walmart paid $${mkPaid.paidOut.toFixed(2)} (marked by hand)`}`;
     }
     tot.recovered += recovered; recoveredByRun.set(o.run_id, (recoveredByRun.get(o.run_id) || 0) + recovered);
-    const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, situation, tone };
+    const line = { po: o.po, date: o.date || '', saleUnits: o.saleUnits, refundUnits: o.refundUnits, net: r2(o.netPayable), back: back > 0, pending: held > 0, notCounted: heldOut, situation, tone };
     const costedUnits = Math.max(0, o.saleUnits - back - held);
     const cogs = cost === null ? 0 : costedUnits * cost;
     const atRisk = cost === null ? 0 : held * cost;
@@ -743,17 +758,18 @@ function profit(scope, key) {
     if (isPriced) { tot.pricedOrders++; tot.pricedUnits += o.saleUnits; } else if (o.saleUnits > 0) tot.unpricedOrders++;
     tot.gross += gross; if (comm !== null) { tot.commission += comm; tot.commGross += gross; tot.commissionKnown = true; }
     if (cost === null) { tot.missingCount++; tot.missingPayout += o.netPayable; missingSkus.add(o.sku || '(no SKU)'); }
-    else { tot.cogs += cogs; tot.costedPayout += o.netPayable; }
+    else { tot.cogs += cogs; if (heldOut) { tot.heldOut += -o.netPayable; tot.heldOutOrders++; } else tot.costedPayout += o.netPayable; }
+    const heldOutAmt = heldOut && cost !== null ? -o.netPayable : 0;
     const k = o.sku || '(no SKU)';
-    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, lines: [] });
+    if (!bySku.has(k)) bySku.set(k, { sku: k, item: o.item || '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, heldOut: 0, unitCost: cost, costKnown: cost !== null, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, lines: [] });
     const g = bySku.get(k);
     g.lines.push(line);
     if (!g.item && o.item) g.item = o.item;
-    g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.unitsPending += held; g.unitsLost += lostUnits; g.atRisk += atRisk; g.payout += o.netPayable; g.cogs += cogs;
+    g.orders++; g.unitsSold += o.saleUnits; g.unitsRefunded += o.refundUnits; g.unitsBack += back; g.unitsPending += held; g.unitsLost += lostUnits; g.atRisk += atRisk; g.payout += o.netPayable; g.cogs += cogs; g.heldOut += heldOutAmt;
     g.gross += gross; if (isPriced) g.pricedUnits += o.saleUnits; if (comm !== null) { g.commission += comm; g.commGross += gross; g.commissionKnown = true; }
   }
   const skus = [...bySku.values()].map((g) => ({
-    ...g, inv: invSku(g.sku), payout: r2(g.payout), cogs: r2(g.cogs), profit: r2(g.payout - g.cogs),
+    ...g, inv: invSku(g.sku), payout: r2(g.payout), cogs: r2(g.cogs), heldOut: r2(g.heldOut), profit: r2(g.payout - g.cogs + g.heldOut),
     // refunds first, then newest sale first
     lines: g.lines.slice().sort((a, b) => (b.refundUnits > 0) - (a.refundUnits > 0) || String(b.date).localeCompare(String(a.date))),
     // the goods price per unit sold and Walmart's cut of it, from the
@@ -761,25 +777,25 @@ function profit(scope, key) {
     gross: r2(g.gross), commission: r2(g.commission), atRisk: r2(g.atRisk),
     avgPrice: g.pricedUnits > 0 && g.gross > 0 ? r2(g.gross / g.pricedUnits) : null,
     commissionPct: g.commissionKnown && g.commGross > 0 ? Math.round((-g.commission / g.commGross) * 1000) / 10 : null,
-    margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs) / g.payout) * 1000) / 10 : null,
+    margin: g.costKnown && g.payout > 0 ? Math.round(((g.payout - g.cogs + g.heldOut) / g.payout) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
   // the same listings grouped under their Linnworks SKU; an unmapped
   // listing is a group of one, flagged so the owner can map it on Pricing
   const byInv = new Map();
   for (const g of skus) {
     const key = g.inv || g.sku; const mapped = !!g.inv;
-    if (!byInv.has(key)) byInv.set(key, { sku: key, mapped, listings: [], item: '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, unitCost: null, costKnown: false });
+    if (!byInv.has(key)) byInv.set(key, { sku: key, mapped, listings: [], item: '', orders: 0, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, cogs: 0, heldOut: 0, gross: 0, commission: 0, commissionKnown: false, pricedUnits: 0, commGross: 0, unitCost: null, costKnown: false });
     const x = byInv.get(key);
     x.listings.push(g); if (!x.item && g.item) x.item = g.item;
-    for (const f of ['orders', 'unitsSold', 'unitsRefunded', 'unitsBack', 'unitsPending', 'unitsLost', 'atRisk', 'payout', 'cogs', 'gross', 'commission', 'pricedUnits', 'commGross']) x[f] += g[f] || 0;
+    for (const f of ['orders', 'unitsSold', 'unitsRefunded', 'unitsBack', 'unitsPending', 'unitsLost', 'atRisk', 'payout', 'cogs', 'heldOut', 'gross', 'commission', 'pricedUnits', 'commGross']) x[f] += g[f] || 0;
     if (g.commissionKnown) x.commissionKnown = true;
     if (g.costKnown) { x.costKnown = true; if (x.unitCost === null) x.unitCost = g.unitCost; }
   }
   const groups = [...byInv.values()].map((x) => ({
-    ...x, payout: r2(x.payout), cogs: r2(x.cogs), atRisk: r2(x.atRisk), gross: r2(x.gross), commission: r2(x.commission), profit: r2(x.payout - x.cogs),
+    ...x, payout: r2(x.payout), cogs: r2(x.cogs), atRisk: r2(x.atRisk), heldOut: r2(x.heldOut), gross: r2(x.gross), commission: r2(x.commission), profit: r2(x.payout - x.cogs + x.heldOut),
     avgPrice: x.pricedUnits > 0 && x.gross > 0 ? r2(x.gross / x.pricedUnits) : null,
     commissionPct: x.commissionKnown && x.commGross > 0 ? Math.round((-x.commission / x.commGross) * 1000) / 10 : null,
-    margin: x.costKnown && x.payout > 0 ? Math.round(((x.payout - x.cogs) / x.payout) * 1000) / 10 : null,
+    margin: x.costKnown && x.payout > 0 ? Math.round(((x.payout - x.cogs + x.heldOut) / x.payout) * 1000) / 10 : null,
     listings: x.listings.slice().sort((a, b) => b.payout - a.payout),
   })).sort((a, b) => b.payout - a.payout);
   // Walmart lines that belong to no order: storage, ads, WFS inventory
@@ -800,15 +816,16 @@ function profit(scope, key) {
   const periods = runs
     .map((r) => {
       const os = rowsIn((h) => h.run === r.id);
-      let payout = 0; let costed = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false;
+      let payout = 0; let costed = 0; let cogs = 0; let miss = 0; let units = 0; let atRisk = 0; let anyPriced = false; let heldOut = 0;
       for (const o of os) {
         const cost = unitCost(o.sku);
-        const { back, held } = standing(o);
+        const st = standing(o); const { back, held } = st;
         payout += o.netPayable; units += o.saleUnits; if (priced(o)) anyPriced = true;
-        if (cost === null) miss++; else { costed += o.netPayable; cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
+        if (cost === null) miss++;
+        else { if (notCounted(o, st)) heldOut += -o.netPayable; else costed += o.netPayable; cogs += Math.max(0, o.saleUnits - back - held) * cost; atRisk += held * cost; }
       }
       const rec = r2(recoveredByRun.get(r.id) || 0);
-      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), costedPayout: r2(costed), cogs: r2(cogs), profit: r2(costed - cogs + rec), recovered: rec, atRisk: r2(atRisk), priced: anyPriced, margin: costed > 0 ? Math.round(((costed - cogs + rec) / costed) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
+      return { id: r.id, label: r.label, orders: os.length, units, payout: r2(payout), costedPayout: r2(costed), cogs: r2(cogs), profit: r2(costed - cogs + rec), recovered: rec, atRisk: r2(atRisk), heldOut: r2(heldOut), priced: anyPriced, margin: costed > 0 ? Math.round(((costed - cogs + rec) / costed) * 1000) / 10 : null, missingCount: miss, hasOrders: os.length > 0 };
     })
     .sort((a, b) => periodStartMs({ label: b.label, ranAt: '' }) - periodStartMs({ label: a.label, ranAt: '' }));
 
@@ -825,7 +842,7 @@ function profit(scope, key) {
     priced: { orders: tot.pricedOrders, unpriced: tot.unpricedOrders, units: tot.pricedUnits },
     atRisk: { amount: r2(tot.atRisk), units: tot.atRiskUnits, orders: tot.pendingOrders }, lostUnits: tot.lostUnits,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
-    costedPayout: r2(tot.costedPayout), recovered: r2(tot.recovered), other, netAfterOther: r2(profitV + other),
+    costedPayout: r2(tot.costedPayout), recovered: r2(tot.recovered), heldOut: { amount: r2(tot.heldOut), orders: tot.heldOutOrders }, other, netAfterOther: r2(profitV + other),
     skus, groups, periods, missingRuns,
   };
 }

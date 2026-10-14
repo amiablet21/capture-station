@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.62 highlights
+
+- **A refund of a sale made before your first statement no longer drags profit down while the unit is back.** Its sale income was never counted, so the whole refund used to land on profit even with the unit back on the shelf. It is now left out of profit while the return is back in stock, pending or never shipped, and counted only once it is lost. The line says "not counted against profit" or "counted against profit", the Walmart paid cell says how much was left out, and Walmart paid itself still matches the statement to the cent.
+- **A "Lost in transit" or "Lost after delivery" refund waits out its window like any other return before its cost is charged.** Reconcile still chases it from day one; only the costing waits (seller-fulfilled 45 days, WFS 135 days).
+
 ## v1.32.61 highlights
 
 - **A renamed statement gets Walmart's own period name.** The downloaded report carries the period on its summary rows — one per week paid and one for the whole statement — plus the odd adjustment row with a window of its own; the app now takes the widest of them, so SEPT_5_-_19.csv imports as "Sep 5 – Sep 19, 2026" exactly as Walmart names it, and lands on the period already in the list. Checked against the owner's three September files: three periods, no twins, 2546 orders priced, Goods sold above Walmart paid.
