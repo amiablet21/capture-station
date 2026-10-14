@@ -432,9 +432,9 @@ function render() {
     for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button type="button" class="rc-subtab chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All <span class="rc-subtab-count">${state.rows.length}</span></button>`,
+      `<button type="button" class="chip-filter ${channelFilter === 'all' ? 'is-on' : ''}" data-ch="all">All <span class="rc-tab-count">${state.rows.length}</span></button>`,
       ...channels.map(c =>
-        `<button type="button" class="rc-subtab chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-subtab-count">${counts[c]}</span></button>`),
+        `<button type="button" class="chip-filter ${channelFilter === c ? 'is-on' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-tab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -770,8 +770,8 @@ function renderCapHist() {
     for (const r of all) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button type="button" class="rc-subtab chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All <span class="rc-subtab-count">${all.length}</span></button>`,
-      ...channels.map(c => `<button type="button" class="rc-subtab chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-subtab-count">${counts[c]}</span></button>`),
+      `<button type="button" class="chip-filter ${channelFilter === 'all' ? 'is-on' : ''}" data-ch="all">All <span class="rc-tab-count">${all.length}</span></button>`,
+      ...channels.map(c => `<button type="button" class="chip-filter ${channelFilter === c ? 'is-on' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-tab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -8976,7 +8976,7 @@ function prChCells(p) {
     const inner = lines.map(l => `
         <div class="pr-entry"><div class="pr-line">
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
-          <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history">${ICONS.clock}</button>
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="${l.fromSales
       ? `The repricer owns this price — this is what the listing last sold at (before tax), never written here. Linnworks has ${prMoney(l.lwPrice)} on file${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`
@@ -11316,7 +11316,7 @@ function renderRecvPast() {
   if (!recvPast.length) {
     box.innerHTML = `
       <div class="recv-past-empty">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.58l-42-25.2A12,12,0,0,1,112,130.29V80a12,12,0,0,1,24,0Zm-8-52A100.2,100.2,0,0,0,57.91,57.06L48,66.75V56a12,12,0,0,0-24,0V96a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24H65.16l9.53-9.31A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
+        ${ICONS.clock}
         No receipts yet. Finished receipts are saved here for review.
       </div>`;
     return;

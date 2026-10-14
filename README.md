@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.70 highlights
+
+- **Orders head, version C.** The channels are a segment pill beside the title (like Period / Month / Year on Profit), the search and the icon cluster sit on the same line, and there is no rule under the title.
+- **One history icon everywhere.** The clock from the Orders head is now also the price-history control on Pricing (the eye is gone), the footer History button carries it, and the receipts panel uses the same glyph. Stock rows already used it.
+
 ## v1.32.69 highlights
 
 - **The Orders head is one line.** Title, channel tabs, search and the icon cluster sit on the rule, the active tab's underline sits on that rule, and the table starts the card. The card head appears only in History (for the date range) or when there are failed rows to clear.
