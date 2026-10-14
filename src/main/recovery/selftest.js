@@ -285,7 +285,7 @@ module.exports = function run(check) {
     check('recovery: profit — a pre-tracking refund is left out of profit while the unit is back or pending, counted once lost',
       l2o && l2o.notCounted === true && /sold before the first statement/.test(l2o.situation) && /not counted against profit/.test(l2o.situation) && l10o && l10o.notCounted === false && /· counted against profit/.test(l10o.situation)
       && pr3b.heldOut.amount === 192 && pr3b.heldOut.orders === 1 && pr3b.payout === pr3.payout && Math.abs(pr3b.payout - pr3b.costedPayout - pr3b.missing.payout + 192) < 0.01
-      && a3b.heldOut === 192 && a3b.profit === Math.round((a3b.payout - a3b.cogs + 192) * 100) / 100 && pr3b.profit === Math.round((pr3b.costedPayout - pr3b.cogs) * 100) / 100 && a3b.atRisk === 140 && pr3b.lostUnits === 1,
+      && a3b.heldOut === 192 && a3b.payout === Math.round((a3b.statementPayout + 192) * 100) / 100 && a3b.profit === Math.round((a3b.payout - a3b.cogs) * 100) / 100 && (a3b.margin === null || a3b.margin === Math.round((a3b.profit / a3b.payout) * 1000) / 10) && pr3b.profit === Math.round((pr3b.costedPayout - pr3b.cogs) * 100) / 100 && a3b.atRisk === 140 && pr3b.lostUnits === 1,
       { l2o, l10o, held: pr3b.heldOut, payout: pr3b.payout, costed: pr3b.costedPayout, miss: pr3b.missing.payout, a3: a3b && { payout: a3b.payout, cogs: a3b.cogs, profit: a3b.profit, heldOut: a3b.heldOut, risk: a3b.atRisk } });
     const per3b = pr3b.periods.find((x) => x.id === res.id);
     check('recovery: profit — the period trend leaves the same refund out', per3b && per3b.heldOut === 192 && per3b.profit === pr3b.profit, per3b);

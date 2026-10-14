@@ -1979,7 +1979,7 @@ function rcRenderProfit() {
       <td class="is-right rc-nowrap">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
       <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
       <td class="is-right">${g.commissionPct == null ? '<span class="rc-faint">—</span>' : rcPct(g.commissionPct)}</td>
-      <td class="is-right">${money(g.payout)}</td>
+      <td class="is-right" title="${g.heldOut > 0 ? `Leaves out ${rcMoney(g.heldOut)} refunded on sales before your first statement (units back or pending); Walmart's own figure is ${g.statementPayout < 0 ? '−' : ''}${rcMoney(g.statementPayout)}` : ''}">${money(g.payout)}${g.heldOut > 0 ? '<span class="rc-muted">*</span>' : ''}</td>
       <td class="is-right">${costCell(g)}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
       <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;

@@ -4,6 +4,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.32.65 highlights
 
+- **A SKU's margin is on the counted money.** A pre-tracking refund left out of profit is now left out of the SKU row's Walmart paid too, so profit and margin read off the same number (a row read 106.9% because profit added the refunds back while Walmart paid still subtracted them). The row carries a small asterisk and the hover gives Walmart's own figure.
 - **A refund left out of profit is struck through.** On a PO line whose sale was before your first statement and whose unit is back or pending, the Walmart paid amount shows in grey with a line through it, and the hover says why. The figure is still Walmart's own.
 
 ## v1.32.64 highlights
