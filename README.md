@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.66 highlights
+
+- **No margin without a sale.** A SKU that sold nothing in the scope (only a label credit, or only a refund of an older sale) shows a dash for margin instead of 100%.
+
 ## v1.32.65 highlights
 
 - **A SKU's margin is on the counted money.** A pre-tracking refund left out of profit is now left out of the SKU row's Walmart paid too, so profit and margin read off the same number (a row read 106.9% because profit added the refunds back while Walmart paid still subtracted them). The row carries a small asterisk and the hover gives Walmart's own figure.

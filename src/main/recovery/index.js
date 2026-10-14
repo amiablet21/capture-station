@@ -780,7 +780,8 @@ function profit(scope, key) {
     gross: r2(g.gross), commission: r2(g.commission), atRisk: r2(g.atRisk),
     avgPrice: g.pricedUnits > 0 && g.gross > 0 ? r2(g.gross / g.pricedUnits) : null,
     commissionPct: g.commissionKnown && g.commGross > 0 ? Math.round((-g.commission / g.commGross) * 1000) / 10 : null,
-    margin: g.costKnown && g.payout + g.heldOut > 0 ? Math.round(((g.payout + g.heldOut - g.cogs) / (g.payout + g.heldOut)) * 1000) / 10 : null,
+    // no margin without a sale: a fee credit alone would read 100% (owner 2026-10-14)
+    margin: g.costKnown && g.unitsSold > 0 && g.payout + g.heldOut > 0 ? Math.round(((g.payout + g.heldOut - g.cogs) / (g.payout + g.heldOut)) * 1000) / 10 : null,
   })).sort((a, b) => b.payout - a.payout);
   // the same listings grouped under their Linnworks SKU; an unmapped
   // listing is a group of one, flagged so the owner can map it on Pricing
@@ -799,7 +800,7 @@ function profit(scope, key) {
     ...x, payout: r2(x.payout), statementPayout: r2(x.payout - x.heldOut), cogs: r2(x.cogs), atRisk: r2(x.atRisk), heldOut: r2(x.heldOut), gross: r2(x.gross), commission: r2(x.commission), profit: r2(x.payout - x.cogs),
     avgPrice: x.pricedUnits > 0 && x.gross > 0 ? r2(x.gross / x.pricedUnits) : null,
     commissionPct: x.commissionKnown && x.commGross > 0 ? Math.round((-x.commission / x.commGross) * 1000) / 10 : null,
-    margin: x.costKnown && x.payout > 0 ? Math.round(((x.payout - x.cogs) / x.payout) * 1000) / 10 : null,
+    margin: x.costKnown && x.unitsSold > 0 && x.payout > 0 ? Math.round(((x.payout - x.cogs) / x.payout) * 1000) / 10 : null,
     listings: x.listings.slice().sort((a, b) => b.payout - a.payout),
   })).sort((a, b) => b.payout - a.payout);
   // Walmart lines that belong to no order: storage, ads, WFS inventory

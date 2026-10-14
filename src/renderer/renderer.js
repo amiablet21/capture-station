@@ -1982,7 +1982,7 @@ function rcRenderProfit() {
       <td class="is-right" title="${g.heldOut > 0 ? `Leaves out ${rcMoney(g.heldOut)} refunded on sales before your first statement (units back or pending); Walmart's own figure is ${g.statementPayout < 0 ? '−' : ''}${rcMoney(g.statementPayout)}` : ''}">${money(g.payout)}${g.heldOut > 0 ? '<span class="rc-muted">*</span>' : ''}</td>
       <td class="is-right">${costCell(g)}</td>
       <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
-      <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
+      <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown && g.margin != null ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
     const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
     // a Walmart listing row: its own caret opens its POs
     const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
