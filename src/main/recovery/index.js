@@ -119,6 +119,29 @@ function syncIn() {
   syncBusy = false;
 }
 
+// what the shared folder holds for Recovery and what this desktop has
+// taken from it (owner 2026-10-14: marks from a file did not show on a
+// new computer); "resync" forgets how far each file was read and reads
+// every file from the top again
+function syncStatus() {
+  const rs = deps.retsync;
+  if (!rs || !rs.enabled()) return { ok: true, enabled: false };
+  const st = rs.status();
+  const files = (prefix) => (typeof rs.auxFiles === 'function' ? rs.auxFiles(prefix) : []);
+  const marks = [...store.allMarks().values()].filter((m) => !m.removed);
+  const own = new Set(mine().map((x) => String(x).toUpperCase()));
+  return {
+    ok: true, enabled: true, folder: st.folder, folderOk: st.folderOk !== false, station: station(),
+    files: { wmruns: files('wmruns'), wmmarks: files('wmmarks'), wmexpenses: files('wmexpenses') },
+    local: { runs: store.listRunMeta().length, marks: marks.length, ownMarks: marks.filter((m) => own.has(String(m.station || '').toUpperCase())).length, expenses: store.allExpenses().filter((e) => !e.removed).length },
+  };
+}
+function resync() {
+  for (const k of Object.keys(auxStates)) delete auxStates[k];
+  syncIn();
+  return syncStatus();
+}
+
 /* ---------- import (§3) ---------- */
 
 const safeLabel = (label) => String(label).replace(/[\\/:*?"<>|]/g, '-');
@@ -922,7 +945,7 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, addExpense, removeExpense,
+  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, syncStatus, resync, addExpense, removeExpense,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
   _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },

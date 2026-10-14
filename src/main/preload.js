@@ -122,6 +122,8 @@ contextBridge.exposeInMainWorld('api', {
   recoveryExpenseAdd: (rec) => ipcRenderer.invoke('recovery:expenseAdd', rec),
   recoveryExpenseRemove: (id) => ipcRenderer.invoke('recovery:expenseRemove', { id }),
   recoveryMarkFile: (text) => ipcRenderer.invoke('recovery:markFile', { text }),
+  recoverySyncStatus: () => ipcRenderer.invoke('recovery:syncStatus'),
+  recoveryResync: () => ipcRenderer.invoke('recovery:resync'),
   recoveryMarkPick: () => ipcRenderer.invoke('recovery:markPick'),
   findStart: (text, forward, fresh) => ipcRenderer.invoke('find:start', { text, forward, fresh }),
   findStop: () => ipcRenderer.invoke('find:stop'),

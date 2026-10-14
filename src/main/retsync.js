@@ -460,6 +460,26 @@ function readAuxNew(prefix, state) {
   return out;
 }
 
+// the aux files of a prefix in the shared folder, one per station, with
+// their line counts (owner 2026-10-14: "why did it not save my marks" —
+// the Import screen shows what each desktop has written)
+function auxFiles(prefix) {
+  if (!enabled()) return [];
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(folder)) {
+      const m = f.match(new RegExp(`^${prefix}-([A-Z0-9-]+)\\.jsonl$`));
+      if (!m) continue;
+      const full = path.join(folder, f);
+      let lines = 0; let bytes = 0; let mtime = 0; let readable = true;
+      try { const st = fs.statSync(full); bytes = st.size; mtime = st.mtimeMs; } catch { readable = false; }
+      try { lines = fs.readFileSync(full, 'utf8').split('\n').filter((l) => l.trim()).length; } catch { readable = false; }
+      out.push({ file: f, station: m[1], own: m[1] === station, lines, bytes, mtime, readable });
+    }
+  } catch { /* folder unreachable */ }
+  return out.sort((a, b) => (b.own - a.own) || b.mtime - a.mtime);
+}
+
 function readAux(prefix) {
   if (!enabled()) return [];
   const out = [];
@@ -476,4 +496,4 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, auxEnsure, readAux, readAuxNew };
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, auxEnsure, readAux, readAuxNew, auxFiles };

@@ -179,6 +179,8 @@ module.exports = function run(check) {
     const rmx = recovery.removeExpense(ex.id);
     check('recovery: expenses — removed everywhere', rmx.ok && recovery.profit('all').expenses.count === 0 && auxLog.some(([p, e]) => p === 'wmexpenses' && e.id === ex.id && e.removed), { rmx, log: auxLog.filter(([p]) => p === 'wmexpenses').length });
     // the statement as Walmart lays it out (v1.32.39)
+    const ss = recovery.syncStatus();
+    check('recovery: sync status — answers with sync off, and resync is safe', ss.ok && ss.enabled === false && recovery.resync().ok, ss);
     const sts = recovery.statements();
     check('recovery: statements — one per imported period, newest first, each with its sections', sts.ok && sts.statements.length >= 2 && sts.statements[0].id === res2.id && sts.statements.every((x) => Array.isArray(x.sections) && typeof x.activity === 'number'), { n: sts.statements.length, first: sts.statements[0] && sts.statements[0].label });
     const stm = recovery.statement('cycle', res2.id);

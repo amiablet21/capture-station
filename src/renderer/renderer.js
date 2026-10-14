@@ -2017,7 +2017,25 @@ function rcRenderProfit() {
 
 /* ----- Reconcile ----- */
 /* ----- Import: the periods' home ----- */
+// the shared-folder readout on Import: every station's files for periods,
+// marks and expenses with their line counts, what this desktop holds, and
+// a button that reads every file from the top again
+async function rcRenderSyncPanel() {
+  const box = $('rcSyncPanel');
+  const st = await api.recoverySyncStatus().catch(() => null);
+  if (!st || !st.ok) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!st.enabled) { box.innerHTML = '<div class="rc-sync-h">Shared folder</div><div class="rc-sync-line rc-muted">Sync is off on this computer, so marks and periods made elsewhere do not reach it. Turn it on in Settings → Sync with the same folder as the other desktops.</div>'; return; }
+  const when = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${rcMonDay(d.toISOString())} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; };
+  const row = (label, list, unit) => `<div class="rc-sync-grp"><span class="rc-sync-k">${label}</span>${list.length ? list.map(f => `<span class="rc-sync-f ${f.own ? 'is-own' : ''} ${f.readable ? '' : 'is-bad'}" title="${esc(f.file)}">${esc(f.station)}${f.own ? ' (this computer)' : ''} · <b>${f.lines}</b> ${unit}${f.readable ? '' : ' · could not be read'}${f.mtime ? ` · ${esc(when(f.mtime))}` : ''}</span>`).join('') : '<span class="rc-muted">no files yet</span>'}</div>`;
+  box.innerHTML = `<div class="rc-sync-h">Shared folder <span class="rc-muted rc-small">${esc(st.folder || '')}${st.folderOk ? '' : ' · not reachable right now'}</span><button type="button" class="rc-link" id="rcResyncBtn">Re-read every file</button></div>
+    ${row('Periods', st.files.wmruns, 'events')}${row('Marks', st.files.wmmarks, 'lines')}${row('Expenses', st.files.wmexpenses, 'lines')}
+    <div class="rc-sync-line rc-muted">This computer holds ${rcPlural(st.local.runs, 'period')}, ${rcPlural(st.local.marks, 'mark')} (${st.local.ownMarks} made here) and ${rcPlural(st.local.expenses, 'expense')}. A station's marks file should hold at least as many lines as the marks it made; if another desktop's file is missing or short, open Recovery on that desktop once so it rebuilds its file.</div>`;
+  const btn = $('rcResyncBtn');
+  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); await rcLoad(); toast('Shared folder read again'); };
+}
 function rcRenderImport() {
+  rcRenderSyncPanel();
   const runs = rc.data.runs || [];
   $('rcPeriodCount').textContent = runs.length ? String(runs.length) : '';
   $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here — or several at once' : 'Drop a payment period CSV here — or several at once';

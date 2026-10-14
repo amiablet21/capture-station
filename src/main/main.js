@@ -7428,6 +7428,8 @@ function registerRecoveryIpc() {
     try { costPut(k, n); return { ok: true, cost: n }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
+  ipcMain.handle('recovery:syncStatus', () => recoveryGate() || recoveryTry(() => recovery.syncStatus()));
+  ipcMain.handle('recovery:resync', () => recoveryGate() || recoveryTry(() => recovery.resync()));
   ipcMain.handle('recovery:markPick', async () => {
     if (recoveryGate()) return recoveryGate();
     const pick = await dialog.showOpenDialog(win, { title: 'A file of PO numbers that came back before the Returns log', filters: [{ name: 'CSV or text', extensions: ['csv', 'txt'] }], properties: ['openFile'] });

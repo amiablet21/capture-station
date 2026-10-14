@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.55 highlights
+
+- **A Shared folder readout on Import** (owner, on a new computer: "why did it not save my previous Mark received from a file?"). Under the drop zones the app lists what the shared folder holds for Recovery — each station's periods, marks and expenses files with their line counts and last write, this computer's own in navy, an unreadable file in red — and what this desktop holds (periods, marks and how many were made here). "Re-read every file" forgets how far each file was read and takes every file from the top. With sync off it says so and points at Settings → Sync.
+
 ## v1.32.54 highlights
 
 - The Import list's rows carry only Remove (owner: "the Reconcile and Excel things are not necessary"). Clicking the period's name still opens it on Reconcile.
