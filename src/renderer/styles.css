@@ -5376,17 +5376,13 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #787774; }
 .rc-pick-menu { max-height: 320px; overflow-y: auto; min-width: 220px; }
 .rc-pick-menu .tab-menu-item.is-current { color: #1E3A66; font-weight: 600; }
-/* seven cells on a wide window, four per row below that (owner 2026-10-14:
-   "pretty scrunched together"); the cells draw their own right and bottom
-   lines, the strip's inset shadow closes the outer edge */
-.rc-strip-profit { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; background: #FFFFFF; border-right: none; border-bottom: none; box-shadow: inset -1px -1px 0 #EAEAEA; }
-.rc-strip-profit .rc-cell { border-right: 1px solid #EAEAEA; border-bottom: 1px solid #EAEAEA; background: #FFFFFF; padding: 14px 18px 13px; }
-.rc-strip-profit .rc-cell.is-hi { background: #F4F6FA; }
-.rc-strip-profit .rc-cell-n { font-size: 21px; white-space: nowrap; }
-@media (min-width: 1380px) {
-  .rc-strip-profit { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .rc-strip-profit .rc-cell { border-bottom: none; }
-}
+/* seven cells, always one row (owner 2026-10-14: "I want one row"): the
+   numbers scale with the window so a seven-figure Goods sold still fits */
+.rc-strip-profit { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rc-strip-profit .rc-cell { padding: 12px 14px 11px; min-width: 0; }
+.rc-strip-profit .rc-cell-n { font-size: clamp(12px, 1.35vw, 22px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-strip-profit .rc-cell-sub { font-size: clamp(10px, 0.8vw, 12px); }
+.rc-strip-profit .rc-label { font-size: clamp(9px, 0.7vw, 10.5px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the eye (owner 2026-10-13): every number on Profit blurred until it is pressed again */
 #recoveryPage.is-blur .rc-strip-profit .rc-cell-n,
 #recoveryPage.is-blur .rc-strip-profit .rc-cell-sub { filter: blur(7px); user-select: none; }

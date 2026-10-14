@@ -2,9 +2,9 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
-## v1.32.73 highlights
+## v1.32.74 highlights
 
-- **The Profit strip no longer squeezes its seven cells.** On a wide window they sit in one row with slightly smaller numbers; below about 1380px they go four to a row, so a seven-figure Goods sold never runs into the next cell.
+- **The Profit strip stays one row.** Its numbers and words scale with the window, so a seven-figure Goods sold fits its cell on a narrower screen instead of running into the next one.
 
 ## v1.32.72 highlights
 
