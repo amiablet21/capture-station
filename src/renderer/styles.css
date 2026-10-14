@@ -5747,6 +5747,8 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-warn svg { display: block; }
 .rc-warn + .rc-group-note { margin-left: 6px; }
 .rc-neg { color: #9F2F2D; }
+/* a refund left out of profit (sold before the first statement, unit back or pending): struck through so the eye skips it */
+.rc-out { color: #A5A29C; text-decoration: line-through; text-decoration-thickness: 1px; }
 .rc-notice { font-size: 12px; color: #956400; margin-top: 10px; }
 .rc-table td { overflow-wrap: anywhere; }
 .rc-table .rc-nowrap { white-space: normal; }

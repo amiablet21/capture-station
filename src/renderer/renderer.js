@@ -1897,7 +1897,7 @@ function rcProfitLines(g) {
       <td><button type="button" class="rc-po rc-po-btn rc-po-sm" data-rcpolink="${esc(l.po)}" title="Open this PO on Walmart">${esc(l.po)}</button><span class="rc-sub-date">${esc(rcMonDay(l.date))}</span></td>
       <td class="is-right rc-mono">${l.saleUnits || '—'}</td>
       <td class="is-right rc-mono">${l.refundUnits || '—'}</td>
-      <td class="is-right rc-mono" colspan="3">${(l.net < 0 ? '−' : '') + rcMoney(l.net)}</td>
+      <td class="is-right rc-mono${l.notCounted ? ' rc-out' : ''}" colspan="3" title="${l.notCounted ? 'Walmart took this back, but it is left out of profit: the sale was before your first statement and the unit is back or pending' : ''}">${(l.net < 0 ? '−' : '') + rcMoney(l.net)}</td>
       <td colspan="3" title="${esc(l.situation)}"><span class="rc-dot is-${esc(l.tone || 'grey')}"></span>${esc(l.situation)}</td>
     </tr>`;
   return `<tr class="rc-subhead"><td class="rc-g"></td><td>PO #</td><td class="is-right">Units</td><td class="is-right">Refunded</td><td class="is-right" colspan="3">Walmart paid</td><td colspan="3">Situation</td></tr>`

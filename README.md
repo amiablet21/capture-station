@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.65 highlights
+
+- **A refund left out of profit is struck through.** On a PO line whose sale was before your first statement and whose unit is back or pending, the Walmart paid amount shows in grey with a line through it, and the hover says why. The figure is still Walmart's own.
+
 ## v1.32.64 highlights
 
 - **The unmapped-listing triangle sits on the centre of the SKU text** instead of hanging below it on the By SKU rows.
