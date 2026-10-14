@@ -1778,13 +1778,13 @@ function rcRenderExpenses() {
   const head = '<th class="rc-g">#</th><th>Date</th><th>Category</th><th>Note</th><th>SKU</th><th class="is-right">Amount</th><th>Entered by</th><th></th>';
   const body = list.length ? list.map((e, i) => `<tr>
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-mono">${esc(rcMonDay(e.date))}, ${esc(String(e.date).slice(0, 4))}</td>
+      <td class="rc-mono rc-nowrap">${esc(rcMonDay(e.date))}${e.dateTo ? ` – ${esc(rcMonDay(e.dateTo))}` : ''}, ${esc(String(e.dateTo || e.date).slice(0, 4))}</td>
       <td>${esc(e.category)}</td>
       <td class="rc-muted">${esc(e.note || '')}</td>
       <td class="rc-mono">${esc(e.sku || '')}</td>
-      <td class="is-right rc-mono">${rcMoney(e.amount)}</td>
+      <td class="is-right rc-mono rc-nowrap" title="${e.full != null && e.full !== e.amount ? `${rcMoney(e.full)} over ${e.days} days · ${e.daysIn} of them in this scope` : ''}">${rcMoney(e.amount)}${e.full != null && e.full !== e.amount ? ` <span class="rc-muted">of ${rcMoney(e.full)}</span>` : ''}</td>
       <td class="rc-muted">${esc([e.station, e.by].filter(Boolean).join(' · '))}</td>
-      <td class="rc-actions"><button type="button" class="rc-link" data-rcexpdel="${esc(e.id)}">Remove</button></td>
+      <td class="rc-actions rc-nowrap"><button type="button" class="rc-link" data-rcexpedit="${esc(e.id)}">Edit</button> <span class="rc-faint">·</span> <button type="button" class="rc-link" data-rcexpdel="${esc(e.id)}">Remove</button></td>
     </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="8">No expenses in this scope. Add outside shipping labels, packaging, supplies and the like; they come off profit in the period they fall in.</td></tr>';
   rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
 }
@@ -1925,7 +1925,7 @@ function rcRenderProfit() {
     const prev = prevRun ? (p.periods || []).find(x => x.id === prevRun.id) : null;
     if (prev && prev.hasOrders) { const d = (p.netProfit ?? p.profit) - prev.profit; delta = ` · ${d >= 0 ? '▲' : '▼'} ${rcMoney(d)} vs last period`; }
   }
-  const cell = (label, v, sub, cls = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
+  const cell = (label, v, sub, cls = '', tip = '') => `<div class="rc-cell ${cls}"${tip ? ` title="${esc(tip)}"` : ''}><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
   const priced = p.gross > 0;
   const partly = priced && p.priced && p.priced.unpriced > 0;
   const costSub = [p.lostUnits ? `${p.lostUnits} lost ${p.lostUnits === 1 ? 'unit' : 'units'} costed` : '', p.atRisk && p.atRisk.units ? `${p.atRisk.units} pending, not costed` : '', p.recovered > 0 ? `${rcMoney(p.recovered)} paid back by insurance or a carrier` : ''].filter(Boolean).join(' · ') || `${p.unitsBack} back in stock · cost recovered`;
@@ -1933,12 +1933,12 @@ function rcRenderProfit() {
     cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
       ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
       : `${rcPlural(p.unitsSold, 'unit')} · no goods price in this import — import this one period's file again on the Import screen`),
-    cell('Walmart paid', signed(p.payout), (p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees')
-      + (p.heldOut && p.heldOut.amount > 0 ? ` · ${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement, not counted while the units are back or pending` : '')
-      // the statement lines on no order (storage, ads, WFS inventory
-      // adjustments) sit outside Walmart paid; shown so the owner can tie
-      // Walmart paid back to the statement's Activity (audit guide §2)
-      + (p.other ? ` · ${p.other < 0 ? '−' : ''}${rcMoney(p.other)} on no order (storage, ads, adjustments) kept aside` : '')),
+    // the tie-out detail (refunds of pre-tracking sales left out, statement
+    // lines on no order kept aside — audit guide §2) lives on hover; the
+    // cell itself stays one line (owner 2026-10-14: "seems unnecessary")
+    cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees', '',
+      [p.heldOut && p.heldOut.amount > 0 ? `${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement is left out of profit while the units are back or pending` : '',
+        p.other ? `${p.other < 0 ? '−' : ''}${rcMoney(p.other)} of statement lines on no order (storage, ads, adjustments) is kept aside` : ''].filter(Boolean).join('\n')),
     cell('Cost of goods', rcMoney(p.cogs), costSub),
     cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
     cell('Expenses', rcMoney(p.expenses ? p.expenses.total : 0), p.expenses && p.expenses.count ? `${rcPlural(p.expenses.count, 'entry', 'entries')} · ${p.expenses.byCategory.slice(0, 2).map(c => `${c.category.toLowerCase()} ${rcMoney(c.amount)}`).join(' · ')}` : 'none in this scope · add on the Expenses tab'),
@@ -2785,30 +2785,39 @@ $('rcBlurBtn').addEventListener('click', () => {
   rcApplyBlur();
 });
 rcApplyBlur();
-// add / remove an expense (owner 2026-10-13)
-$('rcExpAddBtn').addEventListener('click', () => {
+// add / edit / remove an expense (owner 2026-10-13; edit and a date range 2026-10-14)
+function rcOpenExpense(e) {
   const dlg = $('rcExpDlg');
   const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  $('rcExpDate').value = iso; $('rcExpAmount').value = ''; $('rcExpNote').value = ''; $('rcExpSku').value = '';
+  rc.expEditId = e ? e.id : '';
+  $('rcExpTitle').textContent = e ? 'Edit expense' : 'Add an expense';
+  $('rcExpOk').textContent = e ? 'Save' : 'Add expense';
+  $('rcExpDate').value = e ? e.date : iso; $('rcExpDateTo').value = e ? (e.dateTo || '') : '';
+  $('rcExpAmount').value = e ? String(e.full != null ? e.full : e.amount) : ''; $('rcExpNote').value = e ? (e.note || '') : ''; $('rcExpSku').value = e ? (e.sku || '') : '';
   const cats = (rc.profit && rc.profit.expenses && rc.profit.expenses.categories) || ['Shipping labels', 'Packaging', 'Supplies', 'Software', 'Advertising', 'Other'];
   $('rcExpCat').innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (e && e.category) $('rcExpCat').value = e.category;
   dlg.returnValue = '';
   dlg.showModal();
   setTimeout(() => $('rcExpAmount').focus(), 0);
-});
+}
+$('rcExpAddBtn').addEventListener('click', () => rcOpenExpense(null));
 $('rcExpCancel').addEventListener('click', () => $('rcExpDlg').close(''));
 $('rcExpDlg').querySelector('form').addEventListener('submit', (e) => {
   if (!(Number($('rcExpAmount').value) > 0)) { e.preventDefault(); toast('Enter an amount above 0.'); return; }
+  if ($('rcExpDateTo').value && $('rcExpDateTo').value < $('rcExpDate').value) { e.preventDefault(); toast('The end date is before the start date.'); return; }
   $('rcExpDlg').returnValue = 'ok';
 });
 $('rcExpDlg').addEventListener('close', async () => {
   if ($('rcExpDlg').returnValue !== 'ok') return;
-  const r = await api.recoveryExpenseAdd({ date: $('rcExpDate').value, amount: Number($('rcExpAmount').value), category: $('rcExpCat').value, note: $('rcExpNote').value, sku: $('rcExpSku').value }).catch(err => ({ ok: false, error: err.message }));
-  if (!r || !r.ok) { toast((r && r.error) || 'Could not add the expense.', 4000); return; }
-  toast('Expense added');
+  const r = await api.recoveryExpenseAdd({ id: rc.expEditId || '', date: $('rcExpDate').value, dateTo: $('rcExpDateTo').value, amount: Number($('rcExpAmount').value), category: $('rcExpCat').value, note: $('rcExpNote').value, sku: $('rcExpSku').value }).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not save the expense.', 4000); return; }
+  toast(rc.expEditId ? 'Expense saved' : 'Expense added'); rc.expEditId = '';
   await rcLoadProfit(); rcRenderProfit();
 });
 $('rcProfitTable').addEventListener('click', async (e) => {
+  const ed = e.target.closest('[data-rcexpedit]');
+  if (ed) { const x = ((rc.profit && rc.profit.expenses && rc.profit.expenses.list) || []).find(y => y.id === ed.dataset.rcexpedit); if (x) rcOpenExpense(x); return; }
   const del = e.target.closest('[data-rcexpdel]');
   if (!del) return;
   if (!(await rcConfirm({ title: 'Remove this expense', body: 'It comes off every desktop. You can add it again.', ok: 'Remove' }))) return;

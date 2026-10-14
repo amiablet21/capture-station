@@ -5387,8 +5387,8 @@ th:last-child > .col-grip { right: 0; }
 .rc-table tbody tr td.rc-margin.is-mid { background: #FFF3C4; color: #5A4300; }
 .rc-table tbody tr td.rc-margin.is-hi { background: #E3F0E4; color: #1F4D2B; }
 /* the Expenses tab's table: free widths, the note takes the room */
-.rc-table-profit.is-expenses th:nth-child(2) { width: 120px; } .rc-table-profit.is-expenses th:nth-child(3) { width: 140px; }
-.rc-table-profit.is-expenses th:nth-child(n+4) { width: auto; } .rc-table-profit.is-expenses th:nth-child(5) { width: 180px; } .rc-table-profit.is-expenses th:nth-child(6) { width: 110px; } .rc-table-profit.is-expenses th:nth-child(7) { width: 170px; } .rc-table-profit.is-expenses th:nth-child(8) { width: 90px; }
+.rc-table-profit.is-expenses th:nth-child(2) { width: 170px; } .rc-table-profit.is-expenses th:nth-child(3) { width: 140px; }
+.rc-table-profit.is-expenses th:nth-child(n+4) { width: auto; } .rc-table-profit.is-expenses th:nth-child(5) { width: 180px; } .rc-table-profit.is-expenses th:nth-child(6) { width: 110px; } .rc-table-profit.is-expenses th:nth-child(7) { width: 170px; } .rc-table-profit.is-expenses th:nth-child(8) { width: 120px; }
 .rc-table-profit.is-expenses td.is-right { font-family: var(--mono); }
 .rc-cell.is-hi { background: #F4F6FA; }
 .rc-cell.is-red .rc-cell-n { color: #9F2F2D; }

@@ -360,15 +360,24 @@ function mark(po, action, payload = {}) {
 // packing stuff"): dated, categorised, taken off profit in the period they
 // fall in, synced through the shared folder like marks
 const EXPENSE_CATEGORIES = ['Shipping labels', 'Packaging', 'Supplies', 'Software', 'Advertising', 'Other'];
-function addExpense({ id, date, category, note, amount, sku } = {}) {
+// an id that already exists edits that expense in place (owner 2026-10-14:
+// "allow me to edit expenses once recorded"); an optional end date makes it
+// run from one day to another and spread by days over the scopes it touches
+function addExpense({ id, date, dateTo, category, note, amount, sku } = {}) {
   const n = Math.round((Number(amount) || 0) * 100) / 100;
   if (!(n > 0)) return { ok: false, error: 'Enter an amount above 0.' };
   const day = String(date || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Pick a date.' };
-  const rec = { id: String(id || '').trim() || crypto.randomUUID(), date: day, category: String(category || 'Other').trim() || 'Other', note: String(note || '').trim().slice(0, 200), sku: String(sku || '').trim().toUpperCase(), amount: n, updated_at: now(), station: station(), by: byName(), removed: false };
+  let to = String(dateTo || '').slice(0, 10);
+  if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { ok: false, error: 'Pick an end date, or leave it empty.' };
+  if (to && to < day) return { ok: false, error: 'The end date is before the start date.' };
+  if (to === day) to = '';
+  const key = String(id || '').trim();
+  if (key && !store.getExpense(key)) return { ok: false, error: 'That expense is gone; add it again.' };
+  const rec = { id: key || crypto.randomUUID(), date: day, dateTo: to, category: String(category || 'Other').trim() || 'Other', note: String(note || '').trim().slice(0, 200), sku: String(sku || '').trim().toUpperCase(), amount: n, updated_at: now(), station: station(), by: byName(), removed: false };
   store.upsertExpense(rec);
   try { deps.retsync.appendAux('wmexpenses', rec); } catch { /* offline */ }
-  return { ok: true, id: rec.id };
+  return { ok: true, id: rec.id, edited: !!key };
 }
 function removeExpense(id) {
   const cur = store.getExpense(id);
@@ -378,19 +387,37 @@ function removeExpense(id) {
   try { deps.retsync.appendAux('wmexpenses', rec); } catch { /* offline */ }
   return { ok: true };
 }
-// the expenses that fall inside a scope: a period's own dates, a month, a year, or all
+// the expenses that fall inside a scope: a period's own dates, a month, a
+// year, or all. An expense that runs from one day to another gives the
+// scope its share by days (a $310 October subscription gives Sep 19 – Oct 3
+// three days' worth); `amount` is the share, `full` the whole entry
 function expensesIn(scope, key) {
   const all = store.allExpenses();
+  const DAY = 86400000;
   const dayMs = (d) => { const t = Date.parse(`${d}T00:00:00`); return Number.isFinite(t) ? t : NaN; };
+  let a; let b;
   if (scope === 'cycle') {
     const run = store.getRun(key);
     if (!run) return [];
-    const a = periodStartMs(run); const b = periodEndMs(run) + 86399999;
-    return all.filter((e) => { const t = dayMs(e.date); return t >= a && t <= b; });
+    a = periodStartMs(run); b = periodEndMs(run);
+  } else if (scope === 'month') {
+    const [y, m] = String(key).split('-').map(Number);
+    a = new Date(y, m - 1, 1).getTime(); b = new Date(y, m, 0).getTime();
+  } else if (scope === 'year') {
+    a = new Date(Number(key), 0, 1).getTime(); b = new Date(Number(key), 11, 31).getTime();
+  } else return all.map((e) => ({ ...e, full: e.amount, days: 0, daysIn: 0 }));
+  const out = [];
+  for (const e of all) {
+    const s = dayMs(e.date); const t = e.dateTo ? dayMs(e.dateTo) : s;
+    if (!Number.isFinite(s) || !Number.isFinite(t)) continue;
+    const days = Math.round((t - s) / DAY) + 1;
+    const lo = Math.max(s, a); const hi = Math.min(t, b);
+    if (hi < lo) continue;
+    const daysIn = Math.round((hi - lo) / DAY) + 1;
+    const share = days > 1 ? Math.round((e.amount * daysIn / days) * 100) / 100 : e.amount;
+    out.push({ ...e, amount: share, full: e.amount, days, daysIn });
   }
-  if (scope === 'month') return all.filter((e) => String(e.date).slice(0, 7) === String(key));
-  if (scope === 'year') return all.filter((e) => String(e.date).slice(0, 4) === String(key));
-  return all;
+  return out;
 }
 
 // the same mark on many POs at once (owner 2026-10-12: bulk select, and a
@@ -967,7 +994,7 @@ function profitWorkbook(scope, key) {
     ], rows: p.periods.map((x) => [x.label, x.orders, x.units, x.payout, x.cogs, x.profit, x.margin ?? '', x.missingCount]) },
     { name: 'Expenses', columns: [
       { header: 'Date', width: 12, kind: 'text' }, { header: 'Category', width: 16, kind: 'text' }, { header: 'Note', width: 40, kind: 'text' }, { header: 'SKU', width: 24, kind: 'text' }, { header: 'Amount', width: 12, kind: money }, { header: 'Entered by', width: 16, kind: 'text' },
-    ], rows: p.expenses.list.map((e) => [e.date, e.category, e.note, e.sku, e.amount, [e.station, e.by].filter(Boolean).join(' · ')]) },
+    ], rows: p.expenses.list.map((e) => [e.dateTo ? `${e.date} – ${e.dateTo}` : e.date, e.category, e.note, e.sku, e.amount, [e.station, e.by].filter(Boolean).join(' · ')]) },
   ]) };
 }
 

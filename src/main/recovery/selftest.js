@@ -193,6 +193,17 @@ module.exports = function run(check) {
     const prx = recovery.profit('all');
     check('recovery: expenses — added, totalled and taken off profit', ex.ok && prx.expenses.count === 1 && prx.expenses.total === 12.5 && prx.netProfit === Math.round((prx.profit - 12.5) * 100) / 100 && recovery.statement('all').sections.some((s) => s.name === 'Your expenses' && s.total === -12.5), { ex, exp: prx.expenses, net: prx.netProfit, profit: prx.profit });
     check('recovery: expenses — a bad amount is refused', recovery.addExpense({ date: '2026-10-01', amount: 0 }).ok === false);
+    // an expense from one day to another is spread by days (owner 2026-10-14):
+    // $310 over May gives the May 16 – May 30 period 15 days' worth; editing
+    // with the same id changes it in place
+    const span = recovery.addExpense({ date: '2026-05-01', dateTo: '2026-05-31', amount: 310, category: 'Software', note: 'May plan' });
+    const spanCyc = recovery.profit('cycle', res.id).expenses; const spanMon = recovery.profit('month', '2026-05').expenses;
+    check('recovery: expenses — a date range gives each scope its share by days', span.ok && spanCyc.list.some((e) => e.id === span.id && e.amount === 150 && e.full === 310 && e.daysIn === 15) && spanMon.list.some((e) => e.id === span.id && e.amount === 310), { span, cyc: spanCyc.list, mon: spanMon.list });
+    const edit = recovery.addExpense({ id: span.id, date: '2026-05-01', dateTo: '2026-05-31', amount: 620, category: 'Software', note: 'May plan, corrected' });
+    const edited = recovery.profit('month', '2026-05').expenses;
+    check('recovery: expenses — edited in place, not added twice', edit.ok && edit.edited === true && edited.list.filter((e) => e.id === span.id).length === 1 && edited.list.find((e) => e.id === span.id).amount === 620 && edited.list.find((e) => e.id === span.id).note === 'May plan, corrected', { edit, list: edited.list });
+    check('recovery: expenses — an end date before the start, or an unknown id, is refused', recovery.addExpense({ date: '2026-05-10', dateTo: '2026-05-01', amount: 5 }).ok === false && recovery.addExpense({ id: 'nope', date: '2026-05-10', amount: 5 }).ok === false);
+    recovery.removeExpense(span.id);
     const rmx = recovery.removeExpense(ex.id);
     check('recovery: expenses — removed everywhere', rmx.ok && recovery.profit('all').expenses.count === 0 && auxLog.some(([p, e]) => p === 'wmexpenses' && e.id === ex.id && e.removed), { rmx, log: auxLog.filter(([p]) => p === 'wmexpenses').length });
     // the statement as Walmart lays it out (v1.32.39)

@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.67 highlights
+
+- **An expense can run from one day to another.** Give it a To date (a month of software, a week of labels) and each period, month or year takes its share by days; the row shows the share and the full amount on hover.
+- **Expenses can be edited.** Edit on the Expenses tab opens the same dialog with the entry filled in; Save changes it in place on every desktop.
+- **The Walmart paid cell is one line again.** The tie-out detail (pre-tracking refunds left out, statement lines on no order kept aside) moved to the cell's hover.
+
 ## v1.32.66 highlights
 
 - **No margin without a sale.** A SKU that sold nothing in the scope (only a label credit, or only a refund of an older sale) shows a dash for margin instead of 100%.

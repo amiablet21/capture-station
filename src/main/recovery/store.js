@@ -157,6 +157,9 @@ function ensureSchema(db) {
   for (const col of ['paid_out REAL NOT NULL DEFAULT 0', 'paid_out_by TEXT', 'paid_out_at TEXT', 'paid_out_on TEXT']) {
     try { db.exec(`ALTER TABLE wm_marks ADD COLUMN ${col}`); } catch { /* already there */ }
   }
+  // v1.32.67: an expense may run from one day to another (a month of software,
+  // a week of labels); its amount is spread by days across the scopes it touches
+  try { db.exec('ALTER TABLE wm_expenses ADD COLUMN date_to TEXT'); } catch { /* already there */ }
   // v1.32.15: who issued the refund, on the stored refund and on the tracker item
   for (const t of ['wm_refunds', 'wm_items']) {
     try { db.exec(`ALTER TABLE ${t} ADD COLUMN refunded_by TEXT NOT NULL DEFAULT ''`); } catch { /* already there */ }
@@ -221,7 +224,7 @@ function runsWithoutLines() {
 // the owner's own expenses outside Walmart (owner 2026-10-13: outside
 // shipping labels, packing…): one row each, newest write wins, synced
 // through the shared folder like marks; a removal is a tombstoned row
-const expenseOut = (r) => (r ? { id: r.id, date: r.date, category: r.category, note: r.note, sku: r.sku, amount: Number(r.amount) || 0, updated_at: r.updated_at, station: r.station, by: r.by, removed: !!r.removed } : null);
+const expenseOut = (r) => (r ? { id: r.id, date: r.date, dateTo: r.date_to || '', category: r.category, note: r.note, sku: r.sku, amount: Number(r.amount) || 0, updated_at: r.updated_at, station: r.station, by: r.by, removed: !!r.removed } : null);
 function upsertExpense(rec) {
   const db = d();
   const id = String(rec && rec.id || '').trim();
@@ -229,10 +232,10 @@ function upsertExpense(rec) {
   const updatedAt = rec.updated_at && !Number.isNaN(Date.parse(rec.updated_at)) ? new Date(rec.updated_at).toISOString() : new Date().toISOString();
   const cur = db.prepare('SELECT updated_at FROM wm_expenses WHERE id = ?').get(id);
   if (cur && String(cur.updated_at) >= updatedAt) return null;
-  const row = { id, date: String(rec.date || '').slice(0, 10), category: String(rec.category || ''), note: String(rec.note || ''), sku: String(rec.sku || ''), amount: Math.round((Number(rec.amount) || 0) * 100) / 100, updated_at: updatedAt, station: String(rec.station || ''), by: String(rec.by || ''), removed: rec.removed ? 1 : 0 };
-  db.prepare(`INSERT INTO wm_expenses (id, date, category, note, sku, amount, updated_at, station, by, removed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET date = excluded.date, category = excluded.category, note = excluded.note, sku = excluded.sku, amount = excluded.amount, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed`)
-    .run(row.id, row.date, row.category, row.note, row.sku, row.amount, row.updated_at, row.station, row.by, row.removed);
+  const row = { id, date: String(rec.date || '').slice(0, 10), date_to: String(rec.dateTo || rec.date_to || '').slice(0, 10), category: String(rec.category || ''), note: String(rec.note || ''), sku: String(rec.sku || ''), amount: Math.round((Number(rec.amount) || 0) * 100) / 100, updated_at: updatedAt, station: String(rec.station || ''), by: String(rec.by || ''), removed: rec.removed ? 1 : 0 };
+  db.prepare(`INSERT INTO wm_expenses (id, date, date_to, category, note, sku, amount, updated_at, station, by, removed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET date = excluded.date, date_to = excluded.date_to, category = excluded.category, note = excluded.note, sku = excluded.sku, amount = excluded.amount, updated_at = excluded.updated_at, station = excluded.station, by = excluded.by, removed = excluded.removed`)
+    .run(row.id, row.date, row.date_to, row.category, row.note, row.sku, row.amount, row.updated_at, row.station, row.by, row.removed);
   return expenseOut(row);
 }
 function getExpense(id) { return expenseOut(d().prepare('SELECT * FROM wm_expenses WHERE id = ?').get(String(id || ''))); }
