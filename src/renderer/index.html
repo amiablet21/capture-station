@@ -112,6 +112,14 @@
   <div id="capHead" class="rc-head cap-head" hidden>
     <h1 class="rc-h1">Orders</h1>
     <nav id="channelChips" class="rc-subtabs cap-subtabs" aria-label="Channels" hidden></nav>
+    <div class="cap-head-tools">
+      <div class="search-field">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+        <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
+        <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
+      </div>
+      <span id="findCount" class="find-count"></span>
+      </div>
       <div class="cap-icons">
         <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
@@ -128,13 +136,7 @@
       </div>
   </div>
   <div id="findBar" class="cap-band" hidden>
-    <span class="rc-sec-title rc-sec-title-static cap-band-title"><span id="capBandTitle">Captured today</span> <span id="capBandCount" class="rc-sec-count"></span></span>
-    <div class="search-field">
-      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
-      <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
-      <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
-    </div>
-    <span id="findCount" class="find-count"></span>
+    <span class="rc-sec-title rc-sec-title-static cap-band-title"><span id="capBandTitle">History</span> <span id="capBandCount" class="rc-sec-count"></span></span>
     <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
     <!-- Capture history mode (owner 2026-09-23): the same table shows processed
          orders; the band swaps its icons for a date range, and the History
