@@ -11,7 +11,7 @@
     <div class="brand"><img class="brand-mark" src="phone-icon.png" alt="DWS Stock" title="DWS Stock" width="30" height="30" /></div>
     <nav class="tabs" id="pageTabs" hidden>
       <button id="tabOverview" class="tab" hidden>Overview</button>
-      <button id="tabCapture" class="tab is-active">Capture</button>
+      <button id="tabCapture" class="tab is-active">Orders</button>
       <button id="tabStock" class="tab">Stock</button>
       <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
@@ -106,14 +106,35 @@
   <!-- toolbar docked onto the sheet as a header band (owner 2026-08-17,
        matching Stock): band + sheet resize and align as ONE column -->
   <div id="capMain" class="cap-main">
+  <!-- the Orders page in the Recovery style (owner picked design B,
+       2026-10-14): a head with the channels as sub-tabs and the icon
+       cluster, then one card — search on its head, the table under it -->
+  <div id="capHead" class="rc-head cap-head" hidden>
+    <h1 class="rc-h1">Orders</h1>
+    <nav id="channelChips" class="rc-subtabs cap-subtabs" aria-label="Channels" hidden></nav>
+      <div class="cap-icons">
+        <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
+        </button>
+        <button id="ordersRefreshBtn" class="cap-ico" title="Refresh — fetch open orders from Linnworks now (otherwise every 5 minutes)" aria-label="Refresh">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+        </button>
+        <button id="capHistBtn" class="cap-ico" title="History — every processed order, in this same table; click again for today's live list" aria-label="History">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
+        </button>
+        <button id="bExpand" class="cap-ico" hidden title="Browser — open the marketplace browser pane beside the list" aria-label="Browser">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" aria-hidden="true"><circle cx="128" cy="128" r="94"/><ellipse cx="128" cy="128" rx="42" ry="94"/><path d="M40 100h176M40 156h176"/></svg>
+        </button>
+      </div>
+  </div>
   <div id="findBar" class="cap-band" hidden>
+    <span class="rc-sec-title rc-sec-title-static cap-band-title"><span id="capBandTitle">Captured today</span> <span id="capBandCount" class="rc-sec-count"></span></span>
     <div class="search-field">
       <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
       <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
       <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
     </div>
     <span id="findCount" class="find-count"></span>
-    <div id="channelChips" class="channel-chips" hidden></div>
     <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
     <!-- Capture history mode (owner 2026-09-23): the same table shows processed
          orders; the band swaps its icons for a date range, and the History
@@ -139,20 +160,6 @@
          (owner 2026-09-16: "closer... no borders, cleaner") — one quiet
          cluster: tray = import shipped, arrow = refresh, globe = browser;
          the titles carry the words -->
-    <div class="cap-icons">
-      <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
-      </button>
-      <button id="ordersRefreshBtn" class="cap-ico" title="Refresh — fetch open orders from Linnworks now (otherwise every 5 minutes)" aria-label="Refresh">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
-      </button>
-      <button id="capHistBtn" class="cap-ico" title="History — every processed order, in this same table; click again for today's live list" aria-label="History">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
-      </button>
-      <button id="bExpand" class="cap-ico" hidden title="Browser — open the marketplace browser pane beside the list" aria-label="Browser">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" aria-hidden="true"><circle cx="128" cy="128" r="94"/><ellipse cx="128" cy="128" rx="42" ry="94"/><path d="M40 100h176M40 156h176"/></svg>
-      </button>
-    </div>
   </div>
   <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
@@ -162,7 +169,6 @@
           <th id="thOrder" class="th-sort" title="Click to flip newest / oldest first">Order #</th>
           <th class="th-items">Items</th>
           <th id="thTracking" class="th-sort" title="Click to group: missing tracking first · added first · off">Tracking</th>
-          <th>Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.68 highlights
+
+- **Capture is now Orders, in the Recovery style** (owner picked design B). A head with the channels as sub-tabs (All, Walmart, eBay, Temu with their counts) and the icon cluster, then one card: "Captured today" and the search on its head, the table under it. Each order carries its channel and capture time on a sub-line; the Notes column is gone (the note rides that sub-line, "+ Note" appears on hover), and so is the "due by 5:00 PM" headline. History rows keep their processed time and station on the same sub-line.
+
 ## v1.32.67 highlights
 
 - **An expense can run from one day to another.** Give it a To date (a month of software, a week of labels) and each period, month or year takes its share by days; the row shows the share and the full amount on hover.

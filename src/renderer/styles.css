@@ -5793,3 +5793,33 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-period-actions .rc-link { margin-left: 12px; }
 .rc-period-actions .rc-link.is-danger { color: #9F2F2D; }
 .rc-label-row + .rc-pick-row { margin-top: 4px; }
+
+/* ---------- the Orders page in the Recovery style (owner picked design B, 2026-10-14) ---------- */
+.cap-head { margin: 10px 0 12px; padding-bottom: 10px; width: 100%; box-sizing: border-box; }
+.cap-head .rc-h1 { font-size: 18px; }
+.cap-head .cap-icons { margin-left: auto; align-self: center; }
+.cap-subtabs { gap: 22px; }
+.cap-subtabs .chip-filter { font-family: inherit; font-size: 12.5px; font-weight: 500; color: #787774; background: none; border: none; border-radius: 0; padding: 0; box-shadow: none; display: flex; align-items: center; gap: 8px; line-height: 1.55; cursor: pointer; }
+.cap-subtabs .chip-filter:hover { color: #2F3437; }
+.cap-subtabs .chip-filter.is-active { font-weight: 600; color: #2F3437; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid #1E3A66; background: none; box-shadow: none; }
+.cap-subtabs .chip-filter .rc-subtab-count { color: #787774; }
+.cap-subtabs .chip-filter.is-active .rc-subtab-count { color: #9F2F2D; }
+.cap-band { padding: 7px 16px; gap: 12px; }
+.cap-band-title { flex: none; }
+.cap-band .search-field { margin-left: auto; flex: 0 0 260px; height: 30px; }
+.rows-table th { background: #F9F9F8; color: #A5A29C; }
+.rows-table td.cell-gutter { background: #F9F9F8; }
+.rows-table td { padding: 7px 10px; }
+.cell-order { max-width: 300px; }
+.order-num { font-size: 12.5px; }
+.cap-sub { font-family: var(--font); font-size: 11px; color: #787774; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0; }
+.cap-sub .sub-pill { margin: 0 0 0 4px; }
+.cap-sub .history-status { margin: 0; }
+.cap-sub .cap-station { margin: 0; }
+.cap-sub-note { font-family: inherit; font-size: 11px; color: #1E3A66; background: none; border: none; padding: 0; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap-sub-note:hover { text-decoration: underline; text-underline-offset: 3px; }
+.cap-sub-note:not(.has-note) { color: #A5A29C; opacity: 0; transition: opacity 120ms; }
+.rows-table tbody tr:hover .cap-sub-note:not(.has-note), .rows-table tbody tr:focus-within .cap-sub-note:not(.has-note) { opacity: 1; }
+.cap-sub-sep { white-space: pre; }
+.cap-sub-sep.is-quiet { opacity: 0; transition: opacity 120ms; }
+.rows-table tbody tr:hover .cap-sub-sep.is-quiet, .rows-table tbody tr:focus-within .cap-sub-sep.is-quiet { opacity: 1; }

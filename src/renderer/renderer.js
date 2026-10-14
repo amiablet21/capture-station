@@ -416,8 +416,10 @@ function render() {
 
   // header: how many must go out before today's carrier cutoff
   const dueOpen = dueRows.filter(({ row }) => row.status !== 'synced').length;
-  $('dueHeader').hidden = activePage !== 'capture' || dueOpen === 0;
-  $('dueHeader').textContent = dueOpen ? `${dueOpen} due by ${fmtCutoff(state.shipCutoff)}` : '';
+  $('dueHeader').hidden = true; // the headline left at the owner's request (2026-10-14); the row chips carry it
+  $('dueHeader').textContent = '';
+  $('capBandTitle').textContent = 'Captured today';
+  $('capBandCount').textContent = String(state.todayCount ?? state.rows.length);
 
   // marketplace filter chips, shown once there is more than one channel
   // (the "Due today" chip left at the owner's request 2026-08-06 — the
@@ -430,9 +432,9 @@ function render() {
     for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${state.rows.length}</button>`,
+      `<button type="button" class="rc-subtab chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All <span class="rc-subtab-count">${state.rows.length}</span></button>`,
       ...channels.map(c =>
-        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+        `<button type="button" class="rc-subtab chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-subtab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -540,11 +542,11 @@ function render() {
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         meta && meta.customer ? `<button type="button" class="item-info cust-info" data-act="customer" title="Customer and ship-to address — click to open">i</button>` : ''}${
-        row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
+        row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}
+        <div class="cap-sub">${esc(channelLabel(row.channel))} · captured ${esc(fmtTime(row.created_at))}<span class="cap-sub-sep${row.notes ? '' : ' is-quiet'}"> · </span><button type="button" class="cap-sub-note ${row.notes ? 'has-note' : ''}" data-act="note" title="${row.notes ? `${esc(row.notes)}&#10;Click to edit` : 'Add a note (serial number, condition, anything)'}">${row.notes ? esc(row.notes) : '+ Note'}</button>${row.sub_sku
+        ? ` · <button type="button" class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}&#10;Click to edit or remove">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}</div></td>
       <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
-      <td class="cell-notes">${row.sub_sku
-        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}&#10;Click to edit or remove">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
@@ -750,10 +752,10 @@ function capHistRowHtml(row, num) {
   const pc = row.station ? `<span class="cap-station" title="Captured on ${esc(row.station)}">${esc(row.station)}</span>` : '';
   return `<tr data-id="${row.id}" class="is-hist${done ? '' : ' is-unproc'}">
       <td class="cell-gutter ${st}" title="${done ? `Processed ${when}` : 'Not processed yet'} · captured ${fmtTime(row.created_at)}${row.station ? ` on ${esc(row.station)}` : ''}">${num}</td>
-      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span>
+        <div class="cap-sub">${esc(channelLabel(row.channel))} · captured ${esc(fmtTime(row.created_at))}${pc ? ` · ${pc}` : ''} · ${stWord}${row.sub_sku ? ` · <span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}<span class="cap-sub-sep${row.notes ? '' : ' is-quiet'}"> · </span><button type="button" class="cap-sub-note ${row.notes ? 'has-note' : ''}" data-act="note" title="${row.notes ? `${esc(row.notes)}&#10;Click to edit` : 'Add a note'}">${row.notes ? esc(row.notes) : '+ Note'}</button></div></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
-      <td class="cell-notes">${pc}${stWord}${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
       <td class="cell-actions"></td>
     </tr>`;
 }
@@ -768,8 +770,8 @@ function renderCapHist() {
     for (const r of all) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${all.length}</button>`,
-      ...channels.map(c => `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+      `<button type="button" class="rc-subtab chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All <span class="rc-subtab-count">${all.length}</span></button>`,
+      ...channels.map(c => `<button type="button" class="rc-subtab chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-subtab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -777,6 +779,8 @@ function renderCapHist() {
   }
   $('clearFailedBtn').hidden = true;
   $('findBar').hidden = false;
+  $('capBandTitle').textContent = 'History';
+  $('capBandCount').textContent = String(all.length);
   let rows = channelFilter === 'all' ? all : all.filter(r => r.channel === channelFilter);
   if (findQuery) {
     const q = findQuery.toLowerCase();
@@ -1476,7 +1480,8 @@ function applyPageChrome() {
   $('undoFooterBtn').hidden = state.captureOnly || !cap;
   $('syncBtn').classList.toggle('invisible', !cap);
   $('dryRunChip').hidden = !cap || !state.dryRun;
-  $('dueHeader').hidden = !cap || !$('dueHeader').textContent;
+  $('dueHeader').hidden = true;
+  $('capHead').hidden = !cap;
   $('channelChips').hidden = !cap || !$('channelChips').innerHTML;
   $('clearFailedBtn').hidden = !cap || !(Number($('clearFailedBtn').dataset.n) > 0);
   $('findBar').hidden = !cap || (state.captureOnly && !state.rows.length);
