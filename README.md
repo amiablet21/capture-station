@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.58 highlights
+
+- A mark takes the yellow highlight off its row (owner: "in the marked section, it randomly highlights some rows" — a row highlighted while being worked on kept its yellow after Received, Never shipped, Loss or Paid out moved it to Marked). Undo, a case ID or a note leave the highlight alone.
+
 ## v1.32.57 highlights
 
 - **Paid out, by hand** (owner: "Case approved, and then I write the amount I was paid out by my insurance shield or by Walmart, and if less money was paid out, there is some minor loss"). The ⋯ menu on Reconcile gains "Paid out…": the amount, who paid (Walmart, Shipping protection, UPS, FedEx, USPS, Other) and the day. The row moves to Walmart paid with that payout and "Still lost" shows the gap — refund minus what was paid — so a short payout reads as the small loss it is. A payout from Walmart is a placeholder until the next statement carries the real line, which then takes over, so nothing is counted twice; money from insurance or a carrier is outside Walmart's statements, so it is added to Profit on that PO ("Shipping protection paid $150.00" on the PO line, and under Cost of goods on the strip). An open case is marked approved by it. Change or undo from the same menu; it syncs like every other mark.

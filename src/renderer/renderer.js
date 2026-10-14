@@ -2093,6 +2093,11 @@ function rcDaysCell(it) {
 
 // highlighted rows, per computer (localStorage): the POs being worked on
 const rcHl = new Set((() => { try { return JSON.parse(localStorage.getItem('rcHighlight') || '[]'); } catch { return []; } })());
+function rcHlClear(pos) {
+  let changed = false;
+  for (const po of pos || []) if (rcHl.delete(po)) changed = true;
+  if (changed) { try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ } }
+}
 function rcHlToggle(po) {
   if (!po) return;
   if (rcHl.has(po)) rcHl.delete(po); else rcHl.add(po);
@@ -2464,6 +2469,7 @@ const rcItem = (po) => ((rc.data && rc.data.items) || []).find(i => i.po === po)
 async function rcMark(po, action, payload) {
   const res = await api.recoveryMark(po, action, payload).catch(e => ({ ok: false, error: e.message }));
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save that.', 4000); return false; }
+  if (!/^undo|^caseId$|^note$/.test(action)) rcHlClear([po]); // the work on it is done: the highlight comes off
   rc.profit = null;
   await rcLoad();
   return true;
@@ -2832,6 +2838,7 @@ async function rcMarkFile(name, text, file) {
   const ok = await rcConfirm({ title: 'Mark received before the log', body: `${parts.join(' · ')}. They are marked in Recovery only; the Returns sheet is not touched.`, ok: `Mark ${r.matched.length} received`, danger: false });
   if (!ok) { rcMarkProgress(''); return; }
   const m = await api.recoveryMarkMany(r.matched, 'receivedManual', {}).catch(err => ({ ok: false, error: err.message }));
+  if (m && m.ok) rcHlClear((r.matched || []).map(x => x.po));
   if (!m || !m.ok) { rcMarkProgress((m && m.error) || 'Could not mark those.', 'fail'); return; }
   rcMarkProgress(`Done — ${rcPlural(m.count, 'PO')} marked received before the log${r.unmatched.length ? ` · not tracked: ${r.unmatched.slice(0, 8).join(', ')}${r.unmatched.length > 8 ? '…' : ''}` : ''}.`, 'done');
   await rcLoad();
@@ -2958,6 +2965,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
+    if (!act.startsWith('undo')) rcHlClear([rc.menuPo]);
     await rcLoad();
     return;
   }
