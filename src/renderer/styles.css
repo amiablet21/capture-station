@@ -4759,6 +4759,39 @@ th:last-child > .col-grip { right: 0; }
 .ovq-fchip b { font-weight: 500; color: var(--faint); margin-left: 4px; font-variant-numeric: tabular-nums; }
 .ovq-fchip.is-on b { color: #1E3A66; }
 .ovq-row.is-buy { grid-template-columns: 52px minmax(0, 1.4fr) minmax(0, 1fr) 96px 12px; }
+/* Was selling (owner 2026-10-14): the slider bar, the badge, the month bars */
+.ovq-row.is-was { grid-template-columns: 84px minmax(0, 1.2fr) minmax(0, 1.3fr) 150px 12px; cursor: default; }
+.ovq-badge.was { background: #EFEEEA; color: #5A5955; white-space: nowrap; }
+.ovq-l1 b { font-weight: 600; }
+.ovq-wspark { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.ovq-ws { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; }
+.ovq-ws i { display: flex; align-items: flex-end; width: 9px; height: 18px; }
+.ovq-ws i b { display: block; width: 9px; background: #C9D7EC; border-radius: 2px 2px 0 0; }
+.ovq-ws i b.h1 { height: 2px; }
+.ovq-ws i b.h2 { height: 4px; }
+.ovq-ws i b.h3 { height: 6px; }
+.ovq-ws i b.h4 { height: 8px; }
+.ovq-ws i b.h5 { height: 10px; }
+.ovq-ws i b.h6 { height: 12px; }
+.ovq-ws i b.h7 { height: 14px; }
+.ovq-ws i b.h8 { height: 16px; }
+.ovq-ws i b.h9 { height: 18px; }
+.ovq-ws i.is-now b { background: #9F2F2D; }
+.ovq-wspark-l { font-size: 10px; color: var(--faint); }
+.ovq-chev-blank { width: 12px; }
+.ovq-wbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 18px; background: #FBFBFA; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); font-size: 12.5px; color: var(--text); }
+.ovq-wbar-t { color: var(--muted); }
+.ovq-wval { font-size: 15px; font-weight: 600; width: 64px; text-align: center; padding: 2px 6px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-family: var(--mono); color: var(--text); outline: none; -moz-appearance: textfield; }
+.ovq-wval:focus { border-color: #1E3A66; }
+.ovq-wval::-webkit-inner-spin-button, .ovq-wval::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#ovWasN { white-space: nowrap; } .ovq-foot .ovq-link { white-space: nowrap; }
+.ovq-wslider { position: relative; width: 240px; padding: 2px 0 14px; margin: 0 6px; }
+.ovq-wslider input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; margin: 6px 0; border-radius: 2px; background: linear-gradient(to right, #1E3A66 0, #1E3A66 var(--pct, 0%), #E4E2DC var(--pct, 0%), #E4E2DC 100%); outline: none; cursor: pointer; }
+.ovq-wslider input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #1E3A66; box-shadow: 0 1px 3px rgba(47, 52, 55, .2); cursor: grab; }
+.ovq-wticks { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); font-family: var(--mono); pointer-events: none; }
+.ovq-wseg { display: inline-flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; }
+.ovq-wseg button { font-family: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.ovq-wseg button.is-on { background: var(--surface); color: #1E3A66; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, .1); }
 .ovq-why { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 .ovq-buycell { text-align: right; }
 .ovq-buy { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }

@@ -209,6 +209,7 @@ contextBridge.exposeInMainWorld('api', {
   ebayLwStatus: (templateId, subSource) => ipcRenderer.invoke('ebay:lwStatus', { templateId, subSource }),
   overviewData: () => ipcRenderer.invoke('overview:data'),
   overviewExportBuy: (rows, target, lead) => ipcRenderer.invoke('overview:exportBuy', { rows, target, lead }),
+  overviewExportWas: (rows, min, mode, months) => ipcRenderer.invoke('overview:exportWas', { rows, min, mode, months }),
   overviewPhone: () => ipcRenderer.invoke('overview:phone'),
   temuState: () => ipcRenderer.invoke('temu:state'),
   temuTemplate: () => ipcRenderer.invoke('temu:template'),

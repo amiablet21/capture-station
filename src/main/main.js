@@ -4408,6 +4408,8 @@ exit 1
         overviewCache = { at: Date.now(), money: m, promise: null };
         try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
         console.log(`[overview] money pass done in ${Math.round((Date.now() - t0) / 1000)}s`);
+        // the months behind "Was selling" follow, one walk per missing month
+        refreshOverviewMonths(cfg).catch(() => { /* next pass retries */ });
         return m;
       })
       .catch(e => {
@@ -4418,6 +4420,55 @@ exit 1
         throw e;
       });
     return overviewCache.promise;
+  }
+
+  // "Was selling" (owner 2026-10-14: "used to sell minimum 10 units a
+  // month, now out of stock"): units per SKU for each of the last six
+  // COMPLETED months, read once from Linnworks' processed orders (a month
+  // never changes once it is over) and kept on disk; the current month
+  // comes from the money pass. Filled behind the money pass, one month per
+  // Linnworks walk, so the Overview never waits on it.
+  const OVERVIEW_MONTHS_BACK = 6;
+  let overviewMonths = { months: {}, promise: null };
+  const overviewMonthsPath = () => path.join(app.getPath('userData'), 'overview-months.json');
+  try {
+    const j = JSON.parse(fs.readFileSync(overviewMonthsPath(), 'utf8'));
+    if (j && j.months && j.v === 1) overviewMonths = { months: j.months, promise: null };
+  } catch { /* no months yet */ }
+  const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // the last N completed months, oldest first
+  function completedMonths(n = OVERVIEW_MONTHS_BACK) {
+    const now = new Date(); const out = [];
+    for (let i = n; i >= 1; i--) out.push(ymOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+    return out;
+  }
+  function refreshOverviewMonths(cfg) {
+    if (overviewMonths.promise) return overviewMonths.promise;
+    const missing = completedMonths().filter((ym) => !overviewMonths.months[ym]);
+    if (!missing.length) return Promise.resolve(overviewMonths.months);
+    overviewMonths.promise = (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      for (const ym of missing.slice().reverse()) { // newest first: the months that matter most land first
+        const [y, m] = ym.split('-').map(Number);
+        const from = new Date(y, m - 1, 1); const to = new Date(y, m, 1);
+        const t0 = Date.now();
+        const lines = await client.listProcessedLines(from.toISOString(), new Date(to.getTime() - 1).toISOString());
+        const bySku = {}; const last = {};
+        for (const l of lines) {
+          const k = String(l.sku || '').toUpperCase(); if (!k) continue;
+          bySku[k] = (bySku[k] || 0) + (l.qty || 0);
+          const ts = Date.parse(l.processedOn) || 0; if (ts > (last[k] || 0)) last[k] = ts;
+        }
+        overviewMonths.months[ym] = { bySku, last, at: Date.now() };
+        // keep a year, drop the rest
+        for (const k of Object.keys(overviewMonths.months)) if (k < ymOf(new Date(new Date().getFullYear(), new Date().getMonth() - 12, 1))) delete overviewMonths.months[k];
+        try { fs.writeFileSync(overviewMonthsPath(), JSON.stringify({ months: overviewMonths.months, v: 1 })); } catch { /* best effort */ }
+        console.log(`[overview] month ${ym}: ${lines.length} lines in ${Math.round((Date.now() - t0) / 1000)}s`);
+      }
+      overviewMonths.promise = null;
+      return overviewMonths.months;
+    })().catch((e) => { overviewMonths.promise = null; console.log(`[overview] months pass failed: ${e.message}`); throw e; });
+    return overviewMonths.promise;
   }
 
   // Month/Year curves come from Linnworks' PROCESSED ORDERS, not the app's
@@ -4872,6 +4923,16 @@ exit 1
       low: low.slice(0, 40),
       lowCount: low.length,
       coverDays: cover,
+      // "Was selling" (owner 2026-10-14): every item's shelf + WFS level so a
+      // SKU with no sale in 30 days still has a row, this month's units so
+      // far, and each SKU's last sale in the window
+      inv: items.filter((it) => !pads[String(it.sku).toUpperCase()]).map((it) => {
+        const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+        const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+        return { sku: it.sku, title: it.title || '', avail: Math.max(0, Number(home.available) || 0), atWfs: wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0 };
+      }),
+      monthNow: (() => { const m = {}; const ym = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}`; for (const l of sales.lines) { const d = new Date(Date.parse(l.processedOn) || 0); if (`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` !== ym) continue; const k = String(l.sku).toUpperCase(); if (k) m[k] = (m[k] || 0) + (l.qty || 0); } return m; })(),
+      lastSale: Object.fromEntries(Object.entries(stats).filter(([, st]) => st.last).map(([k, st]) => [k, st.last])),
     };
   }
 
@@ -5028,10 +5089,50 @@ exit 1
     // selling fast: the fastest sellers first (owner 2026-10-08)
     fast.sort((a, b) => b.perDay - a.perDay || b.pct - a.pct);
     watch.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    // Was selling (owner 2026-10-14): every SKU whose best three of the last
+    // six completed months average at least 5 units (the slider's floor; the
+    // page filters higher), with its month-by-month units, its last sale
+    // and what is on hand — the page decides between "out of stock" and
+    // "not selling" and applies the slider
+    const was = [];
+    const wasMonths = completedMonths();
+    const monthsHeld = wasMonths.filter((ym) => overviewMonths.months[ym]);
+    const nowYm = ymOf(new Date());
+    if (money && Array.isArray(money.inv) && monthsHeld.length) {
+      const nowTs = Date.now();
+      const fmtDay = (ts) => { const d = new Date(ts); return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()}`; };
+      const stockBySku = new Map(((money && money.stock) || []).map((r) => [String(r.sku).toUpperCase(), r]));
+      for (const it of money.inv) {
+        const k = String(it.sku).toUpperCase();
+        if (db.conditionOfSku(it.sku) || mappedCond.has(k)) continue;
+        const units = wasMonths.map((ym) => { const mo = overviewMonths.months[ym]; return mo ? (mo.bySku[k] || 0) : null; });
+        const known = units.filter((u) => u !== null);
+        if (!known.length) continue;
+        const best = known.slice().sort((a, b) => b - a).slice(0, 3);
+        const pace = Math.round(best.reduce((a, b) => a + b, 0) / best.length);
+        if (pace < 5) continue;
+        let lastTs = (money.lastSale || {})[k] || 0;
+        for (const ym of wasMonths) { const mo = overviewMonths.months[ym]; if (mo && mo.last[k] > lastTs) lastTs = mo.last[k]; }
+        const daysSince = lastTs ? Math.max(0, Math.floor((nowTs - lastTs) / 86400000)) : null;
+        const onHand = Math.max(0, (it.avail || 0) + (it.atWfs || 0));
+        const sr = stockBySku.get(k);
+        // the months that carried the pace, as "Jun – Aug"
+        const hi = units.map((u, i) => (u !== null && u >= pace * 0.6 ? i : -1)).filter((i) => i >= 0);
+        const mon = (ym) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(ym.slice(5, 7)) - 1];
+        const range = hi.length ? (hi[0] === hi[hi.length - 1] ? mon(wasMonths[hi[0]]) : `${mon(wasMonths[hi[0]])} – ${mon(wasMonths[hi[hi.length - 1]])}`) : '';
+        was.push({
+          sku: it.sku, title: it.title || '', avail: it.avail || 0, atWfs: it.atWfs || 0, onHand, pace, range,
+          months: [...wasMonths, nowYm], units: [...units, (money.monthNow || {})[k] || 0],
+          lastTs, last: lastTs ? fmtDay(lastTs) : '', daysSince, recent: sr ? sr.recent : 0, sold30: sr ? sr.sold30 : 0,
+        });
+      }
+      was.sort((a, b) => b.pace - a.pace);
+    }
     return {
       ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
       counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
       leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1, buyUnits, buyPace,
+      was, wasMonths: [...wasMonths, nowYm], wasReady: monthsHeld.length === wasMonths.length && !!(money && money.inv), wasHeld: monthsHeld.length, wasBusy: !!overviewMonths.promise,
     };
   }
 
@@ -7379,6 +7480,19 @@ function registerRecoveryIpc() {
       ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.buyQty) || 0, String(Number(r.perDay) || 0), Number(r.avail) || 0, Number(r.atWfs) || 0, Number(r.daysLeft) || 0, Number(r.sold30) || 0, { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind] || '']) }]);
       const stamp = new Date().toISOString().slice(0, 10);
       return await recoverySaveBuffer(`Buy now — ${target || ''} days of cover, ${lead || ''} days lead`, `Buy_now_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('overview:exportWas', async (_e, { rows, min, mode, months } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const ms = Array.isArray(months) ? months : [];
+      const buf = buildWorkbookSheets([{ name: 'Was selling', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Units a month (best 3 of 6)', width: 14, kind: 'int' },
+        { header: 'Last sale', width: 12, kind: 'text' }, { header: 'Days since', width: 10, kind: 'int' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' },
+        ...ms.map((ym) => ({ header: ym, width: 9, kind: 'int' })),
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.pace) || 0, r.last || '', Number(r.daysSince) || 0, Number(r.avail) || 0, Number(r.atWfs) || 0, ...ms.map((_, i) => Number((r.units || [])[i]) || 0)]) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Was selling — at least ${min || ''} a month, now ${mode === 'idle' ? 'not selling' : 'out of stock'}`, `Was_selling_${stamp}.xlsx`, XLSX_FILTER, buf);
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('returns:export', async () => {

@@ -12880,7 +12880,43 @@ let ovError = ''; // the last fetch's failure, shown in the header
 let ovQuickTimer = null;
 let ovOpenSku = null; // the one expanded row
 let ovShowWatch = false;
-let ovFilter = 'all'; // all | buy | out | low | fast (owner 2026-10-13: the Buy now cut)
+let ovFilter = 'all'; // all | buy | out | low | fast | was (owner 2026-10-13: the Buy now cut; 2026-10-14: Was selling)
+// Was selling (owner 2026-10-14): the slider's monthly minimum and the
+// "and now" choice, kept per computer
+let ovWasMin = (() => { try { const v = Number(localStorage.getItem('ovWasMin')); return v >= 5 ? v : 10; } catch { return 10; } })();
+let ovWasMode = (() => { try { return localStorage.getItem('ovWasMode') === 'idle' ? 'idle' : 'out'; } catch { return 'out'; } })();
+const ovWasRows = (p) => ((p && p.was) || []).filter(r => r.pace >= ovWasMin && (ovWasMode === 'idle' ? (r.daysSince == null || r.daysSince >= 14) : r.onHand <= 0));
+const OV_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ovMonName = (ym) => OV_MON[Number(String(ym).slice(5, 7)) - 1] || '';
+function ovWasRowHtml(r) {
+  const u = r.units || []; const max = Math.max(...u.map(x => Number(x) || 0), 1);
+  const bars = `<span class="ovq-ws">${u.map((v, i) => `<i class="${i === u.length - 1 ? 'is-now' : ''}" title="${esc(ovMonName((r.months || [])[i]))}: ${ovN(Number(v) || 0)}"><b class="h${Math.max(1, Math.round((Number(v) || 0) / max * 9))}"></b></i>`).join('')}</span>`;
+  const lab = r.months && r.months.length ? `${ovMonName(r.months[0])} → ${ovMonName(r.months[r.months.length - 1])}` : '';
+  const since = r.onHand <= 0 ? (r.last ? `out since ${esc(r.last)}` : 'out of stock') : (r.last ? `last sale ${esc(r.last)}` : 'no sale on record');
+  const days = r.daysSince != null ? ` · ${r.daysSince} day${r.daysSince === 1 ? '' : 's'}` : '';
+  return `<div class="ovq-item"><div class="ovq-row is-was">
+    <div><span class="ovq-badge was">Was selling</span></div>
+    <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span></div><div class="ovq-title">${esc(r.title || '')}</div></div>
+    <div class="ovq-l1">Used to sell <b>${ovN(r.pace)}</b> a month<div class="ovq-why">${r.range ? esc(r.range) + ' · ' : ''}${since}${days}${r.onHand > 0 ? ` · ${ovN(r.onHand)} on hand` : ''}</div></div>
+    <div class="ovq-wspark">${bars}<span class="ovq-wspark-l">${esc(lab)}</span></div>
+    <span class="ovq-chev-blank"></span>
+  </div></div>`;
+}
+function ovWasBarHtml(p) {
+  const note = p && p.wasReady ? '' : p && p.wasHeld ? ` <span class="rc-muted">· ${p.wasHeld} of 6 months read so far${p.wasBusy ? ', reading the rest' : ''}</span>` : ' <span class="rc-muted">· reading six months of sales from Linnworks, back in a few minutes</span>';
+  return `<div class="ovq-wbar"><span class="ovq-wbar-t">Used to sell at least</span><input type="number" class="ovq-wval mono" id="ovWasVal" min="1" max="5000" step="1" value="${ovWasMin}" aria-label="Units a month"><span class="ovq-wbar-t">units a month</span>
+    <span class="ovq-wslider"><input type="range" id="ovWasRange" min="5" max="200" step="5" value="${ovWasMin}" aria-label="Units a month"><span class="ovq-wticks"><span>5</span><span>50</span><span>100</span><span>200</span></span></span>
+    <span class="ovq-wbar-t">and now</span><span class="ovq-wseg"><button type="button" class="${ovWasMode === 'out' ? 'is-on' : ''}" data-ovwasmode="out">out of stock</button><button type="button" class="${ovWasMode === 'idle' ? 'is-on' : ''}" data-ovwasmode="idle">not selling</button></span>${note}</div>`;
+}
+function ovWasRepaint() {
+  const p = ovPlan(); const rows = ovWasRows(p);
+  const box = $('ovWasRows'); if (box) box.innerHTML = rows.length ? rows.map(ovWasRowHtml).join('') : `<div class="ovq-note">${p && p.wasReady ? `Nothing used to sell ${ovN(ovWasMin)} a month and is ${ovWasMode === 'idle' ? 'not selling now' : 'out of stock now'}.` : 'The six months of sales are still being read.'}</div>`;
+  const v = $('ovWasVal'); if (v && document.activeElement !== v) v.value = String(ovWasMin);
+  const rr = $('ovWasRange'); if (rr && document.activeElement !== rr) rr.value = String(Math.min(200, Math.max(5, ovWasMin)));
+  const chip = document.querySelector('[data-ovfilter="was"] b'); if (chip) chip.textContent = String(rows.length);
+  const r = $('ovWasRange'); if (r) r.style.setProperty('--pct', `${Math.round((ovWasMin - 5) / 195 * 100)}%`);
+  const n = $('ovWasN'); if (n) n.textContent = rows.length ? `${rows.length} SKU${rows.length === 1 ? '' : 's'}` : '';
+}
 let ovTick = null; // 1s ticker for the elapsed time while the first pass runs
 const ovSeries = {}; // sku -> { s, max } for the chart hover
 
@@ -13111,12 +13147,14 @@ function ovRenderList() {
   const lead = (p && p.leadDays) || 7;
   const cover = (p && p.coverDays) || 21;
   const buyMode = ovFilter === 'buy';
+  const wasMode = ovFilter === 'was';
   // one label whatever the chip, so the chips never shift (owner 2026-10-13)
-  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
   const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
-  const chips = p && p.ready ? `<div class="ovq-filter">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast']].map(([k, t]) =>
-    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? `<b>${nBuy}</b>` : ''}</button>`).join('')}</div>` : '';
-  const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : `Lead time ${lead} days · target ${lead + cover} days on hand`;
+  const nWas = ovWasRows(p).length;
+  const chips = p && p.ready ? `<div class="ovq-filter">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast'], ['was', 'Was selling']].map(([k, t]) =>
+    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? `<b>${nBuy}</b>` : k === 'was' ? `<b>${nWas}</b>` : ''}</button>`).join('')}</div>` : '';
+  const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : wasMode ? 'best 3 of the last 6 months, averaged' : `Lead time ${lead} days · target ${lead + cover} days on hand`;
   const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
   if (ovLoading()) {
@@ -13142,6 +13180,13 @@ function ovRenderList() {
     return;
   }
   const watch = p.watch || [];
+  if (wasMode) {
+    const rows = ovWasRows(p);
+    box.innerHTML = `${head}${ovWasBarHtml(p)}<div id="ovWasRows">${rows.length ? rows.map(ovWasRowHtml).join('') : `<div class="ovq-note">${p.wasReady ? `Nothing used to sell ${ovN(ovWasMin)} a month and is ${ovWasMode === 'idle' ? 'not selling now' : 'out of stock now'}.` : 'The six months of sales are still being read.'}</div>`}</div>
+      <div class="ovq-foot"><button class="ovq-link" data-ovwasxlsx>Download this list as Excel</button><span class="ovq-ign"><span id="ovWasN">${rows.length ? `${rows.length} SKU${rows.length === 1 ? '' : 's'}` : ''}</span><span class="dot">·</span>pace = best 3 of the last 6 months ÷ 3 · out of stock = none at the warehouse or WFS · not selling = no sale in 14 days</span></div>`;
+    const rg = $('ovWasRange'); if (rg) rg.style.setProperty('--pct', `${Math.round((ovWasMin - 5) / 195 * 100)}%`);
+    return;
+  }
   // the watch list expands as more of the SAME rows (owner 2026-10-08:
   // "the same as above but expanded"), not a compact grid
   const rows = buyMode ? (p.buy || [])
@@ -13240,6 +13285,15 @@ $('ovList').addEventListener('mouseout', (e) => {
   for (const c of ['.ovq-guide', '.ovq-dot', '.ovq-tip']) chart.querySelector(c).hidden = true;
 });
 
+$('ovList').addEventListener('input', (e) => {
+  if (e.target.id !== 'ovWasRange' && e.target.id !== 'ovWasVal') return;
+  // the slider for exploring, the box for an exact number (owner 2026-10-14)
+  const n = Number(e.target.value);
+  if (e.target.id === 'ovWasVal' && !(n >= 1)) return;
+  ovWasMin = e.target.id === 'ovWasVal' ? Math.round(n) : Math.max(5, n || 5);
+  try { localStorage.setItem('ovWasMin', String(ovWasMin)); } catch { /* fine */ }
+  ovWasRepaint();
+});
 for (const id of ['ovList', 'ovSold']) {
   $(id).addEventListener('click', async (e) => {
     const sku = e.target.closest('[data-ovsku]');
@@ -13247,6 +13301,14 @@ for (const id of ['ovList', 'ovSold']) {
     if (e.target.closest('[data-ovwatch]')) { ovShowWatch = !ovShowWatch; ovRenderList(); return; }
     const chip = e.target.closest('[data-ovfilter]');
     if (chip) { ovFilter = chip.dataset.ovfilter; ovOpenSku = null; ovRenderList(); return; }
+    const wm = e.target.closest('[data-ovwasmode]');
+    if (wm) { ovWasMode = wm.dataset.ovwasmode === 'idle' ? 'idle' : 'out'; try { localStorage.setItem('ovWasMode', ovWasMode); } catch { /* fine */ } for (const b of document.querySelectorAll('[data-ovwasmode]')) b.classList.toggle('is-on', b.dataset.ovwasmode === ovWasMode); ovWasRepaint(); return; }
+    if (e.target.closest('[data-ovwasxlsx]')) {
+      const p = ovPlan(); const rows = ovWasRows(p);
+      const r = await api.overviewExportWas(rows.map(x => ({ sku: x.sku, title: x.title, pace: x.pace, last: x.last, daysSince: x.daysSince, avail: x.avail, atWfs: x.atWfs, units: x.units })), ovWasMin, ovWasMode, (p && p.wasMonths) || []).catch(err => ({ ok: false, error: err.message }));
+      if (r && r.ok) toast('List saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
+      return;
+    }
     if (e.target.closest('[data-ovbuyxlsx]')) {
       const p = ovPlan(); const rows = (p && p.buy) || [];
       const r = await api.overviewExportBuy(rows.map(x => ({ sku: x.sku, title: x.title, buyQty: x.buyQty, perDay: x.perDay, avail: x.avail, atWfs: x.atWfs, daysLeft: x.daysLeft, sold30: x.sold30, kind: x.kind })), (p.leadDays || 7) + (p.coverDays || 21), p.leadDays || 7).catch(err => ({ ok: false, error: err.message }));

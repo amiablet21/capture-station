@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.56 highlights
+
+- **Was selling, on Overview** (owner: "used to sell minimum 10 units a month, now out of stock … I want like a slider"). A sixth chip beside Buy now. A slider sets the monthly minimum (5 to 200) and a switch picks "out of stock" (nothing at the warehouse or WFS) or "not selling" (no sale in 14 days). Each row says "Used to sell 412 a month · Jun – Aug · out since Sep 28 · 16 days" with a seven-month bar chart, the current month in red. Monthly pace is the best 3 of the last 6 completed months averaged, so one good month does not qualify a SKU and one bad month does not disqualify it. Those six months are read from Linnworks once, behind the Overview's normal pass, one month per walk, and kept on disk; until all six are in, the bar says how many have been read. The slider and the switch are remembered per computer; Download this list as Excel writes the rows with a column per month.
+
 ## v1.32.55 highlights
 
 - **A Shared folder readout on Import** (owner, on a new computer: "why did it not save my previous Mark received from a file?"). Under the drop zones the app lists what the shared folder holds for Recovery — each station's periods, marks and expenses files with their line counts and last write, this computer's own in navy, an unreadable file in red — and what this desktop holds (periods, marks and how many were made here). "Re-read every file" forgets how far each file was read and takes every file from the top. With sync off it says so and points at Settings → Sync.
