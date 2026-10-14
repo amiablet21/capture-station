@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.59 highlights
+
+- **Composites work** (owner: the case listing X210-64GB-GRAY-CASE-USBC draws from X210-64GB-GRAY). The Stock page lists a composite parent again — it had vanished the moment the item became a composite — with a navy "composite" tag and a read-only count that is what its parts can cover; a count typed on it is refused ("adjust the parts instead"). A composite's sale credits its parts: the tablet's pace on Overview counts the case listing's sales, so Buy now orders tablets for both and never the composite. Was selling and the six-month store count the parts the same way.
+- The Shared folder readout moved off the Import screen into Settings → Shared folder (owner: "I would prefer that we didn't have it there").
+- The listing count on a Profit SKU row is a faint "×2" on the baseline, not a pill (owner: "more subtle", "not centered").
+
 ## v1.32.58 highlights
 
 - A mark takes the yellow highlight off its row (owner: "in the marked section, it randomly highlights some rows" — a row highlighted while being worked on kept its yellow after Received, Never shipped, Loss or Paid out moved it to Marked). Undo, a case ID or a note leave the highlight alone.

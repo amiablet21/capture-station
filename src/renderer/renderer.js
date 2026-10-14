@@ -1280,6 +1280,7 @@ async function openSettings() {
   $('testConnResult').textContent = '';
   $('testConnResult').className = 'test-result';
   $('settingsDialog').showModal();
+  rcRenderSyncPanel().catch(() => {}); // the Recovery files in the shared folder, under the folder settings
 }
 
 $('settingsBtn').addEventListener('click', openSettings);
@@ -2023,7 +2024,7 @@ function rcRenderProfit() {
 async function rcRenderSyncPanel() {
   const box = $('rcSyncPanel');
   const st = await api.recoverySyncStatus().catch(() => null);
-  if (!st || !st.ok) { box.hidden = true; return; }
+  if (!st || !st.ok || !st.enabled) { box.hidden = true; return; }
   box.hidden = false;
   if (!st.enabled) { box.innerHTML = '<div class="rc-sync-h">Shared folder</div><div class="rc-sync-line rc-muted">Sync is off on this computer, so marks and periods made elsewhere do not reach it. Turn it on in Settings → Sync with the same folder as the other desktops.</div>'; return; }
   const when = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${rcMonDay(d.toISOString())} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; };
@@ -2032,10 +2033,9 @@ async function rcRenderSyncPanel() {
     ${row('Periods', st.files.wmruns, 'events')}${row('Marks', st.files.wmmarks, 'lines')}${row('Expenses', st.files.wmexpenses, 'lines')}
     <div class="rc-sync-line rc-muted">This computer holds ${rcPlural(st.local.runs, 'period')}, ${rcPlural(st.local.marks, 'mark')} (${st.local.ownMarks} made here) and ${rcPlural(st.local.expenses, 'expense')}. A station's marks file should hold at least as many lines as the marks it made; if another desktop's file is missing or short, open Recovery on that desktop once so it rebuilds its file.</div>`;
   const btn = $('rcResyncBtn');
-  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); await rcLoad(); toast('Shared folder read again'); };
+  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); if (rc.data) await rcLoad(); await rcRenderSyncPanel(); toast('Shared folder read again'); };
 }
 function rcRenderImport() {
-  rcRenderSyncPanel();
   const runs = rc.data.runs || [];
   $('rcPeriodCount').textContent = runs.length ? String(runs.length) : '';
   $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here — or several at once' : 'Drop a payment period CSV here — or several at once';
@@ -4318,7 +4318,7 @@ function renderStock() {
     const hit = chSkuHit(r);
     return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${r.isComposite ? '<span class="badge-unlisted badge-composite" title="A composite: it draws from its parts in Linnworks, so it holds no stock of its own — the count shown is what the parts can cover">composite</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   // dead-end searches offer the missing SKU as a one-click create; inside a
@@ -4360,7 +4360,9 @@ function renderStock() {
           switch (key) {
             case 'sku': return skuCell(r);
             case 'cost': return `<td class="num cell-cost"><button class="stock-num-btn stock-cost-btn${Number(r.cost) > 0 ? '' : ' is-none'}" data-costsid="${esc(r.stockItemId || '')}" data-costsku="${esc(r.sku)}" data-cost="${Number(r.cost) || 0}" title="Cost — click to edit">${fmtCost(r.cost)}</button></td>`;
-            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
+            case 'stockLevel': return r.isComposite
+              ? `<td class="num cell-level"><span class="stock-num-ro" title="A composite's count is what its parts can cover — adjust the parts, not this row">${r.l.available}</span></td>`
+              : `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);

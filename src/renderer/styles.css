@@ -2375,6 +2375,7 @@ tr.unl-dim:hover td { opacity: 1; }
 }
 
 /* condition SKUs holding returns with no marketplace listing linked yet */
+.badge-composite { background: #E4EAF4 !important; color: #1E3A66 !important; }
 .badge-unlisted {
   display: inline-block;
   font-size: 10px;
@@ -5726,7 +5727,8 @@ th:last-child > .col-grip { right: 0; }
 .rc-seg-sm button { padding: 3px 11px; font-size: 12px; }
 .rc-list-tools { display: flex; align-items: center; gap: 10px; }
 .rc-group-note { margin-left: 10px; font-size: 11.5px; color: #787774; font-weight: 400; }
-.rc-group-n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; margin-left: 8px; border-radius: 999px; background: #EFEEEA; color: #787774; font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: -3px; }
+.rc-group-n { display: inline; margin-left: 6px; color: #A5A29C; font-family: var(--mono); font-size: 11px; font-weight: 400; }
+.rc-group-n::before { content: "×"; }
 .rc-table-profit td.rc-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rc-table-profit tr.rc-group td.rc-item .rc-sku { font-weight: 600; }
 .rc-table-profit tr.rc-listing td { background: #FBFBFA; }
@@ -5776,7 +5778,7 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-period-link { font-family: inherit; font-size: 13px; font-weight: 600; color: #1E3A66; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
 .rc-period-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* the shared-folder readout on Import (owner 2026-10-14) */
-.rc-sync { margin-top: 14px; padding: 12px 14px; border: 1px solid #EAEAEA; border-radius: 8px; background: #FBFBFA; font-size: 12.5px; }
+.rc-sync { margin: 10px 0 18px; padding: 12px 14px; border: 1px solid #EAEAEA; border-radius: 8px; background: #FBFBFA; font-size: 12.5px; }
 .rc-sync-h { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 8px; }
 .rc-sync-h .rc-link { margin-left: auto; font-family: inherit; font-size: 12px; color: #1E3A66; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .rc-sync-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 3px 0; }

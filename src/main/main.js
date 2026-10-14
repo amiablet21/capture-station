@@ -4454,10 +4454,14 @@ exit 1
         const t0 = Date.now();
         const lines = await client.listProcessedLines(from.toISOString(), new Date(to.getTime() - 1).toISOString());
         const bySku = {}; const last = {};
+        const credit = (sku, qty, processedOn) => {
+          const k = String(sku || '').toUpperCase(); if (!k) return;
+          bySku[k] = (bySku[k] || 0) + (qty || 0);
+          const ts = Date.parse(processedOn) || 0; if (ts > (last[k] || 0)) last[k] = ts;
+        };
         for (const l of lines) {
-          const k = String(l.sku || '').toUpperCase(); if (!k) continue;
-          bySku[k] = (bySku[k] || 0) + (l.qty || 0);
-          const ts = Date.parse(l.processedOn) || 0; if (ts > (last[k] || 0)) last[k] = ts;
+          credit(l.sku, l.qty, l.processedOn);
+          for (const c of l.children || []) credit(c.sku, (l.qty || 1) * (c.qty || 1), l.processedOn); // a composite's sale is its children's too
         }
         overviewMonths.months[ym] = { bySku, last, at: Date.now() };
         // keep a year, drop the rest
@@ -4752,7 +4756,12 @@ exit 1
     const dayIdx = {};
     for (let i = 0; i < WINDOW_DAYS; i++) dayIdx[db.localDay(new Date(nowTs - (WINDOW_DAYS - 1 - i) * 86400000))] = i;
     const chanKey = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
-    for (const l of sales.lines) {
+    // a composite line also credits each child item with the units its
+    // sale took from the shelf (owner 2026-10-14): the tablet's pace counts
+    // the case listing's sales, so Buy now orders tablets for both
+    const childLines = [];
+    for (const l of sales.lines) for (const c of l.children || []) childLines.push({ ...l, sku: c.sku, qty: (l.qty || 1) * (c.qty || 1), revenue: 0, channelSku: '', viaComposite: l.sku });
+    for (const l of [...sales.lines, ...childLines]) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
       const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {}, series: new Array(WINDOW_DAYS).fill(0), split: { walmart: 0, ebay: 0, temu: 0, other: 0 } };
@@ -4778,6 +4787,8 @@ exit 1
     }
     const pads = {};
     for (const it of items) if (it.dsPad) pads[String(it.sku).toUpperCase()] = true;
+    const composites = {};
+    for (const it of items) if (it.isComposite) composites[String(it.sku).toUpperCase()] = true;
     const lead = Number((cfg.reorder || {}).leadTimeDays) || 7;
     const missed = [];
     const buy = [];
@@ -4894,7 +4905,7 @@ exit 1
       const onHand = avail + atWfs;
       const daysLeft = perDay > 0 ? Math.floor(onHand / perDay) : 9999;
       stock.push({
-        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty,
+        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty, composite: !!composites[k],
         perDay: Math.round(perDay * 100) / 100, recent: s.recent, prior: s.prior,
         daysLeft, outOn: fmtDay(nowTs + daysLeft * 86400000), last: s.last ? fmtDay(s.last) : '', lastTs: s.last,
         series: s.series, split: s.split, padded: !!pads[k],
@@ -4926,7 +4937,7 @@ exit 1
       // "Was selling" (owner 2026-10-14): every item's shelf + WFS level so a
       // SKU with no sale in 30 days still has a row, this month's units so
       // far, and each SKU's last sale in the window
-      inv: items.filter((it) => !pads[String(it.sku).toUpperCase()]).map((it) => {
+      inv: items.filter((it) => !pads[String(it.sku).toUpperCase()] && !it.isComposite).map((it) => {
         const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
         const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
         return { sku: it.sku, title: it.title || '', avail: Math.max(0, Number(home.available) || 0), atWfs: wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0 };
@@ -5041,6 +5052,8 @@ exit 1
       // reorder, so they never show as out or on watch (owner 2026-10-08
       // asked what a "Watch · Out of stock" row meant — these were most of them)
       if (r.padded) continue;
+      // a composite holds no stock of its own: its children carry its sales
+      if (r.composite) continue;
       const pr = r.recent / 14;
       const pp = r.prior / 16;
       const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
@@ -5072,7 +5085,7 @@ exit 1
     const buyPace = Number((cfg.reorder || {}).buyPace ?? 1);
     const buy = [];
     for (const r of (money && money.stock) || []) {
-      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded) continue;
+      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded || r.composite) continue;
       const onHand = Math.max(0, (r.avail || 0) + (r.atWfs || 0));
       if (!(r.perDay >= buyPace && buyPace > 0) && !(buyPace <= 0 && r.sold30 > 0)) continue;
       if (!(onHand <= buyUnits || onHand <= 0 || r.daysLeft <= target)) continue;
@@ -6492,6 +6505,10 @@ exit 1
     if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
+      // a composite holds no stock of its own (owner 2026-10-14): a count
+      // typed on it would sit beside the children's and count twice
+      const me = ((invCache.res && invCache.res.items) || []).find(it => String(it.sku).toUpperCase() === String(sku).toUpperCase());
+      if (me && me.isComposite) return { ok: false, error: `${sku} is a composite: it draws from its parts. Adjust the parts instead.` };
       // the bulk history entry below is this change's one record in the
       // stock history too (skipLog keeps the Linnworks-side recorder quiet)
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n, { skipLog: true });

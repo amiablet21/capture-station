@@ -337,8 +337,6 @@
                 <button id="rcMarkBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
               </div>
               <div class="rc-progress" id="rcMarkProgress" hidden></div>
-              <!-- the shared folder, as Recovery sees it (owner 2026-10-14) -->
-              <div class="rc-sync" id="rcSyncPanel" hidden></div>
             </div>
           </section>
           <section class="rc-sec is-open">
@@ -1135,6 +1133,8 @@
         <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
       </label>
       <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
+      <!-- what the shared folder holds for Recovery (owner 2026-10-14: off the Import screen, into Settings) -->
+      <div class="rc-sync" id="rcSyncPanel" hidden></div>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">
