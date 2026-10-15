@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.81 highlights
+
+- **A quieter import on WFS Inventory** (owner: "make the import option more subtle"). Once a report is in, the drop box gives way to a small **Import report…** button beside the report picker and Remove; a file dragged anywhere on the screen still imports, and the table card outlines while it is over it. The drop box shows only while no report has been imported.
+
 ## v1.32.80 highlights
 
 - **The WFS inventory report is imported on WFS Inventory, not on Import** (owner: "so as to not cause any confusion"). The drop box for the Inventory Reconciliation CSV sits above the units table, Browse… picks one or several, and the report picker has a Remove beside it. Import is back to payment periods and the mark-received file only; a WFS report dropped there by mistake is still recognised by its columns and opens on WFS Inventory.

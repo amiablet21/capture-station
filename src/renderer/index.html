@@ -383,6 +383,10 @@
             <div class="rc-toolbar-right" id="rcWfsTools">
               <select id="rcWfsPick" class="rc-month rc-wfs-pick" aria-label="WFS report"></select>
               <button id="rcWfsRemoveBtn" class="rc-btn rc-btn-text" type="button" title="Remove the report picked on the left">Remove</button>
+              <!-- owner 2026-10-15: "make the import option more subtle" — a
+                   small button once a report is in; the drop box only while
+                   there is none; a file dropped anywhere on the screen imports -->
+              <button id="rcWfsImportBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button" title="Seller Center → WFS → Reports → Inventory Reconciliation (CSV) · or drop the file anywhere on this screen">Import report…</button>
             </div>
           </div>
           <!-- the Inventory Reconciliation import lives here, not on Import
@@ -393,7 +397,7 @@
             <button id="rcWfsBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
           </div>
           <div class="rc-progress" id="rcWfsProgress" hidden></div>
-          <section class="rc-table-card">
+          <section class="rc-table-card" id="rcWfsCard">
             <!-- owner 2026-10-15: the units table, and the shipments logged
                  to WFS that are not marked received (20 days amber, 30 red) -->
             <div class="rc-tabrow" id="rcWfsTabs"></div>

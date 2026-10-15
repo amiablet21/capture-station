@@ -5892,3 +5892,5 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-table-wfsship td.rc-wfs-st { color: #787774; white-space: nowrap; font-size: 12px; }
 .rc-table-wfsship td.rc-wfs-act { text-align: right; white-space: nowrap; }
 .rc-btn-outline.rc-btn-row { padding: 3px 10px; font-size: 12px; }
+/* a file dragged over WFS Inventory once a report is in: the card outlines */
+#rcWfsCard.is-over { box-shadow: 0 0 0 2px #1E3A66; }

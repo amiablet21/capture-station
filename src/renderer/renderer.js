@@ -2162,15 +2162,16 @@ function rcRenderWfs() {
   $('rcWfsTable').classList.toggle('rc-table-wfsship', !onSku);
   $('rcWfsH').textContent = onSku ? 'WFS units by SKU' : rc.wfsTab === 'pending' ? 'Shipments to WFS not received' : 'Shipments to WFS received';
   $('rcWfsSub').textContent = onSku ? "Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report" : 'From the WFS Shipments log (Stock → Actions → WFS Shipments), every desktop';
-  $('rcWfsDrop').hidden = !onSku;
+  $('rcWfsDrop').hidden = !onSku || reps.length > 0;
   if (!onSku) $('rcWfsProgress').hidden = true;
   $('rcWfsRemoveBtn').hidden = !onSku || !reps.length;
+  $('rcWfsImportBtn').hidden = !onSku || !reps.length;
   if (!onSku) { pick.hidden = true; rcRenderWfsShipments(); return; }
   pick.hidden = !reps.length;
   pick.innerHTML = reps.map(r => `<option value="${esc(r.id)}" ${r.id === rc.wfsId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
   const d = rc.wfs;
   if (!reps.length || !d) {
-    $('rcWfsTable').innerHTML = `<tbody><tr class="rc-empty-row"><td>${reps.length ? 'Loading…' : 'No WFS report imported yet — drop the Inventory Reconciliation CSV in the box above.'}</td></tr></tbody>`;
+    $('rcWfsTable').innerHTML = `<tbody><tr class="rc-empty-row"><td>${reps.length ? 'Loading…' : 'No WFS report imported yet.'}</td></tr></tbody>`;
     $('rcWfsFoot').innerHTML = '';
     return;
   }
@@ -3088,17 +3089,16 @@ $('rcProfitExcelBtn').addEventListener('click', async () => {
 $('rcBrowseBtn').addEventListener('click', rcBrowse);
 // the drop target (the whole page accepts the file; the box shows the state)
 for (const ev of ['dragenter', 'dragover']) {
-  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $(rc.sub === 'wfs' ? 'rcWfsDrop' : 'rcDrop').classList.add('is-over'); } });
+  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $(rc.sub !== 'wfs' ? 'rcDrop' : $('rcWfsDrop').hidden ? 'rcWfsCard' : 'rcWfsDrop').classList.add('is-over'); } });
 }
-$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) { $('rcDrop').classList.remove('is-over'); $('rcWfsDrop').classList.remove('is-over'); } });
+$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) { for (const id of ['rcDrop', 'rcWfsDrop', 'rcWfsCard']) $(id).classList.remove('is-over'); } });
 // a file dropped anywhere else must not open in the window (it used to
 // look like nothing happened, or worse, the CSV replaced the page)
 window.addEventListener('dragover', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
 window.addEventListener('drop', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !e.defaultPrevented) e.preventDefault(); });
 $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
-  $('rcDrop').classList.remove('is-over');
-  $('rcWfsDrop').classList.remove('is-over');
+  for (const id of ['rcDrop', 'rcWfsDrop', 'rcWfsCard']) $(id).classList.remove('is-over');
   const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
   const file = files[0];
   if (!file) { rcProgress('Nothing readable was dropped — drop the CSV file itself, not a link to it.', 'fail'); return; }
@@ -3116,12 +3116,14 @@ async function rcRouteDrop(files, toWfs) {
   rc.sub = 'import'; rcRender();
   if (periods.length > 1) rcImportMany(periods); else rcImportFile(periods[0]);
 }
-$('rcWfsBrowseBtn').addEventListener('click', async () => {
+async function rcWfsBrowse() {
   const pick = await api.recoveryWfsPick().catch(err => ({ ok: false, error: err.message }));
   if (!pick || pick.canceled) return;
   if (!pick.ok) { rcWfsProgress(pick.error || 'Could not open that file.', 'fail'); return; }
   await rcWfsImportFiles(pick.files || []);
-});
+}
+$('rcWfsBrowseBtn').addEventListener('click', rcWfsBrowse);
+$('rcWfsImportBtn').addEventListener('click', rcWfsBrowse);
 $('rcWfsRemoveBtn').addEventListener('click', async () => {
   const meta = ((rc.data && rc.data.wfsReports) || []).find(r => r.id === rc.wfsId);
   if (!meta) return;
