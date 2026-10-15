@@ -7895,7 +7895,8 @@ const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'c
 
 function applyRetCols(table) {
   if (!table) return;
-  table.querySelectorAll('thead th').forEach((th, i) => {
+  const ths = [...table.querySelectorAll('thead th')];
+  const put = () => ths.forEach((th, i) => {
     const key = RET_COL_KEYS[i];
     if (!key) return;
     if (!th.querySelector('.col-grip')) {
@@ -7907,6 +7908,20 @@ function applyRetCols(table) {
     th.style.minWidth = w ? `${w}px` : '';
     th.style.maxWidth = w ? `${w}px` : '';
   });
+  put();
+  // the Notes column keeps its room (owner 2026-10-15: "why don't I see it"):
+  // the other columns, dragged wide and remembered, had squeezed it to
+  // nothing. Give the widest remembered columns back until Notes has 140px;
+  // if that is still not enough, forget the remembered widths altogether.
+  const noteTh = ths[10];
+  if (noteTh && noteTh.offsetWidth < 140 && Object.keys(retColWidths).length) {
+    let left = 140 - noteTh.offsetWidth;
+    const keys = Object.keys(retColWidths).filter((k) => k !== 'note' && retColWidths[k] > 110).sort((a, b) => retColWidths[b] - retColWidths[a]);
+    for (const k of keys) { if (left <= 0) break; const give = Math.min(left, retColWidths[k] - 110); retColWidths[k] -= give; left -= give; }
+    if (left > 0) retColWidths = {};
+    localStorage.setItem('retColWidths', JSON.stringify(retColWidths));
+    put();
+  }
 }
 
 function applyRetColsAll() {

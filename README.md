@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.76 highlights
+
+- **The Returns log's Notes column keeps its room.** Column widths dragged on the other columns are remembered per computer, and on one desktop they had squeezed Notes to nothing. The app now takes width back from the widest remembered columns until Notes has 140px, and forgets the remembered widths if that is still not enough.
+
 ## v1.32.75 highlights
 
 - **Cmd+Z / Ctrl+Z on Reconcile.** Every mark (Received, Never shipped, Loss, a case, a payout, a note, Remove) first remembers the PO's marks; Cmd+Z puts the last one back, Cmd+Shift+Z or Ctrl+Y redoes it. The restore is a mark of its own, so it reaches every desktop like any other.
