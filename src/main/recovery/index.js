@@ -757,8 +757,15 @@ function profit(scope, key) {
     else if (st.kind === 'lost') { situation = st.it ? `Refunded${where} · ${when(st.it)}${costNote('cost charged')}` : `Refunded${where} · not received${costNote('cost charged')}`; tone = 'red'; }
     if (o.orphan) situation += heldOut ? ' · not counted against profit' : ' · counted against profit';
     // the statement's own words for the PO's fee lines (owner 2026-10-13:
-    // "include if this is a shipping label charge") ride on every row
-    if (o.note && soldHere) situation += ` · ${o.note}`;
+    // "include if this is a shipping label charge"). On a refunded row they
+    // lead, joined with +, so the charge reads first (owner 2026-10-15:
+    // "put what the charge is before the refunded in a later period");
+    // on a kept sale they follow as before
+    if (o.note) {
+      const fees = String(o.note).split(' · ').filter(Boolean).join(' + ');
+      if (st.kind !== 'kept' && (o.refundUnits > 0 || st.elsewhere)) situation = `${fees} · ${situation}`;
+      else if (soldHere) situation += ` · ${fees}`;
+    }
     // a payout typed by hand (owner 2026-10-14): Walmart's own lands on a
     // later statement, so only money from outside Walmart — the shipping
     // insurance, the carrier — is added to profit here, once per PO

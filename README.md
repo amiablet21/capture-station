@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.77 highlights
+
+- **The charge reads first on a refunded line.** "Walmart Shipping Label Service Charge · Refunded in a later period · …", and when a PO carries more than one fee they are joined with +, as in "WFS Return Processing Fee + WFS Returned Item Removal Fee". Refunds of sales before the first statement show their fees too. A kept sale keeps its fee after the words as before.
+
 ## v1.32.76 highlights
 
 - **The Returns log's Notes column keeps its room.** Column widths dragged on the other columns are remembered per computer, and on one desktop they had squeezed Notes to nothing. The app now takes width back from the widest remembered columns until Notes has 140px, and forgets the remembered widths if that is still not enough.
