@@ -7376,6 +7376,8 @@ function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
 function startRecovery() {
   recovery.configure({
     wfsShipments: () => wfsShipmentsAll(),
+    // Profit groups a SKU's conditions; a listing graded by hand on Returns counts
+    conditionMap: () => db.getConditionMap(),
     retsync,
     listReturns: (n) => db.listReturns(n),
     config,

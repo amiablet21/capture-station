@@ -433,6 +433,24 @@ module.exports = function run(check) {
     const k1 = wfsrecv.parseKey('PC2:9', 'PC1'); const k2 = wfsrecv.parseKey(5, 'PC1'); const k3 = wfsrecv.parseKey('PC1:5', 'PC1');
     check('wfs received: a key names its desktop and id', !k1.own && k1.key === 'PC2:9' && k2.own && k2.key === 'PC1:5' && k3.own && k3.id === 5, [k1, k2, k3]);
 
+    // ----- Profit: a SKU's conditions grouped under one family -----
+    const G = (sku, o) => ({ sku, item: sku, mapped: true, listings: [], orders: 1, unitsSold: 0, unitsRefunded: 0, unitsBack: 0, unitsPending: 0, unitsLost: 0, atRisk: 0, payout: 0, statementPayout: 0, cogs: 0, heldOut: 0, gross: 0, commission: 0, commissionKnown: true, pricedUnits: 0, commGross: 0, unitCost: null, costKnown: false, ...o });
+    const fams = recovery._internal.buildFamilies([
+      G('X133-64GB-GRAY', { unitsSold: 10, payout: 1300, cogs: 1120, unitCost: 112, costKnown: true, gross: 1500, pricedUnits: 10, commission: -120, commGross: 1500 }),
+      G('OPEN-BOX-X133-64GB-GRAY', { unitsSold: 4, payout: 400, cogs: 360, unitCost: 90, costKnown: true, gross: 440, pricedUnits: 4, commission: -35.2, commGross: 440 }),
+      G('USED-X133-64GB-GRAY', { unitsSold: 2, payout: 150, cogs: 140, unitCost: 70, costKnown: true, gross: 170, pricedUnits: 2, commission: -13.6, commGross: 170 }),
+      G('X133-64GB-GRAY-OB2', { unitsSold: 1, payout: 95, cogs: 80, unitCost: 80, costKnown: true }), // graded by hand on Returns
+      G('X230-128GB-GRAY', { unitsSold: 3, payout: 600, cogs: 555, unitCost: 185, costKnown: true }),
+      G('OPEN-BOX-A15-64GB-BLACK', { unitsSold: 1, payout: 70, cogs: 0 }),
+    ], { 'X133-64GB-GRAY': { openbox: 'OPEN-BOX-X133-64GB-GRAY', scrap: 'X133-64GB-GRAY-OB2' } });
+    const fx = fams.find((f) => f.sku === 'X133-64GB-GRAY');
+    check('profit families: a SKU\'s conditions fold under the base SKU, New first', fx && fx.family && fx.members.map((m) => m.cond).join(',') === 'new,openbox,used,scrap', fx && fx.members.map((m) => [m.sku, m.cond]));
+    check('profit families: the family adds its conditions up', fx.unitsSold === 17 && fx.payout === 1945 && fx.cogs === 1700 && fx.profit === 245 && fx.margin === 12.6, [fx.unitsSold, fx.payout, fx.cogs, fx.profit, fx.margin]);
+    check('profit families: mixed costs show the average per unit sold', fx.mixedCost && fx.unitCost === 100, fx.unitCost);
+    check('profit families: a SKU with one condition stays a plain row', fams.find((f) => f.sku === 'X230-128GB-GRAY').family === false && fams.find((f) => f.sku === 'OPEN-BOX-A15-64GB-BLACK').family === false, fams.map((f) => [f.sku, f.family]));
+    const fz = recovery._internal.buildFamilies([G('Y-1', { unitsSold: 1, payout: 50, cogs: 30, unitCost: 30, costKnown: true }), G('USED-Y-1', { unitsSold: 1, payout: 20 })], {});
+    check('profit families: a condition with no cost leaves the family\'s profit unknown', fz[0].family && !fz[0].costKnown && fz[0].margin === null && fz[0].unitCost === null, fz[0]);
+
     db.close();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
   })();

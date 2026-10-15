@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { CONDITION_SUFFIX, CONDITION_PREFIX, conditionOfSku } = require('./skucond');
 
 let db = null;
 
@@ -633,27 +634,9 @@ function deleteConditionMapping(baseSku, condition) {
 }
 
 // The single condition-mapping engine: manual picks (condition_map) beat
-// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention.
+// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention
+// (the naming rule itself lives in skucond.js, shared with Recovery).
 // Pure given an inventory SKU list, so it is testable offline.
-const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
-// preferred naming since 2026-08-06: prefix listings (OPEN-BOX-<SKU> …);
-// suffix names keep auto-deriving so existing listings never unmap
-const CONDITION_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
-
-// The condition a SKU's own NAME carries (OPEN-BOX-X = openbox), plus the
-// core sku with that affix stripped. null = a plain sold SKU.
-function conditionOfSku(sku) {
-  const s = String(sku || '');
-  const up = s.toUpperCase();
-  for (const [cond, pre] of Object.entries(CONDITION_PREFIX)) {
-    if (up.startsWith(pre) && up.length > pre.length) return { cond, core: s.slice(pre.length) };
-  }
-  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
-    if (up.endsWith(suf) && up.length > suf.length) return { cond, core: s.slice(0, s.length - suf.length) };
-  }
-  return null;
-}
-
 function resolveConditionTargets(baseSku, inventorySkus) {
   const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
   const saved = getConditionMap()[baseSku] || {};

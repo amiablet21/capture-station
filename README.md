@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.83 highlights
+
+- **Profit groups a SKU's conditions on its own** (owner: "it should automatically group"). On Profit → By SKU, X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY and USED-X133-64GB-GRAY are one row under the base SKU, its conditions named beside it; open it for a row per condition (New, Open Box, Used, Scrap, each tagged), and each of those still opens to its Walmart listings and POs. The family row adds its conditions up: sold, refunded, Walmart paid and profit summed, avg price and commission weighted by units, margin from the totals. Unit cost is the shared cost, or the average per unit sold (~$) when the conditions cost differently; hover shows each condition's cost. A condition with no cost leaves the family's profit blank until it has one. Conditions come from the SKU's name (OPEN-BOX- / USED- / SCRAP- in front or -OPENBOX / -USED / -SCRAP at the end) and from the condition mappings saved on Returns, so a listing graded by hand joins its family too. A SKU with only one condition stays a plain row.
+
 ## v1.32.82 highlights
 
 - **WFS Inventory, tidied** (owner: "not necessary … make the dropdown and import, remove nicer"). The explainer line under the title, the footnotes and the small captions under the column headers are gone (the Sep 1 / Sep 30 dates stay; a footnote appears only for a Received that differs from Shipped, a report with no dates or columns the app does not recognise). The report picker is now a date pill like Profit's: it opens a menu of the imported reports with **Import report…** and **Remove this report** under a line, and a small upload icon beside it imports directly.

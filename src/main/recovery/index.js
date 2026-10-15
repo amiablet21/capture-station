@@ -18,6 +18,7 @@ const { findIssues, returnsToWarehouseRows } = require('./reconcile');
 const { classify, toSummary, buildRunWorkbook } = require('./classify');
 const { formatPeriod, periodFromReportName, parsePeriodLabel } = require('./period');
 const { parseWfsInventory, gtinKey } = require('./wfsinv');
+const { conditionOfSku } = require('../skucond');
 
 let deps = null; // { retsync, listReturns, config, archiveDir, station, by, wfsShipments }
 const auxStates = {};
@@ -272,6 +273,60 @@ function removeRun(id) {
   deleteRunLocal(id, ts);
   try { deps.retsync.appendAux('wmruns', { op: 'del', id, ts }); } catch { /* offline */ }
   return { ok: true, label: run.label };
+}
+
+/* ---------- Profit: conditions grouped (owner 2026-10-15) ---------- */
+// "It should automatically group": X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY
+// and USED-X133-64GB-GRAY are one family under the base SKU, each condition
+// a row of its own beneath it. A Linnworks SKU's condition comes from the
+// Returns condition mappings first (a listing graded by hand), then from
+// its name (skucond.js). A family of one stays a plain row.
+const COND_ORDER = ['new', 'openbox', 'used', 'scrap'];
+const COND_LABEL = { new: 'New', openbox: 'Open Box', used: 'Used', scrap: 'Scrap' };
+const SUM_FIELDS = ['orders', 'unitsSold', 'unitsRefunded', 'unitsBack', 'unitsPending', 'unitsLost', 'atRisk', 'payout', 'statementPayout', 'cogs', 'heldOut', 'gross', 'commission', 'pricedUnits', 'commGross'];
+
+function skuCondition(sku, byTarget) {
+  const mapped = byTarget.get(String(sku || '').toUpperCase());
+  if (mapped) return mapped;
+  const c = conditionOfSku(sku);
+  return c ? { cond: c.cond, core: c.core } : { cond: 'new', core: String(sku || '') };
+}
+
+function buildFamilies(groups, condMap = {}) {
+  const byTarget = new Map();
+  for (const [base, conds] of Object.entries(condMap || {})) {
+    for (const [cond, target] of Object.entries(conds || {})) {
+      if (target && COND_LABEL[cond] && String(target).toUpperCase() !== String(base).toUpperCase()) byTarget.set(String(target).toUpperCase(), { cond, core: base });
+    }
+  }
+  const fams = new Map();
+  for (const g of groups || []) {
+    const { cond, core } = skuCondition(g.sku, byTarget);
+    const key = String(core).toUpperCase();
+    if (!fams.has(key)) fams.set(key, { core, members: [] });
+    fams.get(key).members.push({ ...g, cond, condLabel: COND_LABEL[cond] });
+  }
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return [...fams.values()].map(({ core, members }) => {
+    members.sort((a, b) => COND_ORDER.indexOf(a.cond) - COND_ORDER.indexOf(b.cond) || b.payout - a.payout);
+    if (members.length === 1) return { ...members[0], members, family: false };
+    const f = { sku: members.find((m) => m.cond === 'new') ? members.find((m) => m.cond === 'new').sku : core, item: '', members, family: true, mapped: members.every((m) => m.mapped !== false), commissionKnown: false };
+    for (const k of SUM_FIELDS) f[k] = r2(members.reduce((t, m) => t + (Number(m[k]) || 0), 0));
+    f.item = (members.find((m) => m.item) || {}).item || '';
+    f.commissionKnown = members.some((m) => m.commissionKnown);
+    // a family's profit needs every condition's cost; the unit cost shown is
+    // the one cost they share, else the average over the units sold
+    f.costKnown = members.every((m) => m.costKnown);
+    const costs = [...new Set(members.filter((m) => m.costKnown).map((m) => m.unitCost))];
+    const soldCosted = members.filter((m) => m.costKnown).reduce((t, m) => t + m.unitsSold, 0);
+    f.mixedCost = costs.length > 1;
+    f.unitCost = !f.costKnown ? null : costs.length === 1 ? costs[0] : soldCosted > 0 ? r2(members.reduce((t, m) => t + m.unitCost * m.unitsSold, 0) / soldCosted) : null;
+    f.profit = r2(f.payout - f.cogs);
+    f.avgPrice = f.pricedUnits > 0 && f.gross > 0 ? r2(f.gross / f.pricedUnits) : null;
+    f.commissionPct = f.commissionKnown && f.commGross > 0 ? Math.round((-f.commission / f.commGross) * 1000) / 10 : null;
+    f.margin = f.costKnown && f.unitsSold > 0 && f.payout > 0 ? Math.round(((f.payout - f.cogs) / f.payout) * 1000) / 10 : null;
+    return f;
+  }).sort((a, b) => b.payout - a.payout);
 }
 
 /* ---------- WFS inventory (owner 2026-10-15) ---------- */
@@ -986,6 +1041,8 @@ function profit(scope, key) {
     margin: x.costKnown && x.unitsSold > 0 && x.payout > 0 ? Math.round(((x.payout - x.cogs) / x.payout) * 1000) / 10 : null,
     listings: x.listings.slice().sort((a, b) => b.payout - a.payout),
   })).sort((a, b) => b.payout - a.payout);
+  const condMap = typeof deps.conditionMap === 'function' ? (deps.conditionMap() || {}) : {};
+  const families = buildFamilies(groups, condMap);
   // Walmart lines that belong to no order: storage, ads, WFS inventory
   // adjustments… but never the transfers to the bank or the summary line
   // (a real report carried −$197,100 of Instant Transfers, 2026-10-12)
@@ -1031,7 +1088,7 @@ function profit(scope, key) {
     atRisk: { amount: r2(tot.atRisk), units: tot.atRiskUnits, orders: tot.pendingOrders }, lostUnits: tot.lostUnits,
     missing: { orders: tot.missingCount, skus: missingSkus.size, payout: r2(tot.missingPayout) },
     costedPayout: r2(tot.costedPayout), recovered: r2(tot.recovered), heldOut: { amount: r2(tot.heldOut), orders: tot.heldOutOrders }, other, netAfterOther: r2(profitV + other),
-    skus, groups, periods, missingRuns,
+    skus, groups, families, periods, missingRuns,
   };
 }
 
@@ -1195,5 +1252,5 @@ module.exports = {
   configure, importReport, removeRun, importWfsReport, removeWfsReport, wfsInventory, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, syncStatus, resync, addExpense, removeExpense,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
-  _internal: { trackerItemsFromStored, applyRunEvent, applyWfsEvent, decoratedItems, warehouse },
+  _internal: { trackerItemsFromStored, applyRunEvent, applyWfsEvent, decoratedItems, warehouse, buildFamilies },
 };
