@@ -548,6 +548,10 @@ function markWfsReceived(id, received) {
   open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?')
     .run(received ? new Date().toISOString() : '', id);
 }
+// the received stamp as given (a mark synced from another desktop keeps its time)
+function setWfsReceivedAt(id, iso) {
+  open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?').run(String(iso || ''), Number(id));
+}
 
 function setWfsIgnore(sku, days, pace) {
   const until = new Date(Date.now() + days * 86400000).toISOString();
@@ -1195,7 +1199,7 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsReceivedAt, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,

@@ -232,6 +232,7 @@ contextBridge.exposeInMainWorld('api', {
   recoveryWfsImport: (name, text, force) => ipcRenderer.invoke('recovery:wfsImport', { name, text, force: !!force }),
   recoveryWfsRemove: (id) => ipcRenderer.invoke('recovery:wfsRemove', { id }),
   recoveryWfsInventory: (id) => ipcRenderer.invoke('recovery:wfsInventory', { id }),
+  recoveryWfsShipments: () => ipcRenderer.invoke('recovery:wfsShipments'),
   recoveryMark: (po, action, payload) => ipcRenderer.invoke('recovery:mark', { po, action, payload: payload || {} }),
   recoveryExportRun: (id) => ipcRenderer.invoke('recovery:exportRun', { id }),
   recoveryExportAudit: () => ipcRenderer.invoke('recovery:exportAudit'),

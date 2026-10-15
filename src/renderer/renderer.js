@@ -1650,7 +1650,7 @@ const rc = {
   scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
   profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(), rcFilters: {}, rcSortable: [], filterCol: '', filterDraft: {}, filterQ: '',
   year: '', profitYear: '',
-  wfsId: null, wfs: null, wfsSort: null,
+  wfsId: null, wfs: null, wfsSort: null, wfsTab: 'sku', wfsShip: null,
 };
 // the key a scope reads: the selected period, the chosen month or year
 function rcScopeKey(scope, which) {
@@ -2095,6 +2095,9 @@ function rcWfsPickId() {
   return rc.wfsId;
 }
 async function rcLoadWfs(seq = rc.seq) {
+  const sh = await api.recoveryWfsShipments().catch(e => ({ ok: false, error: e.message }));
+  if (seq !== rc.seq) return;
+  rc.wfsShip = sh && sh.ok ? sh.shipments || [] : [];
   const id = rcWfsPickId();
   if (!id) { rc.wfs = null; return; }
   const res = await api.recoveryWfsInventory(id).catch(e => ({ ok: false, error: e.message }));
@@ -2103,10 +2106,64 @@ async function rcLoadWfs(seq = rc.seq) {
   if (res && !res.ok) toast(res.error || 'Could not load that WFS report.', 4000);
 }
 const rcWfsNum = (n) => (Number(n) || 0).toLocaleString('en-US');
+// shipments logged to WFS: not received yet (oldest first) or received
+const RC_WFS_AMBER = 20; const RC_WFS_RED = 30; // days since the shipment was logged
+const rcWfsDays = (iso) => {
+  const t = new Date(iso); if (isNaN(t.getTime())) return null;
+  const a = new Date(t.getFullYear(), t.getMonth(), t.getDate()); const n = new Date();
+  return Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - a) / 86400000);
+};
+const rcWfsPendingList = () => (rc.wfsShip || []).filter(s => !s.received_at).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+const rcWfsReceivedList = () => (rc.wfsShip || []).filter(s => s.received_at).sort((a, b) => String(b.received_at).localeCompare(String(a.received_at))).slice(0, 200);
+function rcRenderWfsTabs() {
+  const pend = rcWfsPendingList();
+  const late = pend.filter(s => (rcWfsDays(s.created_at) || 0) >= RC_WFS_AMBER).length;
+  const tabs = [['sku', 'Units by SKU', ''], ['pending', 'Not received', pend.length ? `<span class="rc-tab-count ${late ? 'is-red' : ''}" title="${late} at ${RC_WFS_AMBER}+ days">${pend.length}</span>` : ''], ['received', 'Received', '']];
+  $('rcWfsTabs').innerHTML = tabs.map(([k, label, n]) => `<button type="button" class="rc-tab ${rc.wfsTab === k ? 'is-active' : ''}" data-rcwfstab="${k}">${label}${n ? ` ${n}` : ''}</button>`).join('');
+}
+function rcWfsItemsCell(items) {
+  return (items || []).map(i => `<div class="rc-wfs-line"><span class="rc-sku">${esc(i.channelSku || i.sku || '')}</span><span class="rc-wfs-qty">×${Number(i.qty) || 0}</span></div>`).join('');
+}
+function rcRenderWfsShipments() {
+  const pending = rc.wfsTab === 'pending';
+  const list = pending ? rcWfsPendingList() : rcWfsReceivedList();
+  const units = (s) => (s.items || []).reduce((a, i) => a + (Number(i.qty) || 0), 0);
+  const head = pending
+    ? '<th class="rc-g">#</th><th>Shipped</th><th class="is-right">Days</th><th>Items</th><th class="is-right">Units</th><th>Note</th><th>Logged on</th><th></th>'
+    : '<th class="rc-g">#</th><th>Shipped</th><th>Received</th><th class="is-right">Days</th><th>Items</th><th class="is-right">Units</th><th>Note</th><th>Logged on</th><th></th>';
+  const body = list.length ? list.map((s, i) => {
+    const days = pending ? rcWfsDays(s.created_at) : rcWfsDays(s.created_at) - rcWfsDays(s.received_at);
+    const tone = pending && days >= RC_WFS_RED ? 'is-30' : pending && days >= RC_WFS_AMBER ? 'is-20' : '';
+    const tip = pending ? `${days} days since this shipment was logged` : `Received ${days} days after it was logged`;
+    return `<tr data-rcwfsrow="${esc(s.key)}">
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-wfs-date">${esc(rcMonDay(s.created_at))}<span class="rc-muted"> ${esc(new Date(s.created_at).getFullYear() !== new Date().getFullYear() ? String(new Date(s.created_at).getFullYear()) : '')}</span></td>
+      ${pending ? '' : `<td class="rc-wfs-date">${esc(rcMonDay(s.received_at))}</td>`}
+      <td class="rc-wfs-age ${tone}" title="${esc(tip)}">${days == null ? '—' : days}</td>
+      <td class="rc-wfs-items">${rcWfsItemsCell(s.items)}</td>
+      <td class="rc-wfs-units">${units(s)}</td>
+      <td class="rc-wfs-note" title="${esc(s.note || '')}">${esc(s.note || '')}</td>
+      <td class="rc-wfs-st">${esc(s.station || '')}</td>
+      <td class="rc-wfs-act">${pending
+    ? `<button type="button" class="rc-btn rc-btn-outline rc-btn-navy rc-btn-row" data-rcwfsrecv="${esc(s.key)}">Mark received</button>`
+    : `<button type="button" class="rc-link" data-rcwfsunrecv="${esc(s.key)}" title="Put it back on Not received">Undo</button>`}</td>
+    </tr>`;
+  }).join('') : `<tr class="rc-empty-row"><td colspan="9">${pending ? 'Every logged shipment is marked received.' : 'No shipment is marked received yet.'}</td></tr>`;
+  $('rcWfsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  $('rcWfsFoot').innerHTML = pending
+    ? `<span>Every shipment in the WFS Shipments log not yet marked received, oldest first. Days count from the day it was logged: amber from ${RC_WFS_AMBER}, red from ${RC_WFS_RED}.</span><span>Mark it received once Seller Center shows WFS received it; the mark reaches every desktop.</span>`
+    : '<span>The latest 200 shipments marked received, newest first. Days is how long WFS took after the shipment was logged.</span>';
+}
 function rcRenderWfs() {
   if (rc.sub !== 'wfs' || !rc.data) return;
+  rcRenderWfsTabs();
   const reps = rc.data.wfsReports || [];
   const pick = $('rcWfsPick');
+  const onSku = rc.wfsTab === 'sku';
+  $('rcWfsTable').classList.toggle('rc-table-wfsship', !onSku);
+  $('rcWfsH').textContent = onSku ? 'WFS units by SKU' : rc.wfsTab === 'pending' ? 'Shipments to WFS not received' : 'Shipments to WFS received';
+  $('rcWfsSub').textContent = onSku ? "Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report" : 'From the WFS Shipments log (Stock → Actions → WFS Shipments), every desktop';
+  if (!onSku) { pick.hidden = true; rcRenderWfsShipments(); return; }
   pick.hidden = !reps.length;
   pick.innerHTML = reps.map(r => `<option value="${esc(r.id)}" ${r.id === rc.wfsId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
   const d = rc.wfs;
@@ -3093,7 +3150,23 @@ $('rcWfsReportsTable').addEventListener('click', async (e) => {
   await rcLoad();
 });
 $('rcWfsPick').addEventListener('change', async () => { rc.wfsId = $('rcWfsPick').value; rc.wfs = null; await rcLoadWfs(); rcRenderWfs(); });
+$('rcWfsTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcwfstab]');
+  if (b) { rc.wfsTab = b.dataset.rcwfstab; rcRenderWfs(); }
+});
+async function rcWfsSetReceived(key, received) {
+  const r = await api.wfsReceived(key, received).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not save that.', 4000); return; }
+  const s = (rc.wfsShip || []).find(x => x.key === key);
+  if (s) s.received_at = r.receivedAt || '';
+  rcRenderWfs();
+  toast(received ? 'Marked received' : 'Back on Not received');
+}
 $('rcWfsTable').addEventListener('click', async (e) => {
+  const rv = e.target.closest('[data-rcwfsrecv]');
+  if (rv) { await rcWfsSetReceived(rv.dataset.rcwfsrecv, true); return; }
+  const un = e.target.closest('[data-rcwfsunrecv]');
+  if (un) { await rcWfsSetReceived(un.dataset.rcwfsunrecv, false); return; }
   const go = e.target.closest('[data-rcgo]');
   if (go) { rc.sub = go.dataset.rcgo; rcRender(); return; }
   const th = e.target.closest('[data-rcwfssort]');

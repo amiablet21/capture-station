@@ -12,6 +12,7 @@ const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const recovery = require('./recovery');
+const wfsrecv = require('./wfsrecv');
 const presence = require('./presence');
 // in-place updates (owner 2026-10-08: "why can't it update within itself?")
 // — electron-updater downloads the new NSIS build in the background and
@@ -5836,9 +5837,17 @@ exit 1
   // 2026-09-16: "see which user did what"); local SQLite stays this
   // station's own storage, other stations' shipments come from the fold
   ipcMain.handle('wfs:list', () => wfsShipmentsAll(200, 200));
+  // id: this station's shipment id, or a shipment key "STATION:id" from
+  // wfsShipmentsAll; the mark is kept locally when the shipment is ours and
+  // sent to the shared folder so every desktop sees it
   ipcMain.handle('wfs:received', (_e, { id, received }) => {
-    db.markWfsReceived(Number(id), received !== false);
-    return { ok: true };
+    const k = wfsrecv.parseKey(id, retsync.stationName() || '');
+    if (!Number.isFinite(k.id)) return { ok: false, error: 'Unknown shipment.' };
+    const at = received !== false ? new Date().toISOString() : '';
+    if (k.own) db.setWfsReceivedAt(k.id, at);
+    else if (!retsync.enabled()) return { ok: false, error: 'Turn on Sync to mark another desktop\'s shipment.' };
+    retsync.appendAux('wfsrecv', { key: k.key, receivedAt: at, ts: Date.now() });
+    return { ok: true, receivedAt: at };
   });
   ipcMain.handle('overview:wfsIgnore', (_e, { sku, pace }) => {
     if (!sku) return { ok: false, error: 'Missing SKU.' };
@@ -7349,13 +7358,17 @@ function recoveryArchiveDir() {
 // Recovery's WFS Inventory reads them all to count what was sent)
 function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
   const st = retsync.stationName() || '';
-  const mine = db.listWfsShipments(ownLimit).map(s => ({ ...s, station: st, mine: true }));
+  const mine = db.listWfsShipments(ownLimit).map(s => ({ ...s, key: `${st}:${s.id}`, station: st, mine: true }));
   if (!retsync.enabled()) return mine;
   retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
     .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
   const foreign = retsync.readAux('wfs')
     .filter(e => e.station !== st)
-    .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+    .map(e => ({ id: `${e.station}:${e.id}`, key: `${e.station}:${e.id}`, created_at: String(e.ts || ''), received_at: '', note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+  // received marks ride the shared folder (wfsrecv): the newest mark on a
+  // shipment wins on every desktop, and one on this station's own shipment
+  // is written back to SQLite so the local record agrees
+  wfsrecv.applyMarks(mine.concat(foreign), wfsrecv.latestMarks(retsync.readAux('wfsrecv')), (id, at) => db.setWfsReceivedAt(id, at));
   return mine.concat(foreign)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, limit);
@@ -7456,6 +7469,9 @@ function registerRecoveryIpc() {
   ipcMain.handle('recovery:wfsImport', (_e, { name, text, force } = {}) => recoveryGate() || recoveryTry(() => recovery.importWfsReport({ name, text, force: !!force })));
   ipcMain.handle('recovery:wfsRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeWfsReport(id)));
   ipcMain.handle('recovery:wfsInventory', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.wfsInventory(id)));
+  // every station's WFS shipments with their received marks, for the
+  // Not received list on WFS Inventory
+  ipcMain.handle('recovery:wfsShipments', () => recoveryGate() || recoveryTry(() => ({ ok: true, shipments: wfsShipmentsAll() })));
   ipcMain.handle('recovery:mark', (_e, { po, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.mark(po, action, payload || {})));
   ipcMain.handle('recovery:exportRun', async (_e, { id } = {}) => {
     if (recoveryGate()) return recoveryGate();

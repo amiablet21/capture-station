@@ -392,7 +392,7 @@
         <div id="rcWfs" class="rc-screen" hidden>
           <div class="rc-toolbar">
             <div class="rc-wfs-title">
-              <div class="rc-wfs-h">WFS units by SKU</div>
+              <div class="rc-wfs-h" id="rcWfsH">WFS units by SKU</div>
               <div class="rc-muted rc-small" id="rcWfsSub">Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report</div>
             </div>
             <div class="rc-toolbar-right">
@@ -400,6 +400,9 @@
             </div>
           </div>
           <section class="rc-table-card">
+            <!-- owner 2026-10-15: the units table, and the shipments logged
+                 to WFS that are not marked received (20 days amber, 30 red) -->
+            <div class="rc-tabrow" id="rcWfsTabs"></div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-wfs" id="rcWfsTable"></table></div>
             <div class="rc-foot rc-wfs-foot" id="rcWfsFoot"></div>
           </section>

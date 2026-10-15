@@ -5877,3 +5877,18 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-table-wfsreps th:nth-child(1) { width: 36px; } .rc-table-wfsreps th:nth-child(2) { width: 240px; } .rc-table-wfsreps th:nth-child(3) { width: 200px; }
 .rc-table-wfsreps th:nth-child(5) { width: 110px; }
 .rc-table-wfsreps td:nth-child(4) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* WFS Inventory → Not received / Received: the shipments logged to WFS */
+.rc-table-wfsship { min-width: 980px; }
+.rc-table-wfsship td { font-family: var(--font); text-align: left; vertical-align: top; padding-top: 9px; padding-bottom: 9px; }
+.rc-table-wfsship td:nth-child(n) { white-space: normal; }
+.rc-table-wfsship th:nth-child(1) { width: 36px; }
+.rc-table-wfsship td.rc-wfs-age, .rc-table-wfsship td.rc-wfs-units { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.rc-table-wfsship td.rc-wfs-age.is-20 { background: #F8DF9A; color: #5A4300; font-weight: 600; }
+.rc-table-wfsship td.rc-wfs-age.is-30 { background: #9F2F2D; color: #FFFFFF; font-weight: 600; }
+.rc-table-wfsship td.rc-wfs-date { white-space: nowrap; }
+.rc-wfs-line { display: flex; gap: 8px; align-items: baseline; line-height: 1.55; }
+.rc-wfs-qty { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: #787774; }
+.rc-table-wfsship td.rc-wfs-note { color: #787774; max-width: 280px; }
+.rc-table-wfsship td.rc-wfs-st { color: #787774; white-space: nowrap; font-size: 12px; }
+.rc-table-wfsship td.rc-wfs-act { text-align: right; white-space: nowrap; }
+.rc-btn-outline.rc-btn-row { padding: 3px 10px; font-size: 12px; }

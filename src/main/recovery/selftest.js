@@ -415,6 +415,24 @@ module.exports = function run(check) {
     recovery._internal.applyWfsEvent({ ...wput, id: 'remote-wfs', ts: Date.now() + 5 });
     check('wfs: a report from another desktop is taken in', recovery.state().wfsReports.some((r) => r.id === 'remote-wfs') && recovery.wfsInventory('remote-wfs').rows.length === 3);
 
+    // ----- WFS shipments: received marks shared between desktops -----
+    const wfsrecv = require('../wfsrecv');
+    const marks = wfsrecv.latestMarks([
+      { key: 'PC1:4', receivedAt: '2026-10-01T10:00:00.000Z', ts: 100, station: 'PC2' },
+      { key: 'PC1:4', receivedAt: '', ts: 200, station: 'PC1' }, // undone later
+      { key: 'PC2:9', receivedAt: '2026-10-03T10:00:00.000Z', ts: 150, station: 'PC1' },
+    ]);
+    const writes = [];
+    const ships = wfsrecv.applyMarks([
+      { id: 4, key: 'PC1:4', mine: true, received_at: '2026-10-01T10:00:00.000Z' },
+      { id: 'PC2:9', key: 'PC2:9', mine: false, received_at: '' },
+      { id: 5, key: 'PC1:5', mine: true, received_at: '2026-09-30T10:00:00.000Z' },
+    ], marks, (id, at) => writes.push([id, at]));
+    check('wfs received: the newest mark wins, and an own shipment is written back', ships[0].received_at === '' && writes.length === 1 && writes[0][0] === 4 && writes[0][1] === '', [ships[0], writes]);
+    check('wfs received: another desktop\'s shipment takes its mark; one with no mark keeps its own', ships[1].received_at === '2026-10-03T10:00:00.000Z' && ships[2].received_at === '2026-09-30T10:00:00.000Z', ships);
+    const k1 = wfsrecv.parseKey('PC2:9', 'PC1'); const k2 = wfsrecv.parseKey(5, 'PC1'); const k3 = wfsrecv.parseKey('PC1:5', 'PC1');
+    check('wfs received: a key names its desktop and id', !k1.own && k1.key === 'PC2:9' && k2.own && k2.key === 'PC1:5' && k3.own && k3.id === 5, [k1, k2, k3]);
+
     db.close();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
   })();
