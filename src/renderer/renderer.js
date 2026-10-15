@@ -1865,7 +1865,6 @@ function rcRender() {
   $('rcWfs').hidden = rc.sub !== 'wfs';
   $('rcExportBtn').hidden = rc.sub !== 'notreceived';
   rcRenderImport();
-  rcRenderWfsReports();
   rcRenderReconcile();
   rcRenderProfit();
   rcRenderWfs();
@@ -2163,12 +2162,15 @@ function rcRenderWfs() {
   $('rcWfsTable').classList.toggle('rc-table-wfsship', !onSku);
   $('rcWfsH').textContent = onSku ? 'WFS units by SKU' : rc.wfsTab === 'pending' ? 'Shipments to WFS not received' : 'Shipments to WFS received';
   $('rcWfsSub').textContent = onSku ? "Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report" : 'From the WFS Shipments log (Stock → Actions → WFS Shipments), every desktop';
+  $('rcWfsDrop').hidden = !onSku;
+  if (!onSku) $('rcWfsProgress').hidden = true;
+  $('rcWfsRemoveBtn').hidden = !onSku || !reps.length;
   if (!onSku) { pick.hidden = true; rcRenderWfsShipments(); return; }
   pick.hidden = !reps.length;
   pick.innerHTML = reps.map(r => `<option value="${esc(r.id)}" ${r.id === rc.wfsId ? 'selected' : ''}>${esc(rcPeriodName(r.label))}</option>`).join('');
   const d = rc.wfs;
   if (!reps.length || !d) {
-    $('rcWfsTable').innerHTML = `<tbody><tr class="rc-empty-row"><td>${reps.length ? 'Loading…' : 'No WFS report imported yet. <button type="button" class="rc-link" data-rcgo="import">Import one on the Import screen</button> — Seller Center → WFS → Reports → Inventory Reconciliation.'}</td></tr></tbody>`;
+    $('rcWfsTable').innerHTML = `<tbody><tr class="rc-empty-row"><td>${reps.length ? 'Loading…' : 'No WFS report imported yet — drop the Inventory Reconciliation CSV in the box above.'}</td></tr></tbody>`;
     $('rcWfsFoot').innerHTML = '';
     return;
   }
@@ -2215,22 +2217,6 @@ function rcRenderWfs() {
   notes.push(`<span>Imported ${esc(rcWhen(rep.importedAt))}${rep.csvName ? ` from ${esc(rep.csvName)}` : ''}.</span>`);
   $('rcWfsFoot').innerHTML = notes.join('');
 }
-function rcRenderWfsReports() {
-  const reps = (rc.data && rc.data.wfsReports) || [];
-  $('rcWfsCount').textContent = reps.length ? String(reps.length) : '';
-  const head = '<th class="rc-g">#</th><th>Days</th><th>Imported</th><th>File</th><th></th>';
-  const body = reps.length ? reps.map((r, i) => {
-    const who = [r.station, r.by].filter(Boolean).join(' · ');
-    return `<tr>
-      <td class="rc-g">${i + 1}</td>
-      <td><button type="button" class="rc-period-link" data-rcwfsopen="${esc(r.id)}" title="Open on WFS Inventory">${esc(rcPeriodName(r.label))}</button></td>
-      <td class="rc-muted" title="${esc(who)}"><div>${esc(rcWhen(r.importedAt))}</div>${who ? `<div class="rc-item-sub">${esc(who)}</div>` : ''}</td>
-      <td class="rc-muted">${esc(r.csvName || '')}</td>
-      <td class="rc-period-actions"><button type="button" class="rc-link is-danger" data-rcwfsremove="${esc(r.id)}">Remove</button></td>
-    </tr>`;
-  }).join('') : '<tr class="rc-empty-row"><td colspan="5">No WFS report imported yet.</td></tr>';
-  $('rcWfsReportsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
-}
 function rcWfsProgress(text, state) {
   const el = $('rcWfsProgress');
   el.textContent = text || '';
@@ -2272,7 +2258,7 @@ async function rcWfsImportFiles(files) {
   if (failed.length) parts.push(failed.join('; '));
   if (unknown.length) parts.push(`columns not shown: ${[...new Set(unknown)].join(', ')}`);
   rcWfsProgress(parts.join(' · ') || 'Nothing imported.', failed.length && !done.length ? 'fail' : 'done');
-  if (lastId) { rc.wfsId = lastId; rc.wfs = null; rc.sub = 'wfs'; }
+  if (lastId) { rc.wfsId = lastId; rc.wfs = null; rc.sub = 'wfs'; rc.wfsTab = 'sku'; }
   await rcLoad();
 }
 async function rcWfsReadFiles(files) {
@@ -3102,9 +3088,9 @@ $('rcProfitExcelBtn').addEventListener('click', async () => {
 $('rcBrowseBtn').addEventListener('click', rcBrowse);
 // the drop target (the whole page accepts the file; the box shows the state)
 for (const ev of ['dragenter', 'dragover']) {
-  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $('rcDrop').classList.add('is-over'); } });
+  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $(rc.sub === 'wfs' ? 'rcWfsDrop' : 'rcDrop').classList.add('is-over'); } });
 }
-$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) $('rcDrop').classList.remove('is-over'); });
+$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) { $('rcDrop').classList.remove('is-over'); $('rcWfsDrop').classList.remove('is-over'); } });
 // a file dropped anywhere else must not open in the window (it used to
 // look like nothing happened, or worse, the CSV replaced the page)
 window.addEventListener('dragover', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
@@ -3112,6 +3098,7 @@ window.addEventListener('drop', (e) => { if (e.dataTransfer && [...(e.dataTransf
 $('recoveryPage').addEventListener('drop', (e) => {
   e.preventDefault();
   $('rcDrop').classList.remove('is-over');
+  $('rcWfsDrop').classList.remove('is-over');
   const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
   const file = files[0];
   if (!file) { rcProgress('Nothing readable was dropped — drop the CSV file itself, not a link to it.', 'fail'); return; }
@@ -3135,17 +3122,13 @@ $('rcWfsBrowseBtn').addEventListener('click', async () => {
   if (!pick.ok) { rcWfsProgress(pick.error || 'Could not open that file.', 'fail'); return; }
   await rcWfsImportFiles(pick.files || []);
 });
-$('rcWfsReportsTable').addEventListener('click', async (e) => {
-  const open = e.target.closest('[data-rcwfsopen]');
-  if (open) { rc.wfsId = open.dataset.rcwfsopen; rc.wfs = null; rc.sub = 'wfs'; await rcLoad(); return; }
-  const rm = e.target.closest('[data-rcwfsremove]');
-  if (!rm) return;
-  const meta = ((rc.data && rc.data.wfsReports) || []).find(r => r.id === rm.dataset.rcwfsremove);
+$('rcWfsRemoveBtn').addEventListener('click', async () => {
+  const meta = ((rc.data && rc.data.wfsReports) || []).find(r => r.id === rc.wfsId);
   if (!meta) return;
   if (!(await rcConfirm({ title: 'Remove WFS report', body: `Delete the WFS inventory report for ${rcPeriodName(meta.label)}? Your WFS Shipments log is not touched.`, ok: 'Delete' }))) return;
   const r = await api.recoveryWfsRemove(meta.id).catch(err => ({ ok: false, error: err.message }));
   if (!r || !r.ok) { toast((r && r.error) || 'Could not remove that report.', 4000); return; }
-  if (rc.wfsId === meta.id) { rc.wfsId = null; rc.wfs = null; }
+  rc.wfsId = null; rc.wfs = null;
   rcWfsProgress('');
   await rcLoad();
 });
@@ -3167,8 +3150,6 @@ $('rcWfsTable').addEventListener('click', async (e) => {
   if (rv) { await rcWfsSetReceived(rv.dataset.rcwfsrecv, true); return; }
   const un = e.target.closest('[data-rcwfsunrecv]');
   if (un) { await rcWfsSetReceived(un.dataset.rcwfsunrecv, false); return; }
-  const go = e.target.closest('[data-rcgo]');
-  if (go) { rc.sub = go.dataset.rcgo; rcRender(); return; }
   const th = e.target.closest('[data-rcwfssort]');
   if (th) {
     const key = th.dataset.rcwfssort;

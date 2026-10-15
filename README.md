@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.80 highlights
+
+- **The WFS inventory report is imported on WFS Inventory, not on Import** (owner: "so as to not cause any confusion"). The drop box for the Inventory Reconciliation CSV sits above the units table, Browse… picks one or several, and the report picker has a Remove beside it. Import is back to payment periods and the mark-received file only; a WFS report dropped there by mistake is still recognised by its columns and opens on WFS Inventory.
+
 ## v1.32.79 highlights
 
 - **WFS shipments not received** (owner: "the 20-30 day not received shipment list"). WFS Inventory now has three tabs: Units by SKU, **Not received** and **Received**. Not received lists every shipment in the WFS Shipments log, from every desktop, that is not marked received, oldest first: the day it was logged, Days since (amber from 20, red from 30), its SKUs and units, the note and the desktop that logged it. **Mark received** once Seller Center shows WFS received it; Received lists those with how many days WFS took, and Undo puts one back. The tab count turns red when any shipment is 20+ days. Received marks now reach every desktop through the shared folder (`wfsrecv`), so a shipment logged on one computer can be marked on another; the WFS Shipments dialog's Pending / Check / Received badge follows the same mark.
