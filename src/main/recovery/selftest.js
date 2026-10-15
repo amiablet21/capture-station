@@ -159,6 +159,12 @@ module.exports = function run(check) {
     check('recovery: a written-off PO stays only in the Lost tab', rnr.filterOf(st.items.find((i) => i.po === '007')) === 'lost');
     recovery.mark('010', 'note', { note: 'called rep' });
     check('recovery: note pinned', recovery.state().items.find((i) => i.po === '010').note === 'called rep');
+    // undo (owner 2026-10-15): the marks as they were, restored as a mark of their own
+    const snap = { ...recovery.state().items.find((i) => i.po === '007') };
+    recovery.mark('007', 'undoWriteOff'); recovery.mark('007', 'case', { caseId: 'WM-7' });
+    const r7 = recovery.mark('007', 'restore', { marks: { writtenOff: snap.writtenOff, writtenOffAt: snap.writtenOffAt } });
+    const i7 = recovery.state().items.find((i) => i.po === '007');
+    check('recovery: restore puts a PO\'s marks back exactly (loss back, case gone)', r7.ok && i7.status === 'loss' && !i7.caseOpened && !i7.caseId, i7 && { status: i7.status, case: i7.caseOpened, id: i7.caseId });
 
     // a payout in a later period makes 010 reimbursed; marking 002 received clears it
     const payoutCsv = [

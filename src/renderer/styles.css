@@ -5832,8 +5832,5 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rows-table tbody tr:hover .cap-sub-sep.is-quiet, .rows-table tbody tr:focus-within .cap-sub-sep.is-quiet { opacity: 1; }
 .cap-note { font-family: var(--font); font-size: 11.5px; color: #1E3A66; background: #E4EAF4; border: none; border-radius: 999px; padding: 1px 9px; margin-left: 8px; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: 1px; }
 .cap-note:hover { background: #D6DFEE; }
-.btn-with-ico { display: inline-flex; align-items: center; gap: 7px; }
-.btn-with-ico svg { width: 14px; height: 14px; }
-.pr-eye svg { width: 14px; height: 14px; }
 #rowsGrip { display: none !important; }
 .cap-main { max-width: 100%; }

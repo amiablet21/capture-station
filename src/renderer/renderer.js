@@ -209,6 +209,7 @@ const ICONS = {
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
+  histThin: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>',
   clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
   monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
   copy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></svg>',
@@ -2490,7 +2491,46 @@ function rcMenuItems(it) {
 
 /* ----- actions ----- */
 const rcItem = (po) => ((rc.data && rc.data.items) || []).find(i => i.po === po);
+// undo on Reconcile (owner 2026-10-15: "I can't do command or ctrl z"): every
+// mark first snapshots the PO's marks; Cmd/Ctrl+Z puts the last one back,
+// Cmd/Ctrl+Shift+Z redoes it. The snapshot is restored as a mark of its own,
+// so it reaches every desktop like any other.
+const RC_MARK_KEYS = ['caseOpened', 'caseOpenedAt', 'caseId', 'caseApproved', 'caseApprovedAt', 'adjustment', 'adjustmentAt', 'reimbursePending', 'reimbursePendingAt', 'writtenOff', 'writtenOffAt', 'note', 'noteAt', 'receivedManual', 'receivedManualAt', 'receivedOn', 'neverShipped', 'neverShippedAt', 'paidOut', 'paidOutBy', 'paidOutAt', 'paidOutOn'];
+rc.undoStack = []; rc.redoStack = [];
+function rcSnapshot(po) {
+  const it = rcItem(po) || {};
+  const m = {}; for (const k of RC_MARK_KEYS) if (k in it) m[k] = it[k];
+  return m;
+}
+function rcUndoPush(po) {
+  if (!po) return;
+  rc.undoStack.push({ po, marks: rcSnapshot(po) });
+  if (rc.undoStack.length > 50) rc.undoStack.shift();
+  rc.redoStack = [];
+}
+async function rcUndoRedo(redo) {
+  const from = redo ? rc.redoStack : rc.undoStack; const to = redo ? rc.undoStack : rc.redoStack;
+  const e = from.pop();
+  if (!e) { toast(redo ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  to.push({ po: e.po, marks: rcSnapshot(e.po) });
+  const res = await api.recoveryMark(e.po, 'restore', { marks: e.marks }).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not undo that.', 4000); return; }
+  rc.profit = null;
+  await rcLoad();
+  toast(`${redo ? 'Redone' : 'Undone'} · PO ${e.po}`);
+}
+document.addEventListener('keydown', (e) => {
+  if (activePage !== 'recovery' || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = String(e.key || '').toLowerCase();
+  const redo = (k === 'z' && e.shiftKey) || (k === 'y' && !e.shiftKey);
+  if (!(k === 'z' || k === 'y')) return;
+  const t = e.target;
+  if (t && (t.closest('input, textarea, select, [contenteditable="true"]') || t.closest('dialog[open]'))) return;
+  e.preventDefault();
+  rcUndoRedo(redo);
+});
 async function rcMark(po, action, payload) {
+  if (action !== 'restore') rcUndoPush(po);
   const res = await api.recoveryMark(po, action, payload).catch(e => ({ ok: false, error: e.message }));
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save that.', 4000); return false; }
   if (!/^undo|^caseId$|^note$/.test(action)) rcHlClear([po]); // the work on it is done: the highlight comes off
@@ -3011,6 +3051,7 @@ $('rcMenuDlg').addEventListener('click', async (e) => {
   }
   if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase', 'undoWriteOff', 'undoPaidOut'].includes(act)) {
     const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    rcUndoPush(rc.menuPo);
     const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
     if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
     if (!act.startsWith('undo')) rcHlClear([rc.menuPo]);
@@ -4354,7 +4395,7 @@ function renderStock() {
     // stock history (owner 2026-09-23): the clock opens this SKU's log; a
     // dot on it means the SKU moved today
     const today = stockHistToday && stockHistToday[String(r.sku).toUpperCase()];
-    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.clock}</button>`;
+    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.histThin}</button>`;
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
       ${hist}${ds}${ren}${del}</span>`;
@@ -8992,7 +9033,7 @@ function prChCells(p) {
     const inner = lines.map(l => `
         <div class="pr-entry"><div class="pr-line">
           <button type="button" class="pr-csku pr-open" data-ci="${ci}" data-csku="${esc(l.csku)}" data-ref="${esc(l.refId)}" title="${esc(l.csku)}${l.wfs ? ' · WFS' : ''} — click to open the listing in your browser">${esc(l.csku)}</button>
-          <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history">${ICONS.clock}</button>
+          <button type="button" class="pr-eye" data-hist="1" data-ci="${ci}" data-csku="${esc(l.csku)}" title="Price history for ${esc(l.csku)}" aria-label="Price history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${c.fluctuates
     ? `<span class="pr-price-ro" title="${l.fromSales
       ? `The repricer owns this price — this is what the listing last sold at (before tax), never written here. Linnworks has ${prMoney(l.lwPrice)} on file${l.approx ? ' (stored price; the channel feed carried none)' : ''}.`
@@ -11332,7 +11373,7 @@ function renderRecvPast() {
   if (!recvPast.length) {
     box.innerHTML = `
       <div class="recv-past-empty">
-        ${ICONS.clock}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.58l-42-25.2A12,12,0,0,1,112,130.29V80a12,12,0,0,1,24,0Zm-8-52A100.2,100.2,0,0,0,57.91,57.06L48,66.75V56a12,12,0,0,0-24,0V96a12,12,0,0,0,12,12H76a12,12,0,0,0,0-24H65.16l9.53-9.31A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
         No receipts yet. Finished receipts are saved here for review.
       </div>`;
     return;

@@ -193,6 +193,13 @@ function applyMarker(current, action, payload = {}, nowIso = new Date().toISOStr
       m.note = t || null; m.noteAt = t ? nowIso : null;
       break;
     }
+    // the marks exactly as they were (owner 2026-10-15: Cmd+Z on Reconcile);
+    // only the mark fields are taken, anything else in the payload is ignored
+    case 'restore': {
+      const blank = blankMarks(); const src = payload.marks || {};
+      for (const k of Object.keys(blank)) m[k] = k in src ? src[k] : blank[k];
+      break;
+    }
     default: throw new Error(`Unknown marker action: ${action}`);
   }
   return m;
