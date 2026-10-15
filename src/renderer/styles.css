@@ -5839,7 +5839,6 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
    columns under five group headers — start, sent in, sales, in between,
    left — each group on a faint band of its own so a row reads across */
 .rc-wfs-h { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.rc-wfs-pick { min-width: 220px; font-size: 12.5px; padding: 4px 8px; }
 .rc-table-wfs { min-width: 1240px; table-layout: auto; }
 .rc-table-wfs td.rc-wfs-item .rc-sku, .rc-table-wfs td.rc-wfs-item .rc-item-sub { white-space: nowrap; }
 .rc-table-wfs td.rc-wfs-item .rc-item-sub { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
@@ -5894,3 +5893,6 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-btn-outline.rc-btn-row { padding: 3px 10px; font-size: 12px; }
 /* a file dragged over WFS Inventory once a report is in: the card outlines */
 #rcWfsCard.is-over { box-shadow: 0 0 0 2px #1E3A66; }
+.rc-menu .tab-menu-item.rc-menu-danger { color: #9F2F2D; }
+.rc-menu .tab-menu-item.rc-menu-danger:hover { background: #FDEBEC; }
+#rcWfsTools .rc-when { min-width: 0; }

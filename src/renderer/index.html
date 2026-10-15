@@ -376,17 +376,15 @@
              report's days — the report's own columns, nothing added -->
         <div id="rcWfs" class="rc-screen" hidden>
           <div class="rc-toolbar">
-            <div class="rc-wfs-title">
-              <div class="rc-wfs-h" id="rcWfsH">WFS units by SKU</div>
-              <div class="rc-muted rc-small" id="rcWfsSub">Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report</div>
-            </div>
-            <div class="rc-toolbar-right" id="rcWfsTools">
-              <select id="rcWfsPick" class="rc-month rc-wfs-pick" aria-label="WFS report"></select>
-              <button id="rcWfsRemoveBtn" class="rc-btn rc-btn-text" type="button" title="Remove the report picked on the left">Remove</button>
-              <!-- owner 2026-10-15: "make the import option more subtle" — a
-                   small button once a report is in; the drop box only while
-                   there is none; a file dropped anywhere on the screen imports -->
-              <button id="rcWfsImportBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button" title="Seller Center → WFS → Reports → Inventory Reconciliation (CSV) · or drop the file anywhere on this screen">Import report…</button>
+            <div class="rc-wfs-h" id="rcWfsH">WFS units by SKU</div>
+            <!-- owner 2026-10-15: the report in play as a pill like Profit's
+                 date (its menu lists the reports, Import and Remove) and a
+                 small import icon; a file dropped anywhere here imports -->
+            <div class="rc-toolbar-right rc-scopebar" id="rcWfsTools">
+              <button id="rcWfsWhen" class="rc-when" type="button" aria-haspopup="menu" title="Pick a report"><span id="rcWfsWhenLabel"></span><span class="rc-seg-caret"></span></button>
+              <button id="rcWfsImportBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Import an Inventory Reconciliation report (CSV) · or drop it anywhere here" aria-label="Import report">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 19h14"/></svg>
+              </button>
             </div>
           </div>
           <!-- the Inventory Reconciliation import lives here, not on Import
@@ -455,6 +453,8 @@
   <!-- a PO# opens on Walmart (owner 2026-10-12: "order page or transaction page") -->
   <!-- the scope control's picker: periods, months or years -->
   <dialog id="rcPickDlg" class="tab-menu rc-menu rc-pick-menu"></dialog>
+  <!-- WFS Inventory: the reports, then Import report… and Remove -->
+  <dialog id="rcWfsMenu" class="tab-menu rc-menu rc-pick-menu"></dialog>
   <dialog id="rcPoDlg" class="tab-menu rc-menu">
     <button class="tab-menu-item" data-rcgo="order">Order page</button>
     <button class="tab-menu-item" data-rcgo="return">Return page</button>

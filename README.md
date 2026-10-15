@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.82 highlights
+
+- **WFS Inventory, tidied** (owner: "not necessary … make the dropdown and import, remove nicer"). The explainer line under the title, the footnotes and the small captions under the column headers are gone (the Sep 1 / Sep 30 dates stay; a footnote appears only for a Received that differs from Shipped, a report with no dates or columns the app does not recognise). The report picker is now a date pill like Profit's: it opens a menu of the imported reports with **Import report…** and **Remove this report** under a line, and a small upload icon beside it imports directly.
+
 ## v1.32.81 highlights
 
 - **A quieter import on WFS Inventory** (owner: "make the import option more subtle"). Once a report is in, the drop box gives way to a small **Import report…** button beside the report picker and Remove; a file dragged anywhere on the screen still imports, and the table card outlines while it is over it. The drop box shows only while no report has been imported.
