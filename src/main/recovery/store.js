@@ -160,6 +160,35 @@ function ensureSchema(db) {
   // v1.32.67: an expense may run from one day to another (a month of software,
   // a week of labels); its amount is spread by days across the scopes it touches
   try { db.exec('ALTER TABLE wm_expenses ADD COLUMN date_to TEXT'); } catch { /* already there */ }
+  // the WFS Inventory Reconciliation reports (owner 2026-10-15): one row per
+  // report, one per SKU per fulfillment center with its units as JSON (the
+  // report's own columns, so a column Walmart adds needs no migration)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wm_wfs_reports (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      start_day TEXT,
+      end_day TEXT,
+      imported_at TEXT NOT NULL,
+      csv_name TEXT NOT NULL DEFAULT '',
+      csv_hash TEXT NOT NULL DEFAULT '',
+      fields TEXT NOT NULL DEFAULT '[]',
+      unknown TEXT NOT NULL DEFAULT '[]',
+      station TEXT NOT NULL DEFAULT '',
+      by TEXT NOT NULL DEFAULT '',
+      sync_ts INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS wm_wfs_rows (
+      report_id TEXT NOT NULL,
+      gtin TEXT NOT NULL DEFAULT '',
+      item_id TEXT NOT NULL DEFAULT '',
+      sku TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      fc TEXT NOT NULL DEFAULT '',
+      q TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_wm_wfs_rows_report ON wm_wfs_rows(report_id);
+  `);
   // v1.32.15: who issued the refund, on the stored refund and on the tracker item
   for (const t of ['wm_refunds', 'wm_items']) {
     try { db.exec(`ALTER TABLE ${t} ADD COLUMN refunded_by TEXT NOT NULL DEFAULT ''`); } catch { /* already there */ }
@@ -440,7 +469,60 @@ function ownRuns(stations) {
   return listRuns().filter((r) => set.has(String(r.station).toUpperCase()));
 }
 
+/* ---------- WFS Inventory Reconciliation reports ---------- */
+
+const jsonArr = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+function wfsReportOut(r) {
+  if (!r) return null;
+  return {
+    id: r.id, label: r.label, start: r.start_day || null, end: r.end_day || null, importedAt: r.imported_at,
+    csvName: r.csv_name, csvHash: r.csv_hash, fields: jsonArr(r.fields), unknown: jsonArr(r.unknown),
+    station: r.station, by: r.by, syncTs: r.sync_ts,
+  };
+}
+function listWfsReports() {
+  return d().prepare('SELECT * FROM wm_wfs_reports ORDER BY COALESCE(start_day, imported_at) DESC, imported_at DESC').all().map(wfsReportOut);
+}
+function getWfsReport(id) { return wfsReportOut(d().prepare('SELECT * FROM wm_wfs_reports WHERE id = ?').get(String(id || ''))); }
+function findWfsReportByLabel(label) { return wfsReportOut(d().prepare('SELECT * FROM wm_wfs_reports WHERE label = ?').get(String(label || ''))); }
+function findWfsReportByHash(hash) { return wfsReportOut(d().prepare('SELECT * FROM wm_wfs_reports WHERE csv_hash = ?').get(String(hash || ''))); }
+function wfsReportRows(id) {
+  return d().prepare('SELECT gtin, item_id, sku, name, fc, q FROM wm_wfs_rows WHERE report_id = ?').all(String(id || ''))
+    .map((r) => { let q = {}; try { q = JSON.parse(r.q || '{}'); } catch { /* keep {} */ } return { gtin: r.gtin, itemId: r.item_id, sku: r.sku, name: r.name, fc: r.fc, q }; });
+}
+function putWfsReport(rep, rows) {
+  const db = d();
+  db.prepare('BEGIN').run();
+  try {
+    db.prepare('DELETE FROM wm_wfs_rows WHERE report_id = ?').run(rep.id);
+    db.prepare('DELETE FROM wm_wfs_reports WHERE id = ?').run(rep.id);
+    db.prepare(`INSERT INTO wm_wfs_reports (id, label, start_day, end_day, imported_at, csv_name, csv_hash, fields, unknown, station, by, sync_ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(rep.id, rep.label, rep.start || null, rep.end || null, rep.importedAt, rep.csvName || '', rep.csvHash || '',
+        JSON.stringify(rep.fields || []), JSON.stringify(rep.unknown || []), rep.station || '', rep.by || '', Number(rep.syncTs) || 0);
+    const ins = db.prepare('INSERT INTO wm_wfs_rows (report_id, gtin, item_id, sku, name, fc, q) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    for (const r of rows || []) ins.run(rep.id, String(r.gtin || ''), String(r.itemId || ''), String(r.sku || ''), String(r.name || ''), String(r.fc || ''), JSON.stringify(r.q || {}));
+    db.prepare('COMMIT').run();
+  } catch (e) {
+    db.prepare('ROLLBACK').run();
+    throw e;
+  }
+}
+// a delete leaves a tombstone, like a period's, so an older copy in the
+// shared folder cannot bring the report back
+function deleteWfsReport(id, ts = Date.now()) {
+  const db = d();
+  db.prepare('DELETE FROM wm_wfs_rows WHERE report_id = ?').run(id);
+  db.prepare('DELETE FROM wm_wfs_reports WHERE id = ?').run(id);
+  db.prepare('INSERT INTO wm_tombstones (id, ts) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET ts = MAX(ts, excluded.ts)').run(id, Number(ts) || Date.now());
+}
+function ownWfsReports(stations) {
+  const set = new Set((stations || []).filter(Boolean).map((s) => String(s).toUpperCase()));
+  return listWfsReports().filter((r) => set.has(String(r.station).toUpperCase()));
+}
+
 module.exports = {
+  listWfsReports, getWfsReport, findWfsReportByLabel, findWfsReportByHash, wfsReportRows, putWfsReport, deleteWfsReport, ownWfsReports,
   ensureSchema, listRuns, listRunMeta, getRun, findRunByLabel, findRunByHash, putRun, deleteRun, tombstoneTs,
   runRefunds, runPayouts, runLedger, allPayouts, allLedger, nameByPo, putOrders, runOrders, allOrders, runsWithoutOrders, runsWithoutPrices, runsWithoutRefundedBy, setRefundedBy, refundedByMap,
   putLines, runLines, allLines, runsWithoutLines, runsWithoutNotes,

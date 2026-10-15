@@ -316,6 +316,7 @@
           <nav class="rc-subtabs" aria-label="Recovery screens">
             <button type="button" class="rc-subtab is-active" data-rcsub="import">Import</button>
             <button type="button" class="rc-subtab" data-rcsub="reconcile">Reconcile <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
+            <button type="button" class="rc-subtab" data-rcsub="wfs">WFS Inventory</button>
             <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
           </nav>
           <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
@@ -346,6 +347,14 @@
                 <button id="rcMarkBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
               </div>
               <div class="rc-progress" id="rcMarkProgress" hidden></div>
+              <!-- owner 2026-10-15: what was shipped to WFS and what happened
+                   to it — Walmart's Inventory Reconciliation report -->
+              <div class="rc-drop rc-drop-wfs" id="rcWfsDrop">
+                <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg></div>
+                <div class="rc-drop-text"><div class="rc-drop-title">Import a WFS inventory report</div><div class="rc-drop-sub">Seller Center → WFS → Reports → Inventory Reconciliation (CSV) · one month or a date range · it opens on WFS Inventory</div></div>
+                <button id="rcWfsBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+              </div>
+              <div class="rc-progress" id="rcWfsProgress" hidden></div>
             </div>
           </section>
           <section class="rc-sec is-open">
@@ -354,6 +363,13 @@
               <div class="rc-sec-tools"><span class="rc-muted rc-small">newest period first · click a period to reconcile it</span></div>
             </div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-periods" id="rcPeriodsTable"></table></div>
+          </section>
+          <section class="rc-sec is-open">
+            <div class="rc-sec-head">
+              <span class="rc-sec-title rc-sec-title-static">WFS inventory reports <span class="rc-tab-count" id="rcWfsCount"></span></span>
+              <div class="rc-sec-tools"><span class="rc-muted rc-small">newest first · click one to open it on WFS Inventory</span></div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-wfsreps" id="rcWfsReportsTable"></table></div>
           </section>
         </div>
 
@@ -367,6 +383,25 @@
             <!-- the applied column filters (owner 2026-10-13) -->
             <div class="rc-fl-bar" id="rcFilterBar" hidden></div>
             <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
+          </section>
+        </div>
+
+        <!-- WFS Inventory (owner 2026-10-15, "barebones"): per SKU, what was
+             shipped to WFS and what Walmart says happened to it in the
+             report's days — the report's own columns, nothing added -->
+        <div id="rcWfs" class="rc-screen" hidden>
+          <div class="rc-toolbar">
+            <div class="rc-wfs-title">
+              <div class="rc-wfs-h">WFS units by SKU</div>
+              <div class="rc-muted rc-small" id="rcWfsSub">Shipped from your WFS Shipments log · everything else from Walmart's Inventory Reconciliation report</div>
+            </div>
+            <div class="rc-toolbar-right">
+              <select id="rcWfsPick" class="rc-month rc-wfs-pick" aria-label="WFS report"></select>
+            </div>
+          </div>
+          <section class="rc-table-card">
+            <div class="rc-table-wrap"><table class="rc-table rc-table-wfs" id="rcWfsTable"></table></div>
+            <div class="rc-foot rc-wfs-foot" id="rcWfsFoot"></div>
           </section>
         </div>
 

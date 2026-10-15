@@ -364,6 +364,57 @@ module.exports = function run(check) {
     try { await recovery.importReport({ name: 'x_reconciliationreport.csv', text: csvText, force: true }); } catch (e) { refused = e.message; }
     check('recovery: empty Returns log refuses the import', /returns log is empty/i.test(refused), refused);
 
+    // ----- WFS Inventory: Walmart's Inventory Reconciliation report -----
+    const { parseWfsInventory } = require('./wfsinv');
+    const wfsHead = '"Start Date","End Date","GTIN","Walmart Item ID","Product Name","Vendor SKU","Fulfillment Center","Starting Quantity","Received","Sold","Customer Returns","Lost","Found","Damaged","Removed","Returned To Seller","Transferred","Ending Quantity","Mystery Column"';
+    const wfsCsv = [wfsHead,
+      '"09/01/2026","09/30/2026","00887276123456","111","Galaxy S25 FE","S25-FE-WM","FC-A","100","150","120","5","3","1","2","0","0","10","121","x"',
+      '"09/01/2026","09/30/2026","00887276123456","111","Galaxy S25 FE","S25-FE-WM","FC-B","20","50","30","0","1","0","0","0","0","-10","39","x"',
+      '"09/01/2026","09/30/2026","00887276999999","222","Galaxy Tab","TAB-WM","FC-A","210","0","38","2","2","0","0","18","40","0","114","y"',
+      '"","","","","Total","","","330","200","188","7","6","1","2","18","40","0","274",""',
+    ].join('\n');
+    const wp = parseWfsInventory(wfsCsv, 'WFSInventoryReconciliationReport.csv');
+    check('wfs: columns mapped by name, the odd one reported', wp.fields.join(',') === 'start,recv,sold,cret,lost,found,dmg,removed,rts,moved,end' && wp.unknown.join(',') === 'Mystery Column', [wp.fields, wp.unknown]);
+    check('wfs: one row per SKU per FC, a totals line skipped, the period from the dates', wp.rows.length === 3 && wp.period && wp.period.start === '2026-09-01' && wp.period.end === '2026-09-30', [wp.rows.length, wp.period]);
+    const daily = parseWfsInventory(['Date,SKU,Fulfillment Center,Beginning Qty,Units Received,Units Sold,Ending Qty',
+      '2026-09-02,X,FC1,8,0,3,5', '2026-09-01,X,FC1,10,0,2,8', '2026-09-03,X,FC1,5,4,1,8'].join('\n'));
+    check('wfs: a daily file takes the first day\'s start, the last day\'s end, sums the rest', daily.rows.length === 1 && daily.rows[0].q.start === 10 && daily.rows[0].q.end === 8 && daily.rows[0].q.sold === 6 && daily.rows[0].q.recv === 4 && daily.period.start === '2026-09-01', daily.rows[0]);
+    let wfsErr = '';
+    try { parseWfsInventory('PO,Amount\n1,2'); } catch (e) { wfsErr = e.message; }
+    check('wfs: a file that is not the report says so and lists its columns', /does not look like/.test(wfsErr) && /PO, Amount/.test(wfsErr), wfsErr);
+
+    const at = (y, m, dd) => new Date(y, m - 1, dd, 12).toISOString();
+    const shipments = [
+      { created_at: at(2026, 9, 5), items: [{ sku: 'LW-S25FE', channelSku: 'OTHER', gtin: '887276123456', qty: 210 }] }, // by GTIN
+      { created_at: at(2026, 9, 20), items: [{ sku: 'LW-TAB', channelSku: 'tab-wm', gtin: '', qty: 5 }] }, // by Walmart SKU, any case
+      { created_at: at(2026, 9, 25), items: [{ sku: 'LW-NEW', channelSku: 'NEW-WM', gtin: '', qty: 7 }] }, // in no report row
+      { created_at: at(2026, 10, 2), items: [{ sku: 'LW-S25FE', channelSku: 'S25-FE-WM', gtin: '', qty: 99 }] }, // after the period
+    ];
+    recovery.configure({ wfsShipments: () => shipments });
+    auxLog.length = 0;
+    const wi = recovery.importWfsReport({ name: 'WFSInventoryReconciliationReport.csv', text: wfsCsv });
+    check('wfs: import labels the report by its days and syncs it', wi.ok && wi.label === 'Sep 1 - Sep 30, 2026' && wi.skus === 2 && auxLog.some(([p, e]) => p === 'wmwfs' && e.op === 'put' && e.rows.length === 3), wi);
+    check('wfs: the original file is archived', fs.existsSync(path.join(tmp, 'archive', 'WFS_Inventory_Sep 1 - Sep 30, 2026.csv')));
+    const inv = recovery.wfsInventory(wi.id);
+    const fe = inv.rows.find((r) => r.sku === 'S25-FE-WM');
+    const tab = inv.rows.find((r) => r.sku === 'TAB-WM');
+    const extra = inv.rows.find((r) => !r.inReport);
+    check('wfs: fulfillment centers added together per SKU', fe && fe.q.start === 120 && fe.q.recv === 200 && fe.q.moved === 0 && fe.q.end === 160 && fe.fcs.length === 2, fe);
+    check('wfs: shipped counted by GTIN, then Walmart SKU, inside the report days only', fe.shipped === 210 && tab.shipped === 5 && inv.shipments === 3, [fe.shipped, tab.shipped, inv.shipments]);
+    check('wfs: a shipped SKU missing from the report keeps a row of its own', extra && extra.sku === 'NEW-WM' && extra.shipped === 7 && inv.rows.length === 3, extra);
+    check('wfs: totals add the report rows and the log', inv.totals.shipped === 222 && inv.totals.sold === 188 && inv.totals.end === 274, inv.totals);
+    check('wfs: the report is listed on the state call', recovery.state().wfsReports.some((r) => r.id === wi.id && r.fields.includes('rts')));
+    const wdup = recovery.importWfsReport({ name: 'again.csv', text: wfsCsv });
+    check('wfs: the same file again asks first', wdup.alreadyImported && wdup.sameFile, wdup);
+    const wrep = recovery.importWfsReport({ name: 'again.csv', text: wfsCsv, force: true });
+    check('wfs: a forced re-import replaces the report', wrep.ok && wrep.replaced && recovery.state().wfsReports.length === 1, wrep);
+    const wput = auxLog.filter(([p, e]) => p === 'wmwfs' && e.op === 'put').pop()[1];
+    const wrm = recovery.removeWfsReport(wrep.id);
+    recovery._internal.applyWfsEvent(wput);
+    check('wfs: removed, and an older synced copy cannot bring it back', wrm.ok && recovery.state().wfsReports.length === 0);
+    recovery._internal.applyWfsEvent({ ...wput, id: 'remote-wfs', ts: Date.now() + 5 });
+    check('wfs: a report from another desktop is taken in', recovery.state().wfsReports.some((r) => r.id === 'remote-wfs') && recovery.wfsInventory('remote-wfs').rows.length === 3);
+
     db.close();
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
   })();

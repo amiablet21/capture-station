@@ -17,8 +17,9 @@ const { parseReport } = require('./parseReport');
 const { findIssues, returnsToWarehouseRows } = require('./reconcile');
 const { classify, toSummary, buildRunWorkbook } = require('./classify');
 const { formatPeriod, periodFromReportName, parsePeriodLabel } = require('./period');
+const { parseWfsInventory, gtinKey } = require('./wfsinv');
 
-let deps = null; // { retsync, listReturns, config, archiveDir, station, by }
+let deps = null; // { retsync, listReturns, config, archiveDir, station, by, wfsShipments }
 const auxStates = {};
 const auxState = (prefix) => (auxStates[prefix] = auxStates[prefix] || {});
 let syncBusy = false;
@@ -108,7 +109,9 @@ function syncIn() {
     for (const ev of deps.retsync.readAuxNew('wmruns', auxState('wmruns'))) applyRunEvent(ev);
     for (const ev of deps.retsync.readAuxNew('wmmarks', auxState('wmmarks'))) { if (ev && ev.po) store.upsertMarks(ev); }
     for (const ev of deps.retsync.readAuxNew('wmexpenses', auxState('wmexpenses'))) { if (ev && ev.id) store.upsertExpense(ev); }
+    for (const ev of deps.retsync.readAuxNew('wmwfs', auxState('wmwfs'))) applyWfsEvent(ev);
     deps.retsync.auxBackfill('wmruns', () => store.ownRuns(mine()).map((r) => runEvent(r, r.syncTs || Date.parse(r.ranAt) || Date.now())));
+    deps.retsync.auxBackfill('wmwfs', () => store.ownWfsReports(mine()).map((r) => wfsEvent(r, r.syncTs || Date.parse(r.importedAt) || Date.now())));
     // own marks and expenses: the file is rebuilt whenever it falls short
     // of the rows this station holds (an append that failed, marks made
     // before sync was on); every other desktop reads it on its next pass
@@ -271,6 +274,151 @@ function removeRun(id) {
   return { ok: true, label: run.label };
 }
 
+/* ---------- WFS inventory (owner 2026-10-15) ---------- */
+// Walmart's Inventory Reconciliation report for a period, one row per SKU,
+// beside what the WFS Shipments log says was sent in the same days. Only
+// the report's own columns are shown; nothing is worked out on top of them.
+
+function wfsArchivePath(label) { return path.join(archiveDir(), `WFS_Inventory_${safeLabel(label)}.csv`); }
+const dayLabel = (iso) => { const [y, m, dd] = String(iso).split('-').map(Number); return new Date(y, m - 1, dd); };
+
+function wfsEvent(rep, ts) {
+  return { op: 'put', id: rep.id, ts, report: { ...rep, syncTs: undefined }, rows: store.wfsReportRows(rep.id) };
+}
+function deleteWfsLocal(id, ts) {
+  const rep = store.getWfsReport(id);
+  store.deleteWfsReport(id, ts);
+  if (rep) { try { fs.rmSync(wfsArchivePath(rep.label), { force: true }); } catch { /* best effort */ } }
+}
+function applyWfsEvent(ev) {
+  if (!ev || !ev.id || !ev.ts) return;
+  const ts = Number(ev.ts) || 0;
+  if (ev.op === 'del') {
+    const local = store.getWfsReport(ev.id);
+    if (local && local.syncTs <= ts) deleteWfsLocal(ev.id, ts);
+    else if (!local) store.deleteWfsReport(ev.id, ts);
+    return;
+  }
+  if (ev.op !== 'put' || !ev.report) return;
+  const tomb = store.tombstoneTs(ev.id);
+  if (tomb !== null && tomb >= ts) return;
+  const local = store.getWfsReport(ev.id);
+  if (local && local.syncTs >= ts) return;
+  const rep = { ...ev.report, id: ev.id, syncTs: ts };
+  // two desktops imported the same days: the newer import wins everywhere
+  const twin = store.findWfsReportByLabel(rep.label);
+  if (twin && twin.id !== rep.id) {
+    if (twin.syncTs > ts) return;
+    deleteWfsLocal(twin.id, ts);
+  }
+  store.putWfsReport(rep, ev.rows || []);
+}
+
+function importWfsReport({ name, text, force }) {
+  syncIn();
+  const csvText = String(text ?? '');
+  const parsed = parseWfsInventory(csvText, name);
+  const label = parsed.period
+    ? formatPeriod(dayLabel(parsed.period.start), dayLabel(parsed.period.end))
+    : String(name || 'WFS report').replace(/\.csv$/i, '');
+  const csvHash = crypto.createHash('sha256').update(csvText).digest('hex');
+  if (!force) {
+    const dup = store.findWfsReportByHash(csvHash) || store.findWfsReportByLabel(label);
+    if (dup) return { alreadyImported: true, sameFile: dup.csvHash === csvHash, label: dup.label, importedAt: dup.importedAt };
+  }
+  const ts = Date.now();
+  const replaced = store.findWfsReportByLabel(label);
+  if (replaced) deleteWfsLocal(replaced.id, ts - 1);
+  try {
+    fs.mkdirSync(archiveDir(), { recursive: true });
+    fs.writeFileSync(wfsArchivePath(label), csvText, 'utf8');
+  } catch { /* the report keeps everything it parsed */ }
+  const rep = {
+    id: crypto.randomUUID(), label, start: parsed.period ? parsed.period.start : null, end: parsed.period ? parsed.period.end : null,
+    importedAt: now(), csvName: name || '', csvHash, fields: parsed.fields, unknown: parsed.unknown, station: station(), by: byName(), syncTs: ts,
+  };
+  store.putWfsReport(rep, parsed.rows);
+  if (replaced) { try { deps.retsync.appendAux('wmwfs', { op: 'del', id: replaced.id, ts: ts - 1 }); } catch { /* offline */ } }
+  try { deps.retsync.appendAux('wmwfs', wfsEvent(rep, ts)); } catch { /* offline: the local report stands */ }
+  const skus = new Set(parsed.rows.map((r) => gtinKey(r.gtin) || String(r.sku).toUpperCase()));
+  return { ok: true, id: rep.id, label, skus: skus.size, rows: parsed.rows.length, fields: parsed.fields, unknown: parsed.unknown, dated: !!parsed.period, replaced: !!replaced };
+}
+
+function removeWfsReport(id) {
+  const rep = store.getWfsReport(id);
+  if (!rep) return { ok: false, error: 'That report is already gone.' };
+  const ts = Date.now();
+  deleteWfsLocal(id, ts);
+  try { deps.retsync.appendAux('wmwfs', { op: 'del', id, ts }); } catch { /* offline */ }
+  return { ok: true, label: rep.label };
+}
+
+// the local day a shipment was logged on ("YYYY-MM-DD")
+function localDay(stamp) {
+  const t = new Date(String(stamp || ''));
+  if (isNaN(t.getTime())) return '';
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+
+// one row per SKU: the report's fulfillment centers added together, and the
+// units the WFS Shipments log sent in the report's days. A shipped line
+// matches a report row by GTIN, then by its Walmart SKU, then by its
+// Linnworks SKU; one that matches nothing gets a row of its own.
+function wfsInventory(id) {
+  syncIn();
+  const rep = store.getWfsReport(id);
+  if (!rep) return { ok: false, error: 'That WFS report is not imported.' };
+  const byKey = new Map();
+  const byGtin = new Map();
+  const bySku = new Map();
+  for (const r of store.wfsReportRows(id)) {
+    const gk = gtinKey(r.gtin);
+    const key = gk || `SKU:${String(r.sku).toUpperCase()}`;
+    let row = byKey.get(key);
+    if (!row) {
+      row = { key, sku: r.sku, name: r.name, gtin: r.gtin, itemId: r.itemId, fcs: [], q: {}, shipped: 0, inReport: true };
+      for (const f of rep.fields) row.q[f] = 0;
+      byKey.set(key, row);
+      if (gk) byGtin.set(gk, row);
+    }
+    if (!row.sku && r.sku) row.sku = r.sku;
+    if (!row.name && r.name) row.name = r.name;
+    if (r.fc && !row.fcs.includes(r.fc)) row.fcs.push(r.fc);
+    for (const f of rep.fields) row.q[f] += Number(r.q[f]) || 0;
+    if (r.sku) bySku.set(String(r.sku).toUpperCase(), row);
+  }
+  let shipments = 0;
+  const dated = !!(rep.start && rep.end);
+  if (dated) {
+    const list = typeof deps.wfsShipments === 'function' ? (deps.wfsShipments() || []) : [];
+    for (const s of list) {
+      const day = localDay(s.created_at);
+      if (!day || day < rep.start || day > rep.end) continue;
+      shipments++;
+      for (const it of Array.isArray(s.items) ? s.items : []) {
+        const n = Number(it.qty) || 0;
+        if (!n) continue;
+        const ch = String(it.channelSku || '').toUpperCase();
+        const lw = String(it.sku || '').toUpperCase();
+        let row = byGtin.get(gtinKey(it.gtin)) || (ch && bySku.get(ch)) || (lw && bySku.get(lw));
+        if (!row) {
+          const key = `LOG:${ch || lw}`;
+          row = byKey.get(key);
+          if (!row) {
+            row = { key, sku: it.channelSku || it.sku || '', name: '', gtin: it.gtin || '', itemId: '', fcs: [], q: {}, shipped: 0, inReport: false };
+            byKey.set(key, row);
+          }
+        }
+        row.shipped += n;
+      }
+    }
+  }
+  const rows = [...byKey.values()].sort((a, b) => String(a.sku).localeCompare(String(b.sku), undefined, { numeric: true, sensitivity: 'base' }));
+  const totals = { shipped: rows.reduce((t, r) => t + r.shipped, 0) };
+  for (const f of rep.fields) totals[f] = rows.reduce((t, r) => t + (Number(r.q[f]) || 0), 0);
+  return { ok: true, report: rep, dated, shipments, rows, totals };
+}
+
 /* ---------- the tracker, decorated (§6.2–§6.4) ---------- */
 
 function periodEndMs(run) {
@@ -322,6 +470,7 @@ function state() {
   return {
     ok: true,
     runs: sorted.map((r) => ({ ...r, open: openByRun[r.id] || 0 })),
+    wfsReports: store.listWfsReports(),
     // each row carries its sentence and its list tab, so the renderer only draws
     items: visible.map((it) => ({ ...it, refundedBy: it.refundedBy || byMap[it.po] || '', statusText: rnr.statusText(it), short: rnr.shortStatus(it), tab: rnr.filterOf(it), lostAmount: rnr.lostAmount(it) })),
     today: rnr.todayCounts(visible),
@@ -1043,8 +1192,8 @@ function mailto() {
 }
 
 module.exports = {
-  configure, importReport, removeRun, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, syncStatus, resync, addExpense, removeExpense,
+  configure, importReport, removeRun, importWfsReport, removeWfsReport, wfsInventory, state, runDetail, mark, markMany, markFile, summary, monthLabel, profit, profitWorkbook, statement, statements, syncStatus, resync, addExpense, removeExpense,
   runWorkbook, auditWorkbook, summaryWorkbook, viewCsv, digest, sendDigest, mailto, syncIn, archivePath,
   // for tests
-  _internal: { trackerItemsFromStored, applyRunEvent, decoratedItems, warehouse },
+  _internal: { trackerItemsFromStored, applyRunEvent, applyWfsEvent, decoratedItems, warehouse },
 };

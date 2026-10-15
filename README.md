@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.78 highlights
+
+- **WFS Inventory, a new Recovery screen** (owner: "barebones … what we shipped, what sold, anything in between"). Import Walmart's Inventory Reconciliation report (Seller Center → WFS → Reports, one month or a date range) from the new box on Import; it opens on WFS Inventory as one table, a row per SKU with the fulfillment centers added together. Columns sit under Start (on hand), Sent in (Shipped from your WFS Shipments log in the report's days, Received by WFS), Sales (Sold, Customer returns), In between (Lost, Found, Damaged, Removed, Returned to you, Moved between FCs) and Left (At WFS). Only the columns the file has are shown, as Walmart wrote them; nothing is worked out on top. A Received that differs from Shipped is shaded amber, a shipped SKU missing from the report keeps a row of its own, headers sort, a click highlights a row. Walmart publishes no column list for this file, so columns are matched by name; any it does not recognise are listed under the table and on import. Reports sync to every desktop through the shared folder and the original CSV is kept beside the payment periods.
+
 ## v1.32.77 highlights
 
 - **The charge reads first on a refunded line.** "Walmart Shipping Label Service Charge · Refunded in a later period · …", and when a PO carries more than one fee they are joined with +, as in "WFS Return Processing Fee + WFS Returned Item Removal Fee". Refunds of sales before the first statement show their fees too. A kept sale keeps its fee after the words as before.

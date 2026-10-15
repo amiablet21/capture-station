@@ -5835,19 +5835,7 @@ exit 1
   // shipments, each row wearing the station that logged it (owner
   // 2026-09-16: "see which user did what"); local SQLite stays this
   // station's own storage, other stations' shipments come from the fold
-  ipcMain.handle('wfs:list', () => {
-    const st = retsync.stationName() || '';
-    const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
-    if (!retsync.enabled()) return mine;
-    retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
-      .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
-    const foreign = retsync.readAux('wfs')
-      .filter(e => e.station !== st)
-      .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
-    return mine.concat(foreign)
-      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-      .slice(0, 200);
-  });
+  ipcMain.handle('wfs:list', () => wfsShipmentsAll(200, 200));
   ipcMain.handle('wfs:received', (_e, { id, received }) => {
     db.markWfsReceived(Number(id), received !== false);
     return { ok: true };
@@ -7356,8 +7344,25 @@ function recoveryArchiveDir() {
   if (st.enabled && st.folderOk && st.folder) return path.join(st.folder, 'Walmart Reports');
   return path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports');
 }
+// every station's WFS shipments, newest first: this station's from SQLite,
+// the others' from the shared folder (wfs:list shows the latest 200;
+// Recovery's WFS Inventory reads them all to count what was sent)
+function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
+  const st = retsync.stationName() || '';
+  const mine = db.listWfsShipments(ownLimit).map(s => ({ ...s, station: st, mine: true }));
+  if (!retsync.enabled()) return mine;
+  retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
+    .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
+  const foreign = retsync.readAux('wfs')
+    .filter(e => e.station !== st)
+    .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+  return mine.concat(foreign)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, limit);
+}
 function startRecovery() {
   recovery.configure({
+    wfsShipments: () => wfsShipmentsAll(),
     retsync,
     listReturns: (n) => db.listReturns(n),
     config,
@@ -7437,6 +7442,20 @@ function registerRecoveryIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('recovery:removeRun', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeRun(id)));
+  // WFS Inventory: Walmart's Inventory Reconciliation report, per SKU
+  ipcMain.handle('recovery:wfsPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import WFS Inventory Reconciliation reports',
+      filters: [{ name: 'Inventory Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, files: pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:wfsImport', (_e, { name, text, force } = {}) => recoveryGate() || recoveryTry(() => recovery.importWfsReport({ name, text, force: !!force })));
+  ipcMain.handle('recovery:wfsRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeWfsReport(id)));
+  ipcMain.handle('recovery:wfsInventory', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.wfsInventory(id)));
   ipcMain.handle('recovery:mark', (_e, { po, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.mark(po, action, payload || {})));
   ipcMain.handle('recovery:exportRun', async (_e, { id } = {}) => {
     if (recoveryGate()) return recoveryGate();

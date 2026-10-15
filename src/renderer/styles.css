@@ -5834,3 +5834,46 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .cap-note:hover { background: #D6DFEE; }
 #rowsGrip { display: none !important; }
 .cap-main { max-width: 100%; }
+
+/* WFS Inventory (owner 2026-10-15, the barebones table): the report's
+   columns under five group headers — start, sent in, sales, in between,
+   left — each group on a faint band of its own so a row reads across */
+.rc-wfs-h { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.rc-wfs-pick { min-width: 220px; font-size: 12.5px; padding: 4px 8px; }
+.rc-table-wfs { min-width: 1240px; table-layout: auto; }
+.rc-table-wfs td.rc-wfs-item .rc-sku, .rc-table-wfs td.rc-wfs-item .rc-item-sub { white-space: nowrap; }
+.rc-table-wfs td.rc-wfs-item .rc-item-sub { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.rc-table-wfs thead tr.rc-wfs-grp th { text-transform: none; letter-spacing: 0; font-size: 11px; color: #2F3437; background: #FFFFFF; padding: 7px 12px 6px; }
+.rc-table-wfs thead tr.rc-wfs-grp th .rc-wfs-hint { font-weight: 400; color: #787774; margin-left: 6px; }
+.rc-table-wfs thead tr.rc-wfs-grp th.rc-b-start { box-shadow: inset 0 2px 0 #A5A29C; }
+.rc-table-wfs thead tr.rc-wfs-grp th.rc-b-in { box-shadow: inset 0 2px 0 #4F6FA3; }
+.rc-table-wfs thead tr.rc-wfs-grp th.rc-b-sold { box-shadow: inset 0 2px 0 #5E8C62; }
+.rc-table-wfs thead tr.rc-wfs-grp th.rc-b-mid { box-shadow: inset 0 2px 0 #D4A531; }
+.rc-table-wfs thead tr.rc-wfs-grp th.rc-b-end { box-shadow: inset 0 2px 0 #1E3A66; }
+.rc-table-wfs thead tr.rc-wfs-col th { vertical-align: bottom; }
+.rc-table-wfs thead tr.rc-wfs-col th .rc-wfs-src { display: block; font-size: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; color: #A5A29C; margin-top: 1px; }
+.rc-table-wfs .rc-b-start { background: #F9F9F8; }
+.rc-table-wfs .rc-b-in { background: #F5F7FB; }
+.rc-table-wfs .rc-b-sold { background: #F4F8F4; }
+.rc-table-wfs .rc-b-mid { background: #FBF8F1; }
+.rc-table-wfs .rc-b-end { background: #EEF2F8; }
+.rc-table-wfs .rc-wfs-edge { border-left: 1px solid #EAEAEA; }
+.rc-table-wfs td { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.rc-table-wfs td.rc-g { text-align: center; }
+.rc-table-wfs td.rc-wfs-item { font-family: var(--font); text-align: left; min-width: 240px; }
+.rc-table-wfs td.rc-wfs-zero { color: #D6D4CF; }
+.rc-table-wfs td.rc-wfs-out { color: #9F2F2D; }
+.rc-table-wfs td.rc-wfs-in { color: #346538; }
+.rc-table-wfs td.rc-wfs-short { background: #FBF3DB; color: #956400; font-weight: 600; }
+.rc-table-wfs td.rc-wfs-end { font-weight: 600; color: #1E3A66; }
+.rc-table-wfs tbody tr { cursor: default; }
+.rc-table-wfs tbody tr.is-hl td:not(.rc-g) { background: #FFF3C4; }
+.rc-table-wfs tbody tr.is-hl td.rc-g { background: #F5D27A; color: #5A4300; }
+.rc-table-wfs tfoot td { font-weight: 600; background: #F9F9F8; border-top: 1px solid #EAEAEA; height: 36px; }
+.rc-table-wfs tfoot td.rc-wfs-item { font-weight: 600; }
+.rc-wfs-foot { display: flex; flex-wrap: wrap; gap: 4px 18px; line-height: 1.6; }
+.rc-wfs-key { display: inline-flex; align-items: center; gap: 6px; }
+.rc-wfs-key i { width: 10px; height: 10px; border-radius: 3px; background: #FBF3DB; box-shadow: inset 0 0 0 1px #E9CF83; }
+.rc-table-wfsreps th:nth-child(1) { width: 36px; } .rc-table-wfsreps th:nth-child(2) { width: 240px; } .rc-table-wfsreps th:nth-child(3) { width: 200px; }
+.rc-table-wfsreps th:nth-child(5) { width: 110px; }
+.rc-table-wfsreps td:nth-child(4) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
