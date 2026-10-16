@@ -5897,6 +5897,7 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-menu .tab-menu-item.rc-menu-danger:hover { background: #FDEBEC; }
 #rcWfsTools .rc-when { min-width: 0; }
 
-/* Profit → By SKU: Sort by SKU, navy while on (owner 2026-10-16) */
-.rc-stack-btn.is-on { background: #1E3A66; border-color: #1E3A66; color: #FFFFFF; }
-.rc-stack-btn.is-on:hover:not(:disabled) { background: #152B4E; }
+/* Profit → By SKU: Sort by SKU, an icon like the download beside it (owner
+   2026-10-16: "make the button more subtle"); a soft navy tint while on */
+.rc-stack-btn.is-on { background: #E4EAF4; border-color: #C9D5E8; color: #1E3A66; }
+.rc-stack-btn.is-on:hover:not(:disabled) { background: #DCE4F1; }

@@ -5,6 +5,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.85 highlights
 
 - **Sort by SKU on Profit → By SKU** (owner: "a button for sort by SKU, and then they all kind of organize based on that"). Off, the table sorts like any other (Walmart paid first, or the column you clicked) and each row stands where its numbers put it. On (navy), the rows go A→Z by SKU and each SKU's conditions sit right under it in order: X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY, USED-X133-64GB-GRAY, SCRAP-X133-64GB-GRAY. Clicking a column header turns it off; the choice is remembered on each computer.
+- **Sort by SKU is a small icon** (owner: "make the button more subtle"), the same size as the download icon beside the search, with a soft navy tint while it is on; hover names it.
 
 ## v1.32.84 highlights
 
