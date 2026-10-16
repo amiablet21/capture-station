@@ -1959,7 +1959,7 @@ function rcRenderProfit() {
   rcRenderExpenses();
   $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement' || rc.profitTab === 'expenses';
   $('rcExpAddBtn').hidden = rc.profitTab !== 'expenses';
-  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', (p.families || p.groups || []).length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', (p.groups || []).length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
@@ -1973,23 +1973,26 @@ function rcRenderProfit() {
     // the search reads the Linnworks SKU, the product name, and every
     // Walmart (channel) SKU under the group
     const hit = (g) => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q);
-    // a SKU's conditions sit under one family row (owner 2026-10-15: "it
-    // should automatically group"); a family of one is a plain group row
+    // a SKU's conditions stay stacked (owner 2026-10-16: "the condition is
+    // already in the name… stacked in order": X133, OPEN-BOX-X133,
+    // USED-X133, SCRAP-X133): every row is its own, the sort places each
+    // family where its first row lands and its conditions follow in order
     const groupHit = (x) => hit(x) || (x.listings || []).some(hit);
-    const base = (p.families || p.groups || []).filter(x => (x.family ? hit(x) || x.members.some(groupHit) : groupHit(x)));
-    const rows = rcSortRows(base, s, 'payout');
+    const famOf = new Map();
+    (p.families || []).forEach((f, fi) => (f.members || [f]).forEach((m, mi) => famOf.set(m.sku, { fi, mi })));
+    const sorted = rcSortRows((p.groups || []).filter(groupHit), s, 'payout');
+    const firstAt = new Map();
+    sorted.forEach((x, i) => { const f = famOf.get(x.sku); const k = f ? f.fi : 'x:' + x.sku; if (!firstAt.has(k)) firstAt.set(k, i); });
+    const rows = sorted.slice().sort((a, b) => {
+      const fa = famOf.get(a.sku); const fb = famOf.get(b.sku);
+      const ka = firstAt.get(fa ? fa.fi : 'x:' + a.sku); const kb = firstAt.get(fb ? fb.fi : 'x:' + b.sku);
+      return ka - kb || (fa && fb ? fa.mi - fb.mi : 0);
+    });
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
     // "no cost set" is a button: type the cost right here (owner 2026-10-12)
-    const costCell = (g) => {
-      if (g.family) {
-        const each = g.members.map(m => `${m.condLabel} ${m.costKnown ? rcMoney(m.unitCost) : 'no cost set'}`).join(' · ');
-        if (!g.costKnown) return `<span class="rc-faint" title="${esc(each)}">partly set</span>`;
-        return g.mixedCost ? `<span title="${esc(`Average per unit sold · ${each}`)}">~${rcMoney(g.unitCost)}</span>` : rcMoney(g.unitCost);
-      }
-      return g.costKnown ? rcMoney(g.unitCost) : `<button type="button" class="rc-nocost rc-cost-set" data-rccost="${esc(g.sku)}" title="Click to set this SKU's cost">no cost set</button>`;
-    };
+    const costCell = (g) => g.costKnown ? rcMoney(g.unitCost) : `<button type="button" class="rc-nocost rc-cost-set" data-rccost="${esc(g.sku)}" title="Click to set this SKU's cost">no cost set</button>`;
     // a listing the Pricing map does not know, marked like Capture's ⚠
     // a drawn triangle, not the ⚠ glyph, so it sits dead centre in the circle (owner 2026-10-13)
     const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></svg></span>';
@@ -2004,32 +2007,20 @@ function rcRenderProfit() {
       <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown && g.margin != null ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
     const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
     // a Walmart listing row: its own caret opens its POs
-    const listing = (g, i, nested, deep) => `<tr class="${nested ? 'rc-listing' : ''} ${deep ? 'rc-deep' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
+    const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
       <td class="rc-g">${nested ? '' : i + 1}</td>
       <td class="rc-item" title="${esc(g.item || '')}">${caret(g.sku, "Show this SKU's POs")}<span class="rc-sku">${esc(g.sku)}</span>${!nested && !g.inv ? warn : ''}</td>${cells(g)}
     </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
-    // cond: a condition row inside a family (its index cell blank, the
-    // condition named before the SKU, its listings one step further in)
-    const group = (x, i, cond) => {
+    const group = (x, i) => {
       const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
       // one listing needs no words; more get a small count pill (owner 2026-10-13: "compress it")
       const note = x.mapped ? (x.listings.length > 1 ? `<span class="rc-group-n" title="${x.listings.length} Walmart listings under this SKU">${x.listings.length}</span>` : '') : warn;
-      const condTag = cond ? `<span class="rc-cond-tag is-${esc(x.cond)}">${esc(x.condLabel)}</span>` : '';
-      return `<tr class="rc-group ${cond ? 'rc-cond' : ''} ${open ? 'is-open' : ''}">
-      <td class="rc-g">${cond ? '' : i + 1}</td>
-      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}${condTag}<span class="rc-sku" title="${esc(x.sku)}">${esc(x.sku)}</span>${note}</td>${cells(x)}
-    </tr>${open ? x.listings.filter(g => !q || hit(g) || hit(x)).map(g => listing(g, 0, true, cond)).join('') : ''}`;
-    };
-    const family = (f, i) => {
-      if (!f.family) return group(f, i);
-      const key = 'f:' + f.sku; const open = rc.profitOpen.has(key);
-      const conds = f.members.map(m => m.condLabel).join(' · ');
-      return `<tr class="rc-group rc-family ${open ? 'is-open' : ''}">
+      return `<tr class="rc-group ${open ? 'is-open' : ''}">
       <td class="rc-g">${i + 1}</td>
-      <td class="rc-item" title="${esc(f.item || '')}">${caret(key, 'Show its conditions')}<span class="rc-sku">${esc(f.sku)}</span><span class="rc-family-conds" title="${esc(f.members.map(m => m.sku).join(', '))}">${esc(conds)}</span>${f.mapped ? '' : warn}</td>${cells(f)}
-    </tr>${open ? f.members.filter(m => !q || hit(f) || groupHit(m)).map(m => group(m, 0, true)).join('') : ''}`;
+      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span>${note}</td>${cells(x)}
+    </tr>${open ? x.listings.filter(g => !q || hit(g) || hit(x)).map(g => listing(g, 0, true)).join('') : ''}`;
     };
-    const body = rows.length ? rows.map((g, i) => (byLw ? family(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    const body = rows.length ? rows.map((g, i) => (byLw ? group(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
     rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
   } else if (rc.profitTab === 'period') {
     const s = rc.profitSort;

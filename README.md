@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.84 highlights
+
+- **Profit keeps a SKU's conditions stacked, each its own row** (owner: "the condition is already in the name… stacked in order"). The family row and the condition tags from v1.32.83 are gone: X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY, USED-X133-64GB-GRAY and SCRAP-X133-64GB-GRAY are ordinary rows with their own numbers, always listed together in that order. A column sort places the group where its first row lands; the rest follow it. Conditions are still recognised by name and by the condition mappings saved on Returns.
+
 ## v1.32.83 highlights
 
 - **Profit groups a SKU's conditions on its own** (owner: "it should automatically group"). On Profit → By SKU, X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY and USED-X133-64GB-GRAY are one row under the base SKU, its conditions named beside it; open it for a row per condition (New, Open Box, Used, Scrap, each tagged), and each of those still opens to its Walmart listings and POs. The family row adds its conditions up: sold, refunded, Walmart paid and profit summed, avg price and commission weighted by units, margin from the totals. Unit cost is the shared cost, or the average per unit sold (~$) when the conditions cost differently; hover shows each condition's cost. A condition with no cost leaves the family's profit blank until it has one. Conditions come from the SKU's name (OPEN-BOX- / USED- / SCRAP- in front or -OPENBOX / -USED / -SCRAP at the end) and from the condition mappings saved on Returns, so a listing graded by hand joins its family too. A SKU with only one condition stays a plain row.

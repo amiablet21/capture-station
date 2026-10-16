@@ -5897,19 +5897,3 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-menu .tab-menu-item.rc-menu-danger:hover { background: #FDEBEC; }
 #rcWfsTools .rc-when { min-width: 0; }
 
-/* Profit → By SKU: a SKU's conditions under one family row (owner
-   2026-10-15: "it should automatically group") — the family row names its
-   conditions, each condition row carries a small tag, its listings sit a
-   step further in */
-.rc-family-conds { margin-left: 10px; font-size: 11.5px; color: #A5A29C; font-weight: 400; }
-.rc-table-profit tr.rc-cond td:not(.rc-margin) { background: #FBFBFA; }
-.rc-table-profit tr.rc-cond td.rc-item { padding-left: 28px; }
-.rc-table-profit tr.rc-cond td.rc-item .rc-sku { font-weight: 500; }
-.rc-table-profit tr.rc-cond.is-open td:not(.rc-g):not(.rc-margin) { background: #F4F6FA; }
-.rc-table-profit tr.rc-listing.rc-deep td.rc-item { padding-left: 58px; }
-.rc-cond-tag { display: inline-block; margin-right: 8px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 18px; vertical-align: 1px; background: #F1F0EC; color: #787774; }
-.rc-cond-tag.is-new { background: #EDF3EC; color: #346538; }
-.rc-cond-tag.is-openbox { background: #E1F3FE; color: #1F6C9F; }
-.rc-cond-tag.is-used { background: #FBF3DB; color: #956400; }
-.rc-cond-tag.is-scrap { background: #FDEBEC; color: #9F2F2D; }
-.rc-table-profit tr.rc-listing.rc-deep + tr.rc-subhead td:nth-child(2), .rc-table-profit tr.rc-listing.rc-deep ~ tr.rc-subrow td:nth-child(2) { padding-left: 58px; }
