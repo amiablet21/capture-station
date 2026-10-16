@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.85 highlights
+
+- **Sort by SKU on Profit → By SKU** (owner: "a button for sort by SKU, and then they all kind of organize based on that"). Off, the table sorts like any other (Walmart paid first, or the column you clicked) and each row stands where its numbers put it. On (navy), the rows go A→Z by SKU and each SKU's conditions sit right under it in order: X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY, USED-X133-64GB-GRAY, SCRAP-X133-64GB-GRAY. Clicking a column header turns it off; the choice is remembered on each computer.
+
 ## v1.32.84 highlights
 
 - **Profit keeps a SKU's conditions stacked, each its own row** (owner: "the condition is already in the name… stacked in order"). The family row and the condition tags from v1.32.83 are gone: X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY, USED-X133-64GB-GRAY and SCRAP-X133-64GB-GRAY are ordinary rows with their own numbers, always listed together in that order. A column sort places the group where its first row lands; the rest follow it. Conditions are still recognised by name and by the condition mappings saved on Returns.

@@ -5897,3 +5897,6 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .rc-menu .tab-menu-item.rc-menu-danger:hover { background: #FDEBEC; }
 #rcWfsTools .rc-when { min-width: 0; }
 
+/* Profit → By SKU: Sort by SKU, navy while on (owner 2026-10-16) */
+.rc-stack-btn.is-on { background: #1E3A66; border-color: #1E3A66; color: #FFFFFF; }
+.rc-stack-btn.is-on:hover:not(:disabled) { background: #152B4E; }

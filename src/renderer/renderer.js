@@ -1651,6 +1651,7 @@ const rc = {
   profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(), rcFilters: {}, rcSortable: [], filterCol: '', filterDraft: {}, filterQ: '',
   year: '', profitYear: '',
   wfsId: null, wfs: null, wfsSort: null, wfsTab: 'sku', wfsShip: null,
+  profitStack: (() => { try { return localStorage.getItem('rcProfitStack') === '1'; } catch { return false; } })(),
 };
 // the key a scope reads: the selected period, the chosen month or year
 function rcScopeKey(scope, which) {
@@ -1962,6 +1963,9 @@ function rcRenderProfit() {
   $('rcProfitTabs').innerHTML = [['sku', 'By SKU', (p.groups || []).length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
     `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
   $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
+  $('rcProfitStackBtn').hidden = rc.profitTab !== 'sku';
+  $('rcProfitStackBtn').classList.toggle('is-on', rc.profitStack);
+  $('rcProfitStackBtn').setAttribute('aria-pressed', rc.profitStack ? 'true' : 'false');
   $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
   const money = (v, known = true) => (known ? `${v < 0 ? '−' : ''}${rcMoney(v)}` : '<span class="rc-nocost">no cost set</span>');
   if (rc.profitTab === 'sku') {
@@ -1973,21 +1977,19 @@ function rcRenderProfit() {
     // the search reads the Linnworks SKU, the product name, and every
     // Walmart (channel) SKU under the group
     const hit = (g) => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q);
-    // a SKU's conditions stay stacked (owner 2026-10-16: "the condition is
-    // already in the name… stacked in order": X133, OPEN-BOX-X133,
-    // USED-X133, SCRAP-X133): every row is its own, the sort places each
-    // family where its first row lands and its conditions follow in order
     const groupHit = (x) => hit(x) || (x.listings || []).some(hit);
-    const famOf = new Map();
-    (p.families || []).forEach((f, fi) => (f.members || [f]).forEach((m, mi) => famOf.set(m.sku, { fi, mi })));
-    const sorted = rcSortRows((p.groups || []).filter(groupHit), s, 'payout');
-    const firstAt = new Map();
-    sorted.forEach((x, i) => { const f = famOf.get(x.sku); const k = f ? f.fi : 'x:' + x.sku; if (!firstAt.has(k)) firstAt.set(k, i); });
-    const rows = sorted.slice().sort((a, b) => {
-      const fa = famOf.get(a.sku); const fb = famOf.get(b.sku);
-      const ka = firstAt.get(fa ? fa.fi : 'x:' + a.sku); const kb = firstAt.get(fb ? fb.fi : 'x:' + b.sku);
-      return ka - kb || (fa && fb ? fa.mi - fb.mi : 0);
-    });
+    const shown = (p.groups || []).filter(groupHit);
+    let rows;
+    if (rc.profitStack) {
+      // Sort by SKU (owner 2026-10-16: "the condition is already in the
+      // name… stacked in order", then "a button for sort by SKU"): every row
+      // is its own; the SKUs go A→Z by their base name and each one's
+      // conditions follow it, New, Open Box, Used, Scrap
+      const famOf = new Map();
+      (p.families || []).forEach((f) => (f.members || [f]).forEach((m, mi) => famOf.set(m.sku, { base: String(f.sku), mi })));
+      const fam = (x) => famOf.get(x.sku) || { base: String(x.sku), mi: 0 };
+      rows = shown.slice().sort((a, b) => fam(a).base.localeCompare(fam(b).base, undefined, { numeric: true, sensitivity: 'base' }) || fam(a).mi - fam(b).mi);
+    } else rows = rcSortRows(shown, s, 'payout');
     const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
       + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
       + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
@@ -3030,10 +3032,19 @@ $('rcProfitTable').addEventListener('click', (e) => {
   if (!th) return;
   const key = th.dataset.rcsort;
   const first = th.dataset.rctext ? 1 : -1; // text A→Z first, numbers biggest first
+  // a column sort takes over from Sort by SKU
+  if (rc.profitTab === 'sku' && rc.profitStack) { rc.profitStack = false; try { localStorage.setItem('rcProfitStack', '0'); } catch { /* private mode */ } }
   rc.profitSort = rc.profitSort && rc.profitSort.key === key ? { key, dir: -rc.profitSort.dir } : { key, dir: first };
   rcRenderProfit();
 });
 $('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
+// Sort by SKU on/off, remembered on this computer; a column header click turns it off
+$('rcProfitStackBtn').addEventListener('click', () => {
+  rc.profitStack = !rc.profitStack;
+  if (rc.profitStack) rc.profitSort = null;
+  try { localStorage.setItem('rcProfitStack', rc.profitStack ? '1' : '0'); } catch { /* private mode */ }
+  rcRenderProfit();
+});
 // the eye (owner 2026-10-13): blur every number on Profit for a screen
 // share or a visitor; the toggle is remembered per computer
 const rcBlurKey = 'rcProfitBlur';
