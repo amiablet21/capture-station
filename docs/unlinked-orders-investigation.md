@@ -56,7 +56,7 @@ Open one affected order in Linnworks Open Orders (e.g. Walmart ref ending
 
 ### Things noticed along the way (worth checking someday)
 
-- Two Walmart integrations exist (SubSource `10001467995` and
+- Two Walmart integrations exist (SubSource `10000000000` and
   `wirelesstechnostore`); channel mappings are **per integration** and do not
   carry across.
 - Walmart re-lists items with suffixed channel SKUs (`A9+ 64GB NAVY (2)`,

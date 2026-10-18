@@ -57,7 +57,7 @@ const DEMO_SEED = `(() => {
   // channel mapping: local demo catalog (twin listings included)
   chmap.local = true;
   chmap.channels = [
-    { id: 1, source: 'WALMART', subSource: '10001467995' },
+    { id: 1, source: 'WALMART', subSource: '10000000000' },
     { id: 2, source: 'EBAY', subSource: 'wirelesstechnostore' },
     { id: 3, source: 'TEMU US', subSource: 'Digital World Shop' },
   ];
