@@ -1,4 +1,6 @@
 # Flips a draft GitHub Release to published, without rebuilding anything.
+# Lives in capture-station-releases since the releases moved there
+# (2026-10-18); master copy: tools/release-repo/ in capture-station.
 #
 # Exists because GitHub's release service sometimes drops the final
 # "publish" call after a clean build + upload (v1.27.85 on 2026-09-17 was

@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.86 highlights
+
+- **Updates come from a new place.** The app now looks for updates in the public `amiablet21/capture-station-releases` repo, which holds only the installers, so the source repo can be made private without stations losing updates. Nothing changes at the stations: the version chip and Update work as before.
+- **The Walmart seller ID is out of the repo.** Demo data, mockups and docs use a placeholder, and Recovery reads the payment date from any seller's reconciliation-report file name.
+
 ## v1.32.85 highlights
 
 - **Sort by SKU on Profit → By SKU** (owner: "a button for sort by SKU, and then they all kind of organize based on that"). Off, the table sorts like any other (Walmart paid first, or the column you clicked) and each row stands where its numbers put it. On (navy), the rows go A→Z by SKU and each SKU's conditions sit right under it in order: X133-64GB-GRAY, OPEN-BOX-X133-64GB-GRAY, USED-X133-64GB-GRAY, SCRAP-X133-64GB-GRAY. Clicking a column header turns it off; the choice is remembered on each computer.

@@ -2984,7 +2984,10 @@ function registerIpc() {
   /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
      to GitHub... install it here") — checks the latest GitHub release; one
      click downloads the right installer and opens it. ---------- */
-  const UPDATE_REPO = 'amiablet21/capture-station';
+  // releases live in a separate public repo so the source repo can be
+  // private (owner 2026-10-18); package.json's build.publish names the
+  // same repo for electron-updater
+  const UPDATE_REPO = 'amiablet21/capture-station-releases';
   let updateInfo = null; // { version, url, name }
   const verNewer = (a, b) => { // is a newer than b (x.y.z strings)
     const pa = String(a).split('.').map(Number);

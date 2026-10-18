@@ -1,0 +1,312 @@
+# Builds the DWS Stock installers and publishes them as a GitHub Release in
+# THIS repo (amiablet21/capture-station-releases), which the in-app updater
+# reads. The source lives in the private amiablet21/capture-station; this
+# repo holds no code. The build runs here because a public repo's Actions
+# minutes are free (owner 2026-10-18: ~125 releases a month would overrun a
+# private repo's 2,000 free minutes, macOS counting 10x).
+#
+# Started by the "Build Windows app" / "Build Mac app" workflows in
+# capture-station (one run per platform), or by hand from the Actions tab.
+#
+# Needs one repository secret here:
+#   RELEASE_BOT_TOKEN  fine-grained token with Contents: read on
+#                      capture-station (the same token capture-station uses
+#                      to start this workflow)
+# Optional Mac signing secrets, same names as before: MAC_CSC_LINK,
+# MAC_CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID.
+#
+# Master copy: tools/release-repo/ in capture-station.
+
+name: Build
+
+run-name: Build ${{ inputs.platform }} ${{ inputs.release_tag || '(artifact only)' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'capture-station commit (or branch) to build'
+        required: true
+      release_tag:
+        description: 'Publish a GitHub Release under this tag (e.g. v1.32.86); empty = artifact only'
+        required: false
+        default: ''
+      platform:
+        description: 'windows, mac or both'
+        required: false
+        default: 'both'
+
+permissions:
+  contents: write # create the release and attach the installers
+
+jobs:
+  windows:
+    if: inputs.platform != 'mac'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: amiablet21/capture-station
+          ref: ${{ inputs.source_sha }}
+          token: ${{ secrets.RELEASE_BOT_TOKEN }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # a release whose installers are stamped with an older version is
+      # worse than no release (v1.27.11 shipped 1.27.4-named files on
+      # 2026-09-09) — refuse to build a mismatched release at all
+      - name: Release tag must match package.json version
+        if: inputs.release_tag != ''
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          VER="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$VER" ]; then
+            echo "::error::Release tag $TAG does not match package.json version $VER - bump package.json first"
+            exit 1
+          fi
+
+      - name: Build the NSIS installer
+        run: npx electron-builder --win nsis --publish never
+
+      - name: The updater manifest must exist (latest.yml)
+        shell: bash
+        run: test -f dist/latest.yml || { echo "::error::dist/latest.yml missing - the in-app updater needs it"; exit 1; }
+
+      - name: Keep the installer as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-station-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Attach the installer to the release
+        if: inputs.release_tag != ''
+        # GitHub's asset-upload service dropped good uploads twice on
+        # 2026-09-17 ("Error saving asset" after a clean build) — never
+        # fail the run here; the next step verifies and retries for real
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          # the tag sits on this repo's default branch (the source commit is
+          # not in this repo); make_latest is what the self-updater follows
+          make_latest: true
+          body: 'Built from amiablet21/capture-station@${{ inputs.source_sha }}'
+          files: |
+            dist/*.exe
+            dist/latest.yml
+
+      - name: Make sure the installer really sits on the release (retry the flaky upload)
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --notes "Built from amiablet21/capture-station@$SOURCE_SHA"
+          for i in 1 2 3 4; do
+            MISSING=0
+            for F in dist/*.exe dist/latest.yml; do
+              N="$(basename "$F" | tr ' ' '.')"   # GitHub stores asset names with dots
+              if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N"; then
+                MISSING=1
+                echo "attempt $i: uploading $N"
+                gh release upload "$TAG" "$F" --repo "$GITHUB_REPOSITORY" --clobber || true
+              fi
+            done
+            [ "$MISSING" = "0" ] && exit 0
+            sleep 20
+          done
+          for F in dist/*.exe dist/latest.yml; do
+            N="$(basename "$F" | tr ' ' '.')"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
+              || { echo "::error::$N never landed on $TAG after 4 attempts"; exit 1; }
+          done
+
+      # uploads only add files — anything from an earlier, differently
+      # named build would linger on the release forever. Sweep every
+      # asset that doesn't carry this build's version.
+      - name: Sweep stale assets off the release
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          VER="$(node -p "require('./package.json').version")"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | while read -r A; do
+            case "$A" in
+              *"$VER"*|latest*.yml) ;;   # latest.yml is what the in-app updater reads — keep it
+              *) echo "removing stale asset $A"; gh release delete-asset "$TAG" "$A" --repo "$GITHUB_REPOSITORY" -y ;;
+            esac
+          done
+
+      # softprops creates the release as a draft, uploads, then flips it to
+      # published — and that last call hit the same flaky service on
+      # 2026-09-17, stranding v1.27.85 as an invisible draft with all its
+      # assets attached. Make publishing explicit.
+      - name: Publish the release if it is still a draft
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          PUBLISHED=0
+          for i in 1 2 3 4; do
+            if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" != "true" ]; then PUBLISHED=1; break; fi
+            echo "attempt $i: publishing draft $TAG"
+            if gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false; then PUBLISHED=1; break; fi
+            sleep 20
+          done
+          if [ "$PUBLISHED" != "1" ]; then
+            echo "::error::release $TAG is still a draft after 4 attempts"
+            exit 1
+          fi
+          KEEP="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.draft and .tag_name==\"$TAG\" and .id != $KEEP) | .id" | while read -r RID; do
+            echo "deleting stranded duplicate draft $RID"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RID" || true
+          done
+
+  mac:
+    if: inputs.platform != 'windows'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: amiablet21/capture-station
+          ref: ${{ inputs.source_sha }}
+          token: ${{ secrets.RELEASE_BOT_TOKEN }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Release tag must match package.json version
+        if: inputs.release_tag != ''
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          VER="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$VER" ]; then
+            echo "::error::Release tag $TAG does not match package.json version $VER - bump package.json first"
+            exit 1
+          fi
+
+      - name: Build the universal DMG (Apple Silicon + Intel in one)
+        # unset the signing env entirely when the secrets are blank —
+        # electron-builder treats an EMPTY CSC_LINK as a certificate path
+        # and dies with "not a file" (seen 2026-09-09, run 1)
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac --publish never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Keep the installers as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-station-mac
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Attach installers to the release
+        if: inputs.release_tag != ''
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          make_latest: true
+          body: 'Built from amiablet21/capture-station@${{ inputs.source_sha }}'
+          files: dist/*.dmg
+
+      - name: Make sure the DMG really sits on the release (retry the flaky upload)
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --notes "Built from amiablet21/capture-station@$SOURCE_SHA"
+          for i in 1 2 3 4; do
+            MISSING=0
+            for F in dist/*.dmg; do
+              N="$(basename "$F" | tr ' ' '.')"
+              if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N"; then
+                MISSING=1
+                echo "attempt $i: uploading $N"
+                gh release upload "$TAG" "$F" --repo "$GITHUB_REPOSITORY" --clobber || true
+              fi
+            done
+            [ "$MISSING" = "0" ] && exit 0
+            sleep 20
+          done
+          for F in dist/*.dmg; do
+            N="$(basename "$F" | tr ' ' '.')"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
+              || { echo "::error::$N never landed on $TAG after 4 attempts"; exit 1; }
+          done
+
+      - name: Sweep stale assets off the release
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          VER="$(node -p "require('./package.json').version")"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | while read -r A; do
+            case "$A" in
+              *"$VER"*|latest*.yml) ;;   # the Mac job must never sweep the Windows updater manifest (it did on v1.30.6)
+              *) echo "removing stale asset $A"; gh release delete-asset "$TAG" "$A" --repo "$GITHUB_REPOSITORY" -y ;;
+            esac
+          done
+
+      - name: Publish the release if it is still a draft
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          PUBLISHED=0
+          for i in 1 2 3 4; do
+            if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" != "true" ]; then PUBLISHED=1; break; fi
+            echo "attempt $i: publishing draft $TAG"
+            if gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false; then PUBLISHED=1; break; fi
+            sleep 20
+          done
+          if [ "$PUBLISHED" != "1" ]; then
+            echo "::error::release $TAG is still a draft after 4 attempts"
+            exit 1
+          fi
+          KEEP="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.draft and .tag_name==\"$TAG\" and .id != $KEEP) | .id" | while read -r RID; do
+            echo "deleting stranded duplicate draft $RID"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RID" || true
+          done

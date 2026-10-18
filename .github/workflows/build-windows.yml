@@ -1,12 +1,21 @@
-# Builds the Windows installer (NSIS .exe) on GitHub's Windows runners —
-# the same artifact `npm run dist` produces locally.
+# Starts the Windows build. The build itself runs in the public
+# amiablet21/capture-station-releases repo (its "Build" workflow), which
+# checks out this commit, builds, and publishes the GitHub Release there —
+# the repo the in-app updater reads. It moved there so this repo can be
+# private: a public repo's Actions minutes are free, and ~125 releases a
+# month would overrun a private repo's 2,000 (owner 2026-10-18).
 #
 # Runs when:
-#   - a version tag is pushed (v1.28.0 ...) -> builds AND attaches the
-#     installer to the GitHub Release for that tag (alongside the Mac
-#     builds from build-mac.yml)
-#   - the "Run workflow" button is pressed on the Actions tab -> builds and
-#     leaves the installer as a downloadable artifact
+#   - a version tag is pushed (v1.32.86 ...) -> builds AND publishes
+#   - the "Run workflow" button is pressed on the Actions tab -> builds;
+#     with a release_tag it also tags this commit and publishes
+# The build's progress and installers are on the releases repo's Actions
+# tab, not here.
+#
+# Needs one repository secret: RELEASE_BOT_TOKEN, a fine-grained token
+# for capture-station + capture-station-releases with Contents: read and
+# Actions: read and write (the releases repo keeps the same token to check
+# this repo out).
 
 name: Build Windows app
 
@@ -16,153 +25,65 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Also publish a GitHub Release under this tag (e.g. v1.27.4); empty = artifact only'
+        description: 'Also publish a GitHub Release under this tag (e.g. v1.32.86); empty = artifact only'
         required: false
         default: ''
 
 permissions:
-  contents: write # attach the installer to the tag's GitHub Release
+  contents: write # tag the built commit here, as the releases used to
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  start:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_REPO: amiablet21/capture-station-releases
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
       # a release whose installers are stamped with an older version is
       # worse than no release (v1.27.11 shipped 1.27.4-named files on
-      # 2026-09-09) — refuse to build a mismatched release at all
+      # 2026-09-09) — refuse to start a mismatched release at all
       - name: Release tag must match package.json version
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        id: tag
         shell: bash
         run: |
           TAG="${{ inputs.release_tag }}"
-          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
+          if [ -z "$TAG" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          [ -n "$TAG" ] || exit 0
           VER="$(node -p "require('./package.json').version")"
           if [ "$TAG" != "v$VER" ]; then
             echo "::error::Release tag $TAG does not match package.json version $VER - bump package.json first"
             exit 1
           fi
 
-      - name: Build the NSIS installer
-        run: npx electron-builder --win nsis --publish never
-
-      - name: The updater manifest must exist (latest.yml)
-        shell: bash
-        run: test -f dist/latest.yml || { echo "::error::dist/latest.yml missing - the in-app updater needs it"; exit 1; }
-
-      - name: Keep the installer as a workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: capture-station-windows
-          path: dist/*.exe
-          if-no-files-found: error
-
-      - name: Attach the installer to the release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
-        # GitHub's asset-upload service dropped good uploads twice on
-        # 2026-09-17 ("Error saving asset" after a clean build) — never
-        # fail the run here; the next step verifies and retries for real
-        continue-on-error: true
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag }}
-          # without these, a dispatch-created tag lands on the DEFAULT branch
-          # (not the built commit) and the release inherits that old commit's
-          # date, losing the "latest" marker the self-updater follows
-          # (v1.27.106, 2026-09-21)
-          target_commitish: ${{ github.sha }}
-          make_latest: true
-          files: |
-            dist/*.exe
-            dist/latest.yml
-          generate_release_notes: true
-
-      - name: Make sure the installer really sits on the release (retry the flaky upload)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+      # keeps every version findable in this repo's history; a tag made
+      # with the workflow token does not re-trigger this workflow
+      - name: Tag the built commit
+        if: steps.tag.outputs.tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          TAG="${{ inputs.release_tag }}"
-          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
-          for i in 1 2 3 4; do
-            MISSING=0
-            for F in dist/*.exe dist/latest.yml; do
-              N="$(basename "$F" | tr ' ' '.')"   # GitHub stores asset names with dots
-              if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N"; then
-                MISSING=1
-                echo "attempt $i: uploading $N"
-                gh release upload "$TAG" "$F" --repo "$GITHUB_REPOSITORY" --clobber || true
-              fi
-            done
-            [ "$MISSING" = "0" ] && exit 0
-            sleep 20
-          done
-          for F in dist/*.exe dist/latest.yml; do
-            N="$(basename "$F" | tr ' ' '.')"
-            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
-              || { echo "::error::$N never landed on $TAG after 4 attempts"; exit 1; }
-          done
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null 2>&1 \
+            || gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null \
+            || { echo "::error::could not create tag $TAG"; exit 1; }
 
-      # uploads only add files — anything from an earlier, differently
-      # named build would linger on the release forever. Sweep every
-      # asset that doesn't carry this build's version.
-      - name: Sweep stale assets off the release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+      - name: Start the build in capture-station-releases
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          TAG="${{ inputs.release_tag }}"
-          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
-          VER="$(node -p "require('./package.json').version")"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | while read -r A; do
-            case "$A" in
-              *"$VER"*|latest*.yml) ;;   # latest.yml is what the in-app updater reads — keep it
-              *) echo "removing stale asset $A"; gh release delete-asset "$TAG" "$A" --repo "$GITHUB_REPOSITORY" -y ;;
-            esac
-          done
-
-      # softprops creates the release as a draft, uploads, then flips it to
-      # published — and that last call hit the same flaky service on
-      # 2026-09-17, stranding v1.27.85 as an invisible draft with all its
-      # assets attached. gh's tag lookup finds drafts too, so the verify
-      # step above passes right over it. Make publishing explicit.
-      - name: Publish the release if it is still a draft
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ inputs.release_tag }}"
-          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
-          PUBLISHED=0
-          for i in 1 2 3 4; do
-            if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" != "true" ]; then PUBLISHED=1; break; fi
-            echo "attempt $i: publishing draft $TAG"
-            if gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false; then PUBLISHED=1; break; fi
-            sleep 20
-          done
-          if [ "$PUBLISHED" != "1" ]; then
-            echo "::error::release $TAG is still a draft after 4 attempts"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The RELEASE_BOT_TOKEN secret is missing - add it under Settings > Secrets and variables > Actions"
             exit 1
           fi
-          # a stranded duplicate draft carrying the same tag name would sit
-          # invisibly forever (softprops can leave one behind when its
-          # publish call flakes and a later run recreates the release)
-          KEEP="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId -q .databaseId)"
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.draft and .tag_name==\"$TAG\" and .id != $KEEP) | .id" | while read -r RID; do
-            echo "deleting stranded duplicate draft $RID"
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RID" || true
-          done
+          gh workflow run build.yml --repo "$RELEASE_REPO" \
+            -f source_sha="$GITHUB_SHA" -f release_tag="$TAG" -f platform=windows
+          {
+            echo "Started the Windows build of \`${GITHUB_SHA::7}\`${TAG:+ for $TAG}."
+            echo ""
+            echo "Progress and installers: https://github.com/$RELEASE_REPO/actions/workflows/build.yml"
+          } >> "$GITHUB_STEP_SUMMARY"
