@@ -29,8 +29,8 @@ both secrets.
 ## Files
 
 - `.github/workflows/build-windows.yml`, `build-mac.yml`: start the build
-- `.github/workflows/copy-release-here.yml`: one-off for the switch, copies
-  v1.32.86 back here so stations on v1.32.85 or older can reach it
+- `build-windows.yml`'s `copy_release_here` option: one-off for the switch,
+  copies v1.32.86 back here so stations on v1.32.85 or older can reach it
 - `tools/release-repo/`: master copy of what lives in
   capture-station-releases (README, `build.yml`, `publish-release.yml`);
   edit here, then copy over

@@ -8,7 +8,9 @@
 # Runs when:
 #   - a version tag is pushed (v1.32.86 ...) -> builds AND publishes
 #   - the "Run workflow" button is pressed on the Actions tab -> builds;
-#     with a release_tag it also tags this commit and publishes
+#     with a release_tag it also tags this commit and publishes; with
+#     copy_release_here it only copies that release into this repo (the
+#     one-off for the move, see the copy job)
 # The build's progress and installers are on the releases repo's Actions
 # tab, not here.
 #
@@ -28,12 +30,18 @@ on:
         description: 'Also publish a GitHub Release under this tag (e.g. v1.32.86); empty = artifact only'
         required: false
         default: ''
+      copy_release_here:
+        description: 'One-off for the move: instead of building, copy release_tag from capture-station-releases into this repo (v1.32.86, for stations on v1.32.85)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write # tag the built commit here, as the releases used to
 
 jobs:
   start:
+    if: ${{ !inputs.copy_release_here }}
     runs-on: ubuntu-latest
     env:
       RELEASE_REPO: amiablet21/capture-station-releases
@@ -87,3 +95,38 @@ jobs:
             echo ""
             echo "Progress and installers: https://github.com/$RELEASE_REPO/actions/workflows/build.yml"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # one-off for the move to capture-station-releases (2026-10-18): stations
+  # on v1.32.85 or older look for updates HERE, so the first version that
+  # looks there (v1.32.86) has to be here too. Safe to re-run; drop this job
+  # once every station runs v1.32.86 or newer.
+  copy:
+    if: ${{ inputs.copy_release_here }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy the installers and the updater manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+          FROM: amiablet21/capture-station-releases
+        run: |
+          mkdir dl
+          # the releases repo is public, so this repo's token can read it
+          gh release download "$TAG" --repo "$FROM" --dir dl
+          ls -la dl
+          ls dl/*.exe >/dev/null 2>&1 && ls dl/latest.yml >/dev/null 2>&1 && ls dl/*.dmg >/dev/null 2>&1 \
+            || { echo "::error::$FROM $TAG is missing the .exe, latest.yml or .dmg - wait for both builds to finish"; exit 1; }
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --latest --notes "Copied from $FROM"
+          for i in 1 2 3 4; do
+            gh release upload "$TAG" dl/* --repo "$GITHUB_REPOSITORY" --clobber && break
+            echo "attempt $i failed"; sleep 20
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          for F in dl/*; do
+            N="$(basename "$F")"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -Fxq "$N" \
+              || { echo "::error::$N did not land on $TAG"; exit 1; }
+          done
+          echo "Copied $TAG: $(ls dl | tr '\n' ' ')" >> "$GITHUB_STEP_SUMMARY"
