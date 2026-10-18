@@ -11,6 +11,8 @@ const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
+const recovery = require('./recovery');
+const wfsrecv = require('./wfsrecv');
 const presence = require('./presence');
 // in-place updates (owner 2026-10-08: "why can't it update within itself?")
 // — electron-updater downloads the new NSIS build in the background and
@@ -1203,10 +1205,14 @@ function buildMarketUrl(cfg, channel, po, kind) {
   const ch = String(channel || '').toLowerCase();
   // kind 'case': po carries the dispute case number, and there is no
   // fallback — a case number means nothing to the order-search pages
+  // kind 'txn': the marketplace's payments / transactions search for the
+  // PO (Recovery's PO# menu); no fallback to the order page either
   const tpl = String(kind === 'case'
     ? (cfg.caseUrlTemplates || {})[ch] || ''
-    : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
-      || (cfg.orderUrlTemplates || {})[ch] || ''
+    : kind === 'txn'
+      ? (cfg.txnUrlTemplates || {})[ch] || ''
+      : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+        || (cfg.orderUrlTemplates || {})[ch] || ''
   ).trim();
   if (!tpl || !/^https:\/\//i.test(tpl)) return '';
   if (kind === 'case') return tpl.replace('{case}', encodeURIComponent(String(po)));
@@ -4403,6 +4409,8 @@ exit 1
         overviewCache = { at: Date.now(), money: m, promise: null };
         try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
         console.log(`[overview] money pass done in ${Math.round((Date.now() - t0) / 1000)}s`);
+        // the months behind "Was selling" follow, one walk per missing month
+        refreshOverviewMonths(cfg).catch(() => { /* next pass retries */ });
         return m;
       })
       .catch(e => {
@@ -4413,6 +4421,59 @@ exit 1
         throw e;
       });
     return overviewCache.promise;
+  }
+
+  // "Was selling" (owner 2026-10-14: "used to sell minimum 10 units a
+  // month, now out of stock"): units per SKU for each of the last six
+  // COMPLETED months, read once from Linnworks' processed orders (a month
+  // never changes once it is over) and kept on disk; the current month
+  // comes from the money pass. Filled behind the money pass, one month per
+  // Linnworks walk, so the Overview never waits on it.
+  const OVERVIEW_MONTHS_BACK = 6;
+  let overviewMonths = { months: {}, promise: null };
+  const overviewMonthsPath = () => path.join(app.getPath('userData'), 'overview-months.json');
+  try {
+    const j = JSON.parse(fs.readFileSync(overviewMonthsPath(), 'utf8'));
+    if (j && j.months && j.v === 1) overviewMonths = { months: j.months, promise: null };
+  } catch { /* no months yet */ }
+  const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // the last N completed months, oldest first
+  function completedMonths(n = OVERVIEW_MONTHS_BACK) {
+    const now = new Date(); const out = [];
+    for (let i = n; i >= 1; i--) out.push(ymOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+    return out;
+  }
+  function refreshOverviewMonths(cfg) {
+    if (overviewMonths.promise) return overviewMonths.promise;
+    const missing = completedMonths().filter((ym) => !overviewMonths.months[ym]);
+    if (!missing.length) return Promise.resolve(overviewMonths.months);
+    overviewMonths.promise = (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      for (const ym of missing.slice().reverse()) { // newest first: the months that matter most land first
+        const [y, m] = ym.split('-').map(Number);
+        const from = new Date(y, m - 1, 1); const to = new Date(y, m, 1);
+        const t0 = Date.now();
+        const lines = await client.listProcessedLines(from.toISOString(), new Date(to.getTime() - 1).toISOString());
+        const bySku = {}; const last = {};
+        const credit = (sku, qty, processedOn) => {
+          const k = String(sku || '').toUpperCase(); if (!k) return;
+          bySku[k] = (bySku[k] || 0) + (qty || 0);
+          const ts = Date.parse(processedOn) || 0; if (ts > (last[k] || 0)) last[k] = ts;
+        };
+        for (const l of lines) {
+          credit(l.sku, l.qty, l.processedOn);
+          for (const c of l.children || []) credit(c.sku, (l.qty || 1) * (c.qty || 1), l.processedOn); // a composite's sale is its children's too
+        }
+        overviewMonths.months[ym] = { bySku, last, at: Date.now() };
+        // keep a year, drop the rest
+        for (const k of Object.keys(overviewMonths.months)) if (k < ymOf(new Date(new Date().getFullYear(), new Date().getMonth() - 12, 1))) delete overviewMonths.months[k];
+        try { fs.writeFileSync(overviewMonthsPath(), JSON.stringify({ months: overviewMonths.months, v: 1 })); } catch { /* best effort */ }
+        console.log(`[overview] month ${ym}: ${lines.length} lines in ${Math.round((Date.now() - t0) / 1000)}s`);
+      }
+      overviewMonths.promise = null;
+      return overviewMonths.months;
+    })().catch((e) => { overviewMonths.promise = null; console.log(`[overview] months pass failed: ${e.message}`); throw e; });
+    return overviewMonths.promise;
   }
 
   // Month/Year curves come from Linnworks' PROCESSED ORDERS, not the app's
@@ -4696,7 +4757,12 @@ exit 1
     const dayIdx = {};
     for (let i = 0; i < WINDOW_DAYS; i++) dayIdx[db.localDay(new Date(nowTs - (WINDOW_DAYS - 1 - i) * 86400000))] = i;
     const chanKey = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
-    for (const l of sales.lines) {
+    // a composite line also credits each child item with the units its
+    // sale took from the shelf (owner 2026-10-14): the tablet's pace counts
+    // the case listing's sales, so Buy now orders tablets for both
+    const childLines = [];
+    for (const l of sales.lines) for (const c of l.children || []) childLines.push({ ...l, sku: c.sku, qty: (l.qty || 1) * (c.qty || 1), revenue: 0, channelSku: '', viaComposite: l.sku });
+    for (const l of [...sales.lines, ...childLines]) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
       const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {}, series: new Array(WINDOW_DAYS).fill(0), split: { walmart: 0, ebay: 0, temu: 0, other: 0 } };
@@ -4722,6 +4788,8 @@ exit 1
     }
     const pads = {};
     for (const it of items) if (it.dsPad) pads[String(it.sku).toUpperCase()] = true;
+    const composites = {};
+    for (const it of items) if (it.isComposite) composites[String(it.sku).toUpperCase()] = true;
     const lead = Number((cfg.reorder || {}).leadTimeDays) || 7;
     const missed = [];
     const buy = [];
@@ -4838,7 +4906,7 @@ exit 1
       const onHand = avail + atWfs;
       const daysLeft = perDay > 0 ? Math.floor(onHand / perDay) : 9999;
       stock.push({
-        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty,
+        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty, composite: !!composites[k],
         perDay: Math.round(perDay * 100) / 100, recent: s.recent, prior: s.prior,
         daysLeft, outOn: fmtDay(nowTs + daysLeft * 86400000), last: s.last ? fmtDay(s.last) : '', lastTs: s.last,
         series: s.series, split: s.split, padded: !!pads[k],
@@ -4867,6 +4935,16 @@ exit 1
       low: low.slice(0, 40),
       lowCount: low.length,
       coverDays: cover,
+      // "Was selling" (owner 2026-10-14): every item's shelf + WFS level so a
+      // SKU with no sale in 30 days still has a row, this month's units so
+      // far, and each SKU's last sale in the window
+      inv: items.filter((it) => !pads[String(it.sku).toUpperCase()] && !it.isComposite).map((it) => {
+        const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+        const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+        return { sku: it.sku, title: it.title || '', avail: Math.max(0, Number(home.available) || 0), atWfs: wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0 };
+      }),
+      monthNow: (() => { const m = {}; const ym = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}`; for (const l of sales.lines) { const d = new Date(Date.parse(l.processedOn) || 0); if (`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` !== ym) continue; const k = String(l.sku).toUpperCase(); if (k) m[k] = (m[k] || 0) + (l.qty || 0); } return m; })(),
+      lastSale: Object.fromEntries(Object.entries(stats).filter(([, st]) => st.last).map(([k, st]) => [k, st.last])),
     };
   }
 
@@ -4975,6 +5053,8 @@ exit 1
       // reorder, so they never show as out or on watch (owner 2026-10-08
       // asked what a "Watch · Out of stock" row meant — these were most of them)
       if (r.padded) continue;
+      // a composite holds no stock of its own: its children carry its sales
+      if (r.composite) continue;
       const pr = r.recent / 14;
       const pp = r.prior / 16;
       const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
@@ -4992,15 +5072,81 @@ exit 1
       if (ig && kind !== 'watch' && !(r.perDay > ig.pace * 1.5)) { ignored.push(row); continue; }
       ({ out, low, fast, watch })[kind].push(row);
     }
+    // Buy now (owner 2026-10-13: "which products to buy that sell at least
+    // one a day and are running low"): any queued SKU at the Hot pace or
+    // better with under the target days on hand, out-of-stock sellers
+    // included, soonest-out first; the quantity covers the target at today's
+    // pace less what is on hand at the warehouse and WFS
+    // Buy now scans every selling SKU, not only the queue: under the unit
+    // floor (Settings, 50 by default) OR under the target days on hand, at
+    // the set pace or better (1 a day by default); the quantity brings it to
+    // the larger of the floor and the target's worth of sales
+    const target = lead + cover;
+    const buyUnits = Number((cfg.reorder || {}).buyUnits ?? 50);
+    const buyPace = Number((cfg.reorder || {}).buyPace ?? 1);
+    const buy = [];
+    for (const r of (money && money.stock) || []) {
+      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded || r.composite) continue;
+      const onHand = Math.max(0, (r.avail || 0) + (r.atWfs || 0));
+      if (!(r.perDay >= buyPace && buyPace > 0) && !(buyPace <= 0 && r.sold30 > 0)) continue;
+      if (!(onHand <= buyUnits || onHand <= 0 || r.daysLeft <= target)) continue;
+      const kind = onHand <= 0 ? 'out' : r.daysLeft <= lead ? 'low' : r.daysLeft <= target ? 'watch' : 'stock';
+      const want = Math.max(Math.ceil(r.perDay * target), buyUnits);
+      const row = { ...r, kind, pct: 0, buyQty: Math.max(0, want - onHand), onHand };
+      const queued = [...out, ...low, ...fast, ...watch].find(x => x.sku === r.sku);
+      if (queued) { row.kind = queued.kind; row.pct = queued.pct; row.faster = queued.faster; }
+      buy.push(row);
+    }
+    buy.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // selling fast: the fastest sellers first (owner 2026-10-08)
     fast.sort((a, b) => b.perDay - a.perDay || b.pct - a.pct);
     watch.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    // Was selling (owner 2026-10-14): every SKU whose best three of the last
+    // six completed months average at least 5 units (the slider's floor; the
+    // page filters higher), with its month-by-month units, its last sale
+    // and what is on hand — the page decides between "out of stock" and
+    // "not selling" and applies the slider
+    const was = [];
+    const wasMonths = completedMonths();
+    const monthsHeld = wasMonths.filter((ym) => overviewMonths.months[ym]);
+    const nowYm = ymOf(new Date());
+    if (money && Array.isArray(money.inv) && monthsHeld.length) {
+      const nowTs = Date.now();
+      const fmtDay = (ts) => { const d = new Date(ts); return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()}`; };
+      const stockBySku = new Map(((money && money.stock) || []).map((r) => [String(r.sku).toUpperCase(), r]));
+      for (const it of money.inv) {
+        const k = String(it.sku).toUpperCase();
+        if (db.conditionOfSku(it.sku) || mappedCond.has(k)) continue;
+        const units = wasMonths.map((ym) => { const mo = overviewMonths.months[ym]; return mo ? (mo.bySku[k] || 0) : null; });
+        const known = units.filter((u) => u !== null);
+        if (!known.length) continue;
+        const best = known.slice().sort((a, b) => b - a).slice(0, 3);
+        const pace = Math.round(best.reduce((a, b) => a + b, 0) / best.length);
+        if (pace < 5) continue;
+        let lastTs = (money.lastSale || {})[k] || 0;
+        for (const ym of wasMonths) { const mo = overviewMonths.months[ym]; if (mo && mo.last[k] > lastTs) lastTs = mo.last[k]; }
+        const daysSince = lastTs ? Math.max(0, Math.floor((nowTs - lastTs) / 86400000)) : null;
+        const onHand = Math.max(0, (it.avail || 0) + (it.atWfs || 0));
+        const sr = stockBySku.get(k);
+        // the months that carried the pace, as "Jun – Aug"
+        const hi = units.map((u, i) => (u !== null && u >= pace * 0.6 ? i : -1)).filter((i) => i >= 0);
+        const mon = (ym) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(ym.slice(5, 7)) - 1];
+        const range = hi.length ? (hi[0] === hi[hi.length - 1] ? mon(wasMonths[hi[0]]) : `${mon(wasMonths[hi[0]])} – ${mon(wasMonths[hi[hi.length - 1]])}`) : '';
+        was.push({
+          sku: it.sku, title: it.title || '', avail: it.avail || 0, atWfs: it.atWfs || 0, onHand, pace, range,
+          months: [...wasMonths, nowYm], units: [...units, (money.monthNow || {})[k] || 0],
+          lastTs, last: lastTs ? fmtDay(lastTs) : '', daysSince, recent: sr ? sr.recent : 0, sold30: sr ? sr.sold30 : 0,
+        });
+      }
+      was.sort((a, b) => b.pace - a.pace);
+    }
     return {
-      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored,
-      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length },
-      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
+      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
+      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
+      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1, buyUnits, buyPace,
+      was, wasMonths: [...wasMonths, nowYm], wasReady: monthsHeld.length === wasMonths.length && !!(money && money.inv), wasHeld: monthsHeld.length, wasBusy: !!overviewMonths.promise,
     };
   }
 
@@ -5690,22 +5836,18 @@ exit 1
   // shipments, each row wearing the station that logged it (owner
   // 2026-09-16: "see which user did what"); local SQLite stays this
   // station's own storage, other stations' shipments come from the fold
-  ipcMain.handle('wfs:list', () => {
-    const st = retsync.stationName() || '';
-    const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
-    if (!retsync.enabled()) return mine;
-    retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
-      .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
-    const foreign = retsync.readAux('wfs')
-      .filter(e => e.station !== st)
-      .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
-    return mine.concat(foreign)
-      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-      .slice(0, 200);
-  });
+  ipcMain.handle('wfs:list', () => wfsShipmentsAll(200, 200));
+  // id: this station's shipment id, or a shipment key "STATION:id" from
+  // wfsShipmentsAll; the mark is kept locally when the shipment is ours and
+  // sent to the shared folder so every desktop sees it
   ipcMain.handle('wfs:received', (_e, { id, received }) => {
-    db.markWfsReceived(Number(id), received !== false);
-    return { ok: true };
+    const k = wfsrecv.parseKey(id, retsync.stationName() || '');
+    if (!Number.isFinite(k.id)) return { ok: false, error: 'Unknown shipment.' };
+    const at = received !== false ? new Date().toISOString() : '';
+    if (k.own) db.setWfsReceivedAt(k.id, at);
+    else if (!retsync.enabled()) return { ok: false, error: 'Turn on Sync to mark another desktop\'s shipment.' };
+    retsync.appendAux('wfsrecv', { key: k.key, receivedAt: at, ts: Date.now() });
+    return { ok: true, receivedAt: at };
   });
   ipcMain.handle('overview:wfsIgnore', (_e, { sku, pace }) => {
     if (!sku) return { ok: false, error: 'Missing SKU.' };
@@ -6360,6 +6502,10 @@ exit 1
     if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
+      // a composite holds no stock of its own (owner 2026-10-14): a count
+      // typed on it would sit beside the children's and count twice
+      const me = ((invCache.res && invCache.res.items) || []).find(it => String(it.sku).toUpperCase() === String(sku).toUpperCase());
+      if (me && me.isComposite) return { ok: false, error: `${sku} is a composite: it draws from its parts. Adjust the parts instead.` };
       // the bulk history entry below is this change's one record in the
       // stock history too (skipLog keeps the Linnworks-side recorder quiet)
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n, { skipLog: true });
@@ -6907,6 +7053,11 @@ function createWindow() {
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
+  // find in page (owner 2026-10-12: "Ctrl+F / Command+F to search for items"):
+  // Chromium's own find, so matches highlight natively on every page
+  win.webContents.on('found-in-page', (_e, r) => {
+    win.webContents.send('find:result', { matches: r.matches, active: r.activeMatchOrdinal, final: r.finalUpdate });
+  });
   win.webContents.on('did-finish-load', () => {
     if (!pendingNotice) return;
     win.webContents.send('app:notice', { message: pendingNotice });
@@ -7156,9 +7307,11 @@ app.whenReady().then(() => {
   } catch { /* never block startup on housekeeping */ }
   writeDailyCsv();
   registerIpc();
+  registerRecoveryIpc();
   buildMenu();
   createWindow();
   startRetSync();
+  startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();
   startStockRouter();
@@ -7186,6 +7339,282 @@ app.whenReady().then(() => {
     require('./e2e-test')({ app, win, db, clipboard: testClipboard });
   }
 });
+
+/* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
+// docs/recovery/SPEC.md. The engine lives in ./recovery; this is the Electron
+// skin: dialogs, the archive folder under Documents, the shared folder, and
+// the capture-only gate (the page never exists on a capture-only station).
+// the original CSV of every period: in the shared folder (Google Drive /
+// OneDrive) when sync is on, so every desktop and the owner's Drive have
+// it (owner 2026-10-12: "the files I upload are being put in the google
+// drive right?"); else under Documents on this computer
+function recoveryArchiveDir() {
+  const st = retsync.status();
+  if (st.enabled && st.folderOk && st.folder) return path.join(st.folder, 'Walmart Reports');
+  return path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports');
+}
+// every station's WFS shipments, newest first: this station's from SQLite,
+// the others' from the shared folder (wfs:list shows the latest 200;
+// Recovery's WFS Inventory reads them all to count what was sent)
+function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
+  const st = retsync.stationName() || '';
+  const mine = db.listWfsShipments(ownLimit).map(s => ({ ...s, key: `${st}:${s.id}`, station: st, mine: true }));
+  if (!retsync.enabled()) return mine;
+  retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
+    .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
+  const foreign = retsync.readAux('wfs')
+    .filter(e => e.station !== st)
+    .map(e => ({ id: `${e.station}:${e.id}`, key: `${e.station}:${e.id}`, created_at: String(e.ts || ''), received_at: '', note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+  // received marks ride the shared folder (wfsrecv): the newest mark on a
+  // shipment wins on every desktop, and one on this station's own shipment
+  // is written back to SQLite so the local record agrees
+  wfsrecv.applyMarks(mine.concat(foreign), wfsrecv.latestMarks(retsync.readAux('wfsrecv')), (id, at) => db.setWfsReceivedAt(id, at));
+  return mine.concat(foreign)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, limit);
+}
+function startRecovery() {
+  recovery.configure({
+    wfsShipments: () => wfsShipmentsAll(),
+    // Profit groups a SKU's conditions; a listing graded by hand on Returns counts
+    conditionMap: () => db.getConditionMap(),
+    retsync,
+    listReturns: (n) => db.listReturns(n),
+    config,
+    archiveDir: recoveryArchiveDir, // a function: the folder follows the sync setting
+    // every folder a statement may have been archived in, for periods
+    // imported before the folder moved (owner 2026-10-12: a period with no
+    // goods price although its file was uploaded)
+    archiveDirs: () => {
+      const st = retsync.status();
+      return [path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports'), st.folder ? path.join(st.folder, 'Walmart Reports') : ''];
+    },
+    station: () => stockLogComputer(),
+    stationAliases: () => [os.hostname()],
+    by: () => '',
+    // Profit: costs by inventory SKU, and the Walmart SKU -> inventory SKU
+    // map from the Pricing page's last snapshot (channel mappings)
+    costs: () => { syncCosts(); return db.costsAll(); },
+    channelMap: recoveryChannelMap,
+  });
+  // the dispute digest also goes out at launch (spec §9.1) — quietly, and
+  // only where the page is on; the 20-hour dedupe keeps it from nagging
+  setTimeout(() => {
+    try {
+      const cfg = config.load();
+      if (!cfg.captureOnly && cfg.pages && cfg.pages.recovery && cfg.pages.returns) recovery.sendDigest().catch(() => {});
+    } catch { /* best effort */ }
+  }, 20000);
+}
+// every channel listing's SKU (upper-cased) -> the inventory SKU it maps to,
+// read from pricing-cache.json (written whenever the Pricing page rebuilds)
+function recoveryChannelMap() {
+  const m = new Map();
+  try {
+    const snap = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'pricing-cache.json'), 'utf8'));
+    for (const p of (snap && snap.products) || []) {
+      for (const lines of Object.values(p.channels || {})) {
+        for (const l of lines || []) if (l && l.csku && p.sku) m.set(String(l.csku).toUpperCase(), String(p.sku));
+      }
+    }
+  } catch { /* no snapshot yet: direct SKU matches still work */ }
+  return m;
+}
+const recoveryGate = () => (config.load().captureOnly ? { ok: false, error: 'Capture-only mode.' } : null);
+const recoveryTry = (fn) => { try { return fn(); } catch (e) { return { ok: false, error: e.message }; } };
+const recoveryFile = (label) => String(label || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, '_');
+async function recoverySaveBuffer(title, defaultName, filters, buffer) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, { title, defaultPath: path.join(app.getPath('documents'), defaultName), filters });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(filePath, buffer); return { ok: true, path: filePath }; } catch (e) { return { ok: false, error: e.message }; }
+}
+const XLSX_FILTER = [{ name: 'Excel workbook', extensions: ['xlsx'] }];
+function registerRecoveryIpc() {
+  ipcMain.handle('recovery:state', () => recoveryGate() || recoveryTry(() => recovery.state()));
+  ipcMain.handle('recovery:run', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.runDetail(id)));
+  ipcMain.handle('recovery:summary', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.summary(scope, key)));
+  // Browse…: pick the report; the text comes back so the renderer runs the
+  // same import call a dropped file does
+  ipcMain.handle('recovery:importPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    // several at once (owner 2026-10-12: "bulk add payment reports")
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import Walmart payment-period reports',
+      filters: [{ name: 'Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const files = pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') }));
+      return { ok: true, name: files[0].name, text: files[0].text, files };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:import', async (_e, { name, text, force } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const progress = (t) => { if (win && !win.isDestroyed()) win.webContents.send('recovery:progress', { text: t }); };
+    try {
+      return await recovery.importReport({ name, text, force: !!force }, progress);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:removeRun', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeRun(id)));
+  // WFS Inventory: Walmart's Inventory Reconciliation report, per SKU
+  ipcMain.handle('recovery:wfsPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import WFS Inventory Reconciliation reports',
+      filters: [{ name: 'Inventory Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, files: pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:wfsImport', (_e, { name, text, force } = {}) => recoveryGate() || recoveryTry(() => recovery.importWfsReport({ name, text, force: !!force })));
+  ipcMain.handle('recovery:wfsRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeWfsReport(id)));
+  ipcMain.handle('recovery:wfsInventory', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.wfsInventory(id)));
+  // every station's WFS shipments with their received marks, for the
+  // Not received list on WFS Inventory
+  ipcMain.handle('recovery:wfsShipments', () => recoveryGate() || recoveryTry(() => ({ ok: true, shipments: wfsShipmentsAll() })));
+  ipcMain.handle('recovery:mark', (_e, { po, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.mark(po, action, payload || {})));
+  ipcMain.handle('recovery:exportRun', async (_e, { id } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.runWorkbook(id));
+    if (!wb || wb.ok === false) return wb || { ok: false, error: 'Period not found.' };
+    return recoverySaveBuffer('Save the period workbook', `Reconciliation_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportAudit', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const buf = recoveryTry(() => recovery.auditWorkbook());
+    if (!Buffer.isBuffer(buf)) return buf;
+    return recoverySaveBuffer('Save the audit workbook', 'Returns_Not_Received_Audit.xlsx', XLSX_FILTER, buf);
+  });
+  ipcMain.handle('recovery:exportSummary', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.summaryWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the refund summary', `Returns_Summary_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportCsv', async (_e, { pos, label } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const csv = recoveryTry(() => recovery.viewCsv(pos || []));
+    if (typeof csv !== 'string') return csv;
+    return recoverySaveBuffer('Save this list', `Returns_Not_Received_${recoveryFile(label || 'list')}.csv`, [{ name: 'CSV', extensions: ['csv'] }], Buffer.from(csv, 'utf8'));
+  });
+  ipcMain.handle('recovery:profit', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.profit(scope, key)));
+  ipcMain.handle('recovery:statement', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.statement(scope, key)));
+  ipcMain.handle('recovery:statements', () => recoveryGate() || recoveryTry(() => recovery.statements()));
+  ipcMain.handle('recovery:exportProfit', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.profitWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the profit workbook', `Profit_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:digestSend', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { return { ok: true, ...(await recovery.sendDigest({ force: true })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // "Email me this list": the mailto opens here — app:openExternal only
+  // takes https links, and this one is built from our own rows
+  ipcMain.handle('recovery:mailto', () => {
+    if (recoveryGate()) return recoveryGate();
+    const m = recoveryTry(() => recovery.mailto());
+    if (m && m.ok) shell.openExternal(m.mailto);
+    return m;
+  });
+  // Returns page (owner 2026-10-12: "an option next to Users to download all
+  // the returns"): the whole log as one Excel sheet, one line per item. Not
+  // Recovery-gated — the log exists on every station.
+  // the Buy now list as a workbook: the purchase list to send off
+  ipcMain.handle('overview:exportBuy', async (_e, { rows, target, lead } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Buy now', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Buy', width: 8, kind: 'int' },
+        { header: 'Sales per day', width: 13, kind: 'text' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' }, { header: 'Days left', width: 10, kind: 'int' },
+        { header: 'Sold 30 days', width: 12, kind: 'int' }, { header: 'Status', width: 10, kind: 'text' },
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.buyQty) || 0, String(Number(r.perDay) || 0), Number(r.avail) || 0, Number(r.atWfs) || 0, Number(r.daysLeft) || 0, Number(r.sold30) || 0, { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind] || '']) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Buy now — ${target || ''} days of cover, ${lead || ''} days lead`, `Buy_now_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('overview:exportWas', async (_e, { rows, min, mode, months } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const ms = Array.isArray(months) ? months : [];
+      const buf = buildWorkbookSheets([{ name: 'Was selling', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Units a month (best 3 of 6)', width: 14, kind: 'int' },
+        { header: 'Last sale', width: 12, kind: 'text' }, { header: 'Days since', width: 10, kind: 'int' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' },
+        ...ms.map((ym) => ({ header: ym, width: 9, kind: 'int' })),
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.pace) || 0, r.last || '', Number(r.daysSince) || 0, Number(r.avail) || 0, Number(r.atWfs) || 0, ...ms.map((_, i) => Number((r.units || [])[i]) || 0)]) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Was selling — at least ${min || ''} a month, now ${mode === 'idle' ? 'not selling' : 'out of stock'}`, `Was_selling_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('returns:export', async () => {
+    try {
+      const rows = retsync.enabled() ? retsync.list() : db.listReturns(1e9);
+      const day = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? String(iso || '').slice(0, 10) : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`; };
+      const label = (c) => ({ new: 'New', open: 'Open box', used: 'Used', scrap: 'Scrap', damaged: 'Damaged' })[String(c || '').toLowerCase()] || String(c || '');
+      const lines = [];
+      for (const r of rows.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))) {
+        const items = Array.isArray(r.items) && r.items.length ? r.items : [{}];
+        for (const it of items) {
+          lines.push([day(r.created_at), r.order_number || '', r.customer || '', r.tracking || '', it.sku || '', label(it.condition), it.targetSku || '',
+            Number(it.qty) || (it.sku ? 1 : 0), it.price === '' || it.price == null ? '' : Number(String(it.price).replace(/[$,\s]/g, '')) || 0,
+            r.received_by || '', r.station || '', r.source || '', [r.note, it.note].filter(Boolean).join(' · '), r.unmatched ? 'yes' : '']);
+        }
+      }
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Returns log', columns: [
+        { header: 'Date received', width: 13, kind: 'text' }, { header: 'PO #', width: 20, kind: 'text' }, { header: 'Customer', width: 24, kind: 'text' },
+        { header: 'Tracking #', width: 22, kind: 'text' }, { header: 'Returned SKU', width: 26, kind: 'text' }, { header: 'Condition', width: 11, kind: 'text' },
+        { header: 'Logged as', width: 30, kind: 'text' }, { header: 'Units', width: 7, kind: 'int' }, { header: 'Price', width: 10, kind: 'money' },
+        { header: 'Received by', width: 12, kind: 'text' }, { header: 'Station', width: 18, kind: 'text' }, { header: 'Source', width: 10, kind: 'text' },
+        { header: 'Note', width: 36, kind: 'text' }, { header: 'Unmatched', width: 10, kind: 'text' },
+      ], rows: lines }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer('Download the returns log', `Returns_log_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // findNext is Electron's "begin a new session" flag: true for a new text,
+  // false to step through the matches of the current one
+  ipcMain.handle('recovery:markMany', (_e, { list, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.markMany(list, action, payload || {})));
+  // a cost typed on the Profit table (owner 2026-10-12: listings whose
+  // Linnworks mapping was removed when they shut down still need a cost).
+  // It is saved under the SKU shown — a Walmart listing or a Linnworks SKU —
+  // in the same cost store the Stock page's Cost column writes, and rides
+  // the shared folder like any other cost; same station gate as that column.
+  ipcMain.handle('recovery:expenseAdd', (_e, rec = {}) => recoveryGate() || recoveryTry(() => recovery.addExpense(rec || {})));
+  ipcMain.handle('recovery:expenseRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeExpense(id)));
+  ipcMain.handle('recovery:setCost', (_e, { sku, cost } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const cfg = config.load();
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    const k = String(sku || '').trim();
+    const n = Math.round((Number(cost) || 0) * 100) / 100;
+    if (!k) return { ok: false, error: 'Missing SKU.' };
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
+    try { costPut(k, n); return { ok: true, cost: n }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
+  ipcMain.handle('recovery:syncStatus', () => recoveryGate() || recoveryTry(() => recovery.syncStatus()));
+  ipcMain.handle('recovery:resync', () => recoveryGate() || recoveryTry(() => recovery.resync()));
+  ipcMain.handle('recovery:markPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, { title: 'A file of PO numbers that came back before the Returns log', filters: [{ name: 'CSV or text', extensions: ['csv', 'txt'] }], properties: ['openFile'] });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, name: path.basename(pick.filePaths[0]), text: fs.readFileSync(pick.filePaths[0], 'utf8') }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('find:start', (_e, { text, forward, fresh }) => {
+    if (!win || !String(text || '')) return { ok: false };
+    win.webContents.findInPage(String(text), { forward: forward !== false, findNext: !!fresh, matchCase: false });
+    return { ok: true };
+  });
+  ipcMain.handle('find:stop', () => { if (win) win.webContents.stopFindInPage('clearSelection'); return { ok: true }; });
+  ipcMain.handle('recovery:openArchive', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { fs.mkdirSync(recoveryArchiveDir(), { recursive: true }); await shell.openPath(recoveryArchiveDir()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+}
 
 app.on('window-all-closed', () => app.quit());
 

@@ -209,6 +209,7 @@ const ICONS = {
   box: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrowOut: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.52a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></svg>',
   chartBar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M228,200h-4V40a12,12,0,0,0-12-12H160a12,12,0,0,0-12,12V76H100A12,12,0,0,0,88,88v36H48a12,12,0,0,0-12,12v64H28a12,12,0,0,0,0,24H228a12,12,0,0,0,0-24ZM172,52h28V200H172ZM112,100h36V200H112ZM60,148H88v52H60Z"/></svg>',
+  histThin: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>',
   clock: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
   monitor: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,36H48A28,28,0,0,0,20,64V168a28,28,0,0,0,28,28h68v20H88a12,12,0,0,0,0,24h80a12,12,0,0,0,0-24H140V196h68a28,28,0,0,0,28-28V64A28,28,0,0,0,208,36Zm4,132a4,4,0,0,1-4,4H48a4,4,0,0,1-4-4V64a4,4,0,0,1,4-4H208a4,4,0,0,1,4,4Z"/></svg>',
   copy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></svg>',
@@ -313,7 +314,8 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  // Recovery rides the Returns flag too (it reads the Returns log) and is opt-in like Pricing
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ebay: lst, temu: lst };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -330,6 +332,7 @@ function render() {
   $('tabStock').hidden = !pages.stock;
   $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
+  $('tabRecovery').hidden = !pages.returns || !pages.recovery; // opt-in (owner 2026-10-11), needs Returns
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
   $('historyBtn').hidden = !pages.history;
@@ -414,8 +417,10 @@ function render() {
 
   // header: how many must go out before today's carrier cutoff
   const dueOpen = dueRows.filter(({ row }) => row.status !== 'synced').length;
-  $('dueHeader').hidden = activePage !== 'capture' || dueOpen === 0;
-  $('dueHeader').textContent = dueOpen ? `${dueOpen} due by ${fmtCutoff(state.shipCutoff)}` : '';
+  $('dueHeader').hidden = true; // the headline left at the owner's request (2026-10-14); the row chips carry it
+  $('dueHeader').textContent = '';
+  $('capBandTitle').textContent = 'Captured today';
+  $('capBandCount').textContent = String(state.todayCount ?? state.rows.length);
 
   // marketplace filter chips, shown once there is more than one channel
   // (the "Due today" chip left at the owner's request 2026-08-06 — the
@@ -428,9 +433,9 @@ function render() {
     for (const r of state.rows) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${state.rows.length}</button>`,
+      `<button type="button" class="chip-filter ${channelFilter === 'all' ? 'is-on' : ''}" data-ch="all">All <span class="rc-tab-count">${state.rows.length}</span></button>`,
       ...channels.map(c =>
-        `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+        `<button type="button" class="chip-filter ${channelFilter === c ? 'is-on' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-tab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -441,12 +446,13 @@ function render() {
     r.status === 'failed' && String(r.fail_reason || '').startsWith('Not found in open orders')).length;
   $('clearFailedBtn').hidden = activePage !== 'capture' || failedGone === 0;
   $('clearFailedBtn').dataset.n = String(failedGone); // applyPageChrome reads it on a tab switch
+  // the card head shows in History (the range) or when there is something to clear; otherwise the table starts the card
+  $('findBar').hidden = activePage !== 'capture' || (!capHist.on && failedGone === 0);
   if (failedGone) $('clearFailedBtn').textContent = `Clear failed · ${failedGone}`;
   if (channelFilter !== 'all') visible = visible.filter(({ row }) => row.channel === channelFilter);
 
-  // search bar: always available on the capture list, matches PO#, tracking,
-  // notes, and the order's item SKUs / channel SKUs / titles
-  $('findBar').hidden = activePage !== 'capture' || state.captureOnly && !state.rows.length;
+  // the search lives in the page head now (2026-10-14); the card head below
+  // it shows only in History (the range) or when there are failed rows to clear
   if (capHist.on && activePage === 'capture') { renderCapHist(); return; }
   if (findQuery) {
     const q = findQuery.toLowerCase();
@@ -538,11 +544,10 @@ function render() {
         ${(() => { const due = rowDue(row); return due ? `<span class="due-chip ${due.urgent ? 'is-red' : 'is-amber'}" title="Despatch by ${esc(String((meta || {}).despatchBy).slice(0, 10))} · cutoff ${esc(fmtCutoff(state.shipCutoff))}">${due.label}</span>` : ''; })()}
         <span class="order-num ${hasLink ? 'order-link' : 'copyable" data-copy="' + esc(row.order_number)}" data-po="${esc(row.order_number)}" data-ch="${esc(row.channel)}" title="${hasLink ? 'Click: open on marketplace and select · Right-click: copy' : 'Click to copy'}">${esc(row.order_number)}</span>${
         meta && meta.customer ? `<button type="button" class="item-info cust-info" data-act="customer" title="Customer and ship-to address — click to open">i</button>` : ''}${
-        row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}</td>
+        row.status === 'failed' && row.fail_reason ? `<span class="fail-note" title="${esc(row.fail_reason)}">${esc(row.fail_reason)}</span>` : ''}${row.notes ? ` <button type="button" class="cap-note" data-act="note" title="${esc(row.notes)}&#10;Click to edit">${esc(row.notes)}</button>` : ''}${row.sub_sku
+        ? ` <button type="button" class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}&#10;Click to edit or remove">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}</td>
       <td class="cell-items"><div class="items-stack">${itemsCellHtml}</div></td>
       <td class="cell-tracking">${trackingCell(row)}</td>
-      <td class="cell-notes">${row.sub_sku
-        ? `<button class="sub-pill" data-act="substitute" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}&#10;Click to edit or remove">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</button>` : ''}${notesCell(row)}</td>
       <td class="cell-actions">
         <span class="row-actions">
           ${row.id !== state.currentRowId && !row.tracking ? `<button class="btn-icon" data-act="open" title="Scan tracking">${ICONS.barcode}</button>` : ''}
@@ -680,7 +685,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     $('undoBtn').click();
   }
-  if (e.ctrlKey && (e.key === 'f' || e.key === 'F') && activePage === 'capture') {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F') && activePage === 'capture') {
     e.preventDefault();
     openFind();
   }
@@ -748,10 +753,10 @@ function capHistRowHtml(row, num) {
   const pc = row.station ? `<span class="cap-station" title="Captured on ${esc(row.station)}">${esc(row.station)}</span>` : '';
   return `<tr data-id="${row.id}" class="is-hist${done ? '' : ' is-unproc'}">
       <td class="cell-gutter ${st}" title="${done ? `Processed ${when}` : 'Not processed yet'} · captured ${fmtTime(row.created_at)}${row.station ? ` on ${esc(row.station)}` : ''}">${num}</td>
-      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span></td>
+      <td class="cell-order" title="Captured ${fmtTime(row.created_at)} · ${esc(channelLabel(row.channel))}${when ? ` · processed ${when}` : ''}"><span class="order-num copyable" data-copy="${esc(row.order_number)}" title="Click to copy">${esc(row.order_number)}</span>
+        <div class="cap-sub">${esc(channelLabel(row.channel))} · captured ${esc(fmtTime(row.created_at))}${pc ? ` · ${pc}` : ''} · ${stWord}${row.sub_sku ? ` · <span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}<span class="cap-sub-sep${row.notes ? '' : ' is-quiet'}"> · </span><button type="button" class="cap-sub-note ${row.notes ? 'has-note' : ''}" data-act="note" title="${row.notes ? `${esc(row.notes)}&#10;Click to edit` : 'Add a note'}">${row.notes ? esc(row.notes) : '+ Note'}</button></div></td>
       <td class="cell-items"><div class="items-stack">${itemsHtml}</div></td>
       <td class="cell-tracking">${row.tracking ? `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${row.carrier ? `${esc(row.carrier)} ` : ''}${esc(row.tracking)}</span>` : ''}</td>
-      <td class="cell-notes">${pc}${stWord}${row.sub_sku ? `<span class="sub-pill" title="${esc(row.sub_note || `Shipped ${row.sub_sku} instead of ${row.sub_for || 'the listed item'}`)}">SUB ${row.sub_for ? `${esc(row.sub_for)} ` : ''}→ ${esc(row.sub_sku)}${row.sub_qty > 1 ? ` ×${row.sub_qty}` : ''}</span>` : ''}${notesCell(row)}</td>
       <td class="cell-actions"></td>
     </tr>`;
 }
@@ -766,8 +771,8 @@ function renderCapHist() {
     for (const r of all) counts[r.channel] = (counts[r.channel] || 0) + 1;
     chipBar.hidden = false;
     chipBar.innerHTML = [
-      `<button class="chip-filter ${channelFilter === 'all' ? 'is-active' : ''}" data-ch="all">All · ${all.length}</button>`,
-      ...channels.map(c => `<button class="chip-filter ${channelFilter === c ? 'is-active' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} · ${counts[c]}</button>`),
+      `<button type="button" class="chip-filter ${channelFilter === 'all' ? 'is-on' : ''}" data-ch="all">All <span class="rc-tab-count">${all.length}</span></button>`,
+      ...channels.map(c => `<button type="button" class="chip-filter ${channelFilter === c ? 'is-on' : ''}" data-ch="${esc(c)}">${esc(channelLabel(c))} <span class="rc-tab-count">${counts[c]}</span></button>`),
     ].join('');
   } else {
     chipBar.hidden = true;
@@ -775,6 +780,8 @@ function renderCapHist() {
   }
   $('clearFailedBtn').hidden = true;
   $('findBar').hidden = false;
+  $('capBandTitle').textContent = 'History';
+  $('capBandCount').textContent = String(all.length);
   let rows = channelFilter === 'all' ? all : all.filter(r => r.channel === channelFilter);
   if (findQuery) {
     const q = findQuery.toLowerCase();
@@ -813,7 +820,6 @@ shRangeWire('capHistRange', capHist.range, loadCapHist);
 let findQuery = '';
 
 function openFind() {
-  $('findBar').hidden = false;
   $('findInput').focus();
   $('findInput').select();
 }
@@ -1231,6 +1237,7 @@ async function openSettings() {
   $('setPagePricing').checked = !!pg.pricing; // opt-in: default off
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
+  $('setPageRecovery').checked = !!pg.recovery; // opt-in: default off, needs Returns
   $('setPageListings').checked = pg.listings !== false;
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
@@ -1241,6 +1248,13 @@ async function openSettings() {
   $('setRetSyncStation').value = rsy.station || '';
   $('setRecvWebhook').value = rcv.webhookUrl || '';
   $('setLowWebhook').value = (cfg.lowStock || {}).webhookUrl || '';
+  const rcv2 = cfg.recovery || {};
+  $('setRcEmail').value = rcv2.email || '';
+  $('setRcWebhook').value = rcv2.webhookUrl || '';
+  $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
+  $('setRcCode').value = '';
+  $('setRcCodeClear').checked = false;
+  $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
@@ -1255,6 +1269,8 @@ async function openSettings() {
   $('setReorderAuto').checked = !!rc.auto;
   $('setLeadDays').value = String(rc.leadTimeDays || 7);
   $('setCoverDays').value = String(rc.coverDays || 21);
+  $('setBuyUnits').value = String(rc.buyUnits ?? 50);
+  $('setBuyPace').value = String(rc.buyPace ?? 1);
   const sr = cfg.stockRouting || {};
   $('setRouting').checked = !!sr.enabled;
   const fsel = $('setFallbackLoc');
@@ -1268,6 +1284,7 @@ async function openSettings() {
   $('testConnResult').textContent = '';
   $('testConnResult').className = 'test-result';
   $('settingsDialog').showModal();
+  rcRenderSyncPanel().catch(() => {}); // the Recovery files in the shared folder, under the folder settings
 }
 
 $('settingsBtn').addEventListener('click', openSettings);
@@ -1302,6 +1319,11 @@ $('chooseCsvBtn').addEventListener('click', async () => {
   if (res.folder) $('setCsvFolder').textContent = res.folder;
 });
 
+// Recovery: the archived Walmart reports live under Documents (spec §3.4)
+$('openRcArchiveBtn').addEventListener('click', async () => {
+  const r = await api.recoveryOpenArchive().catch(e => ({ ok: false, error: e.message }));
+  if (r && !r.ok) toast(r.error || 'Could not open the folder.', 4000);
+});
 $('chooseRecvBtn').addEventListener('click', async () => {
   const res = await api.chooseReceivingFolder();
   if (res.folder) $('setRecvFolder').textContent = res.folder;
@@ -1341,6 +1363,7 @@ $('settingsSave').addEventListener('click', async () => {
       pricing: $('setPagePricing').checked,
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
+      recovery: $('setPageRecovery').checked,
       listings: $('setPageListings').checked,
       wholesale: $('setPageWholesale').checked,
       cost: $('setPageCost').checked,
@@ -1348,6 +1371,11 @@ $('settingsSave').addEventListener('click', async () => {
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
+    txnUrlTemplates: { walmart: $('setRcTxnUrl').value.trim() },
+    recovery: {
+      email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim(),
+      ...($('setRcCodeClear').checked ? { codeHash: '' } : $('setRcCode').value.trim() ? { codeHash: await sha256Hex($('setRcCode').value.trim()) } : {}),
+    },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
       applicationSecret: $('setAppSecret').value.trim(),
@@ -1367,6 +1395,8 @@ $('settingsSave').addEventListener('click', async () => {
       auto: $('setReorderAuto').checked,
       leadTimeDays: Math.max(1, parseInt($('setLeadDays').value, 10) || 7),
       coverDays: Math.max(1, parseInt($('setCoverDays').value, 10) || 21),
+      buyUnits: Math.max(0, parseInt($('setBuyUnits').value, 10) || 0),
+      buyPace: Math.max(0, Number($('setBuyPace').value) || 0),
     },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
@@ -1429,7 +1459,7 @@ let activePage = 'capture';
 let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ebay: 'ebayPage', temu: 'temuPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1450,10 +1480,11 @@ function applyPageChrome() {
   $('undoFooterBtn').hidden = state.captureOnly || !cap;
   $('syncBtn').classList.toggle('invisible', !cap);
   $('dryRunChip').hidden = !cap || !state.dryRun;
-  $('dueHeader').hidden = !cap || !$('dueHeader').textContent;
+  $('dueHeader').hidden = true;
+  $('capHead').hidden = !cap;
   $('channelChips').hidden = !cap || !$('channelChips').innerHTML;
   $('clearFailedBtn').hidden = !cap || !(Number($('clearFailedBtn').dataset.n) > 0);
-  $('findBar').hidden = !cap || (state.captureOnly && !state.rows.length);
+  $('findBar').hidden = !cap || (!capHist.on && !(Number($('clearFailedBtn').dataset.n) > 0));
   updateScanPanel();
 }
 
@@ -1468,6 +1499,7 @@ function showPage(page) {
   $('pricingPage').hidden = page !== 'pricing';
   $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
+  $('recoveryPage').hidden = page !== 'recovery';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
@@ -1475,6 +1507,7 @@ function showPage(page) {
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
+  $('tabRecovery').classList.toggle('is-active', page === 'recovery');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
@@ -1515,6 +1548,8 @@ function showPage(page) {
     } else if (page === 'returns') {
       applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
+    } else if (page === 'recovery') {
+      enterRecovery();
     } else {
       focusScan();
     }
@@ -1529,6 +1564,34 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabPricing').addEventListener('click', () => showPage('pricing'));
+// the Recovery tab asks for its access code once per session (owner
+// 2026-10-12: "a universal code: 9419" — the hash lives in Settings)
+let rcUnlocked = false;
+$('tabRecovery').addEventListener('click', async () => {
+  if (rcUnlocked) { showPage('recovery'); return; }
+  const cfg = await api.getConfig();
+  const hash = (cfg.recovery || {}).codeHash || '';
+  if (!hash) { rcUnlocked = true; showPage('recovery'); return; }
+  $('rcCodeInput').value = '';
+  $('rcCodeError').hidden = true;
+  $('rcCodeDlg').showModal();
+  $('rcCodeInput').focus();
+});
+$('rcCodeCancel').addEventListener('click', () => $('rcCodeDlg').close());
+$('rcCodeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const cfg = await api.getConfig();
+  const hash = await sha256Hex($('rcCodeInput').value.trim());
+  if (hash !== ((cfg.recovery || {}).codeHash || '')) {
+    $('rcCodeError').hidden = false;
+    $('rcCodeInput').value = '';
+    $('rcCodeInput').focus();
+    return;
+  }
+  rcUnlocked = true;
+  $('rcCodeDlg').close();
+  showPage('recovery');
+});
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -1555,6 +1618,1790 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
   const item = e.target.closest('.tab-menu-item');
   $('returnsMenuDlg').close();
   if (item) showPage(item.dataset.page);
+});
+
+/* ---------- page scale: the Overview grows with the window ---------- */
+// Owner 2026-10-12: the Overview read "super condensed" on a 2000px
+// monitor, and the size should follow the screen rather than be fixed. One
+// number, --page-scale, zooms the page as a whole: 1 at 1280px and below
+// (laptops keep the design's exact measurements), 1.18 at most. (Recovery
+// used it too for a day; it now sits 1:1 like Capture, owner's call.)
+// (owner 2026-10-12, second pass: 1.35 on the wide monitor was "very
+// large" — the curve now tops out at the 1.18 first approved, reached
+// around 2150px, and grows more slowly before it)
+function pageScale() {
+  return Math.min(1.18, Math.max(1, 1 + (window.innerWidth - 1280) / 4800));
+}
+function applyPageScale() {
+  document.documentElement.style.setProperty('--page-scale', pageScale().toFixed(3));
+}
+applyPageScale();
+let pageScaleTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(pageScaleTimer); pageScaleTimer = setTimeout(applyPageScale, 80); });
+
+/* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
+// docs/recovery/SPEC.md §13 — two screens in one page. Reconcile: drop a
+// Seller Center → Payments report, the three buckets of the period and a
+// tabbed table. Not received: where the refund money went, the Today card,
+// and the tracker with its status sentences and row actions. Every status
+// is derived in the main process on each load; this side only draws.
+const rc = {
+  data: null, run: null, runId: null, sub: 'import', bucket: 'notReceived', tab: 'todo', type: '', q: '', listSort: null, reconcileSort: null, pickFor: 'profit',
+  scope: 'cycle', month: '', summary: null, busy: false, menuPo: null, pendingImport: null, seq: 0, awaitRecv: false,
+  profit: null, profitScope: 'cycle', profitMonth: '', profitTab: 'sku', profitGroup: 'lw', profitQ: '', profitSort: null, profitOpen: new Set(), profitOpenAll: new Set(), statements: null, stOpen: new Set(), rcFilters: {}, rcSortable: [], filterCol: '', filterDraft: {}, filterQ: '',
+  year: '', profitYear: '',
+  wfsId: null, wfs: null, wfsSort: null, wfsTab: 'sku', wfsShip: null,
+  profitStack: (() => { try { return localStorage.getItem('rcProfitStack') === '1'; } catch { return false; } })(),
+};
+// the key a scope reads: the selected period, the chosen month or year
+function rcScopeKey(scope, which) {
+  if (scope === 'cycle') return rc.runId;
+  if (scope === 'month') {
+    const months = (rc.data && rc.data.months) || [];
+    const cur = which === 'profit' ? rc.profitMonth : rc.month;
+    const k = months.includes(cur) ? cur : (months[0] || '');
+    if (which === 'profit') rc.profitMonth = k; else rc.month = k;
+    return k;
+  }
+  if (scope === 'year') {
+    const years = (rc.data && rc.data.years) || [];
+    const cur = which === 'profit' ? rc.profitYear : rc.year;
+    const k = years.includes(cur) ? cur : (years[0] || '');
+    if (which === 'profit') rc.profitYear = k; else rc.year = k;
+    return k;
+  }
+  return null;
+}
+// the picker under the switch: periods, months or years for the scope;
+// idle (invisible, same height) for all time
+const RC_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function rcFillPick(sel, scope, key) {
+  let opts = [];
+  if (scope === 'cycle') opts = ((rc.data && rc.data.runs) || []).map(r => [r.id, rcPeriodName(r.label)]);
+  else if (scope === 'month') opts = ((rc.data && rc.data.months) || []).map(k => [k, `${RC_MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`]);
+  else if (scope === 'year') opts = ((rc.data && rc.data.years) || []).map(y => [y, y]);
+  sel.classList.toggle('is-idle', scope === 'all' || !opts.length);
+  sel.innerHTML = opts.map(([v, label]) => `<option value="${esc(v)}" ${v === key ? 'selected' : ''}>${esc(label)}</option>`).join('');
+}
+const RC_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const rcMoney = (n) => '$' + Math.abs(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rcPlural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+// a period label for the screen: an en dash between the dates
+const rcPeriodName = (label) => String(label || '').replace(' - ', ' – ');
+// Profit tables sort on a header click (owner 2026-10-12: "click the column
+// headers to filter by most to least"): numbers start biggest first, text
+// A→Z; a second click flips; rows with no value sit last either way
+function rcSortRows(rows, sort, defaultKey) {
+  const key = (sort && sort.key) || defaultKey;
+  const dir = sort ? sort.dir : -1;
+  const val = (r) => r[key];
+  const isText = rows.some(r => typeof val(r) === 'string');
+  return rows.slice().sort((a, b) => {
+    const x = val(a), y = val(b);
+    const xn = x === null || x === undefined || x === '', yn = y === null || y === undefined || y === '';
+    if (xn && yn) return 0; if (xn) return 1; if (yn) return -1;
+    const c = isText ? String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' }) : Number(x) - Number(y);
+    return dir * c;
+  });
+}
+const RC_FUNNEL = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
+const rcSortTh = (sort, key, label, right, text, first, filter) => {
+  const on = sort && sort.key === key;
+  const arrow = on ? (sort.dir < 0 ? ' ▾' : ' ▴') : '';
+  const fOn = filter && rc.rcFilters && rc.rcFilters[key] && rc.rcFilters[key].size || (filter && key === 'reasonText' && rc.rcFilters && rc.rcFilters.by && rc.rcFilters.by.size);
+  const funnel = filter ? `<button type="button" class="rc-fl-btn ${fOn ? 'is-on' : ''}" data-rcfilter="${key}" title="Filter ${label.toLowerCase()}" aria-label="Filter ${label.toLowerCase()}">${RC_FUNNEL}</button>` : '';
+  return `<th class="rc-th-sort ${right ? 'is-right' : ''} ${on ? 'is-on' : ''} ${filter ? 'rc-th-fl' : ''} ${fOn ? 'is-filtered' : ''}" data-rcsort="${key}" data-rctext="${text ? '1' : ''}" data-rcfirst="${first || ''}" title="Sort by ${label.toLowerCase()}">${label}${arrow}${funnel}</th>`;
+};
+// "Mon D" from an ISO stamp or a report MM/DD/YYYY date
+function rcMonDay(v) {
+  if (!v) return '';
+  const s = String(v);
+  let d = null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) d = new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+  else { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s); if (m) d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2])); }
+  return d && !isNaN(d.getTime()) ? `${RC_MON[d.getMonth()]} ${d.getDate()}` : '';
+}
+// "today at 8:40 AM" / "yesterday at 8:40 AM" / "Oct 3 at 8:40 AM"
+function rcWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const day = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const yday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const when = day(d) === day(now) ? 'today' : day(d) === day(yday) ? 'yesterday' : `${RC_MON[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== now.getFullYear() ? `, ${d.getFullYear()}` : ''}`;
+  return `${when} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
+// the Item cell: the Walmart channel SKU as the line that reads, the
+// product name under it (owner 2026-10-12)
+const rcSkuCell = (sku, item, extra = '') => sku
+  ? `<div class="rc-sku">${esc(sku)}</div><div class="rc-item-sub">${esc(item || '')}${extra}</div>`
+  : `<div>${esc(item || '')}${extra}</div>`;
+// the same on one line for the spreadsheet grids
+const rcSkuLine = (sku, item) => sku
+  ? `<span class="rc-sku">${esc(sku)}</span><span class="rc-sku-name">${esc(item || '')}</span>`
+  : `<span>${esc(item || '')}</span>`;
+const rcSentence = (t, strong) => t ? `<span class="rc-dot ${esc('is-' + (t.tone || 'grey'))}"></span><span class="rc-lead ${strong ? esc('is-' + t.tone) : ''}">${esc(t.lead)}</span>${t.clause ? `<span class="rc-clause"> — ${esc(t.clause)}</span>` : ''}` : '';
+// the lead takes the tone colour only where the row shouts: red, the amber
+// unpaid-cycles issue, a green approval (the design's calm rows stay plain)
+const rcStrong = (t) => t && (t.tone === 'red' || (t.tone === 'amber' && /^Unpaid/.test(t.lead)) || (t.tone === 'green' && /^Approved/.test(t.lead)));
+
+async function enterRecovery() { await rcLoad(); }
+
+async function rcLoad() {
+  const seq = ++rc.seq;
+  const res = await api.recoveryState().catch(e => ({ ok: false, error: e.message }));
+  if (seq !== rc.seq || activePage !== 'recovery') return;
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not load the Recovery page.', 5000); return; }
+  rc.data = res;
+  const runs = res.runs || [];
+  if (!runs.some(r => r.id === rc.runId)) rc.runId = runs.length ? runs[0].id : null;
+  rc.run = null;
+  if (rc.runId) {
+    const d = await api.recoveryRun(rc.runId).catch(() => null);
+    if (seq !== rc.seq) return;
+    rc.run = d && d.ok ? d.run : null;
+  }
+  if (rc.sub === 'profit') await rcLoadProfit(seq);
+  if (rc.sub === 'wfs') await rcLoadWfs(seq);
+  if (seq !== rc.seq) return;
+  rcRender();
+}
+
+async function rcLoadProfit(seq = rc.seq) {
+  if (!rc.data) return;
+  const key = rcScopeKey(rc.profitScope, 'profit');
+  if (rc.profitScope !== 'all' && !key) { rc.profit = null; return; }
+  const p = await api.recoveryProfit(rc.profitScope, key).catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.profit = p && p.ok ? p : null;
+  const st = await api.recoveryStatements().catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.statements = st && st.ok ? st.statements : null;
+}
+// the Expenses tab: the owner's own costs in this scope, newest first
+function rcRenderExpenses() {
+  const on = rc.profitTab === 'expenses';
+  if (!on) return;
+  const p = rc.profit; const list = (p && p.expenses && p.expenses.list) || [];
+  const head = '<th class="rc-g">#</th><th>Date</th><th>Category</th><th>Note</th><th>SKU</th><th class="is-right">Amount</th><th>Entered by</th><th></th>';
+  const body = list.length ? list.map((e, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-mono rc-nowrap">${esc(rcMonDay(e.date))}${e.dateTo ? ` – ${esc(rcMonDay(e.dateTo))}` : ''}, ${esc(String(e.dateTo || e.date).slice(0, 4))}</td>
+      <td>${esc(e.category)}</td>
+      <td class="rc-muted">${esc(e.note || '')}</td>
+      <td class="rc-mono">${esc(e.sku || '')}</td>
+      <td class="is-right rc-mono rc-nowrap" title="${e.full != null && e.full !== e.amount ? `${rcMoney(e.full)} over ${e.days} days · ${e.daysIn} of them in this scope` : ''}">${rcMoney(e.amount)}${e.full != null && e.full !== e.amount ? ` <span class="rc-muted">of ${rcMoney(e.full)}</span>` : ''}</td>
+      <td class="rc-muted">${esc([e.station, e.by].filter(Boolean).join(' · '))}</td>
+      <td class="rc-actions rc-nowrap"><button type="button" class="rc-link" data-rcexpedit="${esc(e.id)}">Edit</button> <span class="rc-faint">·</span> <button type="button" class="rc-link" data-rcexpdel="${esc(e.id)}">Remove</button></td>
+    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="8">No expenses in this scope. Add outside shipping labels, packaging, supplies and the like; they come off profit in the period they fall in.</td></tr>';
+  rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+}
+// the statement view: Walmart's sections, lines and totals, in Walmart's order
+// the Statement tab: every imported statement as a row, newest first; click
+// one and it drops down to Walmart's sections (owner 2026-10-13: "click on
+// a statement and just have a dropdown with all the information")
+function rcRenderStatement() {
+  const box = $('rcStatement');
+  const on = rc.profitTab === 'statement';
+  box.hidden = !on; $('rcProfitTable').hidden = on;
+  $('rcProfitTable').classList.toggle('is-expenses', rc.profitTab === 'expenses');
+  if (!on) return;
+  const list = (rc.statements || []).filter(st => st.hasLines);
+  box.classList.toggle('has-list', list.length > 0);
+  if (!list.length) { box.innerHTML = '<div class="rc-st-note">No statements yet — import a payment report on the Import screen. Periods imported before v1.32.33 fill in from their archived file; if one stays empty, import that period\'s file again.</div>'; return; }
+  const money = (v) => `${v < 0 ? '−' : ''}${rcMoney(v)}`;
+  const cell = (v) => v == null ? '<td class="is-right rc-mono rc-muted">—</td>' : `<td class="is-right rc-mono ${v < 0 ? 'is-neg' : ''}">${money(v)}</td>`;
+  const section = (s) => `<section class="rc-st-sec">
+    <h3 class="rc-st-h">${esc(s.name)}</h3>
+    ${s.lines.map(l => `<div class="rc-st-row"><span class="rc-st-l">${esc(l.label)}${l.count > 1 ? ` <span class="rc-muted rc-small">· ${l.count} lines</span>` : ''}</span><span class="rc-st-v rc-mono ${l.amount < 0 ? 'is-neg' : ''}">${money(l.amount)}</span></div>`
+      + (l.by || []).map(b => `<div class="rc-st-row rc-st-by ${/Customer Care/.test(b.label) ? 'is-care' : ''}"><span class="rc-st-l">${esc(b.label)} <span class="rc-muted rc-small">· ${b.count}</span></span><span class="rc-st-v rc-mono">${money(b.amount)}</span></div>`).join('')).join('')}
+    <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono ${s.total < 0 ? 'is-neg' : ''}">${money(s.total)}</span></div>
+  </section>`;
+  const paidSec = (st) => st.paid.length ? `<section class="rc-st-sec">
+    <h3 class="rc-st-h">Paid to you</h3>
+    ${st.paid.map(p => `<div class="rc-st-row"><span class="rc-st-l">${esc(p.date ? rcMonDay(p.date) + (String(p.date).slice(0, 4) ? `, ${String(p.date).slice(0, 4)}` : '') : 'Transfer')}</span><span class="rc-st-v rc-mono">${money(p.amount)}</span></div>`).join('')}
+    <div class="rc-st-row is-total"><span class="rc-st-l">Total</span><span class="rc-st-v rc-mono">${money(st.paidTotal)}</span></div>
+  </section>` : '';
+  const sec = (st, name) => { const x = st.sections.find(z => z.name === name); return x ? x.total : null; };
+  const rows = list.map((st, i) => {
+    const open = rc.stOpen.has(st.id);
+    const row = `<tr class="rc-st-tr ${open ? 'is-open' : ''}" data-rcst="${esc(st.id)}">
+      <td class="rc-g rc-muted rc-mono">${i + 1}</td>
+      <td><button type="button" class="rc-caret-btn ${open ? 'is-open' : ''}" aria-label="${open ? 'Close' : 'Open'} this statement"><span class="rc-caret"></span></button><span class="rc-st-name">${esc(rcPeriodName(st.label))}</span></td>
+      ${cell(sec(st, 'Sales'))}${cell(sec(st, 'Refunds'))}${cell(sec(st, 'Fees'))}${cell(sec(st, 'Adjustments'))}${cell(st.activity)}${cell(st.payable)}${cell(st.paidTotal || null)}
+    </tr>`;
+    const detail = open ? `<tr class="rc-st-detail"><td class="rc-g"></td><td colspan="8"><div class="rc-st-grid">${st.sections.map(section).join('')}${paidSec(st)}</div></td></tr>` : '';
+    return row + detail;
+  }).join('');
+  box.innerHTML = `<table class="rc-table rc-table-st"><thead><tr>
+    <th class="rc-g">#</th><th>Statement</th><th class="is-right">Sales</th><th class="is-right">Refunds</th><th class="is-right">Fees</th><th class="is-right">Adjustments</th><th class="is-right">Activity</th><th class="is-right">Total payable</th><th class="is-right">Paid to you</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+$('rcStatement').addEventListener('click', (e) => {
+  const tr = e.target.closest('[data-rcst]');
+  if (!tr || e.target.closest('a, button:not(.rc-caret-btn)')) return;
+  const id = tr.dataset.rcst;
+  if (rc.stOpen.has(id)) rc.stOpen.delete(id); else rc.stOpen.add(id);
+  rcRenderStatement();
+});
+
+async function rcLoadSummary(seq = rc.seq) {
+  if (!rc.data) return;
+  const key = rcScopeKey(rc.scope, 'money');
+  if (rc.scope !== 'all' && !key) { rc.summary = null; return; }
+  const s = await api.recoverySummary(rc.scope, key).catch(() => null);
+  if (seq !== rc.seq) return;
+  rc.summary = s && s.ok ? s : null;
+}
+
+function rcRender() {
+  if (!rc.data) return;
+  const need = rc.data.today ? rc.data.today.needsAction : 0;
+  $('rcNeedCount').textContent = String(need);
+  $('rcNeedCount').hidden = !need;
+  for (const b of document.querySelectorAll('.rc-subtab')) b.classList.toggle('is-active', b.dataset.rcsub === rc.sub);
+  $('rcImport').hidden = rc.sub !== 'import';
+  $('rcReconcile').hidden = rc.sub !== 'reconcile';
+  $('rcProfit').hidden = rc.sub !== 'profit';
+  $('rcWfs').hidden = rc.sub !== 'wfs';
+  $('rcExportBtn').hidden = rc.sub !== 'notreceived';
+  rcRenderImport();
+  rcRenderReconcile();
+  rcRenderProfit();
+  rcRenderWfs();
+}
+
+/* ----- Profit ----- */
+const rcPct = (m) => (m == null ? '—' : `${m.toFixed(1)}%`);
+// the scope control (owner 2026-10-12: "make the drop down better and in
+// tune with the design"): one pill like the page tabs; the active segment
+// names the chosen period / month / year and opens the picker
+const RC_SCOPES = [['cycle', 'Period'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
+function rcScopeOptions(scope) {
+  if (scope === 'cycle') return ((rc.data && rc.data.runs) || []).map(r => [r.id, rcPeriodName(r.label)]);
+  if (scope === 'month') return ((rc.data && rc.data.months) || []).map(k => [k, `${RC_MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`]);
+  if (scope === 'year') return ((rc.data && rc.data.years) || []).map(y => [String(y), String(y)]);
+  return [];
+}
+// the scope control never changes width (owner 2026-10-13: "this keeps
+// shifting"): the segments keep their short names and the period, month or
+// year in play sits in its own pill to the LEFT, where growing or shrinking
+// moves nothing else
+function rcRenderScopeSeg(el, scope, key) {
+  const opts = rcScopeOptions(scope);
+  const cur = opts.find(o => String(o[0]) === String(key));
+  const more = opts.length > 1;
+  const when = scope === 'all' ? 'Every period imported' : cur ? cur[1] : opts.length ? opts[0][1] : 'Nothing imported yet';
+  el.innerHTML = `<button type="button" class="rc-when" data-rcwhen${more ? '' : ' disabled'} title="${more ? 'Pick another' : ''}">${esc(when)}${more ? '<span class="rc-seg-caret"></span>' : ''}</button>`
+    + `<div class="rc-seg">${RC_SCOPES.map(([k, label]) => `<button type="button" data-rcscope="${k}" class="${k === scope ? 'is-on' : ''}">${esc(label)}</button>`).join('')}</div>`;
+}
+function rcProfitLines(g) {
+  const lines = g.lines || [];
+  const all = rc.profitOpenAll.has(g.sku);
+  const refunds = lines.filter(l => l.refundUnits > 0);
+  const sales = lines.filter(l => !(l.refundUnits > 0));
+  const shown = all ? lines : [...refunds, ...sales.slice(0, 5)];
+  const hidden = lines.length - shown.length;
+  const row = (l) => `<tr class="rc-subrow">
+      <td class="rc-g"></td>
+      <td><button type="button" class="rc-po rc-po-btn rc-po-sm" data-rcpolink="${esc(l.po)}" title="Open this PO on Walmart">${esc(l.po)}</button><span class="rc-sub-date">${esc(rcMonDay(l.date))}</span></td>
+      <td class="is-right rc-mono">${l.saleUnits || '—'}</td>
+      <td class="is-right rc-mono">${l.refundUnits || '—'}</td>
+      <td class="is-right rc-mono${l.notCounted ? ' rc-out' : ''}" colspan="3" title="${l.notCounted ? 'Walmart took this back, but it is left out of profit: the sale was before your first statement and the unit is back or pending' : ''}">${(l.net < 0 ? '−' : '') + rcMoney(l.net)}</td>
+      <td colspan="3" title="${esc(l.situation)}"><span class="rc-dot is-${esc(l.tone || 'grey')}"></span>${esc(l.situation)}</td>
+    </tr>`;
+  return `<tr class="rc-subhead"><td class="rc-g"></td><td>PO #</td><td class="is-right">Units</td><td class="is-right">Refunded</td><td class="is-right" colspan="3">Walmart paid</td><td colspan="3">Situation</td></tr>`
+    + shown.map(row).join('')
+    + (hidden > 0 ? `<tr class="rc-subfoot"><td class="rc-g"></td><td colspan="9">… ${rcPlural(hidden, 'more order')} sold and kept · <button type="button" class="rc-link" data-rcshowall="${esc(g.sku)}">show all ${lines.length}</button></td></tr>` : '');
+}
+function rcRenderProfit() {
+  if (rc.sub !== 'profit') return;
+  const p = rc.profit;
+  rcRenderScopeSeg($('rcProfitScope'), rc.profitScope, rcScopeKey(rc.profitScope, 'profit'));
+  $('rcProfitStrip').hidden = !p;
+  if (!p) {
+    $('rcProfitStrip').innerHTML = '';
+    $('rcProfitTabs').innerHTML = '';
+    $('rcProfitTable').innerHTML = '';
+    $('rcProfitFoot').textContent = 'Import a payment period on the Import screen to see its orders.';
+    return;
+  }
+  const signed = (v) => (v < 0 ? '−' : '') + rcMoney(v);
+  // against the period before this one (by period start), when one exists
+  let delta = '';
+  if (rc.profitScope === 'cycle') {
+    const runs = rc.data.runs || []; const i = runs.findIndex(r => r.id === rc.runId);
+    const prevRun = i >= 0 ? runs[i + 1] : null;
+    const prev = prevRun ? (p.periods || []).find(x => x.id === prevRun.id) : null;
+    if (prev && prev.hasOrders) { const d = (p.netProfit ?? p.profit) - prev.profit; delta = ` · ${d >= 0 ? '▲' : '▼'} ${rcMoney(d)} vs last period`; }
+  }
+  const cell = (label, v, sub, cls = '', tip = '') => `<div class="rc-cell ${cls}"${tip ? ` title="${esc(tip)}"` : ''}><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div></div>`;
+  const priced = p.gross > 0;
+  const partly = priced && p.priced && p.priced.unpriced > 0;
+  const costSub = [p.lostUnits ? `${p.lostUnits} lost ${p.lostUnits === 1 ? 'unit' : 'units'} costed` : '', p.atRisk && p.atRisk.units ? `${p.atRisk.units} pending, not costed` : '', p.recovered > 0 ? `${rcMoney(p.recovered)} paid back by insurance or a carrier` : ''].filter(Boolean).join(' · ') || `${p.unitsBack} back in stock · cost recovered`;
+  $('rcProfitStrip').innerHTML = [
+    cell('Goods sold', priced ? rcMoney(p.gross) : '—', priced
+      ? (partly ? `avg ${rcMoney(p.avgPrice || 0)} · ${p.priced.orders} of ${p.priced.orders + p.priced.unpriced} orders priced — re-import the rest` : `${rcPlural(p.unitsSold, 'unit')} · avg ${rcMoney(p.avgPrice || 0)}`)
+      : `${rcPlural(p.unitsSold, 'unit')} · no goods price in this import — import this one period's file again on the Import screen`),
+    // the tie-out detail (refunds of pre-tracking sales left out, statement
+    // lines on no order kept aside — audit guide §2) lives on hover; the
+    // cell itself stays one line (owner 2026-10-14: "seems unnecessary")
+    cell('Walmart paid', signed(p.payout), p.commissionPct != null ? `after ${rcPct(p.commissionPct)} commission, refunds and fees` : 'net of commission, refunds and fees', '',
+      [p.heldOut && p.heldOut.amount > 0 ? `${rcMoney(p.heldOut.amount)} refunded on ${rcPlural(p.heldOut.orders, 'sale')} before your first statement is left out of profit while the units are back or pending` : '',
+        p.other ? `${p.other < 0 ? '−' : ''}${rcMoney(p.other)} of statement lines on no order (storage, ads, adjustments) is kept aside` : ''].filter(Boolean).join('\n')),
+    cell('Cost of goods', rcMoney(p.cogs), costSub),
+    cell('At risk', rcMoney(p.atRisk ? p.atRisk.amount : 0), p.atRisk && p.atRisk.units ? `${rcPlural(p.atRisk.units, 'unit')} pending return · costed if the window closes` : 'no return pending'),
+    cell('Expenses', rcMoney(p.expenses ? p.expenses.total : 0), p.expenses && p.expenses.count ? `${rcPlural(p.expenses.count, 'entry', 'entries')} · ${p.expenses.byCategory.slice(0, 2).map(c => `${c.category.toLowerCase()} ${rcMoney(c.amount)}`).join(' · ')}` : 'none in this scope · add on the Expenses tab'),
+    cell('Profit', signed(p.netProfit ?? p.profit), `${p.margin != null ? rcPct(p.margin) + ' margin after expenses' : 'no costed order yet'}${delta}`, 'is-hi' + ((p.netProfit ?? p.profit) < 0 ? ' is-red' : '')),
+    cell('No cost set', String(p.missing.skus), p.missing.skus ? `${p.missing.skus === 1 ? 'listing' : 'listings'} · ${rcMoney(p.missing.payout)} paid, left out of profit` : 'every listing is costed'),
+  ].join('');
+
+  rcRenderStatement();
+  rcRenderExpenses();
+  $('rcProfitSearchWrap').hidden = rc.profitTab === 'statement' || rc.profitTab === 'expenses';
+  $('rcExpAddBtn').hidden = rc.profitTab !== 'expenses';
+  $('rcProfitTabs').innerHTML = [['sku', 'By SKU', (p.groups || []).length], ['period', 'By period', p.periods.length], ['statement', 'Statement', (rc.statements || []).filter(st => st.hasLines).length], ['expenses', 'Expenses', p.expenses ? p.expenses.count : 0]].map(([k, label, n]) =>
+    `<button type="button" class="rc-tab ${rc.profitTab === k ? 'is-active' : ''}" data-rcptab="${k}">${label} <span class="rc-tab-count">${n}</span></button>`).join('');
+  $('rcProfitSearchWrap').hidden = rc.profitTab !== 'sku';
+  $('rcProfitStackBtn').hidden = rc.profitTab !== 'sku';
+  $('rcProfitStackBtn').classList.toggle('is-on', rc.profitStack);
+  $('rcProfitStackBtn').setAttribute('aria-pressed', rc.profitStack ? 'true' : 'false');
+  $('rcProfitTable').classList.toggle('is-periods', rc.profitTab === 'period');
+  const money = (v, known = true) => (known ? `${v < 0 ? '−' : ''}${rcMoney(v)}` : '<span class="rc-nocost">no cost set</span>');
+  if (rc.profitTab === 'sku') {
+    const q = rc.profitQ.toLowerCase();
+    const s = rc.profitSort;
+    // always grouped by Linnworks SKU (owner 2026-10-14: "I want to have
+    // only linnworks setting"); the Walmart listings sit under each group
+    const byLw = true;
+    // the search reads the Linnworks SKU, the product name, and every
+    // Walmart (channel) SKU under the group
+    const hit = (g) => !q || String(g.sku).toLowerCase().includes(q) || String(g.item).toLowerCase().includes(q);
+    const groupHit = (x) => hit(x) || (x.listings || []).some(hit);
+    const shown = (p.groups || []).filter(groupHit);
+    let rows;
+    if (rc.profitStack) {
+      // Sort by SKU (owner 2026-10-16: "the condition is already in the
+      // name… stacked in order", then "a button for sort by SKU"): every row
+      // is its own; the SKUs go A→Z by their base name and each one's
+      // conditions follow it, New, Open Box, Used, Scrap
+      const famOf = new Map();
+      (p.families || []).forEach((f) => (f.members || [f]).forEach((m, mi) => famOf.set(m.sku, { base: String(f.sku), mi })));
+      const fam = (x) => famOf.get(x.sku) || { base: String(x.sku), mi: 0 };
+      rows = shown.slice().sort((a, b) => fam(a).base.localeCompare(fam(b).base, undefined, { numeric: true, sensitivity: 'base' }) || fam(a).mi - fam(b).mi);
+    } else rows = rcSortRows(shown, s, 'payout');
+    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'sku', byLw ? 'Linnworks SKU' : 'SKU', false, true) + rcSortTh(s, 'unitsSold', 'Sold', true) + rcSortTh(s, 'unitsRefunded', 'Refunded', true)
+      + rcSortTh(s, 'avgPrice', 'Avg price', true) + rcSortTh(s, 'commissionPct', 'Commission', true)
+      + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'unitCost', 'Unit cost', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
+    // "no cost set" is a button: type the cost right here (owner 2026-10-12)
+    const costCell = (g) => g.costKnown ? rcMoney(g.unitCost) : `<button type="button" class="rc-nocost rc-cost-set" data-rccost="${esc(g.sku)}" title="Click to set this SKU's cost">no cost set</button>`;
+    // a listing the Pricing map does not know, marked like Capture's ⚠
+    // a drawn triangle, not the ⚠ glyph, so it sits dead centre in the circle (owner 2026-10-13)
+    const warn = '<span class="rc-warn" title="Not mapped to a Linnworks SKU on the Pricing page"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></svg></span>';
+    const cells = (g) => `
+      <td class="is-right">${g.unitsSold}</td>
+      <td class="is-right rc-nowrap">${g.unitsRefunded}${g.unitsBack ? ` <span class="rc-muted">· ${g.unitsBack} back</span>` : ''}</td>
+      <td class="is-right">${g.avgPrice == null ? '<span class="rc-faint">—</span>' : rcMoney(g.avgPrice)}</td>
+      <td class="is-right">${g.commissionPct == null ? '<span class="rc-faint">—</span>' : rcPct(g.commissionPct)}</td>
+      <td class="is-right" title="${g.heldOut > 0 ? `Leaves out ${rcMoney(g.heldOut)} refunded on sales before your first statement (units back or pending); Walmart's own figure is ${g.statementPayout < 0 ? '−' : ''}${rcMoney(g.statementPayout)}` : ''}">${money(g.payout)}${g.heldOut > 0 ? '<span class="rc-muted">*</span>' : ''}</td>
+      <td class="is-right">${costCell(g)}</td>
+      <td class="is-right ${g.costKnown && g.profit < 0 ? 'rc-neg' : ''}">${g.costKnown ? money(g.profit) : '<span class="rc-faint">—</span>'}</td>
+      <td class="is-right rc-margin ${g.costKnown && g.margin != null ? (g.margin < 10 ? 'is-lo' : g.margin < 15 ? 'is-mid' : 'is-hi') : ''}" title="${g.costKnown && g.margin != null ? (g.margin < 10 ? 'Under 10% margin' : g.margin < 15 ? '10 to 15% margin' : '15% margin or better') : ''}">${g.costKnown && g.margin != null ? rcPct(g.margin) : '<span class="rc-faint">—</span>'}</td>`;
+    const caret = (key, label) => `<button type="button" class="rc-caret-btn ${rc.profitOpen.has(key) ? 'is-open' : ''}" data-rctoggle="${esc(key)}" aria-label="${label}"><span class="rc-caret"></span></button>`;
+    // a Walmart listing row: its own caret opens its POs
+    const listing = (g, i, nested) => `<tr class="${nested ? 'rc-listing' : ''} ${rc.profitOpen.has(g.sku) ? 'is-open' : ''}">
+      <td class="rc-g">${nested ? '' : i + 1}</td>
+      <td class="rc-item" title="${esc(g.item || '')}">${caret(g.sku, "Show this SKU's POs")}<span class="rc-sku">${esc(g.sku)}</span>${!nested && !g.inv ? warn : ''}</td>${cells(g)}
+    </tr>${rc.profitOpen.has(g.sku) ? rcProfitLines(g) : ''}`;
+    const group = (x, i) => {
+      const key = 'g:' + x.sku; const open = rc.profitOpen.has(key);
+      // one listing needs no words; more get a small count pill (owner 2026-10-13: "compress it")
+      const note = x.mapped ? (x.listings.length > 1 ? `<span class="rc-group-n" title="${x.listings.length} Walmart listings under this SKU">${x.listings.length}</span>` : '') : warn;
+      return `<tr class="rc-group ${open ? 'is-open' : ''}">
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-item" title="${esc(x.item || '')}">${caret(key, 'Show its Walmart listings')}<span class="rc-sku">${esc(x.sku)}</span>${note}</td>${cells(x)}
+    </tr>${open ? x.listings.filter(g => !q || hit(g) || hit(x)).map(g => listing(g, 0, true)).join('') : ''}`;
+    };
+    const body = rows.length ? rows.map((g, i) => (byLw ? group(g, i) : listing(g, i, false))).join('') : `<tr class="rc-empty-row"><td colspan="10">${q ? 'Nothing matches.' : 'No orders in this scope.'}</td></tr>`;
+    rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+  } else if (rc.profitTab === 'period') {
+    const s = rc.profitSort;
+    const head = '<th class="rc-g">#</th>' + rcSortTh(s, 'label', 'Period', false, true) + rcSortTh(s, 'orders', 'Orders', true) + rcSortTh(s, 'units', 'Units', true)
+      + rcSortTh(s, 'payout', 'Walmart paid', true) + rcSortTh(s, 'cogs', 'Cost of goods', true) + rcSortTh(s, 'profit', 'Profit', true) + rcSortTh(s, 'margin', 'Margin', true);
+    const periods = s ? rcSortRows(p.periods, s, 'label') : p.periods;
+    const body = periods.length ? periods.map((x, i) => `<tr>
+      <td class="rc-g">${i + 1}</td>
+      <td><div>${esc(rcPeriodName(x.label))}</div>${x.hasOrders ? [x.missingCount ? `${rcPlural(x.missingCount, 'order')} with no cost set` : '', x.priced === false ? 'no goods price in this import — import this one period\'s file again' : ''].filter(Boolean).map(t => `<div class="rc-item-sub">${t}</div>`).join('') : '<div class="rc-item-sub">no sales data in this import — import this one period\'s file again</div>'}</td>
+      <td class="is-right">${x.orders}</td><td class="is-right">${x.units}</td>
+      <td class="is-right">${money(x.payout)}</td><td class="is-right">${money(x.cogs)}</td>
+      <td class="is-right ${x.profit < 0 ? 'rc-neg' : ''}">${money(x.profit)}</td><td class="is-right">${rcPct(x.margin)}</td>
+    </tr>`).join('') : '<tr class="rc-empty-row"><td colspan="8">No periods imported yet.</td></tr>';
+    rcKeepScroll($('rcProfitTable'), () => { $('rcProfitTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+  }
+  const foot = [];
+  if (p.missing.orders) foot.push(`${rcPlural(p.missing.skus, 'listing')} ${p.missing.skus === 1 ? 'has' : 'have'} no cost yet (${rcPlural(p.missing.orders, 'order')}, ${rcMoney(p.missing.payout)} paid): click "no cost set" to type it, or set it in the Stock page's Cost column. ⚠ marks a listing the Pricing page does not map to a Linnworks SKU.`);
+  if (p.missingRuns && p.missingRuns.length) foot.push(`${rcPlural(p.missingRuns.length, 'period')} imported before Profit existed and ${p.missingRuns.length === 1 ? 'its' : 'their'} report file is not on this computer — re-import to include ${p.missingRuns.length === 1 ? 'its' : 'their'} sales: ${p.missingRuns.map(rcPeriodName).join(', ')}.`);
+  if (!foot.length) foot.push('Every order in this scope has a cost. Costs live in the Stock page\'s Cost column.');
+  $('rcProfitFoot').textContent = foot.join(' ');
+}
+
+/* ----- Reconcile ----- */
+/* ----- Import: the periods' home ----- */
+// the shared-folder readout on Import: every station's files for periods,
+// marks and expenses with their line counts, what this desktop holds, and
+// a button that reads every file from the top again
+async function rcRenderSyncPanel() {
+  const box = $('rcSyncPanel');
+  const st = await api.recoverySyncStatus().catch(() => null);
+  if (!st || !st.ok || !st.enabled) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!st.enabled) { box.innerHTML = '<div class="rc-sync-h">Shared folder</div><div class="rc-sync-line rc-muted">Sync is off on this computer, so marks and periods made elsewhere do not reach it. Turn it on in Settings → Sync with the same folder as the other desktops.</div>'; return; }
+  const when = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${rcMonDay(d.toISOString())} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; };
+  const row = (label, list, unit) => `<div class="rc-sync-grp"><span class="rc-sync-k">${label}</span>${list.length ? list.map(f => `<span class="rc-sync-f ${f.own ? 'is-own' : ''} ${f.readable ? '' : 'is-bad'}" title="${esc(f.file)}">${esc(f.station)}${f.own ? ' (this computer)' : ''} · <b>${f.lines}</b> ${unit}${f.readable ? '' : ' · could not be read'}${f.mtime ? ` · ${esc(when(f.mtime))}` : ''}</span>`).join('') : '<span class="rc-muted">no files yet</span>'}</div>`;
+  box.innerHTML = `<div class="rc-sync-h">Shared folder <span class="rc-muted rc-small">${esc(st.folder || '')}${st.folderOk ? '' : ' · not reachable right now'}</span><button type="button" class="rc-link" id="rcResyncBtn">Re-read every file</button></div>
+    ${row('Periods', st.files.wmruns, 'events')}${row('Marks', st.files.wmmarks, 'lines')}${row('Expenses', st.files.wmexpenses, 'lines')}
+    <div class="rc-sync-line rc-muted">This computer holds ${rcPlural(st.local.runs, 'period')}, ${rcPlural(st.local.marks, 'mark')} (${st.local.ownMarks} made here) and ${rcPlural(st.local.expenses, 'expense')}. A station's marks file should hold at least as many lines as the marks it made; if another desktop's file is missing or short, open Recovery on that desktop once so it rebuilds its file.</div>`;
+  const btn = $('rcResyncBtn');
+  if (btn) btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Reading…'; await api.recoveryResync().catch(() => null); if (rc.data) await rcLoad(); await rcRenderSyncPanel(); toast('Shared folder read again'); };
+}
+function rcRenderImport() {
+  const runs = rc.data.runs || [];
+  $('rcPeriodCount').textContent = runs.length ? String(runs.length) : '';
+  $('rcDropTitle').textContent = runs.length ? 'Drop the next period\'s CSV here — or several at once' : 'Drop a payment period CSV here — or several at once';
+  $('rcImportHint').textContent = rc.data.logRows
+    ? `Seller Center → Payments → the period's reconciliation report (CSV) · checked against ${Number(rc.data.logRows).toLocaleString()} returns in the log`
+    : 'Log returns first — the Returns log is what each refund is checked against';
+  const head = '<th class="rc-g">#</th><th>Period</th><th>Imported</th><th class="is-right">Refunds</th><th class="is-right">Received</th><th class="is-right">Not received</th><th class="is-right">WFS waiting</th><th class="is-right">Open today</th><th></th>';
+  const body = runs.length ? runs.map((r, i) => {
+    const c = r.counts || {};
+    const b = (k) => (c[k] || { count: 0, total: 0 });
+    const who = [r.station, r.by].filter(Boolean).join(' · ');
+    return `<tr>
+      <td class="rc-g">${i + 1}</td>
+      <td><button type="button" class="rc-period-link" data-rcrun="${esc(r.id)}" title="Reconcile this period">${esc(rcPeriodName(r.label))}</button></td>
+      <td class="rc-muted" title="${esc(who)}"><div>${esc(rcWhen(r.ranAt))}</div>${who ? `<div class="rc-item-sub">${esc(who)}</div>` : ''}</td>
+      <td class="is-right rc-mono">${r.totalRefunds}</td>
+      <td class="is-right rc-mono">${b('received').count} <span class="rc-muted">· ${rcMoney(b('received').total)}</span></td>
+      <td class="is-right rc-mono">${b('notReceived').count} <span class="rc-muted">· ${rcMoney(b('notReceived').total)}</span></td>
+      <td class="is-right rc-mono">${b('wfsWaiting').count} <span class="rc-muted">· ${rcMoney(b('wfsWaiting').total)}</span></td>
+      <td class="is-right rc-mono ${r.open ? 'rc-neg' : 'rc-faint'}">${r.open || 'clear'}</td>
+      <td class="rc-period-actions"><button type="button" class="rc-link is-danger" data-rcremove="${esc(r.id)}">Remove</button></td>
+    </tr>`;
+  }).join('') : '<tr class="rc-empty-row"><td colspan="9">No period imported yet.</td></tr>';
+  $('rcPeriodsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
+/* ----- WFS Inventory (owner 2026-10-15): the barebones table ----- */
+// Walmart's Inventory Reconciliation report, one row per SKU (fulfillment
+// centers added together), beside the units the WFS Shipments log sent in
+// the report's days. Only the columns the file has are shown.
+const RC_WFS_GROUPS = [
+  { cls: 'rc-b-start', label: 'Start', cols: [['start', 'On hand', '@start']] },
+  { cls: 'rc-b-in', label: 'Sent in', cols: [['shipped', 'Shipped', ''], ['recv', 'Received', '']] },
+  { cls: 'rc-b-sold', label: 'Sales', cols: [['sold', 'Sold', ''], ['cret', 'Customer returns', '']] },
+  { cls: 'rc-b-mid', label: 'In between', cols: [['lost', 'Lost', '', 'out'], ['found', 'Found', '', 'in'], ['dmg', 'Damaged', '', 'out'], ['removed', 'Removed', '', 'out'], ['rts', 'Returned to you', ''], ['moved', 'Moved', ''], ['other', 'Other', '']] },
+  { cls: 'rc-b-end', label: 'Left', cols: [['end', 'At WFS', '@end']] },
+];
+// the reports newest first; the one in play stays picked across loads
+function rcWfsPickId() {
+  const reps = (rc.data && rc.data.wfsReports) || [];
+  if (!reps.some(r => r.id === rc.wfsId)) rc.wfsId = reps.length ? reps[0].id : null;
+  return rc.wfsId;
+}
+async function rcLoadWfs(seq = rc.seq) {
+  const sh = await api.recoveryWfsShipments().catch(e => ({ ok: false, error: e.message }));
+  if (seq !== rc.seq) return;
+  rc.wfsShip = sh && sh.ok ? sh.shipments || [] : [];
+  const id = rcWfsPickId();
+  if (!id) { rc.wfs = null; return; }
+  const res = await api.recoveryWfsInventory(id).catch(e => ({ ok: false, error: e.message }));
+  if (seq !== rc.seq) return;
+  rc.wfs = res && res.ok ? res : null;
+  if (res && !res.ok) toast(res.error || 'Could not load that WFS report.', 4000);
+}
+const rcWfsNum = (n) => (Number(n) || 0).toLocaleString('en-US');
+// shipments logged to WFS: not received yet (oldest first) or received
+const RC_WFS_AMBER = 20; const RC_WFS_RED = 30; // days since the shipment was logged
+const rcWfsDays = (iso) => {
+  const t = new Date(iso); if (isNaN(t.getTime())) return null;
+  const a = new Date(t.getFullYear(), t.getMonth(), t.getDate()); const n = new Date();
+  return Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - a) / 86400000);
+};
+const rcWfsPendingList = () => (rc.wfsShip || []).filter(s => !s.received_at).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+const rcWfsReceivedList = () => (rc.wfsShip || []).filter(s => s.received_at).sort((a, b) => String(b.received_at).localeCompare(String(a.received_at))).slice(0, 200);
+function rcRenderWfsTabs() {
+  const pend = rcWfsPendingList();
+  const late = pend.filter(s => (rcWfsDays(s.created_at) || 0) >= RC_WFS_AMBER).length;
+  const tabs = [['sku', 'Units by SKU', ''], ['pending', 'Not received', pend.length ? `<span class="rc-tab-count ${late ? 'is-red' : ''}" title="${late} at ${RC_WFS_AMBER}+ days">${pend.length}</span>` : ''], ['received', 'Received', '']];
+  $('rcWfsTabs').innerHTML = tabs.map(([k, label, n]) => `<button type="button" class="rc-tab ${rc.wfsTab === k ? 'is-active' : ''}" data-rcwfstab="${k}">${label}${n ? ` ${n}` : ''}</button>`).join('');
+}
+function rcWfsItemsCell(items) {
+  return (items || []).map(i => `<div class="rc-wfs-line"><span class="rc-sku">${esc(i.channelSku || i.sku || '')}</span><span class="rc-wfs-qty">×${Number(i.qty) || 0}</span></div>`).join('');
+}
+function rcRenderWfsShipments() {
+  const pending = rc.wfsTab === 'pending';
+  const list = pending ? rcWfsPendingList() : rcWfsReceivedList();
+  const units = (s) => (s.items || []).reduce((a, i) => a + (Number(i.qty) || 0), 0);
+  const head = pending
+    ? '<th class="rc-g">#</th><th>Shipped</th><th class="is-right">Days</th><th>Items</th><th class="is-right">Units</th><th>Note</th><th>Logged on</th><th></th>'
+    : '<th class="rc-g">#</th><th>Shipped</th><th>Received</th><th class="is-right">Days</th><th>Items</th><th class="is-right">Units</th><th>Note</th><th>Logged on</th><th></th>';
+  const body = list.length ? list.map((s, i) => {
+    const days = pending ? rcWfsDays(s.created_at) : rcWfsDays(s.created_at) - rcWfsDays(s.received_at);
+    const tone = pending && days >= RC_WFS_RED ? 'is-30' : pending && days >= RC_WFS_AMBER ? 'is-20' : '';
+    const tip = pending ? `${days} days since this shipment was logged` : `Received ${days} days after it was logged`;
+    return `<tr data-rcwfsrow="${esc(s.key)}">
+      <td class="rc-g">${i + 1}</td>
+      <td class="rc-wfs-date">${esc(rcMonDay(s.created_at))}<span class="rc-muted"> ${esc(new Date(s.created_at).getFullYear() !== new Date().getFullYear() ? String(new Date(s.created_at).getFullYear()) : '')}</span></td>
+      ${pending ? '' : `<td class="rc-wfs-date">${esc(rcMonDay(s.received_at))}</td>`}
+      <td class="rc-wfs-age ${tone}" title="${esc(tip)}">${days == null ? '—' : days}</td>
+      <td class="rc-wfs-items">${rcWfsItemsCell(s.items)}</td>
+      <td class="rc-wfs-units">${units(s)}</td>
+      <td class="rc-wfs-note" title="${esc(s.note || '')}">${esc(s.note || '')}</td>
+      <td class="rc-wfs-st">${esc(s.station || '')}</td>
+      <td class="rc-wfs-act">${pending
+    ? `<button type="button" class="rc-btn rc-btn-outline rc-btn-navy rc-btn-row" data-rcwfsrecv="${esc(s.key)}">Mark received</button>`
+    : `<button type="button" class="rc-link" data-rcwfsunrecv="${esc(s.key)}" title="Put it back on Not received">Undo</button>`}</td>
+    </tr>`;
+  }).join('') : `<tr class="rc-empty-row"><td colspan="9">${pending ? 'Every logged shipment is marked received.' : 'No shipment is marked received yet.'}</td></tr>`;
+  $('rcWfsTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  $('rcWfsFoot').innerHTML = '';
+  $('rcWfsFoot').hidden = true;
+}
+function rcRenderWfs() {
+  if (rc.sub !== 'wfs' || !rc.data) return;
+  rcRenderWfsTabs();
+  const reps = rc.data.wfsReports || [];
+  const onSku = rc.wfsTab === 'sku';
+  $('rcWfsTable').classList.toggle('rc-table-wfsship', !onSku);
+  $('rcWfsH').textContent = onSku ? 'WFS units by SKU' : rc.wfsTab === 'pending' ? 'Shipments to WFS not received' : 'Shipments to WFS received';
+  $('rcWfsDrop').hidden = !onSku || reps.length > 0;
+  if (!onSku) $('rcWfsProgress').hidden = true;
+  $('rcWfsTools').hidden = !onSku || !reps.length;
+  if (!onSku) { rcRenderWfsShipments(); return; }
+  const cur = reps.find(r => r.id === rc.wfsId);
+  $('rcWfsWhenLabel').textContent = cur ? rcPeriodName(cur.label) : '';
+  const d = rc.wfs;
+  if (!reps.length || !d) {
+    $('rcWfsTable').innerHTML = `<tbody><tr class="rc-empty-row"><td>${reps.length ? 'Loading…' : 'No WFS report imported yet.'}</td></tr></tbody>`;
+    $('rcWfsFoot').innerHTML = '';
+    $('rcWfsFoot').hidden = true;
+    return;
+  }
+  const rep = d.report;
+  const has = (k) => (k === 'shipped' ? d.dated : rep.fields.includes(k));
+  const at = (iso) => (iso ? rcMonDay(iso) : '');
+  const groups = RC_WFS_GROUPS.map(g => ({ ...g, cols: g.cols.filter(c => has(c[0])) })).filter(g => g.cols.length);
+  const cols = groups.flatMap(g => g.cols.map((c, i) => ({ key: c[0], head: c[1], src: c[2] === '@start' ? at(rep.start) : c[2] === '@end' ? at(rep.end) : c[2], tone: c[3] || '', cls: g.cls, edge: i === 0 })));
+  const flat = d.rows.map(r => ({ ...r, ...r.q, shipped: r.shipped, sku: r.sku || '' }));
+  const rows = rc.wfsSort ? rcSortRows(flat, rc.wfsSort, 'sku') : flat;
+  const short = (r) => d.dated && r.inReport && has('recv') && r.shipped > 0 && r.shipped !== (Number(r.recv) || 0);
+  const cell = (c, r) => {
+    if (c.key !== 'shipped' && r && !r.inReport) return `<td class="${c.cls}${c.edge ? ' rc-wfs-edge' : ''} rc-wfs-zero">–</td>`;
+    const n = r ? Number(r[c.key]) || 0 : Number(d.totals[c.key]) || 0;
+    const cls = [c.cls, c.edge ? 'rc-wfs-edge' : '', c.key === 'end' ? 'rc-wfs-end' : '',
+      n === 0 && c.key !== 'end' ? 'rc-wfs-zero' : c.tone === 'out' ? 'rc-wfs-out' : c.tone === 'in' ? 'rc-wfs-in' : '',
+      r && c.key === 'recv' && short(r) ? 'rc-wfs-short' : ''].filter(Boolean).join(' ');
+    const tip = r && c.key === 'recv' && short(r) ? ` title="Shipped ${r.shipped} in these days, Walmart received ${rcWfsNum(r.recv)}"` : '';
+    return `<td class="${cls}"${tip}>${n === 0 && c.key !== 'end' ? '–' : rcWfsNum(n)}</td>`;
+  };
+  const sortTh = (c) => {
+    const on = rc.wfsSort && rc.wfsSort.key === c.key;
+    const arrow = on ? (rc.wfsSort.dir < 0 ? ' ▾' : ' ▴') : '';
+    return `<th class="is-right rc-th-sort ${on ? 'is-on' : ''} ${c.cls}${c.edge ? ' rc-wfs-edge' : ''}" data-rcwfssort="${c.key}" title="Sort by ${esc(c.head.toLowerCase())}">${esc(c.head)}${arrow}${c.src ? `<span class="rc-wfs-src">${esc(c.src)}</span>` : ''}</th>`;
+  };
+  const skuOn = rc.wfsSort && rc.wfsSort.key === 'sku';
+  const head = `<thead>
+    <tr class="rc-wfs-grp"><th class="rc-g"></th><th></th>${groups.map(g => `<th colspan="${g.cols.length}" class="${g.cls} rc-wfs-edge">${esc(g.label)}${g.hint ? `<span class="rc-wfs-hint">${esc(g.hint)}</span>` : ''}</th>`).join('')}</tr>
+    <tr class="rc-wfs-col"><th class="rc-g">#</th><th class="rc-th-sort ${skuOn ? 'is-on' : ''}" data-rcwfssort="sku" title="Sort by SKU">Item${skuOn ? (rc.wfsSort.dir < 0 ? ' ▾' : ' ▴') : ''}</th>${cols.map(sortTh).join('')}</tr>
+  </thead>`;
+  const body = rows.length ? rows.map((r, i) => {
+    const sub = !r.inReport ? 'not in Walmart\'s report' : `${r.name || ''}${r.fcs && r.fcs.length > 1 ? ` · ${r.fcs.length} FCs` : ''}`;
+    return `<tr data-rcwfsrow="${esc(r.key)}"><td class="rc-g">${i + 1}</td><td class="rc-wfs-item">${rcSkuCell(r.sku || r.gtin, sub)}</td>${cols.map(c => cell(c, r)).join('')}</tr>`;
+  }).join('') : `<tr class="rc-empty-row"><td colspan="${cols.length + 2}">The report has no items.</td></tr>`;
+  const foot = `<tfoot><tr><td class="rc-g"></td><td class="rc-wfs-item">Total · ${rcPlural(d.rows.length, 'SKU')}</td>${cols.map(c => cell(c, null)).join('')}</tr></tfoot>`;
+  $('rcWfsTable').innerHTML = head + `<tbody>${body}</tbody>` + foot;
+  const notes = [];
+  if (d.dated && has('recv') && d.rows.some(short)) notes.push('<span class="rc-wfs-key"><i></i>Received differs from shipped</span>');
+  if (!d.dated) notes.push('<span>This report has no dates, so Shipped is not counted.</span>');
+  if (rep.unknown && rep.unknown.length) notes.push(`<span>Columns in the file not shown: ${esc(rep.unknown.join(', '))}</span>`);
+  $('rcWfsFoot').hidden = !notes.length;
+  $('rcWfsFoot').innerHTML = notes.join('');
+}
+function rcWfsProgress(text, state) {
+  const el = $('rcWfsProgress');
+  el.textContent = text || '';
+  el.hidden = !text;
+  el.className = `rc-progress${state ? ` is-${state}` : ''}`;
+}
+// a dropped CSV that is the inventory report and not a payment period
+function rcLooksWfs(text) {
+  const first = String(text || '').replace(/^﻿/, '').split(/\r?\n/, 1)[0].toLowerCase().replace(/[^a-z0-9,]/g, '');
+  if (/transactiontype/.test(first)) return false;
+  return /(starting|beginning|ending)(quantity|qty)/.test(first) || (/lost/.test(first) && /found/.test(first) && /received/.test(first));
+}
+// one file or several: each in turn; a report for days already imported
+// asks once before it is replaced
+async function rcWfsImportFiles(files) {
+  const list = (files || []).filter(f => f && f.name);
+  if (!list.length) return;
+  const done = []; const failed = []; const again = [];
+  let lastId = null; let unknown = [];
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    if (!/\.csv$/i.test(f.name)) { failed.push(`${f.name}: not a CSV`); continue; }
+    rcWfsProgress(list.length > 1 ? `Importing ${i + 1} of ${list.length} — ${f.name}…` : `Reading ${f.name}…`);
+    const res = await api.recoveryWfsImport(f.name, f.text, false).catch(e => ({ ok: false, error: e.message }));
+    if (res && res.ok) { done.push(rcPeriodName(res.label)); lastId = res.id; unknown = unknown.concat(res.unknown || []); }
+    else if (res && res.alreadyImported) again.push({ ...f, label: res.label });
+    else failed.push(`${f.name}: ${(res && res.error) || 'did not import'}`);
+  }
+  if (again.length) {
+    const ok = await rcConfirm({ title: `Replace ${rcPlural(again.length, 'WFS report')} already imported?`, body: `${again.map(a => rcPeriodName(a.label)).join(', ')}. Each is swapped for the file you picked.`, ok: 'Replace', danger: false });
+    for (const f of ok ? again : []) {
+      const res = await api.recoveryWfsImport(f.name, f.text, true).catch(e => ({ ok: false, error: e.message }));
+      if (res && res.ok) { done.push(rcPeriodName(res.label)); lastId = res.id; unknown = unknown.concat(res.unknown || []); }
+      else failed.push(`${f.name}: ${(res && res.error) || 'did not import'}`);
+    }
+  }
+  const parts = [];
+  if (done.length) parts.push(`${rcPlural(done.length, 'WFS report')} imported (${done.join(', ')})`);
+  if (failed.length) parts.push(failed.join('; '));
+  if (unknown.length) parts.push(`columns not shown: ${[...new Set(unknown)].join(', ')}`);
+  rcWfsProgress(parts.join(' · ') || 'Nothing imported.', failed.length && !done.length ? 'fail' : 'done');
+  if (lastId) { rc.wfsId = lastId; rc.wfs = null; rc.sub = 'wfs'; rc.wfsTab = 'sku'; }
+  await rcLoad();
+}
+async function rcWfsReadFiles(files) {
+  const out = [];
+  for (const f of files) { try { out.push({ name: f.name, text: await f.text() }); } catch (e) { out.push({ name: f.name, text: '', readError: e.message }); } }
+  return out;
+}
+
+/* ----- Reconcile: the countdown cell (owner 2026-10-12, "design A") -----
+   Days left in the window as a plain number; the cell shades like Excel
+   conditional formatting: white at 30+, paler to darker yellow under 30,
+   red at 0 and below (the number goes negative once the window has passed). */
+function rcDaysLeft(it) {
+  // the engine stops counting once a case is open or the PO is marked lost;
+  // the timer still runs from the refund date so every row has a number
+  let d = it.daysLeft;
+  if (d == null && it.daysOld != null) d = it.isWfs ? (it.daysOld < 90 ? 90 - it.daysOld : 135 - it.daysOld) : 45 - it.daysOld;
+  return d == null || !Number.isFinite(Number(d)) ? null : Number(d);
+}
+// the Walmart paid tab: what Walmart paid on the PO and when, and the gap
+// that is still lost (a UPS claim or a case can still chase it)
+function rcPaidCells(it) {
+  const paid = Number(it.settlementSeen) || 0; const gap = Number(it.lostAmount) || 0;
+  const when = it.settlementDate ? ` <span class="rc-muted">· ${esc(rcMonDay(it.settlementDate))}</span>` : '';
+  const kind = it.settlementKind ? ` <span class="rc-muted">· ${esc(it.settlementKind)}</span>` : '';
+  return `<td class="rc-mono is-right rc-paid-cell" title="${esc(it.status === 'reimbursed_pending' ? 'Marked as pending reimbursement' : `Walmart paid ${rcMoney(paid)} on this PO`)}">${it.status === 'reimbursed_pending' ? '<span class="rc-muted">pending</span>' : rcMoney(paid)}${when}${kind}</td>
+    <td class="rc-mono is-right ${gap > 0 ? 'rc-neg' : 'rc-muted'}">${gap > 0 ? rcMoney(gap) : '—'}</td>`;
+}
+function rcDaysCell(it) {
+  const n = rcDaysLeft(it);
+  if (n == null) return '<td class="rc-mono is-right rc-days rc-muted" title="No refund date to count from">—</td>';
+  const tier = n <= 0 ? 'is-t0' : n <= 7 ? 'is-t1' : n <= 14 ? 'is-t2' : n <= 29 ? 'is-t3' : '';
+  const win = it.wfsWaiting ? 'Walmart pays back by day 90' : it.isWfs ? 'WFS: file within 135 days of the refund' : 'Seller: dispute within 45 days of the refund';
+  const tip = n > 0 ? `${n} days left · ${win}` : n === 0 ? `Last day · ${win}` : `Window passed ${-n} days ago · ${win}`;
+  return `<td class="rc-mono is-right rc-days ${tier}" title="${esc(tip)}">${n}</td>`;
+}
+
+// highlighted rows, per computer (localStorage): the POs being worked on
+const rcHl = new Set((() => { try { return JSON.parse(localStorage.getItem('rcHighlight') || '[]'); } catch { return []; } })());
+function rcHlClear(pos) {
+  let changed = false;
+  for (const po of pos || []) if (rcHl.delete(po)) changed = true;
+  if (changed) { try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ } }
+}
+// a click anywhere off the rows (owner 2026-10-14: "if I click off
+// somewhere else, it stops highlighting") clears every highlight; a click
+// inside a row, a menu or a dialog leaves them
+function rcHlClearAll() {
+  if (!rcHl.size) return;
+  rcHl.clear();
+  try { localStorage.setItem('rcHighlight', '[]'); } catch { /* private mode */ }
+  for (const tr of document.querySelectorAll('#rcBucketTable tr.is-hl')) tr.classList.remove('is-hl');
+}
+document.addEventListener('click', (e) => {
+  if (activePage !== 'recovery' || !rcHl.size) return;
+  if (!(e.target instanceof Element)) return;
+  if (e.target.closest('tr[data-rcrow], dialog, .rc-menu, .tab-menu, button, a, input, select, textarea, label')) return;
+  rcHlClearAll();
+});
+function rcHlToggle(po) {
+  if (!po) return;
+  if (rcHl.has(po)) rcHl.delete(po); else rcHl.add(po);
+  try { localStorage.setItem('rcHighlight', JSON.stringify([...rcHl])); } catch { /* private mode */ }
+  for (const tr of $('rcBucketTable').querySelectorAll(`tr[data-rcrow="${CSS.escape(po)}"]`)) tr.classList.toggle('is-hl', rcHl.has(po));
+}
+// who issued the refund, one word after the reason (owner 2026-10-13, design
+// A): the customer in grey, the seller in navy, Customer Care in amber
+function rcIssuerWord(it) {
+  const d = String(it.refundedBy || '').trim().toLowerCase();
+  if (!d) return '';
+  const [word, cls] = /customer care/.test(d) ? ['Customer Care', 'is-care'] : /seller/.test(d) ? ['Seller', 'is-seller'] : /return refund|customer/.test(d) ? ['Customer', 'is-customer'] : [String(it.refundedBy).trim(), 'is-customer'];
+  return ` <span class="rc-by ${cls}">· ${esc(word)}</span>`;
+}
+const RC_FLAG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h1.5v18H5zM7.5 4h10.2l-2.6 4 2.6 4H7.5z"/></svg>';
+function rcDaysSince(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso); if (!Number.isFinite(t)) return null;
+  const a = new Date(t); const b = new Date();
+  const day = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.max(0, Math.round((day(b) - day(a)) / 86400000));
+}
+// the case card under the flag (owner 2026-10-13: "when you click on the
+// flag, will it tell you the case"): when, by which station, the ID, and
+// the ways out — open it on Walmart, change the ID, close the case
+function rcOpenCasePop(po, anchor) {
+  const it = rcItem(po); if (!it || !it.caseOpened) return;
+  const d = rcDaysSince(it.caseOpenedAt);
+  const age = d == null ? '' : d === 0 ? 'opened today' : `${d} ${d === 1 ? 'day' : 'days'} ago`;
+  const who = it.station ? ` · from ${esc(it.station)}` : '';
+  const dlg = $('rcCasePop');
+  rc.casePo = po;
+  dlg.innerHTML = `<div class="rc-cp-h"><span class="rc-cp-flag">${RC_FLAG}</span>Case on PO <span class="rc-mono">${esc(po)}</span></div>
+    <div class="rc-cp-line">Opened <b>${esc(rcMonDay(it.caseOpenedAt) || '—')}</b>${age ? ` · ${age}` : ''}${who}</div>
+    <div class="rc-cp-line">Case ID: ${it.caseId ? `<span class="rc-mono rc-cp-id">${esc(it.caseId)}</span> <button type="button" class="rc-link" data-rccp="copy">copy</button>` : '<span class="rc-muted">none yet</span> <button type="button" class="rc-link" data-rccp="caseId">add it</button>'}</div>
+    ${it.sku ? `<div class="rc-cp-line rc-muted">${esc(it.sku)}${it.amount ? ` · ${rcMoney(it.amount)} refunded` : ''}${it.lostAmount ? ` · ${rcMoney(it.lostAmount)} still lost` : ''}</div>` : ''}
+    <div class="tab-menu-sep"></div>
+    ${it.caseId ? '<button class="tab-menu-item" data-rccp="open">Open the case on Walmart</button>' : ''}
+    <button class="tab-menu-item" data-rccp="caseId">${it.caseId ? 'Change the case ID' : 'Add the case ID'}</button>
+    <button class="tab-menu-item" data-rccp="undoCase">Case closed · take the flag off</button>`;
+  dlg.showModal();
+  const r = anchor.getBoundingClientRect();
+  rcAnchor(dlg, r);
+  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`; // hangs from the flag's left edge
+}
+$('rcCasePop').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rccp]');
+  if (!b) { if (e.target === e.currentTarget) $('rcCasePop').close(); return; }
+  const act = b.dataset.rccp; const po = rc.casePo; const it = rcItem(po);
+  $('rcCasePop').close();
+  if (!it) return;
+  if (act === 'copy') { try { await navigator.clipboard.writeText(it.caseId || ''); toast('Case ID copied'); } catch { toast('Could not copy.'); } return; }
+  if (act === 'open') { const r = await api.openOrderPage(it.caseId, 'walmart', 'case').catch(() => null); if (!r || !r.ok) toast((r && r.error) || 'Could not open the case.', 4000); return; }
+  if (act === 'undoCase') { await rcMark(po, 'undoCase', {}); return; }
+  rcDoAction(po, act);
+});
+
+/* ----- Reconcile column filters (owner 2026-10-13: "a clickable filter for
+   each column"): a funnel in every header opens a tick-list of that column's
+   values with counts; the picks stack across columns, show as chips under
+   the tabs, and clear when the tab changes ----- */
+const RC_FILTER_LABELS = { po: 'PO #', type: 'Type', sku: 'Item', units: 'Units', refundTs: 'Refunded', amount: 'Net refund', left: 'Days left', paid: 'Walmart paid', gap: 'Still lost', reasonText: 'Reason', by: 'Issued by', markText: 'Mark' };
+const RC_MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const rcMoneyBand = (v) => { const n = Number(v) || 0; return n < 100 ? ['a', 'Under $100'] : n < 250 ? ['b', '$100 – $250'] : n < 500 ? ['c', '$250 – $500'] : n < 1000 ? ['d', '$500 – $1,000'] : ['e', 'Over $1,000']; };
+const rcIssuerKey = (it) => { const d = String(it.refundedBy || '').toLowerCase(); return !d ? ['', '—'] : /customer care/.test(d) ? ['care', 'Customer Care'] : /seller/.test(d) ? ['seller', 'Seller'] : ['customer', 'Customer']; };
+// each column's filter value for a row: [key, label]
+function rcFilterValue(col, r) {
+  switch (col) {
+    case 'po': return [r.po, r.po];
+    case 'type': return [r.type || '', r.type || '—'];
+    case 'sku': return [r.sku || r.item || '', r.sku || r.item || '—'];
+    case 'units': return [String(r.units), String(r.units)];
+    case 'refundTs': { if (r.refundTs == null) return ['', '—']; const d = new Date(r.refundTs); return [`${d.getFullYear()}-${d.getMonth()}`, `${RC_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`]; }
+    case 'amount': return rcMoneyBand(r.amount);
+    case 'paid': return r.paid > 0 ? rcMoneyBand(r.paid) : ['0', 'Pending'];
+    case 'gap': return r.gap > 0 ? rcMoneyBand(r.gap) : ['0', 'Nothing lost'];
+    case 'left': { const n = r.left; return n == null ? ['', '—'] : n <= 0 ? ['0', 'Window passed'] : n <= 7 ? ['1', 'This week (1–7)'] : n <= 14 ? ['2', '8–14 days'] : n <= 29 ? ['3', '15–29 days'] : ['4', '30 days or more']; }
+    case 'reasonText': { const t = String(r.reasonText || '').toLowerCase(); return [t, t ? t.replace(/^./, c => c.toUpperCase()) : '—']; }
+    case 'by': return rcIssuerKey(r);
+    case 'markText': return [r.markText, r.markText];
+    default: return ['', ''];
+  }
+}
+const rcFilterCols = (list) => Object.keys(rc.rcFilters || {}).filter(c => rc.rcFilters[c] && rc.rcFilters[c].size);
+function rcApplyFilters(list, except) {
+  const cols = rcFilterCols().filter(c => c !== except);
+  if (!cols.length) return list;
+  return list.filter(r => cols.every(c => rc.rcFilters[c].has(rcFilterValue(c, r)[0])));
+}
+const rcFilterOrder = (col) => col === 'left' || col === 'amount' || col === 'paid' || col === 'gap' || col === 'units' ? ((a, b) => (col === 'units' ? Number(a.key) - Number(b.key) : String(a.key).localeCompare(String(b.key)))) : col === 'refundTs' ? ((a, b) => b.ts - a.ts) : ((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+// the values of one column over the rows the OTHER filters leave, with counts
+function rcFilterOptions(col) {
+  const m = new Map();
+  for (const r of rcApplyFilters(rc.rcSortable || [], col)) {
+    const [k, label] = rcFilterValue(col, r);
+    const g = m.get(k) || { key: k, label, n: 0, ts: col === 'refundTs' ? (r.refundTs || 0) : 0 };
+    g.n++; m.set(k, g);
+  }
+  return [...m.values()].sort(rcFilterOrder(col));
+}
+function rcOpenFilter(col, anchor) {
+  rc.filterCol = col;
+  rc.filterDraft = { [col]: new Set(rc.rcFilters[col] || []) };
+  if (col === 'reasonText') rc.filterDraft.by = new Set(rc.rcFilters.by || []);
+  rc.filterQ = '';
+  const dlg = $('rcFilterDlg');
+  rcPaintFilter();
+  dlg.showModal();
+  const r = anchor.getBoundingClientRect();
+  rcAnchor(dlg, r);
+  dlg.querySelector('input[type="search"]')?.focus();
+}
+function rcPaintFilter() {
+  const dlg = $('rcFilterDlg'); const col = rc.filterCol;
+  const q = rc.filterQ.toLowerCase();
+  const section = (c, title) => {
+    const opts = rcFilterOptions(c).filter(o => !q || o.label.toLowerCase().includes(q));
+    const sel = rc.filterDraft[c];
+    return `<div class="rc-fl-h">${title}</div>` + (opts.length ? opts.map(o => `<label class="rc-fl-opt ${sel.has(o.key) ? 'is-on' : ''}"><input type="checkbox" data-rcflcol="${c}" data-rcflkey="${esc(o.key)}" ${sel.has(o.key) ? 'checked' : ''}> <span class="rc-fl-lab">${esc(o.label)}</span><span class="rc-fl-n">${o.n}</span></label>`).join('') : '<div class="rc-fl-none">Nothing matches</div>');
+  };
+  const many = rcFilterOptions(col).length > 8 || col === 'po' || col === 'sku';
+  dlg.innerHTML = `${many ? `<input type="search" class="rc-fl-search" placeholder="Search…" value="${esc(rc.filterQ)}" aria-label="Search values">` : ''}
+    <div class="rc-fl-list">${section(col, RC_FILTER_LABELS[col] || col)}${col === 'reasonText' ? `<div class="rc-fl-sep"></div>${section('by', 'Issued by')}` : ''}</div>
+    <div class="rc-fl-foot"><button type="button" class="rc-link" data-rcflact="clear">Clear</button><button type="button" class="rc-fl-ok" data-rcflact="done">Done</button></div>`;
+}
+$('rcFilterDlg').addEventListener('input', (e) => {
+  if (e.target.matches('.rc-fl-search')) { rc.filterQ = e.target.value; const at = e.target.selectionStart; rcPaintFilter(); const i = $('rcFilterDlg').querySelector('.rc-fl-search'); if (i) { i.focus(); try { i.setSelectionRange(at, at); } catch { /* fine */ } } }
+});
+$('rcFilterDlg').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-rcflcol]');
+  if (!cb) return;
+  const set = rc.filterDraft[cb.dataset.rcflcol];
+  if (cb.checked) set.add(cb.dataset.rcflkey); else set.delete(cb.dataset.rcflkey);
+  cb.closest('.rc-fl-opt').classList.toggle('is-on', cb.checked);
+});
+$('rcFilterDlg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcflact]');
+  if (!b) { if (e.target === e.currentTarget) $('rcFilterDlg').close(); return; }
+  if (b.dataset.rcflact === 'clear') { for (const c of Object.keys(rc.filterDraft)) rc.filterDraft[c] = new Set(); }
+  for (const c of Object.keys(rc.filterDraft)) { if (rc.filterDraft[c].size) rc.rcFilters[c] = rc.filterDraft[c]; else delete rc.rcFilters[c]; }
+  $('rcFilterDlg').close();
+  rcRenderReconcile();
+});
+function rcRenderFilterBar(shown, total) {
+  const bar = $('rcFilterBar');
+  const cols = rcFilterCols();
+  bar.hidden = !cols.length;
+  if (!cols.length) { bar.innerHTML = ''; return; }
+  const chips = cols.map(c => { const keys = [...rc.rcFilters[c]]; const labels = keys.map(k => { const o = rcFilterOptions(c).find(x => x.key === k); return o ? o.label : k; }); const text = labels.length > 2 ? `${labels.slice(0, 2).join(', ')} +${labels.length - 2}` : labels.join(', '); return `<span class="rc-fl-chip">${esc(RC_FILTER_LABELS[c] || c)}: ${esc(text)}<button type="button" data-rcflx="${c}" aria-label="Remove this filter">×</button></span>`; }).join('');
+  bar.innerHTML = `<span class="rc-fl-bar-l">Filtered</span>${chips}<button type="button" class="rc-link" data-rcflx="*">Clear all</button><span class="rc-fl-bar-n">${shown} of ${total} rows</span>`;
+}
+$('rcFilterBar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcflx]');
+  if (!b) return;
+  if (b.dataset.rcflx === '*') rc.rcFilters = {}; else { delete rc.rcFilters[b.dataset.rcflx]; if (b.dataset.rcflx === 'reasonText') delete rc.rcFilters.by; }
+  rcRenderReconcile();
+});
+
+/* ----- Reconcile: one period's result ----- */
+function rcRenderReconcile() {
+  const items = rc.data.items || [];
+  // not back yet, nothing settled, nothing parked
+  const open = items.filter(it => it.status === 'outstanding' && !it.adjustment);
+  const pending = open.filter(it => it.wfsWaiting);              // WFS inside its 90 days
+  const notReceived = open.filter(it => !it.wfsWaiting);          // seller, and WFS past day 90
+  // the two marks (owner 2026-10-12): received before the Returns log, never shipped
+  // …and Loss (owner 2026-10-13: "perhaps in the marked column"): the cost is charged on Profit
+  const marked = items.filter(it => (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped' || it.status === 'loss');
+  // Walmart paid something on the PO — a claim, a dispute, a reversal — in
+  // full or in part (owner 2026-10-13: a lost-in-transit PO with a partial
+  // payout was nowhere on Reconcile; the gap can still go to UPS or a case)
+  const paid = items.filter(it => it.status === 'reimbursed' || it.status === 'reimbursed_pending');
+  if (!['notReceived', 'wfsPending', 'marked', 'paid'].includes(rc.bucket) || (rc.bucket === 'marked' && !marked.length) || (rc.bucket === 'paid' && !paid.length)) rc.bucket = 'notReceived';
+  const tabs = [['notReceived', 'Not received', notReceived.length], ['wfsPending', 'WFS pending', pending.length], ...(paid.length ? [['paid', 'Walmart paid', paid.length]] : []), ...(marked.length ? [['marked', 'Marked', marked.length]] : [])];
+  $('rcBucketTabs').innerHTML = tabs.map(([k, label, n]) =>
+    `<button type="button" class="rc-tab ${rc.bucket === k ? 'is-active' : ''}" data-rcbucket="${k}">${label} <span class="rc-tab-count ${rc.bucket === k && k === 'notReceived' && n ? 'is-red' : ''}">${n}</span></button>`).join('');
+  const isMarked = rc.bucket === 'marked';
+  const isPaid = rc.bucket === 'paid';
+  // every header sorts (owner 2026-10-12: "clickable column headers, not
+  // buttons"); untouched, the open tabs run soonest-to-file first and the
+  // Marked tab newest refund first
+  const so = rc.reconcileSort || (isMarked ? { key: 'refundTs', dir: -1 } : isPaid ? { key: 'gap', dir: -1 } : { key: 'left', dir: 1 });
+  const sortable = (isMarked ? marked : isPaid ? paid : (rc.bucket === 'wfsPending' ? pending : notReceived)).map(it => ({ ...it,
+    left: rcDaysLeft(it), units: Number(it.qty) || 1, amount: Number(it.amount) || 0,
+    refundTs: Number.isFinite(Date.parse(it.refundDate)) ? Date.parse(it.refundDate) : null,
+    paid: Number(it.settlementSeen) || 0, gap: Number(it.lostAmount) || 0,
+    reasonText: String(it.reason || ''), markText: it.status === 'never_shipped' ? 'Never shipped' : it.status === 'loss' ? 'Loss' : 'Received' }));
+  rc.rcSortable = sortable;
+  const rows = rcSortRows(rcApplyFilters(sortable), so, 'left');
+  rcRenderFilterBar(rows.length, sortable.length);
+  const fTh = (key, label, right, text, first) => rcSortTh(so, key, label, right, text, first, true);
+  const head = '<th class="rc-g">#</th>' + fTh('po', 'PO #', false, true) + fTh('type', 'Type', false, true) + fTh('sku', 'Item', false, true)
+    + fTh('units', 'Units', true, false, 1) + fTh('refundTs', 'Refunded', false) + fTh('amount', 'Net refund', true)
+    + (isMarked ? '' : isPaid ? fTh('paid', 'Walmart paid', true) + fTh('gap', 'Still lost', true) : fTh('left', 'Days left', true, false, 1))
+    + (isMarked ? fTh('markText', 'Mark', false, true) : fTh('reasonText', 'Reason', false, true)) + '<th></th>';
+  const markCell = (it) => {
+    const never = it.status === 'never_shipped'; const loss = it.status === 'loss';
+    const paidBack = loss && (Number(it.settlementSeen) || 0) > 0 ? `Walmart paid ${rcMoney(it.settlementSeen)} · ${rcMoney(it.lostAmount || 0)} lost` : '';
+    const who = [it.station, it.receivedOn ? `came back ${rcMonDay(it.receivedOn)}` : '', rcMonDay(loss ? it.writtenOffAt : never ? it.neverShippedAt : it.receivedManualAt), paidBack, loss ? 'cost charged on Profit' : ''].filter(Boolean).join(' · ');
+    const label = loss ? 'Loss' : never ? 'Never shipped' : 'Received';
+    return `<span class="rc-mark-chip ${loss ? 'is-loss' : never ? 'is-never' : 'is-recv'}">${label}</span> <span class="rc-muted rc-small">${esc(who)}</span>`;
+  };
+  // an open case (owner 2026-10-13, design B): a navy bar on the row's edge,
+  // a flag by the PO that opens the case card, the case's age after the reason
+  const caseAge = (it) => { const d = rcDaysSince(it.caseOpenedAt); return d == null ? '' : d === 0 ? 'today' : `${d}d`; };
+  const flag = (it) => it.caseOpened ? `<button type="button" class="rc-flag" data-rccase="${esc(it.po)}" title="${esc(`Case opened ${rcMonDay(it.caseOpenedAt)}${it.caseId ? ` · #${it.caseId}` : ''} · click for the case`)}" aria-label="Case details">${RC_FLAG}</button>` : '';
+  const caseSub = (it) => it.caseOpened ? ` <span class="rc-case-sub">· case ${caseAge(it)}</span>` : '';
+  const body = rows.length ? rows.map((it, i) => `<tr data-rcrow="${esc(it.po)}" class="${rcHl.has(it.po) ? 'is-hl' : ''} ${it.caseOpened ? 'is-case' : ''}">
+      <td class="rc-g">${i + 1}</td>
+      <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart">${esc(it.po)}</button>${flag(it)}</td>
+      <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
+      <td title="${esc(it.item || '')}">${rcSkuLine(it.sku, it.item)}</td>
+      <td class="rc-mono is-right">${Number(it.qty) || 1}</td>
+      <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld} days ago</span>` : ''}</td>
+      <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
+      ${isMarked ? '' : isPaid ? rcPaidCells(it) : rcDaysCell(it)}
+      <td class="${isMarked ? '' : 'rc-muted'}" title="${esc(isMarked ? '' : [String(it.reason || ''), it.refundedBy ? `refunded by: ${it.refundedBy}` : ''].filter(Boolean).join(' · '))}">${isMarked ? markCell(it) : esc(String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase())) + rcIssuerWord(it) + caseSub(it)}</td>
+      <td class="rc-actions"><button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More" title="More">⋯</button></td>
+    </tr>`).join('') : `<tr class="rc-empty-row"><td colspan="11">${items.length ? (rc.bucket === 'wfsPending' ? 'No WFS refund is inside its 90-day window.' : 'Everything has come back.') : 'Nothing imported yet — import a payment period on the Import screen.'}</td></tr>`;
+  $('rcBucketTable').classList.toggle('is-marked', isMarked);
+  $('rcBucketTable').classList.toggle('is-paid', isPaid);
+  rcKeepScroll($('rcBucketTable'), () => { $('rcBucketTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+}
+function rcRenderBucket() { rcRenderReconcile(); }
+
+// a proportional bar: each segment's flex is its dollars (CSSOM, not an
+// inline attribute, so the CSP is happy); nothing at all draws an empty track
+function rcBar(el, segs) {
+  const live = segs.filter(([, v]) => Number(v) > 0);
+  el.innerHTML = live.map(([tone]) => `<div class="rc-seg ${tone}"></div>`).join('');
+  [...el.children].forEach((d, i) => { d.style.flex = String(Math.round(live[i][1] * 100) / 100); });
+}
+
+/* ----- Not received: the money bar, the Today card, the list ----- */
+function rcRenderSummary() {
+  const s = rc.summary;
+  rcRenderScopeSeg($('rcScope'), rc.scope, rcScopeKey(rc.scope, 'money'));
+  const strip = $('rcMoneyStrip');
+  if (!s) {
+    strip.innerHTML = `<div class="rc-cell"><div class="rc-label">Refunded</div><div class="rc-cell-n">$0.00</div><div class="rc-cell-sub">${rc.scope === 'cycle' ? 'no period imported' : 'nothing in this scope'}</div></div>`;
+    return;
+  }
+  const t = rc.data.today || { toFile: { count: 0 }, waiting: { count: 0 }, cases: { count: 0 } };
+  const scopeLabel = rc.scope === 'cycle' ? rcPeriodName(s.label).replace(/, \d{4}$/, '') : s.label;
+  const cell = (label, v, sub, cls = '', extra = '') => `<div class="rc-cell ${cls}"><div class="rc-label">${label}</div><div class="rc-cell-n">${v}</div><div class="rc-cell-sub">${esc(sub)}</div>${extra}</div>`;
+  strip.innerHTML = [
+    cell('Refunded', rcMoney(s.returns), `${rcPlural(s.returnsCount || 0, 'refund')} · ${scopeLabel}`, '', '<div class="rc-bar" id="rcMoneyBar"></div>'),
+    cell('Came back', rcMoney(s.received), 'back in the Returns log', 'is-navy'),
+    cell('Walmart paid back', rcMoney(s.reimbursed), s.disputeWins ? `${rcPlural(s.disputeWinsCount || 0, 'dispute win')} · ${rcMoney(s.disputeWins)}` : 'payouts and dispute wins'),
+    cell('Waiting on WFS', rcMoney(s.pendingWfs), 'Walmart pays back by day 90', 'is-amber'),
+    cell('Being chased', rcMoney(s.pendingSeller), `today: ${rcPlural(t.cases.count, 'open case')} · ${t.toFile.count} to file now`),
+    cell('Lost', rcMoney(s.loss), s.loss > 0 ? 'write-offs and partial payouts' : 'nothing lost', 'is-lost'),
+  ].join('');
+  const segs = [['is-navy', s.received], ['is-blue', s.reimbursed], ['is-amber', s.pendingWfs], ['is-pale', s.pendingSeller], ['is-red', s.loss]];
+  if (s.adjustments) segs.push(['is-grey', s.adjustments]);
+  rcBar($('rcMoneyBar'), segs);
+}
+
+// the chips of the Walmart app: All is the un-actioned to-do, WFS and
+// Seller narrow it, then the states. Loss lists every item carrying lost
+// dollars (write-offs, partial gaps, lost-after-delivery), so the money
+// story's "lost" figure can be seen row by row (owner 2026-10-12).
+const RC_TABS = [['todo', 'All'], ['wfs', 'WFS'], ['seller', 'Seller'], ['cases', 'Open cases'], ['adjustments', 'Partial adjustments'], ['lost', 'Loss'], ['reimbursed', 'Reimbursed']];
+function rcInTab(it, tab) {
+  if (tab === 'todo') return it.tab === 'todo';
+  if (tab === 'wfs') return it.tab === 'todo' && it.type === 'WFS';
+  if (tab === 'seller') return it.tab === 'todo' && it.type !== 'WFS';
+  if (tab === 'lost') return it.tab === 'lost' || (it.lostAmount || 0) > 0;
+  return it.tab === tab;
+}
+function rcMatches(it) {
+  // a search looks across every chip (owner 2026-10-12: a PO typed under
+  // Seller came back "Nothing matches" because it sat under Reimbursed)
+  if (!rc.q) return rcInTab(it, rc.tab);
+  const q = rc.q.toLowerCase();
+  return [it.po, it.sku, it.item, it.caseId, it.note].some(v => String(v || '').toLowerCase().includes(q));
+}
+function rcRenderList() {
+  const items = rc.data.items || [];
+  $('rcListTabs').innerHTML = RC_TABS.map(([k, label]) => {
+    const n = items.filter(it => rcInTab(it, k)).length;
+    return `<button type="button" class="rc-chip ${rc.tab === k ? 'is-on' : ''}" data-rctab="${k}">${label}<span class="rc-chip-n">(${n})</span></button>`;
+  }).join('');
+  // sort keys per column (owner 2026-10-12: "pressing PO# in Loss, greatest
+  // to least"); the engine's order stands until a header is clicked
+  const so = rc.listSort;
+  const keyed = items.filter(rcMatches).map(it => ({ ...it,
+    _date: it.daysOld == null ? null : -it.daysOld, _paid: it.settlementSeen, _lost: it.lostAmount || null,
+    _action: it.short ? it.short.action : '', _deadline: it.short ? it.short.deadlineAt : null, _reason: it.reason || '' }));
+  const rows = so ? rcSortRows(keyed, so, 'po') : keyed;
+  const head = '<th class="rc-g">#</th>' + rcSortTh(so, 'po', 'PO #', false, true) + rcSortTh(so, 'type', 'Type', false, true) + rcSortTh(so, 'sku', 'SKU', false, true)
+    + rcSortTh(so, '_reason', 'Reason', false, true) + rcSortTh(so, '_date', 'Refunded', false) + rcSortTh(so, 'amount', 'Amount', true)
+    + rcSortTh(so, '_paid', 'Paid back', true) + rcSortTh(so, '_lost', 'Lost', true) + rcSortTh(so, '_action', 'Action', false, true) + rcSortTh(so, '_deadline', 'Deadline', true, true) + '<th></th>';
+  let body;
+  if (rows.length) {
+    body = rows.map((it, i) => {
+      const sh = it.short || { action: it.status, tone: 'grey', deadlineText: '—', tooltip: '' };
+      const paid = it.settlementSeen != null ? `<span class="rc-paid">${rcMoney(it.settlementSeen)}</span>` : '<span class="rc-faint">—</span>';
+      const lost = it.lostAmount ? `<span class="rc-neg rc-lead">${rcMoney(it.lostAmount)}</span>` : '<span class="rc-faint">—</span>';
+      const note = it.note ? `<button type="button" class="rc-note-btn" title="${esc(it.note)}" data-rcact="note" data-rcpo="${esc(it.po)}">Note</button>` : '';
+      const prim = rcPrimary(it);
+      const caseTip = it.caseOpened ? (it.caseId ? `case ${it.caseId}` : 'case open · no case ID') : '';
+      const reason = String(it.reason || '').toLowerCase().replace(/^./, ch => ch.toUpperCase());
+      const strong = sh.tone === 'red' || (sh.tone === 'amber' && /^Unpaid/.test(sh.action)) || (sh.tone === 'green' && /^Approved/.test(sh.action));
+      const dueNow = sh.deadlineText === 'now' || (sh.tone === 'red' && sh.deadlineAt);
+      return `<tr data-rcpo="${esc(it.po)}">
+        <td class="rc-g">${i + 1}</td>
+        <td><button type="button" class="rc-po rc-po-btn" data-rcpolink="${esc(it.po)}" title="Open this PO on Walmart${caseTip ? ' · ' + esc(caseTip) : ''}">${esc(it.po)}</button></td>
+        <td class="rc-type ${it.type === 'WFS' ? 'is-wfs' : ''}">${esc(it.type)}</td>
+        <td title="${esc(it.item || '')}">${it.sku ? `<span class="rc-sku">${esc(it.sku)}</span>` : `<span class="rc-muted">${esc(it.item || '')}</span>`}${note}</td>
+        <td class="rc-muted" title="${esc(it.refundedBy ? `Refunded by: ${it.refundedBy}` : '')}">${esc(reason)}</td>
+        <td><span class="rc-mono">${esc(rcMonDay(it.refundDate))}</span>${it.daysOld != null ? ` <span class="rc-muted">· ${it.daysOld}d</span>` : ''}</td>
+        <td class="rc-mono is-right">${rcMoney(it.amount)}</td>
+        <td class="is-right rc-mono">${paid}</td>
+        <td class="is-right rc-mono">${lost}</td>
+        <td title="${esc([sh.tooltip, caseTip].filter(Boolean).join(' · '))}"><span class="rc-dot is-${esc(sh.tone)}"></span><span class="rc-lead ${strong ? 'is-' + esc(sh.tone) : ''}">${esc(sh.action)}</span></td>
+        <td class="is-right rc-mono ${dueNow ? 'rc-neg' : 'rc-muted'}">${esc(sh.deadlineText)}</td>
+        <td class="rc-actions">${prim ? `<button type="button" class="rc-btn ${prim.filled ? 'rc-btn-primary rc-btn-row' : 'rc-btn-outline rc-btn-navy'}" data-rcact="${prim.act}" data-rcpo="${esc(it.po)}">${prim.label}</button>` : ''}<button type="button" class="rc-more" data-rcmenu="${esc(it.po)}" aria-label="More actions" title="More actions">⋯</button></td>
+      </tr>`;
+    }).join('');
+  } else {
+    const waiting = rc.data.today ? rc.data.today.waiting.count : 0;
+    let msg;
+    if (rc.q) msg = 'Nothing matches.';
+    else if (rc.tab === 'todo' || rc.tab === 'wfs' || rc.tab === 'seller') msg = waiting ? `Nothing to file — ${rcPlural(waiting, 'return')} ${waiting === 1 ? 'is' : 'are'} waiting on Walmart.` : (items.length ? 'Nothing to file.' : 'Nothing not-received yet — import a payment period on the Import screen and any returns that did not arrive will show up here.');
+    else msg = { cases: 'No open cases.', adjustments: 'No partial adjustments.', reimbursed: 'Walmart has not paid anything back yet.', lost: 'Nothing lost: no write-offs, no partial reimbursements, no lost-after-delivery refunds outstanding.' }[rc.tab];
+    body = `<tr class="rc-empty-row"><td colspan="12">${esc(msg)}</td></tr>`;
+  }
+  rcKeepScroll($('rcListTable'), () => { $('rcListTable').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`; });
+}
+// re-rendering a table must not throw the page back to the top (owner
+// 2026-10-12): remember the scrolling ancestor's position and put it back
+function rcKeepScroll(el, fn) {
+  let sc = el.parentElement;
+  while (sc && sc !== document.body) { const o = getComputedStyle(sc).overflowY; if ((o === 'auto' || o === 'scroll') && sc.scrollHeight > sc.clientHeight) break; sc = sc.parentElement; }
+  const top = sc ? sc.scrollTop : (window.scrollY || 0);
+  fn();
+  if (sc) sc.scrollTop = top; else window.scrollTo(0, top);
+}
+
+// the one contextual button (§6.6): filled only when the row needs action now
+function rcPrimary(it) {
+  if (it.status !== 'outstanding' || it.adjustment) return null;
+  if (it.caseOpened) return it.caseApproved ? null : { label: 'Mark approved', act: 'approve', filled: false };
+  if (it.wfsWaiting) return null;
+  return { label: 'Open case', act: 'case', filled: !!it.needsAction };
+}
+// the overflow menu per state (§6.6)
+function rcMenuItems(it) {
+  const note = { label: it.note ? 'Edit note' : 'Add note', act: 'note' };
+  const received = { label: 'Mark received', act: 'received' };
+  const loss = { label: 'Write off as a loss', act: 'writeOff' };
+  const remove = { label: 'Remove from the list', act: 'remove', danger: true };
+  let items;
+  if (it.status === 'loss') items = [{ label: 'Un-mark loss', act: 'undoWriteOff' }, note];
+  else if (it.status === 'reimbursed_pending') items = [{ label: 'Undo pending reimbursement', act: 'undoPending' }, note];
+  else if (it.status === 'reimbursed') items = [received, loss, note];
+  else if (it.adjustment) items = [{ label: 'Undo adjustment', act: 'undoAdjustment' }, received, loss, note];
+  else if (it.caseOpened) items = [
+    it.caseApproved ? { label: 'Undo approval', act: 'unapprove' } : { label: 'Mark approved', act: 'approve' },
+    { label: 'Edit case ID', act: 'caseId' }, { label: 'Undo case', act: 'undoCase' }, { label: 'Pending reimbursement', act: 'pending' }, received, loss, note,
+  ];
+  else items = [{ label: 'Open case', act: 'case' }, received, loss, { label: 'Mark adjustment', act: 'adjustment' }, { label: 'Pending reimbursement', act: 'pending' }, note];
+  return [...items, remove];
+}
+
+/* ----- actions ----- */
+const rcItem = (po) => ((rc.data && rc.data.items) || []).find(i => i.po === po);
+// undo on Reconcile (owner 2026-10-15: "I can't do command or ctrl z"): every
+// mark first snapshots the PO's marks; Cmd/Ctrl+Z puts the last one back,
+// Cmd/Ctrl+Shift+Z redoes it. The snapshot is restored as a mark of its own,
+// so it reaches every desktop like any other.
+const RC_MARK_KEYS = ['caseOpened', 'caseOpenedAt', 'caseId', 'caseApproved', 'caseApprovedAt', 'adjustment', 'adjustmentAt', 'reimbursePending', 'reimbursePendingAt', 'writtenOff', 'writtenOffAt', 'note', 'noteAt', 'receivedManual', 'receivedManualAt', 'receivedOn', 'neverShipped', 'neverShippedAt', 'paidOut', 'paidOutBy', 'paidOutAt', 'paidOutOn'];
+rc.undoStack = []; rc.redoStack = [];
+function rcSnapshot(po) {
+  const it = rcItem(po) || {};
+  const m = {}; for (const k of RC_MARK_KEYS) if (k in it) m[k] = it[k];
+  return m;
+}
+function rcUndoPush(po) {
+  if (!po) return;
+  rc.undoStack.push({ po, marks: rcSnapshot(po) });
+  if (rc.undoStack.length > 50) rc.undoStack.shift();
+  rc.redoStack = [];
+}
+async function rcUndoRedo(redo) {
+  const from = redo ? rc.redoStack : rc.undoStack; const to = redo ? rc.undoStack : rc.redoStack;
+  const e = from.pop();
+  if (!e) { toast(redo ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  to.push({ po: e.po, marks: rcSnapshot(e.po) });
+  const res = await api.recoveryMark(e.po, 'restore', { marks: e.marks }).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not undo that.', 4000); return; }
+  rc.profit = null;
+  await rcLoad();
+  toast(`${redo ? 'Redone' : 'Undone'} · PO ${e.po}`);
+}
+document.addEventListener('keydown', (e) => {
+  if (activePage !== 'recovery' || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = String(e.key || '').toLowerCase();
+  const redo = (k === 'z' && e.shiftKey) || (k === 'y' && !e.shiftKey);
+  if (!(k === 'z' || k === 'y')) return;
+  const t = e.target;
+  if (t && (t.closest('input, textarea, select, [contenteditable="true"]') || t.closest('dialog[open]'))) return;
+  e.preventDefault();
+  rcUndoRedo(redo);
+});
+async function rcMark(po, action, payload) {
+  if (action !== 'restore') rcUndoPush(po);
+  const res = await api.recoveryMark(po, action, payload).catch(e => ({ ok: false, error: e.message }));
+  if (!res || !res.ok) { toast((res && res.error) || 'Could not save that.', 4000); return false; }
+  if (!/^undo|^caseId$|^note$/.test(action)) rcHlClear([po]); // the work on it is done: the highlight comes off
+  rc.profit = null;
+  await rcLoad();
+  return true;
+}
+function rcConfirm({ title, body, ok, danger = true }) {
+  return new Promise((resolve) => {
+    const dlg = $('rcConfirmDlg');
+    $('rcConfirmTitle').textContent = title;
+    $('rcConfirmBody').textContent = body;
+    $('rcConfirmOk').textContent = ok || 'Confirm';
+    $('rcConfirmOk').className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+    const done = (v) => { dlg.removeEventListener('close', onClose); resolve(v); };
+    const onClose = () => done(dlg.returnValue === 'ok');
+    dlg.addEventListener('close', onClose);
+    $('rcConfirmOk').onclick = () => dlg.close('ok');
+    $('rcConfirmCancel').onclick = () => dlg.close('');
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+async function rcDoAction(po, act) {
+  const it = rcItem(po);
+  if (!it) return;
+  if (act === 'case' || act === 'caseId') {
+    const dlg = $('rcCaseDlg');
+    $('rcCaseTitle').textContent = act === 'case' ? 'Open a case' : 'Case ID';
+    $('rcCasePo').textContent = `PO ${po} · ${it.item || ''}`;
+    $('rcCaseId').value = it.caseId || '';
+    $('rcCaseOk').textContent = act === 'case' ? 'Open case' : 'Save';
+    dlg.dataset.act = act;
+    dlg.dataset.po = po;
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcCaseId').focus();
+    return;
+  }
+  if (act === 'paidOut') {
+    const dlg = $('rcPayDlg');
+    $('rcPayPo').textContent = `PO ${po} · ${it.item || ''} · refund ${rcMoney(it.amount)}`;
+    $('rcPayAmt').value = it.paidOut > 0 ? String(it.paidOut) : '';
+    $('rcPayBy').value = it.paidOutBy || (it.caseOpened ? 'Walmart' : 'Shipping protection');
+    const today = new Date(); $('rcPayOn').value = it.paidOutOn || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    dlg.dataset.po = po; dlg.dataset.amount = String(it.amount || 0);
+    rcPayGapPaint();
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcPayAmt').focus();
+    return;
+  }
+  if (act === 'note') {
+    const dlg = $('rcNoteDlg');
+    $('rcNotePo').textContent = `PO ${po} · ${it.item || ''}`;
+    $('rcNoteText').value = it.note || '';
+    dlg.dataset.po = po;
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('rcNoteText').focus();
+    return;
+  }
+  if (act === 'received') {
+    // the normal receive popup, prefilled: a return is logged properly and
+    // stock moves; the PO lookup fills the rest (owner decision, spec §12.2)
+    rc.awaitRecv = true;
+    retOpenRecv(po, { sku: it.sku || '', note: it.item || '' });
+    return;
+  }
+  if (act === 'writeOff') {
+    if (!(await rcConfirm({ title: 'Mark as a loss', body: `PO ${po} — ${it.item || ''} · ${rcMoney(it.amount)}. The unit's cost is charged on the Profit page, the row moves to Marked, and nothing is chased. Undo from the Marked tab.`, ok: 'Mark loss' }))) return;
+    await rcMark(po, 'writeOff');
+    return;
+  }
+  if (act === 'remove') {
+    if (!(await rcConfirm({ title: 'Remove from the list', body: `Drop PO ${po} from the tracker on every desktop? Re-importing its period brings it back.`, ok: 'Remove' }))) return;
+    await rcMark(po, 'remove');
+    return;
+  }
+  await rcMark(po, act);
+}
+
+/* ----- import ----- */
+function rcProgress(text, state) {
+  const el = $('rcProgress');
+  el.textContent = text || '';
+  el.hidden = !text;
+  el.className = `rc-progress${state ? ` is-${state}` : ''}`;
+}
+// a stuck busy flag used to swallow every later drop in silence (owner
+// 2026-10-14: "I dropped it but nothing happened"): the flag now carries a
+// timestamp, says so when it blocks, and lets go after two minutes
+function rcBusyNow() {
+  if (!rc.busy) return false;
+  if (Date.now() - (rc.busyAt || 0) > 120000) { rc.busy = false; $('rcDrop').classList.remove('is-busy'); return false; }
+  rcProgress('Still working on the last import — try again in a moment.', 'fail');
+  return true;
+}
+async function rcImport(name, text, force) {
+  if (rcBusyNow()) return;
+  rc.busy = true; rc.busyAt = Date.now();
+  $('rcDrop').classList.add('is-busy');
+  rcProgress(`Reading ${name}…`);
+  let res;
+  try { res = await api.recoveryImport(name, text, force).catch(e => ({ ok: false, error: e.message })); }
+  finally { rc.busy = false; $('rcDrop').classList.remove('is-busy'); }
+  if (!res) { rcProgress('The import did not finish.', 'fail'); return; }
+  if (res.noRefunds) { rcProgress(`This report has no refunds (${res.format} format) — nothing was imported.`, 'fail'); return; }
+  if (res.alreadyImported) {
+    rcProgress('');
+    rc.pendingImport = { name, text };
+    $('rcDupBody').textContent = res.sameFile
+      ? `This exact file was already imported as "${rcPeriodName(res.label)}" (${rcWhen(res.ranAt)}). Re-import and replace it?`
+      : `A report for ${rcPeriodName(res.label)} was already imported (${rcWhen(res.ranAt)}). Re-import and replace it?`;
+    $('rcDupDlg').showModal();
+    return;
+  }
+  if (!res.ok) { rcProgress(res.error || 'Could not import that report.', 'fail'); return; }
+  rc.runId = res.id;
+  rc.sub = 'import';
+  rc.bucket = 'notReceived';
+  rcProgress(`Done — ${rcPeriodName(res.label)} is in the list below and selected on Reconcile. Its not-received returns are on Reconcile.${res.orders && res.priced === false ? ' This file carries no goods price, so Profit shows its payout and cost but no avg price for it.' : ''}`, 'done');
+  await rcLoad();
+}
+async function rcImportFile(file) {
+  if (!file) return;
+  if (!/\.csv$/i.test(file.name)) { rcProgress('That is not a CSV. Drop the reconciliation report from Seller Center → Payments.', 'fail'); return; }
+  let text = '';
+  try { text = await file.text(); } catch (e) { rcProgress(`Could not read the file: ${e.message}`, 'fail'); return; }
+  await rcImport(file.name, text, false);
+}
+// several reports at once (owner 2026-10-12: "bulk add payment reports"):
+// one after another, oldest period first so the tracker builds up in order;
+// a period already in the list is skipped (re-import one by one to replace)
+async function rcImportMany(files) {
+  const list = (files || []).filter(f => f && /\.csv$/i.test(f.name));
+  if (!list.length) { rcProgress('Drop the reconciliation reports (CSV) from Seller Center → Payments.', 'fail'); return; }
+  if (list.length === 1) { await rcImport(list[0].name, await list[0].text(), false); return; }
+  if (rcBusyNow()) return;
+  const items = [];
+  for (const f of list) { try { items.push({ name: f.name, text: await f.text() }); } catch { items.push({ name: f.name, text: '' }); } }
+  await rcImportBatch(items);
+}
+async function rcImportBatch(items) {
+  try { await rcImportBatchInner(items); } finally { rc.busy = false; $('rcDrop').classList.remove('is-busy'); }
+}
+async function rcImportBatchInner(items) {
+  rc.busy = true; rc.busyAt = Date.now();
+  $('rcDrop').classList.add('is-busy');
+  const done = []; const skipped = []; const failed = [];
+  // sort by the period start inside the file name when there is one, else as given
+  const stamp = (n) => { const m = String(n).match(/(\d{2})(\d{2})(\d{4})/); return m ? `${m[3]}${m[1]}${m[2]}` : ''; };
+  items.sort((a, b) => stamp(a.name).localeCompare(stamp(b.name)));
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    rcProgress(`Importing ${i + 1} of ${items.length} — ${it.name}…`);
+    const res = await api.recoveryImport(it.name, it.text, false).catch(e => ({ ok: false, error: e.message }));
+    if (res && res.ok) done.push(rcPeriodName(res.label));
+    else if (res && res.alreadyImported) { skipped.push(rcPeriodName(res.label)); it._skipped = true; }
+    else failed.push(`${it.name}: ${res && res.noRefunds ? 'no refunds in it' : (res && res.error) || 'did not import'}`);
+  }
+  // periods already in the list: ask once for the whole batch, then replace
+  // them in place (owner 2026-10-13: a re-import of every period at once)
+  const again = items.filter((it, i) => items[i]._skipped);
+  if (again.length) {
+    rc.busy = false; $('rcDrop').classList.remove('is-busy');
+    const ok = await rcConfirm({ title: `Replace ${rcPlural(again.length, 'period')} already in the list?`, body: `${skipped.join(', ')}. Each period is swapped for the file you dropped; marks, cases and expenses on its POs stay.`, ok: 'Replace', danger: false });
+    if (ok) {
+      rc.busy = true; rc.busyAt = Date.now(); $('rcDrop').classList.add('is-busy');
+      for (let i = 0; i < again.length; i++) {
+        const it = again[i];
+        rcProgress(`Replacing ${i + 1} of ${again.length} — ${it.name}…`);
+        const res = await api.recoveryImport(it.name, it.text, true).catch(e => ({ ok: false, error: e.message }));
+        if (res && res.ok) { done.push(rcPeriodName(res.label)); const k = skipped.indexOf(rcPeriodName(res.label)); if (k >= 0) skipped.splice(k, 1); }
+        else failed.push(`${it.name}: ${(res && res.error) || 'did not import'}`);
+      }
+    }
+  }
+  rc.busy = false;
+  $('rcDrop').classList.remove('is-busy');
+  const parts = [];
+  if (done.length) parts.push(`${rcPlural(done.length, 'period')} imported (${done.join(', ')})`);
+  if (skipped.length) parts.push(`${skipped.length} already in the list, left as is (${skipped.join(', ')})`);
+  if (failed.length) parts.push(`${failed.length} failed — ${failed.join('; ')}`);
+  rcProgress(parts.join(' · ') || 'Nothing imported.', failed.length && !done.length ? 'fail' : 'done');
+  rc.sub = 'import';
+  await rcLoad();
+}
+async function rcBrowse() {
+  const pick = await api.recoveryImportPick().catch(e => ({ ok: false, error: e.message }));
+  if (!pick || pick.canceled) return;
+  if (!pick.ok) { rcProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  if (pick.files && pick.files.length > 1) { if (!rcBusyNow()) await rcImportBatch(pick.files); return; }
+  await rcImport(pick.name, pick.text, false);
+}
+
+// Place a menu under (or above) an anchor rect. The menu is zoomed by
+// --page-scale like the page, so its own px are window px / scale: sizes
+// are multiplied back and the final position divided before it is set.
+function rcAnchor(dlg, r) {
+  const z = 1; // the Recovery menus are no longer zoomed (1:1 like Capture)
+  const w = dlg.offsetWidth * z;
+  const h = dlg.offsetHeight * z;
+  const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+  const below = r.bottom + 4 + h <= window.innerHeight - 8;
+  const top = below ? r.bottom + 4 : Math.max(8, r.top - 4 - h);
+  dlg.style.left = `${Math.round(left / z)}px`;
+  dlg.style.top = `${Math.round(top / z)}px`;
+}
+
+/* ----- wiring ----- */
+for (const b of document.querySelectorAll('[data-rcsub]')) {
+  b.addEventListener('click', async () => {
+    rc.sub = b.dataset.rcsub;
+    if (!rc.data) return;
+    if (rc.sub === 'profit' && !rc.profit) await rcLoadProfit();
+    if (rc.sub === 'wfs' && !rc.wfs) await rcLoadWfs();
+    rcRender();
+  });
+}
+$('rcProfitScope').addEventListener('click', async (e) => {
+  const w = e.target.closest('[data-rcwhen]');
+  if (w) { rcOpenPick('profit', rc.profitScope, w); return; }
+  const b = e.target.closest('[data-rcscope]');
+  if (!b) return;
+  const scope = b.dataset.rcscope;
+  if (scope !== rc.profitScope) { rc.profitScope = scope; await rcLoadProfit(); rcRenderProfit(); return; }
+  rcOpenPick('profit', scope, $('rcProfitScope').querySelector('[data-rcwhen]') || b);
+});
+// the picker under a scope pill's active segment: periods, months or years
+function rcOpenPick(which, scope, anchor) {
+  const opts = rcScopeOptions(scope);
+  if (opts.length < 2) return;
+  const key = String(rcScopeKey(scope, which));
+  rc.pickFor = which;
+  const dlg = $('rcPickDlg');
+  dlg.innerHTML = opts.map(([v, label]) => `<button class="tab-menu-item ${String(v) === key ? 'is-current' : ''}" data-rcpick="${esc(v)}">${esc(label)}</button>`).join('');
+  dlg.showModal();
+  rcAnchor(dlg, anchor.getBoundingClientRect());
+}
+$('rcPickDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcpick]');
+  $('rcPickDlg').close();
+  if (!item) return;
+  const v = item.dataset.rcpick;
+  const scope = rc.pickFor === 'money' ? rc.scope : rc.profitScope;
+  if (scope === 'cycle') { rc.runId = v; rc.profit = null; await rcLoad(); return; }
+  if (rc.pickFor === 'money') {
+    if (scope === 'month') rc.month = v; else if (scope === 'year') rc.year = v;
+    await rcLoadSummary(); rcRenderSummary(); return;
+  }
+  if (scope === 'month') rc.profitMonth = v; else if (scope === 'year') rc.profitYear = v;
+  await rcLoadProfit();
+  rcRenderProfit();
+});
+$('rcProfitTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-rcptab]'); if (b) { rc.profitTab = b.dataset.rcptab; rc.profitSort = null; rcRenderProfit(); } });
+// type a cost into a "no cost set" cell: Enter saves, Escape or blur cancels
+function rcBeginCostEdit(btn) {
+  const sku = btn.dataset.rccost;
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = '0'; input.step = '0.01'; input.placeholder = '0.00';
+  input.className = 'input stock-edit stock-cost-edit rc-cost-edit';
+  let done = false;
+  const restore = () => { if (input.parentNode) input.replaceWith(btn); };
+  const commit = async () => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    if (val === '') { restore(); return; }
+    const n = Math.round((Number(val) || 0) * 100) / 100;
+    input.disabled = true;
+    const res = await api.recoverySetCost(sku, n).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { toast((res && res.error) || 'Could not save the cost.', 4000); restore(); return; }
+    toast(`${sku} cost set to ${rcMoney(n)}`);
+    await rcLoadProfit(); rcRenderProfit();
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); done = true; restore(); }
+  });
+  input.addEventListener('blur', () => { if (!done) { done = true; restore(); } });
+  btn.replaceWith(input);
+  input.focus();
+}
+$('rcProfitTable').addEventListener('click', (e) => {
+  const costBtn = e.target.closest('[data-rccost]');
+  if (costBtn) { rcBeginCostEdit(costBtn); return; }
+  const tog = e.target.closest('[data-rctoggle]');
+  if (tog) { const k = tog.dataset.rctoggle; if (rc.profitOpen.has(k)) { rc.profitOpen.delete(k); rc.profitOpenAll.delete(k); } else rc.profitOpen.add(k); rcRenderProfit(); return; }
+  const more = e.target.closest('[data-rcshowall]');
+  if (more) { rc.profitOpenAll.add(more.dataset.rcshowall); rcRenderProfit(); return; }
+  const link = e.target.closest('[data-rcpolink]');
+  if (link) { rcPoMenu(link); return; }
+  const th = e.target.closest('[data-rcsort]');
+  if (!th) return;
+  const key = th.dataset.rcsort;
+  const first = th.dataset.rctext ? 1 : -1; // text A→Z first, numbers biggest first
+  // a column sort takes over from Sort by SKU
+  if (rc.profitTab === 'sku' && rc.profitStack) { rc.profitStack = false; try { localStorage.setItem('rcProfitStack', '0'); } catch { /* private mode */ } }
+  rc.profitSort = rc.profitSort && rc.profitSort.key === key ? { key, dir: -rc.profitSort.dir } : { key, dir: first };
+  rcRenderProfit();
+});
+$('rcProfitSearch').addEventListener('input', () => { rc.profitQ = $('rcProfitSearch').value.trim(); rcRenderProfit(); });
+// Sort by SKU on/off, remembered on this computer; a column header click turns it off
+$('rcProfitStackBtn').addEventListener('click', () => {
+  rc.profitStack = !rc.profitStack;
+  if (rc.profitStack) rc.profitSort = null;
+  try { localStorage.setItem('rcProfitStack', rc.profitStack ? '1' : '0'); } catch { /* private mode */ }
+  rcRenderProfit();
+});
+// the eye (owner 2026-10-13): blur every number on Profit for a screen
+// share or a visitor; the toggle is remembered per computer
+const rcBlurKey = 'rcProfitBlur';
+function rcApplyBlur() {
+  let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; } catch { /* private mode */ }
+  $('recoveryPage').classList.toggle('is-blur', on);
+  $('rcBlurBtn').classList.toggle('is-on', on);
+  $('rcBlurBtn').title = on ? 'Show the dashboard numbers' : 'Hide the dashboard numbers';
+}
+$('rcBlurBtn').addEventListener('click', () => {
+  let on = false; try { on = localStorage.getItem(rcBlurKey) === '1'; localStorage.setItem(rcBlurKey, on ? '0' : '1'); } catch { /* private mode */ }
+  rcApplyBlur();
+});
+rcApplyBlur();
+// add / edit / remove an expense (owner 2026-10-13; edit and a date range 2026-10-14)
+function rcOpenExpense(e) {
+  const dlg = $('rcExpDlg');
+  const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  rc.expEditId = e ? e.id : '';
+  $('rcExpTitle').textContent = e ? 'Edit expense' : 'Add an expense';
+  $('rcExpOk').textContent = e ? 'Save' : 'Add expense';
+  $('rcExpDate').value = e ? e.date : iso; $('rcExpDateTo').value = e ? (e.dateTo || '') : '';
+  $('rcExpAmount').value = e ? String(e.full != null ? e.full : e.amount) : ''; $('rcExpNote').value = e ? (e.note || '') : ''; $('rcExpSku').value = e ? (e.sku || '') : '';
+  const cats = (rc.profit && rc.profit.expenses && rc.profit.expenses.categories) || ['Shipping labels', 'Packaging', 'Supplies', 'Software', 'Advertising', 'Other'];
+  $('rcExpCat').innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (e && e.category) $('rcExpCat').value = e.category;
+  dlg.returnValue = '';
+  dlg.showModal();
+  setTimeout(() => $('rcExpAmount').focus(), 0);
+}
+$('rcExpAddBtn').addEventListener('click', () => rcOpenExpense(null));
+$('rcExpCancel').addEventListener('click', () => $('rcExpDlg').close(''));
+$('rcExpDlg').querySelector('form').addEventListener('submit', (e) => {
+  if (!(Number($('rcExpAmount').value) > 0)) { e.preventDefault(); toast('Enter an amount above 0.'); return; }
+  if ($('rcExpDateTo').value && $('rcExpDateTo').value < $('rcExpDate').value) { e.preventDefault(); toast('The end date is before the start date.'); return; }
+  $('rcExpDlg').returnValue = 'ok';
+});
+$('rcExpDlg').addEventListener('close', async () => {
+  if ($('rcExpDlg').returnValue !== 'ok') return;
+  const r = await api.recoveryExpenseAdd({ id: rc.expEditId || '', date: $('rcExpDate').value, dateTo: $('rcExpDateTo').value, amount: Number($('rcExpAmount').value), category: $('rcExpCat').value, note: $('rcExpNote').value, sku: $('rcExpSku').value }).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not save the expense.', 4000); return; }
+  toast(rc.expEditId ? 'Expense saved' : 'Expense added'); rc.expEditId = '';
+  await rcLoadProfit(); rcRenderProfit();
+});
+$('rcProfitTable').addEventListener('click', async (e) => {
+  const ed = e.target.closest('[data-rcexpedit]');
+  if (ed) { const x = ((rc.profit && rc.profit.expenses && rc.profit.expenses.list) || []).find(y => y.id === ed.dataset.rcexpedit); if (x) rcOpenExpense(x); return; }
+  const del = e.target.closest('[data-rcexpdel]');
+  if (!del) return;
+  if (!(await rcConfirm({ title: 'Remove this expense', body: 'It comes off every desktop. You can add it again.', ok: 'Remove' }))) return;
+  const r = await api.recoveryExpenseRemove(del.dataset.rcexpdel).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not remove it.', 4000); return; }
+  await rcLoadProfit(); rcRenderProfit();
+});
+$('rcProfitExcelBtn').addEventListener('click', async () => {
+  if (!rc.profit) { toast('Nothing to export yet.'); return; }
+  const r = await api.recoveryExportProfit(rc.profitScope, rc.profitScope === 'cycle' ? rc.runId : rc.profitScope === 'month' ? rc.profitMonth : null).catch(err => ({ ok: false, error: err.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+});
+$('rcBrowseBtn').addEventListener('click', rcBrowse);
+// the drop target (the whole page accepts the file; the box shows the state)
+for (const ev of ['dragenter', 'dragover']) {
+  $('recoveryPage').addEventListener(ev, (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $(rc.sub !== 'wfs' ? 'rcDrop' : $('rcWfsDrop').hidden ? 'rcWfsCard' : 'rcWfsDrop').classList.add('is-over'); } });
+}
+$('recoveryPage').addEventListener('dragleave', (e) => { if (!$('recoveryPage').contains(e.relatedTarget)) { for (const id of ['rcDrop', 'rcWfsDrop', 'rcWfsCard']) $(id).classList.remove('is-over'); } });
+// a file dropped anywhere else must not open in the window (it used to
+// look like nothing happened, or worse, the CSV replaced the page)
+window.addEventListener('dragover', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
+window.addEventListener('drop', (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !e.defaultPrevented) e.preventDefault(); });
+$('recoveryPage').addEventListener('drop', (e) => {
+  e.preventDefault();
+  for (const id of ['rcDrop', 'rcWfsDrop', 'rcWfsCard']) $(id).classList.remove('is-over');
+  const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+  const file = files[0];
+  if (!file) { rcProgress('Nothing readable was dropped — drop the CSV file itself, not a link to it.', 'fail'); return; }
+  if (e.target.closest && e.target.closest('#rcMarkDrop')) { rcMarkFile(file.name, null, file); return; }
+  rcRouteDrop(files, !!(e.target.closest && (e.target.closest('#rcWfsDrop') || e.target.closest('#rcWfs'))));
+});
+// the WFS inventory report goes to WFS Inventory: dropped on its box or its
+// screen, or recognised by its columns wherever it lands
+async function rcRouteDrop(files, toWfs) {
+  const read = await rcWfsReadFiles(files);
+  const wfs = read.filter(f => toWfs || rcLooksWfs(f.text));
+  const periods = files.filter(f => !wfs.some(w => w.name === f.name));
+  if (wfs.length) await rcWfsImportFiles(wfs);
+  if (!periods.length) return;
+  rc.sub = 'import'; rcRender();
+  if (periods.length > 1) rcImportMany(periods); else rcImportFile(periods[0]);
+}
+async function rcWfsBrowse() {
+  const pick = await api.recoveryWfsPick().catch(err => ({ ok: false, error: err.message }));
+  if (!pick || pick.canceled) return;
+  if (!pick.ok) { rcWfsProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  await rcWfsImportFiles(pick.files || []);
+}
+$('rcWfsBrowseBtn').addEventListener('click', rcWfsBrowse);
+$('rcWfsImportBtn').addEventListener('click', rcWfsBrowse);
+$('rcWfsWhen').addEventListener('click', () => {
+  const reps = (rc.data && rc.data.wfsReports) || [];
+  const dlg = $('rcWfsMenu');
+  dlg.innerHTML = reps.map(r => `<button class="tab-menu-item ${r.id === rc.wfsId ? 'is-current' : ''}" data-rcwfspick="${esc(r.id)}">${esc(rcPeriodName(r.label))}</button>`).join('')
+    + '<div class="tab-menu-sep"></div><button class="tab-menu-item" data-rcwfsact="import">Import report…</button><button class="tab-menu-item rc-menu-danger" data-rcwfsact="remove">Remove this report</button>';
+  dlg.showModal();
+  rcAnchor(dlg, $('rcWfsWhen').getBoundingClientRect());
+});
+$('rcWfsMenu').addEventListener('click', async (e) => {
+  const dlg = $('rcWfsMenu');
+  const pick = e.target.closest('[data-rcwfspick]');
+  const act = e.target.closest('[data-rcwfsact]');
+  if (!pick && !act && e.target === dlg) { dlg.close(); return; }
+  if (!pick && !act) return;
+  dlg.close();
+  if (pick) { if (pick.dataset.rcwfspick !== rc.wfsId) { rc.wfsId = pick.dataset.rcwfspick; rc.wfs = null; await rcLoadWfs(); rcRenderWfs(); } return; }
+  if (act.dataset.rcwfsact === 'import') { await rcWfsBrowse(); return; }
+  const meta = ((rc.data && rc.data.wfsReports) || []).find(r => r.id === rc.wfsId);
+  if (!meta) return;
+  if (!(await rcConfirm({ title: 'Remove WFS report', body: `Delete the WFS inventory report for ${rcPeriodName(meta.label)}? Your WFS Shipments log is not touched.`, ok: 'Delete' }))) return;
+  const r = await api.recoveryWfsRemove(meta.id).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not remove that report.', 4000); return; }
+  rc.wfsId = null; rc.wfs = null;
+  rcWfsProgress('');
+  await rcLoad();
+});
+$('rcWfsTable').addEventListener('click', async (e) => {
+  const rv = e.target.closest('[data-rcwfsrecv]');
+  if (rv) { await rcWfsSetReceived(rv.dataset.rcwfsrecv, true); return; }
+  const un = e.target.closest('[data-rcwfsunrecv]');
+  if (un) { await rcWfsSetReceived(un.dataset.rcwfsunrecv, false); return; }
+  const th = e.target.closest('[data-rcwfssort]');
+  if (th) {
+    const key = th.dataset.rcwfssort;
+    const cur = rc.wfsSort;
+    rc.wfsSort = cur && cur.key === key ? { key, dir: -cur.dir } : { key, dir: key === 'sku' ? 1 : -1 };
+    rcRenderWfs();
+    return;
+  }
+  const tr = e.target.closest('tbody tr[data-rcwfsrow]');
+  if (tr) tr.classList.toggle('is-hl');
+});
+// a file of POs that came back before the Returns log (owner 2026-10-12)
+function rcMarkProgress(text, cls) { const el = $('rcMarkProgress'); el.textContent = text || ''; el.hidden = !text; el.className = `rc-progress ${cls ? 'is-' + cls : ''}`; }
+async function rcMarkFile(name, text, file) {
+  if (file) {
+    if (!/\.(csv|txt)$/i.test(file.name)) { rcMarkProgress('Drop a CSV or text file of PO numbers.', 'fail'); return; }
+    try { text = await file.text(); } catch (err) { rcMarkProgress(`Could not read the file: ${err.message}`, 'fail'); return; }
+  }
+  const r = await api.recoveryMarkFile(text).catch(err => ({ ok: false, error: err.message }));
+  if (!r || !r.ok) { rcMarkProgress((r && r.error) || 'Could not read that file.', 'fail'); return; }
+  if (!r.found) { rcMarkProgress('No PO numbers found in that file.', 'fail'); return; }
+  const parts = [`${rcPlural(r.found, 'PO')} in the file`, `${r.matched.length} on the Not received list`];
+  if (r.already) parts.push(`${r.already} already received`);
+  if (r.unmatched.length) parts.push(`${r.unmatched.length} not tracked (ignored)`);
+  if (!r.matched.length) { rcMarkProgress(parts.join(' · ') + ' — nothing to mark.', 'fail'); return; }
+  const ok = await rcConfirm({ title: 'Mark received before the log', body: `${parts.join(' · ')}. They are marked in Recovery only; the Returns sheet is not touched.`, ok: `Mark ${r.matched.length} received`, danger: false });
+  if (!ok) { rcMarkProgress(''); return; }
+  const m = await api.recoveryMarkMany(r.matched, 'receivedManual', {}).catch(err => ({ ok: false, error: err.message }));
+  if (m && m.ok) rcHlClear((r.matched || []).map(x => x.po));
+  if (!m || !m.ok) { rcMarkProgress((m && m.error) || 'Could not mark those.', 'fail'); return; }
+  rcMarkProgress(`Done — ${rcPlural(m.count, 'PO')} marked received before the log${r.unmatched.length ? ` · not tracked: ${r.unmatched.slice(0, 8).join(', ')}${r.unmatched.length > 8 ? '…' : ''}` : ''}.`, 'done');
+  await rcLoad();
+}
+$('rcMarkBrowseBtn').addEventListener('click', async () => {
+  const pick = await api.recoveryMarkPick().catch(err => ({ ok: false, error: err.message }));
+  if (!pick || pick.canceled) return;
+  if (!pick.ok) { rcMarkProgress(pick.error || 'Could not open that file.', 'fail'); return; }
+  await rcMarkFile(pick.name, pick.text, null);
+});
+api.on('recovery:progress', ({ text }) => { if (rc.busy) rcProgress(text); });
+$('rcDupSkip').addEventListener('click', () => { $('rcDupDlg').close(); rc.pendingImport = null; rcProgress('Skipped — the imported period stands.', ''); });
+$('rcDupReimport').addEventListener('click', async () => {
+  $('rcDupDlg').close();
+  const p = rc.pendingImport;
+  rc.pendingImport = null;
+  if (p) await rcImport(p.name, p.text, true);
+});
+async function rcRemovePeriod(id) {
+  const meta = (rc.data.runs || []).find(r => r.id === id);
+  if (!meta) return;
+  if (!(await rcConfirm({ title: 'Remove period', body: `Delete the "${rcPeriodName(meta.label)}" run? Its not-received data is removed too.`, ok: 'Delete' }))) return;
+  const r = await api.recoveryRemoveRun(id).catch(e => ({ ok: false, error: e.message }));
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not remove that period.', 4000); return; }
+  if (rc.runId === id) rc.runId = null;
+  rc.profit = null;
+  rcProgress('');
+  await rcLoad();
+}
+async function rcExcelPeriod(id) {
+  const r = await api.recoveryExportRun(id).catch(err => ({ ok: false, error: err.message }));
+  if (r && r.ok) toast('Workbook saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the workbook.', 4000);
+}
+$('rcPeriodsTable').addEventListener('click', async (e) => {
+  const open = e.target.closest('[data-rcrun]');
+  if (open) { rc.runId = open.dataset.rcrun; rc.sub = 'reconcile'; rc.bucket = 'notReceived'; rc.profit = null; await rcLoad(); return; }
+  const xl = e.target.closest('[data-rcexcel]');
+  if (xl) { await rcExcelPeriod(xl.dataset.rcexcel); return; }
+  const rm = e.target.closest('[data-rcremove]');
+  if (rm) await rcRemovePeriod(rm.dataset.rcremove);
+});
+$('rcBucketTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rcbucket]');
+  if (b) { rc.bucket = b.dataset.rcbucket; rc.reconcileSort = null; rc.rcFilters = {}; rcRenderBucket(); }
+});
+// row actions: the primary button, the case-id line and the note chip act
+// directly; "⋯" opens the per-state menu anchored under the button
+// a PO# opens a two-way menu: the order on Seller Center or its payments
+// transactions (owner 2026-10-12); both go through the marketplace-link
+// templates in config, so a copied address can replace either
+function rcPoMenu(btn) {
+  rc.linkPo = btn.dataset.rcpolink;
+  const dlg = $('rcPoDlg');
+  dlg.showModal();
+  rcAnchor(dlg, btn.getBoundingClientRect());
+}
+$('rcPoDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcgo]');
+  $('rcPoDlg').close();
+  if (!item || !rc.linkPo) return;
+  if (item.dataset.rcgo === 'copy') { try { await navigator.clipboard.writeText(rc.linkPo); toast('PO # copied'); } catch { toast('Could not copy.'); } return; }
+  const kind = { order: 'order', return: 'return', txn: 'txn' }[item.dataset.rcgo] || 'order';
+  const r = await api.openOrderPage(rc.linkPo, 'walmart', kind).catch(() => null);
+  if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
+});
+$('rcBucketTable').addEventListener('click', (e) => {
+  const link = e.target.closest('[data-rcpolink]');
+  if (link) { rcPoMenu(link); return; }
+  const fl = e.target.closest('[data-rccase]');
+  if (fl) { rcOpenCasePop(fl.dataset.rccase, fl); return; }
+  const fb = e.target.closest('[data-rcfilter]');
+  if (fb) { rcOpenFilter(fb.dataset.rcfilter, fb); return; }
+  const th = e.target.closest('[data-rcsort]');
+  if (th) {
+    const key = th.dataset.rcsort;
+    const first = th.dataset.rcfirst ? Number(th.dataset.rcfirst) : (th.dataset.rctext ? 1 : -1);
+    const cur = rc.reconcileSort || (rc.bucket === 'marked' ? { key: 'refundTs', dir: -1 } : { key: 'left', dir: 1 });
+    rc.reconcileSort = cur.key === key ? { key, dir: -cur.dir } : { key, dir: first };
+    rcRenderReconcile(); return;
+  }
+  // a click on the row itself (not a button, link or input) highlights it,
+  // so the one being worked on stays marked across tab switches and the
+  // Walmart tabs in the browser (owner 2026-10-13); kept per computer
+  const cell = e.target.closest('td');
+  if (cell && !e.target.closest('button, a, input') && cell.closest('tr[data-rcrow]')) { rcHlToggle(cell.closest('tr[data-rcrow]').dataset.rcrow); return; }
+  const more = e.target.closest('[data-rcmenu]');
+  if (!more) return;
+  const it = rcItem(more.dataset.rcmenu);
+  if (!it) return;
+  rc.menuPo = it.po;
+  const marked = (it.status === 'received' && it.receivedManual) || it.status === 'never_shipped' || it.status === 'loss';
+  const items = marked
+    ? [[it.status === 'never_shipped' ? 'undoNeverShipped' : it.status === 'loss' ? 'undoWriteOff' : 'undoReceivedManual', 'Undo this mark']]
+    // Received (today) is a mark only: it never logs a return or moves a
+    // Linnworks quantity (owner 2026-10-13: "do not add the actual qty");
+    // Loss charges the unit's cost on Profit (owner 2026-10-13)
+    : [['receivedToday', 'Received'], ['neverShipped', 'Never shipped'], ['writeOff', 'Loss']]; // owner 2026-10-13: one Received
+  // the case mark (owner 2026-10-13, design B): opened asks for an optional
+  // ID; once set the menu offers the ID and the close
+  const caseItems = marked ? [] : [...(it.caseOpened ? [['caseId', it.caseId ? 'Case ID…' : 'Add the case ID…'], ['undoCase', 'Case closed']] : [['case', 'Case opened…']]),
+    // a payout typed by hand (owner 2026-10-14): case approved, or the insurance / carrier paid
+    ...(it.paidOut > 0 ? [['paidOut', 'Change the payout…'], ['undoPaidOut', 'Undo the payout']] : [['paidOut', 'Paid out…']])];
+  const dlg = $('rcMenuDlg');
+  dlg.innerHTML = items.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('')
+    + (caseItems.length ? '<div class="tab-menu-sep"></div>' + caseItems.map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${esc(label)}</button>`).join('') : '')
+    + '<div class="tab-menu-sep"></div>' // highlight is a click on the row, not a menu item (owner 2026-10-13: "unnecessary")
+    + [['go:order', 'Order page'], ['go:return', 'Return page'], ['go:txn', 'Transaction page'], ['go:copy', 'Copy PO #']].map(([act, label]) => `<button class="tab-menu-item" data-rcact="${act}">${label}</button>`).join('');
+  dlg.showModal();
+  rcAnchor(dlg, more.getBoundingClientRect());
+});
+$('rcMenuDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcact]');
+  $('rcMenuDlg').close();
+  if (!item || !rc.menuPo) return;
+  const act = item.dataset.rcact;
+  if (act.startsWith('go:')) {
+    const kind = act.slice(3);
+    if (kind === 'copy') { try { await navigator.clipboard.writeText(rc.menuPo); toast('PO # copied'); } catch { toast('Could not copy.'); } return; }
+    const r = await api.openOrderPage(rc.menuPo, 'walmart', kind).catch(() => null);
+    if (!r || !r.ok) toast((r && r.error) || 'Could not open the page.', 4000);
+    return;
+  }
+  if (['receivedToday', 'receivedManual', 'neverShipped', 'undoReceivedManual', 'undoNeverShipped', 'undoCase', 'undoWriteOff', 'undoPaidOut'].includes(act)) {
+    const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    rcUndoPush(rc.menuPo);
+    const r = await api.recoveryMark(rc.menuPo, act === 'receivedToday' ? 'receivedManual' : act, act === 'receivedToday' ? { on: iso } : {}).catch(err => ({ ok: false, error: err.message }));
+    if (!r || !r.ok) { toast((r && r.error) || 'Could not mark that.', 4000); return; }
+    if (!act.startsWith('undo')) rcHlClear([rc.menuPo]);
+    await rcLoad();
+    return;
+  }
+  rcDoAction(rc.menuPo, act);
+});
+$('rcCaseCancel').addEventListener('click', () => $('rcCaseDlg').close(''));
+$('rcCaseDlg').addEventListener('close', async () => {
+  const dlg = $('rcCaseDlg');
+  if (dlg.returnValue !== 'ok') return;
+  const po = dlg.dataset.po;
+  const caseId = $('rcCaseId').value.trim();
+  await rcMark(po, dlg.dataset.act === 'case' ? 'case' : 'caseId', { caseId });
+});
+$('rcCaseDlg').querySelector('form').addEventListener('submit', () => { $('rcCaseDlg').returnValue = 'ok'; });
+// the payout dialog: the gap line follows the amount as it is typed
+function rcPayGapPaint() {
+  const dlg = $('rcPayDlg'); const refund = Number(dlg.dataset.amount) || 0; const paid = Number($('rcPayAmt').value) || 0;
+  const by = $('rcPayBy').value; const gap = Math.round((refund - paid) * 100) / 100;
+  $('rcPayGap').textContent = paid > 0 ? (gap > 0.009 ? `Refund ${rcMoney(refund)} · paid ${rcMoney(paid)} · ${rcMoney(gap)} still lost` : `Refund ${rcMoney(refund)} · paid ${rcMoney(paid)} · nothing lost`) : `Refund ${rcMoney(refund)}`;
+  $('rcPayNote').textContent = /walmart/i.test(by) ? 'A Walmart payout reaches Profit through the next statement, so it is not added twice; the row moves to Walmart paid now.' : `Money from ${by} is outside Walmart's statements, so it is added to Profit on this PO.`;
+}
+$('rcPayAmt').addEventListener('input', rcPayGapPaint);
+$('rcPayBy').addEventListener('change', rcPayGapPaint);
+$('rcPayCancel').addEventListener('click', () => $('rcPayDlg').close(''));
+$('rcPayDlg').querySelector('form').addEventListener('submit', () => { $('rcPayDlg').returnValue = 'ok'; });
+$('rcPayDlg').addEventListener('close', async () => {
+  const dlg = $('rcPayDlg');
+  if (dlg.returnValue !== 'ok') return;
+  await rcMark(dlg.dataset.po, 'paidOut', { amount: Number($('rcPayAmt').value) || 0, by: $('rcPayBy').value, on: $('rcPayOn').value });
+});
+$('rcNoteCancel').addEventListener('click', () => $('rcNoteDlg').close(''));
+$('rcNoteDlg').querySelector('form').addEventListener('submit', () => { $('rcNoteDlg').returnValue = 'ok'; });
+$('rcNoteDlg').addEventListener('close', async () => {
+  const dlg = $('rcNoteDlg');
+  if (dlg.returnValue !== 'ok') return;
+  await rcMark(dlg.dataset.po, 'note', { note: $('rcNoteText').value });
+});
+// Export menu (Not received): the view as CSV, the scope's workbook, the
+// audit workbook, the mailto list and the make.com digest
+$('rcExportBtn').addEventListener('click', () => {
+  const dlg = $('rcExportDlg');
+  dlg.showModal();
+  rcAnchor(dlg, $('rcExportBtn').getBoundingClientRect());
+});
+$('rcExportDlg').addEventListener('click', async (e) => {
+  const item = e.target.closest('[data-rcexp]');
+  $('rcExportDlg').close();
+  if (!item || !rc.data) return;
+  const kind = item.dataset.rcexp;
+  let r = null;
+  if (kind === 'csv') {
+    const rows = (rc.data.items || []).filter(rcMatches);
+    if (!rows.length) { toast('Nothing in this view to export.'); return; }
+    const label = RC_TABS.find(t => t[0] === rc.tab)[1];
+    r = await api.recoveryExportCsv(rows.map(i => i.po), label).catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'summary') {
+    if (!rc.summary) { toast('No scope to export yet.'); return; }
+    r = await api.recoveryExportSummary(rc.scope, rc.scope === 'cycle' ? rc.runId : rc.scope === 'month' ? rc.month : null).catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'audit') {
+    r = await api.recoveryExportAudit().catch(err => ({ ok: false, error: err.message }));
+  } else if (kind === 'mail') {
+    r = await api.recoveryMailto().catch(err => ({ ok: false, error: err.message }));
+    if (r && r.ok) { toast(`Opening an email with ${rcPlural(r.count, 'item')}`); return; }
+  } else if (kind === 'digest') {
+    r = await api.recoveryDigestSend().catch(err => ({ ok: false, error: err.message }));
+    if (r && r.ok) {
+      if (r.sent) toast(`Digest sent — ${rcPlural(r.count, 'case')} to open`);
+      else toast({ no_url: 'Set the make.com webhook URL in Settings → Recovery first.', nothing_to_send: 'Nothing to send — no case is due.', already_sent: 'That same digest already went out today.' }[r.reason] || `Not sent (${r.reason}).`, 4000);
+      return;
+    }
+  }
+  if (r && r.ok) toast('Saved'); else if (r && !r.canceled) toast(r.error || 'Could not export.', 4000);
 });
 
 /* ---------- Shelf: the returns sell-through radar ---------- */
@@ -2020,7 +3867,8 @@ function applyBrowserPane() {
     // capture's saved width belongs to capMain (band + sheet as ONE column
     // since 2026-08-17); pinning the inner rowsMain froze the grip drag —
     // the outer shell moved, the table did not (owner report 2026-08-25)
-    applySheetWidth($('capMain'), 'captureSheetWidth');
+    // the Orders list is always full width (owner 2026-10-14: the drag bar "is useless"); an old saved width is dropped
+    localStorage.removeItem('captureSheetWidth'); $('capMain').style.width = '';
     $('rowsMain').style.width = ''; // clear the stale inner pin once
     applySheetWidth($('retMain'), 'retSheetWidth');
     if (bLoad.active) bHideLoading(); // collapsing mid-load resets the panel
@@ -2822,7 +4670,7 @@ function renderStock() {
     // stock history (owner 2026-09-23): the clock opens this SKU's log; a
     // dot on it means the SKU moved today
     const today = stockHistToday && stockHistToday[String(r.sku).toUpperCase()];
-    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.clock}</button>`;
+    const hist = `<button class="btn-icon stock-hist-btn ${today ? 'has-today' : ''}" data-histsku="${esc(r.sku)}" title="${esc(stockHistTip(today))}">${ICONS.histThin}</button>`;
     return `<span class="stock-tray">
       <button class="btn-icon stock-sales-btn" data-salesku="${esc(r.sku)}" data-avail="${r.home ? r.home.stockLevel : r.l.available}" title="Sales history">${ICONS.chartBar}</button>
       ${hist}${ds}${ren}${del}</span>`;
@@ -2835,7 +4683,7 @@ function renderStock() {
     const hit = chSkuHit(r);
     return hit ? `<span class="stock-chhit" title="Matched this linked channel SKU">${esc(hit)}</span>` : '';
   };
-  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
+  const skuCell = (r) => `<td class="mono"><span class="sku-link" data-chsku="${esc(r.sku)}" data-chsid="${esc(r.stockItemId || '')}" title="${esc(r.title)}&#10;Click to see linked channel SKUs">${esc(r.sku)}</span>${chHitHtml(r)}${unlistedSkus && unlistedSkus.has(String(r.sku).toUpperCase()) ? '<span class="badge-unlisted" title="Holds returned stock but no marketplace listing is linked — create the Walmart/eBay listing with EXACTLY this SKU and Linnworks links it automatically">not listed</span>' : ''}${r.isComposite ? '<span class="badge-unlisted badge-composite" title="A composite: it draws from its parts in Linnworks, so it holds no stock of its own — the count shown is what the parts can cover">composite</span>' : ''}${deltaHtml(r)}${trayHtml(r)}</td>`;
   // WFS view: two columns that answer "do I need to send more?" - Walmart's
   // count (theirs, read-only) beside the warehouse count (yours, editable)
   // dead-end searches offer the missing SKU as a one-click create; inside a
@@ -2877,7 +4725,9 @@ function renderStock() {
           switch (key) {
             case 'sku': return skuCell(r);
             case 'cost': return `<td class="num cell-cost"><button class="stock-num-btn stock-cost-btn${Number(r.cost) > 0 ? '' : ' is-none'}" data-costsid="${esc(r.stockItemId || '')}" data-costsku="${esc(r.sku)}" data-cost="${Number(r.cost) || 0}" title="Cost — click to edit">${fmtCost(r.cost)}</button></td>`;
-            case 'stockLevel': return `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
+            case 'stockLevel': return r.isComposite
+              ? `<td class="num cell-level"><span class="stock-num-ro" title="A composite's count is what its parts can cover — adjust the parts, not this row">${r.l.available}</span></td>`
+              : `<td class="num cell-level"><button class="stock-num-btn" data-sku="${esc(r.sku)}" title="${esc(stockHistTip(stockHistToday && stockHistToday[String(r.sku).toUpperCase()], true))}">${r.l.stockLevel}</button></td>`;
             case 'inOrders': return `<td class="num"><button class="stock-num-btn stock-io-btn" data-iosku="${esc(r.sku)}" title="Click to see the open orders for ${esc(r.sku)}">${r.l.inOrders}</button></td>`;
             case 'minimumLevel': return `<td class="num cell-min"><button class="stock-num-btn stock-min-btn" data-minsid="${esc(r.stockItemId || '')}" data-minsku="${esc(r.sku)}" title="Minimum level — click to edit">${r.l.minimumLevel}</button>${(() => {
               const sug = minSuggestionFor(r, r.l);
@@ -3623,7 +5473,7 @@ function alignCaptureToolbar() {
 
 let rowsDrag = null;
 {
-  applySheetWidth($('capMain'), 'captureSheetWidth');
+  localStorage.removeItem('captureSheetWidth'); $('capMain').style.width = '';
   requestAnimationFrame(alignCaptureToolbar);
 }
 
@@ -4330,6 +6180,7 @@ async function rvCommit() {
   rvFeedback('');
   toast(sku ? `Received ${qty} × ${target}` : `Logged return ${po}`);
   loadRetPast();
+  if (activePage === 'recovery') rcLoad(); // the PO leaves the not-received list
   return true;
 }
 
@@ -5820,6 +7671,7 @@ api.on('returns:syncChanged', (d) => {
   const changes = (d && d.changes) || [];
   if (!changes.length) return;
   for (const c of changes) retFreshGids.add(String(c.gid));
+  if (activePage === 'recovery') { rcLoad(); return; } // a return logged elsewhere may clear a PO
   if (activePage !== 'returns') return; // the next page open reloads anyway
   loadRetPast();
   const news = changes.filter(c => c.op === 'put' && c.kind === 'new').length;
@@ -6318,7 +8170,8 @@ const RET_COL_KEYS = { 1: 'po', 2: 'cust', 3: 'trk', 4: 'date', 5: 'rsku', 6: 'c
 
 function applyRetCols(table) {
   if (!table) return;
-  table.querySelectorAll('thead th').forEach((th, i) => {
+  const ths = [...table.querySelectorAll('thead th')];
+  const put = () => ths.forEach((th, i) => {
     const key = RET_COL_KEYS[i];
     if (!key) return;
     if (!th.querySelector('.col-grip')) {
@@ -6330,6 +8183,20 @@ function applyRetCols(table) {
     th.style.minWidth = w ? `${w}px` : '';
     th.style.maxWidth = w ? `${w}px` : '';
   });
+  put();
+  // the Notes column keeps its room (owner 2026-10-15: "why don't I see it"):
+  // the other columns, dragged wide and remembered, had squeezed it to
+  // nothing. Give the widest remembered columns back until Notes has 140px;
+  // if that is still not enough, forget the remembered widths altogether.
+  const noteTh = ths[10];
+  if (noteTh && noteTh.offsetWidth < 140 && Object.keys(retColWidths).length) {
+    let left = 140 - noteTh.offsetWidth;
+    const keys = Object.keys(retColWidths).filter((k) => k !== 'note' && retColWidths[k] > 110).sort((a, b) => retColWidths[b] - retColWidths[a]);
+    for (const k of keys) { if (left <= 0) break; const give = Math.min(left, retColWidths[k] - 110); retColWidths[k] -= give; left -= give; }
+    if (left > 0) retColWidths = {};
+    localStorage.setItem('retColWidths', JSON.stringify(retColWidths));
+    put();
+  }
 }
 
 function applyRetColsAll() {
@@ -11398,6 +13265,11 @@ $('retFixDialog').addEventListener('close', () => {
 });
 
 /* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
+$('retExportBtn').addEventListener('click', async () => {
+  const r = await api.returnsExport().catch(e => ({ ok: false, error: e.message }));
+  if (r && r.ok) toast('Returns log saved.');
+  else if (r && !r.canceled) toast((r && r.error) || 'Could not save the returns log.', 4000);
+});
 $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
   loadUnlisted(true); // fresh scan: cards update the moment it lands
@@ -11429,6 +13301,43 @@ let ovError = ''; // the last fetch's failure, shown in the header
 let ovQuickTimer = null;
 let ovOpenSku = null; // the one expanded row
 let ovShowWatch = false;
+let ovFilter = 'all'; // all | buy | out | low | fast | was (owner 2026-10-13: the Buy now cut; 2026-10-14: Was selling)
+// Was selling (owner 2026-10-14): the slider's monthly minimum and the
+// "and now" choice, kept per computer
+let ovWasMin = (() => { try { const v = Number(localStorage.getItem('ovWasMin')); return v >= 5 ? v : 10; } catch { return 10; } })();
+let ovWasMode = (() => { try { return localStorage.getItem('ovWasMode') === 'idle' ? 'idle' : 'out'; } catch { return 'out'; } })();
+const ovWasRows = (p) => ((p && p.was) || []).filter(r => r.pace >= ovWasMin && (ovWasMode === 'idle' ? (r.daysSince == null || r.daysSince >= 14) : r.onHand <= 0));
+const OV_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ovMonName = (ym) => OV_MON[Number(String(ym).slice(5, 7)) - 1] || '';
+function ovWasRowHtml(r) {
+  const u = r.units || []; const max = Math.max(...u.map(x => Number(x) || 0), 1);
+  const bars = `<span class="ovq-ws">${u.map((v, i) => `<i class="${i === u.length - 1 ? 'is-now' : ''}" title="${esc(ovMonName((r.months || [])[i]))}: ${ovN(Number(v) || 0)}"><b class="h${Math.max(1, Math.round((Number(v) || 0) / max * 9))}"></b></i>`).join('')}</span>`;
+  const lab = r.months && r.months.length ? `${ovMonName(r.months[0])} → ${ovMonName(r.months[r.months.length - 1])}` : '';
+  const since = r.onHand <= 0 ? (r.last ? `out since ${esc(r.last)}` : 'out of stock') : (r.last ? `last sale ${esc(r.last)}` : 'no sale on record');
+  const days = r.daysSince != null ? ` · ${r.daysSince} day${r.daysSince === 1 ? '' : 's'}` : '';
+  return `<div class="ovq-item"><div class="ovq-row is-was">
+    <div><span class="ovq-badge was">Was selling</span></div>
+    <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span></div><div class="ovq-title">${esc(r.title || '')}</div></div>
+    <div class="ovq-l1">Used to sell <b>${ovN(r.pace)}</b> a month<div class="ovq-why">${r.range ? esc(r.range) + ' · ' : ''}${since}${days}${r.onHand > 0 ? ` · ${ovN(r.onHand)} on hand` : ''}</div></div>
+    <div class="ovq-wspark">${bars}<span class="ovq-wspark-l">${esc(lab)}</span></div>
+    <span class="ovq-chev-blank"></span>
+  </div></div>`;
+}
+function ovWasBarHtml(p) {
+  const note = p && p.wasReady ? '' : p && p.wasHeld ? ` <span class="rc-muted">· ${p.wasHeld} of 6 months read so far${p.wasBusy ? ', reading the rest' : ''}</span>` : ' <span class="rc-muted">· reading six months of sales from Linnworks, back in a few minutes</span>';
+  return `<div class="ovq-wbar"><span class="ovq-wbar-t">Used to sell at least</span><input type="number" class="ovq-wval mono" id="ovWasVal" min="1" max="5000" step="1" value="${ovWasMin}" aria-label="Units a month"><span class="ovq-wbar-t">units a month</span>
+    <span class="ovq-wslider"><input type="range" id="ovWasRange" min="5" max="200" step="5" value="${ovWasMin}" aria-label="Units a month"><span class="ovq-wticks"><span>5</span><span>50</span><span>100</span><span>200</span></span></span>
+    <span class="ovq-wbar-t">and now</span><span class="ovq-wseg"><button type="button" class="${ovWasMode === 'out' ? 'is-on' : ''}" data-ovwasmode="out">out of stock</button><button type="button" class="${ovWasMode === 'idle' ? 'is-on' : ''}" data-ovwasmode="idle">not selling</button></span>${note}</div>`;
+}
+function ovWasRepaint() {
+  const p = ovPlan(); const rows = ovWasRows(p);
+  const box = $('ovWasRows'); if (box) box.innerHTML = rows.length ? rows.map(ovWasRowHtml).join('') : `<div class="ovq-note">${p && p.wasReady ? `Nothing used to sell ${ovN(ovWasMin)} a month and is ${ovWasMode === 'idle' ? 'not selling now' : 'out of stock now'}.` : 'The six months of sales are still being read.'}</div>`;
+  const v = $('ovWasVal'); if (v && document.activeElement !== v) v.value = String(ovWasMin);
+  const rr = $('ovWasRange'); if (rr && document.activeElement !== rr) rr.value = String(Math.min(200, Math.max(5, ovWasMin)));
+  const chip = document.querySelector('[data-ovfilter="was"] b'); if (chip) chip.textContent = String(rows.length);
+  const r = $('ovWasRange'); if (r) r.style.setProperty('--pct', `${Math.round((ovWasMin - 5) / 195 * 100)}%`);
+  const n = $('ovWasN'); if (n) n.textContent = rows.length ? `${rows.length} SKU${rows.length === 1 ? '' : 's'}` : '';
+}
 let ovTick = null; // 1s ticker for the elapsed time while the first pass runs
 const ovSeries = {}; // sku -> { s, max } for the chart hover
 
@@ -11574,6 +13483,7 @@ function ovRenderTop() {
     <div><span class="n mono r">${c.out}</span><span class="l">out of stock</span></div>
     <div><span class="n mono a">${c.low}</span><span class="l">running low</span></div>
     <div><span class="n mono b">${c.fast}</span><span class="l">selling fast</span></div>
+    <div><span class="n mono g">${c.buy || 0}</span><span class="l">to buy now</span></div>
   </div>`;
 }
 
@@ -11589,14 +13499,20 @@ function ovPhrase(r) {
   return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
 }
 
-function ovRowHtml(r, open, hotAt) {
-  const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind];
+function ovRowHtml(r, open, hotAt, buy) {
+  const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch', stock: 'Stock' }[r.kind] || 'Stock';
   const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
+  const p = ovPlan() || {};
+  const target = (p.leadDays || 7) + (p.coverDays || 21);
+  // the Buy now cut adds the pace, what is on hand and the quantity to order
+  const why = buy ? `<div class="ovq-why">${(Number(r.perDay) || 0).toFixed(1)}/day · ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand</div>` : '';
+  const pill = buy ? `<div class="ovq-buycell"><span class="ds-pill ovq-buy ${r.daysLeft <= (p.leadDays || 7) ? 'is-hot' : 'is-warm'}" title="${(Number(r.perDay) || 0).toFixed(1)} a day × ${target} days − ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand">BUY ${ovN(r.buyQty)}</span></div>` : '';
   return `<div class="ovq-item">
-    <div class="ovq-row${open ? ' is-open' : ''}" data-ovtoggle="${esc(r.sku)}">
+    <div class="ovq-row${open ? ' is-open' : ''}${buy ? ' is-buy' : ''}" data-ovtoggle="${esc(r.sku)}">
       <div><span class="ovq-badge ${r.kind}">${badge}</span></div>
       <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>${hot}</div><div class="ovq-title">${esc(r.title || '')}</div></div>
-      <div class="ovq-l1">${ovPhrase(r)}</div>
+      <div class="ovq-l1">${ovPhrase(r)}${why}</div>
+      ${pill}
       ${OV_CHEV}
     </div>
     ${open ? ovPanelHtml(r) : ''}
@@ -11651,8 +13567,16 @@ function ovRenderList() {
   const p = ovPlan();
   const lead = (p && p.leadDays) || 7;
   const cover = (p && p.coverDays) || 21;
-  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() ? 'Selling fast — no action needed yet' : 'Needs attention';
-  const head = `<div class="ovq-card-h"><span class="lbl">${label}</span><span class="sub">Lead time ${lead} days · target ${lead + cover} days on hand</span></div>`;
+  const buyMode = ovFilter === 'buy';
+  const wasMode = ovFilter === 'was';
+  // one label whatever the chip, so the chips never shift (owner 2026-10-13)
+  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
+  const nWas = ovWasRows(p).length;
+  const chips = p && p.ready ? `<div class="ovq-filter">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast'], ['was', 'Was selling']].map(([k, t]) =>
+    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? `<b>${nBuy}</b>` : k === 'was' ? `<b>${nWas}</b>` : ''}</button>`).join('')}</div>` : '';
+  const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : wasMode ? 'best 3 of the last 6 months, averaged' : `Lead time ${lead} days · target ${lead + cover} days on hand`;
+  const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
   if (ovLoading()) {
     const mp = ovData.moneyPending;
@@ -11677,17 +13601,30 @@ function ovRenderList() {
     return;
   }
   const watch = p.watch || [];
+  if (wasMode) {
+    const rows = ovWasRows(p);
+    box.innerHTML = `${head}${ovWasBarHtml(p)}<div id="ovWasRows">${rows.length ? rows.map(ovWasRowHtml).join('') : `<div class="ovq-note">${p.wasReady ? `Nothing used to sell ${ovN(ovWasMin)} a month and is ${ovWasMode === 'idle' ? 'not selling now' : 'out of stock now'}.` : 'The six months of sales are still being read.'}</div>`}</div>
+      <div class="ovq-foot"><button class="ovq-link" data-ovwasxlsx>Download this list as Excel</button><span class="ovq-ign"><span id="ovWasN">${rows.length ? `${rows.length} SKU${rows.length === 1 ? '' : 's'}` : ''}</span><span class="dot">·</span>pace = best 3 of the last 6 months ÷ 3 · out of stock = none at the warehouse or WFS · not selling = no sale in 14 days</span></div>`;
+    const rg = $('ovWasRange'); if (rg) rg.style.setProperty('--pct', `${Math.round((ovWasMin - 5) / 195 * 100)}%`);
+    return;
+  }
   // the watch list expands as more of the SAME rows (owner 2026-10-08:
   // "the same as above but expanded"), not a compact grid
-  const rows = [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])];
+  const rows = buyMode ? (p.buy || [])
+    : ovFilter === 'all' ? [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])]
+      : p.rows.filter(r => r.kind === ovFilter);
   if (ovOpenSku && !rows.some(r => r.sku === ovOpenSku)) ovOpenSku = null;
+  const empty = buyMode ? 'Nothing sells a unit a day and runs under the target. Nothing to buy.' : ovFilter !== 'all' ? 'Nothing in this group.' : ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.';
   const list = rows.length
-    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1)).join('')
-    : `<div class="ovq-note">${ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.'}</div>`;
+    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1, buyMode)).join('')
+    : `<div class="ovq-note">${empty}</div>`;
   const watchHtml = '';
   const ign = p.ignored || [];
-  const foot = `<div class="ovq-foot">
-    ${watch.length ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
+  const foot = buyMode ? `<div class="ovq-foot">
+    ${rows.length ? '<button class="ovq-link" data-ovbuyxlsx>Download this list as Excel</button>' : '<span></span>'}
+    <span class="ovq-ign">Order quantity = the larger of ${(p && p.buyUnits) ?? 50} units and sales per day × ${lead + cover} days, minus on hand (warehouse + WFS)</span>
+  </div>` : `<div class="ovq-foot">
+    ${watch.length && ovFilter === 'all' ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
     ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
   </div>`;
   box.innerHTML = `${head}${list}${watchHtml}${foot}`;
@@ -11769,11 +13706,36 @@ $('ovList').addEventListener('mouseout', (e) => {
   for (const c of ['.ovq-guide', '.ovq-dot', '.ovq-tip']) chart.querySelector(c).hidden = true;
 });
 
+$('ovList').addEventListener('input', (e) => {
+  if (e.target.id !== 'ovWasRange' && e.target.id !== 'ovWasVal') return;
+  // the slider for exploring, the box for an exact number (owner 2026-10-14)
+  const n = Number(e.target.value);
+  if (e.target.id === 'ovWasVal' && !(n >= 1)) return;
+  ovWasMin = e.target.id === 'ovWasVal' ? Math.round(n) : Math.max(5, n || 5);
+  try { localStorage.setItem('ovWasMin', String(ovWasMin)); } catch { /* fine */ }
+  ovWasRepaint();
+});
 for (const id of ['ovList', 'ovSold']) {
   $(id).addEventListener('click', async (e) => {
     const sku = e.target.closest('[data-ovsku]');
     if (sku) { e.stopPropagation(); if (sku.dataset.ovsku) ovOpenStock(sku.dataset.ovsku); return; }
     if (e.target.closest('[data-ovwatch]')) { ovShowWatch = !ovShowWatch; ovRenderList(); return; }
+    const chip = e.target.closest('[data-ovfilter]');
+    if (chip) { ovFilter = chip.dataset.ovfilter; ovOpenSku = null; ovRenderList(); return; }
+    const wm = e.target.closest('[data-ovwasmode]');
+    if (wm) { ovWasMode = wm.dataset.ovwasmode === 'idle' ? 'idle' : 'out'; try { localStorage.setItem('ovWasMode', ovWasMode); } catch { /* fine */ } for (const b of document.querySelectorAll('[data-ovwasmode]')) b.classList.toggle('is-on', b.dataset.ovwasmode === ovWasMode); ovWasRepaint(); return; }
+    if (e.target.closest('[data-ovwasxlsx]')) {
+      const p = ovPlan(); const rows = ovWasRows(p);
+      const r = await api.overviewExportWas(rows.map(x => ({ sku: x.sku, title: x.title, pace: x.pace, last: x.last, daysSince: x.daysSince, avail: x.avail, atWfs: x.atWfs, units: x.units })), ovWasMin, ovWasMode, (p && p.wasMonths) || []).catch(err => ({ ok: false, error: err.message }));
+      if (r && r.ok) toast('List saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
+      return;
+    }
+    if (e.target.closest('[data-ovbuyxlsx]')) {
+      const p = ovPlan(); const rows = (p && p.buy) || [];
+      const r = await api.overviewExportBuy(rows.map(x => ({ sku: x.sku, title: x.title, buyQty: x.buyQty, perDay: x.perDay, avail: x.avail, atWfs: x.atWfs, daysLeft: x.daysLeft, sold30: x.sold30, kind: x.kind })), (p.leadDays || 7) + (p.coverDays || 21), p.leadDays || 7).catch(err => ({ ok: false, error: err.message }));
+      if (r && r.ok) toast('Buy list saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
+      return;
+    }
     if (e.target.closest('[data-ovundo]')) { await api.lowUnignore(); await ovFetch(); return; }
     // dismiss (owner 2026-10-10: "where can we see a dismiss button") — the
     // ignore feature the design-1a rebuild kept in code; the footer's Undo
@@ -12391,3 +14353,78 @@ $("tmExport").addEventListener("click", async () => {
   renderTmQueue();
   renderTmForm();
 });
+
+
+/* ----- find on this page: Ctrl+F / Command+F (owner 2026-10-12) ----- */
+const pageFindBar = $('pageFindBar');
+let pageFindLast = '';
+function pageFindOpen() {
+  pageFindBar.hidden = false;
+  const inp = $('pageFindInput');
+  // after the page's own key handlers, which may refocus the scan field
+  setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  if (inp.value.trim()) pageFindRun(false);
+}
+function pageFindClose() {
+  pageFindBar.hidden = true;
+  pageFindLast = '';
+  pageFindHits = []; pageFindIx = -1;
+  $('pageFindCount').textContent = '';
+  pageFindPaint();
+}
+// Find runs in the page itself with the CSS Custom Highlight API (Chromium's
+// own find-in-page also matched the text typed in this bar and kept
+// grabbing the selection, so a letter at a time would not type — owner
+// 2026-10-13). Text nodes of the visible page are scanned, the bar and
+// hidden parts skipped; matches are painted through ::highlight, nothing
+// in the DOM changes and the input keeps its focus.
+let pageFindHits = []; let pageFindIx = -1;
+function pageFindCollect(text) {
+  const q = text.toLowerCase(); const hits = [];
+  const skip = (el) => !el || el === pageFindBar || el.closest('#pageFindBar, script, style, [hidden], dialog:not([open])');
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      const el = n.parentElement;
+      if (skip(el) || !n.nodeValue || !n.nodeValue.toLowerCase().includes(q)) return NodeFilter.FILTER_REJECT;
+      // off-screen pages are display:none: no boxes
+      return el.getClientRects().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const v = n.nodeValue.toLowerCase(); let at = v.indexOf(q);
+    while (at >= 0) { const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + q.length); hits.push(r); at = v.indexOf(q, at + q.length); }
+  }
+  return hits;
+}
+function pageFindPaint() {
+  if (!('highlights' in CSS)) return;
+  CSS.highlights.set('pagefind', new Highlight(...pageFindHits));
+  CSS.highlights.set('pagefind-active', new Highlight(...(pageFindIx >= 0 && pageFindHits[pageFindIx] ? [pageFindHits[pageFindIx]] : [])));
+}
+// a new text starts a search; the same text again steps to the next match
+function pageFindRun(step, forward = true) {
+  const text = $('pageFindInput').value;
+  if (!text.trim()) { $('pageFindCount').textContent = ''; $('pageFindCount').classList.remove('is-none'); pageFindLast = ''; pageFindHits = []; pageFindIx = -1; pageFindPaint(); return; }
+  const fresh = !(step && text === pageFindLast);
+  pageFindLast = text;
+  if (fresh) { pageFindHits = pageFindCollect(text); pageFindIx = pageFindHits.length ? 0 : -1; }
+  else if (pageFindHits.length) pageFindIx = (pageFindIx + (forward ? 1 : -1) + pageFindHits.length) % pageFindHits.length;
+  pageFindPaint();
+  const n = pageFindHits.length;
+  $('pageFindCount').textContent = n ? `${pageFindIx + 1} of ${n}` : 'no matches';
+  $('pageFindCount').classList.toggle('is-none', !n);
+  const r = pageFindHits[pageFindIx];
+  if (r) { const el = r.startContainer.parentElement; if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' }); }
+}
+$('pageFindInput').addEventListener('input', () => pageFindRun(false));
+$('pageFindInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); pageFindRun(true, !e.shiftKey); }
+  else if (e.key === 'Escape') { e.preventDefault(); pageFindClose(); }
+});
+$('pageFindNext').addEventListener('click', () => pageFindRun(true, true));
+$('pageFindPrev').addEventListener('click', () => pageFindRun(true, false));
+$('pageFindClose').addEventListener('click', pageFindClose);
+document.addEventListener('keydown', (e) => {
+  if (activePage === 'capture') return; // Capture has its own order search on this key
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && String(e.key).toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); pageFindOpen(); }
+}, true);

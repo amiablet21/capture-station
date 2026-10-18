@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { CONDITION_SUFFIX, CONDITION_PREFIX, conditionOfSku } = require('./skucond');
 
 let db = null;
 
@@ -221,6 +222,11 @@ function open() {
       pace REAL NOT NULL DEFAULT 0
     );
   `);
+  // Recovery (2026-10-11): imported Walmart payment periods, their refunds /
+  // payouts / ledger, the not-received tracker and its manual markers —
+  // wm_runs, wm_refunds, wm_payouts, wm_ledger, wm_items, wm_marks,
+  // wm_tombstones (docs/recovery/SPEC.md §10.1)
+  require('./recovery/store').ensureSchema(db);
   return db;
 }
 
@@ -543,6 +549,10 @@ function markWfsReceived(id, received) {
   open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?')
     .run(received ? new Date().toISOString() : '', id);
 }
+// the received stamp as given (a mark synced from another desktop keeps its time)
+function setWfsReceivedAt(id, iso) {
+  open().prepare('UPDATE wfs_shipments SET received_at = ? WHERE id = ?').run(String(iso || ''), Number(id));
+}
 
 function setWfsIgnore(sku, days, pace) {
   const until = new Date(Date.now() + days * 86400000).toISOString();
@@ -624,27 +634,9 @@ function deleteConditionMapping(baseSku, condition) {
 }
 
 // The single condition-mapping engine: manual picks (condition_map) beat
-// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention.
+// auto-derivation from the -OPENBOX / -USED / -SCRAP listing convention
+// (the naming rule itself lives in skucond.js, shared with Recovery).
 // Pure given an inventory SKU list, so it is testable offline.
-const CONDITION_SUFFIX = { openbox: '-OPENBOX', used: '-USED', scrap: '-SCRAP' };
-// preferred naming since 2026-08-06: prefix listings (OPEN-BOX-<SKU> …);
-// suffix names keep auto-deriving so existing listings never unmap
-const CONDITION_PREFIX = { openbox: 'OPEN-BOX-', used: 'USED-', scrap: 'SCRAP-' };
-
-// The condition a SKU's own NAME carries (OPEN-BOX-X = openbox), plus the
-// core sku with that affix stripped. null = a plain sold SKU.
-function conditionOfSku(sku) {
-  const s = String(sku || '');
-  const up = s.toUpperCase();
-  for (const [cond, pre] of Object.entries(CONDITION_PREFIX)) {
-    if (up.startsWith(pre) && up.length > pre.length) return { cond, core: s.slice(pre.length) };
-  }
-  for (const [cond, suf] of Object.entries(CONDITION_SUFFIX)) {
-    if (up.endsWith(suf) && up.length > suf.length) return { cond, core: s.slice(0, s.length - suf.length) };
-  }
-  return null;
-}
-
 function resolveConditionTargets(baseSku, inventorySkus) {
   const bySkuUpper = new Map((inventorySkus || []).map(s => [String(s).toUpperCase(), s]));
   const saved = getConditionMap()[baseSku] || {};
@@ -1190,7 +1182,7 @@ module.exports = {
   open, close, backup, dbPath, localDay, quickCheck, checkFile, restoreFrom,
   createRow, getRow, todayRows, activeRows, historyRows, findByOrderNumber, findSimilarOrder,
   setTracking, updateRow, deleteRow, markSynced, markFailed, setSubstitution, setRowItems, clearFailedNotFound, dedupeOrderRows, findByOrderAndPart, setRowPart, rowsByOrderNumber,
-  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
+  rowsToSync, createWfsShipment, listWfsShipments, markWfsReceived, setWfsReceivedAt, setWfsIgnore, clearWfsIgnore, clearIgnoresByPrefix, listWfsIgnores, untouchedImportedRows,
   createReturn, listReturns, getReturn, saveReturn, deleteReturn, getConditionMap, saveConditionMapping,
   deleteConditionMapping, resolveConditionTargets, conditionOfSku, CONDITION_SUFFIX,
   lowStockCrossings, logStockChanges, stockHistory, stockHistoryToday, stockHistoryRange, historyRowsRange, rowsInDays, stockRowsFromBulkEntry, stockLogOwnRows,
