@@ -49,7 +49,7 @@ section of `src/renderer/renderer.js` (`rnrMatchesFilter`, `rnrBadge`,
 ### 2.1 The Walmart reconciliation report (one CSV per payment period)
 
 Downloaded from Seller Center → Payments. Filename pattern
-`Digital_World_Shop_10001467995_MP_<MMDDYYYY>_reconciliationreport.csv`. Two
+`Digital_World_Shop_10000000000_MP_<MMDDYYYY>_reconciliationreport.csv`. Two
 layouts exist; detect by column: **old format** has a `Period Start Date` column,
 otherwise **new format**. Strip a leading UTF‑8 BOM before parsing. Parse with
 `header: true`, skip empty lines. **PO numbers are always strings** (13–15 digits,
@@ -86,7 +86,7 @@ helper: `/wfs|walmart-fulfilled/i` → `WFS`, else `Seller`.
    Statements page; e.g. paid Jun 2 ↔ "May 16 - May 30"). This is authoritative.
 2. Else old-format `Period Start Date`/`Period End Date` columns.
 3. Else min/max refund date across the report (misleading for new-format files).
-4. Else the filename with the `Digital_World_Shop_10001467995_MP_` prefix and
+4. Else the filename with the `Digital_World_Shop_10000000000_MP_` prefix and
    `_reconciliationreport` suffix removed.
 
 Format: `Apr 19 - May 15, 2026`; across years `Dec 28, 2025 - Jan 5, 2026`.

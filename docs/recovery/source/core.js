@@ -402,7 +402,7 @@ async function runReconcile({ name, text, force }, onProgress = () => {}) {
       formatPeriod(period.start, period.end) ||
       String(name || "report")
         .replace(/\.csv$/i, "")
-        .replace("Digital_World_Shop_10001467995_MP_", "")
+        .replace(/^.*?_MP_/, "")
         .replace("_reconciliationreport", "");
 
     // Duplicate guard: fingerprint the file and bail early (before the heavy

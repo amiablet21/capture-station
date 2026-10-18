@@ -200,7 +200,7 @@ async function importReport({ name, text, force }, onProgress = () => {}) {
 
   let label =
     formatPeriod(period.start, period.end) ||
-    String(name || 'report').replace(/\.csv$/i, '').replace('Digital_World_Shop_10001467995_MP_', '').replace('_reconciliationreport', '');
+    String(name || 'report').replace(/\.csv$/i, '').replace(/^.*?_MP_/, '').replace('_reconciliationreport', '');
 
   const csvHash = crypto.createHash('sha256').update(csvText).digest('hex');
   // the same weeks under another name are the same period (owner

@@ -58,7 +58,7 @@ module.exports = function run(check) {
   check('recovery: split refund summed and sign-flipped', po7 && po7['Refunded Retail Sales'] === 75 && po7['Net Refund (Payable Impact)'] === 72, po7);
   check('recovery: period fallback = min/max refund date', parsed.period.start.getTime() === daysAgo(60).getTime() && parsed.period.end.getTime() === daysAgo(5).getTime());
   check('recovery: cross-year label', formatPeriod(new Date(2025, 11, 28), new Date(2026, 0, 5)) === 'Dec 28, 2025 - Jan 5, 2026');
-  const fromName = periodFromReportName('Digital_World_Shop_10001467995_MP_06022026_reconciliationreport.csv');
+  const fromName = periodFromReportName('Digital_World_Shop_10000000000_MP_06022026_reconciliationreport.csv');
   check('recovery: filename payment date -> paid-17..paid-3', formatPeriod(fromName.start, fromName.end) === 'May 16 - May 30, 2026', fromName);
   const pl = parsePeriodLabel('Dec 28, 2025 - Jan 5, 2026');
   check('recovery: label parses back to dates', pl.start.getFullYear() === 2025 && pl.end.getMonth() === 0 && pl.end.getDate() === 5, pl);
@@ -104,7 +104,7 @@ module.exports = function run(check) {
 
   return (async () => {
     const progress = [];
-    const name = 'Digital_World_Shop_10001467995_MP_06022026_reconciliationreport.csv';
+    const name = 'Digital_World_Shop_10000000000_MP_06022026_reconciliationreport.csv';
     const res = await recovery.importReport({ name, text: csvText }, (t) => progress.push(t));
     check('recovery: import ok with the filename period label', res.ok === true && res.label === 'May 16 - May 30, 2026' && res.totalRefunds === 11, res);
     check('recovery: progress text in order', progress.length === 3 && /^Reading/.test(progress[0]) && /Found 11 refunded POs \(new format\)/.test(progress[1]) && /^Summarizing/.test(progress[2]), progress);
