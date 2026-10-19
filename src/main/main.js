@@ -1169,6 +1169,58 @@ async function exportLinnworksSkus() {
   }
 }
 
+// Every Linnworks SKU with its last 30 days of sales (owner 2026-10-19):
+// stock, pace, days left and a suggested order per SKU, a Daily sheet and
+// an About sheet, built to decide purchasing from (in Claude too). The
+// sales come through querySales, so a station whose Overview already
+// walked the 30 days answers from its cache.
+async function exportSalesStock() {
+  const { buildSalesExport, buildSalesExportXlsx, buildSalesExportCsv } = require('./sales-export.js');
+  const cfg = config.load();
+  if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode: no Linnworks access.' };
+  const day = db.localDay();
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Export SKUs with 30-day sales',
+    defaultPath: path.join(app.getPath('documents'), `skus-sales-30d-${day}.xlsx`),
+    filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }, { name: 'CSV (three files)', extensions: ['csv'] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  const tell = (p) => { if (win && !win.isDestroyed()) win.webContents.send('export:progress', p); };
+  try {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    tell({ stage: 'sales' });
+    const sales = await querySales(db.localDay(from), day, false, (p) => {
+      if (p.stage === 'pages') tell({ stage: 'sales', detail: p.pages ? `page ${p.page} of ${p.pages}` : `page ${p.page}` });
+      else if (p.stage === 'orders') tell({ stage: 'sales', detail: `order ${Math.min(p.orders, p.done + 1).toLocaleString()} of ${p.orders.toLocaleString()}` });
+    });
+    if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
+    tell({ stage: 'inventory' });
+    const items = attachCosts(await new LinnworksClient(cfg.linnworks).listInventory());
+    tell({ stage: 'write' });
+    const withCost = !!(cfg.pages && cfg.pages.cost);
+    const data = buildSalesExport(items, sales.lines, {
+      now, days: 30,
+      locationId: cfg.linnworks.locationId, locationName: cfg.linnworks.locationName,
+      leadDays: (cfg.reorder || {}).leadTimeDays, coverDays: (cfg.reorder || {}).coverDays,
+    });
+    if (/\.csv$/i.test(filePath)) {
+      const csv = buildSalesExportCsv(data, { cost: withCost });
+      fs.writeFileSync(filePath, csv.skus, 'utf8');
+      fs.writeFileSync(filePath.replace(/\.csv$/i, '-daily.csv'), csv.daily, 'utf8');
+      fs.writeFileSync(filePath.replace(/\.csv$/i, '-about.csv'), csv.about, 'utf8');
+    } else {
+      fs.writeFileSync(filePath, buildSalesExportXlsx(data, { cost: withCost }));
+    }
+    const toBuy = data.rows.filter(r => r.status === 'Out of stock' || r.status === 'Order now').length;
+    return { ok: true, path: filePath, skus: data.rows.length, toBuy };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    tell({ stage: 'done' });
+  }
+}
+
 /* ---------- sync ---------- */
 
 async function triggerSync(trigger, ids) {
@@ -3522,6 +3574,7 @@ exit 1
   ipcMain.handle('csv:export', () => exportCsv());
   ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
   ipcMain.handle('skus:export', () => exportLinnworksSkus());
+  ipcMain.handle('salesStock:export', () => exportSalesStock());
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
       const result = await testConnection(creds || config.load().linnworks);

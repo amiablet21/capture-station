@@ -60,6 +60,7 @@ if (!window.api) {
     exportCsv: async () => ({ ok: false }),
     exportChannelSkus: async () => ({ ok: false, error: 'Preview mode' }),
     exportLinnworksSkus: async () => ({ ok: false, error: 'Preview mode' }),
+    exportSalesStock: async () => ({ ok: false, error: 'Preview mode' }),
     updateDownload: async () => ({ ok: false, error: 'Preview mode' }),
     openCsvFolder: async () => ({ ok: true }),
     chooseCsvFolder: async () => ({ ok: false, folder: '' }),
@@ -5293,10 +5294,25 @@ async function stockExportLinnworks() {
     btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
   }
 }
+// every SKU with its last 30 days of sales, to buy from (owner 2026-10-19)
+async function stockExportSales() {
+  const btn = $('stockActionsBtn');
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    const res = await api.exportSalesStock();
+    if (res.ok) toast(`${res.skus.toLocaleString()} SKUs · ${res.toBuy.toLocaleString()} out or to order now · saved to ${res.path.split(/[\\/]/).pop()}`, 5000);
+    else if (!res.canceled) toast(res.error || 'Export failed.', 4000);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Actions <span class="tab-caret">▾</span>';
+  }
+}
 api.on('export:progress', (p) => {
   const btn = $('stockActionsBtn');
   if (!btn.disabled || !p) return;
-  btn.textContent = p.stage === 'inventory' ? 'Reading inventory…'
+  btn.textContent = p.stage === 'sales' ? `Reading sales${p.detail ? ' · ' + p.detail : ''}…`
+    : p.stage === 'inventory' ? 'Reading inventory…'
     : p.stage === 'feed' ? `Reading ${p.detail || 'channel'}…`
       : p.stage === 'links' ? 'Reading link records…'
         : p.stage === 'items' ? `Reading links ${p.done + 1} of ${p.total}…`
@@ -5324,6 +5340,7 @@ $('stockActionsDlg').addEventListener('click', (e) => {
   else if (act === 'wholesale') openWsList();
   else if (act === 'bulk') bulkOpen();
   else if (act === 'export:linnworks') stockExportLinnworks();
+  else if (act === 'export:sales') stockExportSales();
   else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
 });
 $('stockSearch').addEventListener('input', () => {
