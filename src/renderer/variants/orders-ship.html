@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Orders — Ship from the order line</title>
+<!--
+  Owner 2026-10-19: on every order line on the Orders page, a way to make
+  the label right there — Ship with Walmart's rates (Walmart orders) side by
+  side with our own two UPS accounts. Always pick the cheapest first
+  (typically UPS Ground or FedEx 2Day). Never offer USPS, UPS Ground Saver,
+  FedEx Ground Economy or similar. Buying a label fills the line's tracking;
+  Process stays a separate press.
+
+  Interactive: press Ship on a line, change weight, pick a rate, Create
+  label. Sample data only — nothing calls Walmart or UPS.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); }
+  .topbar .tr { flex: 1; display: flex; justify-content: flex-end; }
+  .pg { max-width: 1240px; margin: 0 auto; padding: 4px 24px 30px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: visible; }
+  .bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+  .search { width: 260px; font-size: 12.5px; color: var(--faint); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-family: var(--mono); }
+  .chips { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; }
+  .chip { font-size: 12px; font-weight: 500; color: var(--muted); border-radius: 999px; padding: 4px 14px; }
+  .chip.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47,52,55,.08); }
+  table.ot { border-collapse: collapse; width: 100%; }
+  .ot th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .ot td { padding: 11px 16px; border-bottom: 1px solid #EFEEEC; vertical-align: middle; }
+  .ot tr.open > td { background: #FBFAF8; border-bottom-color: transparent; }
+  .gut { color: var(--faint); font-size: 12px; width: 40px; }
+  .po { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .due { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 999px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); margin-left: 8px; }
+  .sku { font-family: var(--mono); font-size: 12.5px; }
+  .x { color: var(--faint); font-size: 12px; margin-left: 4px; }
+  .mk { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-right: 8px; }
+  .mk.walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .mk.ebay { background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .mk.temu { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .trk { display: flex; align-items: center; gap: 8px; }
+  .addtrk { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--accent-soft-text); border: 1px dashed var(--border); background: none; border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  .shipbtn { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font); font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+  .shipbtn:hover { background: var(--accent-hover); }
+  .shipbtn svg { width: 14px; height: 14px; }
+  .shipbtn.on { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .tnum { font-family: var(--mono); font-size: 12.5px; }
+  .lab-ok { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .lnk { border: none; background: none; padding: 0; font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--accent-soft-text); cursor: pointer; }
+  .lnk.dim { color: var(--muted); }
+  tr.fresh > td { animation: fresh 1.8s ease-out; }
+  @keyframes fresh { from { background: var(--accent-soft); } to { background: transparent; } }
+
+  /* the panel under a line */
+  tr.panel > td { padding: 0 16px 16px; background: #FBFAF8; border-bottom: 1px solid var(--border); }
+  .sp { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 6px 18px rgba(47,52,55,.06); }
+  .h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .h .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 11px; }
+  .addr { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin-bottom: 12px; }
+  .addr b { color: var(--text); font-size: 13px; }
+  .f { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+  .f > span { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .f select, .f input { font-family: var(--font); font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); outline: none; width: 100%; }
+  .f input.m { font-family: var(--mono); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .lock { font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface-2); display: flex; }
+  .lock small { margin-left: auto; font-family: var(--font); font-size: 10.5px; color: var(--faint); }
+  .rates { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .rate { display: grid; grid-template-columns: 18px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border-soft); cursor: pointer; }
+  .rate:first-child { border-top: none; }
+  .rate:hover { background: var(--surface-2); }
+  .rate.on { background: var(--accent-soft); }
+  .rd { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--faint); display: grid; place-items: center; }
+  .rate.on .rd { border-color: var(--accent); }
+  .rate.on .rd::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .sv { font-size: 12.5px; font-weight: 500; }
+  .sv .via { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .via.wm { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .via.a { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .via.b { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+  .best { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); margin-left: 6px; vertical-align: 1px; }
+  .eta { font-size: 11px; color: var(--muted); }
+  .pr { font-family: var(--mono); font-weight: 700; font-size: 13px; min-width: 60px; text-align: right; }
+  .more { display: block; width: 100%; text-align: center; padding: 7px; border: none; border-top: 1px solid var(--border-soft); background: var(--surface-2); font-family: var(--font); font-size: 11.5px; color: var(--muted); cursor: pointer; }
+  .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .foot .sum { font-size: 12px; color: var(--muted); flex: 1; line-height: 1.45; }
+  .foot .sum b { color: var(--text); }
+  .foot .btn { padding: 9px 18px; font-size: 13.5px; font-weight: 600; }
+  .note { font-size: 11px; color: var(--faint); margin-top: 8px; }
+  .loading { padding: 26px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .loadbar { height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 10px auto 0; width: 160px; }
+  .loadbar i { display: block; height: 100%; width: 40%; background: var(--accent); animation: slide 900ms ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+
+  .footbar2 { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+  .footbar2 .l { display: flex; gap: 10px; align-items: center; }
+  .footbar2 .hint { font-size: 12px; color: var(--muted); }
+  .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 6px 0 8px; }
+  .lbl b { color: var(--text); letter-spacing: .02em; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="DWS Stock" width="30" height="30" /></div>
+  <nav class="tabs">
+    <button class="tab">Overview</button>
+    <button class="tab is-active">Orders</button>
+    <button class="tab">Stock</button>
+    <button class="tab">Returns <span class="tab-caret">▾</span></button>
+    <button class="tab">Ship</button>
+  </nav>
+  <div class="tr"></div>
+</header>
+
+<div class="pg">
+  <div class="lbl"><b>Orders · Ship from the line</b> — Walmart's rates and both UPS accounts in one list, cheapest picked; the label fills the tracking, you still press Process</div>
+  <div class="card">
+    <div class="bar">
+      <span class="search">Search PO#, SKU or tracking</span>
+      <span class="chips"><span class="chip on">All · 4</span><span class="chip">Walmart · 2</span><span class="chip">eBay · 1</span><span class="chip">Temu · 1</span></span>
+    </div>
+    <table class="ot">
+      <thead><tr><th class="gut">#</th><th>Order #</th><th>Items</th><th>Tracking</th></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+  <div class="footbar2">
+    <div class="l"><button class="btn btn-primary" id="process">Process</button><span class="hint" id="procHint"></span></div>
+    <span class="hint">Never synced</span>
+  </div>
+</div>
+
+<script>
+'use strict';
+const SHIP_ICON = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M255.42,117l-14-35A15.93,15.93,0,0,0,226.58,72H192V64a8,8,0,0,0-8-8H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H49a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,255.42,117ZM192,88h34.58l9.6,24H192ZM32,72H176v64H32ZM80,208a16,16,0,1,1,16-16A16,16,0,0,1,80,208Zm112,0a16,16,0,1,1,16-16A16,16,0,0,1,192,208Zm48-24H223a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>';
+
+const ORDERS = [
+  { n: 4, po: '108829451230774', mk: 'walmart', due: 'Due today', sku: 'X133-128GB-GRAY', qty: 1, name: 'Maria Delgado', a1: '4120 W Belmont Ave, Apt 2', a2: 'Chicago, IL 60641', value: 189.99, box: 0, wt: 1.1 },
+  { n: 3, po: '21-13542-88761', mk: 'ebay', sku: 'T510-32GB-BLACK', qty: 1, name: 'Tom Becker', a1: '88 Orchard Ln', a2: 'Columbus, OH 43215', value: 129.00, box: 1, wt: 2.4 },
+  { n: 2, po: '108827733102415', mk: 'walmart', sku: 'A15-64GB-BLACK', qty: 2, name: 'Jada Price', a1: '19 Hill St', a2: 'Austin, TX 78701', value: 258.00, box: 2, wt: 2.0 },
+  { n: 1, po: 'PO-211-07126085991032676', mk: 'temu', sku: 'X230-128GB-SILVER', qty: 1, name: 'Hakan Swenson', a1: '2314 Maple Avenue, Apt 4B', a2: 'Fairfield, NJ 07004', value: 159.00, box: 0, wt: 1.1,
+    label: { svc: 'UPS Ground', via: 'Digital World Shop', trk: '1Z4A7X030366790118', cost: 9.06 } },
+];
+const BOXES = [['Phone box', 8, 6, 4], ['Tablet box', 13, 10, 4], ['2-phone box', 10, 8, 5]];
+// what the carriers would answer; USPS, UPS Ground Saver and FedEx Ground
+// Economy come back too and are dropped before anything is shown
+const QUOTES = (o, wt) => {
+  const w = Math.max(1, Math.ceil(wt)), far = o.a2.endsWith('07004') ? 0.8 : 1;
+  const q = [];
+  if (o.mk === 'walmart') {
+    q.push({ svc: 'UPS Ground', via: 'wm', base: 7.6, lb: 0.8, d: 'Fri, Oct 23' });
+    q.push({ svc: 'FedEx Ground', via: 'wm', base: 8.1, lb: 0.85, d: 'Fri, Oct 23' });
+    q.push({ svc: 'FedEx 2Day', via: 'wm', base: 10.9, lb: 0.9, d: 'Wed, Oct 21' });
+    q.push({ svc: 'UPS 2nd Day Air', via: 'wm', base: 13.8, lb: 1.6, d: 'Wed, Oct 21' });
+    q.push({ svc: 'USPS Ground Advantage', via: 'wm', base: 5.9, lb: 0.6, d: 'Sat, Oct 24', drop: true });
+    q.push({ svc: 'FedEx Ground Economy', via: 'wm', base: 6.4, lb: 0.6, d: 'Mon, Oct 26', drop: true });
+  }
+  for (const [via, k] of [['a', 1], ['b', 0.94]]) {
+    q.push({ svc: 'UPS Ground', via, base: 10.1 * k, lb: 0.85, d: 'Fri, Oct 23' });
+    q.push({ svc: 'UPS 3 Day Select', via, base: 16.4 * k, lb: 1.5, d: 'Thu, Oct 22' });
+    q.push({ svc: 'UPS 2nd Day Air', via, base: 22.9 * k, lb: 2.1, d: 'Wed, Oct 21' });
+    q.push({ svc: 'UPS Ground Saver', via, base: 8.2 * k, lb: 0.5, d: 'Mon, Oct 26', drop: true });
+  }
+  return q.filter(r => !r.drop).map(r => ({ ...r, price: Math.round((r.base + r.lb * (w - 1)) * far * 100) / 100 }))
+    .sort((a, b) => a.price - b.price);
+};
+const VIA = { wm: ['Walmart', 'wm'], a: ['DWS UPS', 'a'], b: ['Company 2 UPS', 'b'] };
+const money = n => '$' + n.toFixed(2);
+let open = 0, pick = 0, showAll = false, loading = false, fresh = 0;
+
+function render() {
+  const body = document.getElementById('body');
+  let html = '';
+  for (const o of ORDERS) {
+    const isOpen = open === o.n;
+    const trk = o.label
+      ? `<div class="trk"><span class="tnum">${o.label.svc.split(' ')[0]} ${o.label.trk}</span><span class="lab-ok">Label</span><button class="lnk" data-act="reprint">Reprint</button><button class="lnk dim" data-act="void" data-n="${o.n}">Void</button></div>`
+      : `<div class="trk"><button class="shipbtn${isOpen ? ' on' : ''}" data-act="ship" data-n="${o.n}">${SHIP_ICON}${isOpen ? 'Close' : 'Ship'}</button><button class="addtrk">+ Add tracking</button></div>`;
+    html += `<tr class="${isOpen ? 'open' : ''}${fresh === o.n ? ' fresh' : ''}"><td class="gut">${o.n}</td>
+      <td><span class="mk ${o.mk}">${o.mk}</span><span class="po">${o.po}</span>${o.due ? `<span class="due">${o.due}</span>` : ''}</td>
+      <td><span class="sku">${o.sku}</span><span class="x">× ${o.qty}</span></td><td>${trk}</td></tr>`;
+    if (isOpen) html += `<tr class="panel"><td colspan="4">${panel(o)}</td></tr>`;
+  }
+  body.innerHTML = html;
+  fresh = 0;
+  const ready = ORDERS.filter(o => o.label).length;
+  document.getElementById('process').textContent = `Process${ready ? ` · ${ready}` : ''}`;
+  document.getElementById('procHint').textContent = ready ? `${ready} order${ready === 1 ? '' : 's'} with tracking, ready to send to Linnworks` : '';
+  wire();
+}
+
+function panel(o) {
+  const b = BOXES[o.box];
+  const left = `<div>
+    <div class="h">Ship to</div>
+    <div class="addr"><b>${o.name}</b><br>${o.a1}<br>${o.a2}</div>
+    <div class="f"><span>Box</span><select id="box">${BOXES.map((x, i) => `<option value="${i}" ${i === o.box ? 'selected' : ''}>${x[0]} · ${x[1]} × ${x[2]} × ${x[3]}</option>`).join('')}</select></div>
+    <div class="row2">
+      <div class="f"><span>Weight (lb)</span><input id="wt" class="m" value="${o.wt.toFixed(1)}" /></div>
+      <div class="f"><span>Declared value</span><input id="val" class="m" value="${o.value.toFixed(2)}" /></div>
+    </div>
+    <div class="f"><span>Reference #1</span><div class="lock">${o.po}<small>the PO#</small></div></div>
+  </div>`;
+  if (loading) return `<div class="sp">${left}<div><div class="h">Rates</div><div class="rates"><div class="loading">Getting rates from ${o.mk === 'walmart' ? 'Walmart and ' : ''}both UPS accounts…<div class="loadbar"><i></i></div></div></div></div></div>`;
+  const q = QUOTES(o, parseFloat(o.wtNow ?? o.wt));
+  const list = showAll ? q : q.slice(0, 5);
+  const sel = q[pick] || q[0];
+  const rows = list.map((r, i) => `<div class="rate${i === pick ? ' on' : ''}" data-i="${i}"><span class="rd"></span>
+    <div><div class="sv">${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span>${i === 0 ? '<span class="best">Cheapest</span>' : ''}</div><div class="eta">Arrives ${r.d}${r.via === 'wm' ? ' · paid from your Walmart payout' : ''}</div></div>
+    <span></span><span class="pr">${money(r.price)}</span></div>`).join('');
+  return `<div class="sp">${left}<div>
+    <div class="h">Rates <span class="r">${o.mk === 'walmart' ? 'Ship with Walmart + both UPS accounts' : 'both UPS accounts (Walmart labels are for Walmart orders only)'}</span></div>
+    <div class="rates">${rows}${q.length > 5 ? `<button class="more" id="more">${showAll ? 'Show fewer' : `Show all ${q.length}`}</button>` : ''}</div>
+    <div class="foot"><div class="sum"><b>${sel.svc}</b> via <b>${VIA[sel.via][0]}</b> · Ref <b>${o.po}</b><br>The tracking goes on this order. Process stays your call.</div>
+      <button class="btn btn-primary" id="create">Create label · ${money(sel.price)}</button></div>
+    <div class="note">Never offered: USPS, UPS Ground Saver, FedEx Ground Economy. The label prints only the PO# and "Merchandise".</div>
+  </div></div>`;
+}
+
+function wire() {
+  document.querySelectorAll('[data-act="ship"]').forEach(b => b.onclick = () => {
+    const n = Number(b.dataset.n);
+    if (open === n) { open = 0; render(); return; }
+    open = n; pick = 0; showAll = false; loading = true; render();
+    setTimeout(() => { loading = false; render(); }, 700);
+  });
+  document.querySelectorAll('.rate').forEach(r => r.onclick = () => { pick = Number(r.dataset.i); render(); });
+  const more = document.getElementById('more'); if (more) more.onclick = () => { showAll = !showAll; render(); };
+  const wt = document.getElementById('wt');
+  if (wt) wt.onchange = () => { ORDERS.find(o => o.n === open).wtNow = wt.value; pick = 0; render(); };
+  const box = document.getElementById('box');
+  if (box) box.onchange = () => { ORDERS.find(o => o.n === open).box = Number(box.value); render(); };
+  const c = document.getElementById('create');
+  if (c) c.onclick = () => {
+    const o = ORDERS.find(x => x.n === open);
+    const sel = QUOTES(o, parseFloat(o.wtNow ?? o.wt))[pick];
+    const pre = { wm: sel.svc.startsWith('FedEx') ? '7712' : '1Z9WM', a: '1Z4A7X', b: '1Z9R2W' }[sel.via];
+    o.label = { svc: sel.svc, via: VIA[sel.via][0], trk: pre + String(Math.abs(o.po.split('').reduce((h, ch) => h * 31 + ch.charCodeAt(0) | 0, 7))).padEnd(12, '0').slice(0, 12), cost: sel.price };
+    fresh = o.n; open = 0; render();
+  };
+  document.querySelectorAll('[data-act="void"]').forEach(b => b.onclick = () => { ORDERS.find(o => o.n === Number(b.dataset.n)).label = null; render(); });
+}
+
+// ?open = Walmart line's panel, ?ebay = the eBay line's, ?done = a label just bought
+const qs = location.search;
+if (qs.includes('open')) open = 4;
+if (qs.includes('ebay')) open = 3;
+render();
+if (qs.includes('done')) { open = 4; render(); document.getElementById('create').click(); }
+</script>
+</body>
+</html>
