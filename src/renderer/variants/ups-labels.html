@@ -9,8 +9,13 @@
   accounts side by side; every label carries the PO# as its reference and
   a value the owner can set.
 
+  Owner follow-up: also make labels WITHOUT a PO# — "No PO# — type the
+  address" swaps the PO# box for an address form (address book picks,
+  paste-a-whole-address), and Ref 1 becomes free text (invoice #, RMA).
+
   Interactive: type or click one of the sample PO#s, flip Ship/Return,
-  pick a rate, Create label. Sample data only — nothing calls UPS.
+  pick a rate, Create label. ?manual opens the no-PO# entry, ?blank starts
+  empty, ?ret starts on Return. Sample data only — nothing calls UPS.
 -->
 <link rel="stylesheet" href="../styles.css" />
 <style>
@@ -39,6 +44,21 @@
   .order .x { color: var(--faint); }
   .order .tot { margin-left: auto; font-family: var(--mono); font-weight: 600; }
   .order.miss { background: var(--neg-bg); border-color: transparent; color: var(--neg-text); }
+
+  /* manual address entry (no PO#) */
+  .seg-src button { padding: 5px 16px; font-size: 12.5px; }
+  .book { font-size: 11.5px; color: var(--faint); display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .book a { font-size: 11.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+  .book a:hover { border-color: var(--accent); }
+  .book .paste-l { margin-left: auto; color: var(--accent-soft-text); font-weight: 600; cursor: pointer; }
+  .paste-box { width: 100%; height: 76px; font-family: var(--font); font-size: 12.5px; padding: 8px 10px; border: 1px dashed var(--accent); border-radius: var(--r-ctl); resize: none; outline: none; margin-bottom: 10px; color: var(--text); }
+  .mf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 12px; }
+  .mf .c1 { grid-column: span 1; } .mf .c2 { grid-column: span 2; } .mf .c3 { grid-column: span 3; }
+  .f label i { font-style: normal; font-weight: 500; color: var(--faint); }
+  .savebook { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); margin-top: 10px; cursor: pointer; }
+  .savebook input { accent-color: var(--accent); }
+  .tag.typed { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .f input.ref-in { font-family: var(--mono); }
 
   /* Ship / Return switch */
   .seg { display: inline-flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
@@ -188,19 +208,44 @@
     <!-- LEFT: the label -->
     <div class="card">
       <div class="sec">
-        <div class="h">1 · PO#</div>
-        <div class="po-row">
-          <input id="po" class="po-in" placeholder="Paste or scan a PO#" autocomplete="off" spellcheck="false" />
+        <div class="h">1 · Start from</div>
+        <div class="seg seg-src">
+          <button id="sPo" class="on">A PO#</button>
+          <button id="sMan">No PO# — type the address</button>
         </div>
-        <div class="try" id="try">Try a sample:<a data-po="108829451230774">108829451230774</a><a data-po="21-13542-88761">21-13542-88761</a><a data-po="PO-211-07126085991032676">PO-211-07126085991032676</a></div>
-        <div id="orderLine"></div>
+        <div id="pPo" style="margin-top:12px">
+          <div class="po-row">
+            <input id="po" class="po-in" placeholder="Paste or scan a PO#" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="try" id="try">Try a sample:<a data-po="108829451230774">108829451230774</a><a data-po="21-13542-88761">21-13542-88761</a><a data-po="PO-211-07126085991032676">PO-211-07126085991032676</a></div>
+          <div id="orderLine"></div>
+        </div>
+        <div id="pMan" hidden style="margin-top:12px">
+          <div class="book">Address book
+            <a data-b="0">TechHub Distributors</a><a data-b="1">Fix-It Phone Repair</a><a data-b="2">Jordan Ellis</a>
+            <span class="paste-l" id="pasteL">Paste a whole address</span>
+          </div>
+          <textarea id="pasteBox" class="paste-box" hidden placeholder="Paste a full address here — name, street, city, state ZIP — and it fills the boxes"></textarea>
+          <div class="mf">
+            <div class="f c2"><label>Name</label><input id="mName" /></div>
+            <div class="f c2"><label>Company <i>optional</i></label><input id="mCo" /></div>
+            <div class="f c3"><label>Street</label><input id="mL1" /></div>
+            <div class="f c1"><label>Apt / suite</label><input id="mL2" /></div>
+            <div class="f c2"><label>City</label><input id="mCity" /></div>
+            <div class="f c1"><label>State</label><input id="mSt" maxlength="2" style="text-transform:uppercase" /></div>
+            <div class="f c1"><label>ZIP</label><input id="mZip" class="mono" /></div>
+            <div class="f c2"><label>Phone <i>optional</i></label><input id="mPh" class="mono" /></div>
+            <div class="f c2"><label>Email <i>optional</i></label><input id="mEm" /></div>
+          </div>
+          <label class="savebook"><input type="checkbox" id="mSave" /> Save to the address book</label>
+        </div>
       </div>
 
       <div class="sec">
         <div class="h">2 · Type</div>
         <div style="display:flex;align-items:center">
           <div class="seg">
-            <button id="mShip" class="on"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>Ship to customer</button>
+            <button id="mShip" class="on"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg><span id="mShipT">Ship to customer</span></button>
             <button id="mRet"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z"/></svg>Return to us</button>
           </div>
           <span class="seg-note" id="segNote">Our warehouse → the customer</span>
@@ -231,7 +276,8 @@
           <div class="f"><label>Dimensions (in)</label><div class="dims"><input id="dl" value="8" /><b>×</b><input id="dw" value="6" /><b>×</b><input id="dh" value="4" /></div></div>
         </div>
         <div class="fields two">
-          <div class="f"><label>Reference #1</label><div class="lock" id="ref"><span class="dim">— fills from the PO#</span><small>always the PO#</small></div></div>
+          <div class="f"><label>Reference #1</label><div class="lock" id="ref"><span class="dim">— fills from the PO#</span><small>always the PO#</small></div>
+            <input id="refIn" class="ref-in" hidden placeholder="Optional — invoice #, RMA, a note" /><div class="hint" id="refHint" hidden>Prints on the label as Ref 1</div></div>
           <div class="f"><label>Declared value</label><div class="unit pre"><input id="val" class="mono" placeholder="0.00" /><i>$</i></div><div class="hint" id="valHint">Defaults to the order total — change it if you need to</div></div>
         </div>
       </div>
@@ -244,13 +290,14 @@
   <!-- today's labels -->
   <div class="card log">
     <div class="log-h">
-      <h4>Labels</h4><span class="sub">today · <span id="logCount">4</span> labels · <span id="logSpend" class="mono">$41.87</span></span>
+      <h4>Labels</h4><span class="sub">today · <span id="logCount">5</span> labels · <span id="logSpend" class="mono">$56.49</span></span>
       <span class="chips"><span class="chip on">All</span><span class="chip">Ship</span><span class="chip">Return</span></span>
     </div>
     <table>
-      <thead><tr><th>Time</th><th>PO# (reference)</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
+      <thead><tr><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody id="logBody">
         <tr><td class="m">11:42</td><td class="m">108774102293518</td><td><span class="k ret">Return</span></td><td>UPS Ground</td><td>Company 2</td><td class="m">1Z9R2W870391665204</td><td class="num">$149.99</td><td class="num">$10.18</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td></tr>
+        <tr><td class="m">10:40</td><td class="m">INV-2291 <span class="dim" style="font-family:var(--font);font-size:11px">· no PO#</span></td><td><span class="k ship">Ship</span></td><td>UPS Ground</td><td>Digital World Shop</td><td class="m">1Z4A7X030366790118</td><td class="num">$1,840.00</td><td class="num">$14.62</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td></tr>
         <tr><td class="m">10:15</td><td class="m">21-13377-40912</td><td><span class="k ship">Ship</span></td><td>UPS Ground</td><td>Digital World Shop</td><td class="m">1Z4A7X030366781522</td><td class="num">$119.00</td><td class="num">$9.06</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td></tr>
         <tr><td class="m">09:58</td><td class="m">PO-211-06927514993273797</td><td><span class="k ret">Return</span></td><td>UPS Ground</td><td>Company 2</td><td class="m">1Z9R2W870390012745</td><td class="num">$212.00</td><td class="num">$11.40</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td></tr>
         <tr><td class="m">09:21</td><td class="m">108770553218874</td><td><span class="k ship">Ship</span></td><td>UPS 2nd Day Air</td><td>Digital World Shop</td><td class="m">1Z4A7X020355218340</td><td class="num">$329.00</td><td class="num">$11.23</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td></tr>
@@ -280,13 +327,21 @@ const SERVICES = [
   { id: '2da', name: 'UPS 2nd Day Air', base: 19.75, perLb: 2.40, days: 2, ret: true },
   { id: 'nda', name: 'UPS Next Day Air Saver', base: 38.90, perLb: 4.10, days: 1, ret: false },
 ];
+// address book for labels with no PO# (wholesale buyers, repair shops, one-offs)
+const BOOK = [
+  { name: 'Receiving Dept', co: 'TechHub Distributors', l1: '5500 Industrial Pkwy', l2: 'Dock 4', city: 'Dallas', st: 'TX', zip: '75247', ph: '214-555-0187' },
+  { name: 'Sam Ortiz', co: 'Fix-It Phone Repair', l1: '231 Main St', l2: '', city: 'Hackensack', st: 'NJ', zip: '07601', ph: '' },
+  { name: 'Jordan Ellis', co: '', l1: '77 Linden Ct', l2: 'Unit 12', city: 'Raleigh', st: 'NC', zip: '27603', ph: '' },
+];
 const BOXES = { phone: [8, 6, 4], tablet: [13, 10, 4], double: [10, 8, 5] };
 // per-account quirks so the two columns aren't a flat multiple of each other
 const QUIRK = { a: { gnd: 0.0, '3ds': -0.6, '2da': -1.2, nda: -2.8 }, b: { gnd: 0.0, '3ds': 0.9, '2da': 0.4, nda: 1.5 } };
 
 const $ = id => document.getElementById(id);
-const money = n => '$' + n.toFixed(2);
-let order = null, poKey = '', mode = 'ship', pick = null, rates = [], loadT = 0, done = false;
+const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let order = null, poKey = '', mode = 'ship', src = 'po', pick = null, rates = [], loadT = 0, done = false, spend = 56.49;
+// what prints as Ref 1: the PO#, or whatever was typed when there's no PO#
+const refText = () => src === 'po' ? poKey : $('refIn').value.trim();
 
 function eta(days) {
   const d = new Date(2026, 9, 19); let n = 0;
@@ -295,7 +350,60 @@ function eta(days) {
 }
 
 function addrHTML(a, lab, tag, edit) {
-  return `<div class="lab">${lab} ${tag}</div><div class="nm">${a.name}</div><div class="ln">${a.l1}<br>${a.city}</div>${edit ? `<span class="ed">${edit}</span>` : ''}`;
+  return `<div class="lab">${lab} ${tag}</div><div class="nm">${a.name}</div><div class="ln">${a.co ? a.co + '<br>' : ''}${a.l1}<br>${a.city}</div>${edit ? `<span class="ed">${edit}</span>` : ''}`;
+}
+
+function manualOrder() {
+  const v = id => $(id).value.trim();
+  if (!v('mName') || !v('mL1') || !v('mCity') || v('mSt').length !== 2 || v('mZip').length < 5) return null;
+  return { manual: true, name: v('mName'), co: v('mCo'), l1: v('mL1') + (v('mL2') ? ', ' + v('mL2') : ''), city: `${v('mCity')}, ${v('mSt').toUpperCase()} ${v('mZip')}`, st: v('mSt').toUpperCase() };
+}
+
+function fillManual(a) {
+  $('mName').value = a.name; $('mCo').value = a.co || ''; $('mL1').value = a.l1; $('mL2').value = a.l2 || '';
+  $('mCity').value = a.city; $('mSt').value = a.st; $('mZip').value = a.zip; $('mPh').value = a.ph || ''; $('mEm').value = '';
+  manualChanged();
+}
+
+// "Name / Company / 12 Street, Apt 3 / City, ST 12345" in any line layout
+function parsePasted(txt) {
+  const lines = txt.split(/\n|;/).map(s => s.trim()).filter(Boolean);
+  const out = { name: '', co: '', l1: '', l2: '', city: '', st: '', zip: '', ph: '' };
+  const ph = lines.findIndex(l => /^\+?[\d\s().-]{10,}$/.test(l)); if (ph >= 0) out.ph = lines.splice(ph, 1)[0];
+  const csz = lines.findIndex(l => /,?\s*[A-Za-z]{2}\s+\d{5}(-\d{4})?$/.test(l));
+  if (csz >= 0) {
+    const m = lines[csz].match(/^(.*?),?\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+    out.city = m[1].replace(/,$/, ''); out.st = m[2].toUpperCase(); out.zip = m[3];
+    const before = lines.slice(0, csz).filter(l => !/^(united states|usa|us)$/i.test(l));
+    const st = before.findIndex(l => /^\d/.test(l));
+    if (st >= 0) {
+      out.l1 = before[st]; out.l2 = before[st + 1] || '';
+      out.name = before[0] !== before[st] ? before[0] : ''; out.co = st > 1 ? before[1] : '';
+    } else { out.name = before[0] || ''; out.l1 = before[1] || ''; }
+  }
+  return out;
+}
+
+let manT = 0;
+function manualChanged() {
+  if (src !== 'man' || done) return;
+  order = manualOrder();
+  renderAddrs();
+  clearTimeout(manT);
+  if (order) manT = setTimeout(fetchRates, 400); else { rates = []; renderRates(); }
+}
+
+function setSrc(s) {
+  src = s; done = false; pick = null;
+  $('sPo').className = s === 'po' ? 'on' : ''; $('sMan').className = s === 'man' ? 'on' : '';
+  $('pPo').hidden = s !== 'po'; $('pMan').hidden = s !== 'man';
+  $('mShipT').textContent = s === 'po' ? 'Ship to customer' : 'Ship out';
+  $('ref').hidden = s !== 'po'; $('refIn').hidden = $('refHint').hidden = s === 'po';
+  $('valHint').textContent = s === 'po' ? 'Defaults to the order total — change it if you need to' : 'Optional — leave blank for no declared value';
+  if (s === 'po') { lookup($('po').value); return; }
+  $('val').value = ''; if (!$('wt').value) $('wt').value = '1.0';
+  manualChanged(); renderRates();
+  $('mName').focus();
 }
 
 function renderAddrs() {
@@ -303,10 +411,10 @@ function renderAddrs() {
   const us = mode === 'ship' ? SHIP_FROM : RETURN_TO;
   const usTag = `<span class="tag us">${mode === 'ship' ? 'Ship-from' : 'Our return address'}</span>`;
   const usEdit = mode === 'ship' ? 'Change in Settings › Shipping' : 'Set in Settings › Shipping';
-  const custTag = `<span class="tag cust">Customer</span>`;
-  const custHTML = order ? addrHTML(order, '', custTag, 'Edit for this label') : '';
+  const custTag = order && order.manual ? `<span class="tag typed">Typed in</span>` : `<span class="tag cust">Customer</span>`;
+  const custHTML = order ? addrHTML(order, '', custTag, order.manual ? '' : 'Edit for this label') : '';
   const usHTML = addrHTML(us, '', usTag, usEdit);
-  const empty = 'Customer fills in from the PO#';
+  const empty = src === 'po' ? 'Customer fills in from the PO#' : 'Fills in as you type the address above';
   const set = (el, html, lab) => {
     if (!html) { el.className = 'addr empty'; el.innerHTML = empty; return; }
     el.className = 'addr'; el.innerHTML = html.replace('<div class="lab">', `<div class="lab">${lab}`);
@@ -314,7 +422,8 @@ function renderAddrs() {
   if (mode === 'ship') { set(fromEl, usHTML, 'From'); set(toEl, custHTML, 'To'); }
   else { set(fromEl, custHTML, 'From'); set(toEl, usHTML, 'To'); }
   $('swap').className = 'swap' + (mode === 'ret' ? ' ret' : '');
-  $('segNote').textContent = mode === 'ship' ? 'Our warehouse → the customer' : 'The customer → our return address (addresses swapped)';
+  const who = src === 'po' ? 'the customer' : 'them';
+  $('segNote').textContent = mode === 'ship' ? `Our warehouse → ${who}` : `${who[0].toUpperCase() + who.slice(1)} → our return address (addresses swapped)`;
   $('addrHint').innerHTML = mode === 'ret' ? 'Swapped for a return' : '';
 }
 
@@ -341,7 +450,7 @@ function renderRates() {
   const el = $('rates');
   if (done) return;
   if (!order) {
-    el.innerHTML = `<div class="sec"><div class="h">Rates</div></div><div class="rates-empty">Paste a PO# to see UPS rates<br>from both accounts side by side.</div>`;
+    el.innerHTML = `<div class="sec"><div class="h">Rates</div></div><div class="rates-empty">${src === 'po' ? 'Paste a PO#' : 'Fill in name, street, city, state and ZIP'} to see UPS rates<br>from both accounts side by side.</div>`;
     return;
   }
   if (loadT) {
@@ -364,7 +473,7 @@ function renderRates() {
   }
   const sel = rates.find(r => r.acct.id + ':' + r.svc.id === pick);
   const val = parseFloat($('val').value) || 0;
-  html += `<div class="buy"><div class="sum">${sel ? `<b>${sel.svc.name}</b> on the <b>${sel.acct.co}</b> account<br>Ref <b class="mono">${poKey}</b> · value <b class="mono">${money(val)}</b> · ${mode === 'ret' ? '<b>Return</b> label' : 'Ship label'}` : 'Pick a rate'}</div>
+  html += `<div class="buy"><div class="sum">${sel ? `<b>${sel.svc.name}</b> on the <b>${sel.acct.co}</b> account<br>${refText() ? `Ref <b class="mono">${refText()}</b>` : 'No reference'} · ${val ? `value <b class="mono">${money(val)}</b>` : 'no declared value'} · ${mode === 'ret' ? '<b>Return</b> label' : 'Ship label'}` : 'Pick a rate'}</div>
     <button class="btn btn-primary" id="create" ${sel ? '' : 'disabled'}>Create label${sel ? ' · ' + money(sel.price) : ''}</button></div>`;
   el.innerHTML = html;
   el.querySelectorAll('.rate').forEach(r => r.onclick = () => { pick = r.dataset.k; renderRates(); });
@@ -386,7 +495,7 @@ function fetchRates() {
 function trackingFor(sel) {
   const pre = sel.acct.id === 'a' ? '4A7X' : '9R2W';
   const svc = { gnd: '03', '3ds': '12', '2da': '02', nda: '13' }[sel.svc.id];
-  let n = ''; for (const c of poKey) n += c.charCodeAt(0) % 10;
+  let n = ''; for (const c of (refText() || order.name) + order.city) n += c.charCodeAt(0) % 10;
   return '1Z' + pre + svc + (n + '00000000').slice(0, 10);
 }
 
@@ -408,7 +517,7 @@ function createLabel(sel) {
       <div class="lb-svc"><b>UPS ${svcShort}</b>${mode === 'ret' ? '<span class="rs">RS</span>' : ''}<span class="box">${box}</span></div>
       <div class="lb-trk">TRACKING #: ${trk.replace(/(.{2})(.{3})(.{3})(.{2})(.{4})(.{4})/, '$1 $2 $3 $4 $5 $6')}</div>
       <div class="lb-bc"></div>
-      <div class="lb-ref">BILLING: P/P · ${sel.acct.co.toUpperCase()} ${sel.acct.no}<br><b>REF 1: ${poKey}</b><br>DECLARED VALUE: ${money(val)}${mode === 'ret' ? '<br>RETURN — ' + order.sku : ''}</div>
+      <div class="lb-ref">BILLING: P/P · ${sel.acct.co.toUpperCase()} ${sel.acct.no}${refText() ? `<br><b>REF 1: ${refText()}</b>` : ''}${val ? '<br>DECLARED VALUE: ' + money(val) : ''}${mode === 'ret' && order.sku ? '<br>RETURN — ' + order.sku : ''}</div>
     </div>
     <div class="done-acts"><button class="btn btn-primary">Print</button><button class="btn btn-ghost-s">Save PDF</button><button class="btn btn-ghost-s">Copy tracking</button></div>
     <a class="again" id="again">New label</a>
@@ -416,12 +525,13 @@ function createLabel(sel) {
   $('again').onclick = reset;
   const tr = document.createElement('tr'); tr.className = 'fresh';
   const now = new Date(); const t = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  tr.innerHTML = `<td class="m">${t}</td><td class="m">${poKey}</td><td><span class="k ${mode === 'ret' ? 'ret' : 'ship'}">${mode === 'ret' ? 'Return' : 'Ship'}</span></td><td>${sel.svc.name}</td><td>${sel.acct.co}</td><td class="m">${trk}</td><td class="num">${money(val)}</td><td class="num">${money(sel.price)}</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td>`;
+  const refCell = src === 'po' ? poKey : `${refText() || order.name} <span class="dim" style="font-family:var(--font);font-size:11px">· no PO#</span>`;
+  tr.innerHTML = `<td class="m">${t}</td><td class="m">${refCell}</td><td><span class="k ${mode === 'ret' ? 'ret' : 'ship'}">${mode === 'ret' ? 'Return' : 'Ship'}</span></td><td>${sel.svc.name}</td><td>${sel.acct.co}</td><td class="m">${trk}</td><td class="num">${money(val)}</td><td class="num">${money(sel.price)}</td><td><div class="acts"><a>Reprint</a><a class="v">Void</a></div></td>`;
   $('logBody').prepend(tr);
   wireVoid(tr);
   const n = $('logBody').querySelectorAll('tr:not(.voided)').length;
   $('logCount').textContent = n;
-  $('logSpend').textContent = money(41.87 + sel.price);
+  spend += sel.price; $('logSpend').textContent = money(spend);
 }
 
 function wireVoid(tr) {
@@ -433,6 +543,9 @@ document.querySelectorAll('#logBody tr').forEach(wireVoid);
 function reset() {
   done = false; poKey = ''; order = null; pick = null; $('po').value = ''; $('val').value = ''; $('wt').value = '';
   $('ref').innerHTML = '<span class="dim">— fills from the PO#</span><small>always the PO#</small>';
+  ['mName', 'mCo', 'mL1', 'mL2', 'mCity', 'mSt', 'mZip', 'mPh', 'mEm', 'refIn', 'pasteBox'].forEach(id => $(id).value = '');
+  $('mSave').checked = false;
+  if (src === 'man') { setSrc('man'); return; }
   renderOrder(); renderAddrs(); renderRates(); $('po').focus();
 }
 
@@ -458,12 +571,24 @@ $('mRet').onclick = () => { mode = 'ret'; $('mRet').className = 'on'; $('mShip')
 $('box').onchange = () => { const b = BOXES[$('box').value]; if (b) [$('dl').value, $('dw').value, $('dh').value] = b; };
 $('wt').addEventListener('change', () => { if (order && !done) fetchRates(); });
 $('val').addEventListener('input', () => { if (order && !done && !loadT) renderRates(); });
+$('refIn').addEventListener('input', () => { if (order && !done && !loadT) renderRates(); });
+$('sPo').onclick = () => setSrc('po');
+$('sMan').onclick = () => setSrc('man');
+['mName', 'mCo', 'mL1', 'mL2', 'mCity', 'mSt', 'mZip'].forEach(id => $(id).addEventListener('input', manualChanged));
+document.querySelectorAll('.book a').forEach(a => a.onclick = () => fillManual(BOOK[+a.dataset.b]));
+$('pasteL').onclick = () => { $('pasteBox').hidden = !$('pasteBox').hidden; if (!$('pasteBox').hidden) $('pasteBox').focus(); };
+$('pasteBox').addEventListener('input', () => {
+  const a = parsePasted($('pasteBox').value);
+  if (a.zip) { fillManual(a); $('pasteBox').hidden = true; $('pasteBox').value = ''; }
+});
 
 // open with the first sample filled so the mockup reads at a glance; ?blank starts empty
-if (!location.search.includes('blank')) { const p = '108829451230774'; $('po').value = p; lookup(p); }
+// ?manual opens the no-PO# entry with an address-book pick filled in
+if (location.search.includes('manual')) { setSrc('man'); fillManual(BOOK[0]); $('refIn').value = 'INV-2304'; $('val').value = '2150.00'; $('wt').value = '6.5'; $('box').value = 'custom'; [$('dl').value, $('dw').value, $('dh').value] = [16, 12, 8]; }
+else if (!location.search.includes('blank')) { const p = '108829451230774'; $('po').value = p; lookup(p); }
 else { renderAddrs(); renderRates(); }
 if (location.search.includes('ret')) $('mRet').click();
-if (location.search.includes('done')) setTimeout(() => $('create') && $('create').click(), 800);
+if (location.search.includes('done')) setTimeout(() => $('create') && $('create').click(), 1800);
 </script>
 </body>
 </html>
