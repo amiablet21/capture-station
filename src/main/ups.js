@@ -169,7 +169,11 @@ function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   };
 }
 
-function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, serviceCode, reference, description }) {
+// the label's description is ALWAYS generic: no product name, model or SKU
+// ever prints on a label (owner 2026-10-19)
+const LABEL_DESC = { ship: 'Merchandise', return: 'Merchandise return' };
+
+function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, serviceCode, reference }) {
   const { from, to } = legs({ kind, shipFrom, returnTo, other });
   const p = {
     Packaging: { Code: '02' },
@@ -184,7 +188,7 @@ function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   const ref = clip(reference, 35);
   if (ref) p.ReferenceNumber = [{ Value: ref }];
   const shipment = {
-    Description: clip(description || 'Merchandise', 35),
+    Description: kind === 'return' ? LABEL_DESC.return : LABEL_DESC.ship,
     Shipper: shipperOf(account, shipFrom),
     ShipFrom: from,
     ShipTo: to,
@@ -195,9 +199,9 @@ function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   };
   if (kind === 'return') {
     // 9 = UPS Print Return Label: we print it, the customer drops it off.
-    // A return package must say what is inside.
+    // UPS requires a description of a return package (it prints as DESC)
     shipment.ReturnService = { Code: '9' };
-    p.Description = clip(description || 'Merchandise return', 35);
+    p.Description = LABEL_DESC.return;
   }
   return {
     ShipmentRequest: {

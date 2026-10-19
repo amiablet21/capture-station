@@ -1921,8 +1921,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
           made.ok && made.label.tracking === '1ZE2E0000000000001' && made.label.kind === 'return' && made.label.account_name === 'Company Two'
             && made.label.cost === 9.1 && made.gif === gif && made.size && made.size.width === 1400, made.ok ? made.label : made);
         const shipBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
-        check('ship: the PO# is Ref 1, PRL return service, value declared',
+        check('ship: the PO# is Ref 1, PRL return service, value declared, no product on the label',
           shipBody.Package[0].ReferenceNumber[0].Value === '108829451230774' && shipBody.ReturnService.Code === '9'
+            && shipBody.Package[0].Description === 'Merchandise return' && shipBody.Description === 'Merchandise return'
+            && !JSON.stringify(shipBody).includes('X133')
             && shipBody.Package[0].PackageServiceOptions.DeclaredValue.MonetaryValue === '189.99' && shipBody.Shipper.ShipperNumber === 'BBB222', shipBody);
         const typed = await exec(`api.shipCreate(${JSON.stringify({
           accountId: 'a', serviceCode: '02', kind: 'ship', party: { ...cust, company: 'TechHub' }, pkg: { weight: 6 }, value: 0,

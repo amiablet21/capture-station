@@ -14884,13 +14884,10 @@ async function spCreate(sel) {
   sp.creating = true;
   sp.createErr = '';
   spRenderRates();
-  const items = (sp.order && sp.order.items) || [];
-  const sku = items[0] ? items[0].sku : '';
   const res = await api.shipCreate({
     accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
     kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
     reference: spRefText(), fromPo: sp.src === 'po' && !!sp.order, source: sp.order ? sp.order.source : '',
-    description: sp.kind === 'return' ? `Return ${sku || 'merchandise'}` : (sku || 'Merchandise'),
     saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
   });
   sp.creating = false;

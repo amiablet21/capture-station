@@ -6225,7 +6225,7 @@ exit 1
     const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
     try {
       const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({
-        ...prep.input, serviceCode, reference, description: String((payload && payload.description) || '').trim(),
+        ...prep.input, serviceCode, reference,
       });
       const { pkg } = prep.input;
       const label = db.shipLabelAdd({

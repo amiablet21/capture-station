@@ -2,11 +2,16 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.89 highlights
+
+- **No product on UPS labels.** The label's description is always generic: "Merchandise", or "Merchandise return" on return labels (UPS requires a description on returns and prints it as DESC). No product name, model or SKU ever reaches UPS.
+- The Ship tab's second button reads just **No PO#**.
+
 ## v1.32.88 highlights
 
 - **New Ship tab: UPS labels on either company's account** (design `variants/ups-labels.html`). Tick **Ship (UPS labels)** under Settings › Pages, then fill in Settings › UPS labels (see *UPS setup* below).
   - **From a PO#:** paste or scan it and the Linnworks order fills in the customer's name and address and the order value (open or already-shipped orders alike).
-  - **No PO#:** switch to "type the address" for wholesale buyers, repair shops and one-offs. There's an address book (tick "Save to the address book" on a label to add one) and a "Paste a whole address" box that splits a pasted block into the fields.
+  - **No PO#:** switch to **No PO#** for wholesale buyers, repair shops and one-offs. There's an address book (tick "Save to the address book" on a label to add one) and a "Paste a whole address" box that splits a pasted block into the fields.
   - **Ship or Return:** a return swaps the addresses and goes to the return address set in Settings, on a UPS Print Return Label (RS).
   - **Both accounts priced side by side:** every UPS service for the package, from both companies' accounts at their own negotiated prices, with arrival dates. The cheapest is marked and picked, and each rate says how much less it is than the same service on the other account.
   - **Reference and value:** the PO# is always Reference #1 on the label (free text when there's no PO#). The declared value starts at the order total (before tax) and can be changed or left blank.
