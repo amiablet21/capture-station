@@ -1,5 +1,6 @@
 // What the bot says, worked out from the 30-day sales export rows
-// (src/main/sales-export.js) plus the bot's own "bought" notes. Pure — no
+// (src/main/sales-export.js), DWS Stock's item costs and the bot's own
+// "bought" notes and purchase log. Pure — no
 // network, no WhatsApp — so test.js can run it on made-up rows.
 
 // open box / used / scrap listings are resold returns, never bought in
@@ -17,7 +18,30 @@ const perDayText = (n) => `${Number(n || 0).toFixed(1)}/day`;
 // out of stock but a Linnworks PO already covers it: say so instead of "buy 0"
 const buyText = (r) => r.buy ? `*buy ${r.buy}*` : `due in ${r.due}`;
 const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+// a unit price keeps its cents when it has any ($405, $405.50)
+const unitMoney = (n) => {
+  const v = Math.round((Number(n) || 0) * 100) / 100;
+  return `$${v.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 })}`;
+};
 export const dayLabel = (d = new Date()) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+// the last price per SKU: the newer of DWS Stock's cost (shared folder)
+// and the latest "bought … @ price". costs: Map SKU → { cost, at, by };
+// purchases: the bot's purchase log, oldest first.
+export function lastPaidPrices(costs, purchases) {
+  const out = new Map();
+  for (const [sku, c] of costs || []) {
+    if (c.cost > 0) out.set(sku, { price: c.cost, at: c.at, source: 'cost', by: c.by || '' });
+  }
+  for (const p of purchases || []) {
+    if (!(p.price > 0)) continue;
+    const sku = String(p.sku).toUpperCase();
+    const cur = out.get(sku);
+    if (cur && cur.at > p.at) continue;
+    out.set(sku, { price: p.price, at: p.at, source: 'bought', vendor: p.vendor || '', qty: p.qty });
+  }
+  return out;
+}
 
 // bought notes that have done their job: the stock arrived (on hand rose by
 // half the bought qty or more), a Linnworks PO now carries it (Due in), or
@@ -68,24 +92,35 @@ function section(head, rows, line) {
   return ['', head, ...shown];
 }
 
-export function formatShoppingList(list, { now = new Date(), leadDays = 7, dataAt = 0 } = {}) {
+export function formatShoppingList(list, { now = new Date(), leadDays = 7, dataAt = 0, prices = new Map() } = {}) {
   const lines = [`🛒 *To buy — ${dayLabel(now)}*`];
   // Linnworks was unreachable just now: say how old the figures are
   const ageMin = dataAt ? Math.round((now.getTime() - dataAt) / 60000) : 0;
   if (ageMin > 30) lines.push(`⚠️ _Figures from ${ageMin >= 120 ? `${Math.round(ageMin / 60)} hours` : `${ageMin} min`} ago — Linnworks didn't answer._`);
   const left = (r) => r.daysLeft === '' ? `${r.onHand} left` : `${r.onHand} left (~${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'})`;
+  const priceOf = (r) => prices.get(String(r.sku).toUpperCase());
+  const paid = (r) => { const p = priceOf(r); return r.buy && p ? ` · last ${unitMoney(p.price)}` : ''; };
   lines.push(...section('🔴 *Out of stock*', list.out,
-    r => `• ${r.sku} _${shortTitle(r.title)}_ — sells ${perDayText(r.perDay)} → ${buyText(r)}`));
+    r => `• ${r.sku} _${shortTitle(r.title)}_ — sells ${perDayText(r.perDay)} → ${buyText(r)}${paid(r)}`));
   lines.push(...section(`🟠 *Order now* (runs out within ${leadDays} days)`, list.now,
-    r => `• ${r.sku} _${shortTitle(r.title)}_ — ${left(r)}, ${perDayText(r.perDay)} → ${buyText(r)}`));
+    r => `• ${r.sku} _${shortTitle(r.title)}_ — ${left(r)}, ${perDayText(r.perDay)} → ${buyText(r)}${paid(r)}`));
   lines.push(...section('🟡 *Order soon*', list.soon,
-    r => `• ${r.sku} _${shortTitle(r.title)}_ — ${left(r)}, ${perDayText(r.perDay)} → ${buyText(r)}`));
+    r => `• ${r.sku} _${shortTitle(r.title)}_ — ${left(r)}, ${perDayText(r.perDay)} → ${buyText(r)}${paid(r)}`));
   lines.push(...section('🚚 *On the way*', list.onTheWay,
-    r => `• ${r.sku} — ${r.bought.qty} bought ${dayLabel(new Date(r.bought.at))}${r.bought.price ? ` @ ${money(r.bought.price)}` : ''}`));
+    r => `• ${r.sku} — ${r.bought.qty} bought ${dayLabel(new Date(r.bought.at))}${r.bought.price ? ` @ ${unitMoney(r.bought.price)}` : ''}`));
   if (!list.out.length && !list.now.length && !list.soon.length) lines.push('', '✅ Nothing to buy right now.');
-  const units = [...list.out, ...list.now, ...list.soon].reduce((s, r) => s + r.buy, 0);
-  if (units) lines.push('', `Total: ${units.toLocaleString('en-US')} units`);
-  lines.push('', '_Reply: bought SKU qty @ price · stock SKU · list · help_');
+  const toBuy = [...list.out, ...list.now, ...list.soon].filter(r => r.buy > 0);
+  const units = toBuy.reduce((s, r) => s + r.buy, 0);
+  if (units) {
+    // at the last price paid; SKUs with no price yet are counted, not guessed
+    const priced = toBuy.filter(priceOf);
+    const spend = priced.reduce((s, r) => s + r.buy * priceOf(r).price, 0);
+    const unpriced = toBuy.length - priced.length;
+    let total = `Total: ${units.toLocaleString('en-US')} units`;
+    if (priced.length) total += ` ≈ ${money(spend)} at last prices${unpriced ? ` (+${unpriced} SKU${unpriced === 1 ? '' : 's'} with no price yet)` : ''}`;
+    lines.push('', total);
+  }
+  lines.push('', '_Reply: bought SKU qty @ price from seller · stock SKU · history SKU · help_');
   return lines.join('\n');
 }
 
@@ -96,7 +131,7 @@ export function formatOutAlert(rows) {
   return lines.join('\n');
 }
 
-export function formatStock(r, bought) {
+export function formatStock(r, bought, price) {
   const lines = [`📦 *${r.sku}*`, shortTitle(r.title, 60)];
   lines.push(`Available ${r.available}${r.atWfs ? ` · at WFS ${r.atWfs}` : ''}${r.due ? ` · due in ${r.due}` : ''}`);
   lines.push(`Sold: ${r.sold7} this week · ${r.sold30} in 30 days (${perDayText(r.perDay)}${r.trend ? `, ${r.trend.toLowerCase()}` : ''})`);
@@ -104,7 +139,25 @@ export function formatStock(r, bought) {
   const ch = [['Walmart', r.walmart], ['eBay', r.ebay], ['Temu', r.temu], ['Other', r.other]].filter(([, n]) => n > 0);
   if (ch.length) lines.push(ch.map(([k, n]) => `${k} ${n}`).join(' · '));
   lines.push(`Status: ${r.status}${r.order ? ` → buy ${r.order}` : ''}`);
-  if (bought) lines.push(`🚚 ${bought.qty} bought ${dayLabel(new Date(bought.at))}${bought.price ? ` @ ${money(bought.price)}` : ''}`);
+  if (price) lines.push(`Last price: ${priceText(price)}`);
+  if (bought) lines.push(`🚚 ${bought.qty} bought ${dayLabel(new Date(bought.at))}${bought.price ? ` @ ${unitMoney(bought.price)}` : ''}`);
+  return lines.join('\n');
+}
+
+const priceText = (p) => p.source === 'bought'
+  ? `${unitMoney(p.price)} (bought ${dayLabel(new Date(p.at))}${p.vendor ? ` from ${p.vendor}` : ''})`
+  : `${unitMoney(p.price)} (cost in DWS Stock, set ${dayLabel(new Date(p.at))})`;
+
+// "when did we last buy this?": the purchase log for one SKU, newest first
+export function formatHistory(r, purchases, price) {
+  const key = String(r.sku).toUpperCase();
+  const mine = (purchases || []).filter(p => String(p.sku).toUpperCase() === key).slice(-8).reverse();
+  const lines = [`🧾 *${r.sku}* — purchases`];
+  if (!mine.length) lines.push('No purchases noted through the bot yet.');
+  for (const p of mine) {
+    lines.push(`• ${dayLabel(new Date(p.at))}: ${p.qty}${p.price ? ` @ ${unitMoney(p.price)}` : ''}${p.vendor ? ` from ${p.vendor}` : ''}`);
+  }
+  if (price && price.source === 'cost') lines.push('', `Cost in DWS Stock: ${unitMoney(price.price)} (set ${dayLabel(new Date(price.at))})`);
   return lines.join('\n');
 }
 
@@ -112,8 +165,9 @@ export const HELP_TEXT = [
   '🤖 *What I understand*',
   '• *list* — the shopping list now',
   '• *stock S25* — stock and sales for a SKU',
-  '• *bought S25 30 @ 405* — note a purchase (price optional)',
-  '• *cancel S25* — remove a purchase note',
+  '• *bought S25 30 @ 405 from Ali* — note a purchase (price and seller optional)',
+  '• *history S25* — when we bought it, how many, price, from whom',
+  '• *cancel S25* — remove the last purchase note',
   '• *status* — is the bot healthy',
   'The list arrives every evening, and I post right away when a fast seller sells out.',
 ].join('\n');
@@ -128,15 +182,15 @@ export function parseCommand(text) {
   switch (cmd) {
     case 'help': case 'list': case 'status': case 'setup': case 'whoami':
       return rest.length ? null : { cmd };
-    case 'stock': case 'cancel':
+    case 'stock': case 'cancel': case 'history':
       return arg ? { cmd, sku: arg } : { cmd, error: `Which SKU? e.g. *${cmd} S25*` };
     case 'bought': {
-      // bought <sku> <qty> [@|at|for] [$]<price>
-      const m = arg.match(/^(\S+)\s+(\d+)(?:\s*(?:@|at|for)?\s*\$?\s*(\d+(?:\.\d+)?))?$/i);
-      if (!m) return { cmd, error: 'Write it like *bought S25 30 @ 405* (price optional).' };
+      // bought <sku> <qty> [[@|at|for] [$]<price>] [from <seller>]
+      const m = arg.match(/^(\S+)\s+(\d+)(?:\s*(?:@|at|for)?\s*\$?\s*(\d+(?:\.\d+)?))?(?:\s+from\s+(.+))?$/i);
+      if (!m) return { cmd, error: 'Write it like *bought S25 30 @ 405 from Ali* (price and seller optional).' };
       const qty = Number(m[2]);
       if (!(qty > 0)) return { cmd, error: 'The quantity has to be more than 0.' };
-      return { cmd, sku: m[1], qty, price: m[3] ? Number(m[3]) : null };
+      return { cmd, sku: m[1], qty, price: m[3] ? Number(m[3]) : null, vendor: m[4] ? m[4].trim().slice(0, 60) : '' };
     }
     default:
       return null;

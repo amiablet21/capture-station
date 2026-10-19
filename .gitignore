@@ -11,3 +11,4 @@ tools/walmart-lister-data.json
 # the bot's secrets and its WhatsApp login / data on the server
 bot/.env
 bot/data/
+bot/google-key.json

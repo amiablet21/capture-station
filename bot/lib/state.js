@@ -4,7 +4,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const EMPTY = { groupJid: '', bought: {}, alertedOut: {}, primed: false, lastDailyDay: '', linnworksDownNotified: false };
+// bought: open purchase notes (they settle when the stock arrives);
+// purchases: every purchase ever noted, kept for "history" and last prices
+const EMPTY = { groupJid: '', bought: {}, purchases: [], alertedOut: {}, primed: false, lastDailyDay: '', linnworksDownNotified: false };
 
 export class State {
   constructor(dataDir) {

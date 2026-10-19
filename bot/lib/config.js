@@ -39,9 +39,22 @@ export function loadConfig() {
     // the spare number, for linking with a code instead of a QR
     botPhone: digits(e.BOT_PHONE),
     alertWebhookUrl: String(e.ALERT_WEBHOOK_URL || '').trim(),
+    // DWS Stock's item costs from the shared Drive folder (optional): the
+    // service account's key file and the folder's id from its Drive link
+    googleKeyFile: e.GOOGLE_KEY_FILE ? path.resolve(BOT_DIR, e.GOOGLE_KEY_FILE) : '',
+    driveFolderId: driveFolderId(e.DRIVE_FOLDER_ID),
     dataDir,
     authDir: path.join(dataDir, 'whatsapp-auth'),
   };
+}
+
+// the id alone, or pasted as the whole folder link
+function driveFolderId(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  const m = s.match(/folders\/([A-Za-z0-9_-]+)/) || s.match(/^([A-Za-z0-9_-]+)$/);
+  if (!m) throw new Error(`DRIVE_FOLDER_ID doesn't look like a Drive folder id or link: "${s}"`);
+  return m[1];
 }
 
 export function requireLinnworks(cfg) {

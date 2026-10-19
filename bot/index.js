@@ -10,15 +10,24 @@ import path from 'node:path';
 import { loadConfig, requireLinnworks } from './lib/config.js';
 import { State } from './lib/state.js';
 import { SalesData } from './lib/data.js';
+import { DriveCosts } from './lib/drive.js';
 import { startWhatsApp, senderAllowed, senderIds } from './lib/whatsapp.js';
 import {
-  shoppingList, formatShoppingList, formatOutAlert, formatStock, settledBought,
-  parseCommand, matchSku, isConditionSku, HELP_TEXT,
+  shoppingList, formatShoppingList, formatOutAlert, formatStock, formatHistory, settledBought,
+  lastPaidPrices, parseCommand, matchSku, isConditionSku, HELP_TEXT,
 } from './lib/report.js';
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const LINNWORKS_DOWN_NOTICE_MS = 60 * 60 * 1000;
+const MAX_PURCHASES = 5000;
+
+// DWS Stock's costs from the shared Drive folder, when it is set up
+function driveCosts(cfg) {
+  if (!cfg.googleKeyFile && !cfg.driveFolderId) return null;
+  if (!cfg.googleKeyFile || !cfg.driveFolderId) throw new Error('Set both GOOGLE_KEY_FILE and DRIVE_FOLDER_ID in bot/.env (or neither).');
+  return new DriveCosts({ keyFile: cfg.googleKeyFile, folderId: cfg.driveFolderId });
+}
 
 const cfg = loadConfig();
 const mode = process.argv.includes('--link') ? 'link' : process.argv.includes('--preview') ? 'preview' : 'run';
@@ -29,8 +38,14 @@ if (mode === 'preview') {
   log('reading stock and 30 days of sales from Linnworks (the first time takes a few minutes)…');
   const rows = await data.refresh();
   const state = new State(cfg.dataDir);
-  console.log(`\nLocation: ${data.locationName} · ${rows.length} SKUs\n`);
-  console.log(formatShoppingList(shoppingList(rows, state.get('bought')), { leadDays: cfg.leadDays }));
+  const drive = driveCosts(cfg);
+  if (drive) {
+    log(`reading DWS Stock costs from Drive as ${drive.email}…`);
+    await drive.refresh();
+  }
+  console.log(`\nLocation: ${data.locationName} · ${rows.length} SKUs${drive ? ` · ${drive.costs.size} costs from Drive` : ''}\n`);
+  const prices = lastPaidPrices(drive ? drive.costs : new Map(), state.get('purchases'));
+  console.log(formatShoppingList(shoppingList(rows, state.get('bought')), { leadDays: cfg.leadDays, prices }));
   process.exit(0);
 }
 
@@ -50,8 +65,18 @@ async function run() {
   if (!fs.existsSync(path.join(cfg.authDir, 'creds.json'))) throw new Error('WhatsApp is not linked yet. Run: npm run link');
   const state = new State(cfg.dataDir);
   const data = new SalesData(cfg);
+  const drive = driveCosts(cfg);
   let failingSince = 0;
   let lastError = '';
+  let costsError = '';
+
+  // costs are a bonus: a failed read keeps the last ones and never stops
+  // the stock checks
+  const refreshCosts = async () => {
+    if (!drive) return;
+    try { await drive.refresh(); costsError = ''; } catch (e) { costsError = e.message; log('costs read failed:', e.message); }
+  };
+  const prices = () => lastPaidPrices(drive ? drive.costs : new Map(), state.get('purchases'));
 
   const notifyWebhook = async (body) => {
     if (!/^https:\/\//i.test(cfg.alertWebhookUrl)) return;
@@ -123,6 +148,7 @@ async function run() {
       failingSince = 0; lastError = '';
       state.set({ linnworksDownNotified: false });
       await checkSellOuts();
+      await refreshCosts();
     } catch (e) {
       lastError = e.message;
       log('check failed:', e.message);
@@ -151,7 +177,7 @@ async function run() {
       await data.refresh().catch(e => log('refresh before the list failed:', e.message));
     }
     if (!data.rows) return; // never read Linnworks yet: the next try posts it
-    if (await post(formatShoppingList(currentList(), { leadDays: cfg.leadDays, dataAt: data.at }))) {
+    if (await post(formatShoppingList(currentList(), { leadDays: cfg.leadDays, dataAt: data.at, prices: prices() }))) {
       state.set({ lastDailyDay: localDay() });
       log('evening list posted');
     }
@@ -186,24 +212,33 @@ async function run() {
         '🤖 *Bot status*',
         age === null ? 'Not read Linnworks yet' : `Last Linnworks check: ${age} min ago (${data.rows.length} SKUs, ${data.locationName})`,
         lastError ? `⚠️ Last error: ${lastError.slice(0, 200)}` : '✅ No errors',
-        `Evening list: ${cfg.dailyTime} · purchase notes: ${Object.keys(state.get('bought')).length}`,
+        !drive ? 'Prices: from "bought … @ price" notes only (Drive costs not set up)'
+          : costsError ? `⚠️ Drive costs: ${costsError.slice(0, 200)}`
+            : `Prices: ${drive.costs.size} costs from DWS Stock, read ${Math.round((Date.now() - drive.at) / 60000)} min ago`,
+        `Evening list: ${cfg.dailyTime} · open purchase notes: ${Object.keys(state.get('bought')).length}`,
       ].join('\n'));
       return;
     }
     if (!data.rows) { await reply('Still reading Linnworks — try again in a minute.'); return; }
     if (Date.now() - data.at > 5 * 60000) await data.refresh().catch(() => {});
 
-    if (command.cmd === 'list') { await reply(formatShoppingList(currentList(), { leadDays: cfg.leadDays, dataAt: data.at })); return; }
+    if (command.cmd === 'list') { await reply(formatShoppingList(currentList(), { leadDays: cfg.leadDays, dataAt: data.at, prices: prices() })); return; }
 
     if (command.cmd === 'cancel') {
+      // takes back the last purchase noted for a SKU (a typo, a wrong qty)
       const bought = { ...state.get('bought') };
+      const purchases = [...state.get('purchases')];
       const q = command.sku.toUpperCase();
-      const hits = bought[q] ? [q] : Object.keys(bought).filter(k => k.includes(q));
-      if (hits.length !== 1) { await reply(hits.length ? `"${command.sku}" matches ${hits.join(', ')} — which one?` : `No purchase note matches "${command.sku}".`); return; }
+      const skus = [...new Set([...Object.keys(bought), ...purchases.map(p => String(p.sku).toUpperCase())])];
+      const hits = skus.includes(q) ? [q] : skus.filter(k => k.includes(q));
+      if (hits.length !== 1) { await reply(hits.length ? `"${command.sku}" matches ${hits.slice(0, 8).join(', ')} — which one?` : `No purchase note matches "${command.sku}".`); return; }
       const key = hits[0];
+      let i = purchases.length - 1;
+      while (i >= 0 && String(purchases[i].sku).toUpperCase() !== key) i--;
+      const gone = i >= 0 ? purchases.splice(i, 1)[0] : null;
       delete bought[key];
-      state.set({ bought });
-      await reply(`🗑️ Removed the purchase note for ${key}.`);
+      state.set({ bought, purchases });
+      await reply(`🗑️ Removed the last purchase note for ${key}${gone ? ` (${gone.qty}${gone.price ? ` @ $${gone.price}` : ''}, ${new Date(gone.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}.`);
       return;
     }
 
@@ -212,17 +247,23 @@ async function run() {
     const r = hit.row;
     const key = String(r.sku).toUpperCase();
 
-    if (command.cmd === 'stock') { await reply(formatStock(r, state.get('bought')[key])); return; }
+    if (command.cmd === 'stock') { await reply(formatStock(r, state.get('bought')[key], prices().get(key))); return; }
+    if (command.cmd === 'history') { await reply(formatHistory(r, state.get('purchases'), prices().get(key))); return; }
 
     if (command.cmd === 'bought') {
+      const at = new Date().toISOString();
+      const by = senderIds(msg)[0] || '';
       const bought = { ...state.get('bought') };
+      // a second buy before the first arrives adds up
+      const prev = bought[key];
       bought[key] = {
-        sku: r.sku, title: r.title, qty: command.qty, price: command.price,
-        at: new Date().toISOString(), onHandAt: r.onHand, by: senderIds(msg)[0] || '',
+        sku: r.sku, title: r.title, qty: command.qty + (prev ? prev.qty : 0), price: command.price ?? (prev ? prev.price : null),
+        at, onHandAt: prev ? prev.onHandAt : r.onHand, by,
       };
-      state.set({ bought });
-      const left = Math.max(0, (Number(r.order) || 0) - command.qty);
-      await reply(`✅ Noted: ${command.qty} × ${r.sku}${command.price ? ` @ $${command.price}` : ''}. ${left ? `Still short by ${left}.` : "It's off the list until it arrives."}`);
+      const purchases = [...state.get('purchases'), { sku: r.sku, title: r.title, qty: command.qty, price: command.price, vendor: command.vendor, at, by }];
+      state.set({ bought, purchases: purchases.slice(-MAX_PURCHASES) });
+      const left = Math.max(0, (Number(r.order) || 0) - bought[key].qty);
+      await reply(`✅ Noted: ${command.qty} × ${r.sku}${command.price ? ` @ $${command.price}` : ''}${command.vendor ? ` from ${command.vendor}` : ''}. ${left ? `Still short by ${left}.` : "It's off the list until it arrives."}`);
     }
   }
 

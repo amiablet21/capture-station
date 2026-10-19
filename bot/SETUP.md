@@ -196,8 +196,9 @@ ids WhatsApp shows for you. Add those digits to `ALLOWED_NUMBERS`, then
 |---|---|
 | `list` | the shopping list now |
 | `stock S25` | stock, sales this week / 30 days, days left, marketplace split |
-| `bought S25 30 @ 405` | notes the purchase (price optional). The SKU leaves the list until it arrives |
-| `cancel S25` | removes a purchase note |
+| `bought S25 30 @ 405 from Ali` | notes the purchase (price and seller optional). The SKU leaves the list until it arrives |
+| `history S25` | when it was bought, how many, at what price, from whom |
+| `cancel S25` | takes back the last purchase noted for that SKU |
 | `status` | when it last read Linnworks, and any error |
 | `help` | this list |
 
@@ -212,11 +213,62 @@ Ordinary chat in the group is ignored.
   day) sells out. Once per sell-out.
 - **If Linnworks stops answering for an hour,** and again when it's back.
 
+**Last prices** show on the list (`buy 30 · last $412`), with a spend total
+at those prices, and in `stock` and `history`. Each SKU uses the newer of
+its cost in DWS Stock (once the next section is set up) and the latest
+`bought … @ price`. A SKU with no price yet is counted, never guessed.
+
 **A `bought` note clears itself** when the stock arrives (on hand goes up),
 when a Linnworks purchase order covers it (Due in), or after `BOUGHT_DAYS`
 (21 days by default).
 
 Open box, used and scrap SKUs never appear, the same as on the Overview.
+
+## Last prices from DWS Stock (optional, about 15 minutes)
+
+Without this, prices come only from `bought … @ price` notes. With it, the
+bot also reads the costs DWS Stock keeps in your shared Drive folder. It
+signs in as its own Google "service account" that can **view that one
+folder and nothing else** in your Drive.
+
+1. Go to **console.cloud.google.com**, signed in with the Google account
+   that owns the shared folder. Create a project (any name, e.g. "DWS bot").
+2. **APIs & Services → Library**: search **Google Drive API** → **Enable**.
+3. **IAM & Admin → Service accounts → Create service account**. Name it
+   `dws-bot` and skip the optional steps. Note its email
+   (`dws-bot@….iam.gserviceaccount.com`).
+4. Open it → **Keys → Add key → Create new key → JSON**. A file downloads.
+   **Treat it like a password.**
+5. In Google Drive, open the **shared folder** DWS Stock syncs (the one with
+   the `costs-….jsonl` files). **Share** it with the service account's
+   email as **Viewer**, and untick "Notify".
+6. Copy the folder's link from the address bar
+   (`https://drive.google.com/drive/folders/…`).
+7. Copy the key file to the server over Tailscale, from your computer:
+   ```bash
+   scp ~/Downloads/THE-KEY-FILE.json root@SERVER-NAME:/home/dwsbot/capture-station/bot/google-key.json
+   ssh root@SERVER-NAME "chown dwsbot: /home/dwsbot/capture-station/bot/google-key.json && chmod 600 /home/dwsbot/capture-station/bot/google-key.json"
+   ```
+   Then delete the downloaded copy from your computer.
+8. In `bot/.env`, set:
+   ```
+   GOOGLE_KEY_FILE=google-key.json
+   DRIVE_FOLDER_ID=https://drive.google.com/drive/folders/…   (the link from step 6)
+   ```
+9. As `dwsbot`, run `npm run preview` (it should say "N costs from Drive"),
+   then, as root, `systemctl restart dws-bot`. `status` in the group shows
+   how many costs it read.
+
+**If Google refuses:**
+- *"Key creation is disabled"* in step 4 means your Google Workspace has the
+  policy that blocks service-account keys. The Workspace admin can allow it
+  for this one project under **IAM → Organization policies**.
+- *"no costs-*.jsonl files … is it shared?"* means the folder isn't shared
+  with the service account's email, or Workspace sharing settings block
+  sharing outside your domain. Check step 5.
+
+**Off switch:** remove the service account from the folder's sharing, or
+delete its key in the Cloud console.
 
 ## Looking after it
 
@@ -246,6 +298,7 @@ systemctl restart dws-bot
 ## If something ever goes wrong (off switch)
 
 1. **Linnworks:** delete the bot's app or installation. It can no longer read anything.
+   **Drive:** remove the service account from the shared folder.
 2. **WhatsApp:** on the spare phone, Linked devices → log out the server.
 3. **Server:** `systemctl stop dws-bot`, or delete the server on the
    Hetzner or DigitalOcean site.

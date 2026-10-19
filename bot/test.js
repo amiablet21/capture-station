@@ -2,18 +2,23 @@
 // (sales-export.js) and the bot's messages and commands. No Linnworks, no
 // WhatsApp. Run: npm test
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 import {
-  shoppingList, formatShoppingList, formatOutAlert, formatStock, settledBought,
-  parseCommand, matchSku, isConditionSku,
+  shoppingList, formatShoppingList, formatOutAlert, formatStock, formatHistory, settledBought,
+  lastPaidPrices, parseCommand, matchSku, isConditionSku,
 } from './lib/report.js';
 import { senderAllowed, messageText } from './lib/whatsapp.js';
+import { mergeCostFiles, DriveCosts } from './lib/drive.js';
 
 const require = createRequire(import.meta.url);
 const { buildSalesExport } = require('../src/main/sales-export.js');
 
 let passed = 0;
-const test = (name, fn) => { fn(); passed++; console.log('ok -', name); };
+const test = async (name, fn) => { await fn(); passed++; console.log('ok -', name); };
 
 // ---- a small warehouse ----
 const LOC = 'loc-main';
@@ -105,9 +110,12 @@ test('bought notes settle when stock arrives, a PO covers it, or it gets old', (
 });
 
 test('commands parse', () => {
-  assert.deepEqual(parseCommand('bought S25 30 @ 405'), { cmd: 'bought', sku: 'S25', qty: 30, price: 405 });
-  assert.deepEqual(parseCommand('Bought s25 30 at $405.50'), { cmd: 'bought', sku: 's25', qty: 30, price: 405.5 });
-  assert.deepEqual(parseCommand('bought S25 30'), { cmd: 'bought', sku: 'S25', qty: 30, price: null });
+  assert.deepEqual(parseCommand('bought S25 30 @ 405'), { cmd: 'bought', sku: 'S25', qty: 30, price: 405, vendor: '' });
+  assert.deepEqual(parseCommand('Bought s25 30 at $405.50'), { cmd: 'bought', sku: 's25', qty: 30, price: 405.5, vendor: '' });
+  assert.deepEqual(parseCommand('bought S25 30'), { cmd: 'bought', sku: 'S25', qty: 30, price: null, vendor: '' });
+  assert.deepEqual(parseCommand('bought S25 30 @ 405 from 2B Wireless'), { cmd: 'bought', sku: 'S25', qty: 30, price: 405, vendor: '2B Wireless' });
+  assert.deepEqual(parseCommand('bought S25 30 from Ali'), { cmd: 'bought', sku: 'S25', qty: 30, price: null, vendor: 'Ali' });
+  assert.deepEqual(parseCommand('history s25'), { cmd: 'history', sku: 's25' });
   assert.ok(parseCommand('bought S25').error);
   assert.ok(parseCommand('bought S25 0').error);
   assert.deepEqual(parseCommand('LIST'), { cmd: 'list' });
@@ -148,6 +156,95 @@ test('only allowed people, whether WhatsApp shows the number or the privacy id',
   assert.ok(senderAllowed(lid, allowed));
   assert.ok(!senderAllowed(stranger, allowed));
   assert.equal(messageText({ message: { ephemeralMessage: { message: { extendedTextMessage: { text: 'list' } } } } }), 'list');
+});
+
+// ---- last prices ----
+const costs = mergeCostFiles([
+  // station A set S25's cost, then station B changed it later; a torn last line is skipped
+  '{"sku":"s25-128gb-navy","cost":399,"updated_at":"2026-10-01T10:00:00.000Z","station":"A","by":""}\n{"sku":"A15-64GB-BLK","cost":98,"updated_at":"2026-10-02T10:00:00.000Z","station":"A"}\n{"sku":"TAB',
+  '{"sku":"S25-128GB-NAVY","cost":412,"updated_at":"2026-10-03T10:00:00.000Z","station":"B","by":"admin"}\n{"sku":"S25-128GB-NAVY","cost":380,"updated_at":"2026-09-01T10:00:00.000Z","station":"B"}\n',
+]);
+
+await test('costs: newest write per SKU across the station files wins', () => {
+  assert.equal(costs.get('S25-128GB-NAVY').cost, 412);
+  assert.equal(costs.get('A15-64GB-BLK').cost, 98);
+  assert.equal(costs.size, 2);
+});
+
+const purchases = [
+  { sku: 'A15-64GB-BLK', qty: 20, price: 95, vendor: 'Ali', at: '2026-09-20T15:00:00.000Z' },
+  { sku: 'A15-64GB-BLK', qty: 25, price: 101.5, vendor: '2B Wireless', at: '2026-10-10T15:00:00.000Z' },
+  { sku: 'TAB-A9-GRY', qty: 10, price: null, at: '2026-10-11T15:00:00.000Z' },
+];
+const prices = lastPaidPrices(costs, purchases);
+
+await test('last price: the newer of DWS Stock cost and a bought note', () => {
+  assert.deepEqual(prices.get('S25-128GB-NAVY'), { price: 412, at: '2026-10-03T10:00:00.000Z', source: 'cost', by: 'admin' });
+  assert.equal(prices.get('A15-64GB-BLK').price, 101.5); // bought Oct 10, after the Oct 2 cost
+  assert.equal(prices.get('A15-64GB-BLK').vendor, '2B Wireless');
+  assert.equal(prices.has('TAB-A9-GRY'), false); // bought with no price: nothing to show
+});
+
+await test('the list shows last prices and a spend total that never guesses', () => {
+  const text = formatShoppingList(shoppingList(rows, {}), { now, prices });
+  assert.match(text, /S25-128GB-NAVY .*buy 115\* · last \$412/);
+  assert.match(text, /A15-64GB-BLK .*buy 55\* · last \$101\.50/);
+  // 115 x 412 + 55 x 101.5 = 52,962.5; TAB has no price
+  assert.match(text, /Total: 190 units ≈ \$52,963 at last prices \(\+1 SKU with no price yet\)/);
+  console.log('\n' + text + '\n');
+});
+
+await test('stock and history show where the price came from', () => {
+  assert.match(formatStock(row('S25-128GB-NAVY'), null, prices.get('S25-128GB-NAVY')), /Last price: \$412 \(cost in DWS Stock, set Sat, Oct 3\)/);
+  assert.match(formatStock(row('A15-64GB-BLK'), null, prices.get('A15-64GB-BLK')), /Last price: \$101\.50 \(bought Sat, Oct 10 from 2B Wireless\)/);
+  const h = formatHistory(row('A15-64GB-BLK'), purchases, prices.get('A15-64GB-BLK'));
+  assert.match(h, /Sat, Oct 10: 25 @ \$101\.50 from 2B Wireless\n• Sun, Sep 20: 20 @ \$95 from Ali/u);
+  assert.match(formatHistory(row('S25-128GB-NAVY'), purchases, prices.get('S25-128GB-NAVY')), /No purchases noted[\s\S]*Cost in DWS Stock: \$412/);
+});
+
+await test('Drive: signs in with the service account and re-reads only changed files', async () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dws-bot-test-'));
+  const keyFile = path.join(dir, 'key.json');
+  fs.writeFileSync(keyFile, JSON.stringify({ client_email: 'bot@proj.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) }));
+  let modified = 't1';
+  const downloads = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    if (u.startsWith('https://oauth2.googleapis.com/token')) {
+      const jwt = new URLSearchParams(String(opts.body)).get('assertion');
+      const [h, c, sig] = jwt.split('.');
+      const ok = crypto.createVerify('RSA-SHA256').update(`${h}.${c}`).verify(publicKey, Buffer.from(sig, 'base64url'));
+      const claims = JSON.parse(Buffer.from(c, 'base64url').toString());
+      assert.ok(ok, 'JWT signature verifies');
+      assert.equal(claims.scope, 'https://www.googleapis.com/auth/drive.readonly');
+      assert.equal(claims.iss, 'bot@proj.iam.gserviceaccount.com');
+      return json({ access_token: 'tok', expires_in: 3600 });
+    }
+    assert.equal(opts.headers.Authorization, 'Bearer tok');
+    if (u.includes('alt=media')) {
+      downloads.push(u);
+      return new Response('{"sku":"S25-128GB-NAVY","cost":400,"updated_at":"2026-10-05T00:00:00.000Z"}\n');
+    }
+    const q = new URL(u).searchParams.get('q');
+    assert.equal(q, "'FOLDER123' in parents and name contains 'costs-' and trashed = false");
+    return json({ files: [{ id: 'f1', name: 'costs-ADMIN.jsonl', modifiedTime: modified }, { id: 'f2', name: 'costs-notes.txt', modifiedTime: 't1' }] });
+  };
+  try {
+    const d = new DriveCosts({ keyFile, folderId: 'FOLDER123' });
+    await d.refresh();
+    assert.equal(d.costs.get('S25-128GB-NAVY').cost, 400);
+    await d.refresh(); // unchanged: no new download
+    assert.equal(downloads.length, 1);
+    modified = 't2';
+    await d.refresh(); // changed: downloaded again
+    assert.equal(downloads.length, 2);
+  } finally {
+    globalThis.fetch = realFetch;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 console.log(`\n${passed} passed`);
