@@ -170,6 +170,7 @@ export const HELP_TEXT = [
   '• *cancel S25* — remove the last purchase note',
   '• *status* — is the bot healthy',
   'The list arrives every evening, and I post right away when a fast seller sells out.',
+  'Or just ask: start with *bot* (or @mention me), e.g. _bot when did we last buy the navy S25?_',
 ].join('\n');
 
 // one chat line → { cmd, ... } or null when it is not meant for the bot

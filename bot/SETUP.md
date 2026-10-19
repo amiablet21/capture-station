@@ -205,6 +205,19 @@ ids WhatsApp shows for you. Add those digits to `ALLOWED_NUMBERS`, then
 You can type part of a SKU. If it matches several, the bot asks which one.
 Ordinary chat in the group is ignored.
 
+**Or just ask in plain words** (once the next-but-one section is set up).
+Start with `bot`, put `?` in front, @mention the bot, or reply to one of its
+messages:
+
+> bot when did we last buy the navy S25, and from who?
+> ? what are the top 5 sellers this week
+> bot is the A15 selling faster than last month?
+
+It looks the answer up in the same data (stock, 30 days of sales, the
+purchase log, last prices). It never makes numbers up: if something was
+never recorded, it says so. It can't change anything. Questions follow on
+from each other for 30 minutes, so "and the 256GB?" works.
+
 **What it posts on its own:**
 - **Every evening at `DAILY_TIME`:** the shopping list, in three groups.
   🔴 out of stock, 🟠 order now (runs out within the lead time), and
@@ -270,6 +283,42 @@ folder and nothing else** in your Drive.
 **Off switch:** remove the service account from the folder's sharing, or
 delete its key in the Cloud console.
 
+## Plain-language questions (optional, about 5 minutes)
+
+The bot uses Claude, through Anthropic's API, to understand questions. You
+pay Anthropic per question.
+
+1. Go to **console.anthropic.com**, sign up or sign in, and add a payment
+   method (**Settings → Billing**). Setting a monthly spend limit there is a
+   good idea.
+2. **Settings → API keys → Create key**. Name it `dws-bot` and copy it.
+   **Treat it like a password.**
+3. In `bot/.env`, set:
+   ```
+   ANTHROPIC_API_KEY=the key
+   NAMES=15551234567=Me,15557654321=Dad
+   ```
+   `NAMES` is optional: it lets answers and the purchase log say who did
+   what instead of showing a number.
+4. As root, run `systemctl restart dws-bot`. Then ask in the group, e.g.
+   `bot what's selling fastest this week?`
+
+**Cost.** `status` in the group shows today's questions and the
+approximate spend. Two settings control it:
+- `CLAUDE_MODEL`: `claude-opus-5-5` (the default) answers best.
+  `claude-haiku-5-5` costs a small fraction per question and handles simple
+  lookups well. Try it if the bill matters more than the odd harder
+  question.
+- `AI_DAILY_LIMIT` (default 200) caps questions per day. Past it, the bot
+  says so, and the commands keep working.
+
+What gets sent to Anthropic: the question, plus the stock, sales and
+purchase figures the bot looks up to answer it. Customer names and
+addresses are never included, because the bot doesn't have them.
+
+**Off switch:** delete the key in the Anthropic console, or remove
+`ANTHROPIC_API_KEY` from `.env` and restart. The commands keep working.
+
 ## Looking after it
 
 - **Keep the spare phone charged and open WhatsApp on it about once a
@@ -299,6 +348,7 @@ systemctl restart dws-bot
 
 1. **Linnworks:** delete the bot's app or installation. It can no longer read anything.
    **Drive:** remove the service account from the shared folder.
+   **Anthropic:** delete the bot's API key in the console.
 2. **WhatsApp:** on the spare phone, Linked devices → log out the server.
 3. **Server:** `systemctl stop dws-bot`, or delete the server on the
    Hetzner or DigitalOcean site.

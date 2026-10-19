@@ -11,7 +11,8 @@ import { loadConfig, requireLinnworks } from './lib/config.js';
 import { State } from './lib/state.js';
 import { SalesData } from './lib/data.js';
 import { DriveCosts } from './lib/drive.js';
-import { startWhatsApp, senderAllowed, senderIds } from './lib/whatsapp.js';
+import { startWhatsApp, senderAllowed, senderIds, addressedText, digitsOf } from './lib/whatsapp.js';
+import { Assistant } from './lib/assistant.js';
 import {
   shoppingList, formatShoppingList, formatOutAlert, formatStock, formatHistory, settledBought,
   lastPaidPrices, parseCommand, matchSku, isConditionSku, HELP_TEXT,
@@ -77,6 +78,20 @@ async function run() {
     try { await drive.refresh(); costsError = ''; } catch (e) { costsError = e.message; log('costs read failed:', e.message); }
   };
   const prices = () => lastPaidPrices(drive ? drive.costs : new Map(), state.get('purchases'));
+
+  // plain-language questions, when an Anthropic key is set
+  const assistant = cfg.ai.enabled ? new Assistant({
+    model: cfg.ai.model, effort: cfg.ai.effort, dailyLimit: cfg.ai.dailyLimit,
+    getContext: () => ({
+      rows: data.rows || [], days: data.days || [], dataAt: data.at,
+      purchases: state.get('purchases'), bought: state.get('bought'), prices: prices(),
+    }),
+    log: (m) => log('[ai]', m),
+  }) : null;
+  const nameOf = (msg) => {
+    for (const id of senderIds(msg)) { const n = cfg.names[digitsOf(id)]; if (n) return n; }
+    return '';
+  };
 
   const notifyWebhook = async (body) => {
     if (!/^https:\/\//i.test(cfg.alertWebhookUrl)) return;
@@ -186,9 +201,21 @@ async function run() {
   async function handleMessage(msg, text) {
     const chat = msg.key.remoteJid || '';
     const command = parseCommand(text);
-    if (!command) return;
     const reply = (t) => wa.send(chat, t);
     const allowed = senderAllowed(msg, cfg.allowedNumbers);
+    if (!command) {
+      // not a command: a question for the assistant, or people talking
+      if (!assistant || !allowed || chat !== state.get('groupJid')) return;
+      const question = addressedText(msg, text, wa.me());
+      if (question === null) return;
+      if (!question) { await wa.reply(chat, 'Yes? Ask me about stock, sales, purchases or prices.', msg); return; }
+      if (!data.rows) { await wa.reply(chat, 'Still reading Linnworks — ask me again in a minute.', msg); return; }
+      await wa.typing(chat, true);
+      const answer = await assistant.ask(chat, question, { who: nameOf(msg) });
+      await wa.typing(chat, false);
+      await wa.reply(chat, answer, msg);
+      return;
+    }
 
     // whoami answers anyone, anywhere: it is how you find the number to
     // put in ALLOWED_NUMBERS
@@ -216,6 +243,7 @@ async function run() {
           : costsError ? `⚠️ Drive costs: ${costsError.slice(0, 200)}`
             : `Prices: ${drive.costs.size} costs from DWS Stock, read ${Math.round((Date.now() - drive.at) / 60000)} min ago`,
         `Evening list: ${cfg.dailyTime} · open purchase notes: ${Object.keys(state.get('bought')).length}`,
+        assistant ? `Questions today: ${assistant.today().questions} of ${cfg.ai.dailyLimit} (≈ $${assistant.costToday().toFixed(2)}, ${cfg.ai.model})` : 'Questions: off (no ANTHROPIC_API_KEY)',
       ].join('\n'));
       return;
     }
@@ -252,7 +280,7 @@ async function run() {
 
     if (command.cmd === 'bought') {
       const at = new Date().toISOString();
-      const by = senderIds(msg)[0] || '';
+      const by = nameOf(msg) || senderIds(msg)[0] || '';
       const bought = { ...state.get('bought') };
       // a second buy before the first arrives adds up
       const prev = bought[key];

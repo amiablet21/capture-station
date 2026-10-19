@@ -2,7 +2,7 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
-**WhatsApp bot** (`bot/`, runs on a cloud server, not part of the app build): posts the evening shopping list to a WhatsApp group, posts when a fast seller sells out, and takes `list` / `stock` / `bought` / `cancel` / `status`. It reads Linnworks only, through the app's own client and the 30-day export's reorder maths. Setup: `bot/SETUP.md`; offline tests: `cd bot && npm test`.
+**WhatsApp bot** (`bot/`, runs on a cloud server, not part of the app build): posts the evening shopping list to a WhatsApp group, posts when a fast seller sells out, and takes `list` / `stock` / `history` / `bought` / `cancel` / `status`, plus plain-language questions through Claude (read-only tools). It reads Linnworks only, through the app's own client and the 30-day export's reorder maths. Setup: `bot/SETUP.md`; offline tests: `cd bot && npm test`.
 
 ## v1.31.24 highlights
 

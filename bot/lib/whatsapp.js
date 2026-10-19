@@ -8,13 +8,26 @@ import QRCode from 'qrcode';
 
 const log = (...a) => console.log(new Date().toISOString(), '[whatsapp]', ...a);
 
-// the text of a message, whatever wrapper it came in
-export function messageText(msg) {
+// the message itself, whatever wrapper it came in
+function innerMessage(msg) {
   let m = msg && msg.message;
-  if (!m) return '';
+  if (!m) return null;
   if (m.ephemeralMessage) m = m.ephemeralMessage.message || {};
   if (m.viewOnceMessage) m = m.viewOnceMessage.message || {};
+  return m;
+}
+
+export function messageText(msg) {
+  const m = innerMessage(msg);
+  if (!m) return '';
   return m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || '';
+}
+
+// who a message @mentions, and whose message it replies to
+export function messageContext(msg) {
+  const m = innerMessage(msg);
+  const ci = (m && m.extendedTextMessage && m.extendedTextMessage.contextInfo) || {};
+  return { mentioned: (ci.mentionedJid || []).map(String), quotedFrom: ci.participant ? String(ci.participant) : '' };
 }
 
 // every id WhatsApp gives the sender: the phone-number id and/or the
@@ -27,7 +40,20 @@ export function senderIds(msg) {
     .map(String);
 }
 
-const digitsOf = (jid) => String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+export const digitsOf = (jid) => String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+
+// a message meant for the assistant → the question in it, else null.
+// Meant for it = @mentions the bot, replies to one of the bot's messages,
+// or starts with "bot" or "?". Everything else is people talking.
+export function addressedText(msg, text, meIds) {
+  const mine = new Set(meIds.map(digitsOf).filter(Boolean));
+  const { mentioned, quotedFrom } = messageContext(msg);
+  const t = String(text || '').trim();
+  if (mentioned.some(j => mine.has(digitsOf(j)))) return t.replace(/@\d+/g, '').trim();
+  if (quotedFrom && mine.has(digitsOf(quotedFrom))) return t;
+  const m = t.match(/^(?:hey\s+)?bot\b[\s,:!-]*([\s\S]*)$/i) || t.match(/^\?\s*([\s\S]+)$/);
+  return m ? m[1].trim() : null;
+}
 
 export function senderAllowed(msg, allowedNumbers) {
   if (!allowedNumbers.length) return true;
@@ -117,6 +143,11 @@ export async function startWhatsApp({ authDir, botPhone, onMessage, onLoggedOut,
   await opened;
   return {
     send: (jid, text) => sock.sendMessage(jid, { text }),
+    // an answer shown as a reply to the question it answers
+    reply: (jid, text, quoted) => sock.sendMessage(jid, { text }, quoted ? { quoted } : {}),
+    typing: (jid, on) => sock.sendPresenceUpdate(on ? 'composing' : 'paused', jid).catch(() => {}),
+    // the bot's own ids (phone-number id and privacy id), to spot @mentions
+    me: () => [sock.user && sock.user.id, sock.user && sock.user.lid].filter(Boolean).map(String),
     groups: async () => Object.values(await sock.groupFetchAllParticipating()),
     close: () => { try { sock.end(undefined); } catch { /* already closed */ } },
   };

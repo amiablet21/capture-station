@@ -43,6 +43,16 @@ export function loadConfig() {
     // service account's key file and the folder's id from its Drive link
     googleKeyFile: e.GOOGLE_KEY_FILE ? path.resolve(BOT_DIR, e.GOOGLE_KEY_FILE) : '',
     driveFolderId: driveFolderId(e.DRIVE_FOLDER_ID),
+    // plain-language questions through Claude: on when ANTHROPIC_API_KEY is set
+    ai: {
+      enabled: !!String(e.ANTHROPIC_API_KEY || '').trim(),
+      model: String(e.CLAUDE_MODEL || 'claude-opus-5-5').trim(),
+      effort: String(e.CLAUDE_EFFORT || 'low').trim(),
+      dailyLimit: num(e.AI_DAILY_LIMIT, 200),
+    },
+    // optional names for the allowed numbers ("15551234567=Me,15557654321=Dad")
+    names: Object.fromEntries(String(e.NAMES || '').split(',').map(p => p.split('=')).filter(p => p.length === 2)
+      .map(([n, name]) => [digits(n), name.trim()]).filter(([n, name]) => n && name)),
     dataDir,
     authDir: path.join(dataDir, 'whatsapp-auth'),
   };

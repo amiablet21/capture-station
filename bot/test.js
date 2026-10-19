@@ -11,7 +11,8 @@ import {
   shoppingList, formatShoppingList, formatOutAlert, formatStock, formatHistory, settledBought,
   lastPaidPrices, parseCommand, matchSku, isConditionSku,
 } from './lib/report.js';
-import { senderAllowed, messageText } from './lib/whatsapp.js';
+import { senderAllowed, messageText, addressedText } from './lib/whatsapp.js';
+import { Assistant, runTool, TOOLS } from './lib/assistant.js';
 import { mergeCostFiles, DriveCosts } from './lib/drive.js';
 
 const require = createRequire(import.meta.url);
@@ -51,7 +52,7 @@ const lines = [
   ...sales('S25-128GB-NAVY-OPENBOX', 1, 5),
   ...sales('IPHONE13-OUT-DUE', 2),
 ];
-const { rows } = buildSalesExport(items, lines, { now, days: 30, locationId: LOC, leadDays: 7, coverDays: 21 });
+const { rows, days } = buildSalesExport(items, lines, { now, days: 30, locationId: LOC, leadDays: 7, coverDays: 21 });
 const row = (sku) => rows.find(r => r.sku === sku);
 
 test('statuses come from the shared reorder maths', () => {
@@ -245,6 +246,93 @@ await test('Drive: signs in with the service account and re-reads only changed f
     globalThis.fetch = realFetch;
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---- plain-language questions ----
+const ctx = { rows, days, purchases, prices, bought: {}, dataAt: now.getTime() };
+
+await test('assistant tools answer from the data', () => {
+  const found = runTool('find_skus', { query: 's25 navy' }, ctx);
+  assert.deepEqual(found.skus.map(r => r.sku), ['S25-128GB-NAVY', 'S25-128GB-NAVY-OPENBOX']);
+  assert.equal(found.skus[1].condition, 'open box / used / scrap');
+  const sku = runTool('get_sku', { sku: 'a15-64gb-blk' }, ctx);
+  assert.equal(sku.sold30, 60);
+  assert.equal(sku.series, undefined);
+  assert.deepEqual(sku.lastPrice, { price: 101.5, from: 'noted purchase', date: '2026-10-10', seller: '2B Wireless' });
+  const daily = runTool('daily_sales', { sku: 'TAB-A9-GRY' }, ctx);
+  assert.equal(Object.keys(daily.days).length, 30);
+  assert.equal(daily.days['2026-10-19'], 1);
+  const hist = runTool('purchase_history', { sku: 'A15-64GB-BLK' }, ctx);
+  assert.deepEqual(hist.purchases.map(p => [p.date, p.qty, p.seller]), [['2026-10-10', 25, '2B Wireless'], ['2026-09-20', 20, 'Ali']]);
+  assert.match(runTool('purchase_history', { sku: 'S25-128GB-NAVY' }, ctx).note, /No purchases/);
+  assert.equal(runTool('purchase_history', { sku: 'S25-128GB-NAVY' }, ctx).dwsStockCost.cost, 412);
+  assert.deepEqual(runTool('shopping_list', {}, ctx).orderNow.map(r => r.sku), ['A15-64GB-BLK']);
+  assert.equal(runTool('top_sellers', { by: 'units_30d', limit: 2 }, ctx).skus[0].sku, 'S25-128GB-NAVY');
+  assert.match(runTool('get_sku', { sku: 'NOPE' }, ctx).error, /find_skus/);
+  // every tool is strict with a closed schema
+  for (const t of TOOLS) assert.ok(t.strict && t.input_schema.additionalProperties === false, t.name);
+});
+
+await test('assistant: tool loop, one results message per turn, history only appended', async () => {
+  const calls = [];
+  const replies = [
+    { stop_reason: 'tool_use', usage: { input_tokens: 1000, output_tokens: 50 }, content: [
+      { type: 'thinking', thinking: '', signature: 'sig1' },
+      { type: 'tool_use', id: 't1', name: 'find_skus', input: { query: 'a15' } },
+      { type: 'tool_use', id: 't2', name: 'purchase_history', input: { sku: 'A15-64GB-BLK' } },
+    ] },
+    { stop_reason: 'end_turn', usage: { input_tokens: 1500, output_tokens: 80 }, content: [{ type: 'text', text: 'Last bought *Oct 10*: 25 @ $101.50 from 2B Wireless.' }] },
+    { stop_reason: 'end_turn', usage: { input_tokens: 200, output_tokens: 20 }, content: [{ type: 'text', text: 'Ali, on Sep 20.' }] },
+  ];
+  const client = { beta: { messages: { create: async (p) => { calls.push(structuredClone(p)); return replies.shift(); } } } };
+  const a = new Assistant({ model: 'claude-opus-5-5', effort: 'low', dailyLimit: 5, getContext: () => ctx, client });
+  const answer = await a.ask('group1', 'when did we last buy the A15?', { who: 'Dad', now });
+  assert.equal(answer, 'Last bought *Oct 10*: 25 @ $101.50 from 2B Wireless.');
+  assert.equal(calls[0].model, 'claude-opus-5-5');
+  assert.deepEqual(calls[0].output_config, { effort: 'low' });
+  assert.equal(calls[0].fallbacks, 'default');
+  assert.deepEqual(calls[0].betas, ['server-side-fallback-2026-07-01']);
+  assert.equal(calls[0].thinking, undefined); // Opus 5.5 always thinks; effort sets the depth
+  assert.match(calls[0].messages[0].content, /from Dad\]\nwhen did we last buy the A15\?$/);
+  // the second request: question, the whole assistant turn as it came (thinking included), both results in ONE message
+  const second = calls[1].messages;
+  assert.equal(second.length, 3);
+  assert.equal(second[1].content[0].type, 'thinking');
+  assert.deepEqual(second[2].content.map(r => r.tool_use_id), ['t1', 't2']);
+  assert.match(second[2].content[1].content, /2B Wireless/);
+  // a follow-up continues the same conversation, earlier turns untouched
+  await a.ask('group1', 'and before that?', { now });
+  assert.deepEqual(calls[2].messages.slice(0, 4), calls[1].messages.concat([{ role: 'assistant', content: [{ type: 'text', text: 'Last bought *Oct 10*: 25 @ $101.50 from 2B Wireless.' }] }]));
+  assert.equal(a.today().questions, 2);
+  assert.ok(a.costToday() > 0);
+});
+
+await test('assistant: Haiku gets no fallbacks; refusals, errors and the daily limit are handled', async () => {
+  const seen = [];
+  const mk = (res) => ({ beta: { messages: { create: async (p) => { seen.push(p); if (res instanceof Error) throw res; return res; } } } });
+  const h = new Assistant({ model: 'claude-haiku-5-5', effort: 'low', dailyLimit: 1, getContext: () => ctx,
+    client: mk({ stop_reason: 'refusal', usage: {}, content: [] }) });
+  assert.match(await h.ask('g', 'x', { now }), /can't help/);
+  assert.equal(seen[0].fallbacks, undefined);
+  assert.equal(seen[0].betas, undefined);
+  assert.match(await h.ask('g', 'y', { now }), /daily limit/);
+  assert.equal(h.sessions.get('g').messages.length, 0); // a refused turn is not kept
+  const broken = new Assistant({ model: 'claude-opus-5-5', effort: 'low', dailyLimit: 5, getContext: () => ctx, client: mk(new Error('boom')) });
+  assert.match(await broken.ask('g', 'z', { now }), /went wrong/);
+});
+
+await test('questions are only picked up when addressed to the bot', () => {
+  const me = ['15550001111:7@s.whatsapp.net', '88990011@lid'];
+  const plain = (text) => ({ key: {}, message: { conversation: text } });
+  const ext = (text, contextInfo) => ({ key: {}, message: { extendedTextMessage: { text, contextInfo } } });
+  assert.equal(addressedText(plain('bot when did we last buy S25?'), 'bot when did we last buy S25?', me), 'when did we last buy S25?');
+  assert.equal(addressedText(plain('Bot, top sellers this week'), 'Bot, top sellers this week', me), 'top sellers this week');
+  assert.equal(addressedText(plain('? how many A15 left'), '? how many A15 left', me), 'how many A15 left');
+  assert.equal(addressedText(ext('@88990011 what sold today', { mentionedJid: ['88990011@lid'] }), '@88990011 what sold today', me), 'what sold today');
+  assert.equal(addressedText(ext('and the 256?', { participant: '15550001111@s.whatsapp.net' }), 'and the 256?', me), 'and the 256?');
+  assert.equal(addressedText(plain('thanks dad, call you later'), 'thanks dad, call you later', me), null);
+  assert.equal(addressedText(plain('robot vacuum sold well'), 'robot vacuum sold well', me), null);
+  assert.equal(addressedText(ext('see this', { participant: '15557654321@s.whatsapp.net' }), 'see this', me), null);
 });
 
 console.log(`\n${passed} passed`);

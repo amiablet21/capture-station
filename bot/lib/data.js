@@ -70,6 +70,7 @@ export class SalesData {
       leadDays: this.cfg.leadDays, coverDays: this.cfg.coverDays,
     });
     this.rows = data.rows;
+    this.days = data.days; // the window's local dates, oldest first (daily_sales)
     this.at = Date.now();
     return this.rows;
   }
