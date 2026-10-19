@@ -275,4 +275,4 @@ function buildSkuExportCsv(data, opts = {}) {
   return { skus: file(skuCols, data.skuRows), mappings: file(MAP_COLUMNS, data.mapRows) };
 }
 
-module.exports = { LABELS, conditionOf, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx, buildSkuExport, buildSkuExportXlsx, buildSkuExportCsv };
+module.exports = { LABELS, csvEscape, conditionOf, buildChannelSkuRows, buildChannelSkuCsv, buildChannelSkuXlsx, buildSkuExport, buildSkuExportXlsx, buildSkuExportCsv };
