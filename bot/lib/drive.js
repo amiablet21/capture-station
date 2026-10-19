@@ -31,9 +31,12 @@ export function mergeCostFiles(texts) {
 }
 
 export class DriveCosts {
-  constructor({ keyFile, folderId }) {
-    this.key = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
-    if (!this.key.client_email || !this.key.private_key) throw new Error(`${keyFile} is not a service account key (no client_email / private_key)`);
+  // the service account's key: the downloaded JSON file, or its contents
+  // pasted into a setting (Railway)
+  constructor({ keyFile, keyJson, folderId }) {
+    const where = keyJson ? 'GOOGLE_KEY_JSON' : keyFile;
+    try { this.key = JSON.parse(keyJson || fs.readFileSync(keyFile, 'utf8')); } catch (e) { throw new Error(`${where} is not readable JSON: ${e.message}`); }
+    if (!this.key.client_email || !this.key.private_key) throw new Error(`${where} is not a service account key (no client_email / private_key)`);
     this.folderId = folderId;
     this.token = null; // { value, exp }
     this.files = new Map(); // file id -> { modifiedTime, text }

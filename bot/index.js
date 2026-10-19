@@ -25,9 +25,10 @@ const MAX_PURCHASES = 5000;
 
 // DWS Stock's costs from the shared Drive folder, when it is set up
 function driveCosts(cfg) {
-  if (!cfg.googleKeyFile && !cfg.driveFolderId) return null;
-  if (!cfg.googleKeyFile || !cfg.driveFolderId) throw new Error('Set both GOOGLE_KEY_FILE and DRIVE_FOLDER_ID in bot/.env (or neither).');
-  return new DriveCosts({ keyFile: cfg.googleKeyFile, folderId: cfg.driveFolderId });
+  const hasKey = !!(cfg.googleKeyJson || cfg.googleKeyFile);
+  if (!hasKey && !cfg.driveFolderId) return null;
+  if (!hasKey || !cfg.driveFolderId) throw new Error('Set DRIVE_FOLDER_ID and the key (GOOGLE_KEY_JSON or GOOGLE_KEY_FILE), or neither.');
+  return new DriveCosts({ keyFile: cfg.googleKeyFile, keyJson: cfg.googleKeyJson, folderId: cfg.driveFolderId });
 }
 
 const cfg = loadConfig();
@@ -63,7 +64,13 @@ async function run() {
   requireLinnworks(cfg);
   // without a list, anyone who added the bot to a group could redirect it
   if (!cfg.allowedNumbers.length) throw new Error('Set ALLOWED_NUMBERS in bot/.env (your number and your dad\'s, with country code).');
-  if (!fs.existsSync(path.join(cfg.authDir, 'creds.json'))) throw new Error('WhatsApp is not linked yet. Run: npm run link');
+  // not linked yet (first start, or after a logout): the link code is
+  // printed to the log (Railway's Deploy Logs) and the bot carries on once
+  // the spare phone has entered it
+  if (!fs.existsSync(path.join(cfg.authDir, 'creds.json'))) {
+    log(cfg.botPhone ? 'WhatsApp is not linked yet: the link code follows. A new one appears if it expires.'
+      : 'WhatsApp is not linked yet: scan the QR code below (or set BOT_PHONE to get a code you can type instead).');
+  }
   const state = new State(cfg.dataDir);
   const data = new SalesData(cfg);
   const drive = driveCosts(cfg);
@@ -159,6 +166,8 @@ async function run() {
   const check = async () => {
     try {
       await data.refresh();
+      const l = shoppingList(data.rows, state.get('bought'));
+      log(`Linnworks: ${data.rows.length} SKUs at ${data.locationName} · to buy: ${l.out.length} out of stock, ${l.now.length} order now, ${l.soon.length} order soon`);
       if (failingSince && state.get('linnworksDownNotified')) await post('✅ Linnworks is reachable again.');
       failingSince = 0; lastError = '';
       state.set({ linnworksDownNotified: false });

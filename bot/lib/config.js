@@ -42,6 +42,7 @@ export function loadConfig() {
     // DWS Stock's item costs from the shared Drive folder (optional): the
     // service account's key file and the folder's id from its Drive link
     googleKeyFile: e.GOOGLE_KEY_FILE ? path.resolve(BOT_DIR, e.GOOGLE_KEY_FILE) : '',
+    googleKeyJson: String(e.GOOGLE_KEY_JSON || '').trim(),
     driveFolderId: driveFolderId(e.DRIVE_FOLDER_ID),
     // plain-language questions through Claude: on when ANTHROPIC_API_KEY is set
     ai: {
