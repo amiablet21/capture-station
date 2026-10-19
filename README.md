@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.90 highlights
+
+- Ship tab: the Type buttons read plainly (**Ship to customer** / **Return to us**), with no arrows and no note beside them.
+- The arrow between the address cards always points from From (left) to To (right). On a return it used to turn around and point back at the sender.
+
 ## v1.32.89 highlights
 
 - **No product on UPS labels.** The label's description is always generic: "Merchandise", or "Merchandise return" on return labels (UPS requires a description on returns and prints it as DESC). No product name, model or SKU ever reaches UPS.
