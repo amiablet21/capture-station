@@ -79,6 +79,9 @@
   .best { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); margin-left: 6px; vertical-align: 1px; }
   .eta { font-size: 11px; color: var(--muted); }
   .pr { font-family: var(--mono); font-weight: 700; font-size: 13px; min-width: 60px; text-align: right; }
+  .vchips { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .vchips button { font-family: var(--font); font-size: 11.5px; font-weight: 500; color: var(--muted); border: none; background: none; border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+  .vchips button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47,52,55,.1); }
   .more { display: block; width: 100%; text-align: center; padding: 7px; border: none; border-top: 1px solid var(--border-soft); background: var(--surface-2); font-family: var(--font); font-size: 11.5px; color: var(--muted); cursor: pointer; }
   .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   .foot .sum { font-size: 12px; color: var(--muted); flex: 1; line-height: 1.45; }
@@ -111,7 +114,7 @@
 </header>
 
 <div class="pg">
-  <div class="lbl"><b>Orders · Ship from the line</b> — Walmart's rates and both UPS accounts in one list, cheapest picked; the label fills the tracking, you still press Process</div>
+  <div class="lbl" hidden><b>Orders · Ship from the line</b> — Walmart's rates and both UPS accounts in one list, cheapest picked; the label fills the tracking, you still press Process</div>
   <div class="card">
     <div class="bar">
       <span class="search">Search PO#, SKU or tracking</span>
@@ -164,7 +167,9 @@ const QUOTES = (o, wt) => {
 };
 const VIA = { wm: ['Walmart', 'wm'], a: ['DWS UPS', 'a'], b: ['Company 2 UPS', 'b'] };
 const money = n => '$' + n.toFixed(2);
-let open = 0, pick = 0, showAll = false, loading = false, fresh = 0;
+let open = 0, pick = 0, showAll = false, loading = false, fresh = 0, via = '';
+// the rates for a line, narrowed to one account when a chip is on
+const ratesFor = (o) => QUOTES(o, parseFloat(o.wtNow ?? o.wt)).filter(r => !via || r.via === via);
 
 function render() {
   const body = document.getElementById('body');
@@ -183,7 +188,6 @@ function render() {
   fresh = 0;
   const ready = ORDERS.filter(o => o.label).length;
   document.getElementById('process').textContent = `Process${ready ? ` · ${ready}` : ''}`;
-  document.getElementById('procHint').textContent = ready ? `${ready} order${ready === 1 ? '' : 's'} with tracking, ready to send to Linnworks` : '';
   wire();
 }
 
@@ -197,21 +201,22 @@ function panel(o) {
       <div class="f"><span>Weight (lb)</span><input id="wt" class="m" value="${(parseFloat(o.wtNow ?? o.wt) || 0).toFixed(1)}" /></div>
       <div class="f"><span>Declared value</span><input id="val" class="m" value="${o.value.toFixed(2)}" /></div>
     </div>
-    <div class="f"><span>Reference #1</span><div class="lock">${o.po}<small>the PO#</small></div></div>
+    <div class="f"><span>Reference #1</span><div class="lock">${o.po}</div></div>
   </div>`;
-  if (loading) return `<div class="sp">${left}<div><div class="h">Rates</div><div class="rates"><div class="loading">Getting rates from ${o.mk === 'walmart' ? 'Walmart and ' : ''}both UPS accounts…<div class="loadbar"><i></i></div></div></div></div></div>`;
-  const q = QUOTES(o, parseFloat(o.wtNow ?? o.wt));
+  if (loading) return `<div class="sp">${left}<div><div class="h">Rates</div><div class="rates"><div class="loading">Getting rates…<div class="loadbar"><i></i></div></div></div></div></div>`;
+  const q = ratesFor(o);
+  const chips = (o.mk === 'walmart' ? [['', 'All'], ['wm', 'Walmart'], ['a', 'DWS UPS'], ['b', 'Company 2 UPS']] : [['', 'All'], ['a', 'DWS UPS'], ['b', 'Company 2 UPS']])
+    .map(([k, t]) => `<button data-via="${k}" class="${via === k ? 'on' : ''}">${t}</button>`).join('');
   const list = showAll ? q : q.slice(0, 5);
   const sel = q[pick] || q[0];
   const rows = list.map((r, i) => `<div class="rate${i === pick ? ' on' : ''}" data-i="${i}"><span class="rd"></span>
-    <div><div class="sv">${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span>${i === 0 ? '<span class="best">Cheapest</span>' : ''}</div><div class="eta">Arrives ${r.d}${r.via === 'wm' ? ' · paid from your Walmart payout' : ''}</div></div>
+    <div><div class="sv">${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span>${i === 0 ? '<span class="best">Cheapest</span>' : ''}</div><div class="eta">${r.d}</div></div>
     <span></span><span class="pr">${money(r.price)}</span></div>`).join('');
   return `<div class="sp">${left}<div>
-    <div class="h">Rates <span class="r">${o.mk === 'walmart' ? 'Ship with Walmart + both UPS accounts' : 'both UPS accounts (Walmart labels are for Walmart orders only)'}</span></div>
+    <div class="h">Rates <span class="vchips">${chips}</span></div>
     <div class="rates">${rows}${q.length > 5 ? `<button class="more" id="more">${showAll ? 'Show fewer' : `Show all ${q.length}`}</button>` : ''}</div>
     <div class="foot"><span class="sum"></span>
       <button class="btn btn-primary" id="create">Create label · ${money(sel.price)}</button></div>
-    <div class="note">Never offered: USPS, UPS Ground Saver, FedEx Ground Economy. The label prints only the PO# and "Merchandise".</div>
   </div></div>`;
 }
 
@@ -219,9 +224,12 @@ function wire() {
   document.querySelectorAll('[data-act="ship"]').forEach(b => b.onclick = () => {
     const n = Number(b.dataset.n);
     if (open === n) { open = 0; render(); return; }
-    open = n; pick = 0; showAll = false; loading = true; render();
+    open = n; pick = 0; showAll = false; loading = true;
+    if (via === 'wm' && ORDERS.find(o => o.n === n).mk !== 'walmart') via = '';
+    render();
     setTimeout(() => { loading = false; render(); }, 700);
   });
+  document.querySelectorAll('[data-via]').forEach(b => b.onclick = () => { via = b.dataset.via; pick = 0; showAll = false; render(); });
   document.querySelectorAll('.rate').forEach(r => r.onclick = () => { pick = Number(r.dataset.i); render(); });
   const more = document.getElementById('more'); if (more) more.onclick = () => { showAll = !showAll; render(); };
   const wt = document.getElementById('wt');
@@ -231,7 +239,7 @@ function wire() {
   const c = document.getElementById('create');
   if (c) c.onclick = () => {
     const o = ORDERS.find(x => x.n === open);
-    const sel = QUOTES(o, parseFloat(o.wtNow ?? o.wt))[pick];
+    const sel = ratesFor(o)[pick];
     const pre = { wm: sel.svc.startsWith('FedEx') ? '7712' : '1Z9WM', a: '1Z4A7X', b: '1Z9R2W' }[sel.via];
     o.label = { svc: sel.svc, via: VIA[sel.via][0], trk: pre + String(Math.abs(o.po.split('').reduce((h, ch) => h * 31 + ch.charCodeAt(0) | 0, 7))).padEnd(12, '0').slice(0, 12), cost: sel.price };
     fresh = o.n; open = 0; render();
