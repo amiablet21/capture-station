@@ -7,3 +7,7 @@ tools/hubx.env
 # Walmart Marketplace API credentials + the lister's local working data
 tools/walmart.env
 tools/walmart-lister-data.json
+
+# the bot's secrets and its WhatsApp login / data on the server
+bot/.env
+bot/data/

@@ -1,0 +1,22 @@
+# systemd service for the bot. Install (see SETUP.md):
+#   sudo cp dws-bot.service /etc/systemd/system/ && sudo systemctl enable --now dws-bot
+[Unit]
+Description=DWS Stock WhatsApp bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dwsbot
+WorkingDirectory=/home/dwsbot/capture-station/bot
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=30
+# lock it down: no privilege changes, read-only system, writes only to data/
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/dwsbot/capture-station/bot/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
