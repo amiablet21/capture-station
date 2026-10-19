@@ -60,7 +60,7 @@ const xml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 function colLetter(i) { let s = ''; i += 1; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
 
 // Style ids (cellXfs order below): 0 body text, 1 header, 2 body number,
-// 3 body currency, 4 body centered text
+// 3 body currency, 4 body centered text, 5 body number with two decimals
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;$&quot;#,##0.00"/></numFmts>
@@ -68,23 +68,25 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3A5F"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFD9D9D9"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="5">
+<cellXfs count="6">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="1" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="2" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-// columns: [{ header, width, kind: 'text'|'int'|'money'|'center' }]
+// columns: [{ header, width, kind: 'text'|'int'|'money'|'center'|'dec' }]
 // rows: arrays of cell values in column order ('' / null = empty cell)
+const STYLE_OF = { int: 2, money: 3, center: 4, dec: 5 };
 function cellXml(ref, v, kind) {
-  if (v === '' || v == null) return `<c r="${ref}" s="${kind === 'int' ? 2 : kind === 'money' ? 3 : kind === 'center' ? 4 : 0}"/>`;
-  if (kind === 'int' || kind === 'money') {
+  if (v === '' || v == null) return `<c r="${ref}" s="${STYLE_OF[kind] || 0}"/>`;
+  if (kind === 'int' || kind === 'money' || kind === 'dec') {
     const n = Number(v);
-    if (Number.isFinite(n)) return `<c r="${ref}" s="${kind === 'int' ? 2 : 3}"><v>${n}</v></c>`;
+    if (Number.isFinite(n)) return `<c r="${ref}" s="${STYLE_OF[kind]}"><v>${n}</v></c>`;
   }
   return `<c r="${ref}" s="${kind === 'center' ? 4 : 0}" t="inlineStr"><is><t xml:space="preserve">${xml(v)}</t></is></c>`;
 }
