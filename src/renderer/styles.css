@@ -5964,8 +5964,7 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .sp-addr .warn { color: var(--neg-text); font-size: 11.5px; margin-top: 4px; }
 .sp-addr .sp-link { margin-top: 5px; }
 .sp-swap { display: grid; place-items: center; color: var(--faint); }
-.sp-swap span { width: 26px; height: 26px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; font-size: 13px; transition: transform 300ms var(--ease); }
-.sp-swap.is-ret span { transform: rotate(180deg); color: var(--badge-yellow-text); border-color: #EBD9A6; background: var(--badge-yellow-bg); }
+.sp-swap span { width: 26px; height: 26px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; font-size: 13px; }
 
 .sp-fields { display: grid; grid-template-columns: 1.4fr .8fr 1.2fr; gap: 12px; }
 .sp-fields.two { grid-template-columns: 1.4fr 1fr; margin-top: 12px; }

@@ -14630,10 +14630,6 @@ function spRenderSource() {
   $('spKindShipT').textContent = po ? 'Ship to customer' : 'Ship out';
   $('spKindShip').classList.toggle('is-on', sp.kind === 'ship');
   $('spKindRet').classList.toggle('is-on', sp.kind === 'return');
-  const who = po ? 'the customer' : 'them';
-  $('spKindNote').textContent = sp.kind === 'ship'
-    ? `Our warehouse → ${who}`
-    : `${who[0].toUpperCase()}${who.slice(1)} → our return address (addresses swapped)`;
   $('spRefLock').innerHTML = sp.order
     ? `${esc(sp.poKey)}<small>always the PO#</small>`
     : '<span class="sp-dim">— fills from the PO#</span><small>always the PO#</small>';
@@ -14692,7 +14688,6 @@ function spRenderAddrs() {
   const [from, to] = ship ? [usCard, otherCard] : [otherCard, usCard];
   spAddrCard($('spFrom'), from[0], 'From', from[1], from[2], from[3]);
   spAddrCard($('spTo'), to[0], 'To', to[1], to[2], to[3]);
-  $('spSwap').classList.toggle('is-ret', !ship);
   $('spAddrHint').textContent = ship ? '' : 'Swapped for a return';
 }
 
