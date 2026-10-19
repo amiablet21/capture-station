@@ -63,7 +63,7 @@ if (mode === 'link') {
 async function run() {
   requireLinnworks(cfg);
   // without a list, anyone who added the bot to a group could redirect it
-  if (!cfg.allowedNumbers.length) throw new Error('Set ALLOWED_NUMBERS in bot/.env (your number and your dad\'s, with country code).');
+  if (!cfg.allowedNumbers.length) throw new Error('Set ALLOWED_NUMBERS (Railway Variables or bot/.env): your number and your dad\'s, with country code.');
   // not linked yet (first start, or after a logout): the link code is
   // printed to the log (Railway's Deploy Logs) and the bot carries on once
   // the spare phone has entered it

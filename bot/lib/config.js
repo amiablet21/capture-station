@@ -72,5 +72,5 @@ export function requireLinnworks(cfg) {
   const lw = cfg.linnworks;
   const missing = [['LINNWORKS_APP_ID', lw.applicationId], ['LINNWORKS_APP_SECRET', lw.applicationSecret], ['LINNWORKS_TOKEN', lw.token]]
     .filter(([, v]) => !v).map(([k]) => k);
-  if (missing.length) throw new Error(`Missing in bot/.env: ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`Missing settings: ${missing.join(', ')} (Railway: the service's Variables; own server: bot/.env)`);
 }
