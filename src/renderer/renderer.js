@@ -14857,13 +14857,9 @@ function spRenderRates() {
     html += '</div>';
   }
   const sel = spSelectedRate();
-  const val = parseFloat($('spVal').value) || 0;
-  const ref = spRefText();
   let autoPrint = false;
   try { autoPrint = localStorage.getItem('spAutoPrint') === '1'; } catch { /* default off */ }
-  html += `<div class="sp-buy"><div class="sum">${sel
-    ? `<b>${esc(sel.name)}</b> on the <b>${esc(sel.acct.name)}</b> account<br>${ref ? `Ref <b class="mono">${esc(ref)}</b>` : 'No reference'} · ${val ? `value <b class="mono">${spMoney(val)}</b>` : 'no declared value'} · ${sp.kind === 'return' ? '<b>Return</b> label' : 'Ship label'}`
-    : 'Pick a rate'}</div>
+  html += `<div class="sp-buy">
     <button class="btn btn-primary" id="spCreate" type="button" ${sel && !sp.creating ? '' : 'disabled'}>${sp.creating ? 'Creating label…' : `Create label${sel ? ` · ${spMoney(sel.price)}` : ''}`}</button>
     <label class="check sp-autoprint"><input id="spAutoPrint" type="checkbox" ${autoPrint ? 'checked' : ''} /> Print as soon as it's created</label>
     ${sp.createErr ? `<div class="err">${esc(sp.createErr)}</div>` : ''}</div>`;
@@ -15051,7 +15047,6 @@ for (const id of ['spWt', 'spDl', 'spDw', 'spDh']) {
 }
 // the declared value changes the price (UPS charges for coverage over $100)
 $('spVal').addEventListener('input', () => spScheduleRates(700));
-$('spRefIn').addEventListener('input', () => { if (!sp.ratesLoading && !sp.done) spRenderRates(); });
 
 /* Settings › UPS labels */
 function fillUpsSettings(u) {

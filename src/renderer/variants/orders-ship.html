@@ -194,7 +194,7 @@ function panel(o) {
     <div class="addr"><b>${o.name}</b><br>${o.a1}<br>${o.a2}</div>
     <div class="f"><span>Box</span><select id="box">${BOXES.map((x, i) => `<option value="${i}" ${i === o.box ? 'selected' : ''}>${x[0]} · ${x[1]} × ${x[2]} × ${x[3]}</option>`).join('')}</select></div>
     <div class="row2">
-      <div class="f"><span>Weight (lb)</span><input id="wt" class="m" value="${o.wt.toFixed(1)}" /></div>
+      <div class="f"><span>Weight (lb)</span><input id="wt" class="m" value="${(parseFloat(o.wtNow ?? o.wt) || 0).toFixed(1)}" /></div>
       <div class="f"><span>Declared value</span><input id="val" class="m" value="${o.value.toFixed(2)}" /></div>
     </div>
     <div class="f"><span>Reference #1</span><div class="lock">${o.po}<small>the PO#</small></div></div>
@@ -209,7 +209,7 @@ function panel(o) {
   return `<div class="sp">${left}<div>
     <div class="h">Rates <span class="r">${o.mk === 'walmart' ? 'Ship with Walmart + both UPS accounts' : 'both UPS accounts (Walmart labels are for Walmart orders only)'}</span></div>
     <div class="rates">${rows}${q.length > 5 ? `<button class="more" id="more">${showAll ? 'Show fewer' : `Show all ${q.length}`}</button>` : ''}</div>
-    <div class="foot"><div class="sum"><b>${sel.svc}</b> via <b>${VIA[sel.via][0]}</b> · Ref <b>${o.po}</b><br>The tracking goes on this order. Process stays your call.</div>
+    <div class="foot"><span class="sum"></span>
       <button class="btn btn-primary" id="create">Create label · ${money(sel.price)}</button></div>
     <div class="note">Never offered: USPS, UPS Ground Saver, FedEx Ground Economy. The label prints only the PO# and "Merchandise".</div>
   </div></div>`;

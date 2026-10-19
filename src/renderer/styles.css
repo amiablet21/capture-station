@@ -6000,8 +6000,6 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .sp-loadbar i { display: block; height: 100%; width: 40%; background: var(--accent); border-radius: 3px; animation: spSlide 900ms ease-in-out infinite; }
 @keyframes spSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
 .sp-buy { padding: 12px 16px 14px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px; }
-.sp-buy .sum { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
-.sp-buy .sum b { color: var(--text); }
 .sp-buy .btn { width: 100%; padding: 10px 14px; font-size: 14px; font-weight: 600; }
 .sp-buy .sp-autoprint { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .sp-buy .err { color: var(--neg-text); font-size: 12px; margin-top: 8px; }
