@@ -65,6 +65,40 @@ function orderNetCharge(totalCharge, tax) {
   return Math.round(Math.max(0, total - Math.min(t, total)) * 100) / 100;
 }
 
+// an order (open or full processed shape — both carry CustomerInfo,
+// TotalsInfo and Items) as the Ship tab's party + summary
+function labelOrder(o, status, ref) {
+  const ci = o.CustomerInfo || {};
+  const a = ci.Address || {};
+  const t = (v) => String(v || '').trim();
+  const items = (o.Items || []).filter(it => !it.IsService).map(it => ({
+    sku: it.SKU || it.ItemNumber || '',
+    title: it.Title || '',
+    quantity: it.Quantity || 1,
+  }));
+  return {
+    reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
+    source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
+    status,
+    // what the buyer paid before sales tax — the label's declared value
+    // starts here and the owner can change it
+    total: orderNetCharge(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge), o.TotalsInfo && o.TotalsInfo.Tax),
+    items,
+    party: {
+      name: t(a.FullName || ci.ChannelBuyerName),
+      company: t(a.Company),
+      line1: t(a.Address1),
+      line2: [t(a.Address2), t(a.Address3)].filter(Boolean).join(', '),
+      city: t(a.Town),
+      state: t(a.Region),
+      zip: t(a.PostCode),
+      country: t(a.Country),
+      phone: t(a.PhoneNumber),
+      email: t(a.EmailAddress || ci.EmailAddress),
+    },
+  };
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -727,6 +761,33 @@ class LinnworksClient {
       }));
     } catch { /* items stay empty; the UI lets the user pick the SKU */ }
     return out;
+  }
+
+  // Ship tab (owner 2026-10-19): one order by its channel reference, open
+  // or already processed, with the ship-to address split into fields and
+  // the order's value — everything a UPS label needs. Open orders are
+  // looked up at each of the station's locations in turn (Linnworks only
+  // searches "Default" without one — the dropship location holds orders
+  // too); a processed order is read in full by id.
+  async findOrderForLabel(reference, fulfilmentCenters) {
+    const ref = String(reference || '').trim();
+    if (!ref) return null;
+    const centers = [...new Set((fulfilmentCenters || []).filter(Boolean))];
+    for (const fc of centers.length ? centers : ['00000000-0000-0000-0000-000000000000']) {
+      const open = await this.call('Orders/GetOpenOrders', {
+        entriesPerPage: 10,
+        pageNumber: 1,
+        fulfilmentCenter: fc,
+        filters: { TextFields: [{ FieldCode: 'GENERAL_INFO_REFERENCE_NUMBER', Type: 'Equal', Text: ref }] },
+      });
+      const hit = ((open && open.Data) || []).find(o => o.GeneralInfo && String(o.GeneralInfo.ReferenceNum).trim() === ref);
+      if (hit) return labelOrder(hit, 'open', ref);
+    }
+    const done = await this.findProcessedOrder(ref, { light: true });
+    if (!done || !done.orderId) return null;
+    const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [done.orderId] });
+    const order = (full || [])[0];
+    return order ? labelOrder(order, 'processed', ref) : null;
   }
 
   // Sales page: every processed-order item line in a date window.

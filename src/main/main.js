@@ -9,6 +9,7 @@ const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
+const ups = require('./ups');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const presence = require('./presence');
@@ -5979,6 +5980,249 @@ exit 1
       pw.destroy();
     }
   });
+  /* ---- Ship tab (owner 2026-10-19): UPS labels from a PO# or a typed
+     address, rated on BOTH companies' UPS accounts side by side; the PO#
+     is always Ref 1, the declared value is the owner's call ---- */
+  const shipOff = () => { const c = config.load(); return c.captureOnly || !(c.pages && c.pages.ship); };
+  const upsReady = (a) => !!(a && a.clientId && a.clientSecret && a.accountNumber);
+  const upsName = (a) => String(a.name || '').trim() || `UPS account ${String(a.id).toUpperCase()}`;
+  const shipParty = (x) => {
+    const out = {};
+    for (const f of ['name', 'company', 'line1', 'line2', 'city', 'state', 'zip', 'phone', 'email']) out[f] = String((x && x[f]) || '').trim().slice(0, 120);
+    return out;
+  };
+  const shipPkg = (p) => ({
+    weight: Math.max(0, Number(p && p.weight) || 0),
+    length: Math.max(0, Number(p && p.length) || 0),
+    width: Math.max(0, Number(p && p.width) || 0),
+    height: Math.max(0, Number(p && p.height) || 0),
+  });
+  // everything a rate or a label needs, checked up front so UPS errors are
+  // only ever about UPS
+  function shipInput(payload) {
+    const cfg = config.load();
+    const u = cfg.ups || {};
+    const kind = payload && payload.kind === 'return' ? 'return' : 'ship';
+    const other = shipParty(payload && payload.party);
+    const pkg = shipPkg(payload && payload.pkg);
+    const p0 = ups.addressProblem(u.shipFrom);
+    if (p0) return { error: `Ship-from address: ${p0.toLowerCase()} (Settings › UPS labels).` };
+    if (kind === 'return') {
+      const p1 = ups.addressProblem(u.returnTo);
+      if (p1) return { error: `Return address: ${p1.toLowerCase()} (Settings › UPS labels).` };
+    }
+    const p2 = ups.addressProblem(other);
+    if (p2) return { error: `${kind === 'return' ? 'Their' : 'Ship-to'} address: ${p2.toLowerCase()}.` };
+    if (!(pkg.weight > 0)) return { error: 'Enter the weight.' };
+    if (pkg.weight > 150) return { error: 'UPS takes up to 150 lb per package.' };
+    return { cfg, u, input: { kind, shipFrom: u.shipFrom, returnTo: u.returnTo, other, pkg, value: Math.max(0, Number(payload && payload.value) || 0) } };
+  }
+
+  ipcMain.handle('ship:info', () => {
+    const u = config.load().ups || {};
+    return {
+      ok: true,
+      test: !!u.test,
+      printer: u.printer || '',
+      boxes: u.boxes || [],
+      shipFrom: u.shipFrom || {},
+      returnTo: u.returnTo || {},
+      shipFromProblem: ups.addressProblem(u.shipFrom),
+      returnToProblem: ups.addressProblem(u.returnTo),
+      accounts: (u.accounts || []).map(a => ({ id: a.id, name: upsName(a), ready: upsReady(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() })),
+    };
+  });
+
+  ipcMain.handle('ship:lookup', async (_e, { ref } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const reference = String(ref || '').trim();
+    if (!reference) return { ok: false, error: 'Enter a PO#.' };
+    try {
+      const cfg = config.load();
+      const order = await new LinnworksClient(cfg.linnworks).findOrderForLabel(reference,
+        [cfg.linnworks.locationId, (cfg.stockRouting || {}).fallbackLocationId]);
+      if (!order) return { ok: false, notFound: true, error: `No Linnworks order found for ${reference}.` };
+      const country = String(order.party.country || '').trim();
+      if (country && !/^(us|usa|united states( of america)?)$/i.test(country)) {
+        return { ok: false, error: `${reference} ships to ${country}; the Ship tab makes US labels only.` };
+      }
+      order.party.state = ups.stateCode(order.party.state);
+      return { ok: true, order };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:rates', async (_e, payload) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const prep = shipInput(payload);
+    if (prep.error) return { ok: false, error: prep.error };
+    const accounts = prep.u.accounts || [];
+    if (!accounts.some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › UPS labels).' };
+    // both accounts at once; one failing never hides the other's rates
+    const out = await Promise.all(accounts.map(async (a) => {
+      const head = { id: a.id, name: upsName(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() };
+      if (!upsReady(a)) return { ...head, ok: false, notSet: true, error: 'Not set up — add it in Settings › UPS labels.' };
+      try {
+        return { ...head, ok: true, rates: await new ups.UpsClient(a, { test: !!prep.u.test }).rates(prep.input) };
+      } catch (e) {
+        return { ...head, ok: false, error: e.message };
+      }
+    }));
+    return { ok: true, test: !!prep.u.test, accounts: out };
+  });
+
+  ipcMain.handle('ship:create', async (_e, payload) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const prep = shipInput(payload);
+    if (prep.error) return { ok: false, error: prep.error };
+    const acct = (prep.u.accounts || []).find(a => a.id === (payload && payload.accountId));
+    if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › UPS labels).' };
+    const serviceCode = String((payload && payload.serviceCode) || '').replace(/\D/g, '').slice(0, 3);
+    if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
+    const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
+    try {
+      const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({
+        ...prep.input, serviceCode, reference, description: String((payload && payload.description) || '').trim(),
+      });
+      const { pkg } = prep.input;
+      const label = db.shipLabelAdd({
+        kind: prep.input.kind, reference, fromPo: !!(payload && payload.fromPo), source: payload && payload.source,
+        accountId: acct.id, accountName: upsName(acct), serviceCode,
+        serviceName: ups.SERVICE_NAMES[serviceCode] || String((payload && payload.serviceName) || `UPS service ${serviceCode}`),
+        tracking: res.tracking, shipmentId: res.shipmentId,
+        cost: res.charge ?? (Number.isFinite(Number(payload && payload.price)) ? Number(payload.price) : null),
+        value: prep.input.value, weight: pkg.weight,
+        dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
+        partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
+        labelGif: res.labelGif, test: !!prep.u.test,
+      });
+      if (payload && payload.saveAddress) { try { db.shipAddrSave(prep.input.other); } catch { /* the label matters more */ } }
+      if (payload && payload.addressId) { try { db.shipAddrTouch(payload.addressId); } catch { /* best effort */ } }
+      const { label_gif: gif, ...row } = label;
+      return { ok: true, label: row, gif, size: ups.gifSize(gif) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:list', (_e, { days } = {}) => {
+    const n = Math.max(0, Math.min(3650, Number(days) || 0));
+    const since = n ? db.localDay(new Date(Date.now() - n * 86400000)) : db.localDay();
+    return { ok: true, labels: db.shipLabelList({ sinceDay: since }) };
+  });
+
+  ipcMain.handle('ship:label', (_e, { id } = {}) => {
+    const l = db.shipLabelGet(id);
+    if (!l) return { ok: false, error: 'Label not found.' };
+    const { label_gif: gif, ...row } = l;
+    return { ok: true, label: row, gif, size: ups.gifSize(gif) };
+  });
+
+  // a 4x6 page holding the label upright: UPS's GIF lies on its side
+  // (wider than tall), so it is turned a quarter clockwise to stand up
+  function shipLabelHtml(gif) {
+    const size = ups.gifSize(gif);
+    const wide = size && size.width > size.height;
+    const img = wide
+      ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
+      : 'display:block;width:4in;height:auto';
+    return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:4in 6in;margin:0}html,body{margin:0;padding:0}`
+      + `.pg{position:relative;width:4in;height:6in;overflow:hidden}</style></head><body><div class="pg">`
+      + `<img style="${img}" src="data:image/gif;base64,${gif}"></div></body></html>`;
+  }
+  async function shipLabelWindow(id) {
+    const l = db.shipLabelGet(id);
+    if (!l) throw new Error('Label not found.');
+    if (!l.label_gif) throw new Error('UPS sent no image for this label.');
+    const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
+    await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif))}`);
+    return { pw, label: l };
+  }
+
+  ipcMain.handle('ship:print', async (_e, { id } = {}) => {
+    let pw = null;
+    try {
+      const printer = String((config.load().ups || {}).printer || '');
+      ({ pw } = await shipLabelWindow(id));
+      // a named label printer prints straight away; otherwise the system
+      // print dialog asks which printer
+      const ok = await new Promise((resolve, reject) => {
+        pw.webContents.print({
+          silent: !!printer, deviceName: printer || undefined, printBackground: true,
+          margins: { marginType: 'none' }, pageSize: { width: 101600, height: 152400 },
+        }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
+      });
+      return { ok: true, printed: ok };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  ipcMain.handle('ship:pdf', async (_e, { id } = {}) => {
+    let pw = null;
+    try {
+      const l = db.shipLabelGet(id);
+      if (!l) return { ok: false, error: 'Label not found.' };
+      const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}.pdf`;
+      const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
+      ({ pw } = await shipLabelWindow(id));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      fs.writeFileSync(pick.filePath, pdf);
+      shell.showItemInFolder(pick.filePath);
+      return { ok: true, path: pick.filePath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  ipcMain.handle('ship:void', async (_e, { id } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const l = db.shipLabelGet(id);
+    if (!l) return { ok: false, error: 'Label not found.' };
+    if (l.voided_at) return { ok: true, label: l };
+    const u = config.load().ups || {};
+    const acct = (u.accounts || []).find(a => a.id === l.account_id);
+    if (!upsReady(acct)) return { ok: false, error: `The ${l.account_name} account is no longer set up, so UPS can't be asked to void it.` };
+    try {
+      // a label bought on the test servers is voided there too
+      await new ups.UpsClient(acct, { test: !!l.test }).void(l.shipment_id || l.tracking);
+      const { label_gif: _g, ...row } = db.shipLabelVoid(id);
+      return { ok: true, label: row };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:addresses', () => ({ ok: true, addresses: db.shipAddrList() }));
+  ipcMain.handle('ship:addressDelete', (_e, { id } = {}) => { db.shipAddrDelete(id); return { ok: true }; });
+
+  // Settings' Test button: a token from UPS proves the client ID, secret
+  // and account number belong together
+  ipcMain.handle('ship:test', async (_e, { account, test } = {}) => {
+    try {
+      const a = { clientId: String((account && account.clientId) || '').trim(), clientSecret: String((account && account.clientSecret) || '').trim(), accountNumber: String((account && account.accountNumber) || '').trim() };
+      await new ups.UpsClient(a, { test: !!test }).token();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:printers', async () => {
+    try {
+      const list = await win.webContents.getPrintersAsync();
+      return { ok: true, printers: list.map(p => ({ name: p.name, label: p.displayName || p.name })) };
+    } catch (e) {
+      return { ok: false, error: e.message, printers: [] };
+    }
+  });
+
   // Create a new inventory item, optionally with a starting level at the
   // primary location (via the existing UpdateStockLevelsBySKU delta path).
   ipcMain.handle('stock:createSku', async (_e, payload) => {

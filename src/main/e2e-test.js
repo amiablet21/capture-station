@@ -1824,6 +1824,114 @@ module.exports = async function run({ app, win, db, clipboard }) {
         claimsT.jpegOrientation(exif));
     }
 
+    // Ship tab (owner 2026-10-19): UPS labels against a fake UPS — both
+    // accounts rated side by side, a return label bought, listed, voided
+    {
+      const http = require('node:http');
+      const upsMod = require('./ups');
+      const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.from([0x78, 0x05, 0x20, 0x03]), Buffer.alloc(20)]).toString('base64');
+      const upsSeen = [];
+      const fake = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => {
+          upsSeen.push({ url: req.url, method: req.method, body });
+          res.setHeader('Content-Type', 'application/json');
+          if (req.url === '/security/v1/oauth/token') {
+            const id = Buffer.from(String(req.headers.authorization || '').replace(/^Basic /, ''), 'base64').toString();
+            return res.end(JSON.stringify({ access_token: `TOK-${id.split(':')[0]}`, expires_in: '3600' }));
+          }
+          const b = String(req.headers.authorization || '').endsWith('-B'); // the second account
+          if (req.url.startsWith('/api/rating/')) {
+            return res.end(JSON.stringify({ RateResponse: { RatedShipment: [
+              { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '15.00' }, NegotiatedRateCharges: { TotalCharge: { MonetaryValue: b ? '9.10' : '10.40' } } },
+              { Service: { Code: '02' }, TotalCharges: { MonetaryValue: b ? '24.00' : '23.50' } },
+            ] } }));
+          }
+          if (req.url.endsWith('/ship')) {
+            return res.end(JSON.stringify({ ShipmentResponse: { ShipmentResults: {
+              ShipmentIdentificationNumber: '1ZE2E0000000000001',
+              NegotiatedRateCharges: { TotalCharge: { MonetaryValue: '9.10' } },
+              PackageResults: [{ TrackingNumber: '1ZE2E0000000000001', ShippingLabel: { GraphicImage: gif } }],
+            } } }));
+          }
+          if (req.url.includes('/void/cancel/')) return res.end(JSON.stringify({ VoidShipmentResponse: { SummaryResult: { Status: { Code: '1' } } } }));
+          res.statusCode = 404; res.end('{}');
+        });
+      });
+      await new Promise(r => fake.listen(0, '127.0.0.1', r));
+      upsMod.UpsClient.testHost = `http://127.0.0.1:${fake.address().port}`;
+      try {
+        check('ship: tab hidden until ticked', await exec(`document.getElementById('tabShip').hidden`) === true);
+        const addr = (company, line2) => ({ company, name: 'Shipping', phone: '201-555-0100', line1: '100 Commerce Dr', line2, city: 'Fairfield', state: 'NJ', zip: '07004' });
+        await exec(`api.setConfig(${JSON.stringify({
+          captureOnly: false,
+          pages: { ship: true },
+          ups: {
+            accounts: [
+              { id: 'a', name: 'Digital World Shop', accountNumber: 'aaa111', clientId: 'ID-A', clientSecret: 'S-A' },
+              { id: 'b', name: 'Company Two', accountNumber: 'bbb222', clientId: 'ID-B', clientSecret: 'S-B' },
+            ],
+            shipFrom: addr('Digital World Shop', ''),
+            returnTo: addr('DWS Returns', 'Dock 2'),
+          },
+        })}).then(() => refresh())`);
+        await sleep(300);
+        check('ship: tab shows once ticked', await exec(`document.getElementById('tabShip').hidden`) === false);
+        const info = await exec('api.shipInfo()');
+        check('ship: both accounts ready, addresses complete',
+          info.ok && info.accounts.length === 2 && info.accounts.every(a => a.ready) && !info.shipFromProblem && !info.returnToProblem, info);
+        const cust = { name: 'Maria Delgado', line1: '4120 W Belmont Ave', line2: 'Apt 2', city: 'Chicago', state: 'IL', zip: '60641' };
+        let r = await exec(`api.shipRates(${JSON.stringify({ kind: 'ship', party: { ...cust, zip: '606' }, pkg: { weight: 1 } })})`);
+        check('ship: a bad ZIP is caught before UPS is asked', !r.ok && /zip/i.test(r.error), r);
+        r = await exec(`api.shipRates(${JSON.stringify({ kind: 'ship', party: cust, pkg: { weight: 0 } })})`);
+        check('ship: no weight, no rates', !r.ok && /weight/i.test(r.error), r);
+        r = await exec(`api.shipRates(${JSON.stringify({ kind: 'return', party: cust, pkg: { weight: 1.1, length: 8, width: 6, height: 4 }, value: 189.99 })})`);
+        const ra = r.ok && r.accounts.find(a => a.id === 'a');
+        const rb = r.ok && r.accounts.find(a => a.id === 'b');
+        check('ship: both accounts rated side by side (negotiated price wins)',
+          ra && rb && ra.ok && rb.ok && ra.rates[0].price === 10.4 && rb.rates[0].price === 9.1 && rb.rates[0].code === '03', r);
+        const rateBody = JSON.parse(upsSeen.filter(x => x.url.startsWith('/api/rating/')).pop().body).RateRequest.Shipment;
+        check('ship: a return is rated from the customer to our return address',
+          rateBody.ShipFrom.Name === 'Maria Delgado' && rateBody.ShipTo.Name === 'DWS Returns', rateBody.ShipTo);
+        const made = await exec(`api.shipCreate(${JSON.stringify({
+          accountId: 'b', serviceCode: '03', kind: 'return', party: cust, pkg: { weight: 1.1 }, value: 189.99,
+          reference: '108829451230774', fromPo: true, source: 'WALMART', description: 'Return X133-128GB-GRAY',
+        })})`);
+        check('ship: return label bought on the second account',
+          made.ok && made.label.tracking === '1ZE2E0000000000001' && made.label.kind === 'return' && made.label.account_name === 'Company Two'
+            && made.label.cost === 9.1 && made.gif === gif && made.size && made.size.width === 1400, made.ok ? made.label : made);
+        const shipBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
+        check('ship: the PO# is Ref 1, PRL return service, value declared',
+          shipBody.Package[0].ReferenceNumber[0].Value === '108829451230774' && shipBody.ReturnService.Code === '9'
+            && shipBody.Package[0].PackageServiceOptions.DeclaredValue.MonetaryValue === '189.99' && shipBody.Shipper.ShipperNumber === 'BBB222', shipBody);
+        const typed = await exec(`api.shipCreate(${JSON.stringify({
+          accountId: 'a', serviceCode: '02', kind: 'ship', party: { ...cust, company: 'TechHub' }, pkg: { weight: 6 }, value: 0,
+          reference: 'INV-2304', fromPo: false, saveAddress: true,
+        })})`);
+        check('ship: label with no PO# saves the address', typed.ok && typed.label.from_po === 0
+          && (await exec('api.shipAddresses()')).addresses.some(x => x.company === 'TechHub'), typed);
+        let list = await exec('api.shipList(0)');
+        check('ship: today\'s list carries both labels, newest first, no images',
+          list.ok && list.labels.length === 2 && list.labels[0].reference === 'INV-2304' && !('label_gif' in list.labels[0]), list.labels && list.labels.length);
+        const v = await exec(`api.shipVoid(${made.label.id})`);
+        list = await exec('api.shipList(0)');
+        check('ship: void reaches UPS and marks the label',
+          v.ok && upsSeen.some(x => x.method === 'DELETE' && x.url.endsWith('/1ZE2E0000000000001'))
+            && list.labels.find(l => l.id === made.label.id).voided_at, v);
+        await exec(`showPage('ship')`);
+        await sleep(600);
+        check('ship: page opens with the labels list',
+          await exec(`!document.getElementById('shipPage').hidden && document.querySelectorAll('#spLogBody tr').length === 2`), null);
+        const disk = JSON.parse(fs.readFileSync(require('node:path').join(app.getPath('userData'), 'config.json'), 'utf8'));
+        check('ship: UPS secrets never sit in config.json in plain text (when the OS can encrypt)',
+          !disk.upsEnc || disk.ups.accounts.every(a => !a.clientSecret && !a.clientId), disk.ups && disk.ups.accounts);
+      } finally {
+        upsMod.UpsClient.testHost = '';
+        fake.close();
+      }
+    }
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

@@ -20,6 +20,18 @@ function encryptCreds(linnworks) {
   }
 }
 
+// the UPS client IDs and secrets ride the same OS-key encryption, one
+// blob for both accounts (upsEnc)
+function encryptUps(ups) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const secrets = ((ups && ups.accounts) || []).map(a => ({ clientId: a.clientId || '', clientSecret: a.clientSecret || '' }));
+    return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
 function decryptCreds(b64) {
   try {
     return JSON.parse(safeStorage.decryptString(Buffer.from(b64, 'base64')));
@@ -74,7 +86,28 @@ const DEFAULTS = {
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
   // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
-  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false },
+  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, ship: false },
+  // Ship tab (owner 2026-10-19): UPS labels on either company's account.
+  // Each account is its own UPS developer app (client ID + secret) billed to
+  // its shipper number; name is what the Ship tab shows. shipFrom is the
+  // warehouse (and the Shipper on every label); returnTo is where return
+  // labels send the parcel. test = UPS's test servers (no charge, labels
+  // not valid). printer: '' = ask with the print dialog every time.
+  ups: {
+    test: false,
+    printer: '',
+    accounts: [
+      { id: 'a', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+      { id: 'b', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+    ],
+    shipFrom: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    returnTo: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    boxes: [
+      { name: 'Phone box', length: 8, width: 6, height: 4 },
+      { name: 'Tablet box', length: 13, width: 10, height: 4 },
+      { name: '2-phone box', length: 10, width: 8, height: 5 },
+    ],
+  },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -213,6 +246,14 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  if (stored.upsEnc) {
+    let secrets = null;
+    try { secrets = JSON.parse(safeStorage.decryptString(Buffer.from(stored.upsEnc, 'base64'))); } catch { /* other machine */ }
+    if (Array.isArray(secrets) && stored.ups && Array.isArray(stored.ups.accounts)) {
+      stored.ups.accounts.forEach((a, i) => { if (a && secrets[i]) Object.assign(a, secrets[i]); });
+    }
+    delete stored.upsEnc;
+  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -255,6 +296,9 @@ function load() {
     }
   }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
+  // the Ship tab always has its two account slots, whatever was saved
+  const accts = Array.isArray(cached.ups.accounts) ? cached.ups.accounts : [];
+  cached.ups.accounts = DEFAULTS.ups.accounts.map((def, i) => ({ ...def, ...(accts[i] || {}), id: def.id }));
   return cached;
 }
 
@@ -275,6 +319,11 @@ function save(patch) {
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
+  const upsEnc = encryptUps(cfg.ups);
+  if (upsEnc && persisted.ups && Array.isArray(persisted.ups.accounts)) {
+    persisted.upsEnc = upsEnc;
+    for (const a of persisted.ups.accounts) { a.clientId = ''; a.clientSecret = ''; }
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

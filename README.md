@@ -2,6 +2,19 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.0 highlights
+
+- **New Ship tab: UPS labels on either company's account** (design `variants/ups-labels.html`). Tick **Ship (UPS labels)** under Settings › Pages, then fill in Settings › UPS labels (see *UPS setup* below).
+  - **From a PO#:** paste or scan it and the Linnworks order fills in the customer's name and address and the order value (open or already-shipped orders alike).
+  - **No PO#:** switch to "type the address" for wholesale buyers, repair shops and one-offs. There's an address book (tick "Save to the address book" on a label to add one) and a "Paste a whole address" box that splits a pasted block into the fields.
+  - **Ship or Return:** a return swaps the addresses and goes to the return address set in Settings, on a UPS Print Return Label (RS).
+  - **Both accounts priced side by side:** every UPS service for the package, from both companies' accounts at their own negotiated prices, with arrival dates. The cheapest is marked and picked, and each rate says how much less it is than the same service on the other account.
+  - **Reference and value:** the PO# is always Reference #1 on the label (free text when there's no PO#). The declared value starts at the order total (before tax) and can be changed or left blank.
+  - **Box presets** (phone 8×6×4, tablet 13×10×4, 2-phone 10×8×5, or custom) and the weight in pounds.
+  - **The label:** shown upright as a 4×6 preview with Print, Save PDF and Copy tracking, plus an optional "Print as soon as it's created". Pick the label printer in Settings to skip the print dialog.
+  - **Labels list:** today's labels (or the last 7 / 30 days) with reference, Ship/Return, service, account, tracking, value and cost; Reprint, PDF and Void (UPS credits a voided unused label).
+  - **Test mode** in Settings uses UPS's test servers: sample labels, nothing charged.
+
 ## v1.31.24 highlights
 
 - **Export SKUs + 30-day sales** (Stock → Actions): every Linnworks SKU with its last 30 days of sales, built for deciding what to buy (and to hand to Claude for a ranked buy list). An Excel workbook with three sheets: **SKUs** (one row per item, worst first: status (Out of stock, Order now, Order soon, On order, Covered, Not selling, Dropship, Not linked), available, in orders, at WFS, on hand, due in, min, units sold over 30 / 14 / 7 days, per day, trend, days left, out-by date, suggested order (lead + cover days of pace, less on hand and due in, rounded up to 5), cost / order cost / margin on a Cost station, average price, revenue, units per channel, units sold from WFS, last sold), **Daily** (units per local day for each SKU that sold) and **About** (the window, the reorder settings and how each figure is worked out). CSV saves the sheets as three files. The sales come from the same cache as the Overview, so a station that has already loaded it exports quickly.
@@ -260,6 +273,15 @@ Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%AP
 4. **Dry run is ON by default.** Dry-run syncs look up each order (read-only) and log what would happen without writing anything. Turn it off only after a first live test on one order passes.
 
 Sync per row: find open order by channel reference number (`Orders/GetOpenOrders`) -> set tracking (`Orders/SetOrderShippingInfo`, preserves existing postal service/weights) -> process (`Orders/ProcessOrderByOrderOrReferenceId` with `ScansPerformed: true`). Calls are throttled under the 150/min API limit. Failed rows (e.g. order not yet in Linnworks) retry automatically on the next sync. (Serial attachment via `CreateSerialisedValuesForOrderItems` remains in the codebase but is unused since serial tracking was retired.)
+
+## UPS setup (Ship tab)
+
+1. For each company, sign in at developer.ups.com with that company's UPS login, create an app, and add the **Authorization (OAuth)**, **Rating** and **Shipping** products to it, linked to that company's UPS account number.
+2. In the app: Settings › Pages › tick **Ship (UPS labels)**. Under **UPS labels**, give each account a name (what the Ship tab shows), its 6-character UPS account number, and the app's Client ID and Client Secret, then press **Test** on each. A "Connected" means UPS accepted the three together.
+3. Fill in the **Ship-from** address (the warehouse; it is also the shipper on every label) and the **Return address** (where return labels send the parcel; "same as ship-from" copies it). Pick the **Label printer** to print without the dialog.
+4. Try a few labels with **Test mode** on (UPS's test servers: sample labels, no charge), then untick it.
+
+Client IDs and secrets are encrypted at rest with the Windows user's key, like the Linnworks credentials. Rates use `rating/v2409/Shoptimeintransit` with negotiated rates; labels use `shipments/v2409/ship` (GIF, Reference #1 at package level, ReturnService 9 for returns); Void uses `shipments/v2409/void/cancel`. Labels are kept on this station (the `ship_labels` table, image included) for reprinting.
 
 ## Configurable patterns (Settings)
 

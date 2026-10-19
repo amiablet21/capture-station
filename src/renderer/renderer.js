@@ -110,6 +110,19 @@ if (!window.api) {
     wholesaleSerialsCsv: async () => ({ ok: false, error: 'Preview mode' }),
     wholesaleDiscardDraft: async () => ({ ok: true }),
     wholesalePrint: async () => ({ ok: false, error: 'Preview mode' }),
+    shipInfo: async () => ({ ok: true, test: true, printer: '', boxes: [{ name: 'Phone box', length: 8, width: 6, height: 4 }], shipFrom: {}, returnTo: {}, shipFromProblem: 'Name is missing', returnToProblem: 'Name is missing', accounts: [] }),
+    shipLookup: async () => ({ ok: false, error: 'Preview mode' }),
+    shipRates: async () => ({ ok: false, error: 'Preview mode' }),
+    shipCreate: async () => ({ ok: false, error: 'Preview mode' }),
+    shipList: async () => ({ ok: true, labels: [] }),
+    shipLabel: async () => ({ ok: false, error: 'Preview mode' }),
+    shipPrint: async () => ({ ok: false, error: 'Preview mode' }),
+    shipPdf: async () => ({ ok: false, error: 'Preview mode' }),
+    shipVoid: async () => ({ ok: false, error: 'Preview mode' }),
+    shipAddresses: async () => ({ ok: true, addresses: [] }),
+    shipAddressDelete: async () => ({ ok: true }),
+    shipTest: async () => ({ ok: false, error: 'Preview mode' }),
+    shipPrinters: async () => ({ ok: true, printers: [] }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -314,7 +327,7 @@ function render() {
   // Listings split from the returns flag the same day ("I just need them to
   // process returns") so a returns-only station shows Returns alone.
   const lst = !!pages.returns && pages.listings !== false;
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, ebay: lst, temu: lst, ship: !!pages.ship };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -332,7 +345,8 @@ function render() {
   $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
   $('tabListings').hidden = !(pages.returns && pages.listings !== false);
-  $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns);
+  $('tabShip').hidden = !pages.ship; // UPS labels, per-station opt-in (owner 2026-10-19)
+  $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns || pages.ship);
   $('historyBtn').hidden = !pages.history;
   $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
 
@@ -1235,6 +1249,8 @@ async function openSettings() {
   $('setPageListings').checked = pg.listings !== false;
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
+  $('setPageShip').checked = !!pg.ship; // opt-in: default off (owner 2026-10-19)
+  fillUpsSettings(cfg.ups || {});
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
   const rsy = cfg.returnsSync || {};
@@ -1345,7 +1361,9 @@ $('settingsSave').addEventListener('click', async () => {
       listings: $('setPageListings').checked,
       wholesale: $('setPageWholesale').checked,
       cost: $('setPageCost').checked,
+      ship: $('setPageShip').checked,
     },
+    ups: readUpsSettings(),
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
@@ -1374,6 +1392,7 @@ $('settingsSave').addEventListener('click', async () => {
   });
   $('settingsDialog').close();
   await refresh();
+  if (activePage === 'ship') enterShip();
   toast('Settings saved');
 });
 
@@ -1430,7 +1449,7 @@ let activePage = 'capture';
 let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', ebay: 'ebayPage', temu: 'temuPage', ship: 'shipPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1471,12 +1490,14 @@ function showPage(page) {
   $('returnsPage').hidden = page !== 'returns';
   $('ebayPage').hidden = page !== 'ebay';
   $('temuPage').hidden = page !== 'temu';
+  $('shipPage').hidden = page !== 'ship';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
+  $('tabShip').classList.toggle('is-active', page === 'ship');
   if (page === 'ebay' || page === 'temu') {
     try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
   }
@@ -1513,6 +1534,8 @@ function showPage(page) {
       enterPricing();
     } else if (page === 'shelf') {
       enterShelf();
+    } else if (page === 'ship') {
+      enterShip();
     } else if (page === 'returns') {
       applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
@@ -1530,6 +1553,7 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabPricing').addEventListener('click', () => showPage('pricing'));
+$('tabShip').addEventListener('click', () => showPage('ship'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -12407,4 +12431,659 @@ $("tmExport").addEventListener("click", async () => {
   tmCur = null;
   renderTmQueue();
   renderTmForm();
+});
+
+/* ---------- Ship page: UPS labels (owner 2026-10-19, design variants/ups-labels.html) ----------
+   Paste a PO# (the Linnworks order fills the customer and the value) or
+   type an address; Ship or Return (a return swaps the addresses and goes to
+   our return address); both companies' UPS accounts are rated side by side
+   and the cheapest is picked; the PO# is always Ref 1. */
+
+const sp = {
+  info: null, // ship:info — accounts, our two addresses, boxes, test mode
+  src: 'po', // 'po' | 'man'
+  kind: 'ship', // 'ship' | 'return'
+  poKey: '', // the PO# the current order was looked up with
+  order: null, // Linnworks order for poKey
+  lookupMsg: '', // "Looking up…" / not found / error under the PO# box
+  lookupSeq: 0,
+  party: null, // the other side of the label: customer or typed address
+  addressId: null, // address-book entry the typed address came from
+  rates: null, // ship:rates result
+  ratesErr: '',
+  ratesLoading: false,
+  ratesSeq: 0,
+  ratesTimer: 0,
+  pick: '', // 'accountId:serviceCode'
+  creating: false,
+  createErr: '',
+  done: null, // { label, gif, size } once a label is bought
+  book: [],
+  log: [],
+  logKind: '',
+  logDays: 0,
+  freshId: 0,
+};
+
+const spMoney = (n) => (Number.isFinite(Number(n)) && n !== null ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—');
+
+function spDayLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// "Name / Company / 12 Street, Apt 3 / City, ST 12345" in any line layout
+function spParseAddress(txt) {
+  const lines = String(txt || '').split(/\n|;/).map(s => s.trim()).filter(Boolean);
+  const out = { name: '', company: '', line1: '', line2: '', city: '', state: '', zip: '', phone: '' };
+  const ph = lines.findIndex(l => /^\+?[\d\s().-]{10,}$/.test(l));
+  if (ph >= 0) out.phone = lines.splice(ph, 1)[0];
+  const csz = lines.findIndex(l => /,?\s*[A-Za-z]{2}\s+\d{5}(-\d{4})?$/.test(l));
+  if (csz < 0) return out;
+  const m = lines[csz].match(/^(.*?),?\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+  out.city = m[1].replace(/,$/, ''); out.state = m[2].toUpperCase(); out.zip = m[3];
+  const before = lines.slice(0, csz).filter(l => !/^(united states|usa|us)$/i.test(l));
+  const st = before.findIndex(l => /^\d/.test(l));
+  if (st >= 0) {
+    out.line1 = before[st]; out.line2 = before[st + 1] || '';
+    out.name = st > 0 ? before[0] : ''; out.company = st > 1 ? before[1] : '';
+  } else { out.name = before[0] || ''; out.line1 = before[1] || ''; }
+  return out;
+}
+
+// the same checks the main process makes, so the page can say what is
+// missing before asking UPS anything
+function spAddrProblem(a) {
+  if (!a) return 'No address';
+  if (!String(a.name || '').trim() && !String(a.company || '').trim()) return 'Name is missing';
+  if (!String(a.line1 || '').trim()) return 'Street is missing';
+  if (!String(a.city || '').trim()) return 'City is missing';
+  if (!/^[A-Za-z]{2}$/.test(String(a.state || '').trim())) return 'State should be two letters';
+  if (!/^\d{5}(-?\d{4})?$/.test(String(a.zip || '').trim())) return 'ZIP should be 5 digits';
+  return '';
+}
+
+const SP_MAN = { name: 'spMName', company: 'spMCo', line1: 'spML1', line2: 'spML2', city: 'spMCity', state: 'spMSt', zip: 'spMZip', phone: 'spMPh', email: 'spMEm' };
+function spManualParty() {
+  const a = {};
+  for (const [f, id] of Object.entries(SP_MAN)) a[f] = $(id).value.trim();
+  a.state = a.state.toUpperCase();
+  return a;
+}
+function spFillManual(a, addressId = null) {
+  for (const [f, id] of Object.entries(SP_MAN)) $(id).value = (a && a[f]) || '';
+  sp.addressId = addressId;
+  spManualChanged();
+}
+
+function spRefText() {
+  return sp.src === 'po' ? (sp.order ? sp.poKey : '') : $('spRefIn').value.trim();
+}
+
+function spPkg() {
+  return {
+    weight: parseFloat($('spWt').value) || 0,
+    length: parseFloat($('spDl').value) || 0,
+    width: parseFloat($('spDw').value) || 0,
+    height: parseFloat($('spDh').value) || 0,
+  };
+}
+
+async function enterShip() {
+  const info = await api.shipInfo();
+  sp.info = info && info.ok ? info : null;
+  spRenderBanner();
+  spFillBoxes();
+  spRenderAll();
+  spLoadBook();
+  spLoadLog();
+  if (!sp.done) (sp.src === 'po' ? $('spPo') : $('spMName')).focus();
+}
+
+function spRenderBanner() {
+  const el = $('spBanner');
+  const i = sp.info;
+  const msgs = [];
+  if (i && !i.accounts.some(a => a.ready)) msgs.push('No UPS account is set up yet');
+  if (i && i.shipFromProblem) msgs.push('the ship-from address is incomplete');
+  if (i && i.returnToProblem) msgs.push('the return address is incomplete');
+  if (i && i.test) msgs.unshift('Test mode: labels come from UPS\'s test servers and are not valid for shipping');
+  el.hidden = !msgs.length;
+  el.innerHTML = msgs.length ? `${esc(msgs.join(' · '))} — <a id="spOpenSettings">open Settings</a>` : '';
+  const a = $('spOpenSettings');
+  if (a) a.onclick = () => openSettings();
+}
+
+function spFillBoxes() {
+  const sel = $('spBox');
+  const boxes = (sp.info && sp.info.boxes) || [];
+  const prev = sel.value;
+  sel.innerHTML = boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('')
+    + '<option value="custom">Custom size</option>';
+  let want = prev;
+  if (!want) { try { want = localStorage.getItem('spBox') || ''; } catch { /* default */ } }
+  sel.value = [...sel.options].some(o => o.value === want) ? want : (boxes.length ? '0' : 'custom');
+  spApplyBox(false);
+}
+
+function spApplyBox(remember = true) {
+  const v = $('spBox').value;
+  const b = ((sp.info && sp.info.boxes) || [])[Number(v)];
+  if (b) { $('spDl').value = b.length; $('spDw').value = b.width; $('spDh').value = b.height; }
+  if (remember) { try { localStorage.setItem('spBox', v); } catch { /* best effort */ } }
+}
+
+function spRenderAll() {
+  spRenderSource();
+  spRenderOrder();
+  spRenderAddrs();
+  spRenderRates();
+}
+
+function spRenderSource() {
+  const po = sp.src === 'po';
+  $('spSrcPo').classList.toggle('is-on', po);
+  $('spSrcMan').classList.toggle('is-on', !po);
+  $('spPoPane').hidden = !po;
+  $('spManPane').hidden = po;
+  $('spRefLock').hidden = !po;
+  $('spRefIn').hidden = po;
+  $('spRefHint').hidden = po;
+  $('spValHint').textContent = po ? 'Defaults to the order total — change it if you need to' : 'Optional — leave blank for no declared value';
+  $('spKindShipT').textContent = po ? 'Ship to customer' : 'Ship out';
+  $('spKindShip').classList.toggle('is-on', sp.kind === 'ship');
+  $('spKindRet').classList.toggle('is-on', sp.kind === 'return');
+  const who = po ? 'the customer' : 'them';
+  $('spKindNote').textContent = sp.kind === 'ship'
+    ? `Our warehouse → ${who}`
+    : `${who[0].toUpperCase()}${who.slice(1)} → our return address (addresses swapped)`;
+  $('spRefLock').innerHTML = sp.order
+    ? `${esc(sp.poKey)}<small>always the PO#</small>`
+    : '<span class="sp-dim">— fills from the PO#</span><small>always the PO#</small>';
+}
+
+function spRenderOrder() {
+  const el = $('spOrder');
+  if (sp.lookupMsg) {
+    const miss = !/^Looking/.test(sp.lookupMsg);
+    el.innerHTML = `<div class="sp-order ${miss ? 'is-miss' : 'is-wait'}">${esc(sp.lookupMsg)}${miss ? ' <button class="sp-link" id="spToManual" type="button">Type the address instead</button>' : ''}</div>`;
+    const b = $('spToManual');
+    if (b) b.onclick = () => { spSetSrc('man'); };
+    return;
+  }
+  const o = sp.order;
+  if (!o) { el.innerHTML = ''; return; }
+  const mk = String(o.source || '').toLowerCase();
+  const items = o.items || [];
+  const first = items[0];
+  el.innerHTML = `<div class="sp-order"><span class="sp-mk ${esc(mk)}">${esc(o.source || 'Order')}</span>`
+    + (first ? `<span class="sku">${esc(first.sku)}</span><span class="sp-dim">× ${first.quantity}</span>` : '')
+    + (items.length > 1 ? `<span class="sp-dim">+${items.length - 1} more</span>` : '')
+    + `<span class="sp-dim">· ${esc(o.party.name || o.party.company)}${o.status === 'processed' ? ' · shipped' : ''}</span>`
+    + `<span class="tot">${spMoney(o.total)}</span></div>`;
+}
+
+function spAddrCard(el, a, lab, tag, link, problem) {
+  if (!a) {
+    el.className = 'sp-addr is-empty';
+    el.textContent = sp.src === 'po' ? 'The customer fills in from the PO#' : 'Fills in as you type the address';
+    return;
+  }
+  el.className = `sp-addr${problem ? ' is-bad' : ''}`;
+  // the company leads, the person under it — the way UPS prints it
+  const lines = [a.company && a.name ? a.name : '', [a.line1, a.line2].filter(Boolean).join(', '),
+    [a.city, [a.state, a.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')].filter(Boolean);
+  el.innerHTML = `<div class="lab">${esc(lab)} ${tag}</div><div class="nm">${esc(a.company || a.name || '—')}</div>`
+    + `<div class="ln">${lines.map(esc).join('<br>')}</div>`
+    + (problem ? `<div class="warn">${esc(problem)}</div>` : '')
+    + (link ? `<button class="sp-link" type="button" data-act="${link.act}">${esc(link.text)}</button>` : '');
+  const b = el.querySelector('[data-act]');
+  if (b) b.onclick = () => (b.dataset.act === 'settings' ? openSettings() : spEditCustomer());
+}
+
+function spRenderAddrs() {
+  const i = sp.info || {};
+  const ship = sp.kind === 'ship';
+  const us = ship ? i.shipFrom : i.returnTo;
+  const usProblem = ship ? i.shipFromProblem : i.returnToProblem;
+  const usTag = `<span class="sp-tag us">${ship ? 'Ship-from' : 'Our return address'}</span>`;
+  const usCard = [us && (us.name || us.company || us.line1) ? us : { name: 'Not set yet' }, usTag, { act: 'settings', text: ship ? 'Change in Settings' : 'Set in Settings' }, usProblem];
+  const p = sp.party;
+  const otherTag = sp.src === 'po' ? '<span class="sp-tag cust">Customer</span>' : '<span class="sp-tag typed">Typed in</span>';
+  const otherProblem = p ? spAddrProblem(p) : '';
+  const otherCard = [p, otherTag, sp.src === 'po' && p ? { act: 'edit', text: 'Edit for this label' } : null, otherProblem];
+  const [from, to] = ship ? [usCard, otherCard] : [otherCard, usCard];
+  spAddrCard($('spFrom'), from[0], 'From', from[1], from[2], from[3]);
+  spAddrCard($('spTo'), to[0], 'To', to[1], to[2], to[3]);
+  $('spSwap').classList.toggle('is-ret', !ship);
+  $('spAddrHint').textContent = ship ? '' : 'Swapped for a return';
+}
+
+// a PO# address that needs a fix: carry it into the typed form, keeping
+// the PO# as the reference
+function spEditCustomer() {
+  const keep = { order: sp.order, poKey: sp.poKey };
+  spSetSrc('man');
+  spFillManual(sp.party);
+  $('spRefIn').value = keep.poKey;
+  if (keep.order && !$('spVal').value) $('spVal').value = Number(keep.order.total || 0).toFixed(2);
+}
+
+function spSetSrc(src) {
+  if (sp.src === src) return;
+  sp.src = src;
+  sp.done = null;
+  sp.pick = '';
+  if (src === 'po') {
+    sp.party = sp.order ? { ...sp.order.party } : null;
+    $('spVal').value = sp.order ? Number(sp.order.total || 0).toFixed(2) : '';
+  } else {
+    sp.party = null;
+    $('spVal').value = '';
+    spManualChanged();
+  }
+  spRenderAll();
+  spScheduleRates(0);
+  (src === 'po' ? $('spPo') : $('spMName')).focus();
+}
+
+function spSetKind(kind) {
+  if (sp.kind === kind) return;
+  sp.kind = kind;
+  sp.done = null;
+  spRenderSource();
+  spRenderAddrs();
+  spScheduleRates(0);
+}
+
+function spManualChanged() {
+  if (sp.src !== 'man') return;
+  const a = spManualParty();
+  sp.party = Object.values(a).some(Boolean) ? a : null;
+  if (sp.done) sp.done = null;
+  spRenderAddrs();
+  spScheduleRates();
+}
+
+async function spLookup() {
+  const ref = $('spPo').value.trim();
+  if (!ref || (ref === sp.poKey && sp.order)) return;
+  const seq = ++sp.lookupSeq;
+  sp.poKey = ref;
+  sp.order = null;
+  sp.party = null;
+  sp.done = null;
+  sp.pick = '';
+  sp.rates = null;
+  sp.lookupMsg = `Looking up ${ref} in Linnworks…`;
+  spRenderAll();
+  const res = await api.shipLookup(ref);
+  if (seq !== sp.lookupSeq) return; // a newer PO# was entered meanwhile
+  if (!res.ok) {
+    sp.lookupMsg = res.error || 'Lookup failed.';
+    spRenderAll();
+    return;
+  }
+  sp.lookupMsg = '';
+  sp.order = res.order;
+  sp.party = { ...res.order.party };
+  $('spVal').value = Number(res.order.total || 0).toFixed(2);
+  spRenderAll();
+  spScheduleRates(0);
+  $('spWt').focus();
+  $('spWt').select();
+}
+
+function spScheduleRates(delay = 500) {
+  clearTimeout(sp.ratesTimer);
+  sp.ratesTimer = setTimeout(spFetchRates, delay);
+}
+
+// what is still missing before rates can be asked for, '' = ready
+function spRatesBlocker() {
+  if (!sp.party) return sp.src === 'po' ? 'Paste a PO# to see UPS rates from both accounts side by side.' : 'Fill in name, street, city, state and ZIP to see UPS rates.';
+  const p = spAddrProblem(sp.party);
+  if (p) return `${sp.kind === 'return' ? 'Their' : 'Ship-to'} address: ${p.toLowerCase()}.`;
+  if (!(spPkg().weight > 0)) return 'Enter the weight to see rates.';
+  return '';
+}
+
+async function spFetchRates() {
+  if (sp.done) return;
+  const block = spRatesBlocker();
+  const seq = ++sp.ratesSeq;
+  if (block) {
+    sp.rates = null; sp.ratesErr = ''; sp.ratesLoading = false;
+    spRenderRates();
+    return;
+  }
+  sp.ratesLoading = true;
+  sp.ratesErr = '';
+  spRenderRates();
+  const res = await api.shipRates({ kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0 });
+  if (seq !== sp.ratesSeq) return; // something changed while UPS answered
+  sp.ratesLoading = false;
+  if (!res.ok) {
+    sp.rates = null;
+    sp.ratesErr = res.error || 'Rates failed.';
+  } else {
+    sp.rates = res;
+    const all = res.accounts.flatMap(a => (a.ok ? a.rates.map(r => ({ ...r, acct: a })) : []));
+    if (!all.some(r => `${r.acct.id}:${r.code}` === sp.pick)) {
+      const cheapest = all.reduce((m, r) => (!m || r.price < m.price ? r : m), null);
+      sp.pick = cheapest ? `${cheapest.acct.id}:${cheapest.code}` : '';
+    }
+  }
+  spRenderRates();
+}
+
+function spSelectedRate() {
+  if (!sp.rates || !sp.pick) return null;
+  const [id, code] = sp.pick.split(':');
+  const a = sp.rates.accounts.find(x => x.id === id);
+  const r = a && a.ok ? a.rates.find(x => x.code === code) : null;
+  return r ? { ...r, acct: a } : null;
+}
+
+function spRenderRates() {
+  const el = $('spRates');
+  if (sp.done) { spRenderDone(); return; }
+  const head = (right = '') => `<div class="sp-sec"><div class="sp-h">Rates ${sp.info && sp.info.test ? '<span class="sp-test">Test mode</span>' : ''}<span class="sp-h-r">${right}</span></div></div>`;
+  if (sp.ratesLoading) {
+    el.innerHTML = `${head()}<div class="sp-rates-empty">Getting rates from both UPS accounts…<div class="sp-loadbar"><i></i></div></div>`;
+    return;
+  }
+  const block = spRatesBlocker();
+  if (block || sp.ratesErr) {
+    el.innerHTML = `${head()}<div class="sp-rates-empty${sp.ratesErr ? ' is-err' : ''}">${esc(sp.ratesErr || block)}</div>`;
+    return;
+  }
+  if (!sp.rates) { el.innerHTML = `${head()}<div class="sp-rates-empty">…</div>`; return; }
+  const all = sp.rates.accounts.flatMap(a => (a.ok ? a.rates : []));
+  const cheapest = all.length ? Math.min(...all.map(r => r.price)) : null;
+  // the same service on the other account, for the "$x less" note
+  const bySvc = {};
+  for (const a of sp.rates.accounts) if (a.ok) for (const r of a.rates) (bySvc[r.code] ||= []).push(r.price);
+  let html = head(`${sp.kind === 'return' ? 'return label' : 'from our warehouse'} · <button class="sp-link" id="spRefresh" type="button">refresh</button>`);
+  for (const a of sp.rates.accounts) {
+    html += `<div class="sp-acct"><div class="sp-acct-h"><span class="co">${esc(a.name)}</span>${a.tail ? `<span class="no">••• ${esc(a.tail)}</span>` : ''}</div>`;
+    if (!a.ok) {
+      html += `<div class="sp-acct-err${a.notSet ? ' is-off' : ''}">${esc(a.error)}</div></div>`;
+      continue;
+    }
+    if (!a.rates.length) html += '<div class="sp-acct-err is-off">No services offered for this shipment.</div>';
+    for (const r of a.rates) {
+      const key = `${a.id}:${r.code}`;
+      const others = (bySvc[r.code] || []).filter(p => p !== r.price);
+      const save = others.length ? Math.max(...others) - r.price : 0;
+      const eta = r.arrival ? `Arrives ${spDayLabel(r.arrival)}` : r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : '';
+      html += `<div class="sp-rate${sp.pick === key ? ' is-on' : ''}" data-k="${esc(key)}"><span class="rd"></span><div>`
+        + `<div class="sv">${esc(r.name)}${r.price === cheapest ? '<span class="sp-best">Cheapest</span>' : ''}</div>`
+        + `<div class="eta">${esc(eta)}${save > 0.004 ? ` · <span class="sp-save-amt">${spMoney(save)} less than the other account</span>` : ''}</div>`
+        + `</div><span class="pr">${spMoney(r.price)}</span></div>`;
+    }
+    html += '</div>';
+  }
+  const sel = spSelectedRate();
+  const val = parseFloat($('spVal').value) || 0;
+  const ref = spRefText();
+  let autoPrint = false;
+  try { autoPrint = localStorage.getItem('spAutoPrint') === '1'; } catch { /* default off */ }
+  html += `<div class="sp-buy"><div class="sum">${sel
+    ? `<b>${esc(sel.name)}</b> on the <b>${esc(sel.acct.name)}</b> account<br>${ref ? `Ref <b class="mono">${esc(ref)}</b>` : 'No reference'} · ${val ? `value <b class="mono">${spMoney(val)}</b>` : 'no declared value'} · ${sp.kind === 'return' ? '<b>Return</b> label' : 'Ship label'}`
+    : 'Pick a rate'}</div>
+    <button class="btn btn-primary" id="spCreate" type="button" ${sel && !sp.creating ? '' : 'disabled'}>${sp.creating ? 'Creating label…' : `Create label${sel ? ` · ${spMoney(sel.price)}` : ''}`}</button>
+    <label class="check sp-autoprint"><input id="spAutoPrint" type="checkbox" ${autoPrint ? 'checked' : ''} /> Print as soon as it's created</label>
+    ${sp.createErr ? `<div class="err">${esc(sp.createErr)}</div>` : ''}</div>`;
+  el.innerHTML = html;
+  el.querySelectorAll('.sp-rate').forEach(r => { r.onclick = () => { sp.pick = r.dataset.k; spRenderRates(); }; });
+  $('spRefresh').onclick = () => spFetchRates();
+  $('spAutoPrint').onchange = (e) => { try { localStorage.setItem('spAutoPrint', e.target.checked ? '1' : '0'); } catch { /* best effort */ } };
+  if (sel) $('spCreate').onclick = () => spCreate(sel);
+}
+
+async function spCreate(sel) {
+  if (sp.creating) return;
+  sp.creating = true;
+  sp.createErr = '';
+  spRenderRates();
+  const items = (sp.order && sp.order.items) || [];
+  const sku = items[0] ? items[0].sku : '';
+  const res = await api.shipCreate({
+    accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
+    kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
+    reference: spRefText(), fromPo: sp.src === 'po' && !!sp.order, source: sp.order ? sp.order.source : '',
+    description: sp.kind === 'return' ? `Return ${sku || 'merchandise'}` : (sku || 'Merchandise'),
+    saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
+  });
+  sp.creating = false;
+  if (!res.ok) {
+    sp.createErr = res.error || 'UPS did not create the label.';
+    spRenderRates();
+    return;
+  }
+  sp.done = res;
+  sp.freshId = res.label.id;
+  spRenderRates();
+  spLoadLog();
+  if (sp.src === 'man' && $('spMSave').checked) spLoadBook();
+  let autoPrint = false;
+  try { autoPrint = localStorage.getItem('spAutoPrint') === '1'; } catch { /* default off */ }
+  if (autoPrint) spPrint(res.label.id);
+}
+
+function spRenderDone() {
+  const { label: l, gif, size } = sp.done;
+  const wide = size && size.width > size.height;
+  $('spRates').innerHTML = `<div class="sp-done">
+    <div class="sp-done-h"><span class="ok">✓</span><b>Label created</b>${l.test ? ' <span class="sp-test">Test</span>' : ''}<span class="trk">${esc(l.tracking)}</span></div>
+    <div class="sp-label">${gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/gif;base64,${gif}" alt="UPS label" />` : '<div class="none">UPS sent no label image. The shipment exists; void it from the list below if it is not needed.</div>'}</div>
+    <div class="sp-done-acts">
+      <button class="btn btn-primary" id="spDonePrint" type="button">Print</button>
+      <button class="btn btn-ghost" id="spDonePdf" type="button">Save PDF</button>
+      <button class="btn btn-ghost" id="spDoneCopy" type="button">Copy tracking</button>
+    </div>
+    <button class="btn btn-secondary sp-again" id="spAgain" type="button">New label</button>
+  </div>`;
+  $('spDonePrint').onclick = () => spPrint(l.id);
+  $('spDonePdf').onclick = () => spPdf(l.id);
+  $('spDoneCopy').onclick = async () => { await api.copyText(l.tracking); toast('Tracking copied'); };
+  $('spAgain').onclick = spReset;
+}
+
+async function spPrint(id) {
+  const res = await api.shipPrint(id);
+  if (!res.ok) toast(`Print failed: ${res.error}`, 4000);
+  else if (res.printed) toast('Sent to the printer');
+}
+
+async function spPdf(id) {
+  const res = await api.shipPdf(id);
+  if (res.ok) toast('Label saved as PDF');
+  else if (!res.canceled) toast(`PDF failed: ${res.error}`, 4000);
+}
+
+function spReset() {
+  sp.done = null; sp.order = null; sp.poKey = ''; sp.party = null; sp.addressId = null;
+  sp.rates = null; sp.ratesErr = ''; sp.pick = ''; sp.createErr = ''; sp.lookupMsg = '';
+  $('spPo').value = ''; $('spVal').value = ''; $('spWt').value = ''; $('spRefIn').value = ''; $('spPaste').value = '';
+  $('spMSave').checked = false;
+  for (const id of Object.values(SP_MAN)) $(id).value = '';
+  spApplyBox(false);
+  spRenderAll();
+  (sp.src === 'po' ? $('spPo') : $('spMName')).focus();
+}
+
+/* address book */
+async function spLoadBook() {
+  const res = await api.shipAddresses();
+  sp.book = (res && res.addresses) || [];
+  spRenderBook();
+}
+
+function spRenderBook() {
+  const el = $('spBook');
+  if (!sp.book.length) { el.innerHTML = '<span class="sp-dim">— tick "Save to the address book" on a label to add one</span>'; return; }
+  el.innerHTML = sp.book.slice(0, 8).map(a => `<span class="sp-chip" data-id="${a.id}" title="${esc([a.name, a.line1, `${a.city}, ${a.state} ${a.zip}`].filter(Boolean).join(' · '))}">${esc(a.company || a.name)}<button class="x" type="button" title="Remove from the address book">×</button></span>`).join('');
+  el.querySelectorAll('.sp-chip').forEach(c => {
+    c.onclick = (e) => {
+      const id = Number(c.dataset.id);
+      if (e.target.closest('.x')) {
+        api.shipAddressDelete(id).then(spLoadBook);
+        return;
+      }
+      spFillManual(sp.book.find(a => a.id === id), id);
+    };
+  });
+}
+
+/* labels list */
+async function spLoadLog() {
+  const res = await api.shipList(sp.logDays);
+  sp.log = (res && res.labels) || [];
+  spRenderLog();
+}
+
+function spRenderLog() {
+  const rows = sp.log.filter(l => !sp.logKind || l.kind === sp.logKind);
+  const live = rows.filter(l => !l.voided_at);
+  const spend = live.reduce((t, l) => t + (Number(l.cost) || 0), 0);
+  const range = { 0: 'today', 7: 'last 7 days', 30: 'last 30 days' }[sp.logDays] || '';
+  $('spLogSum').textContent = `${range} · ${live.length} label${live.length === 1 ? '' : 's'} · ${spMoney(spend)}`;
+  $('spLogEmpty').hidden = rows.length > 0;
+  $('spLogEmpty').textContent = `No labels ${range === 'today' ? 'yet today' : `in the ${range}`}.`;
+  $('spLogBody').innerHTML = rows.map(l => {
+    const t = new Date(l.created_at);
+    const when = sp.logDays ? `${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${fmtTime(l.created_at)}` : fmtTime(l.created_at);
+    const ref = l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`;
+    const kind = l.voided_at ? '<span class="sp-k void">Voided</span>' : `<span class="sp-k ${l.kind}">${l.kind === 'return' ? 'Return' : 'Ship'}</span>`;
+    return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}" data-id="${l.id}">`
+      + `<td class="m">${esc(when)}</td><td class="m">${ref}</td><td>${kind}${l.test ? ' <span class="sp-test">Test</span>' : ''}</td>`
+      + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td><td class="m">${esc(l.tracking)}</td>`
+      + `<td class="num">${l.value ? spMoney(l.value) : '—'}</td><td class="num">${spMoney(l.cost)}</td>`
+      + `<td><div class="sp-acts">${l.voided_at ? '' : '<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button><button class="sp-link v" data-act="void" type="button">Void</button>'}</div></td></tr>`;
+  }).join('');
+  sp.freshId = 0;
+}
+
+$('spLogBody').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const id = Number(b.closest('tr').dataset.id);
+  if (b.dataset.act === 'print') spPrint(id);
+  else if (b.dataset.act === 'pdf') spPdf(id);
+  else if (b.dataset.act === 'void') {
+    const l = sp.log.find(x => x.id === id);
+    if (!l || !confirm(`Void the UPS label ${l.tracking}${l.reference ? ` (${l.reference})` : ''}?\nUPS credits an unused label back to the ${l.account_name} account.`)) return;
+    b.disabled = true;
+    const res = await api.shipVoid(id);
+    if (!res.ok) { b.disabled = false; toast(`Void failed: ${res.error}`, 5000); return; }
+    toast('Label voided');
+    spLoadLog();
+  }
+});
+
+$('spLogKind').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  sp.logKind = b.dataset.k;
+  $('spLogKind').querySelectorAll('button').forEach(x => x.classList.toggle('is-on', x === b));
+  spRenderLog();
+});
+$('spLogRange').addEventListener('change', () => { sp.logDays = Number($('spLogRange').value) || 0; spLoadLog(); });
+
+$('spSrcPo').addEventListener('click', () => spSetSrc('po'));
+$('spSrcMan').addEventListener('click', () => spSetSrc('man'));
+$('spKindShip').addEventListener('click', () => spSetKind('ship'));
+$('spKindRet').addEventListener('click', () => spSetKind('return'));
+$('spPo').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); spLookup(); } });
+// a scanner or a paste brings the whole PO# at once — look it up right away
+$('spPo').addEventListener('paste', () => setTimeout(spLookup, 0));
+$('spPo').addEventListener('input', () => {
+  if (!$('spPo').value.trim() && (sp.order || sp.lookupMsg)) spReset();
+});
+for (const id of Object.values(SP_MAN)) {
+  $(id).addEventListener('input', () => { sp.addressId = null; spManualChanged(); });
+}
+$('spPasteBtn').addEventListener('click', () => {
+  $('spPaste').hidden = !$('spPaste').hidden;
+  if (!$('spPaste').hidden) $('spPaste').focus();
+});
+$('spPaste').addEventListener('input', () => {
+  const a = spParseAddress($('spPaste').value);
+  if (!a.zip) return;
+  spFillManual(a);
+  $('spPaste').value = '';
+  $('spPaste').hidden = true;
+});
+$('spBox').addEventListener('change', () => { spApplyBox(); spScheduleRates(); });
+for (const id of ['spWt', 'spDl', 'spDw', 'spDh']) {
+  $(id).addEventListener('input', () => { if ($(id) !== $('spWt')) $('spBox').value = 'custom'; spScheduleRates(700); });
+}
+// the declared value changes the price (UPS charges for coverage over $100)
+$('spVal').addEventListener('input', () => spScheduleRates(700));
+$('spRefIn').addEventListener('input', () => { if (!sp.ratesLoading && !sp.done) spRenderRates(); });
+
+/* Settings › UPS labels */
+function fillUpsSettings(u) {
+  (u.accounts || []).slice(0, 2).forEach((a, i) => {
+    $(`setUpsName${i}`).value = a.name || '';
+    $(`setUpsAcct${i}`).value = a.accountNumber || '';
+    $(`setUpsId${i}`).value = a.clientId || '';
+    $(`setUpsSecret${i}`).value = a.clientSecret || '';
+    $(`setUpsRes${i}`).textContent = '';
+    $(`setUpsRes${i}`).className = 'test-result';
+  });
+  for (const box of document.querySelectorAll('.ups-addr')) {
+    const a = u[box.dataset.addr] || {};
+    box.querySelectorAll('[data-f]').forEach(inp => { inp.value = a[inp.dataset.f] || ''; });
+  }
+  $('setUpsTest').checked = !!u.test;
+  const sel = $('setUpsPrinter');
+  sel.innerHTML = `<option value="">Ask every time</option>${u.printer ? `<option value="${esc(u.printer)}">${esc(u.printer)}</option>` : ''}`;
+  sel.value = u.printer || '';
+  api.shipPrinters().then(res => {
+    const names = ((res && res.printers) || []);
+    sel.innerHTML = '<option value="">Ask every time</option>' + names.map(p => `<option value="${esc(p.name)}">${esc(p.label)}</option>`).join('')
+      + (u.printer && !names.some(p => p.name === u.printer) ? `<option value="${esc(u.printer)}">${esc(u.printer)} (not found)</option>` : '');
+    sel.value = u.printer || '';
+  });
+}
+
+function readUpsAccount(i) {
+  return {
+    id: i === 0 ? 'a' : 'b',
+    name: $(`setUpsName${i}`).value.trim(),
+    accountNumber: $(`setUpsAcct${i}`).value.trim().toUpperCase(),
+    clientId: $(`setUpsId${i}`).value.trim(),
+    clientSecret: $(`setUpsSecret${i}`).value.trim(),
+  };
+}
+
+function readUpsSettings() {
+  const out = { accounts: [readUpsAccount(0), readUpsAccount(1)], test: $('setUpsTest').checked, printer: $('setUpsPrinter').value };
+  for (const box of document.querySelectorAll('.ups-addr')) {
+    const a = {};
+    box.querySelectorAll('[data-f]').forEach(inp => { a[inp.dataset.f] = inp.value.trim(); });
+    a.state = String(a.state || '').toUpperCase();
+    out[box.dataset.addr] = a;
+  }
+  return out;
+}
+
+document.querySelectorAll('.ups-test').forEach(b => b.addEventListener('click', async () => {
+  const i = Number(b.dataset.i);
+  const out = $(`setUpsRes${i}`);
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.shipTest(readUpsAccount(i), $('setUpsTest').checked);
+  out.textContent = res.ok ? 'Connected' : res.error;
+  out.classList.add(res.ok ? 'is-ok' : 'is-fail');
+}));
+
+$('setUpsSame').addEventListener('click', () => {
+  const from = document.querySelector('.ups-addr[data-addr="shipFrom"]');
+  const to = document.querySelector('.ups-addr[data-addr="returnTo"]');
+  from.querySelectorAll('[data-f]').forEach(inp => { to.querySelector(`[data-f="${inp.dataset.f}"]`).value = inp.value; });
 });
