@@ -404,7 +404,10 @@ class LinnworksClient {
       try {
         items = await this.call('Stock/GetStockItemsFull', {
           keyword: '',
-          loadCompositeParents: false,
+          // composite parents (a listing that draws from other items) are
+          // real inventory rows too (owner 2026-10-14: the case listing
+          // vanished from the Stock page the moment it became a composite)
+          loadCompositeParents: true,
           loadVariationParents: false,
           entriesPerPage: 200,
           pageNumber: page,
@@ -430,6 +433,7 @@ class LinnworksClient {
           title: it.ItemTitle || '',
           barcode: it.BarcodeNumber || '',
           category: it.CategoryName || '',
+          isComposite: !!it.IsComposite,
           purchasePrice: it.PurchasePrice || 0,
           retailPrice: it.RetailPrice || 0,
           image: img ? (img.Source || img.FullSource || '') : '',
@@ -582,7 +586,7 @@ class LinnworksClient {
     try {
       items = await this.call('Stock/GetStockItemsFull', {
         keyword: String(sku).trim(),
-        loadCompositeParents: false,
+        loadCompositeParents: true,
         loadVariationParents: false,
         entriesPerPage: 50,
         pageNumber: 1,
@@ -876,6 +880,10 @@ class LinnworksClient {
             // as Cost; failing that, the inc-tax total minus its Tax; failing
             // that, the unit price times quantity.
             revenue: lineExTax(it, qty),
+            // a composite line's children: the items its sale really took
+            // from the shelf (owner 2026-10-14) — readers credit their
+            // pace from this, never as lines of their own
+            children: (it.CompositeSubItems || []).map(c => ({ sku: c.SKU || c.ItemNumber || '', qty: (c.Quantity || 1) })).filter(c => c.sku),
           });
         }
       }

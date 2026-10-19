@@ -839,7 +839,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     // slot proves newest-first (the due seed must not have re-sorted anything)
     check('queue shows due + qty chips (no Due-today filter), newest on top',
       queueBits[0] === true && queueBits[1] === true && queueBits[2] === true
-        && queueBits[3] === '02-12345-67890' && queueBits[4] === false,
+        && queueBits[3] === '02-12345-67890' && queueBits[4] === true, // the "due by" headline left with the Orders restyle (2026-10-14)
       queueBits);
     check('gutter numbers follow display order: top = count, bottom = 1',
       queueBits[5] === '2' && queueBits[6] === '1',
@@ -1130,18 +1130,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`({ on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
       dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
       gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
-      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cell-notes').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order').textContent.trim() })`);
-    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time in Notes; the band swaps to the range and the History icon lights up',
+      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cap-sub').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order .order-num').textContent.trim() })`);
+    // the Notes column left with the Orders restyle (owner 2026-10-14): the processed word, station and note ride under the order number
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time under the order number; the band swaps to the range and the History icon lights up',
       res && res.on === true && res.lit === true && res.range === true && res.importHidden === true
         && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
-        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /^Processed \d\d:\d\d/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
+        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /Processed \d\d:\d\d/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
       res);
     // the note on a history row is still editable, through the same dialog, onto the same row
     res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); const b = tr.querySelector('[data-act="note"]'); if (!b) return { btn: false }; b.click(); return { btn: true, open: $('notesDialog').open, title: $('notesTitle').textContent }; })()`);
     check('Capture history mode: the note control renders and opens the notes dialog for that order', res && res.btn === true && res.open === true && /HIST-ORDER-1/.test(res.title), res);
     await exec(`$('notesText').value = 'left at side door'; $('notesForm').requestSubmit();`);
     await new Promise(r => setTimeout(r, 500));
-    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); return { saved: (tr.querySelector('.note-text') || {}).textContent || '', pill: (tr.querySelector('.history-status') || {}).textContent || '' }; })()`);
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); return { saved: (tr.querySelector('.cap-sub-note') || {}).textContent || '', pill: (tr.querySelector('.history-status') || {}).textContent || '' }; })()`);
     check('Capture history mode: the saved note shows on the history row and the Processed pill is untouched', res && res.saved === 'left at side door' && /^Processed \d\d:\d\d$/.test(res.pill) && db.getRow(histRowId).notes === 'left at side door', res);
     res = await exec(`(() => { $('capHistBtn').click(); return { on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
     check('Capture history mode: clicking the History icon again restores the live list', res && res.on === false && res.lit === false && res.importShown === true && res.hist === 0, res);
@@ -1824,6 +1825,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
         claimsT.jpegOrientation(exif));
     }
 
+    // 40. Recovery (2026-10-11): the §11 fixture through parse -> reconcile ->
+    // classify -> store -> tracker on a throwaway db (src/main/recovery/selftest.js),
+    // then the Electron skin: capture-only refuses, the tab is opt-in and off
+    await require('./recovery/selftest')(check);
+    res = await exec('api.recoveryState()');
+    check('recovery:state refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.recoveryImport('x.csv', 'a,b', false)`);
+    check('recovery:import refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const rcUi = await exec(`[$('tabRecovery').hidden, !!$('recoveryPage'), $('recoveryPage').hidden, typeof enterRecovery, !!$('setPageRecovery'), !!$('setRcEmail'), !!$('setRcWebhook')]`);
+    check('recovery: tab hidden until ticked, page section present, settings fields present',
+      rcUi[0] === true && rcUi[1] === true && rcUi[2] === true && rcUi[3] === 'function' && rcUi[4] && rcUi[5] && rcUi[6], rcUi);
+    const rcCfg = await exec('api.getConfig()');
+    check('recovery: config defaults — page off, email and webhook empty',
+      rcCfg && rcCfg.pages && rcCfg.pages.recovery === false && rcCfg.recovery && rcCfg.recovery.email === '' && rcCfg.recovery.webhookUrl === '', rcCfg && rcCfg.recovery);
+    check('recovery: PO# menu — Walmart transaction link template carries {po}',
+      rcCfg && rcCfg.txnUrlTemplates && /^https:\/\/seller\.walmart\.com\/.*\{po\}/.test(rcCfg.txnUrlTemplates.walmart), rcCfg && rcCfg.txnUrlTemplates);
+    const rcTables = db.open().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'wm_%' ORDER BY name").all().map(r => r.name);
+    check('recovery: schema tables created', JSON.stringify(rcTables) === JSON.stringify(['wm_expenses', 'wm_items', 'wm_ledger', 'wm_lines', 'wm_marks', 'wm_orders', 'wm_payouts', 'wm_refunds', 'wm_runs', 'wm_tombstones']), rcTables);
     // Ship tab (owner 2026-10-19): UPS labels against a fake UPS — both
     // accounts rated side by side, a return label bought, listed, voided
     {

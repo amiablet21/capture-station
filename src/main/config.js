@@ -86,7 +86,8 @@ const DEFAULTS = {
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
   // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
-  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, ship: false },
+  // (Recovery is opt-in too and needs Returns, since it reads the Returns log.)
+  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, recovery: false, ship: false },
   // Ship tab (owner 2026-10-19): UPS labels on either company's account.
   // Each account is its own UPS developer app (client ID + secret) billed to
   // its shipper number; name is what the Ship tab shows. shipFrom is the
@@ -124,6 +125,13 @@ const DEFAULTS = {
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
   returnsSync: { folder: '', station: '' },
+  // Recovery page: the alert email for "Email me this list", the make.com
+  // webhook the dispute digest POSTs to, and the digest's last-sent memory
+  // (so the same set of cases is not re-sent within 20 hours)
+  // codeHash: the access code asked for once per session before the Recovery
+  // tab opens (owner 2026-10-12: "a universal code: 9419"); SHA-256 hex,
+  // changeable in Settings → Recovery, empty = no code
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0, codeHash: 'e83faad6630f2b9e40271ed9143575989697a1345ccd29b4b67d06ffb1498691' },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -149,6 +157,13 @@ const DEFAULTS = {
     walmart: 'https://seller.walmart.com/orders/disputes?status=ALL&viewCase={case}',
     ebay: '',
     temu: '',
+  },
+  // Recovery's PO# menu (owner 2026-10-12: "order page or transaction
+  // page"): its second entry opens the PO in Seller Center's payments
+  // transactions. {po} is replaced; editable in Settings → Recovery.
+  txnUrlTemplates: {
+    // the PO search form (owner 2026-10-13), not the free-text searchTerm
+    walmart: 'https://seller.walmart.com/payments/transactions?searchType=poNo&searchValue={po}',
   },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
@@ -272,6 +287,12 @@ function load() {
   if (stored.listingUrlTemplates
       && stored.listingUrlTemplates.walmart === 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}') {
     stored.listingUrlTemplates.walmart = DEFAULTS.listingUrlTemplates.walmart;
+  }
+  // migration: the Transaction page link moves from the free-text search to
+  // Seller Center's PO search (owner 2026-10-13)
+  if (stored.txnUrlTemplates
+      && stored.txnUrlTemplates.walmart === 'https://seller.walmart.com/payments/transactions?searchTerm={po}') {
+    stored.txnUrlTemplates.walmart = DEFAULTS.txnUrlTemplates.walmart;
   }
   // migration: eBay lister profiles saved before the real policy names were
   // set on eBay hold empty strings — empty means "never configured", so the
