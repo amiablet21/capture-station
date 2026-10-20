@@ -176,6 +176,10 @@ contextBridge.exposeInMainWorld('api', {
   shipTest: (account, test) => ipcRenderer.invoke('ship:test', { account, test }),
   shipPrinters: () => ipcRenderer.invoke('ship:printers'),
   walmartTest: (creds) => ipcRenderer.invoke('walmart:test', creds),
+  // Browser access (owner 2026-10-20)
+  webInfo: () => ipcRenderer.invoke('web:info'),
+  webNewKey: () => ipcRenderer.invoke('web:newKey'),
+  webOpen: () => ipcRenderer.invoke('web:open'),
   // Ship from the Orders line (owner 2026-10-20): UPS + Ship with Walmart
   orderShipPrep: (rowId) => ipcRenderer.invoke('orderShip:prep', { rowId }),
   orderShipRates: (payload) => ipcRenderer.invoke('orderShip:rates', payload),

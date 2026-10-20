@@ -123,6 +123,9 @@ const DEFAULTS = {
   // (Seller Center → API Key Management) for Walmart's label rates on
   // Walmart orders. Empty = Walmart rates simply don't show.
   walmart: { clientId: '', clientSecret: '' },
+  // Browser access (owner 2026-10-20): the whole app at http://localhost:<port>
+  // on this computer only, opened with a private key (the link in Settings)
+  web: { enabled: false, port: 47391, key: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },

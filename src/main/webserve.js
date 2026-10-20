@@ -85,8 +85,9 @@ ${preload}
 
 function indexHtml() {
   const html = fs.readFileSync(path.join(RENDERER, 'index.html'), 'utf8');
-  const extra = '<script src="/web-bridge.js"></script>'
-    + '<style>#bExpand,#bDock,#bDivider{display:none!important}</style>';
+  // the page's own CSP allows only files from the page's origin, so the
+  // browser-only bits come as files too
+  const extra = '<script src="/web-bridge.js"></script><link rel="stylesheet" href="/web-bridge.css">';
   return html.replace('<script src="renderer.js"></script>', `${extra}<script src="renderer.js"></script>`);
 }
 
@@ -160,6 +161,8 @@ function createServer({ port, getKey, handlers, eventTarget }) {
     }
     if (url.pathname === '/' || url.pathname === '/index.html') return send(res, 200, indexHtml(), MIME['.html']);
     if (url.pathname === '/web-bridge.js') return send(res, 200, bridgeSource(), MIME['.js']);
+    // the docked marketplace browser lives in the desktop window only
+    if (url.pathname === '/web-bridge.css') return send(res, 200, '#bExpand,#bDock,#bDivider{display:none!important}', MIME['.css']);
 
     // the renderer's own files, and nothing outside its folder
     const file = path.normalize(path.join(RENDERER, decodeURIComponent(url.pathname)));

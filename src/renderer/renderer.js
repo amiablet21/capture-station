@@ -124,6 +124,9 @@ if (!window.api) {
     shipTest: async () => ({ ok: false, error: 'Preview mode' }),
     shipPrinters: async () => ({ ok: true, printers: [] }),
     walmartTest: async () => ({ ok: false, error: 'Preview mode' }),
+    webInfo: async () => ({ ok: true, enabled: false, running: false, error: '', url: '' }),
+    webNewKey: async () => ({ ok: false, error: 'Preview mode' }),
+    webOpen: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipPrep: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipCreate: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1296,6 +1299,7 @@ async function openSettings() {
   $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
+  fillWebSettings();
   setSecretField('setWmId', (cfg.walmart || {}).hasClientId);
   setSecretField('setWmSecret', (cfg.walmart || {}).hasClientSecret);
   $('setWmRes').textContent = ''; $('setWmRes').className = 'test-result';
@@ -1414,6 +1418,7 @@ $('settingsSave').addEventListener('click', async () => {
     },
     ups: readUpsSettings(),
     walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },
+    web: { enabled: $('setWebOn').checked },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
@@ -15131,6 +15136,27 @@ document.querySelectorAll('.ups-test').forEach(b => b.addEventListener('click', 
   out.textContent = res.ok ? 'Connected' : res.error;
   out.classList.add(res.ok ? 'is-ok' : 'is-fail');
 }));
+
+/* Settings › Browser (owner 2026-10-20): the private link to this app in a browser */
+async function fillWebSettings() {
+  const w = await api.webInfo();
+  $('setWebOn').checked = !!w.enabled;
+  $('setWebRow').hidden = !w.enabled || !w.url;
+  $('setWebUrl').textContent = w.url ? w.url.replace(/\?k=.*/, '?k=••••••') : '';
+  $('setWebUrl').dataset.url = w.url || '';
+  $('setWebNote').textContent = w.error || (w.enabled ? 'Keep the link private: it opens everything this app can do.' : '');
+  $('setWebNote').classList.toggle('is-fail', !!w.error);
+  $('setWebNew').hidden = !!window.__DWS_WEB__;
+}
+$('setWebCopy').addEventListener('click', async () => { await api.copyText($('setWebUrl').dataset.url); toast('Link copied'); });
+$('setWebOpen').addEventListener('click', async () => { const r = await api.webOpen(); if (!r.ok) toast(r.error, 4000); });
+$('setWebNew').addEventListener('click', async () => {
+  if (!confirm('Make a new link? The old one stops working, including in any open browser tab.')) return;
+  const r = await api.webNewKey();
+  if (!r.ok) { toast(r.error, 4000); return; }
+  fillWebSettings();
+  toast('New link made');
+});
 
 $('setWmTest').addEventListener('click', async () => {
   const out = $('setWmRes');

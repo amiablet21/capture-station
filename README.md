@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.92 highlights
+
+- **The app in a browser.** Settings › Browser › **Open the app in a browser on this computer**. You get a private link (`http://localhost:47391/?k=…`) with **Copy link** and **Open**. It opens the whole app in Chrome or Edge: every tab, Recovery, Settings, live updates. It runs while the desktop app is open, and only this computer can reach it.
+- The link's key becomes a browser cookie, and the address bar drops it. Other websites can't load the app, embed it or send it actions. **New link** (desktop only) makes the old link stop working.
+- Desktop-only in the browser: the docked marketplace pane, and dropping files from disk.
+
 ## v1.32.91 highlights
 
 - **Ship from the Orders line.** Every order without tracking has a **Ship** button. It opens a panel under the line with the order's ship-to, box, weight, declared value and the PO# as Reference #1, and one rate list: **Ship with Walmart** (Walmart orders, once the Walmart keys are in Settings) beside both UPS accounts. Chips filter **All · Walmart · each UPS account**; the list holds one height, so switching never moves anything. The cheapest wears a star and is picked. **Create label** puts the tracking on the line and opens a print popup; **Process** stays your press. Voiding the label (Ship tab › Labels) takes the tracking back off a line not yet processed.

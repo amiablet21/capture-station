@@ -6097,3 +6097,7 @@ tr.os-row > td { padding: 0 14px 14px; background: #FBFAF8; border-bottom: 1px s
 .os-err { font-size: 12px; color: var(--neg-text); }
 .os-dlg { width: 300px; }
 .os-dlg .sp-label { margin: 0 auto; }
+
+/* Settings › Browser */
+.web-row .web-url { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#setWebNote.is-fail { color: var(--neg-text); }

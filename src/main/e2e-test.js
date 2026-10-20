@@ -2046,6 +2046,72 @@ module.exports = async function run({ app, win, db, clipboard }) {
       }
     }
 
+    // Browser access (owner 2026-10-20): the whole app at localhost, locked to
+    // this computer, a private key and the page's own origin
+    {
+      const http = require('node:http');
+      const { BrowserWindow } = require('electron');
+      const req = (opts, body) => new Promise((resolve) => {
+        const r = http.request({ host: '127.0.0.1', port: 47391, method: 'GET', ...opts }, (res) => {
+          let data = ''; res.on('data', c => { data += c; }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+        });
+        r.on('error', (e) => resolve({ status: 0, headers: {}, body: '', error: e.code }));
+        if (body) r.write(body);
+        r.end();
+      });
+      await exec(`api.setConfig({ web: { enabled: true } })`);
+      await sleep(500);
+      const info = await exec('api.webInfo()');
+      const key = (String(info.url).match(/\?k=([0-9a-f]+)/) || [])[1] || '';
+      check('web: switched on, serving a link with a long private key', info.running && key.length === 48 && /^http:\/\/localhost:47391\/\?k=/.test(info.url), info);
+      const host = { Host: 'localhost:47391' };
+      let r = await req({ path: '/', headers: host });
+      check('web: no key, no app', r.status === 401 && !r.body.includes('renderer.js'), r.status);
+      r = await req({ path: '/?k=nope', headers: host });
+      check('web: a wrong key is refused', r.status === 401, r.status);
+      r = await req({ path: `/?k=${key}`, headers: host });
+      const cookie = String((r.headers['set-cookie'] || [])[0] || '').split(';')[0];
+      check('web: the right key becomes a strict, script-proof cookie and a clean address',
+        r.status === 302 && r.headers.location === '/' && /HttpOnly/.test(r.headers['set-cookie']) && /SameSite=Strict/.test(r.headers['set-cookie']), r.headers);
+      r = await req({ path: '/', headers: { ...host, Cookie: cookie } });
+      check('web: with the cookie, the app itself (bridge included)', r.status === 200 && r.body.includes('/web-bridge.js') && r.headers['x-frame-options'] === 'DENY', r.status);
+      r = await req({ path: '/', headers: { Host: 'evil.example:47391', Cookie: cookie } });
+      check('web: a page posing under another host name is refused (DNS rebinding)', r.status === 403, r.status);
+      const call = (ch, origin, body = '[]') => req({ method: 'POST', path: `/ipc/${ch}`, headers: { ...host, Cookie: cookie, 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) } }, body);
+      r = await call('web:info', 'https://evil.example');
+      check('web: actions from another site are refused', r.status === 403, r.status);
+      r = await call('web:info', 'http://localhost:47391');
+      check('web: actions from the page itself run the app\'s own handlers', r.status === 200 && JSON.parse(r.body).value.running === true, r.body);
+      r = await call('web:newKey', 'http://localhost:47391');
+      check('web: a new link can only be made on the desktop', JSON.parse(r.body).value.ok === false, r.body);
+      r = await req({ path: '/..%2fmain%2fmain.js', headers: { ...host, Cookie: cookie } });
+      check('web: nothing outside the app\'s pages is served', r.status === 404, r.status);
+      // a real browser page: the whole app renders and follows live updates
+      const bw = new BrowserWindow({ show: false, width: 1300, height: 900, webPreferences: { contextIsolation: true, sandbox: true } });
+      const webLog = [];
+      bw.webContents.on('console-message', (...a) => webLog.push(a.map(x => (x && x.message) || x).join(' ').slice(0, 300)));
+      try {
+        await bw.loadURL(info.url);
+        await sleep(2500);
+        const page = await bw.webContents.executeJavaScript(`(async () => {
+          window.__got = 0; api.on('state:changed', () => { window.__got++; });
+          const st = await api.getState();
+          return { web: !!window.__DWS_WEB__, rows: st.rows.length, tabs: !!document.getElementById('tabShip'), url: location.href, rendered: (showPage('capture'), render(), document.querySelectorAll('#rowsBody tr').length), dockHidden: getComputedStyle(document.getElementById('bDock')).display === 'none' };
+        })()`, true);
+        await exec(`api.setConfig({})`); // any change pushes state to every window
+        await sleep(800);
+        const got = await bw.webContents.executeJavaScript('window.__got', true);
+        check('web: the app runs in a browser page, key gone from the address, live updates arrive',
+          page.web && page.rows > 0 && page.tabs && page.rendered === page.rows && page.dockHidden && page.url === 'http://localhost:47391/' && got > 0, { ...page, got, webLog: webLog.filter(l => !/Content Security Policy/.test(l)).slice(0, 8) });
+      } finally {
+        bw.destroy();
+      }
+      await exec(`api.setConfig({ web: { enabled: false } })`);
+      await sleep(400);
+      r = await req({ path: '/', headers: host });
+      check('web: switched off, nothing is listening', r.status === 0, r);
+    }
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

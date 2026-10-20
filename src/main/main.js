@@ -1,5 +1,12 @@
 'use strict';
 const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell, WebContentsView, session } = require('electron');
+// every IPC handler is also kept here, so the browser version of the app
+// (webserve.js, owner 2026-10-20) runs the very same code as this window
+const ipcHandlers = new Map();
+{
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, fn) => { ipcHandlers.set(channel, fn); return handle(channel, fn); };
+}
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -11,6 +18,7 @@ const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const ups = require('./ups');
 const walmart = require('./walmart');
+const webserve = require('./webserve');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const recovery = require('./recovery');
@@ -3603,8 +3611,10 @@ exit 1
       for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
       delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
     }
+    const wasWebOn = !!(config.load().web || {}).enabled; // load() is the live object save() changes
     const cfg = config.save(patch);
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
+    if (patch.web && patch.web.enabled !== undefined && !!patch.web.enabled !== wasWebOn) startWeb();
     pushState();
     return publicConfig(cfg);
   });
@@ -6517,6 +6527,24 @@ exit 1
     }
   });
 
+  // Settings › General › Browser: the link (with its key), whether it runs,
+  // a fresh key (old links stop working), and opening it in the default browser
+  ipcMain.handle('web:info', () => {
+    const cfg = config.load();
+    return { ok: true, enabled: !!cfg.web.enabled, running: !!web.server, error: web.error, url: cfg.web.key ? webUrl(cfg) : '' };
+  });
+  ipcMain.handle('web:newKey', async (e) => {
+    if (e && e.web) return { ok: false, error: 'Make a new link from the desktop app.' };
+    config.save({ web: { key: webserve.newKey() } });
+    if (config.load().web.enabled) await startWeb();
+    return { ok: true, url: webUrl(config.load()) };
+  });
+  ipcMain.handle('web:open', async () => {
+    if (!web.server) return { ok: false, error: web.error || 'Browser access is off.' };
+    await shell.openExternal(webUrl(config.load()));
+    return { ok: true };
+  });
+
   ipcMain.handle('walmart:test', async (_e, creds = {}) => {
     try {
       const saved = config.load().walmart || {};
@@ -7490,6 +7518,37 @@ exit 1
   });
 }
 
+/* ---------- browser access (owner 2026-10-20) ---------- */
+
+const web = { server: null, error: '' };
+const webUrl = (cfg) => `http://localhost:${cfg.web.port}/?k=${cfg.web.key}`;
+
+async function startWeb() {
+  await stopWeb();
+  let cfg = config.load();
+  if (!cfg.web || !cfg.web.enabled) { web.error = ''; return; }
+  if (!cfg.web.key) cfg = config.save({ web: { key: webserve.newKey() } });
+  const server = webserve.createServer({
+    port: Number(cfg.web.port) || 47391,
+    getKey: () => config.load().web.key,
+    handlers: ipcHandlers,
+    eventTarget: () => (win && !win.isDestroyed() ? win.webContents : null),
+  });
+  try {
+    await server.listen();
+    web.server = server;
+    web.error = '';
+  } catch (e) {
+    web.error = e && e.code === 'EADDRINUSE' ? `Port ${cfg.web.port} is in use by another program.` : String((e && e.message) || e);
+  }
+}
+
+async function stopWeb() {
+  const s = web.server;
+  web.server = null;
+  if (s) await s.close();
+}
+
 /* ---------- window & menu ---------- */
 
 function createWindow() {
@@ -7520,6 +7579,12 @@ function createWindow() {
     } catch { /* best effort */ }
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // everything this window is told, the browser tabs are told too
+  const sendToWindow = win.webContents.send.bind(win.webContents);
+  win.webContents.send = (channel, ...args) => {
+    sendToWindow(channel, ...args);
+    if (web.server) web.server.broadcast(channel, args[0]);
+  };
   wirePaneResync(win);
   // right-click copy/paste menu, standard across the whole app; in-app copies
   // prime the clipboard watcher so they never re-ingest as order captures
@@ -7799,6 +7864,7 @@ app.whenReady().then(() => {
   registerRecoveryIpc();
   buildMenu();
   createWindow();
+  startWeb();
   startRetSync();
   startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
