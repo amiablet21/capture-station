@@ -16,7 +16,7 @@
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   table.ot { border-collapse: collapse; width: 100%; }
   .ot th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--border); }
-  .ot td { padding: 11px 16px; border-bottom: 1px solid #EFEEEC; vertical-align: middle; transition: background 200ms; }
+  .ot td { padding: 11px 16px; border-bottom: 1px solid #EFEEEC; vertical-align: middle; }
   .ot tr.open > td { background: var(--accent-soft); }
   .gut { color: var(--faint); font-size: 12px; width: 40px; }
   .po { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
@@ -28,9 +28,9 @@
   .proc { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 3px 12px; }
 
   /* the drawer */
-  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,.2); opacity: 0; pointer-events: none; transition: opacity 260ms; z-index: 20; }
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,.2); opacity: 0; pointer-events: none; z-index: 20; }
   .scrim.on { opacity: 1; pointer-events: auto; }
-  .dw { position: fixed; top: 0; right: 0; bottom: 0; width: min(880px, 94vw); background: var(--canvas); box-shadow: -24px 0 60px rgba(47,52,55,.16); transform: translateX(104%); transition: transform 340ms cubic-bezier(.2,.8,.2,1); z-index: 21; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .dw { position: fixed; top: 0; right: 0; bottom: 0; width: min(880px, 94vw); background: var(--canvas); box-shadow: -24px 0 60px rgba(47,52,55,.16); transform: translateX(104%); transition: transform 260ms cubic-bezier(.2,.8,.2,1); will-change: transform; z-index: 21; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
   .dw.on { transform: none; }
 
   .dw-h { display: flex; align-items: center; gap: 10px; padding: 16px 22px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -58,7 +58,7 @@
   .ln { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 13px; line-height: 1.5; }
   .ln > svg { width: 15px; height: 15px; color: var(--faint); flex: none; margin-top: 2px; }
   .ln .v { flex: 1; min-width: 0; }
-  .ln .ic { opacity: 0; transition: opacity 120ms; margin-top: -2px; }
+  .ln .ic { opacity: 0; margin-top: -2px; }
   .ln:hover .ic { opacity: 1; }
   .mono { font-family: var(--mono); }
 
@@ -88,12 +88,11 @@
   .pk-save:hover { background: #DCE4F1; }
   .pk-save:disabled { opacity: .45; cursor: default; }
   .pk-save svg, .pk-ok svg { width: 13px; height: 13px; }
-  .pk-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--pos-text); text-transform: none; letter-spacing: 0; animation: pop 260ms cubic-bezier(.34,1.56,.64,1); }
-  @keyframes pop { from { transform: scale(.8); opacity: 0; } to { transform: none; opacity: 1; } }
+  .pk-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--pos-text); text-transform: none; letter-spacing: 0; }
 
   /* rates */
   .rates { display: flex; flex-direction: column; gap: 6px; }
-  .rt { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: border-color 120ms, background 120ms; }
+  .rt { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
   .rt:hover { border-color: #C9D5E8; }
   .rt.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
   .rd { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; display: grid; place-items: center; }
@@ -110,8 +109,6 @@
   .pick-sum .mono { color: var(--text); font-weight: 700; margin-left: 6px; }
   .dw-f .btn { margin-left: auto; padding: 11px 26px; font-size: 14px; font-weight: 600; }
 
-  .stg { opacity: 0; transform: translateX(14px); animation: stg 360ms cubic-bezier(.2,.8,.2,1) forwards; }
-  @keyframes stg { to { opacity: 1; transform: none; } }
 </style>
 </head>
 <body>
@@ -191,7 +188,6 @@ function drawer(o) {
   const ini = c.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('');
   const rates = RATES[o.ch];
   const chips = o.ch === 'walmart' ? ['All', 'Walmart', 'DWS', 'Co 2'] : ['All', 'DWS', 'Co 2'];
-  const st = (i) => `class="bx stg" style="animation-delay:${120 + i * 60}ms"`;
   return `
   <div class="dw-h">
     <span class="mk ${o.ch}">${o.ch}</span>
@@ -202,20 +198,20 @@ function drawer(o) {
   </div>
   <div class="dw-b">
     <div class="col">
-      <section ${st(0)}>
+      <section class="bx">
         <div class="bx-t">Customer</div>
         <div class="who"><div class="av">${ini}</div><div><b>${c.name}</b>${c.company ? `<span>${c.company}</span>` : ''}</div></div>
         <div class="ln">${IC.pin}<div class="v">${c.addr.join('<br>')}</div><button class="ic" title="Copy">${IC.copy}</button></div>
         <div class="ln">${IC.phone}<div class="v mono">${c.phone}</div><button class="ic" title="Copy">${IC.copy}</button></div>
       </section>
-      <section ${st(1)}>
+      <section class="bx">
         <div class="bx-t">${o.items.length > 1 ? `Items · ${o.items.reduce((n, it) => n + it.qty, 0)}` : 'Item'}</div>
         ${o.items.map(it => `<div class="it"><div class="ph">${it.photo}</div><div style="min-width:0"><div class="it-t">${it.title}</div><div class="it-s">${it.sku}</div></div>
           <div class="it-r">${it.qty > 1 ? `<div class="q">×${it.qty}</div>` : ''}<div class="p">${money(it.price)}</div></div></div>`).join('')}
       </section>
     </div>
     <div class="col">
-      <section ${st(2)}>
+      <section class="bx">
         <div class="bx-t">Package <span class="r" id="pkTag"></span></div>
         <div class="pk">
           <label class="pf"><span>Box</span><select class="input" data-k="box">${BOXES.map((b, i) => `<option value="${i}">${b.name} · ${b.d.join(' × ')}</option>`).join('')}<option value="custom">Custom size</option></select></label>
@@ -227,7 +223,7 @@ function drawer(o) {
           <div class="pf"><span>Reference #1</span><div class="lock">${IC.lock}${o.po}</div></div>
         </div>
       </section>
-      <section ${st(3)}>
+      <section class="bx">
         <div class="bx-t">Rates <span class="r os-chips">${chips.map((x, i) => `<button class="${i ? '' : 'is-on'}">${x}</button>`).join('')}</span></div>
         <div class="rates">${rates.map((r, i) => `<div class="rt ${r.best ? 'on' : ''}" data-i="${i}"><span class="rd"></span>
           <div><div class="sv">${r.best ? IC.star : ''}${r.name}<span class="os-via ${r.cls}">${r.tag}</span></div><div class="eta">${r.eta}</div></div>
