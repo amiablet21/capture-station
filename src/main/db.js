@@ -1267,6 +1267,11 @@ function shipLabelFind({ tracking = '', reference = '' } = {}) {
     : open().prepare(`SELECT id FROM ship_labels WHERE reference = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1`).get(r);
   return row ? shipLabelGet(row.id) : null;
 }
+// read-only: live labels made from an Orders line in the last 30 days
+function shipLabelsForRows() {
+  const since = localDay(new Date(Date.now() - 30 * 86400000));
+  return open().prepare(`SELECT id, row_id, tracking FROM ship_labels WHERE row_id > 0 AND (voided_at IS NULL OR voided_at = '') AND day >= ? ORDER BY id`).all(since);
+}
 // a Walmart label's image can arrive after the purchase
 function shipLabelSetImage(id, b64) {
   open().prepare('UPDATE ship_labels SET label_gif = ? WHERE id = ?').run(String(b64 || ''), Number(id));
@@ -1319,5 +1324,5 @@ module.exports = {
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
   costUpsert, costsAll, costGet, costOwnRows, costLogRows,
-  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
+  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelFind, shipLabelsForRows, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
 };

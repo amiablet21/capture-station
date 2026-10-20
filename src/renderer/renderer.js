@@ -259,7 +259,12 @@ function trackingCell(row) {
     return ship + '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
-  return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>`;
+  // a label made here for this line: Reprint, and Void until it is processed
+  const made = state && state.rowLabels && state.rowLabels[row.id];
+  const acts = made && made.tracking === row.tracking
+    ? `<span class="tracking-acts"><button class="sp-link" data-act="lreprint" data-label="${made.id}" type="button">Reprint</button>${row.status === 'synced' ? '' : `<button class="sp-link v" data-act="lvoid" data-label="${made.id}" type="button">Void</button>`}</span>`
+    : '';
+  return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>${acts}`;
 }
 
 function notesCell(row) {
@@ -1098,6 +1103,8 @@ $('rowsBody').addEventListener('click', async (e) => {
   if (!row) return;
 
   if (btn.dataset.act === 'ship') { osToggle(row); return; }
+  if (btn.dataset.act === 'lreprint') { spOpenPrint(Number(btn.dataset.label)); return; }
+  if (btn.dataset.act === 'lvoid') { spVoidFromRow(Number(btn.dataset.label), row); return; }
   if (btn.dataset.act === 'substitute') {
     // an item-line button names the line it replaces; the SUB pill edits the
     // existing substitution and keeps its stored line
@@ -14961,14 +14968,14 @@ function spRenderDone() {
       <button class="btn btn-ghost" id="spDoneCopy" type="button">Copy tracking</button>
     </div>
   </div>`;
-  $('spDonePrint').onclick = () => spPrint(l.id);
+  $('spDonePrint').onclick = () => spOpenPrint(l.id);
   $('spDonePdf').onclick = () => spPdf(l.id);
   $('spDoneCopy').onclick = async () => { await api.copyText(l.tracking); toast('Tracking copied'); };
   $('spAgain').onclick = spReset;
 }
 
-async function spPrint(id) {
-  const res = await api.shipPrint(id);
+async function spPrint(id, opts) {
+  const res = await api.shipPrint(id, opts);
   if (!res.ok) toast(`Print failed: ${res.error}`, 4000);
   else if (res.printed) toast('Sent to the printer');
 }
@@ -15083,7 +15090,7 @@ $('spLogBody').addEventListener('click', async (e) => {
   if (!b) return;
   const id = Number(b.closest('tr').dataset.id);
   if (b.dataset.act === 'download') { e.preventDefault(); spDownload(b); return; }
-  if (b.dataset.act === 'print') spPrint(id);
+  if (b.dataset.act === 'print') spOpenPrint(id);
   else if (b.dataset.act === 'pdf') spPdf(id);
   else if (b.dataset.act === 'void') {
     const l = sp.log.find(x => x.id === id);
@@ -15568,8 +15575,11 @@ $('osScrim').addEventListener('click', () => { if (os && !os.creating) { osClose
 $('osCreate').addEventListener('click', osCreate);
 
 // the print popup: the label, Print ready under Enter
-function osShowLabel(res) {
+function osShowLabel(res, { reprint = false } = {}) {
   const { label: l, gif, size } = res;
+  $('osLabelTitle').textContent = reprint ? 'Reprint label' : 'Label created';
+  $('osLabelOk').hidden = reprint;
+  osPrintSetup();
   const wide = size && size.width > size.height;
   const type = size && size.type === 'png' ? 'png' : 'gif';
   $('osLabelImg').innerHTML = gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/${type};base64,${gif}" alt="Label" />` : '<div class="none">The label image is on its way — Print fetches it.</div>';
@@ -15578,9 +15588,55 @@ function osShowLabel(res) {
   $('osLabelDlg').showModal();
   $('osLabelPrint').focus();
 }
+// the print popup's choice (owner 2026-10-20): the label printer at 4x6 or
+// plain paper, and which printer; each format remembers its own printer
+var osPrinters = null;
+const osPrintGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const osPrintSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* best effort */ } };
+function osPrintFill() {
+  const fmt = $('osPrintFmt').dataset.fmt || 'label';
+  $('osPrintFmt').querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('is-on', b.dataset.fmt === fmt));
+  const def = fmt === 'label' ? ((sp.info && sp.info.printer) || '') : '';
+  const want = osPrintGet(`osPrinter-${fmt}`, def);
+  const names = osPrinters || [];
+  const sel = $('osPrinter');
+  sel.innerHTML = '<option value="">Choose in the print window</option>' + names.map(p => `<option value="${esc(p.name)}">${esc(p.label)}</option>`).join('')
+    + (want && !names.some(p => p.name === want) ? `<option value="${esc(want)}">${esc(want)}</option>` : '');
+  sel.value = want;
+}
+function osPrintSetup() {
+  $('osPrintFmt').dataset.fmt = osPrintGet('osPrintFmt', 'label') === 'letter' ? 'letter' : 'label';
+  osPrintFill();
+  if (!osPrinters) api.shipPrinters().then(r => { osPrinters = (r && r.printers) || []; osPrintFill(); }).catch(() => {});
+}
+$('osPrintFmt').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fmt]');
+  if (!b) return;
+  $('osPrintFmt').dataset.fmt = b.dataset.fmt;
+  osPrintSet('osPrintFmt', b.dataset.fmt);
+  osPrintFill();
+});
+$('osPrinter').addEventListener('change', () => osPrintSet(`osPrinter-${$('osPrintFmt').dataset.fmt || 'label'}`, $('osPrinter').value));
+// Reprint (Ship › Labels and the Orders line): the same popup, same choices
+async function spOpenPrint(id) {
+  const res = await api.shipLabel(id);
+  if (!res || !res.ok) { toast(`Reprint failed: ${(res && res.error) || 'label not found'}`, 4000); return; }
+  if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
+  osShowLabel(res, { reprint: true });
+}
+// Void from the Orders line: the label goes back to UPS (or Walmart) and the
+// line gets its tracking back off
+async function spVoidFromRow(id, row) {
+  if (!confirm(`Void the label ${row.tracking} for ${row.order_number}?\nThe carrier credits an unused label back.`)) return;
+  const res = await api.shipVoid(id);
+  if (!res || !res.ok) { toast(`Void failed: ${(res && res.error) || 'unknown error'}`, 5000); return; }
+  toast('Label voided');
+}
 $('osLabelPrint').addEventListener('click', async () => {
   const id = Number($('osLabelDlg').dataset.id);
+  const paper = $('osPrintFmt').dataset.fmt === 'letter' ? 'letter' : 'label';
+  const printer = $('osPrinter').value;
   $('osLabelDlg').close();
-  await spPrint(id);
+  await spPrint(id, { paper, printer });
 });
 $('osLabelClose').addEventListener('click', () => $('osLabelDlg').close());

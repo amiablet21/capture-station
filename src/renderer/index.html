@@ -310,8 +310,13 @@
   <!-- the print popup after a label is made on an Orders line (owner 2026-10-20) -->
   <dialog id="osLabelDlg" class="dlg os-dlg">
     <div class="dlg-body">
-      <div class="sp-done-h"><span class="ok">✓</span><b>Label created</b><span class="trk" id="osLabelTrk"></span></div>
+      <div class="sp-done-h"><span class="ok" id="osLabelOk">✓</span><b id="osLabelTitle">Label created</b><span class="trk" id="osLabelTrk"></span></div>
       <div class="sp-label" id="osLabelImg"></div>
+      <div class="osp-fmt" id="osPrintFmt">
+        <button type="button" data-fmt="label">Label printer · 4×6</button>
+        <button type="button" data-fmt="letter">Paper · 8.5×11</button>
+      </div>
+      <select id="osPrinter" class="input osp-printer"></select>
       <div class="sp-done-acts">
         <button class="btn btn-primary" id="osLabelPrint" type="button">Print</button>
         <button class="btn btn-ghost" id="osLabelClose" type="button">Close</button>

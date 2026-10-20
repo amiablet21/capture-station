@@ -141,6 +141,7 @@ function buildState() {
     orderUrlTemplates: cfg.orderUrlTemplates || {},
     returnUrlTemplates: cfg.returnUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
+    rowLabels: rowLabelsFor(cfg),
     locations: {
       primaryId: cfg.linnworks.locationId || '',
       primaryName: cfg.linnworks.locationName || '',
@@ -149,6 +150,16 @@ function buildState() {
         && (cfg.stockRouting || {}).fallbackLocationId !== cfg.linnworks.locationId,
     },
   };
+}
+
+// order line -> the live label made for it here (Reprint / Void on the line)
+function rowLabelsFor(cfg) {
+  if (cfg.captureOnly || !(cfg.pages && cfg.pages.ship)) return {};
+  try {
+    const out = {};
+    for (const l of db.shipLabelsForRows()) out[l.row_id] = { id: l.id, tracking: l.tracking };
+    return out;
+  } catch { return {}; }
 }
 
 function pushState() {
@@ -6374,19 +6385,22 @@ exit 1
 
   // a 4x6 page holding the label upright: UPS's GIF lies on its side
   // (wider than tall), so it is turned a quarter clockwise to stand up
-  function shipLabelHtml(gif) {
+  // paper 'letter' (owner 2026-10-20: print on plain paper too): the same
+  // 4x6 label at true size, top-left of an 8.5x11 page
+  function shipLabelHtml(gif, paper = 'label') {
     const info = ups.imageInfo(gif);
     const wide = info && info.width > info.height;
     const img = wide
       ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
       : 'display:block;width:4in;height:auto';
-    return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:4in 6in;margin:0}html,body{margin:0;padding:0}`
+    const page = paper === 'letter' ? '@page{size:letter;margin:0}.pg{margin:.5in}' : '@page{size:4in 6in;margin:0}';
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${page}html,body{margin:0;padding:0}`
       + `.pg{position:relative;width:4in;height:6in;overflow:hidden}</style></head><body><div class="pg">`
       + `<img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div></body></html>`;
   }
   // store: false keeps the label record untouched (the browser download is
   // read-only); a Walmart image still missing is then fetched but not kept
-  async function shipLabelWindow(id, { store = true } = {}) {
+  async function shipLabelWindow(id, { store = true, paper = 'label' } = {}) {
     let l = db.shipLabelGet(id);
     if (!l) throw new Error('Label not found.');
     // a Walmart label whose image was not ready at purchase is fetched now
@@ -6396,7 +6410,7 @@ exit 1
     }
     if (!l.label_gif) throw new Error('The carrier sent no image for this label.');
     const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
-    await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif))}`);
+    await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif, paper))}`);
     return { pw, label: l };
   }
 
@@ -6424,17 +6438,20 @@ exit 1
     }
   };
 
-  ipcMain.handle('ship:print', async (_e, { id } = {}) => {
+  // printer / paper picked in the print popup (owner 2026-10-20: label
+  // printer or plain paper, any printer); left out = Settings' printer, 4x6
+  ipcMain.handle('ship:print', async (_e, { id, printer: pick, paper } = {}) => {
     let pw = null;
     try {
-      const printer = String((config.load().ups || {}).printer || '');
-      ({ pw } = await shipLabelWindow(id));
-      // a named label printer prints straight away; otherwise the system
-      // print dialog asks which printer
+      const printer = pick !== undefined ? String(pick || '') : String((config.load().ups || {}).printer || '');
+      const letter = paper === 'letter';
+      ({ pw } = await shipLabelWindow(id, { paper: letter ? 'letter' : 'label' }));
+      // a named printer prints straight away; otherwise the system print
+      // dialog asks which printer
       const ok = await new Promise((resolve, reject) => {
         pw.webContents.print({
           silent: !!printer, deviceName: printer || undefined, printBackground: true,
-          margins: { marginType: 'none' }, pageSize: { width: 101600, height: 152400 },
+          margins: { marginType: 'none' }, pageSize: letter ? 'Letter' : { width: 101600, height: 152400 },
         }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
       });
       return { ok: true, printed: ok };

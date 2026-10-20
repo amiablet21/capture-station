@@ -2046,6 +2046,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
             /Deliver by10\/22\/2026/.test(ui.deliver) && /Ordered10\/20\/2026/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
+          const lr = await exec(`(async () => {
+            state = await api.getState(); render();
+            const tr = document.querySelector('#rowsBody tr[data-id="${eRow.id}"]');
+            const rp = tr && tr.querySelector('[data-act="lreprint"]'), vd = tr && tr.querySelector('[data-act="lvoid"]');
+            const out = { reprint: !!rp, void: !!vd, otherRow: !!document.querySelector('#rowsBody tr[data-id="${wRow.id}"] [data-act="lreprint"]') };
+            if (!rp) return out;
+            rp.click(); await new Promise(r => setTimeout(r, 600));
+            const dlg = $('osLabelDlg');
+            out.open = dlg.open; out.title = $('osLabelTitle').textContent;
+            out.fmts = [...$('osPrintFmt').querySelectorAll('[data-fmt]')].map(b => b.textContent);
+            $('osPrintFmt').querySelector('[data-fmt="letter"]').click();
+            out.letterOn = $('osPrintFmt').querySelector('[data-fmt="letter"]').classList.contains('is-on') && localStorage.getItem('osPrintFmt') === 'letter';
+            out.printerSel = !!$('osPrinter');
+            dlg.close();
+            $('osPrintFmt').querySelector('[data-fmt="label"]').click();
+            return out; })()`);
+          check('order ship: a line with a label made here offers Reprint and Void; Reprint opens the popup with label printer or paper',
+            lr.reprint && lr.void && !lr.otherRow && lr.open && lr.title === 'Reprint label' && lr.fmts.join('|') === 'Label printer · 4×6|Paper · 8.5×11' && lr.letterOn && lr.printerSel, lr);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {

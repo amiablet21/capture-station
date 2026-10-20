@@ -6088,7 +6088,13 @@ tr.os-open > td { background: var(--accent-soft); }
 .os-via-b { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
 .os-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--faint); font-size: 12.5px; }
 .os-err { font-size: 12px; color: var(--neg-text); }
-.os-dlg { width: 300px; }
+.os-dlg { width: 340px; }
+.osp-fmt { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; background: var(--surface-2); border-radius: 10px; padding: 3px; margin-top: 14px; }
+.osp-fmt button { font-family: var(--font); font-size: 12.5px; font-weight: 500; color: var(--muted); border: none; background: none; border-radius: 8px; padding: 7px 6px; cursor: pointer; }
+.osp-fmt button.is-on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47, 52, 55, .1); }
+.osp-printer { width: 100%; margin-top: 8px; }
+.tracking-acts { display: inline-flex; gap: 10px; margin-left: 12px; }
+.tracking-acts .sp-link { font-size: 12px; }
 .os-dlg .sp-label { margin: 0 auto; }
 
 /* Settings › Browser */

@@ -168,7 +168,7 @@ contextBridge.exposeInMainWorld('api', {
   shipCreate: (payload) => ipcRenderer.invoke('ship:create', payload),
   shipList: (days) => ipcRenderer.invoke('ship:list', { days }),
   shipLabel: (id) => ipcRenderer.invoke('ship:label', { id }),
-  shipPrint: (id) => ipcRenderer.invoke('ship:print', { id }),
+  shipPrint: (id, opts) => ipcRenderer.invoke('ship:print', { id, ...(opts || {}) }),
   shipPdf: (id) => ipcRenderer.invoke('ship:pdf', { id }),
   shipVoid: (id) => ipcRenderer.invoke('ship:void', { id }),
   shipAddresses: () => ipcRenderer.invoke('ship:addresses'),
