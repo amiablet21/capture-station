@@ -94,7 +94,7 @@ function indexHtml() {
 const LOCKED = `<!doctype html><meta charset="utf-8"><title>DWS Stock</title>
 <body style="font:15px system-ui;padding:40px;color:#2F3437">Open DWS Stock from the link in its Settings › General › Browser.</body>`;
 
-function createServer({ port, getKey, handlers, eventTarget }) {
+function createServer({ port, getKey, handlers, eventTarget, labelPdf }) {
   const clients = new Set();
   const okHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const okOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
@@ -150,6 +150,20 @@ function createServer({ port, getKey, handlers, eventTarget }) {
     }
 
     if (req.method !== 'GET') return send(res, 405, 'Method not allowed');
+
+    // an existing shipping label as a PDF download: /labels/<id>/pdf, or
+    // /labels/pdf?tracking=… / ?po=… (owner 2026-10-20: the assistant that
+    // answers Walmart messages attaches it). Behind the same key as the rest;
+    // read-only — it never buys, voids or changes a label.
+    const lm = url.pathname.match(/^\/labels\/(?:(\d+)\/)?pdf$/);
+    if (lm) {
+      if (typeof labelPdf !== 'function') return send(res, 404, JSON.stringify({ error: 'Labels are not available.' }), MIME['.json']);
+      const q = lm[1] ? { id: Number(lm[1]) } : { tracking: url.searchParams.get('tracking') || '', po: url.searchParams.get('po') || '' };
+      const out = await labelPdf(q);
+      if (!out || !out.ok) return send(res, (out && out.status) || 500, JSON.stringify({ error: (out && out.error) || 'The PDF could not be made.' }), MIME['.json']);
+      const name = String(out.filename || 'label.pdf').replace(/[^\w.-]+/g, '_');
+      return send(res, 200, out.pdf, 'application/pdf', { 'Content-Disposition': `attachment; filename="${name}"`, 'Content-Length': String(out.pdf.length) });
+    }
 
     if (url.pathname === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Content-Type-Options': 'nosniff' });

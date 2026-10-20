@@ -6384,19 +6384,45 @@ exit 1
       + `.pg{position:relative;width:4in;height:6in;overflow:hidden}</style></head><body><div class="pg">`
       + `<img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div></body></html>`;
   }
-  async function shipLabelWindow(id) {
+  // store: false keeps the label record untouched (the browser download is
+  // read-only); a Walmart image still missing is then fetched but not kept
+  async function shipLabelWindow(id, { store = true } = {}) {
     let l = db.shipLabelGet(id);
     if (!l) throw new Error('Label not found.');
     // a Walmart label whose image was not ready at purchase is fetched now
     if (!l.label_gif && l.account_id === 'wm') {
-      db.shipLabelSetImage(l.id, await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking));
-      l = db.shipLabelGet(id);
+      const img = await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking);
+      if (store) { db.shipLabelSetImage(l.id, img); l = db.shipLabelGet(id); } else l = { ...l, label_gif: img };
     }
     if (!l.label_gif) throw new Error('The carrier sent no image for this label.');
     const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
     await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif))}`);
     return { pw, label: l };
   }
+
+  // Download PDF in the browser (owner 2026-10-20, for the assistant that
+  // answers Walmart messages): an EXISTING label as a 4x6 PDF, by id,
+  // tracking or PO#. Read-only: never buys, re-creates, voids or edits a
+  // label; a voided label is not served.
+  labelPdfFor = async ({ id, tracking, po } = {}) => {
+    let l = null;
+    if (id) l = db.shipLabelGet(Number(id));
+    else if (tracking || po) l = db.shipLabelFind({ tracking, reference: po });
+    else return { ok: false, status: 400, error: 'Say which label: id, tracking or po.' };
+    if (!l) return { ok: false, status: 404, error: `No label found for ${id ? `#${id}` : tracking || po}.` };
+    if (l.voided_at) return { ok: false, status: 410, error: `The label ${l.tracking} was voided.` };
+    let pw = null;
+    try {
+      ({ pw } = await shipLabelWindow(l.id, { store: false }));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      const ref = String(l.reference || l.tracking).replace(/[^\w.-]+/g, '_');
+      return { ok: true, pdf, filename: `${l.kind === 'return' ? 'return' : 'label'}-${ref}.pdf` };
+    } catch (e) {
+      return { ok: false, status: 502, error: `The PDF could not be made: ${e.message}` };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  };
 
   ipcMain.handle('ship:print', async (_e, { id } = {}) => {
     let pw = null;
@@ -7585,6 +7611,7 @@ exit 1
 /* ---------- browser access (owner 2026-10-20) ---------- */
 
 const web = { server: null, error: '' };
+let labelPdfFor = null; // set once the Ship handlers exist: ({ id | tracking | po }) => { ok, pdf, filename } | { ok: false, status, error }
 const webUrl = (cfg) => `http://localhost:${cfg.web.port}/?k=${cfg.web.key}`;
 
 async function startWeb() {
@@ -7597,6 +7624,7 @@ async function startWeb() {
     getKey: () => config.load().web.key,
     handlers: ipcHandlers,
     eventTarget: () => (win && !win.isDestroyed() ? win.webContents : null),
+    labelPdf: (q) => (labelPdfFor ? labelPdfFor(q) : { ok: false, status: 503, error: 'The app is still starting.' }),
   });
   try {
     await server.listen();

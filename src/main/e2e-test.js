@@ -2130,6 +2130,35 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('web: a new link can only be made on the desktop', JSON.parse(r.body).value.ok === false, r.body);
       r = await req({ path: '/..%2fmain%2fmain.js', headers: { ...host, Cookie: cookie } });
       check('web: nothing outside the app\'s pages is served', r.status === 404, r.status);
+
+      // Download PDF (owner 2026-10-20): an existing label, read-only, behind the key
+      const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const sample = db.shipLabelAdd({ kind: 'return', reference: 'SAMPLE-PO-1001', fromPo: true, accountId: 'a', accountName: 'Sample UPS',
+        serviceCode: '03', serviceName: 'UPS Ground', tracking: '1ZSAMPLE0000000001', cost: 9.1, value: 50, weight: 1, labelGif: PNG1 });
+      const voidedSample = db.shipLabelAdd({ kind: 'ship', reference: 'SAMPLE-PO-1002', fromPo: true, accountId: 'a', accountName: 'Sample UPS',
+        serviceCode: '03', serviceName: 'UPS Ground', tracking: '1ZSAMPLE0000000002', cost: 9.1, labelGif: PNG1 });
+      db.shipLabelVoid(voidedSample.id);
+      const before = JSON.stringify(db.shipLabelGet(sample.id));
+      const labelCount = db.shipLabelList({ limit: 5000 }).length;
+      const pdfOk = (x, name) => x.status === 200 && x.headers['content-type'] === 'application/pdf'
+        && x.headers['content-disposition'] === `attachment; filename="${name}"` && String(x.body).startsWith('%PDF');
+      r = await req({ path: `/labels/${sample.id}/pdf`, headers: { ...host, Cookie: cookie } });
+      check('web: Download PDF serves the existing label as an attachment named return-<PO>.pdf', pdfOk(r, 'return-SAMPLE-PO-1001.pdf'), { status: r.status, headers: r.headers });
+      r = await req({ path: '/labels/pdf?tracking=1zsample0000000001', headers: { ...host, Cookie: cookie } });
+      const byTracking = pdfOk(r, 'return-SAMPLE-PO-1001.pdf');
+      r = await req({ path: '/labels/pdf?po=SAMPLE-PO-1001', headers: { ...host, Cookie: cookie } });
+      check('web: the same PDF by tracking number or by PO#', byTracking && pdfOk(r, 'return-SAMPLE-PO-1001.pdf'), r.status);
+      r = await req({ path: `/labels/${sample.id}/pdf`, headers: host });
+      check('web: Download PDF needs the key like everything else', r.status === 401 && !String(r.body).startsWith('%PDF'), r.status);
+      r = await req({ path: '/labels/pdf?tracking=1ZNOTHERE000000000', headers: { ...host, Cookie: cookie } });
+      const missing = r.status === 404 && /No label found/.test(JSON.parse(r.body).error);
+      r = await req({ path: '/labels/pdf?tracking=1ZSAMPLE0000000002', headers: { ...host, Cookie: cookie } });
+      const voidedByTracking = r.status === 404;
+      r = await req({ path: `/labels/${voidedSample.id}/pdf`, headers: { ...host, Cookie: cookie } });
+      check('web: a missing or voided label answers with a clear error, no file', missing && voidedByTracking && r.status === 410 && /voided/.test(JSON.parse(r.body).error), r.body);
+      r = await req({ method: 'POST', path: `/labels/${sample.id}/pdf`, headers: { ...host, Cookie: cookie, Origin: 'http://localhost:47391' } });
+      check('web: Download PDF is read-only: no POST, and the label and the label count are unchanged',
+        r.status === 405 && JSON.stringify(db.shipLabelGet(sample.id)) === before && db.shipLabelList({ limit: 5000 }).length === labelCount, r.status);
       // a real browser page: the whole app renders and follows live updates
       const bw = new BrowserWindow({ show: false, width: 1300, height: 900, webPreferences: { contextIsolation: true, sandbox: true } });
       const webLog = [];
@@ -2147,6 +2176,32 @@ module.exports = async function run({ app, win, db, clipboard }) {
         const got = await bw.webContents.executeJavaScript('window.__got', true);
         check('web: the app runs in a browser page, key gone from the address, live updates arrive',
           page.web && page.rows > 0 && page.tabs && page.rendered === page.rows && page.dockHidden && page.url === 'http://localhost:47391/' && got > 0, { ...page, got, webLog: webLog.filter(l => !/Content Security Policy/.test(l)).slice(0, 8) });
+        // the Labels list's Download PDF link: a real browser download
+        const dlDir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'dws-dl-'));
+        const downloaded = new Promise((resolve) => {
+          bw.webContents.session.once('will-download', (_ev, item) => {
+            const to = path.join(dlDir, item.getFilename());
+            item.setSavePath(to);
+            item.once('done', (_e2, st) => resolve({ state: st, name: item.getFilename(), to }));
+          });
+          setTimeout(() => resolve({ state: 'timeout' }), 8000);
+        });
+        const link = await bw.webContents.executeJavaScript(`(async () => {
+          sp.logDays = 30; await spLoadLog();
+          const a = document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-testid="label-download-pdf"]');
+          const v = document.querySelector('#spLogBody tr[data-id="${voidedSample.id}"] [data-testid="label-download-pdf"]');
+          const text = a ? a.textContent : '';
+          if (a) a.click();
+          return { link: !!a, text, href: a ? a.getAttribute('href') : '', po: a ? a.dataset.po : '', voidedLink: !!v,
+            keeps: !!document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-act="pdf"]') && !!document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-act="print"]') };
+        })()`, true);
+        const dl = await downloaded;
+        const file = dl.to && fs.existsSync(dl.to) ? fs.readFileSync(dl.to) : Buffer.alloc(0);
+        check('web: Download PDF in Ship › Labels downloads return-<PO>.pdf; Reprint and PDF stay; none on a voided label',
+          link.link && link.text === 'Download PDF' && link.href === `/labels/${sample.id}/pdf` && link.po === 'SAMPLE-PO-1001' && link.keeps && !link.voidedLink
+          && dl.state === 'completed' && dl.name === 'return-SAMPLE-PO-1001.pdf' && file.subarray(0, 4).toString() === '%PDF', { link, dl: { state: dl.state, name: dl.name }, size: file.length });
+        const desk = await exec(`(async () => { sp.logDays = 30; await spLoadLog(); return !!document.querySelector('#spLogBody [data-testid="label-download-pdf"]'); })()`);
+        check('web: the desktop window keeps its own PDF button, no browser link', desk === false, desk);
       } finally {
         bw.destroy();
       }

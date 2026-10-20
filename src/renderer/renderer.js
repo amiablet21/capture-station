@@ -14973,6 +14973,42 @@ async function spPrint(id) {
   else if (res.printed) toast('Sent to the printer');
 }
 
+// Download PDF (owner 2026-10-20): only in the browser copy of the app, a
+// real browser download of the label already bought, served by the app at
+// /labels/<id>/pdf. The desktop keeps its PDF button (a save dialog).
+function spDownloadLink(l) {
+  if (!window.__DWS_WEB__) return '';
+  const ref = String(l.reference || l.tracking).replace(/[^\w.-]+/g, '_');
+  const name = `${l.kind === 'return' ? 'return' : 'label'}-${ref}.pdf`;
+  return `<a class="sp-link" data-act="download" data-testid="label-download-pdf" data-po="${esc(l.reference || '')}" data-tracking="${esc(l.tracking)}"`
+    + ` href="/labels/${Number(l.id)}/pdf" download="${esc(name)}">Download PDF</a>`;
+}
+async function spDownload(a) {
+  if (a.dataset.busy) return;
+  a.dataset.busy = '1';
+  const label = a.textContent;
+  a.textContent = 'Downloading…';
+  try {
+    const res = await fetch(a.getAttribute('href'), { credentials: 'same-origin' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `The app answered ${res.status}`);
+    }
+    const blob = await res.blob();
+    const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+    const url = URL.createObjectURL(blob);
+    const dl = document.createElement('a');
+    dl.href = url; dl.download = (m && m[1]) || a.getAttribute('download') || 'label.pdf';
+    document.body.appendChild(dl); dl.click(); dl.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    toast(`Download failed: ${e.message}`, 6000);
+  } finally {
+    a.textContent = label;
+    delete a.dataset.busy;
+  }
+}
+
 async function spPdf(id) {
   const res = await api.shipPdf(id);
   if (res.ok) toast('Label saved as PDF');
@@ -15037,7 +15073,7 @@ function spRenderLog() {
       + `<td class="m">${esc(when)}</td><td class="m">${ref}</td><td>${kind}${l.test ? ' <span class="sp-test">Test</span>' : ''}</td>`
       + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td><td class="m">${esc(l.tracking)}</td>`
       + `<td class="num">${l.value ? spMoney(l.value) : '—'}</td><td class="num">${spMoney(l.cost)}</td>`
-      + `<td><div class="sp-acts">${l.voided_at ? '' : '<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button><button class="sp-link v" data-act="void" type="button">Void</button>'}</div></td></tr>`;
+      + `<td><div class="sp-acts">${l.voided_at ? '' : `<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button>${spDownloadLink(l)}<button class="sp-link v" data-act="void" type="button">Void</button>`}</div></td></tr>`;
   }).join('');
   sp.freshId = 0;
 }
@@ -15046,6 +15082,7 @@ $('spLogBody').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const id = Number(b.closest('tr').dataset.id);
+  if (b.dataset.act === 'download') { e.preventDefault(); spDownload(b); return; }
   if (b.dataset.act === 'print') spPrint(id);
   else if (b.dataset.act === 'pdf') spPdf(id);
   else if (b.dataset.act === 'void') {
