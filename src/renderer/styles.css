@@ -5992,7 +5992,7 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .sp-rate .sv { font-size: 12.5px; font-weight: 500; }
 .sp-rate .eta { font-size: 11px; color: var(--muted); }
 .sp-rate .pr { margin-left: auto; font-family: var(--mono); font-weight: 700; font-size: 13.5px; }
-.sp-best { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: var(--badge-green-bg); color: var(--badge-green-text); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.sp-star { width: 14px; height: 14px; color: #E3A008; vertical-align: -2px; margin-right: 5px; }
 .sp-save-amt { font-size: 10.5px; color: var(--badge-green-text); font-weight: 600; }
 .sp-rates-empty { padding: 30px 20px; text-align: center; color: var(--faint); font-size: 12.5px; }
 .sp-rates-empty.is-err { color: var(--neg-text); }

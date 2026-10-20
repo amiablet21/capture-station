@@ -14515,6 +14515,8 @@ const sp = {
   freshId: 0,
 };
 
+// the cheapest rate wears a gold star (owner pick B, 2026-10-20)
+const SP_STAR = '<svg class="sp-star" viewBox="0 0 256 256" fill="currentColor" aria-label="Cheapest"><title>Cheapest</title><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>';
 const spMoney = (n) => (Number.isFinite(Number(n)) && n !== null ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—');
 
 function spDayLabel(iso) {
@@ -14864,7 +14866,7 @@ function spRenderRates() {
       const save = others.length ? Math.max(...others) - r.price : 0;
       const eta = r.arrival ? `Arrives ${spDayLabel(r.arrival)}` : r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : '';
       html += `<div class="sp-rate${sp.pick === key ? ' is-on' : ''}" data-k="${esc(key)}"><span class="rd"></span><div>`
-        + `<div class="sv">${esc(r.name)}${r.price === cheapest ? '<span class="sp-best">Cheapest</span>' : ''}</div>`
+        + `<div class="sv">${r.price === cheapest ? SP_STAR : ''}${esc(r.name)}</div>`
         + `<div class="eta">${esc(eta)}${save > 0.004 ? ` · <span class="sp-save-amt">${spMoney(save)} less than the other account</span>` : ''}</div>`
         + `</div><span class="pr">${spMoney(r.price)}</span></div>`;
     }

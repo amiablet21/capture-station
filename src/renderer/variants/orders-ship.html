@@ -79,6 +79,7 @@
   .via.wm { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
   .via.a { background: var(--accent-soft); color: var(--accent-soft-text); }
   .via.b { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+  .star { width: 14px; height: 14px; color: #E3A008; vertical-align: -2px; margin-right: 5px; }
   .best { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); margin-left: 6px; vertical-align: 1px; }
   .eta { font-size: 11px; color: var(--muted); }
   .pr { font-family: var(--mono); font-weight: 700; font-size: 13px; min-width: 60px; text-align: right; }
@@ -167,6 +168,7 @@ const QUOTES = (o, wt) => {
   return q.filter(r => !r.drop).map(r => ({ ...r, price: Math.round((r.base + r.lb * (w - 1)) * far * 100) / 100 }))
     .sort((a, b) => a.price - b.price);
 };
+const STAR = '<svg class="star" viewBox="0 0 256 256" fill="currentColor" aria-label="Cheapest"><title>Cheapest</title><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>';
 const VIA = { wm: ['Walmart', 'wm'], a: ['DWS UPS', 'a'], b: ['Company 2 UPS', 'b'] };
 const money = n => '$' + n.toFixed(2);
 let open = 0, pick = 0, showAll = false, loading = false, fresh = 0, via = '';
@@ -212,7 +214,7 @@ function panel(o) {
   const list = q;
   const sel = q[pick] || q[0];
   const rows = list.map((r, i) => `<div class="rate${i === pick ? ' on' : ''}" data-i="${i}"><span class="rd"></span>
-    <div><div class="sv">${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span>${i === 0 ? '<span class="best">Cheapest</span>' : ''}</div><div class="eta">${r.d}</div></div>
+    <div><div class="sv">${i === 0 ? STAR : ''}${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span></div><div class="eta">${r.d}</div></div>
     <span></span><span class="pr">${money(r.price)}</span></div>`).join('');
   return `<div class="sp">${left}<div>
     <div class="h">Rates <span class="vchips">${chips}</span></div>
