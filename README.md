@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.96 highlights
+
+- **Reprint and Void on the order line.** When a line's tracking came from a label made in the app, **Reprint** and **Void** sit beside the tracking number. Void appears until the order is processed, and takes the tracking back off the line.
+- **Print on a label printer or paper.** After **Create label**, and on every **Reprint**, choose **Label printer · 4×6** or **Paper · 8.5×11** (the 4×6 label at true size on a letter page), and which printer. Each format remembers its own printer. The Ship tab's Print and Reprint use the same popup.
+
 ## v1.32.95 highlights
 
 - **Download PDF in the browser.** In the browser copy of the app (Settings › General › Browser), every label in Ship › Labels has a **Download PDF** link. It is a normal browser download of the label already bought, named `return-<PO>.pdf` (or `label-<PO>.pdf`). It never buys, re-creates, voids or changes a label. The same file is also at `http://localhost:47391/labels/pdf?tracking=<tracking>` or `?po=<PO#>`, behind the same private key as the rest of the app. A missing or voided label shows an error instead of a file. The desktop's PDF and Reprint buttons are unchanged.
