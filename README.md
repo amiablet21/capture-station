@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.95 highlights
+
+- **Download PDF in the browser.** In the browser copy of the app (Settings › General › Browser), every label in Ship › Labels has a **Download PDF** link. It is a normal browser download of the label already bought, named `return-<PO>.pdf` (or `label-<PO>.pdf`). It never buys, re-creates, voids or changes a label. The same file is also at `http://localhost:47391/labels/pdf?tracking=<tracking>` or `?po=<PO#>`, behind the same private key as the rest of the app. A missing or voided label shows an error instead of a file. The desktop's PDF and Reprint buttons are unchanged.
+- **Ship drawer:** a late rate shows its delivery date in red. Nothing else changes, and it isn't greyed out.
+
 ## v1.32.94 highlights
 
 - **Order dates in the Ship drawer.** Under the customer, an **Order** box shows **Ordered**, **Ship by** and **Deliver by**, with Deliver by highlighted. Walmart orders use Walmart's own dates; other marketplaces use Linnworks'.
