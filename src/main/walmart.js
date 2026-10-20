@@ -30,8 +30,16 @@ function errorText(body, status) {
   return `Walmart answered ${status}`;
 }
 
+// a date Walmart sends (epoch ms or ISO) as a local YYYY-MM-DD, '' if unset
+function dayOf(v) {
+  if (v === undefined || v === null || v === '') return '';
+  const d = new Date(/^\d+$/.test(String(v)) ? Number(v) : v);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2010) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // a Walmart order as the label calls need it: every line's number, SKU and
-// quantity, and the ship-to
+// quantity, the ship-to, and the delivery date Walmart promised the buyer
 function parseOrder(body) {
   const o = (body && (body.order || (body.list && body.list.elements && arr(body.list.elements.order)[0]))) || body;
   if (!o || !o.purchaseOrderId) return null;
@@ -43,6 +51,8 @@ function parseOrder(body) {
   const a = (o.shippingInfo && o.shippingInfo.postalAddress) || {};
   return {
     purchaseOrderId: String(o.purchaseOrderId),
+    deliverBy: dayOf(o.shippingInfo && o.shippingInfo.estimatedDeliveryDate),
+    shipBy: dayOf(o.shippingInfo && o.shippingInfo.estimatedShipDate),
     lines,
     shipTo: {
       name: clip(a.name, 60),
@@ -250,5 +260,5 @@ WalmartClient.testHost = ''; // the e2e suite's fake Walmart
 
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
-  parseOrder, parseEstimates, buildEstimateRequest, buildLabelRequest, parseLabel,
+  parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel,
 };

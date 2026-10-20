@@ -67,8 +67,21 @@ function orderNetCharge(totalCharge, tax) {
 
 // an order (open or full processed shape — both carry CustomerInfo,
 // TotalsInfo and Items) as the Ship tab's party + summary
+// a Linnworks date as a local YYYY-MM-DD; '' when unset (Linnworks fills
+// empty dates with 0001-01-01 or the epoch)
+function dayOf(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2010) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function labelOrder(o, status, ref) {
   const ci = o.CustomerInfo || {};
+  const gi = o.GeneralInfo || {};
+  // the marketplace's delivery window, when the channel sends one (Amazon,
+  // Walmart and eBay scheduled/estimated delivery); the despatch-by date always
+  const sd = gi.ScheduledDelivery || {};
   const a = ci.Address || {};
   const t = (v) => String(v || '').trim();
   const items = (o.Items || []).filter(it => !it.IsService).map(it => ({
@@ -82,6 +95,8 @@ function labelOrder(o, status, ref) {
     reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
     source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
     status,
+    deliverBy: dayOf(sd.To) || dayOf(sd.From),
+    shipBy: dayOf(gi.DespatchByDate),
     // what the buyer paid before sales tax — the label's declared value
     // starts here and the owner can change it
     total: orderNetCharge(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge), o.TotalsInfo && o.TotalsInfo.Tax),
