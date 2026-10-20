@@ -6101,3 +6101,26 @@ tr.os-row > td { padding: 0 14px 14px; background: #FBFAF8; border-bottom: 1px s
 /* Settings › Browser */
 .web-row .web-url { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #setWebNote.is-fail { color: var(--neg-text); }
+
+/* Settings (owner 2026-10-20, variants/settings-organized.html): a sidebar of
+   six groups, one group on screen at a time */
+.dlg-settings { width: min(920px, 96vw); }
+.set-wrap { display: grid; grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; height: min(640px, 88vh); }
+.set-nav { grid-row: 1 / 3; background: var(--surface-2); border-right: 1px solid var(--border); padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; }
+.set-nav .dlg-title { padding: 0 10px 8px; margin: 0; }
+.set-nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.set-nav button svg { width: 16px; height: 16px; flex: none; }
+.set-nav button:hover { color: var(--text); background: rgba(0, 0, 0, 0.03); }
+.set-nav button.is-on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.08); }
+.set-nav button.is-on svg { color: var(--accent); }
+.set-pane { overflow-y: auto; padding: 22px 26px 12px; min-width: 0; }
+.set-h { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; }
+.set-pages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; margin-bottom: 6px; }
+.set-foot { grid-column: 2; margin: 0; border-radius: 0 0 var(--r-modal) 0; }
+@media (max-width: 640px) {
+  .set-wrap { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .set-nav { grid-row: auto; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--border); padding: 10px; }
+  .set-nav .dlg-title { width: 100%; }
+  .set-nav button { width: auto; }
+  .set-foot { grid-column: 1; border-radius: 0 0 var(--r-modal) var(--r-modal); }
+}

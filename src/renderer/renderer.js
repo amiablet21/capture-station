@@ -1265,7 +1265,22 @@ function setSecretField(id, saved) {
   tag.hidden = !saved;
 }
 
-async function openSettings() {
+// one group on screen at a time; the last one picked stays for the session
+const SET_GROUPS = ['general', 'linnworks', 'shipping', 'stock', 'returns', 'advanced'];
+let setGroup = 'general';
+function showSetGroup(g) {
+  setGroup = SET_GROUPS.includes(g) ? g : 'general';
+  for (const sec of document.querySelectorAll('#setPane .set-sec')) sec.hidden = sec.dataset.p !== setGroup;
+  for (const b of document.querySelectorAll('#setNav [data-p]')) b.classList.toggle('is-on', b.dataset.p === setGroup);
+  $('setPane').scrollTop = 0;
+}
+$('setNav').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-p]');
+  if (b) showSetGroup(b.dataset.p);
+});
+
+async function openSettings(group) {
+  if (typeof group === 'string' && SET_GROUPS.includes(group)) setGroup = group; // survives the PIN prompt
   const cfg = await api.getConfig();
   if (cfg.settingsPinHash && !settingsUnlocked) {
     pinExpected = cfg.settingsPinHash;
@@ -1330,7 +1345,9 @@ async function openSettings() {
   $('setPinClear').checked = false;
   $('testConnResult').textContent = '';
   $('testConnResult').className = 'test-result';
+  showSetGroup(setGroup);
   $('settingsDialog').showModal();
+  if (document.activeElement && document.activeElement.closest('#setNav')) document.activeElement.blur(); // no ring on a fresh open
   rcRenderSyncPanel().catch(() => {}); // the Recovery files in the shared folder, under the folder settings
 }
 
@@ -14620,7 +14637,7 @@ function spRenderBanner() {
   el.hidden = !msgs.length;
   el.innerHTML = msgs.length ? `${esc(msgs.join(' · '))} — <a id="spOpenSettings">open Settings</a>` : '';
   const a = $('spOpenSettings');
-  if (a) a.onclick = () => openSettings();
+  if (a) a.onclick = () => openSettings('shipping');
 }
 
 function spFillBoxes() {
@@ -14703,7 +14720,7 @@ function spAddrCard(el, a, lab, tag, link, problem) {
     + (problem ? `<div class="warn">${esc(problem)}</div>` : '')
     + (link ? `<button class="sp-link" type="button" data-act="${link.act}">${esc(link.text)}</button>` : '');
   const b = el.querySelector('[data-act]');
-  if (b) b.onclick = () => (b.dataset.act === 'settings' ? openSettings() : spEditCustomer());
+  if (b) b.onclick = () => (b.dataset.act === 'settings' ? openSettings('shipping') : spEditCustomer());
 }
 
 function spRenderAddrs() {

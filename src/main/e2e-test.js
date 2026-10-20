@@ -2046,6 +2046,25 @@ module.exports = async function run({ app, win, db, clipboard }) {
       }
     }
 
+    // Settings in six groups (owner 2026-10-20, variants/settings-organized.html)
+    {
+      const res = await exec(`(async () => {
+        await openSettings('general');
+        const shown = () => [...document.querySelectorAll('#setPane .set-sec')].filter(x => !x.hidden).map(x => x.dataset.p);
+        const out = { groups: [...document.querySelectorAll('#setNav [data-p]')].map(b => b.textContent.trim()), first: shown(), upsHidden: !$('setUpsName0').offsetParent };
+        document.querySelector('#setNav [data-p="shipping"]').click();
+        out.after = shown(); out.on = document.querySelector('#setNav .is-on').dataset.p; out.upsShown = !!$('setUpsName0').offsetParent;
+        $('settingsDialog').close();
+        await openSettings();
+        out.reopened = shown();
+        $('settingsDialog').close();
+        return out;
+      })()`);
+      check('settings: six groups in a sidebar, one on screen, the pick stays for the session',
+        res && res.groups.join() === 'General,Linnworks,Shipping,Stock,Returns,Advanced' && res.first.join() === 'general' && res.upsHidden
+        && res.after.join() === 'shipping' && res.on === 'shipping' && res.upsShown && res.reopened.join() === 'shipping', res);
+    }
+
     // Browser access (owner 2026-10-20): the whole app at localhost, locked to
     // this computer, a private key and the page's own origin
     {

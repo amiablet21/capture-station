@@ -287,8 +287,8 @@ class UpsClient {
   // tokens last hours
   async token() {
     const { clientId, clientSecret, accountNumber } = this.account;
-    if (!clientId || !clientSecret) throw new UpsError('Client ID and secret are not set (Settings › UPS labels).');
-    if (!accountNumber) throw new UpsError('UPS account number is not set (Settings › UPS labels).');
+    if (!clientId || !clientSecret) throw new UpsError('Client ID and secret are not set (Settings › Shipping).');
+    if (!accountNumber) throw new UpsError('UPS account number is not set (Settings › Shipping).');
     const key = this.tokenKey();
     const hit = UpsClient.tokens.get(key);
     if (hit && hit.until > Date.now() + 60000) return hit.token;

@@ -6204,10 +6204,10 @@ exit 1
     const other = shipParty(payload && payload.party);
     const pkg = shipPkg(payload && payload.pkg);
     const p0 = ups.addressProblem(u.shipFrom);
-    if (p0) return { error: `Ship-from address: ${p0.toLowerCase()} (Settings › UPS labels).` };
+    if (p0) return { error: `Ship-from address: ${p0.toLowerCase()} (Settings › Shipping).` };
     if (kind === 'return') {
       const p1 = ups.addressProblem(u.returnTo);
-      if (p1) return { error: `Return address: ${p1.toLowerCase()} (Settings › UPS labels).` };
+      if (p1) return { error: `Return address: ${p1.toLowerCase()} (Settings › Shipping).` };
     }
     const p2 = ups.addressProblem(other);
     if (p2) return { error: `${kind === 'return' ? 'Their' : 'Ship-to'} address: ${p2.toLowerCase()}.` };
@@ -6232,7 +6232,7 @@ exit 1
   });
 
   ipcMain.handle('ship:lookup', async (_e, { ref } = {}) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const reference = String(ref || '').trim();
     if (!reference) return { ok: false, error: 'Enter a PO#.' };
     try {
@@ -6252,10 +6252,10 @@ exit 1
   });
 
   ipcMain.handle('ship:rates', async (_e, payload) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const prep = shipInput(payload);
     if (prep.error) return { ok: false, error: prep.error };
-    if (!(prep.u.accounts || []).some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › UPS labels).' };
+    if (!(prep.u.accounts || []).some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › Shipping).' };
     return { ok: true, test: !!prep.u.test, accounts: await upsRatesAll(prep) };
   });
 
@@ -6263,7 +6263,7 @@ exit 1
   async function upsRatesAll(prep) {
     return Promise.all((prep.u.accounts || []).map(async (a) => {
       const head = { id: a.id, name: upsName(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() };
-      if (!upsReady(a)) return { ...head, ok: false, notSet: true, error: 'Not set up — add it in Settings › UPS labels.' };
+      if (!upsReady(a)) return { ...head, ok: false, notSet: true, error: 'Not set up — add it in Settings › Shipping.' };
       try {
         return { ...head, ok: true, rates: await new ups.UpsClient(a, { test: !!prep.u.test }).rates(prep.input) };
       } catch (e) {
@@ -6290,11 +6290,11 @@ exit 1
   }
 
   ipcMain.handle('ship:create', async (_e, payload) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const prep = shipInput(payload);
     if (prep.error) return { ok: false, error: prep.error };
     const acct = (prep.u.accounts || []).find(a => a.id === (payload && payload.accountId));
-    if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › UPS labels).' };
+    if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › Shipping).' };
     const serviceCode = String((payload && payload.serviceCode) || '').replace(/\D/g, '').slice(0, 3);
     if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
     const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
@@ -6393,7 +6393,7 @@ exit 1
   });
 
   ipcMain.handle('ship:void', async (_e, { id } = {}) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const l = db.shipLabelGet(id);
     if (!l) return { ok: false, error: 'Label not found.' };
     if (l.voided_at) return { ok: true, label: l };
@@ -6439,7 +6439,7 @@ exit 1
   }
 
   ipcMain.handle('orderShip:prep', async (_e, { rowId } = {}) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(rowId);
     if (error) return { ok: false, error };
     try {
@@ -6458,7 +6458,7 @@ exit 1
   });
 
   ipcMain.handle('orderShip:rates', async (_e, payload = {}) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(payload.rowId);
     if (error) return { ok: false, error };
     const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
@@ -6480,7 +6480,7 @@ exit 1
   });
 
   ipcMain.handle('orderShip:create', async (_e, payload = {}) => {
-    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(payload.rowId);
     if (error) return { ok: false, error };
     const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
@@ -6509,7 +6509,7 @@ exit 1
         });
       } else {
         const acct = (prep.u.accounts || []).find(a => a.id === payload.via);
-        if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › UPS labels).' };
+        if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › Shipping).' };
         const serviceCode = String(payload.code || '').replace(/\D/g, '').slice(0, 3);
         if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
         label = await upsBuyLabel(prep, acct, {
@@ -7352,7 +7352,7 @@ exit 1
   ipcMain.handle('stock:setCost', (_e, { sku, cost, from }) => {
     invCacheClear();
     const cfg = config.load();
-    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › General).' };
     const n = Math.round((Number(cost) || 0) * 100) / 100;
     if (!sku) return { ok: false, error: 'Missing stock item.' };
     if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
@@ -8143,7 +8143,7 @@ function registerRecoveryIpc() {
   ipcMain.handle('recovery:setCost', (_e, { sku, cost } = {}) => {
     if (recoveryGate()) return recoveryGate();
     const cfg = config.load();
-    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › General).' };
     const k = String(sku || '').trim();
     const n = Math.round((Number(cost) || 0) * 100) / 100;
     if (!k) return { ok: false, error: 'Missing SKU.' };

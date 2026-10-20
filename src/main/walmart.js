@@ -169,7 +169,7 @@ class WalmartClient {
 
   async token() {
     const { clientId, clientSecret } = this.creds;
-    if (!clientId || !clientSecret) throw new WalmartError('Walmart Client ID and secret are not set (Settings › Walmart).');
+    if (!clientId || !clientSecret) throw new WalmartError('Walmart Client ID and secret are not set (Settings › Shipping).');
     const key = `${this.host}|${crypto.createHash('sha256').update(`${clientId}|${clientSecret}`).digest('hex')}`;
     const hit = WalmartClient.tokens.get(key);
     if (hit && hit.until > Date.now() + 30000) return hit.token;
