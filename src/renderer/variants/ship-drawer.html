@@ -84,6 +84,12 @@
   .pk2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
   .lock { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 7px 10px; }
   .lock svg { width: 13px; height: 13px; color: var(--faint); }
+  .pk-save { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font); font-size: 11.5px; font-weight: 600; color: var(--accent-soft-text); background: var(--accent-soft); border: none; border-radius: 999px; padding: 4px 11px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .pk-save:hover { background: #DCE4F1; }
+  .pk-save:disabled { opacity: .45; cursor: default; }
+  .pk-save svg, .pk-ok svg { width: 13px; height: 13px; }
+  .pk-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--pos-text); text-transform: none; letter-spacing: 0; animation: pop 260ms cubic-bezier(.34,1.56,.64,1); }
+  @keyframes pop { from { transform: scale(.8); opacity: 0; } to { transform: none; opacity: 1; } }
 
   /* rates */
   .rates { display: flex; flex-direction: column; gap: 6px; }
@@ -126,6 +132,8 @@ const IC = {
   copy: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>',
   pin: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>',
   phone: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46ZM176,208A128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.56L168.89,152l47,21.05h0s.08,0,.11,0A40.21,40.21,0,0,1,176,208Z"/></svg>',
+  bookmark: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M184,32H72A16,16,0,0,0,56,48V224a8,8,0,0,0,12.24,6.78L128,193.43l59.77,37.35A8,8,0,0,0,200,224V48A16,16,0,0,0,184,32Zm0,177.57-51.77-32.35a8,8,0,0,0-8.48,0L72,209.57V48H184Z"/></svg>',
+  check: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>',
   lock: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/></svg>',
   star: '<svg class="star" viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>',
 };
@@ -159,6 +167,11 @@ const RATES = {
     { tag: 'DWS', cls: '', name: 'UPS 2nd Day Air', eta: 'Wed, Oct 22 · 2 days', pr: 18.95 },
   ],
 };
+// what was saved, by item (or by the exact mix of items on a multi-item order);
+// the real app keeps it on the Linnworks item, so every computer has it
+const SAVED = { 'S25-128GB-NAVY': { box: '0', wt: '1.1', d: ['9', '6', '3'] } };
+const BOXES = [{ name: 'Phone box', d: ['9', '6', '3'] }, { name: 'Tablet box', d: ['12', '9', '3'] }];
+const pkKey = (o) => o.items.map(it => `${it.sku}${it.qty > 1 ? `×${it.qty}` : ''}`).sort().join(' + ');
 const $ = (id) => document.getElementById(id);
 const money = (n) => `$${n.toFixed(2)}`;
 let openPo = '';
@@ -203,14 +216,14 @@ function drawer(o) {
     </div>
     <div class="col">
       <section ${st(2)}>
-        <div class="bx-t">Package</div>
+        <div class="bx-t">Package <span class="r" id="pkTag"></span></div>
         <div class="pk">
-          <label class="pf"><span>Box</span><select class="input"><option>Phone box · 9 × 6 × 3</option><option>Custom size</option></select></label>
-          <label class="pf"><span>Weight (lb)</span><input class="input mono" value="${o.items.length > 1 ? '2.4' : '1.1'}" /></label>
+          <label class="pf"><span>Box</span><select class="input" data-k="box">${BOXES.map((b, i) => `<option value="${i}">${b.name} · ${b.d.join(' × ')}</option>`).join('')}<option value="custom">Custom size</option></select></label>
+          <label class="pf"><span>Weight (lb)</span><input class="input mono" data-k="wt" placeholder="0.0" /></label>
           <label class="pf"><span>Value</span><input class="input mono" value="${o.value.toFixed(2)}" /></label>
         </div>
         <div class="pk2">
-          <div class="pf"><span>Dimensions (in)</span><div class="dims"><input class="input mono" value="9" /><b>×</b><input class="input mono" value="6" /><b>×</b><input class="input mono" value="3" /></div></div>
+          <div class="pf"><span>Dimensions (in)</span><div class="dims"><input class="input mono" data-k="d0" /><b>×</b><input class="input mono" data-k="d1" /><b>×</b><input class="input mono" data-k="d2" /></div></div>
           <div class="pf"><span>Reference #1</span><div class="lock">${IC.lock}${o.po}</div></div>
         </div>
       </section>
@@ -226,6 +239,28 @@ function drawer(o) {
     <div class="pick-sum" id="sum"></div>
     <button class="btn btn-primary" type="button">Create label</button>
   </div>`;
+}
+
+// Package: fills from what was saved for these items; Save appears when
+// there is nothing saved yet or the numbers differ from it
+function pkSetup(o) {
+  const key = pkKey(o);
+  const many = o.items.length > 1 || o.items[0].qty > 1;
+  const f = (k) => $('dw').querySelector(`[data-k="${k}"]`);
+  const read = () => ({ box: f('box').value, wt: f('wt').value.trim(), d: [f('d0').value.trim(), f('d1').value.trim(), f('d2').value.trim()] });
+  const fill = (v) => { f('box').value = v.box; f('wt').value = v.wt; v.d.forEach((x, i) => { f(`d${i}`).value = x; }); };
+  fill(SAVED[key] || { box: '0', wt: '', d: BOXES[0].d });
+  const what = many ? 'these items' : 'this item';
+  const tag = () => {
+    const now = read(), was = SAVED[key];
+    const same = was && JSON.stringify(now) === JSON.stringify(was);
+    if (same) { $('pkTag').innerHTML = `<span class="pk-ok">${IC.check}Saved for ${what}</span>`; return; }
+    $('pkTag').innerHTML = `<button class="pk-save" type="button" ${Number(now.wt) > 0 ? '' : 'disabled'}>${IC.bookmark}${was ? 'Update saved' : `Save for ${what}`}</button>`;
+    $('pkTag').querySelector('button').onclick = () => { SAVED[key] = read(); tag(); };
+  };
+  f('box').addEventListener('change', () => { const b = BOXES[Number(f('box').value)]; if (b) b.d.forEach((x, i) => { f(`d${i}`).value = x; }); tag(); });
+  for (const k of ['wt', 'd0', 'd1', 'd2']) f(k).addEventListener('input', () => { if (k !== 'wt') f('box').value = 'custom'; tag(); });
+  tag();
 }
 
 function summary(o, i) {
@@ -246,6 +281,7 @@ function open(po) {
     $('dw').querySelectorAll('.rt').forEach(x => x.classList.toggle('on', x === r));
     summary(o, Number(r.dataset.i));
   });
+  pkSetup(o);
   $('dw').classList.add('on'); $('scrim').classList.add('on');
 }
 function close() {
