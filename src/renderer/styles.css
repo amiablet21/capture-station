@@ -6193,6 +6193,4 @@ tr.os-open > td { background: var(--accent-soft); }
 .osd-date.is-key svg, .osd-date.is-key span { color: var(--accent-soft-text); font-weight: 600; }
 .osd-date.is-key b { font-weight: 700; color: var(--accent-soft-text); }
 .osd-date.is-none b { color: var(--faint); font-weight: 500; }
-.osd-rates .sp-rate.is-late .eta { color: var(--neg-text); }
-.osd-late { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-weight: 600; color: var(--neg-text); }
-.osd-late svg { width: 12px; height: 12px; }
+.osd-rates .sp-rate.is-late .eta { color: var(--neg-text); font-weight: 600; }
