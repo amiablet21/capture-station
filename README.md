@@ -5,7 +5,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.91 highlights
 
 - **Recovery opens with the Settings PIN.** No separate code; entering the PIN once unlocks Settings and Recovery for the session. With no PIN set, Recovery opens directly.
-- Ship tab: the summary above **Create label** is gone.
+- Ship tab: the summary above **Create label** is gone. After a label: **Print** and **New label** side by side, **Save PDF · Copy tracking** as small links under them.
 
 ## v1.32.90 highlights
 

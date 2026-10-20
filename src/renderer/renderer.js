@@ -14901,10 +14901,11 @@ function spRenderDone() {
     <div class="sp-label">${gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/gif;base64,${gif}" alt="UPS label" />` : '<div class="none">UPS sent no label image. The shipment exists; void it from the list below if it is not needed.</div>'}</div>
     <div class="sp-done-acts">
       <button class="btn btn-primary" id="spDonePrint" type="button">Print</button>
-      <button class="btn btn-ghost" id="spDonePdf" type="button">Save PDF</button>
-      <button class="btn btn-ghost" id="spDoneCopy" type="button">Copy tracking</button>
+      <button class="btn btn-secondary" id="spAgain" type="button">New label</button>
     </div>
-    <button class="btn btn-secondary sp-again" id="spAgain" type="button">New label</button>
+    <div class="sp-done-more">
+      <button class="sp-link" id="spDonePdf" type="button">Save PDF</button><span>·</span><button class="sp-link" id="spDoneCopy" type="button">Copy tracking</button>
+    </div>
   </div>`;
   $('spDonePrint').onclick = () => spPrint(l.id);
   $('spDonePdf').onclick = () => spPdf(l.id);
