@@ -6,7 +6,8 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 - **Recovery opens with the Settings PIN.** No separate code; entering the PIN once unlocks Settings and Recovery for the session. With no PIN set, Recovery opens directly.
 - **Saved keys stay hidden.** In Settings a saved key shows **Saved ✓ · Replace**, never the key itself (UPS Client IDs and secrets, the Linnworks secret and token). The keys no longer reach the window at all: a field left empty keeps the saved key, and Test uses it.
-- Ship tab: the summary above **Create label** is gone; the cheapest rate wears a gold star. After a label: **Print** · **New label** over **Save PDF** · **Copy tracking**, all one size. Label PDFs save to Downloads.
+- Ship tab: the summary above **Create label** is gone; the cheapest rate wears a gold star.
+- Orders: the search box sits right beside the icons; its match count ("3 of 71") shows inside the box. After a label: **Print** · **New label** over **Save PDF** · **Copy tracking**, all one size. Label PDFs save to Downloads.
 
 ## v1.32.90 highlights
 
