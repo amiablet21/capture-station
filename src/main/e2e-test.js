@@ -2019,7 +2019,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
             b.click(); await new Promise(r => setTimeout(r, 900));
             const d = document.getElementById('osDrawer');
             const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
-              ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent),
+              ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent) && /×1/.test($('osdItems').textContent),
               saveBtn: !!$('osPkSave') && $('osPkSave').disabled };
             render(); out.survives = d.classList.contains('is-open') && !!document.querySelector('#rowsBody tr.os-open');
             const wt = $('osWt'); wt.value = '1.3'; wt.dispatchEvent(new Event('input'));
@@ -2045,7 +2045,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
-            /Deliver by:10\/22\/2026/.test(ui.deliver) && /Ordered:/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
+            /Deliver by10\/22\/2026/.test(ui.deliver) && /Ordered10\/20\/2026/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {
