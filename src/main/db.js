@@ -1263,8 +1263,8 @@ function shipLabelFind({ tracking = '', reference = '' } = {}) {
   const r = String(reference || '').trim();
   if (!t && !r) return null;
   const row = t
-    ? open().prepare('SELECT id FROM ship_labels WHERE UPPER(tracking) = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1').get(t)
-    : open().prepare('SELECT id FROM ship_labels WHERE reference = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1').get(r);
+    ? open().prepare(`SELECT id FROM ship_labels WHERE UPPER(tracking) = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1`).get(t)
+    : open().prepare(`SELECT id FROM ship_labels WHERE reference = ? AND (voided_at IS NULL OR voided_at = '') ORDER BY id DESC LIMIT 1`).get(r);
   return row ? shipLabelGet(row.id) : null;
 }
 // a Walmart label's image can arrive after the purchase
