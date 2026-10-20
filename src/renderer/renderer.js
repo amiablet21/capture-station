@@ -15319,6 +15319,7 @@ function osRenderItems(items) {
     </div>`).join('') : '<span class="osd-dim">Loading…</span>';
 }
 
+const OSD_WARN = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></svg>';
 const OSD_CAL = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z"/></svg>';
 const OSD_TRUCK = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M255.42,117l-14-35A15.93,15.93,0,0,0,226.58,72H192V64a8,8,0,0,0-8-8H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H49a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,255.42,117ZM192,88h34.58l9.6,24H192ZM32,72H176v64H32ZM80,208a16,16,0,1,1,16-16A16,16,0,0,1,80,208Zm81-24H111a32,32,0,0,0-62,0H32V152H176v12.31A32.11,32.11,0,0,0,161,184Zm31,24a16,16,0,1,1,16-16A16,16,0,0,1,192,208Zm48-24H223a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>';
 const OSD_PIN = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>';
@@ -15457,7 +15458,7 @@ function osRenderRates() {
   if (!os.pick || !list.some(r => r.key === os.pick)) os.pick = best ? best.key : '';
   const day = (iso) => (iso ? spDayLabel(iso) : '');
   box.innerHTML = list.length ? list.map(r => `<div class="sp-rate${r.key === os.pick ? ' is-on' : ''}${late(r) ? ' is-late' : ''}" data-k="${esc(r.key)}"><span class="rd"></span>
-      <div><div class="sv">${r === best ? SP_STAR : ''}${esc(r.name)}<span class="os-via os-via-${esc(r.via)}">${esc(r.viaName)}</span>${late(r) ? '<span class="osd-late">Late</span>' : ''}</div><div class="eta">${esc(day(r.arrival) || (r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : ''))}</div></div>
+      <div><div class="sv">${r === best ? SP_STAR : ''}${esc(r.name)}<span class="os-via os-via-${esc(r.via)}">${esc(r.viaName)}</span></div><div class="eta">${esc(day(r.arrival) || (r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : ''))}${late(r) ? `<span class="osd-late">${OSD_WARN}Late</span>` : ''}</div></div>
       <span class="pr">${spMoney(r.price)}</span></div>`).join('')
     : '<div class="os-empty">No rates</div>';
   const sel = list.find(r => r.key === os.pick);
