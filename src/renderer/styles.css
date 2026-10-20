@@ -6054,3 +6054,7 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .ups-addr-h .sp-link { margin-left: auto; }
 .ups-csz { display: grid; grid-template-columns: minmax(0, 1fr) 52px 90px; gap: 6px; }
 .ups-csz [data-f="state"] { text-transform: uppercase; }
+
+/* a saved key in Settings: shown as saved, never as the key */
+.secret-saved { display: flex; align-items: center; gap: 6px; min-height: 33px; font-size: 12.5px; color: var(--pos-text); }
+.secret-saved .sp-link { font-size: 12.5px; }

@@ -1237,6 +1237,24 @@ $('pinForm').addEventListener('submit', async (e) => {
 
 $('pinDialog').addEventListener('close', () => focusScan());
 
+// a saved key shows "Saved ✓ · Replace" in place of its field and never
+// comes back to the screen (owner 2026-10-20); Replace opens an empty
+// field, and a field left empty keeps the saved key
+function setSecretField(id, saved) {
+  const inp = $(id);
+  let tag = inp.nextElementSibling;
+  if (!tag || !tag.classList.contains('secret-saved')) {
+    tag = document.createElement('span');
+    tag.className = 'secret-saved';
+    tag.innerHTML = 'Saved ✓ · <button type="button" class="sp-link">Replace</button>';
+    inp.after(tag);
+    tag.querySelector('button').addEventListener('click', () => { tag.hidden = true; inp.hidden = false; inp.focus(); });
+  }
+  inp.value = '';
+  inp.hidden = !!saved;
+  tag.hidden = !saved;
+}
+
 async function openSettings() {
   const cfg = await api.getConfig();
   if (cfg.settingsPinHash && !settingsUnlocked) {
@@ -1271,8 +1289,8 @@ async function openSettings() {
   $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
-  $('setAppSecret').value = cfg.linnworks.applicationSecret;
-  $('setToken').value = cfg.linnworks.token;
+  setSecretField('setAppSecret', cfg.linnworks.hasApplicationSecret);
+  setSecretField('setToken', cfg.linnworks.hasToken);
   const sel = $('setLocation');
   sel.innerHTML = cfg.linnworks.locationId
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
@@ -15050,8 +15068,8 @@ function fillUpsSettings(u) {
   (u.accounts || []).slice(0, 2).forEach((a, i) => {
     $(`setUpsName${i}`).value = a.name || '';
     $(`setUpsAcct${i}`).value = a.accountNumber || '';
-    $(`setUpsId${i}`).value = a.clientId || '';
-    $(`setUpsSecret${i}`).value = a.clientSecret || '';
+    setSecretField(`setUpsId${i}`, a.hasClientId);
+    setSecretField(`setUpsSecret${i}`, a.hasClientSecret);
     $(`setUpsRes${i}`).textContent = '';
     $(`setUpsRes${i}`).className = 'test-result';
   });

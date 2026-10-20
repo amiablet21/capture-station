@@ -3562,12 +3562,43 @@ exit 1
     pushState();
     return { ok: true, folder: filePaths[0] };
   });
-  ipcMain.handle('config:get', () => config.load());
+  // saved keys never travel to the window (owner 2026-10-20: "Saved ✓ ·
+  // Replace", not the key): the renderer gets has* flags, and a save that
+  // leaves a key out keeps the stored one
+  function publicConfig(cfg) {
+    const out = structuredClone(cfg);
+    const lw = out.linnworks || {};
+    lw.hasApplicationSecret = !!lw.applicationSecret; lw.hasToken = !!lw.token;
+    lw.applicationSecret = ''; lw.token = '';
+    for (const a of (out.ups && out.ups.accounts) || []) {
+      a.hasClientId = !!a.clientId; a.hasClientSecret = !!a.clientSecret;
+      a.clientId = ''; a.clientSecret = '';
+    }
+    return out;
+  }
+  ipcMain.handle('config:get', () => publicConfig(config.load()));
   ipcMain.handle('config:set', (_e, patch) => {
-    const cfg = config.save(patch || {});
+    patch = patch || {};
+    // the UPS account list is saved whole: carry each stored key over
+    // unless the patch brings a replacement
+    if (patch.ups && Array.isArray(patch.ups.accounts)) {
+      const cur = config.load().ups.accounts;
+      patch.ups.accounts = patch.ups.accounts.map((a, i) => {
+        const was = cur.find(c => c.id === a.id) || cur[i] || {};
+        const keep = { ...a };
+        for (const f of ['clientId', 'clientSecret']) if (!keep[f]) keep[f] = was[f] || '';
+        delete keep.hasClientId; delete keep.hasClientSecret;
+        return keep;
+      });
+    }
+    if (patch.linnworks) {
+      for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
+      delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
+    }
+    const cfg = config.save(patch);
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
     pushState();
-    return cfg;
+    return publicConfig(cfg);
   });
   ipcMain.handle('csv:export', () => exportCsv());
   ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
@@ -3575,7 +3606,14 @@ exit 1
   ipcMain.handle('salesStock:export', () => exportSalesStock());
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
-      const result = await testConnection(creds || config.load().linnworks);
+      // a key left blank in Settings means the saved one
+      const saved = config.load().linnworks;
+      const c = creds || {};
+      const result = await testConnection({
+        applicationId: c.applicationId || saved.applicationId,
+        applicationSecret: c.applicationSecret || saved.applicationSecret,
+        token: c.token || saved.token,
+      });
       return { ok: true, ...result };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -6348,7 +6386,10 @@ exit 1
   // and account number belong together
   ipcMain.handle('ship:test', async (_e, { account, test } = {}) => {
     try {
-      const a = { clientId: String((account && account.clientId) || '').trim(), clientSecret: String((account && account.clientSecret) || '').trim(), accountNumber: String((account && account.accountNumber) || '').trim() };
+      // a key left blank in Settings means the saved one
+      const saved = ((config.load().ups || {}).accounts || []).find(x => x.id === (account && account.id)) || {};
+      const pick = (f) => String((account && account[f]) || '').trim() || String(saved[f] || '');
+      const a = { clientId: pick('clientId'), clientSecret: pick('clientSecret'), accountNumber: pick('accountNumber') };
       await new ups.UpsClient(a, { test: !!test }).token();
       return { ok: true };
     } catch (e) {

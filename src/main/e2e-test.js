@@ -1900,6 +1900,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
         const info = await exec('api.shipInfo()');
         check('ship: both accounts ready, addresses complete',
           info.ok && info.accounts.length === 2 && info.accounts.every(a => a.ready) && !info.shipFromProblem && !info.returnToProblem, info);
+        // saved keys never come back to the window, and a save without them keeps them
+        let pub = await exec('api.getConfig()');
+        check('keys: config read carries no UPS keys, only saved flags',
+          pub.ups.accounts.every(a => a.clientId === '' && a.clientSecret === '' && a.hasClientId && a.hasClientSecret), pub.ups.accounts);
+        await exec(`api.setConfig({ ups: { accounts: [{ id: 'a', name: 'Digital World Shop', accountNumber: 'aaa111', clientId: '', clientSecret: '' }, { id: 'b', name: 'Company Two', accountNumber: 'bbb222' }] }, linnworks: { applicationSecret: 'LW-SECRET', token: 'LW-TOKEN' } })`);
+        const kept = (await exec('api.shipInfo()')).accounts.every(a => a.ready);
+        const back = await exec(`api.setConfig({ linnworks: { applicationSecret: '', token: '' } })`);
+        pub = await exec('api.getConfig()');
+        check('keys: a save without keys keeps them; Linnworks keys stay hidden too',
+          kept && pub.linnworks.applicationSecret === '' && pub.linnworks.token === '' && pub.linnworks.hasApplicationSecret && pub.linnworks.hasToken
+            && back.linnworks.token === '' && !JSON.stringify(pub).includes('LW-SECRET') && !JSON.stringify(pub).includes('S-A'), pub.linnworks);
+        const shown = await exec(`(async () => { await openSettings(); const r = { inputHidden: $('setUpsSecret0').hidden, saved: !$('setUpsSecret0').nextElementSibling.hidden && /Saved/.test($('setUpsSecret0').nextElementSibling.textContent), value: $('setUpsSecret0').value, lw: $('setToken').hidden }; $('settingsDialog').close(); return r; })()`);
+        check('keys: Settings shows "Saved" instead of the key', shown.inputHidden && shown.saved && shown.value === '' && shown.lw, shown);
         const cust = { name: 'Maria Delgado', line1: '4120 W Belmont Ave', line2: 'Apt 2', city: 'Chicago', state: 'IL', zip: '60641' };
         let r = await exec(`api.shipRates(${JSON.stringify({ kind: 'ship', party: { ...cust, zip: '606' }, pkg: { weight: 1 } })})`);
         check('ship: a bad ZIP is caught before UPS is asked', !r.ok && /zip/i.test(r.error), r);
