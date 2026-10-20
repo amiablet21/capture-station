@@ -128,6 +128,7 @@ if (!window.api) {
     webNewKey: async () => ({ ok: false, error: 'Preview mode' }),
     webOpen: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipPrep: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipSavePkg: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
     orderShipCreate: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
@@ -1557,6 +1558,7 @@ function applyPageChrome() {
 }
 
 function showPage(page) {
+  if (page !== 'capture' && typeof os !== 'undefined' && os && !os.creating) osClose(); // the Ship drawer belongs to Orders
   const switching = activePage !== page;
   activePage = page;
   if (page !== 'capture') $('findBar').hidden = true;
@@ -15201,7 +15203,6 @@ $('setUpsSame').addEventListener('click', () => {
 // var, not let: the row renderer reads these, and may run before this part
 // of the file has
 var os = null; // { rowId, po, channel, party, value, walmart, rates, loading, err, via, pick, creating, seq, timer }
-var osPanel = null; // the panel's <tr>, kept across tbody rebuilds
 
 function osCanShip(row) {
   return !!(state && !state.captureOnly && state.pages && state.pages.ship && !row.tracking && row.status !== 'synced');
@@ -15209,23 +15210,44 @@ function osCanShip(row) {
 
 async function osToggle(row) {
   if (os && os.rowId === row.id) { osClose(); return; }
-  if (osPanel) { osPanel.remove(); osPanel = null; }
-  os = { rowId: row.id, po: row.order_number, channel: row.channel, loading: true, rates: null, err: '', via: '', pick: '', seq: 0 };
-  // the box presets come from Settings › UPS labels
+  os = { rowId: row.id, po: row.order_number, channel: row.channel, loading: true, rates: null, err: '', via: '', pick: '', seq: 0, key: '', saved: null };
+  // the box presets come from Settings › Shipping
   if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
   if (!os || os.rowId !== row.id) return;
-  osBuildPanel();
+  osFillDrawer(row);
+  osOpenDrawer();
   render();
   osPrep();
 }
 
+function osOpenDrawer() {
+  const d = $('osDrawer');
+  clearTimeout(osDrawerTimer);
+  d.classList.remove('is-closing');
+  $('osScrim').hidden = false;
+  d.setAttribute('aria-hidden', 'false');
+  void d.offsetWidth; // start the slide from off-screen
+  d.classList.add('is-open');
+}
+var osDrawerTimer = null;
+function osHideDrawer() {
+  const d = $('osDrawer');
+  if (!d.classList.contains('is-open')) return;
+  $('osScrim').hidden = true;
+  d.setAttribute('aria-hidden', 'true');
+  d.classList.add('is-closing'); // stays visible while it slides out
+  d.classList.remove('is-open');
+  clearTimeout(osDrawerTimer);
+  osDrawerTimer = setTimeout(() => d.classList.remove('is-closing'), 280);
+}
+
 function osClose() {
   os = null;
-  if (osPanel) { osPanel.remove(); osPanel = null; }
+  osHideDrawer();
   if (state) render();
 }
 
-// Esc cancels an open ship panel (owner 2026-10-20). On window, so it runs
+// Esc cancels the open drawer (owner 2026-10-20). On window, so it runs
 // before the row's own Esc (next order); an open customer card or dialog
 // takes Esc first, and a label being bought is never abandoned.
 window.addEventListener('keydown', (e) => {
@@ -15236,75 +15258,117 @@ window.addEventListener('keydown', (e) => {
   focusScan();
 }, true);
 
+// after a re-render: mark the line, and let the drawer go when the line has
+// its tracking now (or is gone)
 function osReattach() {
   if (!os) return;
   const tr = document.querySelector(`#rowsBody tr[data-id="${os.rowId}"]`);
   const row = state && state.rows.find(r => r.id === os.rowId);
-  if (!tr || !row || !osCanShip(row)) { if (!row || row.tracking) { os = null; if (osPanel) { osPanel.remove(); osPanel = null; } } return; }
-  if (!osPanel) osBuildPanel();
-  tr.classList.add('os-open');
-  tr.after(osPanel);
+  if (!row || row.tracking) { if (!os.creating) { os = null; osHideDrawer(); } return; }
+  if (tr) tr.classList.add('os-open');
 }
 
-function osBuildPanel() {
-  osPanel = document.createElement('tr');
-  osPanel.className = 'os-row';
+// the drawer's fixed parts, filled from what the Orders list already knows;
+// the Linnworks lookup (osPrep) then fills the address and the saved package
+function osFillDrawer(row) {
+  const meta = metaFor(row) || {};
+  $('osdCh').textContent = channelLabel(row.channel);
+  $('osdCh').className = `osd-mk is-${String(row.channel || '').toLowerCase()}`;
+  $('osdPo').textContent = row.order_number;
+  $('osdRef').textContent = row.order_number;
+  const due = rowDue(row);
+  $('osdDue').hidden = !due;
+  if (due) { $('osdDue').textContent = due.label; $('osdDue').classList.toggle('is-over', !!due.overdue); }
+  $('osdAgo').textContent = row.created_at ? `Captured ${fmtTime(row.created_at)}` : '';
+  osRenderCustomer(meta.customer ? { name: meta.customer.name, company: meta.customer.company, lines: meta.customer.address || [], phone: meta.customer.phone } : null);
+  osRenderItems((meta.items || []).map(i => ({ sku: i.sku || i.channelSku || '', title: i.title || '', qty: i.qty || 1, total: Number(i.lineTotal) || 0, img: i.img || '' })));
   const boxes = ((sp.info && sp.info.boxes) || []);
-  osPanel.innerHTML = `<td colspan="5"><div class="os-panel">
-    <div class="os-left">
-      <div class="os-h">Ship to</div>
-      <div class="os-addr" id="osAddr"><span class="sp-dim">Loading…</span></div>
-      <label class="os-f"><span>Box</span><select id="osBox" class="input">${boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('')}<option value="custom">Custom size</option></select></label>
-      <div class="os-two">
-        <label class="os-f"><span>Weight (lb)</span><input id="osWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
-        <label class="os-f"><span>Declared value</span><input id="osVal" class="input mono" inputmode="decimal" autocomplete="off" /></label>
-      </div>
-      <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
-      <div class="os-f"><span>Reference #1</span><div class="sp-lock mono">${esc(os.po)}</div></div>
-    </div>
-    <div class="os-right">
-      <div class="os-h">Rates <span class="os-chips" id="osChips"></span></div>
-      <div class="os-rates" id="osRates"></div>
-      <div class="os-foot"><span class="os-err" id="osErr"></span><button class="btn btn-primary" id="osCreate" type="button" disabled>Create label</button></div>
-    </div>
-  </div></td>`;
-  const q = (id) => osPanel.querySelector(`#${id}`);
+  const sel = $('osBox');
+  sel.innerHTML = boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('') + '<option value="custom">Custom size</option>';
   let lastBox = '';
   try { lastBox = localStorage.getItem('spBox') || ''; } catch { /* default */ }
-  const sel = q('osBox');
   sel.value = [...sel.options].some(o => o.value === lastBox) ? lastBox : (boxes.length ? '0' : 'custom');
-  const applyBox = () => { const b = boxes[Number(sel.value)]; if (b) { q('osDl').value = b.length; q('osDw').value = b.width; q('osDh').value = b.height; } };
-  applyBox();
-  sel.addEventListener('change', () => { applyBox(); try { localStorage.setItem('spBox', sel.value); } catch { /* best effort */ } osSchedule(); });
-  for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
-    q(id).addEventListener('input', () => { if (['osDl', 'osDw', 'osDh'].includes(id)) sel.value = 'custom'; osSchedule(700); });
-  }
-  q('osChips').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-via]');
-    if (!b) return;
-    os.via = b.dataset.via; os.pick = '';
-    osRenderRates();
-  });
-  q('osRates').addEventListener('click', (e) => {
-    const r = e.target.closest('[data-k]');
-    if (!r) return;
-    os.pick = r.dataset.k;
-    osRenderRates();
-  });
-  q('osCreate').addEventListener('click', osCreate);
+  osApplyBox();
+  $('osWt').value = '';
+  $('osVal').value = '';
+  $('osPkTag').innerHTML = '';
+  $('osdSum').innerHTML = '';
+  osRenderRates();
+}
+
+function osRenderCustomer(c) {
+  if (!c || !(c.name || (c.lines || []).length)) { $('osAddr').innerHTML = '<span class="osd-dim">Loading…</span>'; return; }
+  const ini = String(c.name || c.company || '?').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const copy = (v) => `<button type="button" class="btn-icon" data-copy="${esc(v)}" title="Copy">${ICONS.copy}</button>`;
+  const lines = (c.lines || []).filter(Boolean);
+  $('osAddr').innerHTML = `<div class="osd-who"><div class="osd-av">${esc(ini)}</div><div><b>${esc(c.name || c.company)}</b>${c.name && c.company ? `<span>${esc(c.company)}</span>` : ''}</div></div>`
+    + (lines.length ? `<div class="osd-ln">${OSD_PIN}<div class="v">${lines.map(esc).join('<br>')}</div>${copy(lines.join('\n'))}</div>` : '')
+    + (c.phone ? `<div class="osd-ln">${OSD_PHONE}<div class="v mono">${esc(c.phone)}</div>${copy(c.phone)}</div>` : '');
+}
+
+function osRenderItems(items) {
+  const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
+  $('osdItemsT').textContent = items.length > 1 || n > 1 ? `Items · ${n}` : 'Item';
+  $('osdItems').innerHTML = items.length ? items.map(it => `<div class="osd-it">
+      <div class="osd-ph">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" />` : ICONS.box}</div>
+      <div style="min-width:0"><div class="osd-it-t">${esc(it.title || it.sku)}</div>${it.title && it.sku ? `<div class="osd-it-s">${esc(it.sku)}</div>` : ''}</div>
+      <div class="osd-it-r">${it.qty > 1 ? `<div class="q">×${it.qty}</div>` : ''}${it.total > 0 ? `<div class="p">${spMoney(it.total)}</div>` : ''}</div>
+    </div>`).join('') : '<span class="osd-dim">Loading…</span>';
+}
+
+const OSD_PIN = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>';
+const OSD_PHONE = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46ZM176,208A128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.56L168.89,152l47,21.05h0s.08,0,.11,0A40.21,40.21,0,0,1,176,208Z"/></svg>';
+
+function osApplyBox() {
+  const b = ((sp.info && sp.info.boxes) || [])[Number($('osBox').value)];
+  if (b && $('osBox').value !== 'custom') { $('osDl').value = b.length; $('osDw').value = b.width; $('osDh').value = b.height; }
+}
+
+// the package as it stands, in the shape it is saved in
+function osPkgNow() {
+  const v = (id) => Math.round((parseFloat($(id).value) || 0) * 100) / 100;
+  const sel = $('osBox');
+  const b = ((sp.info && sp.info.boxes) || [])[Number(sel.value)];
+  return { box: sel.value === 'custom' || !b ? 'custom' : b.name, weight: v('osWt'), length: v('osDl'), width: v('osDw'), height: v('osDh') };
+}
+function osFillPkg(p) {
+  const sel = $('osBox');
+  const i = ((sp.info && sp.info.boxes) || []).findIndex(b => b.name === p.box);
+  sel.value = i >= 0 ? String(i) : 'custom';
+  $('osWt').value = p.weight || '';
+  $('osDl').value = p.length || ''; $('osDw').value = p.width || ''; $('osDh').value = p.height || '';
+}
+// Package header: "✓ Saved" when it matches what was saved for these items,
+// otherwise a Save button (owner 2026-10-20: dimensions saved per item)
+function osPkgTag() {
+  if (!os || !os.key) { $('osPkTag').innerHTML = ''; return; }
+  const now = osPkgNow();
+  const many = os.key.includes(' + ') || os.key.includes('×');
+  const what = many ? 'these items' : 'this item';
+  const same = os.saved && ['box', 'weight', 'length', 'width', 'height'].every(k => String(now[k]) === String(os.saved[k]));
+  $('osPkTag').innerHTML = same
+    ? `<span class="osd-ok">✓ Saved for ${what}</span>`
+    : `<button type="button" class="osd-save" id="osPkSave" ${now.weight > 0 ? '' : 'disabled'}>${os.saved ? 'Update saved' : `Save for ${what}`}</button>`;
 }
 
 async function osPrep() {
   const rowId = os.rowId;
   const res = await api.orderShipPrep(rowId);
   if (!os || os.rowId !== rowId) return;
-  if (!res.ok) { os.loading = false; os.err = res.error; osRenderRates(); osPanel.querySelector('#osAddr').innerHTML = `<span class="os-err">${esc(res.error)}</span>`; return; }
-  Object.assign(os, { party: res.party, value: res.value, walmart: res.walmart });
+  if (!res.ok) { os.loading = false; os.err = res.error; osRenderRates(); $('osAddr').innerHTML = `<span class="os-err">${esc(res.error)}</span>`; return; }
+  Object.assign(os, { party: res.party, value: res.value, walmart: res.walmart, key: res.key || '', saved: res.saved || null });
   const p = res.party;
-  osPanel.querySelector('#osAddr').innerHTML = `<b>${esc(p.company || p.name)}</b><br>${p.company && p.name ? `${esc(p.name)}<br>` : ''}${esc([p.line1, p.line2].filter(Boolean).join(', '))}<br>${esc(`${p.city}, ${p.state} ${p.zip}`)}`;
-  osPanel.querySelector('#osVal').value = Number(res.value || 0).toFixed(2);
-  osPanel.querySelector('#osWt').focus();
-  osRenderRates();
+  osRenderCustomer({ name: p.name, company: p.company, lines: [[p.line1, p.line2].filter(Boolean).join(', '), `${p.city}, ${p.state} ${p.zip}`], phone: p.phone });
+  // the Orders list had no items for this line (a typed-in order): Linnworks' list
+  if (!$('osdItems').querySelector('.osd-it') && (res.items || []).length) {
+    osRenderItems(res.items.map(it => ({ sku: it.sku, title: it.title, qty: it.quantity || 1, total: Number(it.lineTotal) || 0, img: it.img || '' })));
+  }
+  $('osVal').value = Number(res.value || 0).toFixed(2);
+  if (os.saved && !$('osWt').value.trim()) osFillPkg(os.saved); // saved for these items: ready to rate
+  osPkgTag();
+  if (!(parseFloat($('osWt').value) > 0)) $('osWt').focus();
+  os.loading = false;
+  if (parseFloat($('osWt').value) > 0) osFetch(); else osRenderRates();
 }
 
 function osSchedule(delay = 400) {
@@ -15314,8 +15378,8 @@ function osSchedule(delay = 400) {
 }
 
 function osPkg() {
-  const v = (id) => parseFloat(osPanel.querySelector(`#${id}`).value) || 0;
-  return { weight: v('osWt'), length: v('osDl'), width: v('osDw'), height: v('osDh') };
+  const p = osPkgNow();
+  return { weight: p.weight, length: p.length, width: p.width, height: p.height };
 }
 
 async function osFetch() {
@@ -15325,7 +15389,7 @@ async function osFetch() {
   const seq = ++os.seq;
   os.loading = true; os.err = '';
   osRenderRates();
-  const res = await api.orderShipRates({ rowId: os.rowId, party: os.party, pkg, value: parseFloat(osPanel.querySelector('#osVal').value) || 0 });
+  const res = await api.orderShipRates({ rowId: os.rowId, party: os.party, pkg, value: parseFloat($('osVal').value) || 0 });
   if (!os || seq !== os.seq) return;
   os.loading = false;
   if (!res.ok) { os.rates = null; os.err = res.error; } else { os.rates = res.sources; }
@@ -15341,24 +15405,24 @@ function osAllRates() {
 }
 
 function osRenderRates() {
-  if (!os || !osPanel) return;
-  const box = osPanel.querySelector('#osRates');
-  const chips = osPanel.querySelector('#osChips');
+  if (!os) return;
+  const box = $('osRates');
+  const chips = $('osChips');
   const srcs = (os.rates || []).length ? os.rates : [];
   chips.innerHTML = srcs.length > 1 ? [['', 'All'], ...srcs.map(s => [s.id, s.name])]
     .map(([k, t]) => `<button type="button" data-via="${esc(k)}" class="${os.via === k ? 'is-on' : ''}">${esc(t)}</button>`).join('') : '';
-  const btn = osPanel.querySelector('#osCreate');
-  const errEl = osPanel.querySelector('#osErr');
+  const btn = $('osCreate');
+  const errEl = $('osErr');
   const fails = srcs.filter(s => !s.ok && !s.notSet).map(s => `${s.name}: ${s.error}`);
   errEl.textContent = os.err || fails.join(' · ');
   if (os.loading) {
     box.innerHTML = '<div class="os-empty">Getting rates…<div class="sp-loadbar"><i></i></div></div>';
-    btn.disabled = true; btn.textContent = 'Create label';
+    btn.disabled = true; btn.textContent = 'Create label'; $('osdSum').innerHTML = '';
     return;
   }
   if (!os.party || !(osPkg().weight > 0) || !os.rates) {
     box.innerHTML = `<div class="os-empty">${os.party ? 'Enter the weight' : ''}</div>`;
-    btn.disabled = true; btn.textContent = 'Create label';
+    btn.disabled = true; btn.textContent = 'Create label'; $('osdSum').innerHTML = '';
     return;
   }
   const list = osAllRates().filter(r => !os.via || r.via === os.via);
@@ -15370,7 +15434,8 @@ function osRenderRates() {
     : '<div class="os-empty">No rates</div>';
   const sel = list.find(r => r.key === os.pick);
   btn.disabled = !sel || os.creating;
-  btn.textContent = os.creating ? 'Creating label…' : `Create label${sel ? ` · ${spMoney(sel.price)}` : ''}`;
+  btn.textContent = os.creating ? 'Creating label…' : 'Create label';
+  $('osdSum').innerHTML = sel ? `<b>${esc(sel.name)}</b> · ${esc(sel.viaName)}<span class="mono">${spMoney(sel.price)}</span>` : '';
 }
 
 async function osCreate() {
@@ -15382,7 +15447,7 @@ async function osCreate() {
   osRenderRates();
   const res = await api.orderShipCreate({
     rowId, via: sel.via, code: sel.code, name: sel.name, carrier: sel.carrier || '', price: sel.price,
-    party: os.party, pkg: osPkg(), value: parseFloat(osPanel.querySelector('#osVal').value) || 0,
+    party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0,
   });
   const mine = os && os.rowId === rowId;
   if (!res.ok) {
@@ -15394,6 +15459,48 @@ async function osCreate() {
   if (mine) osClose();
   osShowLabel(res);
 }
+
+$('osBox').addEventListener('change', () => {
+  osApplyBox();
+  try { localStorage.setItem('spBox', $('osBox').value); } catch { /* best effort */ }
+  osPkgTag(); osSchedule();
+});
+for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
+  $(id).addEventListener('input', () => {
+    if (['osDl', 'osDw', 'osDh'].includes(id)) $('osBox').value = 'custom';
+    osPkgTag(); osSchedule(700);
+  });
+}
+$('osChips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-via]');
+  if (!b || !os) return;
+  os.via = b.dataset.via; os.pick = '';
+  osRenderRates();
+});
+$('osRates').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-k]');
+  if (!r || !os) return;
+  os.pick = r.dataset.k;
+  osRenderRates();
+});
+$('osPkTag').addEventListener('click', async (e) => {
+  if (!e.target.closest('#osPkSave') || !os || !os.key) return;
+  const key = os.key;
+  const res = await api.orderShipSavePkg(key, osPkgNow());
+  if (!res.ok) { toast(res.error, 4000); return; }
+  if (os && os.key === key) { os.saved = res.saved; osPkgTag(); }
+});
+$('osAddr').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  await api.copyText(b.dataset.copy);
+  toast('Copied');
+});
+$('osdCopy').innerHTML = ICONS.copy;
+$('osdCopy').addEventListener('click', async () => { await api.copyText($('osdPo').textContent); toast('Copied'); });
+$('osdClose').addEventListener('click', () => { if (os && !os.creating) { osClose(); focusScan(); } });
+$('osScrim').addEventListener('click', () => { if (os && !os.creating) { osClose(); focusScan(); } });
+$('osCreate').addEventListener('click', osCreate);
 
 // the print popup: the label, Print ready under Enter
 function osShowLabel(res) {

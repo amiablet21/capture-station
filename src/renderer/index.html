@@ -262,6 +262,50 @@
     <p class="shelf-sum" id="shSum"></p>
   </section>
 
+  <!-- Ship from an Orders line (owner 2026-10-20, variants/ship-drawer.html):
+       a drawer from the right with the customer, the items, the package
+       (saved per item) and every rate; the slide is its only motion -->
+  <div class="osd-scrim" id="osScrim" hidden></div>
+  <aside class="osd" id="osDrawer" aria-hidden="true">
+    <div class="osd-h">
+      <span class="osd-mk" id="osdCh"></span>
+      <span class="osd-po mono" id="osdPo"></span>
+      <button class="btn-icon osd-ic" id="osdCopy" type="button" title="Copy the order number"></button>
+      <span class="osd-due" id="osdDue" hidden></span>
+      <span class="osd-ago" id="osdAgo"></span>
+      <button class="btn-icon osd-ic osd-x" id="osdClose" type="button" title="Close (Esc)">✕</button>
+    </div>
+    <div class="osd-b">
+      <div class="osd-col">
+        <section class="osd-bx"><div class="osd-t">Customer</div><div id="osAddr"></div></section>
+        <section class="osd-bx"><div class="osd-t" id="osdItemsT">Item</div><div id="osdItems"></div></section>
+      </div>
+      <div class="osd-col">
+        <section class="osd-bx">
+          <div class="osd-t">Package <span class="r" id="osPkTag"></span></div>
+          <div class="osd-pk">
+            <label class="os-f"><span>Box</span><select id="osBox" class="input"></select></label>
+            <label class="os-f"><span>Weight (lb)</span><input id="osWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
+            <label class="os-f"><span>Value</span><input id="osVal" class="input mono" inputmode="decimal" autocomplete="off" /></label>
+          </div>
+          <div class="osd-pk2">
+            <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
+            <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
+          </div>
+        </section>
+        <section class="osd-bx">
+          <div class="osd-t">Rates <span class="os-chips" id="osChips"></span></div>
+          <div class="osd-rates" id="osRates"></div>
+        </section>
+      </div>
+    </div>
+    <div class="osd-f">
+      <span class="osd-sum" id="osdSum"></span>
+      <span class="os-err" id="osErr"></span>
+      <button class="btn btn-primary" id="osCreate" type="button" disabled>Create label</button>
+    </div>
+  </aside>
+
   <!-- the print popup after a label is made on an Orders line (owner 2026-10-20) -->
   <dialog id="osLabelDlg" class="dlg os-dlg">
     <div class="dlg-body">

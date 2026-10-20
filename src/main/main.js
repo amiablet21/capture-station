@@ -1497,6 +1497,53 @@ function listingPriceHistory({ sales: rawSales, log, days, curPrice, limit }) {
   };
 }
 
+/* ---- saved packages (owner 2026-10-20): the box, weight and size an item
+   ships in, remembered for the next time it ships. Keyed by the item, or by
+   the exact mix of items on a multi-item order ("A15-64GB-BLACK×2 +
+   CHG-25W-USBC"). Kept here and in the shared folder, so every desktop has
+   them; not in Linnworks, whose weight units belong to its own shipping
+   rules. Newest save for a key wins. */
+function shipPkgPath() { return path.join(app.getPath('userData'), 'ship-packages.json'); }
+function loadShipPkgs() {
+  try { const j = JSON.parse(fs.readFileSync(shipPkgPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+function shipPkgKey(items) {
+  const parts = (items || []).filter(it => it && it.sku)
+    .map(it => `${String(it.sku).trim().toUpperCase()}${(Number(it.quantity ?? it.qty) || 1) > 1 ? `×${Number(it.quantity ?? it.qty)}` : ''}`);
+  return parts.sort().join(' + ');
+}
+function shipPkgKeyClean(key) { return String(key || '').trim().toUpperCase().slice(0, 400); }
+function shipPkgClean(pkg) {
+  const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const p = { box: String((pkg && pkg.box) || '').slice(0, 60), weight: n(pkg && pkg.weight), length: n(pkg && pkg.length), width: n(pkg && pkg.width), height: n(pkg && pkg.height) };
+  return p.weight > 0 ? p : null;
+}
+function shipPkgLog(key, pkg) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    key, pkg,
+  };
+  try { fs.writeFileSync(shipPkgPath(), JSON.stringify([entry, ...loadShipPkgs()].slice(0, 5000))); } catch { /* best effort */ }
+  try { retsync.appendAux('shippkgs', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+function shipPkgState() {
+  const seen = new Set();
+  const out = {};
+  const stamp = {};
+  let aux = [];
+  try { aux = retsync.readAux('shippkgs'); } catch { aux = []; }
+  for (const e of [...aux, ...loadShipPkgs()]) {
+    if (!e || !e.id || !e.key || !e.pkg || seen.has(e.id)) continue;
+    seen.add(e.id);
+    if (!stamp[e.key] || String(e.ts) > stamp[e.key]) { stamp[e.key] = String(e.ts); out[e.key] = e.pkg; }
+  }
+  return out;
+}
+
 /* ---- variation groups (owner 2026-09-18): condition SKUs (OPEN-BOX-…,
    USED-…) grouped under their New product on the Pricing tab. Grouping is
    MANUAL — the naming convention only suggests. An op log (add / remove /
@@ -6438,6 +6485,16 @@ exit 1
     return { row };
   }
 
+  ipcMain.handle('orderShip:savePkg', (_e, { key, pkg } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const k = shipPkgKeyClean(key);
+    const p = shipPkgClean(pkg);
+    if (!k) return { ok: false, error: 'No items to save the package for.' };
+    if (!p) return { ok: false, error: 'Enter the weight first.' };
+    shipPkgLog(k, p);
+    return { ok: true, key: k, saved: p };
+  });
+
   ipcMain.handle('orderShip:prep', async (_e, { rowId } = {}) => {
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
     const { row, error } = orderRowFor(rowId);
@@ -6448,9 +6505,13 @@ exit 1
         [cfg.linnworks.locationId, (cfg.stockRouting || {}).fallbackLocationId]);
       if (!order) return { ok: false, error: `No Linnworks order found for ${row.order_number}.` };
       order.party.state = ups.stateCode(order.party.state);
+      const key = shipPkgKey(order.items);
+      const imgs = skuImageCache.map || {}; // only when already loaded: never hold the drawer up for it
       return {
-        ok: true, po: row.order_number, channel: row.channel, party: order.party, value: order.total, items: order.items,
+        ok: true, po: row.order_number, channel: row.channel, party: order.party, value: order.total,
+        items: order.items.map(it => ({ ...it, img: imgs[it.sku] || '' })),
         walmart: row.channel === 'walmart' && wmReady(),
+        key, saved: key ? shipPkgState()[key] || null : null,
       };
     } catch (e) {
       return { ok: false, error: e.message };

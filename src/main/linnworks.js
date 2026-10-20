@@ -75,6 +75,8 @@ function labelOrder(o, status, ref) {
     sku: it.SKU || it.ItemNumber || '',
     title: it.Title || '',
     quantity: it.Quantity || 1,
+    // what the line sold for (the Ship drawer shows it beside the item)
+    lineTotal: Math.round((Number(it.CostIncTax) > 0 ? Number(it.CostIncTax) : (Number(it.PricePerUnit) || 0) * (it.Quantity || 1)) * 100) / 100,
   }));
   return {
     reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,

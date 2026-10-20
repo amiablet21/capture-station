@@ -182,6 +182,7 @@ contextBridge.exposeInMainWorld('api', {
   webOpen: () => ipcRenderer.invoke('web:open'),
   // Ship from the Orders line (owner 2026-10-20): UPS + Ship with Walmart
   orderShipPrep: (rowId) => ipcRenderer.invoke('orderShip:prep', { rowId }),
+  orderShipSavePkg: (key, pkg) => ipcRenderer.invoke('orderShip:savePkg', { key, pkg }),
   orderShipRates: (payload) => ipcRenderer.invoke('orderShip:rates', payload),
   orderShipCreate: (payload) => ipcRenderer.invoke('orderShip:create', payload),
   lowIgnore: (sku, pace) => ipcRenderer.invoke('overview:lowIgnore', { sku, pace }),

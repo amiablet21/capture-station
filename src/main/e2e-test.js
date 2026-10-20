@@ -2016,17 +2016,30 @@ module.exports = async function run({ app, win, db, clipboard }) {
           const ui = await exec(`(async () => {
             const tr = document.querySelector('#rowsBody tr[data-id="${wRow.id}"]'); const b = tr && tr.querySelector('.os-btn');
             if (!b) return { btn: false };
-            b.click(); await new Promise(r => setTimeout(r, 600));
-            const panel = document.querySelector('#rowsBody tr.os-row');
-            const out = { btn: true, panel: !!panel, after: !!panel && panel.previousElementSibling.dataset.id === '${wRow.id}', ref: panel && panel.textContent.includes('108829451230774') };
-            render(); out.survives = !!document.querySelector('#rowsBody tr.os-row');
-            const wt = document.getElementById('osWt'); wt.focus();
+            b.click(); await new Promise(r => setTimeout(r, 900));
+            const d = document.getElementById('osDrawer');
+            const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
+              ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent),
+              saveBtn: !!$('osPkSave') && $('osPkSave').disabled };
+            render(); out.survives = d.classList.contains('is-open') && !!document.querySelector('#rowsBody tr.os-open');
+            const wt = $('osWt'); wt.value = '1.3'; wt.dispatchEvent(new Event('input'));
+            out.saveOn = !!$('osPkSave') && !$('osPkSave').disabled && /Save for this item/.test($('osPkSave').textContent);
+            $('osPkSave').click(); await new Promise(r => setTimeout(r, 300));
+            out.savedTag = /Saved for this item/.test($('osPkTag').textContent);
+            wt.focus();
             wt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-            out.escClosed = !document.querySelector('#rowsBody tr.os-row') && os === null;
-            if (!out.escClosed) osClose(); return out; })()`);
-          check('order ship: Ship on a line opens the panel under it, and it survives a re-render',
-            ui.btn && ui.panel && ui.after && ui.ref && ui.survives, ui);
-          check('order ship: Esc cancels the open panel', ui.escClosed === true, ui);
+            out.escClosed = !d.classList.contains('is-open') && os === null && !document.querySelector('#rowsBody tr.os-open');
+            if (!out.escClosed) osClose();
+            await new Promise(r => setTimeout(r, 400));
+            document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn').click(); await new Promise(r => setTimeout(r, 900));
+            out.refilled = $('osWt').value === '1.3' && /Saved for this item/.test($('osPkTag').textContent);
+            osClose(); return out; })()`);
+          check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
+            ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
+          check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
+          check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
+          r = await exec(`api.orderShipPrep(${wRow.id})`);
+          check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {
             win.setSize(1360, 900);
             await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));
