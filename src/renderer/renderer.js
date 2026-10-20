@@ -1269,8 +1269,6 @@ async function openSettings() {
   $('setRcEmail').value = rcv2.email || '';
   $('setRcWebhook').value = rcv2.webhookUrl || '';
   $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
-  $('setRcCode').value = '';
-  $('setRcCodeClear').checked = false;
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
@@ -1393,7 +1391,6 @@ $('settingsSave').addEventListener('click', async () => {
     txnUrlTemplates: { walmart: $('setRcTxnUrl').value.trim() },
     recovery: {
       email: $('setRcEmail').value.trim(), webhookUrl: $('setRcWebhook').value.trim(),
-      ...($('setRcCodeClear').checked ? { codeHash: '' } : $('setRcCode').value.trim() ? { codeHash: await sha256Hex($('setRcCode').value.trim()) } : {}),
     },
     linnworks: {
       applicationId: $('setAppId').value.trim(),
@@ -1588,14 +1585,13 @@ function showPage(page) {
 $('tabCapture').addEventListener('click', () => showPage('capture'));
 $('tabStock').addEventListener('click', () => showPage('stock'));
 $('tabPricing').addEventListener('click', () => showPage('pricing'));
-// the Recovery tab asks for its access code once per session (owner
-// 2026-10-12: "a universal code: 9419" — the hash lives in Settings)
-let rcUnlocked = false;
+// the Recovery tab asks for the Settings PIN once per session (owner
+// 2026-10-20: one PIN for both, kept only in this computer's settings);
+// unlocking either one unlocks the other
 $('tabRecovery').addEventListener('click', async () => {
-  if (rcUnlocked) { showPage('recovery'); return; }
+  if (settingsUnlocked) { showPage('recovery'); return; }
   const cfg = await api.getConfig();
-  const hash = (cfg.recovery || {}).codeHash || '';
-  if (!hash) { rcUnlocked = true; showPage('recovery'); return; }
+  if (!cfg.settingsPinHash) { showPage('recovery'); return; }
   $('rcCodeInput').value = '';
   $('rcCodeError').hidden = true;
   $('rcCodeDlg').showModal();
@@ -1606,13 +1602,13 @@ $('rcCodeForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const cfg = await api.getConfig();
   const hash = await sha256Hex($('rcCodeInput').value.trim());
-  if (hash !== ((cfg.recovery || {}).codeHash || '')) {
+  if (hash !== (cfg.settingsPinHash || '')) {
     $('rcCodeError').hidden = false;
     $('rcCodeInput').value = '';
     $('rcCodeInput').focus();
     return;
   }
-  rcUnlocked = true;
+  settingsUnlocked = true;
   $('rcCodeDlg').close();
   showPage('recovery');
 });

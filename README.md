@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.91 highlights
+
+- **Recovery opens with the Settings PIN.** No separate code; entering the PIN once unlocks Settings and Recovery for the session. With no PIN set, Recovery opens directly.
+- Ship tab: the summary above **Create label** is gone.
+
 ## v1.32.90 highlights
 
 - Ship tab: the Type buttons read plainly (**Ship to customer** / **Return to us**), with no arrows and no note beside them.
@@ -400,7 +405,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.32.5 highlights
 
-- **Recovery asks for an access code.** Clicking the tab asks for a code once per app session (9419 to start); change or remove it in Settings → Recovery.
+- **Recovery asks for an access code.** Clicking the tab asks for a code once per app session. (Since v1.32.91 that code is the Settings PIN.)
 - **Imported reports land in the shared folder.** With the shared folder on, each period's original CSV is kept in a Walmart Reports folder inside it, so it reaches Drive and every desktop; with sync off it stays under Documents on this computer. Settings shows which.
 
 ## v1.32.4 highlights

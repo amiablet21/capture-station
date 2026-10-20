@@ -653,15 +653,15 @@
       </div>
     </div>
   </dialog>
-  <!-- The access code before the Recovery tab opens (owner 2026-10-12) -->
+  <!-- The Settings PIN before the Recovery tab opens (owner 2026-10-20) -->
   <dialog id="rcCodeDlg" class="dlg rc-dlg">
     <form method="dialog" class="dlg-body" id="rcCodeForm">
       <h2 class="dlg-title">Recovery</h2>
       <label class="field">
-        <span class="field-label">Enter the access code</span>
+        <span class="field-label">Settings PIN</span>
         <input id="rcCodeInput" type="password" class="input mono" inputmode="numeric" autocomplete="off" />
       </label>
-      <p class="dlg-note" id="rcCodeError" hidden>Wrong code.</p>
+      <p class="dlg-note" id="rcCodeError" hidden>Wrong PIN.</p>
       <div class="dlg-actions">
         <!-- Cancel is a plain button: Enter in the field must submit through
              Open, and implicit submission takes the FIRST submit button -->
@@ -1244,11 +1244,6 @@
         <span class="field-label">Walmart transaction page a PO# opens ({po} is replaced · if it lands on the wrong page, search a PO under Seller Center → Payments and paste that address here with {po} in place of the number)</span>
         <input id="setRcTxnUrl" type="text" class="input mono" placeholder="https://seller.walmart.com/payments/…{po}" autocomplete="off" spellcheck="false" />
       </label>
-      <label class="field">
-        <span class="field-label">Access code asked for before the Recovery tab opens (leave blank to keep the current one)</span>
-        <input id="setRcCode" type="password" class="input mono" inputmode="numeric" autocomplete="off" placeholder="••••" />
-      </label>
-      <label class="check"><input id="setRcCodeClear" type="checkbox" /> Remove the access code</label>
       <div class="settings-row">
         <span class="field-label">Imported Walmart reports</span>
         <span id="setRcArchive" class="test-result mono">Documents\Capture Station\Walmart Reports</span>
