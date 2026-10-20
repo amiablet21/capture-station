@@ -123,6 +123,10 @@ if (!window.api) {
     shipAddressDelete: async () => ({ ok: true }),
     shipTest: async () => ({ ok: false, error: 'Preview mode' }),
     shipPrinters: async () => ({ ok: true, printers: [] }),
+    walmartTest: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipPrep: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipRates: async () => ({ ok: false, error: 'Preview mode' }),
+    orderShipCreate: async () => ({ ok: false, error: 'Preview mode' }),
     lowIgnore: async () => ({ ok: false, error: 'Preview mode' }),
     lowUnignore: async () => ({ ok: false, error: 'Preview mode' }),
     overviewData: async () => ({ ok: false, error: 'Preview mode' }),
@@ -247,7 +251,8 @@ function trackingCell(row) {
       return '<input id="rowScanInput" class="row-scan-input mono" type="text" placeholder="Scan tracking…" autocomplete="off" spellcheck="false" />'
         + '<button class="tracking-cancel" data-act="cancelwait" title="Stop waiting for this order\'s tracking (Esc)">✕</button>';
     }
-    return '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
+    const ship = osCanShip(row) ? `<button class="os-btn${os && os.rowId === row.id ? ' is-on' : ''}" data-act="ship" title="Make the label here">${os && os.rowId === row.id ? 'Close' : 'Ship'}</button>` : '';
+    return ship + '<button class="tracking-add" data-act="open" title="Click, then scan or copy this order\'s tracking">+ Add tracking</button>';
   }
   const label = row.carrier ? `${esc(row.carrier)} ${esc(row.tracking)}` : esc(row.tracking);
   return `<span class="copyable" data-copy="${esc(row.tracking)}" title="Click to copy ${esc(row.tracking)}">${label}</span>`;
@@ -575,6 +580,7 @@ function render() {
   knownRowIds.clear();
   state.rows.forEach(r => knownRowIds.add(r.id));
   firstRender = false;
+  osReattach(); // the open Ship panel survives the rebuild, inputs and all
   const inp = activeScanInput();
   if (inp && prevScan) {
     inp.value = prevScan.value;
@@ -1087,6 +1093,7 @@ $('rowsBody').addEventListener('click', async (e) => {
   const row = state.rows.find(r => r.id === id);
   if (!row) return;
 
+  if (btn.dataset.act === 'ship') { osToggle(row); return; }
   if (btn.dataset.act === 'substitute') {
     // an item-line button names the line it replaces; the SUB pill edits the
     // existing substitution and keeps its stored line
@@ -1289,6 +1296,9 @@ async function openSettings() {
   $('setRcTxnUrl').value = (cfg.txnUrlTemplates || {}).walmart || '';
   $('setRcArchive').textContent = (cfg.returnsSync || {}).folder ? `${cfg.returnsSync.folder}\\Walmart Reports` : 'Documents\\Capture Station\\Walmart Reports';
   $('setAppId').value = cfg.linnworks.applicationId;
+  setSecretField('setWmId', (cfg.walmart || {}).hasClientId);
+  setSecretField('setWmSecret', (cfg.walmart || {}).hasClientSecret);
+  $('setWmRes').textContent = ''; $('setWmRes').className = 'test-result';
   setSecretField('setAppSecret', cfg.linnworks.hasApplicationSecret);
   setSecretField('setToken', cfg.linnworks.hasToken);
   const sel = $('setLocation');
@@ -1403,6 +1413,7 @@ $('settingsSave').addEventListener('click', async () => {
       ship: $('setPageShip').checked,
     },
     ups: readUpsSettings(),
+    walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },
     receiving: { webhookUrl: $('setRecvWebhook').value.trim() },
     returnsSync: { station: $('setRetSyncStation').value.trim().toUpperCase() },
     lowStock: { webhookUrl: $('setLowWebhook').value.trim() },
@@ -15121,8 +15132,229 @@ document.querySelectorAll('.ups-test').forEach(b => b.addEventListener('click', 
   out.classList.add(res.ok ? 'is-ok' : 'is-fail');
 }));
 
+$('setWmTest').addEventListener('click', async () => {
+  const out = $('setWmRes');
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.walmartTest({ clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() });
+  out.textContent = res.ok ? 'Connected' : res.error;
+  out.classList.add(res.ok ? 'is-ok' : 'is-fail');
+});
+
 $('setUpsSame').addEventListener('click', () => {
   const from = document.querySelector('.ups-addr[data-addr="shipFrom"]');
   const to = document.querySelector('.ups-addr[data-addr="returnTo"]');
   from.querySelectorAll('[data-f]').forEach(inp => { to.querySelector(`[data-f="${inp.dataset.f}"]`).value = inp.value; });
 });
+
+
+/* ---------- Ship from the Orders line (owner 2026-10-20, design variants/orders-ship.html) ----------
+   A panel under the row: the order's ship-to, box, weight, value and PO#,
+   then one rate list — Ship with Walmart (Walmart orders) and both UPS
+   accounts — filtered by chips, cheapest starred and picked. Create label
+   puts the tracking on the row (Process stays a separate press) and opens
+   a print popup. */
+
+// var, not let: the row renderer reads these, and may run before this part
+// of the file has
+var os = null; // { rowId, po, channel, party, value, walmart, rates, loading, err, via, pick, creating, seq, timer }
+var osPanel = null; // the panel's <tr>, kept across tbody rebuilds
+
+function osCanShip(row) {
+  return !!(state && !state.captureOnly && state.pages && state.pages.ship && !row.tracking && row.status !== 'synced');
+}
+
+async function osToggle(row) {
+  if (os && os.rowId === row.id) { osClose(); return; }
+  if (osPanel) { osPanel.remove(); osPanel = null; }
+  os = { rowId: row.id, po: row.order_number, channel: row.channel, loading: true, rates: null, err: '', via: '', pick: '', seq: 0 };
+  // the box presets come from Settings › UPS labels
+  if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
+  if (!os || os.rowId !== row.id) return;
+  osBuildPanel();
+  render();
+  osPrep();
+}
+
+function osClose() {
+  os = null;
+  if (osPanel) { osPanel.remove(); osPanel = null; }
+  if (state) render();
+}
+
+function osReattach() {
+  if (!os) return;
+  const tr = document.querySelector(`#rowsBody tr[data-id="${os.rowId}"]`);
+  const row = state && state.rows.find(r => r.id === os.rowId);
+  if (!tr || !row || !osCanShip(row)) { if (!row || row.tracking) { os = null; if (osPanel) { osPanel.remove(); osPanel = null; } } return; }
+  if (!osPanel) osBuildPanel();
+  tr.classList.add('os-open');
+  tr.after(osPanel);
+}
+
+function osBuildPanel() {
+  osPanel = document.createElement('tr');
+  osPanel.className = 'os-row';
+  const boxes = ((sp.info && sp.info.boxes) || []);
+  osPanel.innerHTML = `<td colspan="5"><div class="os-panel">
+    <div class="os-left">
+      <div class="os-h">Ship to</div>
+      <div class="os-addr" id="osAddr"><span class="sp-dim">Loading…</span></div>
+      <label class="os-f"><span>Box</span><select id="osBox" class="input">${boxes.map((b, i) => `<option value="${i}">${esc(b.name)} · ${b.length} × ${b.width} × ${b.height}</option>`).join('')}<option value="custom">Custom size</option></select></label>
+      <div class="os-two">
+        <label class="os-f"><span>Weight (lb)</span><input id="osWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
+        <label class="os-f"><span>Declared value</span><input id="osVal" class="input mono" inputmode="decimal" autocomplete="off" /></label>
+      </div>
+      <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
+      <div class="os-f"><span>Reference #1</span><div class="sp-lock mono">${esc(os.po)}</div></div>
+    </div>
+    <div class="os-right">
+      <div class="os-h">Rates <span class="os-chips" id="osChips"></span></div>
+      <div class="os-rates" id="osRates"></div>
+      <div class="os-foot"><span class="os-err" id="osErr"></span><button class="btn btn-primary" id="osCreate" type="button" disabled>Create label</button></div>
+    </div>
+  </div></td>`;
+  const q = (id) => osPanel.querySelector(`#${id}`);
+  let lastBox = '';
+  try { lastBox = localStorage.getItem('spBox') || ''; } catch { /* default */ }
+  const sel = q('osBox');
+  sel.value = [...sel.options].some(o => o.value === lastBox) ? lastBox : (boxes.length ? '0' : 'custom');
+  const applyBox = () => { const b = boxes[Number(sel.value)]; if (b) { q('osDl').value = b.length; q('osDw').value = b.width; q('osDh').value = b.height; } };
+  applyBox();
+  sel.addEventListener('change', () => { applyBox(); try { localStorage.setItem('spBox', sel.value); } catch { /* best effort */ } osSchedule(); });
+  for (const id of ['osWt', 'osVal', 'osDl', 'osDw', 'osDh']) {
+    q(id).addEventListener('input', () => { if (['osDl', 'osDw', 'osDh'].includes(id)) sel.value = 'custom'; osSchedule(700); });
+  }
+  q('osChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-via]');
+    if (!b) return;
+    os.via = b.dataset.via; os.pick = '';
+    osRenderRates();
+  });
+  q('osRates').addEventListener('click', (e) => {
+    const r = e.target.closest('[data-k]');
+    if (!r) return;
+    os.pick = r.dataset.k;
+    osRenderRates();
+  });
+  q('osCreate').addEventListener('click', osCreate);
+}
+
+async function osPrep() {
+  const rowId = os.rowId;
+  const res = await api.orderShipPrep(rowId);
+  if (!os || os.rowId !== rowId) return;
+  if (!res.ok) { os.loading = false; os.err = res.error; osRenderRates(); osPanel.querySelector('#osAddr').innerHTML = `<span class="os-err">${esc(res.error)}</span>`; return; }
+  Object.assign(os, { party: res.party, value: res.value, walmart: res.walmart });
+  const p = res.party;
+  osPanel.querySelector('#osAddr').innerHTML = `<b>${esc(p.company || p.name)}</b><br>${p.company && p.name ? `${esc(p.name)}<br>` : ''}${esc([p.line1, p.line2].filter(Boolean).join(', '))}<br>${esc(`${p.city}, ${p.state} ${p.zip}`)}`;
+  osPanel.querySelector('#osVal').value = Number(res.value || 0).toFixed(2);
+  osPanel.querySelector('#osWt').focus();
+  osRenderRates();
+}
+
+function osSchedule(delay = 400) {
+  if (!os) return;
+  clearTimeout(os.timer);
+  os.timer = setTimeout(osFetch, delay);
+}
+
+function osPkg() {
+  const v = (id) => parseFloat(osPanel.querySelector(`#${id}`).value) || 0;
+  return { weight: v('osWt'), length: v('osDl'), width: v('osDw'), height: v('osDh') };
+}
+
+async function osFetch() {
+  if (!os || !os.party) return;
+  const pkg = osPkg();
+  if (!(pkg.weight > 0)) { os.rates = null; os.loading = false; os.err = ''; osRenderRates(); return; }
+  const seq = ++os.seq;
+  os.loading = true; os.err = '';
+  osRenderRates();
+  const res = await api.orderShipRates({ rowId: os.rowId, party: os.party, pkg, value: parseFloat(osPanel.querySelector('#osVal').value) || 0 });
+  if (!os || seq !== os.seq) return;
+  os.loading = false;
+  if (!res.ok) { os.rates = null; os.err = res.error; } else { os.rates = res.sources; }
+  os.pick = '';
+  osRenderRates();
+}
+
+// every rate from every source, tagged with where it comes from, cheapest first
+function osAllRates() {
+  const out = [];
+  for (const s of os.rates || []) if (s.ok) for (const r of s.rates) out.push({ ...r, via: s.id, viaName: s.name, key: `${s.id}:${r.code}` });
+  return out.sort((a, b) => a.price - b.price);
+}
+
+function osRenderRates() {
+  if (!os || !osPanel) return;
+  const box = osPanel.querySelector('#osRates');
+  const chips = osPanel.querySelector('#osChips');
+  const srcs = (os.rates || []).length ? os.rates : [];
+  chips.innerHTML = srcs.length > 1 ? [['', 'All'], ...srcs.map(s => [s.id, s.name])]
+    .map(([k, t]) => `<button type="button" data-via="${esc(k)}" class="${os.via === k ? 'is-on' : ''}">${esc(t)}</button>`).join('') : '';
+  const btn = osPanel.querySelector('#osCreate');
+  const errEl = osPanel.querySelector('#osErr');
+  const fails = srcs.filter(s => !s.ok && !s.notSet).map(s => `${s.name}: ${s.error}`);
+  errEl.textContent = os.err || fails.join(' · ');
+  if (os.loading) {
+    box.innerHTML = '<div class="os-empty">Getting rates…<div class="sp-loadbar"><i></i></div></div>';
+    btn.disabled = true; btn.textContent = 'Create label';
+    return;
+  }
+  if (!os.party || !(osPkg().weight > 0) || !os.rates) {
+    box.innerHTML = `<div class="os-empty">${os.party ? 'Enter the weight' : ''}</div>`;
+    btn.disabled = true; btn.textContent = 'Create label';
+    return;
+  }
+  const list = osAllRates().filter(r => !os.via || r.via === os.via);
+  if (!os.pick || !list.some(r => r.key === os.pick)) os.pick = list[0] ? list[0].key : '';
+  const day = (iso) => (iso ? spDayLabel(iso) : '');
+  box.innerHTML = list.length ? list.map((r, i) => `<div class="sp-rate${r.key === os.pick ? ' is-on' : ''}" data-k="${esc(r.key)}"><span class="rd"></span>
+      <div><div class="sv">${i === 0 ? SP_STAR : ''}${esc(r.name)}<span class="os-via os-via-${esc(r.via)}">${esc(r.viaName)}</span></div><div class="eta">${esc(day(r.arrival) || (r.days ? `${r.days} business day${r.days === 1 ? '' : 's'}` : ''))}</div></div>
+      <span class="pr">${spMoney(r.price)}</span></div>`).join('')
+    : '<div class="os-empty">No rates</div>';
+  const sel = list.find(r => r.key === os.pick);
+  btn.disabled = !sel || os.creating;
+  btn.textContent = os.creating ? 'Creating label…' : `Create label${sel ? ` · ${spMoney(sel.price)}` : ''}`;
+}
+
+async function osCreate() {
+  if (!os || os.creating) return;
+  const sel = osAllRates().find(r => r.key === os.pick);
+  if (!sel) return;
+  const rowId = os.rowId;
+  os.creating = true; os.err = '';
+  osRenderRates();
+  const res = await api.orderShipCreate({
+    rowId, via: sel.via, code: sel.code, name: sel.name, carrier: sel.carrier || '', price: sel.price,
+    party: os.party, pkg: osPkg(), value: parseFloat(osPanel.querySelector('#osVal').value) || 0,
+  });
+  const mine = os && os.rowId === rowId;
+  if (!res.ok) {
+    if (mine) { os.creating = false; os.err = res.error; osRenderRates(); }
+    return;
+  }
+  // the state push that carries the new tracking may already have closed
+  // the panel; the popup shows either way
+  if (mine) osClose();
+  osShowLabel(res);
+}
+
+// the print popup: the label, Print ready under Enter
+function osShowLabel(res) {
+  const { label: l, gif, size } = res;
+  const wide = size && size.width > size.height;
+  const type = size && size.type === 'png' ? 'png' : 'gif';
+  $('osLabelImg').innerHTML = gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/${type};base64,${gif}" alt="Label" />` : '<div class="none">The label image is on its way — Print fetches it.</div>';
+  $('osLabelTrk').textContent = l.tracking;
+  $('osLabelDlg').dataset.id = l.id;
+  $('osLabelDlg').showModal();
+  $('osLabelPrint').focus();
+}
+$('osLabelPrint').addEventListener('click', async () => {
+  const id = Number($('osLabelDlg').dataset.id);
+  $('osLabelDlg').close();
+  await spPrint(id);
+});
+$('osLabelClose').addEventListener('click', () => $('osLabelDlg').close());

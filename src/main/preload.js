@@ -175,6 +175,11 @@ contextBridge.exposeInMainWorld('api', {
   shipAddressDelete: (id) => ipcRenderer.invoke('ship:addressDelete', { id }),
   shipTest: (account, test) => ipcRenderer.invoke('ship:test', { account, test }),
   shipPrinters: () => ipcRenderer.invoke('ship:printers'),
+  walmartTest: (creds) => ipcRenderer.invoke('walmart:test', creds),
+  // Ship from the Orders line (owner 2026-10-20): UPS + Ship with Walmart
+  orderShipPrep: (rowId) => ipcRenderer.invoke('orderShip:prep', { rowId }),
+  orderShipRates: (payload) => ipcRenderer.invoke('orderShip:rates', payload),
+  orderShipCreate: (payload) => ipcRenderer.invoke('orderShip:create', payload),
   lowIgnore: (sku, pace) => ipcRenderer.invoke('overview:lowIgnore', { sku, pace }),
   lowUnignore: () => ipcRenderer.invoke('overview:lowUnignore'),
   receivingFinish: (lines, meta) => ipcRenderer.invoke('receiving:finish', { lines, ...(meta || {}) }),

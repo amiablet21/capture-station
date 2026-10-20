@@ -270,6 +270,11 @@ function open() {
       used_at TEXT NOT NULL
     );
   `);
+  // labels made from an Orders line (owner 2026-10-20) remember the row
+  // they filled and the carrier (Walmart voids by carrier + tracking)
+  const shipCols = db.prepare('PRAGMA table_info(ship_labels)').all().map(c => c.name);
+  if (!shipCols.includes('carrier')) db.exec(`ALTER TABLE ship_labels ADD COLUMN carrier TEXT NOT NULL DEFAULT ''`);
+  if (!shipCols.includes('row_id')) db.exec(`ALTER TABLE ship_labels ADD COLUMN row_id INTEGER NOT NULL DEFAULT 0`);
   return db;
 }
 
@@ -1229,17 +1234,18 @@ const shipStr = (v, n) => String(v ?? '').trim().slice(0, n);
 function shipLabelAdd(rec) {
   const now = new Date();
   const r = open().prepare(`INSERT INTO ship_labels (created_at, day, kind, reference, from_po, source, account_id, account_name,
-      service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, party, label_gif, test)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, party, label_gif, test, carrier, row_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     now.toISOString(), localDay(now), rec.kind === 'return' ? 'return' : 'ship', shipStr(rec.reference, 60), rec.fromPo ? 1 : 0,
     shipStr(rec.source, 40), shipStr(rec.accountId, 8), shipStr(rec.accountName, 60), shipStr(rec.serviceCode, 4),
     shipStr(rec.serviceName, 60), shipStr(rec.tracking, 40), shipStr(rec.shipmentId, 40),
     Number.isFinite(rec.cost) ? rec.cost : null, Math.max(0, Number(rec.value) || 0), Math.max(0, Number(rec.weight) || 0),
-    shipStr(rec.dims, 40), shipStr(rec.partyName, 120), JSON.stringify(rec.party || {}), String(rec.labelGif || ''), rec.test ? 1 : 0);
+    shipStr(rec.dims, 40), shipStr(rec.partyName, 120), JSON.stringify(rec.party || {}), String(rec.labelGif || ''), rec.test ? 1 : 0,
+    shipStr(rec.carrier, 20), Number(rec.rowId) || 0);
   return shipLabelGet(Number(r.lastInsertRowid));
 }
 // the list never carries the label images (tens of KB each)
-const SHIP_LIST_COLS = 'id, created_at, day, kind, reference, from_po, source, account_id, account_name, service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, test, voided_at';
+const SHIP_LIST_COLS = 'id, created_at, day, kind, reference, from_po, source, account_id, account_name, service_code, service_name, tracking, shipment_id, cost, value, weight, dims, party_name, test, voided_at, carrier, row_id';
 function shipLabelList({ sinceDay = '', limit = 300 } = {}) {
   return open().prepare(`SELECT ${SHIP_LIST_COLS} FROM ship_labels WHERE day >= ? ORDER BY id DESC LIMIT ?`).all(String(sinceDay || ''), limit);
 }
@@ -1249,6 +1255,10 @@ function shipLabelGet(id) {
   let party = {};
   try { party = JSON.parse(r.party || '{}'); } catch { /* keep {} */ }
   return { ...r, party };
+}
+// a Walmart label's image can arrive after the purchase
+function shipLabelSetImage(id, b64) {
+  open().prepare('UPDATE ship_labels SET label_gif = ? WHERE id = ?').run(String(b64 || ''), Number(id));
 }
 function shipLabelVoid(id) {
   open().prepare('UPDATE ship_labels SET voided_at = ? WHERE id = ?').run(new Date().toISOString(), Number(id));
@@ -1298,5 +1308,5 @@ module.exports = {
   wsGid, wsUpsertCustomer, wsListCustomers, wsGetCustomer, wsUpsertInvoice, wsListInvoices, wsGetInvoice, wsNextNumber, wsCleanLines,
   wsUpsertSerial, wsListSerials, wsGetSerial, wsSerialCounts, wsOwnRows,
   costUpsert, costsAll, costGet, costOwnRows, costLogRows,
-  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelVoid, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
+  shipLabelAdd, shipLabelList, shipLabelGet, shipLabelVoid, shipLabelSetImage, shipAddrList, shipAddrSave, shipAddrTouch, shipAddrDelete,
 };

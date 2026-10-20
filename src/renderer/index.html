@@ -262,6 +262,18 @@
     <p class="shelf-sum" id="shSum"></p>
   </section>
 
+  <!-- the print popup after a label is made on an Orders line (owner 2026-10-20) -->
+  <dialog id="osLabelDlg" class="dlg os-dlg">
+    <div class="dlg-body">
+      <div class="sp-done-h"><span class="ok">✓</span><b>Label created</b><span class="trk" id="osLabelTrk"></span></div>
+      <div class="sp-label" id="osLabelImg"></div>
+      <div class="sp-done-acts">
+        <button class="btn btn-primary" id="osLabelPrint" type="button">Print</button>
+        <button class="btn btn-ghost" id="osLabelClose" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Ship page (owner 2026-10-19, design variants/ups-labels.html): a UPS
        label from a PO# or a typed address, Ship or Return, rated on both
        companies' UPS accounts side by side; PO# = Ref 1, value editable -->
@@ -1308,6 +1320,7 @@
           <input class="input" data-f="line2" placeholder="Suite / unit (optional)" autocomplete="off" />
           <div class="ups-csz"><input class="input" data-f="city" placeholder="City" autocomplete="off" /><input class="input" data-f="state" placeholder="ST" maxlength="2" autocomplete="off" /><input class="input mono" data-f="zip" placeholder="ZIP" maxlength="10" autocomplete="off" /></div>
           <input class="input mono" data-f="phone" placeholder="Phone" autocomplete="off" />
+          <input class="input" data-f="email" placeholder="Email (optional)" autocomplete="off" />
         </div>
         <div class="ups-addr" data-addr="returnTo">
           <div class="ups-addr-h">Return address (where returns go) <button id="setUpsSame" class="sp-link" type="button">same as ship-from</button></div>
@@ -1326,6 +1339,14 @@
       <div class="settings-row">
         <label class="check"><input id="setUpsTest" type="checkbox" /> Test mode: use UPS's test servers (labels are samples, nothing is charged)</label>
       </div>
+
+      <h3 class="dlg-section">Walmart</h3>
+      <p class="dlg-note">Seller Center › API Key Management. For Walmart's label rates on Walmart orders.</p>
+      <div class="grid2">
+        <label class="field"><span class="field-label">Client ID</span><input id="setWmId" type="password" class="input mono" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Client secret</span><input id="setWmSecret" type="password" class="input mono" autocomplete="off" /></label>
+      </div>
+      <div class="settings-row"><button id="setWmTest" class="btn btn-secondary" type="button">Test</button><span id="setWmRes" class="test-result"></span></div>
 
       <h3 class="dlg-section">Linnworks</h3>
       <div class="grid2">

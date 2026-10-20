@@ -1875,6 +1875,21 @@ module.exports = async function run({ app, win, db, clipboard }) {
             } } }));
           }
           if (req.url.includes('/void/cancel/')) return res.end(JSON.stringify({ VoidShipmentResponse: { SummaryResult: { Status: { Code: '1' } } } }));
+          // the fake Walmart (Ship with Walmart) on the same server
+          if (req.url === '/v3/token') return res.end(JSON.stringify({ access_token: 'WMTOK', expires_in: 900 }));
+          if (req.url.startsWith('/v3/orders/')) return res.end(JSON.stringify({ order: { purchaseOrderId: '108829451230774',
+            shippingInfo: { postalAddress: { name: 'Maria Delgado', address1: '4120 W Belmont Ave', city: 'Chicago', state: 'IL', postalCode: '60641' } },
+            orderLines: { orderLine: [{ lineNumber: '1', item: { sku: 'WM-X133', productName: 'Galaxy' }, orderLineQuantity: { amount: '1' } }] } } }));
+          if (req.url === '/v3/shipping/labels/shipping-estimates') return res.end(JSON.stringify({ data: { estimates: [
+            { name: 'USPS_GROUND_ADVANTAGE', displayName: 'USPS Ground Advantage', carrierName: 'USPS', estimatedRate: { amount: 5.5 } },
+            { name: 'UPS_GROUND', displayName: 'UPS Ground', carrierName: 'UPS', estimatedRate: { amount: 8.4 }, deliveryDate: '2026-10-23T23:59:00Z' },
+            { name: 'FEDEX_2_DAY', displayName: 'FedEx 2Day', carrierName: 'FedEx', estimatedRate: { amount: 11.8 } } ] } }));
+          if (req.url === '/v3/shipping/labels' && req.method === 'POST') return res.end(JSON.stringify({ data: { trackingNo: '1Z9WM0000000000077', carrierName: 'UPS', carrierServiceType: 'UPS Ground' } }));
+          if (req.url.startsWith('/v3/shipping/labels/carriers/')) {
+            if (req.method === 'DELETE') return res.end(JSON.stringify({ data: 'true' }));
+            res.setHeader('Content-Type', 'image/png');
+            return res.end(Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 4, 176, 0, 0, 7, 8]), Buffer.alloc(200)]));
+          }
           res.statusCode = 404; res.end('{}');
         });
       });
@@ -1960,6 +1975,71 @@ module.exports = async function run({ app, win, db, clipboard }) {
         const disk = JSON.parse(fs.readFileSync(require('node:path').join(app.getPath('userData'), 'config.json'), 'utf8'));
         check('ship: UPS secrets never sit in config.json in plain text (when the OS can encrypt)',
           !disk.upsEnc || disk.ups.accounts.every(a => !a.clientSecret && !a.clientId), disk.ups && disk.ups.accounts);
+
+        // Ship from the Orders line (owner 2026-10-20): Walmart + both UPS
+        // accounts in one list; the label's tracking lands on the row
+        const wmMod = require('./walmart');
+        wmMod.WalmartClient.testHost = upsMod.UpsClient.testHost;
+        const lwMod = require('./linnworks');
+        const realFind = lwMod.LinnworksClient.prototype.findOrderForLabel;
+        lwMod.LinnworksClient.prototype.findOrderForLabel = async (ref) => ({ reference: ref, source: 'WALMART', status: 'open', total: 189.99,
+          items: [{ sku: 'X133-128GB-GRAY', quantity: 1 }], party: { ...cust, phone: '', email: '', country: 'United States' } });
+        try {
+          await exec(`api.setConfig({ walmart: { clientId: 'WCID', clientSecret: 'WSEC' } })`);
+          const wRow = db.createRow({ channel: 'walmart', orderNumber: '108829451230774', origin: '' });
+          const eRow = db.createRow({ channel: 'ebay', orderNumber: '21-13542-88761', origin: '' });
+          let r = await exec(`api.orderShipPrep(${wRow.id})`);
+          check('order ship: a Walmart line preps with the Linnworks address and Walmart on', r.ok && r.walmart === true && r.party.city === 'Chicago' && r.value === 189.99, r);
+          const pkg = { weight: 1.1, length: 8, width: 6, height: 4 };
+          r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: wRow.id, party: cust, pkg, value: 189.99 })})`);
+          const wm = r.ok && r.sources.find(x => x.id === 'wm');
+          check('order ship: one list from Walmart and both UPS accounts, USPS never offered',
+            r.ok && r.sources.map(x => x.id).join(',') === 'wm,a,b' && wm.ok && wm.rates.map(x => x.code).join(',') === 'UPS_GROUND,FEDEX_2_DAY', r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: wRow.id, via: 'wm', code: 'UPS_GROUND', name: 'UPS Ground', carrier: 'UPS', price: 8.4, party: cust, pkg, value: 189.99 })})`);
+          let rowNow = db.getRow(wRow.id);
+          check('order ship: a Walmart label fills the row\'s tracking, image kept, not processed',
+            r.ok && rowNow.tracking === '1Z9WM0000000000077' && rowNow.carrier === 'UPS' && rowNow.status !== 'synced' && r.size && r.size.type === 'png' && r.label.account_name === 'Walmart', { r: r.ok ? r.label : r, rowNow });
+          const wmLabel = r.label;
+          r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: eRow.id, party: cust, pkg, value: 129 })})`);
+          check('order ship: an eBay line shows only the UPS accounts', r.ok && r.sources.map(x => x.id).join(',') === 'a,b', r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: eRow.id, via: 'b', code: '03', name: 'UPS Ground', price: 9.1, party: cust, pkg, value: 129 })})`);
+          rowNow = db.getRow(eRow.id);
+          check('order ship: a UPS label on the eBay line, the PO# as Ref 1',
+            r.ok && rowNow.tracking === '1ZE2E0000000000001' && r.label.reference === '21-13542-88761' && r.label.row_id === eRow.id, r.ok ? r.label : r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: eRow.id, via: 'b', code: '03', party: cust, pkg })})`);
+          check('order ship: a line with tracking can\'t buy a second label', !r.ok && /already has tracking/.test(r.error), r);
+          r = await exec(`api.shipVoid(${wmLabel.id})`);
+          check('order ship: voiding the Walmart label takes the tracking back off the row',
+            r.ok && upsSeen.some(x => x.method === 'DELETE' && x.url.includes('/v3/shipping/labels/carriers/UPS/trackings/1Z9WM0000000000077')) && db.getRow(wRow.id).tracking === '', r);
+          await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); render(); })()`);
+          await sleep(500);
+          const ui = await exec(`(async () => {
+            const tr = document.querySelector('#rowsBody tr[data-id="${wRow.id}"]'); const b = tr && tr.querySelector('.os-btn');
+            if (!b) return { btn: false };
+            b.click(); await new Promise(r => setTimeout(r, 600));
+            const panel = document.querySelector('#rowsBody tr.os-row');
+            const out = { btn: true, panel: !!panel, after: !!panel && panel.previousElementSibling.dataset.id === '${wRow.id}', ref: panel && panel.textContent.includes('108829451230774') };
+            render(); out.survives = !!document.querySelector('#rowsBody tr.os-row');
+            osClose(); return out; })()`);
+          check('order ship: Ship on a line opens the panel under it, and it survives a re-render',
+            ui.btn && ui.panel && ui.after && ui.ref && ui.survives, ui);
+          if (process.env.CAPTURE_E2E_SHOT) {
+            win.setSize(1360, 900);
+            await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));
+              const w = document.getElementById('osWt'); w.value = '1.1'; w.dispatchEvent(new Event('input')); })()`);
+            await sleep(2200);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship.png'), (await win.webContents.capturePage()).toPNG());
+            await exec(`document.getElementById('osCreate').click()`);
+            await sleep(1800);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship-label.png'), (await win.webContents.capturePage()).toPNG());
+            await exec(`document.getElementById('osLabelDlg').close()`);
+            await sleep(400);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship-done.png'), (await win.webContents.capturePage()).toPNG());
+          }
+        } finally {
+          lwMod.LinnworksClient.prototype.findOrderForLabel = realFind;
+          wmMod.WalmartClient.testHost = '';
+        }
       } finally {
         upsMod.UpsClient.testHost = '';
         fake.close();

@@ -4,6 +4,10 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.32.91 highlights
 
+- **Ship from the Orders line.** Every order without tracking has a **Ship** button. It opens a panel under the line with the order's ship-to, box, weight, declared value and the PO# as Reference #1, and one rate list: **Ship with Walmart** (Walmart orders, once the Walmart keys are in Settings) beside both UPS accounts. Chips filter **All · Walmart · each UPS account**; the list holds one height, so switching never moves anything. The cheapest wears a star and is picked. **Create label** puts the tracking on the line and opens a print popup; **Process** stays your press. Voiding the label (Ship tab › Labels) takes the tracking back off a line not yet processed.
+- **Walmart keys** in Settings › Walmart (Seller Center › API Key Management), hidden once saved, with a Test button. The ship-from address takes an optional email.
+- USPS, UPS Ground Saver (SurePost) and FedEx Ground Economy are never offered, from Walmart or UPS. No product name is sent to Walmart either.
+
 - **Recovery opens with the Settings PIN.** No separate code; entering the PIN once unlocks Settings and Recovery for the session. With no PIN set, Recovery opens directly.
 - **Saved keys stay hidden.** In Settings a saved key shows **Saved ✓ · Replace**, never the key itself (UPS Client IDs and secrets, the Linnworks secret and token). The keys no longer reach the window at all: a field left empty keeps the saved key, and Test uses it.
 - Ship tab: the summary above **Create label** is gone; the cheapest rate wears a gold star.

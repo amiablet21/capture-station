@@ -6062,3 +6062,38 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 /* a saved key in Settings: shown as saved, never as the key */
 .secret-saved { display: flex; align-items: center; gap: 6px; min-height: 33px; font-size: 12.5px; color: var(--pos-text); }
 .secret-saved .sp-link { font-size: 12.5px; }
+
+/* ---------- Ship from the Orders line (owner 2026-10-20, design variants/orders-ship.html) ---------- */
+.os-btn { font-family: var(--font); font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: var(--r-ctl); padding: 3px 12px; margin-right: 6px; cursor: pointer; }
+.os-btn:hover { background: var(--accent-hover); }
+.os-btn.is-on { background: var(--accent-soft); color: var(--accent-soft-text); }
+tr.os-open > td { background: #FBFAF8; }
+tr.os-row > td { padding: 0 14px 14px; background: #FBFAF8; border-bottom: 1px solid var(--border); }
+.os-panel { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 6px 18px rgba(47, 52, 55, .06); white-space: normal; }
+.os-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.os-addr { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin-bottom: 10px; min-height: 58px; }
+.os-addr b { color: var(--text); font-size: 13px; }
+.os-f { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.os-f > span { font-size: 11px; font-weight: 600; color: var(--muted); }
+.os-f .input { width: 100%; }
+.os-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.os-dims > div { display: flex; align-items: center; gap: 4px; }
+.os-dims .input { text-align: center; padding-left: 4px; padding-right: 4px; }
+.os-dims b { color: var(--faint); font-weight: 400; font-size: 11px; }
+.os-chips { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+.os-chips:empty { display: none; }
+.os-chips button { font-family: var(--font); font-size: 11.5px; font-weight: 500; color: var(--muted); border: none; background: none; border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+.os-chips button.is-on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47, 52, 55, .1); }
+/* one fixed height whatever the filter: switching chips never moves the rows or the button */
+.os-rates { border: 1px solid var(--border); border-radius: 10px; height: 268px; overflow-y: auto; padding: 0 10px; }
+.os-rates .sp-rate { margin: 0 -10px; border-radius: 0; border-top: 1px solid var(--border-soft); padding: 8px 12px; }
+.os-rates .sp-rate:first-child { border-top: none; }
+.os-via { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; background: var(--accent-soft); color: var(--accent-soft-text); }
+.os-via-wm { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.os-via-b { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+.os-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--faint); font-size: 12.5px; }
+.os-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.os-foot .btn { margin-left: auto; padding: 9px 18px; font-size: 13.5px; font-weight: 600; }
+.os-err { font-size: 12px; color: var(--neg-text); }
+.os-dlg { width: 300px; }
+.os-dlg .sp-label { margin: 0 auto; }

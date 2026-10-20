@@ -10,6 +10,7 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const ups = require('./ups');
+const walmart = require('./walmart');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
 const recovery = require('./recovery');
@@ -3574,6 +3575,9 @@ exit 1
       a.hasClientId = !!a.clientId; a.hasClientSecret = !!a.clientSecret;
       a.clientId = ''; a.clientSecret = '';
     }
+    const w = out.walmart || (out.walmart = {});
+    w.hasClientId = !!w.clientId; w.hasClientSecret = !!w.clientSecret;
+    w.clientId = ''; w.clientSecret = '';
     return out;
   }
   ipcMain.handle('config:get', () => publicConfig(config.load()));
@@ -3590,6 +3594,10 @@ exit 1
         delete keep.hasClientId; delete keep.hasClientSecret;
         return keep;
       });
+    }
+    if (patch.walmart) {
+      for (const f of ['clientId', 'clientSecret']) if (!patch.walmart[f]) delete patch.walmart[f];
+      delete patch.walmart.hasClientId; delete patch.walmart.hasClientSecret;
     }
     if (patch.linnworks) {
       for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
@@ -6237,10 +6245,13 @@ exit 1
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
     const prep = shipInput(payload);
     if (prep.error) return { ok: false, error: prep.error };
-    const accounts = prep.u.accounts || [];
-    if (!accounts.some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › UPS labels).' };
-    // both accounts at once; one failing never hides the other's rates
-    const out = await Promise.all(accounts.map(async (a) => {
+    if (!(prep.u.accounts || []).some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › UPS labels).' };
+    return { ok: true, test: !!prep.u.test, accounts: await upsRatesAll(prep) };
+  });
+
+  // every UPS account at once; one failing never hides the other's rates
+  async function upsRatesAll(prep) {
+    return Promise.all((prep.u.accounts || []).map(async (a) => {
       const head = { id: a.id, name: upsName(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() };
       if (!upsReady(a)) return { ...head, ok: false, notSet: true, error: 'Not set up — add it in Settings › UPS labels.' };
       try {
@@ -6249,8 +6260,24 @@ exit 1
         return { ...head, ok: false, error: e.message };
       }
     }));
-    return { ok: true, test: !!prep.u.test, accounts: out };
-  });
+  }
+
+  // buy one UPS label and keep it (with its image) in ship_labels
+  async function upsBuyLabel(prep, acct, { serviceCode, serviceName, reference, fromPo, source, price, rowId }) {
+    const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({ ...prep.input, serviceCode, reference });
+    const { pkg } = prep.input;
+    return db.shipLabelAdd({
+      kind: prep.input.kind, reference, fromPo: !!fromPo, source,
+      accountId: acct.id, accountName: upsName(acct), serviceCode,
+      serviceName: ups.SERVICE_NAMES[serviceCode] || String(serviceName || `UPS service ${serviceCode}`),
+      tracking: res.tracking, shipmentId: res.shipmentId, carrier: 'UPS', rowId,
+      cost: res.charge ?? (Number.isFinite(Number(price)) ? Number(price) : null),
+      value: prep.input.value, weight: pkg.weight,
+      dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
+      partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
+      labelGif: res.labelGif, test: !!prep.u.test,
+    });
+  }
 
   ipcMain.handle('ship:create', async (_e, payload) => {
     if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
@@ -6262,20 +6289,9 @@ exit 1
     if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
     const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
     try {
-      const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({
-        ...prep.input, serviceCode, reference,
-      });
-      const { pkg } = prep.input;
-      const label = db.shipLabelAdd({
-        kind: prep.input.kind, reference, fromPo: !!(payload && payload.fromPo), source: payload && payload.source,
-        accountId: acct.id, accountName: upsName(acct), serviceCode,
-        serviceName: ups.SERVICE_NAMES[serviceCode] || String((payload && payload.serviceName) || `UPS service ${serviceCode}`),
-        tracking: res.tracking, shipmentId: res.shipmentId,
-        cost: res.charge ?? (Number.isFinite(Number(payload && payload.price)) ? Number(payload.price) : null),
-        value: prep.input.value, weight: pkg.weight,
-        dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
-        partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
-        labelGif: res.labelGif, test: !!prep.u.test,
+      const label = await upsBuyLabel(prep, acct, {
+        serviceCode, serviceName: payload && payload.serviceName, reference,
+        fromPo: payload && payload.fromPo, source: payload && payload.source, price: payload && payload.price,
       });
       if (payload && payload.saveAddress) { try { db.shipAddrSave(prep.input.other); } catch { /* the label matters more */ } }
       if (payload && payload.addressId) { try { db.shipAddrTouch(payload.addressId); } catch { /* best effort */ } }
@@ -6302,19 +6318,24 @@ exit 1
   // a 4x6 page holding the label upright: UPS's GIF lies on its side
   // (wider than tall), so it is turned a quarter clockwise to stand up
   function shipLabelHtml(gif) {
-    const size = ups.gifSize(gif);
-    const wide = size && size.width > size.height;
+    const info = ups.imageInfo(gif);
+    const wide = info && info.width > info.height;
     const img = wide
       ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
       : 'display:block;width:4in;height:auto';
     return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:4in 6in;margin:0}html,body{margin:0;padding:0}`
       + `.pg{position:relative;width:4in;height:6in;overflow:hidden}</style></head><body><div class="pg">`
-      + `<img style="${img}" src="data:image/gif;base64,${gif}"></div></body></html>`;
+      + `<img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div></body></html>`;
   }
   async function shipLabelWindow(id) {
-    const l = db.shipLabelGet(id);
+    let l = db.shipLabelGet(id);
     if (!l) throw new Error('Label not found.');
-    if (!l.label_gif) throw new Error('UPS sent no image for this label.');
+    // a Walmart label whose image was not ready at purchase is fetched now
+    if (!l.label_gif && l.account_id === 'wm') {
+      db.shipLabelSetImage(l.id, await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking));
+      l = db.shipLabelGet(id);
+    }
+    if (!l.label_gif) throw new Error('The carrier sent no image for this label.');
     const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
     await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif))}`);
     return { pw, label: l };
@@ -6366,14 +6387,144 @@ exit 1
     const l = db.shipLabelGet(id);
     if (!l) return { ok: false, error: 'Label not found.' };
     if (l.voided_at) return { ok: true, label: l };
-    const u = config.load().ups || {};
-    const acct = (u.accounts || []).find(a => a.id === l.account_id);
-    if (!upsReady(acct)) return { ok: false, error: `The ${l.account_name} account is no longer set up, so UPS can't be asked to void it.` };
     try {
-      // a label bought on the test servers is voided there too
-      await new ups.UpsClient(acct, { test: !!l.test }).void(l.shipment_id || l.tracking);
+      if (l.account_id === 'wm') {
+        await new walmart.WalmartClient(config.load().walmart).discard(l.carrier, l.tracking);
+      } else {
+        const u = config.load().ups || {};
+        const acct = (u.accounts || []).find(a => a.id === l.account_id);
+        if (!upsReady(acct)) return { ok: false, error: `The ${l.account_name} account is no longer set up, so UPS can't be asked to void it.` };
+        // a label bought on the test servers is voided there too
+        await new ups.UpsClient(acct, { test: !!l.test }).void(l.shipment_id || l.tracking);
+      }
       const { label_gif: _g, ...row } = db.shipLabelVoid(id);
+      // the order it filled gets its tracking back off, unless already processed
+      const orderRow = l.row_id ? db.getRow(l.row_id) : null;
+      if (orderRow && orderRow.tracking === l.tracking && orderRow.status !== 'synced') {
+        db.setTracking(orderRow.id, '', '');
+        pushState();
+      }
       return { ok: true, label: row };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---- Ship from the Orders line (owner 2026-10-20): one rate list mixing
+     Ship with Walmart (Walmart orders) with both UPS accounts; the label's
+     tracking lands on the row, Process stays a separate press ---- */
+  const wmReady = () => { const w = config.load().walmart || {}; return !!(w.clientId && w.clientSecret); };
+  const wmOrders = new Map(); // po -> Walmart order (lines + ship-to), per session
+
+  async function wmOrder(po) {
+    if (!wmOrders.has(po)) wmOrders.set(po, await new walmart.WalmartClient(config.load().walmart).order(po));
+    return wmOrders.get(po);
+  }
+  function orderRowFor(rowId) {
+    const row = db.getRow(Number(rowId));
+    if (!row) return { error: 'That order is no longer on the list.' };
+    if (row.tracking) return { error: 'This order already has tracking.' };
+    if (row.status === 'synced') return { error: 'This order is already processed.' };
+    return { row };
+  }
+
+  ipcMain.handle('orderShip:prep', async (_e, { rowId } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const { row, error } = orderRowFor(rowId);
+    if (error) return { ok: false, error };
+    try {
+      const cfg = config.load();
+      const order = await new LinnworksClient(cfg.linnworks).findOrderForLabel(row.order_number,
+        [cfg.linnworks.locationId, (cfg.stockRouting || {}).fallbackLocationId]);
+      if (!order) return { ok: false, error: `No Linnworks order found for ${row.order_number}.` };
+      order.party.state = ups.stateCode(order.party.state);
+      return {
+        ok: true, po: row.order_number, channel: row.channel, party: order.party, value: order.total, items: order.items,
+        walmart: row.channel === 'walmart' && wmReady(),
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('orderShip:rates', async (_e, payload = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const { row, error } = orderRowFor(payload.rowId);
+    if (error) return { ok: false, error };
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    if (prep.error) return { ok: false, error: prep.error };
+    const jobs = [upsRatesAll(prep)];
+    const useWm = row.channel === 'walmart' && wmReady();
+    if (useWm) {
+      jobs.push((async () => {
+        try {
+          const order = await wmOrder(row.order_number);
+          return { id: 'wm', name: 'Walmart', ok: true, rates: await new walmart.WalmartClient(config.load().walmart).estimates({ order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom }) };
+        } catch (e) {
+          return { id: 'wm', name: 'Walmart', ok: false, error: e.message };
+        }
+      })());
+    }
+    const [upsSources, wmSource] = await Promise.all(jobs);
+    return { ok: true, test: !!prep.u.test, sources: [...(wmSource ? [wmSource] : []), ...upsSources] };
+  });
+
+  ipcMain.handle('orderShip:create', async (_e, payload = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › Pages).' };
+    const { row, error } = orderRowFor(payload.rowId);
+    if (error) return { ok: false, error };
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    if (prep.error) return { ok: false, error: prep.error };
+    try {
+      let label;
+      if (payload.via === 'wm') {
+        if (row.channel !== 'walmart' || !wmReady()) return { ok: false, error: 'Walmart labels are for Walmart orders, with the Walmart keys set.' };
+        const client = new walmart.WalmartClient(config.load().walmart);
+        const order = await wmOrder(row.order_number);
+        const bought = await client.createLabel({
+          order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom, returnTo: prep.u.returnTo,
+          carrierName: String(payload.carrier || ''), serviceType: String(payload.code || ''),
+        });
+        let image = '';
+        try { image = await client.downloadLabel(bought.carrier || payload.carrier, bought.tracking); } catch { /* Reprint fetches it */ }
+        const { pkg } = prep.input;
+        label = db.shipLabelAdd({
+          kind: 'ship', reference: row.order_number, fromPo: true, source: row.channel,
+          accountId: 'wm', accountName: 'Walmart', serviceCode: String(payload.code || ''),
+          serviceName: String(payload.name || bought.service || ''), tracking: bought.tracking, carrier: bought.carrier || String(payload.carrier || ''),
+          cost: Number.isFinite(Number(payload.price)) ? Number(payload.price) : null, value: 0, weight: pkg.weight,
+          dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
+          partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
+          labelGif: image, rowId: row.id,
+        });
+      } else {
+        const acct = (prep.u.accounts || []).find(a => a.id === payload.via);
+        if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › UPS labels).' };
+        const serviceCode = String(payload.code || '').replace(/\D/g, '').slice(0, 3);
+        if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
+        label = await upsBuyLabel(prep, acct, {
+          serviceCode, serviceName: payload.name, reference: row.order_number, fromPo: true, source: row.channel, price: payload.price, rowId: row.id,
+        });
+      }
+      // the tracking lands on the order like a scan; Process stays the owner's press
+      db.setTracking(row.id, label.tracking, classifyTracking(label.tracking) || label.carrier || '');
+      if (currentRowId === row.id) currentRowId = null;
+      pushState();
+      const { label_gif: gif, ...rec } = label;
+      return { ok: true, label: rec, gif, size: ups.imageInfo(gif) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:test', async (_e, creds = {}) => {
+    try {
+      const saved = config.load().walmart || {};
+      await new walmart.WalmartClient({
+        clientId: String(creds.clientId || '').trim() || saved.clientId,
+        clientSecret: String(creds.clientSecret || '').trim() || saved.clientSecret,
+      }).token();
+      return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
     }

@@ -24,8 +24,11 @@ const SERVICE_NAMES = {
   '59': 'UPS 2nd Day Air A.M.',
   '75': 'UPS Heavy Goods',
   '92': 'UPS SurePost Less than 1 lb',
-  '93': 'UPS SurePost 1 lb or Greater',
+  '93': 'UPS Ground Saver',
 };
+// services the owner never ships with (2026-10-19): UPS Ground Saver and the
+// SurePost family it replaced never appear among the rates
+const EXCLUDED_CODES = new Set(['92', '93']);
 // fallback transit days when UPS sends no estimate (Ground is zone-based)
 const SERVICE_DAYS = { '01': 1, '13': 1, '14': 1, '02': 2, '59': 2, '12': 3, '03': 5 };
 
@@ -224,6 +227,7 @@ function parseRates(body) {
   const out = [];
   for (const r of arr(body && body.RateResponse && body.RateResponse.RatedShipment)) {
     const code = String((r.Service && r.Service.Code) || '');
+    if (EXCLUDED_CODES.has(code)) continue;
     const list = money(r.TotalCharges);
     const negotiated = money(r.NegotiatedRateCharges && r.NegotiatedRateCharges.TotalCharge);
     const tt = r.TimeInTransit && r.TimeInTransit.ServiceSummary;
@@ -352,19 +356,21 @@ class UpsClient {
 UpsClient.tokens = new Map();
 UpsClient.testHost = ''; // the e2e suite's fake UPS
 
-// a GIF's own pixel size (bytes 6-9, little-endian): UPS sends the 4x6
-// label lying on its side, so print and preview turn it upright when wide
-function gifSize(b64) {
+// a label image's own pixel size and type: UPS sends a GIF lying on its
+// side (print and preview turn it upright when wide), Walmart a PNG
+function imageInfo(b64) {
   try {
-    const b = Buffer.from(String(b64 || '').slice(0, 24), 'base64');
-    if (b.toString('ascii', 0, 3) !== 'GIF') return null;
-    return { width: b.readUInt16LE(6), height: b.readUInt16LE(8) };
+    const b = Buffer.from(String(b64 || '').slice(0, 44), 'base64');
+    if (b.toString('ascii', 0, 3) === 'GIF') return { type: 'gif', width: b.readUInt16LE(6), height: b.readUInt16LE(8) };
+    if (b.length >= 24 && b.readUInt32BE(0) === 0x89504E47) return { type: 'png', width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+    return null;
   } catch {
     return null;
   }
 }
+const gifSize = (b64) => { const i = imageInfo(b64); return i ? { width: i.width, height: i.height } : null; };
 
 module.exports = {
   UpsClient, UpsError, SERVICE_NAMES, stateCode, zip, addressProblem, isResidential,
-  buildRateRequest, buildShipRequest, parseRates, parseShip, gifSize,
+  buildRateRequest, buildShipRequest, parseRates, parseShip, gifSize, imageInfo,
 };

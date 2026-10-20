@@ -32,6 +32,16 @@ function encryptUps(ups) {
   }
 }
 
+// the Walmart key pair too (walmartEnc)
+function encryptWalmart(w) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.encryptString(JSON.stringify({ clientId: (w && w.clientId) || '', clientSecret: (w && w.clientSecret) || '' })).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
 function decryptCreds(b64) {
   try {
     return JSON.parse(safeStorage.decryptString(Buffer.from(b64, 'base64')));
@@ -101,7 +111,7 @@ const DEFAULTS = {
       { id: 'a', name: '', accountNumber: '', clientId: '', clientSecret: '' },
       { id: 'b', name: '', accountNumber: '', clientId: '', clientSecret: '' },
     ],
-    shipFrom: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    shipFrom: { name: '', company: '', phone: '', email: '', line1: '', line2: '', city: '', state: '', zip: '' },
     returnTo: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
     boxes: [
       { name: 'Phone box', length: 8, width: 6, height: 4 },
@@ -109,6 +119,10 @@ const DEFAULTS = {
       { name: '2-phone box', length: 10, width: 8, height: 5 },
     ],
   },
+  // Ship with Walmart (owner 2026-10-20): the seller's own Walmart key pair
+  // (Seller Center → API Key Management) for Walmart's label rates on
+  // Walmart orders. Empty = Walmart rates simply don't show.
+  walmart: { clientId: '', clientSecret: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -270,6 +284,12 @@ function load() {
     }
     delete stored.upsEnc;
   }
+  if (stored.walmartEnc) {
+    let w = null;
+    try { w = JSON.parse(safeStorage.decryptString(Buffer.from(stored.walmartEnc, 'base64'))); } catch { /* other machine */ }
+    if (w) stored.walmart = { ...(stored.walmart || {}), ...w };
+    delete stored.walmartEnc;
+  }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
   // "deliberately cleared" — clearing it just makes the PO# copy instead)
@@ -346,6 +366,11 @@ function save(patch) {
   if (upsEnc && persisted.ups && Array.isArray(persisted.ups.accounts)) {
     persisted.upsEnc = upsEnc;
     for (const a of persisted.ups.accounts) { a.clientId = ''; a.clientSecret = ''; }
+  }
+  const wEnc = encryptWalmart(cfg.walmart);
+  if (wEnc) {
+    persisted.walmartEnc = wEnc;
+    persisted.walmart = { ...(persisted.walmart || {}), clientId: '', clientSecret: '' };
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');
