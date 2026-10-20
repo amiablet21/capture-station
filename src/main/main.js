@@ -6347,7 +6347,7 @@ exit 1
       const l = db.shipLabelGet(id);
       if (!l) return { ok: false, error: 'Label not found.' };
       const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}.pdf`;
-      const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
       if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
       ({ pw } = await shipLabelWindow(id));
       const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });

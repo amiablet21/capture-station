@@ -14920,9 +14920,8 @@ function spRenderDone() {
     <div class="sp-done-acts">
       <button class="btn btn-primary" id="spDonePrint" type="button">Print</button>
       <button class="btn btn-secondary" id="spAgain" type="button">New label</button>
-    </div>
-    <div class="sp-done-more">
-      <button class="sp-link" id="spDonePdf" type="button">Save PDF</button><span>·</span><button class="sp-link" id="spDoneCopy" type="button">Copy tracking</button>
+      <button class="btn btn-ghost" id="spDonePdf" type="button">Save PDF</button>
+      <button class="btn btn-ghost" id="spDoneCopy" type="button">Copy tracking</button>
     </div>
   </div>`;
   $('spDonePrint').onclick = () => spPrint(l.id);

@@ -6015,10 +6015,9 @@ button.rc-cost-set:hover { border-color: #D4A531; color: #956400; background: va
 .sp-label img.is-wide { height: 240px; width: auto; transform-origin: top left; transform: translateX(240px) rotate(90deg); }
 .sp-label img.is-tall { width: 240px; height: auto; }
 .sp-label .none { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 12px; padding: 20px; text-align: center; }
-.sp-done-acts { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 14px; }
-.sp-done-acts .btn { padding: 10px 14px; font-size: 14px; font-weight: 600; }
-.sp-done-more { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 10px; color: var(--faint); font-size: 12px; }
-.sp-done-more .sp-link { font-size: 12.5px; }
+.sp-done-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.sp-done-acts .btn { height: 40px; padding: 0 14px; font-size: 13.5px; font-weight: 600; }
+.sp-done-acts .btn-ghost { color: var(--text); background: var(--surface); }
 
 .sp-log { max-width: 1240px; margin: 16px auto 0; }
 .sp-log-h { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
