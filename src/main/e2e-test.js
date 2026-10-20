@@ -2020,9 +2020,13 @@ module.exports = async function run({ app, win, db, clipboard }) {
             const panel = document.querySelector('#rowsBody tr.os-row');
             const out = { btn: true, panel: !!panel, after: !!panel && panel.previousElementSibling.dataset.id === '${wRow.id}', ref: panel && panel.textContent.includes('108829451230774') };
             render(); out.survives = !!document.querySelector('#rowsBody tr.os-row');
-            osClose(); return out; })()`);
+            const wt = document.getElementById('osWt'); wt.focus();
+            wt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+            out.escClosed = !document.querySelector('#rowsBody tr.os-row') && os === null;
+            if (!out.escClosed) osClose(); return out; })()`);
           check('order ship: Ship on a line opens the panel under it, and it survives a re-render',
             ui.btn && ui.panel && ui.after && ui.ref && ui.survives, ui);
+          check('order ship: Esc cancels the open panel', ui.escClosed === true, ui);
           if (process.env.CAPTURE_E2E_SHOT) {
             win.setSize(1360, 900);
             await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));

@@ -15225,6 +15225,17 @@ function osClose() {
   if (state) render();
 }
 
+// Esc cancels an open ship panel (owner 2026-10-20). On window, so it runs
+// before the row's own Esc (next order); an open customer card or dialog
+// takes Esc first, and a label being bought is never abandoned.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !os || os.creating || custCard || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  osClose();
+  focusScan();
+}, true);
+
 function osReattach() {
   if (!os) return;
   const tr = document.querySelector(`#rowsBody tr[data-id="${os.rowId}"]`);
