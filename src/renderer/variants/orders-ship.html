@@ -63,7 +63,10 @@
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .lock { font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface-2); display: flex; }
   .lock small { margin-left: auto; font-family: var(--font); font-size: 10.5px; color: var(--faint); }
-  .rates { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  /* one fixed height whatever the filter: switching chips never moves the
+     rows or the button; longer lists scroll inside */
+  .rates { border: 1px solid var(--border); border-radius: 10px; height: 268px; overflow-y: auto; background: var(--surface); }
+  .rates .loading { height: 100%; display: flex; flex-direction: column; justify-content: center; }
   .rate { display: grid; grid-template-columns: 18px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border-soft); cursor: pointer; }
   .rate:first-child { border-top: none; }
   .rate:hover { background: var(--surface-2); }
@@ -82,7 +85,6 @@
   .vchips { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; margin-left: auto; text-transform: none; letter-spacing: 0; }
   .vchips button { font-family: var(--font); font-size: 11.5px; font-weight: 500; color: var(--muted); border: none; background: none; border-radius: 999px; padding: 3px 11px; cursor: pointer; }
   .vchips button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47,52,55,.1); }
-  .more { display: block; width: 100%; text-align: center; padding: 7px; border: none; border-top: 1px solid var(--border-soft); background: var(--surface-2); font-family: var(--font); font-size: 11.5px; color: var(--muted); cursor: pointer; }
   .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   .foot .sum { font-size: 12px; color: var(--muted); flex: 1; line-height: 1.45; }
   .foot .sum b { color: var(--text); }
@@ -207,14 +209,14 @@ function panel(o) {
   const q = ratesFor(o);
   const chips = (o.mk === 'walmart' ? [['', 'All'], ['wm', 'Walmart'], ['a', 'DWS UPS'], ['b', 'Company 2 UPS']] : [['', 'All'], ['a', 'DWS UPS'], ['b', 'Company 2 UPS']])
     .map(([k, t]) => `<button data-via="${k}" class="${via === k ? 'on' : ''}">${t}</button>`).join('');
-  const list = showAll ? q : q.slice(0, 5);
+  const list = q;
   const sel = q[pick] || q[0];
   const rows = list.map((r, i) => `<div class="rate${i === pick ? ' on' : ''}" data-i="${i}"><span class="rd"></span>
     <div><div class="sv">${r.svc}<span class="via ${VIA[r.via][1]}">${VIA[r.via][0]}</span>${i === 0 ? '<span class="best">Cheapest</span>' : ''}</div><div class="eta">${r.d}</div></div>
     <span></span><span class="pr">${money(r.price)}</span></div>`).join('');
   return `<div class="sp">${left}<div>
     <div class="h">Rates <span class="vchips">${chips}</span></div>
-    <div class="rates">${rows}${q.length > 5 ? `<button class="more" id="more">${showAll ? 'Show fewer' : `Show all ${q.length}`}</button>` : ''}</div>
+    <div class="rates">${rows}</div>
     <div class="foot"><span class="sum"></span>
       <button class="btn btn-primary" id="create">Create label · ${money(sel.price)}</button></div>
   </div></div>`;
@@ -231,7 +233,6 @@ function wire() {
   });
   document.querySelectorAll('[data-via]').forEach(b => b.onclick = () => { via = b.dataset.via; pick = 0; showAll = false; render(); });
   document.querySelectorAll('.rate').forEach(r => r.onclick = () => { pick = Number(r.dataset.i); render(); });
-  const more = document.getElementById('more'); if (more) more.onclick = () => { showAll = !showAll; render(); };
   const wt = document.getElementById('wt');
   if (wt) wt.onchange = () => { ORDERS.find(o => o.n === open).wtNow = wt.value; pick = 0; render(); };
   const box = document.getElementById('box');
