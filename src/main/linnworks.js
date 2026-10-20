@@ -95,6 +95,7 @@ function labelOrder(o, status, ref) {
     reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
     source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
     status,
+    orderedOn: dayOf(gi.ReceivedDate),
     deliverBy: dayOf(sd.To) || dayOf(sd.From),
     shipBy: dayOf(gi.DespatchByDate),
     // what the buyer paid before sales tax — the label's declared value

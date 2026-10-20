@@ -6512,7 +6512,7 @@ exit 1
         items: order.items.map(it => ({ ...it, img: imgs[it.sku] || '' })),
         walmart: row.channel === 'walmart' && wmReady(),
         key, saved: key ? shipPkgState()[key] || null : null,
-        deliverBy: order.deliverBy || '', shipBy: order.shipBy || '',
+        orderedOn: order.orderedOn || '', deliverBy: order.deliverBy || '', shipBy: order.shipBy || '',
       };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -6527,12 +6527,12 @@ exit 1
     if (prep.error) return { ok: false, error: prep.error };
     const jobs = [upsRatesAll(prep)];
     const useWm = row.channel === 'walmart' && wmReady();
-    let deliverBy = '';
+    let dates = null; // Walmart's own order dates, when it is a Walmart order
     if (useWm) {
       jobs.push((async () => {
         try {
           const order = await wmOrder(row.order_number);
-          deliverBy = order.deliverBy || ''; // the date Walmart promised the buyer
+          dates = { orderedOn: order.orderedOn || '', shipBy: order.shipBy || '', deliverBy: order.deliverBy || '' }; // what Walmart promised the buyer
           return { id: 'wm', name: 'Walmart', ok: true, rates: await new walmart.WalmartClient(config.load().walmart).estimates({ order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom }) };
         } catch (e) {
           return { id: 'wm', name: 'Walmart', ok: false, error: e.message };
@@ -6540,7 +6540,7 @@ exit 1
       })());
     }
     const [upsSources, wmSource] = await Promise.all(jobs);
-    return { ok: true, test: !!prep.u.test, deliverBy, sources: [...(wmSource ? [wmSource] : []), ...upsSources] };
+    return { ok: true, test: !!prep.u.test, dates, sources: [...(wmSource ? [wmSource] : []), ...upsSources] };
   });
 
   ipcMain.handle('orderShip:create', async (_e, payload = {}) => {

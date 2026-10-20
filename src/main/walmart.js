@@ -51,6 +51,7 @@ function parseOrder(body) {
   const a = (o.shippingInfo && o.shippingInfo.postalAddress) || {};
   return {
     purchaseOrderId: String(o.purchaseOrderId),
+    orderedOn: dayOf(o.orderDate),
     deliverBy: dayOf(o.shippingInfo && o.shippingInfo.estimatedDeliveryDate),
     shipBy: dayOf(o.shippingInfo && o.shippingInfo.estimatedShipDate),
     lines,

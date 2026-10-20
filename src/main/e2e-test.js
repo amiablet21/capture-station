@@ -1878,7 +1878,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
           // the fake Walmart (Ship with Walmart) on the same server
           if (req.url === '/v3/token') return res.end(JSON.stringify({ access_token: 'WMTOK', expires_in: 900 }));
           if (req.url.startsWith('/v3/orders/')) return res.end(JSON.stringify({ order: { purchaseOrderId: '108829451230774',
-            shippingInfo: { estimatedDeliveryDate: new Date(2026, 9, 22, 14).getTime(), postalAddress: { name: 'Maria Delgado', address1: '4120 W Belmont Ave', city: 'Chicago', state: 'IL', postalCode: '60641' } },
+            orderDate: new Date(2026, 9, 20, 9).getTime(), shippingInfo: { estimatedDeliveryDate: new Date(2026, 9, 22, 14).getTime(), estimatedShipDate: new Date(2026, 9, 20, 18).getTime(), postalAddress: { name: 'Maria Delgado', address1: '4120 W Belmont Ave', city: 'Chicago', state: 'IL', postalCode: '60641' } },
             orderLines: { orderLine: [{ lineNumber: '1', item: { sku: 'WM-X133', productName: 'Galaxy' }, orderLineQuantity: { amount: '1' } }] } } }));
           if (req.url === '/v3/shipping/labels/shipping-estimates') return res.end(JSON.stringify({ data: { estimates: [
             { name: 'USPS_GROUND_ADVANTAGE', displayName: 'USPS Ground Advantage', carrierName: 'USPS', estimatedRate: { amount: 5.5 } },
@@ -2028,7 +2028,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
             out.savedTag = /Saved for this item/.test($('osPkTag').textContent);
             await new Promise(r => setTimeout(r, 2500)); // the rates for the new weight
             const picked = document.querySelector('#osRates .sp-rate.is-on');
-            out.deliver = $('osdDeliver').hidden ? '' : $('osdDeliver').textContent;
+            out.deliver = $('osdDates').textContent;
             out.late = [...document.querySelectorAll('#osRates .sp-rate.is-late')].map(x => x.dataset.k);
             out.pickedLate = !!(picked && picked.classList.contains('is-late'));
             out.starOnPicked = !!(picked && picked.querySelector('.sp-star'));
@@ -2044,8 +2044,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
-          check('order ship: the drawer shows Walmart\'s deliver-by date, flags late rates and picks the cheapest on time',
-            /Deliver by Thu, Oct 22/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
+          check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
+            /Deliver by:10\/22\/2026/.test(ui.deliver) && /Ordered:/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {
