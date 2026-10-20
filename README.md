@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.94 highlights
+
+- **Order dates in the Ship drawer.** Under the customer, an **Order** box shows **Ordered**, **Ship by** and **Deliver by**, with Deliver by highlighted. Walmart orders use Walmart's own dates; other marketplaces use Linnworks'.
+- **Late rates flagged.** A rate that arrives after the Deliver by date is greyed out and tagged **Late**. The star and the first pick go to the cheapest rate that arrives in time.
+- Every item shows its quantity as a small tag, **×1** included.
+
 ## v1.32.93 highlights
 
 - **Ship opens a drawer.** **Ship** on an order line slides a drawer in from the right, over the list. It shows the customer (name, company, ship-to, phone, each copyable), every item with its photo, SKU, quantity and price, the package, and one rate list from Walmart and both UPS accounts. The cheapest rate is starred and picked. **Create label** works as before. Esc, ✕ or a click on the list closes the drawer. Sliding is its only motion.
