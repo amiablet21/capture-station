@@ -6655,11 +6655,15 @@ exit 1
   ipcMain.handle('walmart:test', async (_e, creds = {}) => {
     try {
       const saved = config.load().walmart || {};
-      await new walmart.WalmartClient({
+      const client = new walmart.WalmartClient({
         clientId: String(creds.clientId || '').trim() || saved.clientId,
         clientSecret: String(creds.clientSecret || '').trim() || saved.clientSecret,
-      }).token();
-      return { ok: true };
+      });
+      await client.token();
+      // which carriers Walmart will sell labels for on this account
+      let carriers = null;
+      try { carriers = await client.carriers(); } catch { /* the keys work; the list is a bonus */ }
+      return { ok: true, carriers };
     } catch (e) {
       return { ok: false, error: e.message };
     }

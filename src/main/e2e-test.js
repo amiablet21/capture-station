@@ -1885,6 +1885,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
             { name: 'UPS_GROUND', displayName: 'UPS Ground', carrierName: 'UPS', estimatedRate: { amount: 8.4 }, deliveryDate: '2026-10-23T23:59:00Z' },
             { name: 'FEDEX_2_DAY', displayName: 'FedEx 2Day', carrierName: 'FedEx', estimatedRate: { amount: 11.8 } } ] } }));
           if (req.url === '/v3/shipping/labels' && req.method === 'POST') return res.end(JSON.stringify({ data: { trackingNo: '1Z9WM0000000000077', carrierName: 'UPS', carrierServiceType: 'UPS Ground' } }));
+          if (req.url === '/v3/shipping/labels/carriers') return res.end(JSON.stringify([{ carrierId: '1000', shortName: 'FedEx', carrierName: 'FedEx' }, { carrierId: '1001', shortName: 'USPS', carrierName: 'USPS' }]));
           if (req.url.startsWith('/v3/shipping/labels/carriers/')) {
             if (req.method === 'DELETE') return res.end(JSON.stringify({ data: 'true' }));
             res.setHeader('Content-Type', 'image/png');
@@ -1986,6 +1987,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
           items: [{ sku: 'X133-128GB-GRAY', quantity: 1 }], party: { ...cust, phone: '', email: '', country: 'United States' } });
         try {
           await exec(`api.setConfig({ walmart: { clientId: 'WCID', clientSecret: 'WSEC' } })`);
+          const wt = await exec(`api.walmartTest({})`);
+          check('walmart: Test logs in and lists the carriers Walmart sells labels for', wt.ok && Array.isArray(wt.carriers) && wt.carriers.join(',') === 'FedEx,USPS', wt);
           const wRow = db.createRow({ channel: 'walmart', orderNumber: '108829451230774', origin: '' });
           const eRow = db.createRow({ channel: 'ebay', orderNumber: '21-13542-88761', origin: '' });
           let r = await exec(`api.orderShipPrep(${wRow.id})`);

@@ -15226,7 +15226,8 @@ $('setWmTest').addEventListener('click', async () => {
   out.className = 'test-result';
   out.textContent = 'Connecting…';
   const res = await api.walmartTest({ clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() });
-  out.textContent = res.ok ? 'Connected' : res.error;
+  out.textContent = !res.ok ? res.error
+    : res.carriers && res.carriers.length ? `Connected · Carriers: ${res.carriers.join(', ')}` : 'Connected';
   out.classList.add(res.ok ? 'is-ok' : 'is-fail');
 });
 

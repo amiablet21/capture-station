@@ -222,6 +222,15 @@ class WalmartClient {
     return body;
   }
 
+  // the carriers Walmart sells labels for on this account (Supported
+  // carriers API); the docs say FedEx and USPS today (owner 2026-10-21: show
+  // it on Test, so UPS is noticed the day Walmart adds it)
+  async carriers() {
+    const body = await this.call('GET', '/v3/shipping/labels/carriers');
+    const list = arr((body && (body.data || body.carriers || body.carrierList)) || body);
+    return [...new Set(list.map(c => clip(c && (c.shortName || c.carrierName || c.name), 40)).filter(Boolean))];
+  }
+
   async order(po) {
     const body = await this.call('GET', `/v3/orders/${encodeURIComponent(String(po).trim())}`);
     const o = parseOrder(body);
