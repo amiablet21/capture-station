@@ -15065,19 +15065,17 @@ async function spLoadLog() {
 }
 
 // the marketplace a label is for (owner 2026-10-21): optional, Walmart /
-// eBay / Temu; a PO# lookup picks the order's own, a second press clears it
+// eBay / Temu from a dropdown; a PO# lookup picks the order's own
 function spMktOf(src) {
   const s = String(src || '').toLowerCase();
   return s.includes('walmart') ? 'Walmart' : s.includes('ebay') ? 'eBay' : s.includes('temu') ? 'Temu' : '';
 }
 function spSetMkt(m) {
-  sp.mkt = m || '';
-  document.querySelectorAll('#spMkt [data-m]').forEach(b => b.classList.toggle('is-on', b.dataset.m === sp.mkt));
+  sp.mkt = ['Walmart', 'eBay', 'Temu'].includes(m) ? m : '';
+  $('spMkt').value = sp.mkt;
+  $('spMktDot').className = `sp-mkt-dot${sp.mkt ? ` is-${sp.mkt.toLowerCase()}` : ''}`;
 }
-$('spMkt').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-m]');
-  if (b) spSetMkt(sp.mkt === b.dataset.m ? '' : b.dataset.m);
-});
+$('spMkt').addEventListener('change', () => spSetMkt($('spMkt').value));
 
 function spRenderLog() {
   const rows = sp.log.filter(l => !sp.logKind || l.kind === sp.logKind);
@@ -15092,7 +15090,7 @@ function spRenderLog() {
     const when = sp.logDays ? `${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${fmtTime(l.created_at)}` : fmtTime(l.created_at);
     const mk = spMktOf(l.source);
     const ref = (l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`)
-      + (mk ? `<span class="sp-mk is-${mk.toLowerCase()}">${mk}</span>` : '');
+      + (mk ? `<span class="sp-mk">${mk}</span>` : '');
     const kind = l.voided_at ? '<span class="sp-k void">Voided</span>' : `<span class="sp-k ${l.kind}">${l.kind === 'return' ? 'Return' : 'Ship'}</span>`;
     return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}" data-id="${l.id}">`
       + `<td class="sel">${l.voided_at ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`

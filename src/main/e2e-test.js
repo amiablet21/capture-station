@@ -1960,6 +1960,14 @@ module.exports = async function run({ app, win, db, clipboard }) {
           reference: 'INV-2304', reference2: 'RMA-77', fromPo: false, saveAddress: true,
         })})`);
         const typedBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
+        const mk = await exec(`(async () => {
+          $('spMkt').value = 'eBay'; $('spMkt').dispatchEvent(new Event('change'));
+          const out = { picked: sp.mkt, dot: $('spMktDot').className };
+          sp.log = [{ id: 9001, created_at: new Date().toISOString(), kind: 'ship', reference: 'X-1', from_po: 1, source: 'TEMU', service_name: 'UPS Ground', account_name: 'A', tracking: '1ZX', value: 0, cost: 1 }];
+          spRenderLog(); out.tag = (document.querySelector('#spLogBody tr[data-id="9001"] .sp-mk') || {}).textContent || '';
+          spSetMkt(''); await spLoadLog();
+          return out; })()`);
+        check('ship: the Marketplace dropdown picks Walmart / eBay / Temu, and the list tags each label', mk.picked === 'eBay' && /is-ebay/.test(mk.dot) && mk.tag === 'Temu', mk);
         check('ship: an optional Reference #2 prints under Ref 1', JSON.stringify(typedBody.Package[0].ReferenceNumber) === JSON.stringify([{ Value: 'INV-2304' }, { Value: 'RMA-77' }]), typedBody.Package[0].ReferenceNumber);
         check('ship: label with no PO# saves the address', typed.ok && typed.label.from_po === 0
           && (await exec('api.shipAddresses()')).addresses.some(x => x.company === 'TechHub'), typed);
