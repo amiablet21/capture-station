@@ -14935,7 +14935,7 @@ async function spCreate(sel) {
   const res = await api.shipCreate({
     accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
     kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
-    reference: spRefText(), fromPo: sp.src === 'po' && !!sp.order, source: sp.order ? sp.order.source : '',
+    reference: spRefText(), reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.order ? sp.order.source : '',
     saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
   });
   sp.creating = false;
@@ -15024,7 +15024,7 @@ async function spPdf(id) {
 function spReset() {
   sp.done = null; sp.order = null; sp.poKey = ''; sp.party = null; sp.addressId = null;
   sp.rates = null; sp.ratesErr = ''; sp.pick = ''; sp.createErr = ''; sp.lookupMsg = '';
-  $('spPo').value = ''; $('spVal').value = ''; $('spWt').value = ''; $('spRefIn').value = ''; $('spPaste').value = '';
+  $('spPo').value = ''; $('spVal').value = ''; $('spWt').value = ''; $('spRefIn').value = ''; $('spRef2').value = ''; $('spPaste').value = '';
   $('spMSave').checked = false;
   for (const id of Object.values(SP_MAN)) $(id).value = '';
   spApplyBox(false);
@@ -15372,6 +15372,7 @@ function osFillDrawer(row) {
   osApplyBox();
   $('osWt').value = '';
   $('osVal').value = '';
+  $('osRef2').value = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
   osRenderRates();
@@ -15554,7 +15555,7 @@ async function osCreate() {
   osRenderRates();
   const res = await api.orderShipCreate({
     rowId, via: sel.via, code: sel.code, name: sel.name, carrier: sel.carrier || '', price: sel.price,
-    party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0,
+    party: os.party, pkg: osPkg(), value: parseFloat($('osVal').value) || 0, reference2: $('osRef2').value.trim(),
   });
   const mine = os && os.rowId === rowId;
   if (!res.ok) {

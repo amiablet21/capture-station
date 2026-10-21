@@ -1957,8 +1957,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
             && shipBody.Package[0].PackageServiceOptions.DeclaredValue.MonetaryValue === '189.99' && shipBody.Shipper.ShipperNumber === 'BBB222', shipBody);
         const typed = await exec(`api.shipCreate(${JSON.stringify({
           accountId: 'a', serviceCode: '02', kind: 'ship', party: { ...cust, company: 'TechHub' }, pkg: { weight: 6 }, value: 0,
-          reference: 'INV-2304', fromPo: false, saveAddress: true,
+          reference: 'INV-2304', reference2: 'RMA-77', fromPo: false, saveAddress: true,
         })})`);
+        const typedBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
+        check('ship: an optional Reference #2 prints under Ref 1', JSON.stringify(typedBody.Package[0].ReferenceNumber) === JSON.stringify([{ Value: 'INV-2304' }, { Value: 'RMA-77' }]), typedBody.Package[0].ReferenceNumber);
         check('ship: label with no PO# saves the address', typed.ok && typed.label.from_po === 0
           && (await exec('api.shipAddresses()')).addresses.some(x => x.company === 'TechHub'), typed);
         let list = await exec('api.shipList(0)');

@@ -293,6 +293,10 @@
             <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
             <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
           </div>
+          <div class="osd-pk2">
+            <div></div>
+            <label class="os-f"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
+          </div>
         </section>
         <section class="osd-bx">
           <div class="osd-t">Rates <span class="os-chips" id="osChips"></span></div>
@@ -397,7 +401,12 @@
               <small id="spRefHint" class="sp-hint" hidden>Prints on the label as Ref 1</small></div>
             <div class="sp-f"><span>Declared value ($)</span>
               <input id="spVal" class="input mono" inputmode="decimal" placeholder="0.00" autocomplete="off" />
-              <small id="spValHint" class="sp-hint">Defaults to the order total — change it if you need to</small></div>
+              <small id="spValHint" class="sp-hint">Optional</small></div>
+          </div>
+          <div class="sp-fields two">
+            <div class="sp-f"><span>Reference #2</span>
+              <input id="spRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></div>
+            <div></div>
           </div>
         </div>
       </div>

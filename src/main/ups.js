@@ -176,7 +176,7 @@ function buildRateRequest({ account, kind, shipFrom, returnTo, other, pkg, value
 // ever prints on a label (owner 2026-10-19)
 const LABEL_DESC = { ship: 'Merchandise', return: 'Merchandise return' };
 
-function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, serviceCode, reference }) {
+function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value, serviceCode, reference, reference2 }) {
   const { from, to } = legs({ kind, shipFrom, returnTo, other });
   const p = {
     Packaging: { Code: '02' },
@@ -188,8 +188,9 @@ function buildShipRequest({ account, kind, shipFrom, returnTo, other, pkg, value
   if (dv) p.PackageServiceOptions = dv;
   // Ref 1 prints on the label (the PO#); package-level is the one valid
   // for US-to-US shipments
-  const ref = clip(reference, 35);
-  if (ref) p.ReferenceNumber = [{ Value: ref }];
+  // Ref 2 (owner 2026-10-21) is optional and prints under Ref 1
+  const refs = [clip(reference, 35), clip(reference2, 35)].filter(Boolean);
+  if (refs.length) p.ReferenceNumber = refs.map(Value => ({ Value }));
   const shipment = {
     Description: kind === 'return' ? LABEL_DESC.return : LABEL_DESC.ship,
     Shipper: shipperOf(account, shipFrom),

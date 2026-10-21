@@ -6331,8 +6331,8 @@ exit 1
   }
 
   // buy one UPS label and keep it (with its image) in ship_labels
-  async function upsBuyLabel(prep, acct, { serviceCode, serviceName, reference, fromPo, source, price, rowId }) {
-    const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({ ...prep.input, serviceCode, reference });
+  async function upsBuyLabel(prep, acct, { serviceCode, serviceName, reference, reference2, fromPo, source, price, rowId }) {
+    const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({ ...prep.input, serviceCode, reference, reference2 });
     const { pkg } = prep.input;
     return db.shipLabelAdd({
       kind: prep.input.kind, reference, fromPo: !!fromPo, source,
@@ -6356,9 +6356,10 @@ exit 1
     const serviceCode = String((payload && payload.serviceCode) || '').replace(/\D/g, '').slice(0, 3);
     if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
     const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
+    const reference2 = String((payload && payload.reference2) || '').trim().slice(0, 35);
     try {
       const label = await upsBuyLabel(prep, acct, {
-        serviceCode, serviceName: payload && payload.serviceName, reference,
+        serviceCode, serviceName: payload && payload.serviceName, reference, reference2,
         fromPo: payload && payload.fromPo, source: payload && payload.source, price: payload && payload.price,
       });
       if (payload && payload.saveAddress) { try { db.shipAddrSave(prep.input.other); } catch { /* the label matters more */ } }
@@ -6677,7 +6678,8 @@ exit 1
         const serviceCode = String(payload.code || '').replace(/\D/g, '').slice(0, 3);
         if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
         label = await upsBuyLabel(prep, acct, {
-          serviceCode, serviceName: payload.name, reference: row.order_number, fromPo: true, source: row.channel, price: payload.price, rowId: row.id,
+          serviceCode, serviceName: payload.name, reference: row.order_number, reference2: String(payload.reference2 || '').trim().slice(0, 35),
+          fromPo: true, source: row.channel, price: payload.price, rowId: row.id,
         });
       }
       // the tracking lands on the order like a scan; Process stays the owner's press
