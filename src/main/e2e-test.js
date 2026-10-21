@@ -2061,13 +2061,28 @@ module.exports = async function run({ app, win, db, clipboard }) {
             out.open = dlg.open; out.title = $('osLabelTitle').textContent;
             out.fmts = [...$('osPrintFmt').querySelectorAll('[data-fmt]')].map(b => b.textContent);
             $('osPrintFmt').querySelector('[data-fmt="letter"]').click();
-            out.letterOn = $('osPrintFmt').querySelector('[data-fmt="letter"]').classList.contains('is-on') && localStorage.getItem('osPrintFmt') === 'letter';
+            out.letterOn = $('osPrintFmt').querySelector('[data-fmt="letter"]').classList.contains('is-on') && localStorage.getItem('osPrintFmt') === 'letter'
+              && $('osSheet').classList.contains('is-letter');
+            $('osPrintFmt').querySelector('[data-fmt="a4"]').click();
+            out.a4On = $('osSheet').classList.contains('is-a4') && localStorage.getItem('osPrintFmt') === 'a4';
             out.printerSel = !!$('osPrinter');
             dlg.close();
             $('osPrintFmt').querySelector('[data-fmt="label"]').click();
             return out; })()`);
           check('order ship: a line with a label made here offers Reprint and Void; Reprint opens the popup with label printer or paper',
-            lr.reprint && lr.void && !lr.otherRow && lr.open && lr.title === 'Reprint label' && lr.fmts.join('|') === 'Label printer · 4×6|Paper · 8.5×11' && lr.letterOn && lr.printerSel, lr);
+            lr.reprint && lr.void && !lr.otherRow && lr.open && lr.title === 'Reprint label' && lr.fmts.join('|') === 'Label 4×6|Letter|A4' && lr.letterOn && lr.a4On && lr.printerSel, lr);
+          const many = await exec(`(async () => {
+            sp.logDays = 30; await spLoadLog();
+            const boxes = [...document.querySelectorAll('#spLogBody [data-sel]')].slice(0, 2);
+            boxes.forEach(b => { b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); });
+            const out = { n: boxes.length, btn: !$('spPrintSel').hidden && $('spPrintSel').textContent === 'Print selected · 2' };
+            $('spPrintSel').click(); await new Promise(r => setTimeout(r, 600));
+            out.open = $('osLabelDlg').open; out.title = $('osLabelTitle').textContent; out.ids = $('osLabelDlg').dataset.ids.split(',').length;
+            $('osLabelDlg').close();
+            out.none = await api.shipPrintMany([987654], {});
+            return out; })()`);
+          check('ship: tick labels in the list and Print selected prints them together (unknown labels refused)',
+            many.n === 2 && many.btn && many.open && many.title === 'Print 2 labels' && many.ids === 2 && many.none.ok === false, many);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {

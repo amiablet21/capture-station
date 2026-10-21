@@ -6385,19 +6385,26 @@ exit 1
 
   // a 4x6 page holding the label upright: UPS's GIF lies on its side
   // (wider than tall), so it is turned a quarter clockwise to stand up
-  // paper 'letter' (owner 2026-10-20: print on plain paper too): the same
-  // 4x6 label at true size, top-left of an 8.5x11 page
-  function shipLabelHtml(gif, paper = 'label') {
-    const info = ups.imageInfo(gif);
-    const wide = info && info.width > info.height;
-    const img = wide
-      ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
-      : 'display:block;width:4in;height:auto';
-    const page = paper === 'letter' ? '@page{size:letter;margin:0}.pg{margin:.5in}' : '@page{size:4in 6in;margin:0}';
+  // paper 'letter' / 'a4' (owner 2026-10-20/21: plain paper too): the same
+  // 4x6 label at true size, top-left of the page. Several labels print one
+  // per page (Ship › Labels › Print selected)
+  function shipLabelHtml(gifs, paper = 'label') {
+    const page = paper === 'letter' ? '@page{size:letter;margin:0}.pg{margin:.5in}'
+      : paper === 'a4' ? '@page{size:A4;margin:0}.pg{margin:.5in}' : '@page{size:4in 6in;margin:0}';
+    const one = (gif) => {
+      const info = ups.imageInfo(gif);
+      const wide = info && info.width > info.height;
+      const img = wide
+        ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
+        : 'display:block;width:4in;height:auto';
+      return `<div class="pg"><img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div>`;
+    };
     return `<!doctype html><html><head><meta charset="utf-8"><style>${page}html,body{margin:0;padding:0}`
-      + `.pg{position:relative;width:4in;height:6in;overflow:hidden}</style></head><body><div class="pg">`
-      + `<img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div></body></html>`;
+      + `.pg{position:relative;width:4in;height:6in;overflow:hidden;break-after:page}.pg:last-child{break-after:auto}</style></head><body>`
+      + [].concat(gifs).map(one).join('') + '</body></html>';
   }
+  const printPageSize = (paper) => (paper === 'letter' ? 'Letter' : paper === 'a4' ? 'A4' : { width: 101600, height: 152400 });
+  const printPaper = (paper) => (paper === 'letter' || paper === 'a4' ? paper : 'label');
   // store: false keeps the label record untouched (the browser download is
   // read-only); a Walmart image still missing is then fetched but not kept
   async function shipLabelWindow(id, { store = true, paper = 'label' } = {}) {
@@ -6444,17 +6451,49 @@ exit 1
     let pw = null;
     try {
       const printer = pick !== undefined ? String(pick || '') : String((config.load().ups || {}).printer || '');
-      const letter = paper === 'letter';
-      ({ pw } = await shipLabelWindow(id, { paper: letter ? 'letter' : 'label' }));
+      ({ pw } = await shipLabelWindow(id, { paper: printPaper(paper) }));
       // a named printer prints straight away; otherwise the system print
       // dialog asks which printer
       const ok = await new Promise((resolve, reject) => {
         pw.webContents.print({
           silent: !!printer, deviceName: printer || undefined, printBackground: true,
-          margins: { marginType: 'none' }, pageSize: letter ? 'Letter' : { width: 101600, height: 152400 },
+          margins: { marginType: 'none' }, pageSize: printPageSize(printPaper(paper)),
         }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
       });
       return { ok: true, printed: ok };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  // Print selected (owner 2026-10-21): several labels from Ship › Labels in
+  // one print job, one label per page; voided labels are skipped
+  ipcMain.handle('ship:printMany', async (_e, { ids, printer: pick, paper } = {}) => {
+    let pw = null;
+    try {
+      const printer = pick !== undefined ? String(pick || '') : String((config.load().ups || {}).printer || '');
+      const gifs = [];
+      let skipped = 0;
+      for (const id of [...new Set((ids || []).map(Number))].slice(0, 200)) {
+        let l = db.shipLabelGet(id);
+        if (!l || l.voided_at) { skipped++; continue; }
+        if (!l.label_gif && l.account_id === 'wm') {
+          try { db.shipLabelSetImage(l.id, await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking)); l = db.shipLabelGet(id); } catch { /* counted below */ }
+        }
+        if (l.label_gif) gifs.push(l.label_gif); else skipped++;
+      }
+      if (!gifs.length) return { ok: false, error: 'None of those labels can be printed.' };
+      pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
+      await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(gifs, printPaper(paper)))}`);
+      const ok = await new Promise((resolve, reject) => {
+        pw.webContents.print({
+          silent: !!printer, deviceName: printer || undefined, printBackground: true,
+          margins: { marginType: 'none' }, pageSize: printPageSize(printPaper(paper)),
+        }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
+      });
+      return { ok: true, printed: ok, count: gifs.length, skipped };
     } catch (e) {
       return { ok: false, error: e.message };
     } finally {

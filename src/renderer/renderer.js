@@ -117,6 +117,7 @@ if (!window.api) {
     shipList: async () => ({ ok: true, labels: [] }),
     shipLabel: async () => ({ ok: false, error: 'Preview mode' }),
     shipPrint: async () => ({ ok: false, error: 'Preview mode' }),
+    shipPrintMany: async () => ({ ok: false, error: 'Preview mode' }),
     shipPdf: async () => ({ ok: false, error: 'Preview mode' }),
     shipVoid: async () => ({ ok: false, error: 'Preview mode' }),
     shipAddresses: async () => ({ ok: true, addresses: [] }),
@@ -14531,6 +14532,7 @@ document.addEventListener('keydown', (e) => {
    our return address); both companies' UPS accounts are rated side by side
    and the cheapest is picked; the PO# is always Ref 1. */
 
+var spSel = new Set(); // Ship › Labels: the labels ticked for Print selected
 const sp = {
   info: null, // ship:info — accounts, our two addresses, boxes, test mode
   src: 'po', // 'po' | 'man'
@@ -15074,13 +15076,47 @@ function spRenderLog() {
     const ref = l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`;
     const kind = l.voided_at ? '<span class="sp-k void">Voided</span>' : `<span class="sp-k ${l.kind}">${l.kind === 'return' ? 'Return' : 'Ship'}</span>`;
     return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}" data-id="${l.id}">`
+      + `<td class="sel">${l.voided_at ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`
       + `<td class="m">${esc(when)}</td><td class="m">${ref}</td><td>${kind}${l.test ? ' <span class="sp-test">Test</span>' : ''}</td>`
       + `<td>${esc(l.service_name)}</td><td>${esc(l.account_name)}</td><td class="m">${esc(l.tracking)}</td>`
       + `<td class="num">${l.value ? spMoney(l.value) : '—'}</td><td class="num">${spMoney(l.cost)}</td>`
       + `<td><div class="sp-acts">${l.voided_at ? '' : `<button class="sp-link" data-act="print" type="button">Reprint</button><button class="sp-link" data-act="pdf" type="button">PDF</button>${spDownloadLink(l)}<button class="sp-link v" data-act="void" type="button">Void</button>`}</div></td></tr>`;
   }).join('');
   sp.freshId = 0;
+  spSelSync();
 }
+
+// Print selected (owner 2026-10-21): buy labels, then tick them here and
+// print them all in one go
+function spSelSync() {
+  const live = new Set(sp.log.filter(l => !l.voided_at).map(l => l.id));
+  for (const id of [...spSel]) if (!live.has(id)) spSel.delete(id);
+  const boxes = [...document.querySelectorAll('#spLogBody [data-sel]')];
+  $('spLogAll').checked = boxes.length > 0 && boxes.every(b => b.checked);
+  $('spLogAll').indeterminate = !$('spLogAll').checked && boxes.some(b => b.checked);
+  $('spPrintSel').hidden = spSel.size === 0;
+  $('spPrintSel').textContent = `Print selected · ${spSel.size}`;
+}
+$('spLogBody').addEventListener('change', (e) => {
+  const b = e.target.closest('[data-sel]');
+  if (!b) return;
+  if (b.checked) spSel.add(Number(b.dataset.sel)); else spSel.delete(Number(b.dataset.sel));
+  spSelSync();
+});
+$('spLogAll').addEventListener('change', () => {
+  const on = $('spLogAll').checked;
+  document.querySelectorAll('#spLogBody [data-sel]').forEach(b => { b.checked = on; if (on) spSel.add(Number(b.dataset.sel)); else spSel.delete(Number(b.dataset.sel)); });
+  spSelSync();
+});
+$('spPrintSel').addEventListener('click', async () => {
+  // newest last, so the pile comes out in the order the labels were bought
+  const ids = sp.log.filter(l => spSel.has(l.id)).map(l => l.id).reverse();
+  if (!ids.length) return;
+  const res = await api.shipLabel(ids[0]);
+  if (!res || !res.ok) { toast(`Print failed: ${(res && res.error) || 'label not found'}`, 4000); return; }
+  if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
+  osShowLabel(res, { reprint: true, ids });
+});
 
 $('spLogBody').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-act]');
@@ -15574,15 +15610,17 @@ $('osScrim').addEventListener('click', () => { if (os && !os.creating) { osClose
 $('osCreate').addEventListener('click', osCreate);
 
 // the print popup: the label, Print ready under Enter
-function osShowLabel(res, { reprint = false } = {}) {
+function osShowLabel(res, { reprint = false, ids = null } = {}) {
   const { label: l, gif, size } = res;
-  $('osLabelTitle').textContent = reprint ? 'Reprint label' : 'Label created';
+  // several labels: the first one shows, all of them print
+  $('osLabelDlg').dataset.ids = ids && ids.length > 1 ? ids.join(',') : '';
+  $('osLabelTitle').textContent = ids && ids.length > 1 ? `Print ${ids.length} labels` : reprint ? 'Reprint label' : 'Label created';
   $('osLabelOk').hidden = reprint;
   osPrintSetup();
   const wide = size && size.width > size.height;
   const type = size && size.type === 'png' ? 'png' : 'gif';
   $('osLabelImg').innerHTML = gif ? `<img class="${wide ? 'is-wide' : 'is-tall'}" src="data:image/${type};base64,${gif}" alt="Label" />` : '<div class="none">The label image is on its way — Print fetches it.</div>';
-  $('osLabelTrk').textContent = l.tracking;
+  $('osLabelTrk').textContent = ids && ids.length > 1 ? `${l.tracking} +${ids.length - 1}` : l.tracking;
   $('osLabelDlg').dataset.id = l.id;
   $('osLabelDlg').showModal();
   $('osLabelPrint').focus();
@@ -15592,9 +15630,11 @@ function osShowLabel(res, { reprint = false } = {}) {
 var osPrinters = null;
 const osPrintGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const osPrintSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* best effort */ } };
+const OS_FMTS = ['label', 'letter', 'a4'];
 function osPrintFill() {
   const fmt = $('osPrintFmt').dataset.fmt || 'label';
   $('osPrintFmt').querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('is-on', b.dataset.fmt === fmt));
+  $('osSheet').className = `osp-sheet${fmt === 'label' ? '' : ` is-${fmt}`}`;
   const def = fmt === 'label' ? ((sp.info && sp.info.printer) || '') : '';
   const want = osPrintGet(`osPrinter-${fmt}`, def);
   const names = osPrinters || [];
@@ -15604,7 +15644,8 @@ function osPrintFill() {
   sel.value = want;
 }
 function osPrintSetup() {
-  $('osPrintFmt').dataset.fmt = osPrintGet('osPrintFmt', 'label') === 'letter' ? 'letter' : 'label';
+  const f = osPrintGet('osPrintFmt', 'label');
+  $('osPrintFmt').dataset.fmt = OS_FMTS.includes(f) ? f : 'label';
   osPrintFill();
   if (!osPrinters) api.shipPrinters().then(r => { osPrinters = (r && r.printers) || []; osPrintFill(); }).catch(() => {});
 }
@@ -15633,9 +15674,19 @@ async function spVoidFromRow(id, row) {
 }
 $('osLabelPrint').addEventListener('click', async () => {
   const id = Number($('osLabelDlg').dataset.id);
-  const paper = $('osPrintFmt').dataset.fmt === 'letter' ? 'letter' : 'label';
+  const paper = OS_FMTS.includes($('osPrintFmt').dataset.fmt) ? $('osPrintFmt').dataset.fmt : 'label';
   const printer = $('osPrinter').value;
+  const many = ($('osLabelDlg').dataset.ids || '').split(',').filter(Boolean).map(Number);
   $('osLabelDlg').close();
+  if (many.length > 1) {
+    const r = await api.shipPrintMany(many, { paper, printer });
+    if (!r.ok) toast(`Print failed: ${r.error}`, 5000);
+    else if (r.printed) {
+      toast(`Sent ${r.count} label${r.count === 1 ? '' : 's'} to the printer${r.skipped ? ` · ${r.skipped} skipped` : ''}`);
+      spSel.clear(); spSelSync(); document.querySelectorAll('#spLogBody [data-sel]').forEach(b => { b.checked = false; });
+    }
+    return;
+  }
   await spPrint(id, { paper, printer });
 });
 $('osLabelClose').addEventListener('click', () => $('osLabelDlg').close());

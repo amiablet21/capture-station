@@ -311,10 +311,11 @@
   <dialog id="osLabelDlg" class="dlg os-dlg">
     <div class="dlg-body">
       <div class="sp-done-h"><span class="ok" id="osLabelOk">✓</span><b id="osLabelTitle">Label created</b><span class="trk" id="osLabelTrk"></span></div>
-      <div class="sp-label" id="osLabelImg"></div>
+      <div class="osp-sheet" id="osSheet"><div class="sp-label" id="osLabelImg"></div></div>
       <div class="osp-fmt" id="osPrintFmt">
-        <button type="button" data-fmt="label">Label printer · 4×6</button>
-        <button type="button" data-fmt="letter">Paper · 8.5×11</button>
+        <button type="button" data-fmt="label">Label 4×6</button>
+        <button type="button" data-fmt="letter">Letter</button>
+        <button type="button" data-fmt="a4">A4</button>
       </div>
       <select id="osPrinter" class="input osp-printer"></select>
       <div class="sp-done-acts">
@@ -407,6 +408,7 @@
     <div class="sp-card sp-log">
       <div class="sp-log-h">
         <h4>Labels</h4><span id="spLogSum" class="sp-note"></span>
+        <button id="spPrintSel" class="btn btn-primary sp-print-sel" type="button" hidden>Print selected</button>
         <div class="sp-chips" id="spLogKind">
           <button class="is-on" data-k="" type="button">All</button><button data-k="ship" type="button">Ship</button><button data-k="return" type="button">Return</button>
         </div>
@@ -415,7 +417,7 @@
         </select>
       </div>
       <table class="sp-table">
-        <thead><tr><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
+        <thead><tr><th class="sel"><input type="checkbox" id="spLogAll" title="Select all" /></th><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
         <tbody id="spLogBody"></tbody>
       </table>
       <div id="spLogEmpty" class="sp-empty">No labels yet today.</div>
