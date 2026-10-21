@@ -6168,7 +6168,7 @@ tr.os-open > td { background: var(--accent-soft); }
 .osd-it-r .q { font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
 .osd-it-r .p { font-family: var(--mono); font-weight: 700; font-size: 13.5px; }
 .osd-dim { color: var(--faint); font-size: 12.5px; }
-.osd-pk { display: grid; grid-template-columns: minmax(0, 1.4fr) 90px 100px; gap: 10px; }
+.osd-pk { display: grid; grid-template-columns: minmax(0, 1.4fr) 90px 112px; gap: 10px; }
 .osd-pk2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .osd-pk .os-f, .osd-pk2 .os-f { margin-bottom: 0; min-width: 0; }
 .osd-pk2 { margin-top: 10px; }

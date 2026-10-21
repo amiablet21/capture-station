@@ -14756,7 +14756,6 @@ function spEditCustomer() {
   spSetSrc('man');
   spFillManual(sp.party);
   $('spRefIn').value = keep.poKey;
-  if (keep.order && !$('spVal').value) $('spVal').value = Number(keep.order.total || 0).toFixed(2);
 }
 
 function spSetSrc(src) {
@@ -14766,7 +14765,6 @@ function spSetSrc(src) {
   sp.pick = '';
   if (src === 'po') {
     sp.party = sp.order ? { ...sp.order.party } : null;
-    $('spVal').value = sp.order ? Number(sp.order.total || 0).toFixed(2) : '';
   } else {
     sp.party = null;
     $('spVal').value = '';
@@ -14817,7 +14815,6 @@ async function spLookup() {
   sp.lookupMsg = '';
   sp.order = res.order;
   sp.party = { ...res.order.party };
-  $('spVal').value = Number(res.order.total || 0).toFixed(2);
   spRenderAll();
   spScheduleRates(0);
   $('spWt').focus();
@@ -15424,7 +15421,8 @@ async function osPrep() {
   if (!$('osdItems').querySelector('.osd-it') && (res.items || []).length) {
     osRenderItems(res.items.map(it => ({ sku: it.sku, title: it.title, qty: it.quantity || 1, total: Number(it.lineTotal) || 0, img: it.img || '' })));
   }
-  $('osVal').value = Number(res.value || 0).toFixed(2);
+  // declared value stays empty unless typed (owner 2026-10-21): nothing is
+  // declared, the carrier's standard $100 cover applies
   if (os.saved && !$('osWt').value.trim()) osFillPkg(os.saved); // saved for these items: ready to rate
   osPkgTag();
   if (!(parseFloat($('osWt').value) > 0)) $('osWt').focus();
