@@ -14686,7 +14686,7 @@ function spRenderSource() {
   $('spRefLock').hidden = !po;
   $('spRefIn').hidden = po;
   $('spRefHint').hidden = po;
-  $('spValHint').textContent = po ? 'Defaults to the order total — change it if you need to' : 'Optional — leave blank for no declared value';
+  $('spValHint').textContent = 'Optional — leave blank for no declared value';
   $('spKindShipT').textContent = po ? 'Ship to customer' : 'Ship out';
   $('spKindShip').classList.toggle('is-on', sp.kind === 'ship');
   $('spKindRet').classList.toggle('is-on', sp.kind === 'return');

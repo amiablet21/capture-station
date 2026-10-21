@@ -245,7 +245,12 @@ function parseRates(body) {
       days,
     });
   }
-  return out.filter(r => r.price !== null).sort((a, b) => a.price - b.price);
+  // UPS can answer one service twice (e.g. Ground plus a dearer Saturday-
+  // delivery variant, owner 2026-10-21); a label is bought by the service
+  // code alone, i.e. the standard one, so each service shows once, cheapest
+  const best = new Map();
+  for (const r of out) if (r.price !== null && (!best.has(r.code) || r.price < best.get(r.code).price)) best.set(r.code, r);
+  return [...best.values()].sort((a, b) => a.price - b.price);
 }
 
 function parseShip(body) {

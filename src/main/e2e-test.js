@@ -1865,6 +1865,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
             return res.end(JSON.stringify({ RateResponse: { RatedShipment: [
               { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '15.00' }, NegotiatedRateCharges: { TotalCharge: { MonetaryValue: b ? '9.10' : '10.40' } } },
               { Service: { Code: '02' }, TotalCharges: { MonetaryValue: b ? '24.00' : '23.50' } },
+              // UPS can answer a service twice (a dearer Saturday-delivery Ground)
+              { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '19.00' }, NegotiatedRateCharges: { TotalCharge: { MonetaryValue: b ? '13.10' : '14.40' } } },
             ] } }));
           }
           if (req.url.endsWith('/ship')) {
@@ -1939,6 +1941,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
         const rb = r.ok && r.accounts.find(a => a.id === 'b');
         check('ship: both accounts rated side by side (negotiated price wins)',
           ra && rb && ra.ok && rb.ok && ra.rates[0].price === 10.4 && rb.rates[0].price === 9.1 && rb.rates[0].code === '03', r);
+        check('ship: a service UPS answers twice shows once, at its standard price',
+          ra && rb && ra.rates.filter(x => x.code === '03').length === 1 && rb.rates.filter(x => x.code === '03').length === 1 && ra.rates.length === 2, ra && ra.rates);
         const rateBody = JSON.parse(upsSeen.filter(x => x.url.startsWith('/api/rating/')).pop().body).RateRequest.Shipment;
         check('ship: a return is rated from the customer to our return address',
           rateBody.ShipFrom.Name === 'Maria Delgado' && rateBody.ShipTo.Name === 'DWS Returns', rateBody.ShipTo);
