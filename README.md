@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.99 highlights
+
+- **Paper labels fill the top half of the sheet.** On **Letter** or **A4**, the label lies wide and enlarged across the top half of the page, with the bottom half blank, as UPS prints on plain paper. The popup preview shows it the same way. **Label 4×6** is unchanged.
+- **Print selected handles any number of labels.** A big batch no longer fails to load before printing.
+
 ## v1.32.98 highlights
 
 - **Print on A4.** The print popup offers **Label 4×6 · Letter · A4**. On paper the 4×6 label prints at true size, half an inch in from the top-left, and the preview now shows the sheet as it will print.
