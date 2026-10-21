@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.97 highlights
+
+- **No declared value unless you type one.** The Ship drawer and the Ship tab no longer fill in the order total. Empty means nothing is declared, so the carrier's standard cover applies. Type an amount to declare more.
+- **Walmart Test lists your carriers.** Settings › Shipping › Walmart › **Test** now shows which carriers Walmart sells labels for on your account, e.g. "Connected · Carriers: FedEx, USPS". Walmart's API offers FedEx and USPS today. If UPS appears there, its rates show in the drawer automatically.
+
 ## v1.32.96 highlights
 
 - **Reprint and Void on the order line.** When a line's tracking came from a label made in the app, **Reprint** and **Void** sit beside the tracking number. Void appears until the order is processed, and takes the tracking back off the line.
