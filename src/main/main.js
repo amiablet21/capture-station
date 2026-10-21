@@ -6385,23 +6385,41 @@ exit 1
 
   // a 4x6 page holding the label upright: UPS's GIF lies on its side
   // (wider than tall), so it is turned a quarter clockwise to stand up
-  // paper 'letter' / 'a4' (owner 2026-10-20/21: plain paper too): the same
-  // 4x6 label at true size, top-left of the page. Several labels print one
-  // per page (Ship › Labels › Print selected)
+  // paper 'letter' / 'a4' (owner 2026-10-21): the label turned to lie wide
+  // and enlarged to fill the TOP HALF of the sheet, the bottom half blank,
+  // as UPS prints on plain paper. 'label' = the 4x6 label printer. Several
+  // labels print one per page (Ship › Labels › Print selected)
   function shipLabelHtml(gifs, paper = 'label') {
-    const page = paper === 'letter' ? '@page{size:letter;margin:0}.pg{margin:.5in}'
-      : paper === 'a4' ? '@page{size:A4;margin:0}.pg{margin:.5in}' : '@page{size:4in 6in;margin:0}';
+    const sheet = paper === 'a4' ? { size: 'A4', w: 8.27, h: 11.69 } : paper === 'letter' ? { size: 'letter', w: 8.5, h: 11 } : null;
     const one = (gif) => {
       const info = ups.imageInfo(gif);
       const wide = info && info.width > info.height;
+      const src = `data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}`;
+      if (!sheet) {
+        const img = wide
+          ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
+          : 'display:block;width:4in;height:auto';
+        return `<div class="pg"><img style="${img}" src="${src}"></div>`;
+      }
+      const m = 0.25;
+      const W = sheet.w - 2 * m;
+      const H = sheet.h / 2 - m;
       const img = wide
-        ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
-        : 'display:block;width:4in;height:auto';
-      return `<div class="pg"><img style="${img}" src="data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}"></div>`;
+        ? `position:absolute;top:0;left:0;width:${W}in;height:${H}in;object-fit:contain;object-position:left top`
+        : `position:absolute;top:0;left:0;width:${H}in;height:${W}in;object-fit:contain;object-position:right top;transform-origin:top left;transform:translateY(${H}in) rotate(-90deg)`;
+      return `<div class="pg"><div class="half" style="position:absolute;top:${m}in;left:${m}in;width:${W}in;height:${H}in;overflow:hidden"><img style="${img}" src="${src}"></div></div>`;
     };
+    const page = sheet ? `@page{size:${sheet.size};margin:0}.pg{width:${sheet.w}in;height:${sheet.h}in}` : '@page{size:4in 6in;margin:0}.pg{width:4in;height:6in}';
     return `<!doctype html><html><head><meta charset="utf-8"><style>${page}html,body{margin:0;padding:0}`
-      + `.pg{position:relative;width:4in;height:6in;overflow:hidden;break-after:page}.pg:last-child{break-after:auto}</style></head><body>`
+      + `.pg{position:relative;overflow:hidden;break-after:page}.pg:last-child{break-after:auto}</style></head><body>`
       + [].concat(gifs).map(one).join('') + '</body></html>';
+  }
+  // a print page goes through a temp file: a data: URL stops at ~2 MB, a
+  // dozen-plus labels in one Print selected job is past that
+  async function loadPrintPage(pw, html) {
+    const file = path.join(app.getPath('temp'), `dws-label-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+    fs.writeFileSync(file, html);
+    try { await pw.loadFile(file); } finally { try { fs.unlinkSync(file); } catch { /* gone */ } }
   }
   const printPageSize = (paper) => (paper === 'letter' ? 'Letter' : paper === 'a4' ? 'A4' : { width: 101600, height: 152400 });
   const printPaper = (paper) => (paper === 'letter' || paper === 'a4' ? paper : 'label');
@@ -6417,7 +6435,7 @@ exit 1
     }
     if (!l.label_gif) throw new Error('The carrier sent no image for this label.');
     const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
-    await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(l.label_gif, paper))}`);
+    await loadPrintPage(pw, shipLabelHtml(l.label_gif, paper));
     return { pw, label: l };
   }
 
@@ -6486,7 +6504,7 @@ exit 1
       }
       if (!gifs.length) return { ok: false, error: 'None of those labels can be printed.' };
       pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
-      await pw.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shipLabelHtml(gifs, printPaper(paper)))}`);
+      await loadPrintPage(pw, shipLabelHtml(gifs, printPaper(paper)));
       const ok = await new Promise((resolve, reject) => {
         pw.webContents.print({
           silent: !!printer, deviceName: printer || undefined, printBackground: true,
