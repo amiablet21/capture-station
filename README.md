@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.98 highlights
+
+- **Print on A4.** The print popup offers **Label 4×6 · Letter · A4**. On paper the 4×6 label prints at true size, half an inch in from the top-left, and the preview now shows the sheet as it will print.
+- **Print several labels at once.** In Ship › Labels, tick the labels (or tick all) and press **Print selected**. They print in one job, one label per page, in the order they were bought. Voided labels are skipped.
+
 ## v1.32.97 highlights
 
 - **No declared value unless you type one.** The Ship drawer and the Ship tab no longer fill in the order total. Empty means nothing is declared, so the carrier's standard cover applies. Type an amount to declare more.
