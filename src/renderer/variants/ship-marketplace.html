@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Ship — marketplace picker styles</title>
+<!--
+  Owner 2026-10-21: the Walmart / eBay / Temu picker on the Ship tab "looks
+  ugly". Three alternatives, each shown as the picker beside Reference #2
+  and as the tag in the Labels list.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); }
+  .pg { max-width: 860px; margin: 0 auto; padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 18px; }
+  .opt { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+  .opt h3 { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 12px; }
+  .opt h3 b { color: var(--text); margin-right: 6px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .f { display: flex; flex-direction: column; gap: 5px; }
+  .f > span { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .input { width: 100%; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--border-soft); font-size: 13px; }
+  .row:first-of-type { border-top: none; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .d-wm { background: #2B7BC4; } .d-eb { background: #3E8E4E; } .d-tm { background: #E07B1F; }
+
+  /* A: segmented, like "Ship out / Return to us" */
+  .seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { font-family: var(--font); font-size: 12.5px; font-weight: 500; color: var(--muted); border: none; background: none; border-radius: 8px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47,52,55,.1); }
+  .tagA { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-left: 10px; }
+
+  /* B: dropdown with a dot */
+  .sel { position: relative; }
+  .sel select { padding-left: 28px; }
+  .sel .dot { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); }
+  .tagB { font-size: 11.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; margin-left: 10px; }
+
+  /* C: small round marks */
+  .marks { display: flex; gap: 8px; }
+  .mk { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--border); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--surface); cursor: pointer; }
+  .mk.on.wm { border-color: #2B7BC4; color: #fff; background: #2B7BC4; }
+  .mk-name { font-size: 12.5px; color: var(--text); align-self: center; margin-left: 4px; font-weight: 600; }
+  .tagC { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; margin-left: 10px; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <section class="opt">
+    <h3><b>A</b>Segmented, like Ship out / Return</h3>
+    <div class="two">
+      <label class="f"><span>Reference #2</span><input class="input mono" value="RMA-77" /></label>
+      <div class="f"><span>Marketplace</span><div class="seg"><button>None</button><button class="on"><i class="dot d-wm"></i>Walmart</button><button><i class="dot d-eb"></i>eBay</button><button><i class="dot d-tm"></i>Temu</button></div></div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="row"><span class="mono">129126619338337</span><span class="tagA"><i class="dot d-wm"></i>Walmart</span></div>
+      <div class="row"><span class="mono">21-13542-88761</span><span class="tagA"><i class="dot d-eb"></i>eBay</span></div>
+      <div class="row"><span class="mono">PO-211-09763641549430973</span><span class="tagA"><i class="dot d-tm"></i>Temu</span></div>
+    </div>
+  </section>
+
+  <section class="opt">
+    <h3><b>B</b>One dropdown</h3>
+    <div class="two">
+      <label class="f"><span>Reference #2</span><input class="input mono" value="RMA-77" /></label>
+      <label class="f"><span>Marketplace</span><div class="sel"><i class="dot d-wm"></i><select class="input"><option>Walmart</option><option>eBay</option><option>Temu</option><option>None</option></select></div></label>
+    </div>
+    <div style="margin-top:14px">
+      <div class="row"><span class="mono">129126619338337</span><span class="tagB">Walmart</span></div>
+      <div class="row"><span class="mono">21-13542-88761</span><span class="tagB">eBay</span></div>
+      <div class="row"><span class="mono">PO-211-09763641549430973</span><span class="tagB">Temu</span></div>
+    </div>
+  </section>
+
+  <section class="opt">
+    <h3><b>C</b>Small round marks</h3>
+    <div class="two">
+      <label class="f"><span>Reference #2</span><input class="input mono" value="RMA-77" /></label>
+      <div class="f"><span>Marketplace</span><div class="marks"><span class="mk on wm">W</span><span class="mk">eB</span><span class="mk">T</span><span class="mk-name">Walmart</span></div></div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="row"><span class="mono">129126619338337</span><span class="tagC" style="background:#2B7BC4">W</span></div>
+      <div class="row"><span class="mono">21-13542-88761</span><span class="tagC" style="background:#3E8E4E">eB</span></div>
+      <div class="row"><span class="mono">PO-211-09763641549430973</span><span class="tagC" style="background:#E07B1F">T</span></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>
