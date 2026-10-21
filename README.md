@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.101 highlights
+
+- **One row per UPS service.** UPS sometimes sends a service twice (e.g. Ground plus a dearer Saturday-delivery Ground). Both rows used to get picked together. Each service now shows once, at the standard price that is actually bought, and the "less than the other account" amounts are right again.
+- The Ship tab's declared-value hint reads "Optional".
+
 ## v1.32.100 highlights
 
 - **Reference #2.** An optional second reference on UPS labels, on the Ship tab and in the Ship drawer. It prints under Ref 1. Walmart labels carry no references.
