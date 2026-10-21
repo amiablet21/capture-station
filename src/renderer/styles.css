@@ -6218,3 +6218,15 @@ tr.os-open > td { background: var(--accent-soft); }
 .sp-table th.sel, .sp-table td.sel { width: 28px; padding-right: 0; }
 .sp-table td.sel input, .sp-table th.sel input { margin: 0; cursor: pointer; }
 .sp-print-sel { padding: 5px 14px; font-size: 12.5px; font-weight: 600; }
+
+/* Ship tab: which marketplace the label is for (owner 2026-10-21), optional */
+.sp-mkt { display: flex; gap: 6px; }
+.sp-mkt button { flex: 1; font-family: var(--font); font-size: 12.5px; font-weight: 500; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 7px 8px; cursor: pointer; }
+.sp-mkt button:hover { color: var(--text); }
+.sp-mkt button.is-on[data-m="Walmart"] { background: var(--badge-blue-bg); color: var(--badge-blue-text); border-color: transparent; font-weight: 600; }
+.sp-mkt button.is-on[data-m="eBay"] { background: var(--badge-green-bg); color: var(--badge-green-text); border-color: transparent; font-weight: 600; }
+.sp-mkt button.is-on[data-m="Temu"] { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); border-color: transparent; font-weight: 600; }
+.sp-mk { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; background: var(--surface-2); color: var(--muted); }
+.sp-mk.is-walmart { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+.sp-mk.is-ebay { background: var(--badge-green-bg); color: var(--badge-green-text); }
+.sp-mk.is-temu { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }

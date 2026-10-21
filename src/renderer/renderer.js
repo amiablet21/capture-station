@@ -14816,6 +14816,7 @@ async function spLookup() {
   }
   sp.lookupMsg = '';
   sp.order = res.order;
+  spSetMkt(spMktOf(res.order.source)); // the order's own marketplace, changeable
   sp.party = { ...res.order.party };
   spRenderAll();
   spScheduleRates(0);
@@ -14935,7 +14936,7 @@ async function spCreate(sel) {
   const res = await api.shipCreate({
     accountId: sel.acct.id, serviceCode: sel.code, serviceName: sel.name, price: sel.price,
     kind: sp.kind, party: sp.party, pkg: spPkg(), value: parseFloat($('spVal').value) || 0,
-    reference: spRefText(), reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.order ? sp.order.source : '',
+    reference: spRefText(), reference2: $('spRef2').value.trim(), fromPo: sp.src === 'po' && !!sp.order, source: sp.mkt || '',
     saveAddress: sp.src === 'man' && $('spMSave').checked, addressId: sp.src === 'man' ? sp.addressId : null,
   });
   sp.creating = false;
@@ -15025,6 +15026,7 @@ function spReset() {
   sp.done = null; sp.order = null; sp.poKey = ''; sp.party = null; sp.addressId = null;
   sp.rates = null; sp.ratesErr = ''; sp.pick = ''; sp.createErr = ''; sp.lookupMsg = '';
   $('spPo').value = ''; $('spVal').value = ''; $('spWt').value = ''; $('spRefIn').value = ''; $('spRef2').value = ''; $('spPaste').value = '';
+  spSetMkt('');
   $('spMSave').checked = false;
   for (const id of Object.values(SP_MAN)) $(id).value = '';
   spApplyBox(false);
@@ -15062,6 +15064,21 @@ async function spLoadLog() {
   spRenderLog();
 }
 
+// the marketplace a label is for (owner 2026-10-21): optional, Walmart /
+// eBay / Temu; a PO# lookup picks the order's own, a second press clears it
+function spMktOf(src) {
+  const s = String(src || '').toLowerCase();
+  return s.includes('walmart') ? 'Walmart' : s.includes('ebay') ? 'eBay' : s.includes('temu') ? 'Temu' : '';
+}
+function spSetMkt(m) {
+  sp.mkt = m || '';
+  document.querySelectorAll('#spMkt [data-m]').forEach(b => b.classList.toggle('is-on', b.dataset.m === sp.mkt));
+}
+$('spMkt').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-m]');
+  if (b) spSetMkt(sp.mkt === b.dataset.m ? '' : b.dataset.m);
+});
+
 function spRenderLog() {
   const rows = sp.log.filter(l => !sp.logKind || l.kind === sp.logKind);
   const live = rows.filter(l => !l.voided_at);
@@ -15073,7 +15090,9 @@ function spRenderLog() {
   $('spLogBody').innerHTML = rows.map(l => {
     const t = new Date(l.created_at);
     const when = sp.logDays ? `${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${fmtTime(l.created_at)}` : fmtTime(l.created_at);
-    const ref = l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`;
+    const mk = spMktOf(l.source);
+    const ref = (l.reference ? `${esc(l.reference)}${l.from_po ? '' : '<small>· no PO#</small>'}` : `${esc(l.party_name)}<small>· no ref</small>`)
+      + (mk ? `<span class="sp-mk is-${mk.toLowerCase()}">${mk}</span>` : '');
     const kind = l.voided_at ? '<span class="sp-k void">Voided</span>' : `<span class="sp-k ${l.kind}">${l.kind === 'return' ? 'Return' : 'Ship'}</span>`;
     return `<tr class="${l.voided_at ? 'is-void' : ''}${l.id === sp.freshId ? ' is-fresh' : ''}" data-id="${l.id}">`
       + `<td class="sel">${l.voided_at ? '' : `<input type="checkbox" data-sel="${l.id}" ${spSel.has(l.id) ? 'checked' : ''} />`}</td>`
