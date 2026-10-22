@@ -340,7 +340,7 @@ function render() {
   // Overview has its OWN flag (owner 2026-08-25: employees must not see the
   // money dashboard) — it still needs stock access to have data to show.
   // Recovery rides the Returns flag too (it reads the Returns log) and is opt-in like Pricing
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ship: !!pages.ship, walmart: !!pages.stock };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ship: !!pages.ship, walmart: !!pages.stock && pages.walmart !== false };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -359,7 +359,8 @@ function render() {
   $('tabReturns').hidden = !pages.returns;
   $('tabRecovery').hidden = !pages.returns || !pages.recovery; // opt-in (owner 2026-10-11), needs Returns
   $('tabShip').hidden = !pages.ship; // UPS labels, per-station opt-in (owner 2026-10-19)
-  $('tabWalmart').hidden = !pages.stock; // List on Walmart reads the Linnworks inventory
+  // List on Walmart: its own tick, on by default wherever Stock is (it reads the Linnworks inventory)
+  $('tabWalmart').hidden = !pages.stock || pages.walmart === false;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns || pages.ship);
   $('historyBtn').hidden = !pages.history;
   $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
@@ -1304,6 +1305,7 @@ async function openSettings(group) {
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
   $('setPageShip').checked = !!pg.ship; // opt-in: default off (owner 2026-10-19)
+  $('setPageWalmart').checked = pg.walmart !== false; // List on Walmart: on unless unticked
   fillUpsSettings(cfg.ups || {});
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
@@ -1435,6 +1437,7 @@ $('settingsSave').addEventListener('click', async () => {
       wholesale: $('setPageWholesale').checked,
       cost: $('setPageCost').checked,
       ship: $('setPageShip').checked,
+      walmart: $('setPageWalmart').checked,
     },
     ups: readUpsSettings(),
     walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },

@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.104 highlights
+
+- **Walmart has its own tick** under Settings › General › Pages on this station (it was riding the Stock tick, so it could not be found or switched off). It starts ticked wherever Stock is on; untick it to hide the Walmart tab on that station.
+
 ## v1.32.103 highlights
 
 - **List on Walmart has its own Walmart tab** (owner: not tied to Stock → Unlisted). Add the SKUs you want with the box at the top (SKU, title or barcode, from the Linnworks inventory); the Unlisted view is back to how it was. **Nothing is searched for you**: the search box starts empty with the SKU's name only as a suggestion (click to fill in), Walmart is asked only when you press Search, and a UPC is checked only when you press Check or scan it. Remove a SKU with its ✕, or Clear list. **List | Uploads** switches to past uploads, each with per-SKU results.
