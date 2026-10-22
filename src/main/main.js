@@ -866,7 +866,9 @@ function writeReturnsCsv() {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
     const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched,dispute_settlement'];
-    for (const r of db.listReturns(1000).slice().reverse()) {
+    // every return, not the newest 1000: past that the oldest silently
+    // fell off the CSV (owner 2026-10-22; the returns room logs ~30 a day)
+    for (const r of db.listReturns(1e9).slice().reverse()) {
       // a PO-only return has no item lines: one placeholder row keeps it in the CSV
       const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
       for (const it of its) {
@@ -3812,7 +3814,7 @@ exit 1
         if (!k || Number.isNaN(ts)) return;
         if (!arrived.has(k) || ts > arrived.get(k)) arrived.set(k, ts);
       };
-      for (const r of db.listReturns(1000)) {
+      for (const r of db.listReturns(1e9)) { // all of them: a SKU's last return may be old
         const ts = Date.parse(r.created_at);
         for (const it of r.items || []) bump(it.targetSku || it.sku, ts);
       }

@@ -2200,6 +2200,28 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('web: switched off, nothing is listening', r.status === 0, r);
     }
 
+    // returns.csv carries every return (it stopped at the newest 1000,
+    // so the oldest fell off once a station passed 1000 — owner 2026-10-22).
+    // Last in the suite: the extra returns would skew the log checks above.
+    {
+      const tag = `CSV-OLDEST-${Date.now()}`;
+      db.createReturn({ orderNumber: tag, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+        items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      for (let n = 0; n < 1000; n++) {
+        db.createReturn({ orderNumber: `CSV-FILL-${n}`, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+          items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      }
+      const wasCaptureOnly = (await exec('api.getConfig()')).captureOnly;
+      await exec(`api.setConfig({ captureOnly: false })`); // returns:create refuses capture-only
+      const made = await exec(`api.returnsCreate({ orderNumber: 'CSV-NEWEST', unmatched: true, items: [] })`);
+      await exec(`api.setConfig(${JSON.stringify({ captureOnly: !!wasCaptureOnly })})`);
+      const folder = (await exec('api.getConfig()')).csvFolder || path.join(app.getPath('documents'), 'Capture Station');
+      const csv = fs.readFileSync(path.join(folder, 'returns.csv'), 'utf8');
+      check('returns.csv keeps every return past 1000 — the oldest and the newest are both in it',
+        made && made.ok && csv.includes(tag) && csv.includes('CSV-NEWEST') && csv.split('\r\n').length - 1 >= db.listReturns(1e9).length,
+        { made, hasOldest: csv.includes(tag), lines: csv.split('\r\n').length - 1, returns: db.listReturns(1e9).length });
+    }
+
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
   } catch (e) {
     console.log(`E2E_CRASH ${e.stack}`);

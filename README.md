@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.109 highlights
+
+- **`returns.csv` keeps every return.** The CSV mirror beside the daily capture files held only the newest 1000 returns, so a busy station's oldest ones quietly fell off it (the returns room logs about 30 a day). It now carries the whole log. The Stock page's "last arrived" date reads every return too, not the newest 1000. The shared `returns-log.csv` in the sync folder always had everything.
+
 ## v1.32.108 highlights
 
 - **Returns can no longer vanish from the entry row.** Every return the returns room saved was in the shared folder and in `returns-log.csv`; the missing ones never saved at all. Scanning a PO only *loads* the order and the return saves on the next Enter; the loaded row's gutter now reads **Save** instead of a ✓, which looked like it was already saved. Pressing Esc, scanning the next PO over a loaded row, or closing / updating the app used to throw that draft away without a word. Now each one lands on a red **"N returns were NOT saved"** card above the log, with when it happened and why. **Put back** returns it to the entry row (order included) for an Enter to save; **Discard** drops it. A scan typed while a save is still running is also kept now instead of being wiped when the save finishes, and a quick double Enter can no longer save one return twice.
