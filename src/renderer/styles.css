@@ -6035,6 +6035,8 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .wl-upc-row { display: flex; gap: 6px; }
 .wl-upc-row .wl-in { flex: 1; min-width: 0; }
+.wl-upc-row .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+.wl-offer .wl-f-upc { grid-column: span 2; }
 .wl-upc-st.is-ok { color: var(--pos-text); font-weight: 600; }
 .wl-upc-st.is-bad { color: var(--neg-text); font-weight: 600; }
 .wl-upc-st.is-warn { color: var(--badge-yellow-text); font-weight: 600; }

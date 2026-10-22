@@ -12599,7 +12599,11 @@ async function wlSearchCur() {
 // lookup; the answer is cached per UPC so re-renders never re-ask)
 function wlUpcState(it) {
   const c = it.upcCheck;
+  if (c && c.state === 'fetching') return c;
+  if (c && c.state === 'fetchfail' && c.upc === it.upc) return c;
   if (!it.upc) return { state: 'none' };
+  // the Walmart item number typed where the UPC goes (owner hit it 2026-10-22)
+  if (it.pick && it.upc === String(it.pick).replace(/\D/g, '')) return { state: 'itemid' };
   if (!c || c.upc !== it.upc) return { state: 'unchecked' };
   if (c.state === 'checking' || c.state === 'error' || c.state === 'missing') return c;
   return c.itemId === it.pick ? { ...c, state: 'ok' } : { ...c, state: 'other' };
@@ -12710,7 +12714,10 @@ function wlResultHtml(it, r) {
 
 function wlUpcFieldHtml(it) {
   const u = wlUpcState(it);
-  const msg = u.state === 'none' ? '<span class="wl-upc-st is-warn">Scan the box barcode or type the UPC. Walmart needs it to list.</span>'
+  const msg = u.state === 'none' ? '<span class="wl-upc-st is-warn">Walmart needs the UPC to list: press <b>Get from Walmart</b>, or scan the box barcode.</span>'
+    : u.state === 'itemid' ? '<span class="wl-upc-st is-bad">✗ That is the Walmart item number, not the UPC. Press <b>Get from Walmart</b> to find the UPC.</span>'
+    : u.state === 'fetching' ? '<span class="wl-upc-st"><span class="wl-spin"></span>Reading the UPC off the item on walmart.com…</span>'
+    : u.state === 'fetchfail' ? `<span class="wl-upc-st is-bad">✗ ${esc(u.error || 'Could not get the UPC.')}</span>`
     : u.state === 'unchecked' ? '<span class="wl-upc-st">Press Check to confirm it is this item.</span>'
     : u.state === 'checking' ? '<span class="wl-upc-st"><span class="wl-spin"></span>Checking on Walmart…</span>'
     : u.state === 'ok' ? '<span class="wl-upc-st is-ok">✓ This UPC is the item you picked</span>'
@@ -12719,7 +12726,8 @@ function wlUpcFieldHtml(it) {
     : `<span class="wl-upc-st is-bad">✗ ${esc(u.error || 'Could not check.')}</span>`;
   return `<div class="wl-f wl-f-upc"><label for="wlUpc">UPC</label>
     <div class="wl-upc-row"><input id="wlUpc" class="wl-in" type="text" inputmode="numeric" value="${esc(it.upc)}" placeholder="Scan or type" autocomplete="off" />
-    <button type="button" class="btn btn-secondary" data-wlupc>Check</button></div>
+    <button type="button" class="btn btn-secondary" data-wlupc>Check</button>
+    <button type="button" class="btn btn-secondary" data-wlupcfetch title="Find this item's UPC on its walmart.com page, then confirm it through Walmart's API">Get from Walmart</button></div>
     <div class="wl-hint">${msg}${it.barcode ? '' : (u.state === 'ok' ? ' Saved to the Linnworks barcode when you list.' : '')}</div></div>`;
 }
 
@@ -12767,7 +12775,7 @@ function wlRenderFind() {
   }
   $('wlBody').innerHTML = `<div class="wl-find">${wlRailHtml()}<div class="wl-pane">${pane}</div></div>`;
   const picked = wl.items.filter(i => i.state === 'picked').length;
-  $('wlFoot').innerHTML = `<div class="wl-foot-info">Walmart's search doesn't give out UPCs, and an offer needs one: it comes from the <b>Linnworks barcode</b> or one scan of the box, and is saved to Linnworks so the next restock needs no scan.</div>
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Walmart's search doesn't give out UPCs, and an offer needs one: press <b>Get from Walmart</b> on the picked item, or it comes from the <b>Linnworks barcode</b> or a scan of the box. It is saved to Linnworks, so the next restock needs none of this.</div>
     <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclearlist ${wl.items.length ? '' : 'disabled'}>Clear list</button>
     <button type="button" class="btn btn-secondary" data-wlreview ${picked ? '' : 'disabled'}>Review ${picked} picked →</button></div>`;
 }
@@ -12991,6 +12999,24 @@ $('walmartPage').addEventListener('click', async (e) => {
     wl.cur = Number(cur.dataset.wlcur);
     const it = wl.items[wl.cur];
     if (it.state === 'skipped') it.state = 'todo';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlupcfetch]')) {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    if (!it || !it.pick) { toast('Pick the matching Walmart item first.'); return; }
+    const pick = it.pick;
+    it.upcCheck = { state: 'fetching' };
+    wlRender();
+    const res = await api.walmartUpcFromItem(pick).catch(err => ({ ok: false, error: err.message }));
+    if (!wl || !wl.items.includes(it) || it.pick !== pick) return;
+    if (res && res.ok) {
+      it.upc = res.upc;
+      it.upcCheck = { upc: res.upc, state: 'found', itemId: String(res.item.itemId), title: res.item.title };
+    } else {
+      it.upcCheck = { upc: it.upc, state: 'fetchfail', error: (res && res.error) || 'Could not get the UPC.' };
+    }
     wlRender();
     return;
   }

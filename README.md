@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.106 highlights
+
+- **Get from Walmart** beside the UPC box on the Walmart tab (owner: "I already have the item ID, can it not find it itself?"). Walmart's catalog search never returns a UPC, so for the picked item the app asks Walmart's Get an item call by item number first (it answers for items Walmart counts as yours), then reads the UPC off the item's walmart.com page in a hidden window. Every candidate is looked up through the API and only a UPC that leads back to that exact item number is filled in, so a misread can never list the wrong product. If walmart.com shows its robot check, the message says to copy the UPC from View on Walmart → Specifications. Typing the item number into the UPC box now says so instead of "Walmart has no item with this UPC".
+
 ## v1.32.105 highlights
 
 - **Rating and reviews on Walmart search results** (owner pick B, `variants/walmart-ratings.html`): under each result's title, five stars filled to the average, the number and the review count ("★★★★½ 4.6 · 2,341 reviews"); 1–9 reviews get a "few reviews" tag, none reads "No reviews yet". Walmart's search already returns both, so no extra calls.

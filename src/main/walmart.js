@@ -281,6 +281,26 @@ class WalmartClient {
     return normalizeSearch(await this.call('GET', `/v3/items/walmart/search?${id.param}=${id.value}`))[0] || null;
   }
 
+  // GTIN / UPC an item number carries, via Get an item (productIdType=
+  // ITEM_ID). Walmart documents it for the seller's own "partner catalog",
+  // so for an item the seller does not sell yet it may answer nothing —
+  // callers treat [] as "try another way". Codes still need proving.
+  async itemIdentifiers(itemId) {
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return [];
+    const body = await this.call('GET', `/v3/items/${encodeURIComponent(id)}?productIdType=ITEM_ID`);
+    const rows = arr((body && (body.ItemResponse || body.itemResponse || body.items)) || body);
+    const codes = [];
+    for (const r of rows) {
+      // the 12-digit UPC first: it is what the box shows and Linnworks keeps
+      for (const v of [r && r.upc, r && r.gtin]) {
+        const d = String(v || '').replace(/\D/g, '');
+        if (d.length >= 8 && d.length <= 14 && !codes.includes(d)) codes.push(d);
+      }
+    }
+    return codes;
+  }
+
   async submitMatchFeed(offers) {
     const body = await this.call('POST', '/v3/feeds?feedType=MP_ITEM_MATCH', buildMatchFeed(offers));
     if (!body || !body.feedId) throw new WalmartError(`Walmart took the upload but returned no feed id${body ? ` (${errorText(body, 200)})` : ''}.`);

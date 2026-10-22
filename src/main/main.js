@@ -4327,6 +4327,76 @@ exit 1
     }
   });
 
+  // Walmart item number -> its UPC (owner 2026-10-22: "I already have the
+  // item ID, can it not find it itself?"). Walmart's API answers UPC ->
+  // item but never item -> UPC, so the item's own walmart.com page is read
+  // once in a hidden window (only when the owner presses the button), every
+  // barcode-looking value on it is collected, and each is looked up through
+  // the API: only a UPC that points back to THIS item number is returned,
+  // so a misread page can never fill in a wrong UPC. Its own session, never
+  // the Seller Center pane's.
+  const WM_SITE_PARTITION = 'persist:walmart-site';
+  ipcMain.handle('walmart:upcFromItem', async (_e, { itemId } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick the Walmart item first.' };
+    // first the API: Get an item by item number carries gtin / upc (for
+    // items Walmart counts as in this seller's catalog); proven by lookup
+    try {
+      const c = wmClient();
+      for (const code of (await c.itemIdentifiers(id).catch(() => [])).slice(0, 4)) {
+        const item = await c.lookupUpc(code).catch(() => null);
+        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'api' };
+      }
+    } catch { /* fall through to the product page */ }
+    const site = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
+    const ses = session.fromPartition(WM_SITE_PARTITION);
+    ses.setUserAgent(ses.getUserAgent()
+      .replace(/\sElectron\/\S+/i, '')
+      .replace(/\s(?:capture[- ]?station|Capture ?Station|dws[- ]?stock)\/\S+/i, ''));
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: ses, sandbox: true, contextIsolation: true, javascript: true } });
+    let found = { codes: [], blocked: false };
+    try {
+      await w.loadURL(`${site}/ip/${id}`).catch(() => {}); // a slow sub-resource is no failure
+      for (let i = 0; i < 8; i++) {
+        found = await w.webContents.executeJavaScript(`(() => {
+          const body = document.body ? document.body.innerText : '';
+          const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+          const codes = [];
+          const add = (c) => { c = String(c || '').replace(/\\D/g, ''); if (c.length >= 8 && c.length <= 14 && !codes.includes(c)) codes.push(c); };
+          const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => x.textContent)
+            .concat((document.getElementById('__NEXT_DATA__') || {}).textContent || '');
+          for (const t of json) {
+            const re = /"(?:upc|productUpc|gtin|gtin8|gtin12|gtin13|gtin14)"\\s*:\\s*"?(\\d{8,14})"?/g;
+            for (let m = re.exec(t); m; m = re.exec(t)) add(m[1]);
+          }
+          const spec = /\\bUPC\\b[^0-9]{0,24}(\\d{8,14})/i.exec(body);
+          if (spec) add(spec[1]);
+          return { codes, blocked, ready: !!(document.getElementById('__NEXT_DATA__') || codes.length) };
+        })()`, true).catch(() => ({ codes: [], blocked: false, ready: false }));
+        if (found.codes.length || found.blocked || found.ready) break;
+        await new Promise(r => setTimeout(r, 750));
+      }
+    } finally {
+      w.destroy();
+    }
+    if (found.blocked && !found.codes.length) {
+      return { ok: false, error: 'Walmart.com asked to check this computer is not a robot, so the page could not be read. Open View on Walmart, scroll to Specifications and copy the UPC from there.' };
+    }
+    try {
+      const c = wmClient();
+      for (const code of found.codes.slice(0, 6)) {
+        const item = await c.lookupUpc(code).catch(() => null);
+        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'page' };
+      }
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    return { ok: false, error: found.codes.length
+      ? `This item's page lists ${found.codes.length === 1 ? 'a barcode' : 'barcodes'} (${found.codes.slice(0, 3).join(', ')}) but none leads back to item ${id} on Walmart — scan the box instead.`
+      : "This item's walmart.com page doesn't show a UPC. Scan the box barcode, or copy it from View on Walmart → Specifications." };
+  });
+
   ipcMain.handle('walmart:submit', async (_e, { offers } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };

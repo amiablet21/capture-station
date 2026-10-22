@@ -233,6 +233,7 @@ contextBridge.exposeInMainWorld('api', {
   walmartStatus: () => ipcRenderer.invoke('walmart:status'),
   walmartSearch: (query, barcode) => ipcRenderer.invoke('walmart:search', { query, barcode }),
   walmartUpc: (upc) => ipcRenderer.invoke('walmart:upc', { upc }),
+  walmartUpcFromItem: (itemId) => ipcRenderer.invoke('walmart:upcFromItem', { itemId }),
   walmartSubmit: (offers) => ipcRenderer.invoke('walmart:submit', { offers }),
   walmartFeeds: () => ipcRenderer.invoke('walmart:feeds'),
   walmartFeedCheck: (feedId) => ipcRenderer.invoke('walmart:feedCheck', { feedId }),

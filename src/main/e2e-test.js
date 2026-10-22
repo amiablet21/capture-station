@@ -1330,6 +1330,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.walmartSearch('Galaxy Tab A9', '')`);
     check('walmart:search refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartUpcFromItem('1735902284')`);
+    check('walmart:upcFromItem refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
     check('walmart:submit refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     {
