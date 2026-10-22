@@ -4427,6 +4427,135 @@ function wsBlank() {
   return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
 }
 
+/* ---- unsaved drafts (owner 2026-10-22: returns typed in the returns room
+   were "not being recorded / disappearing"; every saved one was in the
+   shared folder, so the losses were drafts that never saved). A looked-up
+   order sits in the row until a second Enter; Esc, a new PO over it, a
+   save that wiped what was typed meanwhile, or closing the app threw it
+   away without a word. Each of those now lands here, kept on this
+   station, until it is put back and saved or discarded. ---- */
+const WS_UNSAVED_KEY = 'retUnsaved';
+let wsPrev = null; // the loaded draft a newly typed PO is replacing
+
+function wsUnsavedList() {
+  try { return JSON.parse(localStorage.getItem(WS_UNSAVED_KEY) || '[]') || []; } catch { return []; }
+}
+function wsUnsavedStore(list) {
+  try { localStorage.setItem(WS_UNSAVED_KEY, JSON.stringify(list.slice(0, 100))); } catch { /* storage full: the card shows what it can */ }
+  renderRetUnsaved();
+}
+
+// the row as typed + the loaded order behind it
+function wsSnapshot() {
+  const v = {};
+  for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
+  return {
+    v, recv: wsRecvVal(), condition: ws.condition, pick: ws.pick, targets: ws.targets,
+    orderId: ws.orderId, source: ws.source, unmatched: ws.unmatched, items: ws.items, looked: ws.looked,
+  };
+}
+
+// a stray PO keystroke is not a return; a SKU, a loaded order or a PO
+// that was Entered (looked up) is
+function wsWorthKeeping(s) {
+  return !!(s && (s.v.sku || s.recv || s.orderId || s.looked));
+}
+
+function wsKeepUnsaved(s, why) {
+  if (!wsWorthKeeping(s)) return;
+  const sku = (s.v.sku || s.recv).toUpperCase();
+  const list = wsUnsavedList().filter(d => !(d.v.po === s.v.po && (d.v.sku || d.recv || '').toUpperCase() === sku));
+  list.unshift({ ...s, at: new Date().toISOString(), why });
+  wsUnsavedStore(list);
+}
+
+// Esc: the row clears as before, the draft is kept
+function wsDiscard() {
+  if (wsPrev) wsKeepUnsaved(wsPrev, 'replaced by a new PO, then cleared');
+  wsPrev = null;
+  wsKeepUnsaved(wsSnapshot(), 'cleared with Esc before saving');
+  wsReset();
+}
+
+// a new PO is being looked up or saved: the draft it typed over is kept
+// unless it was the same PO all along
+function wsSettlePrev() {
+  if (!wsPrev) return;
+  if (wsPrev.v.po !== wsEls.po.value.trim()) {
+    wsKeepUnsaved(wsPrev, `replaced by PO ${wsEls.po.value.trim() || '(blank)'} before saving`);
+  }
+  wsPrev = null;
+}
+
+function renderRetUnsaved() {
+  const box = $('retUnsaved');
+  if (!box) return;
+  const list = wsUnsavedList();
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div class="ret-uns-head">
+      <span class="ret-uns-title">⚠ ${list.length} return${list.length === 1 ? ' was' : 's were'} NOT saved</span>
+      <span class="ret-uns-sub">Put one back in the entry row and press Enter to save it, or discard it.</span>
+      <button type="button" class="ret-uns-btn ret-uns-x" data-unsall="1">Discard all</button>
+    </div>
+    ${list.map((d, n) => `
+      <div class="ret-uns-row">
+        <span class="mono ret-uns-when">${esc(retDateUS(d.at))} ${esc(new Date(d.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</span>
+        <span class="mono">${esc(d.v.po || '(no PO)')}</span>
+        <span class="mono ret-uns-sku">${esc(d.v.sku || d.recv || '(no SKU)')}</span>
+        <span class="ret-uns-cond">${esc(retCondLabel(d.condition))}${d.v.units && d.v.units !== '1' ? ` ×${esc(d.v.units)}` : ''}</span>
+        <span class="ret-uns-why">${esc(d.why)}</span>
+        <button type="button" class="ret-uns-btn" data-unsput="${n}">Put back</button>
+        <button type="button" class="ret-uns-btn ret-uns-x" data-unsdel="${n}">Discard</button>
+      </div>`).join('')}`;
+}
+
+$('retUnsaved').addEventListener('click', (e) => {
+  const all = e.target.closest('[data-unsall]');
+  if (all) {
+    if (confirm('Discard every unsaved return in this list? They were never saved, so they will be gone.')) wsUnsavedStore([]);
+    return;
+  }
+  const del = e.target.closest('[data-unsdel]');
+  if (del) {
+    const list = wsUnsavedList();
+    list.splice(Number(del.dataset.unsdel), 1);
+    wsUnsavedStore(list);
+    return;
+  }
+  const put = e.target.closest('[data-unsput]');
+  if (!put || !wsEls) return;
+  if (ws.busy || wsWorthKeeping(wsSnapshot())) { toast('Save or clear (Esc) the entry row first.'); return; }
+  const list = wsUnsavedList();
+  const d = list.splice(Number(put.dataset.unsput), 1)[0];
+  if (!d) return;
+  wsReset();
+  for (const [key] of WS_FIELDS) if (d.v[key] != null && (key !== 'date' || d.v.date)) wsEls[key].value = d.v[key];
+  wsDateAuto = false;
+  Object.assign(ws, {
+    condition: d.condition || 'new', pick: d.pick || '', targets: d.targets || null,
+    orderId: d.orderId || null, source: d.source || '', unmatched: d.unmatched !== false,
+    items: d.items || [], looked: d.looked || '',
+  });
+  wsRenderCond();
+  const r = wsRecvEl();
+  if (r && d.recv) r.value = d.recv;
+  wsSetPhase(ws.orderId ? 'ready' : 'idle');
+  wsUnsavedStore(list);
+  wsEls.sku.focus();
+  toast('Back in the entry row — press Enter to save it.', 3000);
+});
+
+// closing or restarting the app (Update now included) keeps the draft too
+window.addEventListener('beforeunload', () => {
+  if (!wsEls) return;
+  if (wsPrev) wsKeepUnsaved(wsPrev, 'replaced by a new PO, then the app closed');
+  wsKeepUnsaved(wsSnapshot(), ws.busy
+    ? 'the app closed mid-save — check the log before saving it again'
+    : 'the app closed before it was saved');
+});
+
 // Different return keeps the ORDERED SKU in the cell and grows a second
 // "→ what came back" line under it (owner 2026-09-10: same look as the
 // log's arrow line) — this manages that extra input's life cycle
@@ -4441,7 +4570,7 @@ function wsSyncRecv() {
     placeholder="→ what came back…" autocomplete="off" spellcheck="false" aria-label="What actually came back" />`);
   r = wsRecvEl();
   r.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); wsDiscard(); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
     wsSave();
@@ -4487,7 +4616,7 @@ function retEntryRow() {
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
       if (key === 'sku' && skuListLive() && (e.key === 'Enter' || e.key === 'Escape')) return;
-      if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); wsDiscard(); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
       const po = wsEls.po.value.trim();
@@ -4511,6 +4640,13 @@ function retEntryRow() {
   // editing the PO after a match voids the match (a stale orderId must
   // never ride along); a re-typed SKU is no longer "that order line"
   wsEls.po.addEventListener('input', () => {
+    // typing over a LOADED order: hold on to that draft until the new PO
+    // is Entered (wsSettlePrev), the row is Esc'd or the app closes. A
+    // failed lookup overwrote nothing, so retyping its PO is a correction.
+    if (!wsPrev && !ws.busy && ws.orderId) {
+      wsPrev = wsSnapshot();
+      wsPrev.v.po = ws.looked;
+    }
     ws.orderId = null; ws.source = ''; ws.unmatched = true;
     ws.items = []; ws.looked = '';
     wsSetPhase('idle'); // the edited PO is a new draft, not the loaded order
@@ -4696,6 +4832,7 @@ function wsSetPhase(p) {
 // the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
+  wsSettlePrev();
   ws.busy = true;
   wsSetPhase('pending');
   const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
@@ -4789,9 +4926,14 @@ function wsReset() {
 async function wsSave() {
   if (!ws || ws.busy) return;
   const v = {};
-  for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
+  const sent = {}; // raw cells, to tell later typing from this entry
+  for (const [key] of WS_FIELDS) { sent[key] = wsEls[key].value; v[key] = sent[key].trim(); }
   const sku = v.sku.toUpperCase();
   if (!v.po && !sku && !v.cust && !v.trk && !v.note) return; // a blank row is a stray Enter
+  wsSettlePrev();
+  // the order behind THIS row, taken now: a PO typed while the save runs
+  // clears ws and must not leak into (or out of) this entry
+  const order = { orderId: ws.orderId, source: ws.source, unmatched: ws.unmatched };
   let receivedDay = '';
   if (v.date) {
     const m = v.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -4816,8 +4958,11 @@ async function wsSave() {
     } else {
       target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
       if (!target) {
-        // one quiet resolve attempt before complaining (hand-typed SKUs)
+        // one quiet resolve attempt before complaining (hand-typed SKUs);
+        // busy, so a second Enter meanwhile can't save the entry twice
+        ws.busy = true;
         const tr = await api.returnsTargets(sku).catch(() => null);
+        ws.busy = false;
         if (tr && tr.ok) {
           ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
           target = (ws.targets[ws.condition]) || '';
@@ -4840,14 +4985,14 @@ async function wsSave() {
   if (by) retReceivedBy = by;
   ws.busy = true;
   const res = await rvCreate({
-    orderId: ws.orderId || undefined,
+    orderId: order.orderId || undefined,
     orderNumber: v.po,
-    source: ws.source,
+    source: order.source,
     customer: v.cust,
     tracking: v.trk,
     receivedBy: by,
     receivedDay, // the typed Date Received cell (empty = today)
-    unmatched: !!ws.unmatched,
+    unmatched: !!order.unmatched,
     note: (sku || received) ? '' : v.note,
     items: (sku || received) ? [{
       // no ordered SKU on record: what came back IS the line
@@ -4861,9 +5006,20 @@ async function wsSave() {
   ws.busy = false;
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save the return.'); return; }
   toast((sku || received) ? `Received ${sku || received} ×${qty}` : `Logged ${v.po}`, 2500);
+  // the next return may already be going in (a scan lands while the save
+  // runs): clear only the cells still holding what was just saved
+  const typed = {};
+  for (const [key] of WS_FIELDS) if (wsEls[key].value !== sent[key]) typed[key] = wsEls[key].value;
+  wsPrev = null;
   wsReset();
+  for (const key of Object.keys(typed)) wsEls[key].value = typed[key];
+  if (typed.date != null) wsDateAuto = false;
+  // a put-back draft that just saved leaves the unsaved card
+  const savedSku = (sku || received).toUpperCase();
+  const left = wsUnsavedList().filter(d => !(d.v.po === v.po && (d.v.sku || d.recv || '').toUpperCase() === savedSku));
+  if (left.length !== wsUnsavedList().length) wsUnsavedStore(left);
   loadRetPast();
-  wsEls.po.focus();
+  if (!Object.keys(typed).length) wsEls.po.focus();
 }
 
 
@@ -5868,6 +6024,7 @@ async function loadRetPast() {
   }
   renderRetLog();
   renderRetDisputes();
+  renderRetUnsaved();
   retFreshGids.clear(); // washed once; later re-renders stay calm
 }
 
