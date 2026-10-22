@@ -6170,3 +6170,19 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-stars i.w96 { width: 96%; }
 .wl-stars i.w98 { width: 98%; }
 .wl-stars i.w100 { width: 100%; }
+/* unsaved returns: drafts thrown out of the entry row before they saved
+   (owner 2026-10-22). Always open, never behind a chip: a return that
+   did not save must be impossible to miss. */
+.ret-unsaved { border: 1px solid var(--neg-text); border-left: 3px solid var(--neg-text); border-radius: 11px; background: var(--neg-bg); padding: 10px 12px; margin-bottom: 8px; }
+.ret-uns-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.ret-uns-title { font-size: 13px; font-weight: 700; color: var(--neg-text); }
+.ret-uns-sub { font-size: 11.5px; color: var(--muted); flex: 1; min-width: 0; }
+.ret-uns-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border-soft); font-size: 12px; flex-wrap: wrap; }
+.ret-uns-row .mono { font-size: 12px; }
+.ret-uns-when { color: var(--muted); }
+.ret-uns-sku { font-weight: 600; }
+.ret-uns-cond { color: var(--muted); }
+.ret-uns-why { flex: 1; min-width: 0; color: var(--neg-text); font-size: 11.5px; }
+.ret-uns-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-family: inherit; font-size: 11.5px; cursor: pointer; color: var(--text); }
+.ret-uns-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ret-uns-x:hover { border-color: var(--neg-text); color: var(--neg-text); }

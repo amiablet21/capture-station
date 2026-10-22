@@ -473,6 +473,9 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
+      <!-- entry-row drafts that were cleared, replaced or closed before they
+           were saved: never behind a chip, so a lost return is seen -->
+      <div id="retUnsaved" class="ret-unsaved" hidden></div>
       <!-- RETURNS-2 sheet (2026-09-04): the log owns the page; its first
            row is the launcher — a PO# typed there opens the receive popup
            (2026-09-05, "popup instead of on the line"); the pencil on a

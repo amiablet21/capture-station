@@ -473,6 +473,48 @@ module.exports = async function run({ app, win, db, clipboard }) {
       inlineGot && inlineGot.orderId === 'oid-77' && inlineGot.unmatched === false
         && inlineGot.items[0].price === 149.99 && inlineGot.items[0].settle === 149.99,
       inlineGot);
+    // 24c-unsaved (owner 2026-10-22, returns "disappearing"): a looked-up
+    // draft that a new PO replaces, or that Esc clears, is KEPT on the
+    // unsaved card instead of vanishing; Put back restores it to save
+    await exec(`localStorage.removeItem('retUnsaved'); wsReset();
+      $('wsPo').value = '119888000000001';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    await exec(`$('wsPo').value = 'PO-NEXT-2';
+      $('wsPo').dispatchEvent(new Event('input', { bubbles: true }));
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    let uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('retUnsaved').hidden]`);
+    check('a new PO over a loaded, unsaved return keeps that return on the unsaved card',
+      uns[0].length === 1 && uns[0][0].v.po === '119888000000001' && uns[0][0].v.sku === 'S25-128GB-NAVY'
+        && uns[0][0].orderId === 'oid-77' && /replaced by PO PO-NEXT-2/.test(uns[0][0].why) && uns[1] === false,
+      uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0;`);
+    uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('wsPo').value + $('ws_sku').value,
+      document.querySelectorAll('#retUnsaved .ret-uns-row').length]`);
+    check('Esc clears the row but keeps the draft (same PO + SKU listed once)',
+      uns[0].length === 1 && /Esc/.test(uns[0][0].why) && uns[1] === '' && uns[2] === 1, uns);
+    await exec(`window.__rvGot2 = null; document.querySelector('#retUnsaved [data-unsput="0"]').click(); 0;`);
+    uns = await exec(`[$('wsPo').value, $('ws_sku').value, ws.orderId, JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('Put back restores the draft, loaded order included, and leaves the card',
+      uns[0] === '119888000000001' && uns[1] === 'S25-128GB-NAVY' && uns[2] === 'oid-77' && uns[3] === 0, uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    for (let w = 0; w < 20 && !(inlineGot = await exec(`window.__rvGot2`)); w++) await sleep(150);
+    check('a put-back draft saves with its order', inlineGot && inlineGot.orderId === 'oid-77'
+      && inlineGot.orderNumber === '119888000000001', inlineGot);
+    // a scan typed while the save runs survives the save's row clear
+    await exec(`window.__rvKeep = rvCreate; window.__rvGot2 = null;
+      rvCreate = async (p) => { window.__rvGot2 = p; await new Promise(r => setTimeout(r, 400)); return { ok: true, id: 997 }; };
+      wsReset(); $('wsPo').value = 'PO-A'; ws.looked = 'PO-A'; $('ws_sku').value = 'S25-128GB-NAVY';
+      $('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(100);
+    await exec(`$('wsPo').value = 'PO-B'; $('wsPo').dispatchEvent(new Event('input', { bubbles: true })); 0;`);
+    await sleep(700);
+    uns = await exec(`[window.__rvGot2 && window.__rvGot2.orderNumber, $('wsPo').value, $('ws_sku').value,
+      JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('a PO typed during a save is kept; the saved cells clear; nothing lands on the card',
+      uns[0] === 'PO-A' && uns[1] === 'PO-B' && uns[2] === '' && uns[3] === 0, uns);
+    await exec(`rvCreate = window.__rvKeep; wsReset(); localStorage.removeItem('retUnsaved'); renderRetUnsaved(); 0;`);
     // the condition pill opens its 4-pill menu right in the row
     await exec(`$('ws_sku').value = 'S25-128GB-NAVY'; wsRenderCond(); document.querySelector('#wsCond').click(); 0;`);
     await sleep(150);
