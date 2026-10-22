@@ -14573,6 +14573,7 @@ function osFillDrawer(row) {
   $('osWt').value = '';
   $('osVal').value = '';
   $('osRef2').value = '';
+  os.ref2Auto = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
   osRenderRates();
@@ -14588,8 +14589,23 @@ function osRenderCustomer(c) {
     + (c.phone ? `<div class="osd-ln">${OSD_PHONE}<div class="v mono">${esc(c.phone)}</div>${copy(c.phone)}</div>` : '');
 }
 
+// Reference #2 starts as "SKU | 1 unit sold" so the printed label tells the
+// packer what goes in the box (owner 2026-10-22); typing over it wins. UPS
+// prints 35 characters, so a long SKU list is cut and the count kept
+// (plain ASCII: no ellipsis on a carrier label).
+function osRef2Default(items) {
+  const skus = [...new Set(items.map(it => String(it.sku || '').trim()).filter(Boolean))];
+  if (!skus.length) return '';
+  const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
+  const tail = ` | ${n} unit${n === 1 ? '' : 's'} sold`;
+  const head = skus.join(', ');
+  return head.length + tail.length <= 35 ? head + tail : head.slice(0, 35 - tail.length).trim() + tail;
+}
+
 function osRenderItems(items) {
   const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
+  const ref2 = $('osRef2');
+  if (os && (!ref2.value.trim() || ref2.value === os.ref2Auto)) { os.ref2Auto = osRef2Default(items); ref2.value = os.ref2Auto; }
   $('osdItemsT').textContent = items.length > 1 || n > 1 ? `Items · ${n}` : 'Item';
   $('osdItems').innerHTML = items.length ? items.map(it => `<div class="osd-it">
       <div class="osd-ph">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" />` : ICONS.box}</div>

@@ -1930,7 +1930,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
             const d = document.getElementById('osDrawer');
             const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
               ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent) && /×1/.test($('osdItems').textContent),
-              saveBtn: !!$('osPkSave') && $('osPkSave').disabled, noValue: $('osVal').value === '' };
+              saveBtn: !!$('osPkSave') && $('osPkSave').disabled, noValue: $('osVal').value === '', ref2: $('osRef2').value,
+              ref2Many: osRef2Default([{ sku: 'X133-128GB-GRAY', qty: 2 }, { sku: 'OPEN-BOX-S25-ULTRA-512GB-BLACK', qty: 1 }]) };
             render(); out.survives = d.classList.contains('is-open') && !!document.querySelector('#rowsBody tr.os-open');
             const wt = $('osWt'); wt.value = '1.3'; wt.dispatchEvent(new Event('input'));
             out.saveOn = !!$('osPkSave') && !$('osPkSave').disabled && /Save for this item/.test($('osPkSave').textContent);
@@ -1953,6 +1954,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
           check('order ship: no declared value unless typed', ui.noValue === true, ui);
+          check('order ship: Reference #2 starts as the SKU and units sold, cut to 35 with the count kept',
+            ui.ref2 === 'X133-128GB-GRAY | 1 unit sold' && ui.ref2Many === 'X133-128GB-GRAY, OPE | 3 units sold' && ui.ref2Many.length <= 35, ui);
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',

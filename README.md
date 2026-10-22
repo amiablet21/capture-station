@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.107 highlights
+
+- **Reference #2 fills itself on the order line's Ship drawer** (owner: "so when my employee prints it, it will be easier"): it starts as the order's SKU and how many units sold, e.g. `X133-128GB-GRAY | 1 unit sold` (`| 3 units sold` for more). Several SKUs are listed comma-separated; UPS prints 35 characters, so a long list is cut and the count is always kept. Typing over it wins, and the field stays editable.
+
 ## v1.32.106 highlights
 
 - **Get from Walmart** beside the UPC box on the Walmart tab (owner: "I already have the item ID, can it not find it itself?"). Walmart's catalog search never returns a UPC, so for the picked item the app asks Walmart's Get an item call by item number first (it answers for items Walmart counts as yours), then reads the UPC off the item's walmart.com page in a hidden window. Every candidate is looked up through the API and only a UPC that leads back to that exact item number is filled in, so a misread can never list the wrong product. If walmart.com shows its robot check, the message says to copy the UPC from View on Walmart → Specifications. Typing the item number into the UPC box now says so instead of "Walmart has no item with this UPC".
