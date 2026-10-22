@@ -6174,6 +6174,7 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-stars i.w96 { width: 96%; }
 .wl-stars i.w98 { width: 98%; }
 .wl-stars i.w100 { width: 100%; }
+
 /* unsaved returns: drafts thrown out of the entry row before they saved
    (owner 2026-10-22). Always open, never behind a chip: a return that
    did not save must be impossible to miss. */
