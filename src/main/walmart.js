@@ -356,8 +356,14 @@ function normalizeSearch(j) {
   });
 }
 
+// the offer conditions an MP_ITEM_MATCH feed takes without extra ids
+// (Restored grades also need restoredProductIdentifier, spec 5.x only).
+// Everything but New needs Walmart's Pre-Owned approval and a photo.
+const MATCH_CONDITIONS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured', 'New with defects'];
+
 // offers -> MP_ITEM_MATCH 4.2 payload (official schema: no businessUnit in
-// the 4.2 header; condition / price / ShippingWeight / sku / ids required)
+// the 4.2 header; condition / price / ShippingWeight / sku / ids required;
+// mainImageUrl required for every condition but New)
 function buildMatchFeed(offers) {
   return {
     MPItemFeedHeader: { sellingChannel: 'mpsetupbymatch', locale: 'en', version: '4.2', processMode: 'REPLACE', subset: 'EXTERNAL' },
@@ -368,6 +374,7 @@ function buildMatchFeed(offers) {
         price: Math.round(Number(o.price) * 100) / 100,
         ShippingWeight: Math.round(Number(o.shipLb) * 1000) / 1000,
         condition: o.condition || 'New',
+        ...(o.condition && o.condition !== 'New' && o.mainImageUrl ? { mainImageUrl: String(o.mainImageUrl) } : {}),
       },
     })),
   };
@@ -407,5 +414,5 @@ const isFinal = (s) => s === 'SUCCESS' || /ERROR$/.test(String(s || ''));
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
-  idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal,
+  idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
 };

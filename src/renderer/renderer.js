@@ -340,7 +340,7 @@ function render() {
   // Overview has its OWN flag (owner 2026-08-25: employees must not see the
   // money dashboard) — it still needs stock access to have data to show.
   // Recovery rides the Returns flag too (it reads the Returns log) and is opt-in like Pricing
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ship: !!pages.ship };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ship: !!pages.ship, walmart: !!pages.stock };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -359,6 +359,7 @@ function render() {
   $('tabReturns').hidden = !pages.returns;
   $('tabRecovery').hidden = !pages.returns || !pages.recovery; // opt-in (owner 2026-10-11), needs Returns
   $('tabShip').hidden = !pages.ship; // UPS labels, per-station opt-in (owner 2026-10-19)
+  $('tabWalmart').hidden = !pages.stock; // List on Walmart reads the Linnworks inventory
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns || pages.ship);
   $('historyBtn').hidden = !pages.history;
   $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
@@ -1529,7 +1530,7 @@ let activePage = 'capture';
 let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ship: 'shipPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ship: 'shipPage', walmart: 'walmartPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1572,6 +1573,7 @@ function showPage(page) {
   $('returnsPage').hidden = page !== 'returns';
   $('recoveryPage').hidden = page !== 'recovery';
   $('shipPage').hidden = page !== 'ship';
+  $('walmartPage').hidden = page !== 'walmart';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
@@ -1579,6 +1581,7 @@ function showPage(page) {
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabRecovery').classList.toggle('is-active', page === 'recovery');
   $('tabShip').classList.toggle('is-active', page === 'ship');
+  $('tabWalmart').classList.toggle('is-active', page === 'walmart');
   // the VISUAL switch is instant (pill, fade, hidden flags); each page's
   // heavy entry work — table renders, data refreshes — waits until the user
   // SETTLES here for a beat, so flying across tabs never stacks re-renders
@@ -1610,6 +1613,8 @@ function showPage(page) {
       enterShelf();
     } else if (page === 'ship') {
       enterShip();
+    } else if (page === 'walmart') {
+      wlEnter();
     } else if (page === 'returns') {
       applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
@@ -1657,6 +1662,7 @@ $('rcCodeForm').addEventListener('submit', async (e) => {
   showPage('recovery');
 });
 $('tabShip').addEventListener('click', () => showPage('ship'));
+$('tabWalmart').addEventListener('click', () => showPage('walmart'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -4934,26 +4940,11 @@ function renderUnlistedView() {
       return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
     })
     .filter(stockCondOk); // the dim rows follow the active slice too
-  // List on Walmart (owner 2026-10-22): a tick box on every row still
-  // missing on Walmart, and the name the app will search Walmart for
-  const wlOn = unlChanKeys().includes('walmart');
-  if (wlOn) wlLoadSent();
-  const wlMissing = (d) => d.missing.includes('walmart') && !chanSkipKind(d.sku, 'walmart');
-  // a SKU already on its way to Walmart can't be ticked twice
-  const wlCan = (d) => wlMissing(d) && !wlSentFor(d.sku);
-  const wlCells = (d, mode) => !wlOn ? ['', ''] : [
-    `<td class="wl-chk">${!mode && wlCan(d) ? `<input type="checkbox" data-wlsku="${esc(d.sku)}" ${wlSel.has(d.sku) ? 'checked' : ''} title="Tick to list on Walmart" />` : ''}</td>`,
-    `<td class="wl-q">${mode || !wlMissing(d) ? ''
-      : wlSentFor(d.sku) ? `<span class="wl-sent" title="Sent with List on Walmart ${esc(new Date(wlSentFor(d.sku).at).toLocaleString())} — Stock → Actions → Walmart uploads">${wlSentFor(d.sku).ok ? '✓ Accepted by Walmart, linking…' : 'Sent to Walmart, processing…'}</span>`
-      : esc(wlQueryFor(d))}</td>`,
-  ];
   const rowHtml = (d, idx, mode) => `
-        <tr${mode ? ` class="unl-dim is-${mode}"` : (wlSel.has(d.sku) ? ' class="wl-picked"' : '')}>
-          ${wlCells(d, mode)[0]}
+        <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
           <td class="cell-gutter">${mode ? '·' : idx}</td>
           <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
           <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
-          ${wlCells(d, mode)[1]}
           <td class="num">${d.avail == null ? '—' : d.avail}</td>
           <td>${mode === 'ignored'
     ? `<span class="unl-dim-note">never listed</span>`
@@ -4964,18 +4955,13 @@ function renderUnlistedView() {
             <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — moves it to the never-listed rows below">✕</button>`}</td>
         </tr>`;
   const dimCount = parked.length + ignoredRows.length;
-  // the tick boxes only ever cover rows on screen that can still go
-  wlRows = rows.filter(wlCan);
-  for (const sku of [...wlSel]) if (!wlRows.some(d => d.sku === sku)) wlSel.delete(sku);
   $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
     ? `<p class="dlg-note">Nothing here — every in-stock ${stockActiveView ? `${esc(stockActiveView.label)} ` : ''}SKU is listed on every channel it's expected on. 🎉</p>`
     : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table unl-table">
       <thead><tr>
-        ${wlOn ? `<th class="wl-chk"><input type="checkbox" id="wlAll" title="Tick every row missing on Walmart" ${wlRows.length && wlRows.every(d => wlSel.has(d.sku)) ? 'checked' : ''} /></th>` : ''}
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
-        <th class="th-sku">SKU</th>
-        ${wlOn ? '<th class="th-q" title="What List on Walmart searches Walmart\'s catalog for: the Linnworks title, or the SKU when there is none. You can change it in the dialog">Searches Walmart for</th>' : ''}
+        <th>SKU</th>
         <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
         <th class="th-chn">Channels
           <button type="button" id="unlChanFilterBtn" class="unl-funnel ${unlChanSel.length ? 'is-active' : ''}"
@@ -4985,24 +4971,22 @@ function renderUnlistedView() {
       </tr></thead>
       <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
       ${dimCount ? `<tbody class="unl-dim-body">
-        <tr class="unl-sec-tr"><td colspan="${wlOn ? 8 : 6}" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
+        <tr class="unl-sec-tr"><td colspan="6" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
         ${parked.map(d => rowHtml(d, 0, 'parked')).join('')}
         ${ignoredRows.map(d => rowHtml(d, 0, 'ignored')).join('')}
       </tbody>` : ''}
     </table>
-    ${wlOn ? '<div id="wlBar" class="wl-bar"></div>' : ''}
     <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
   // wear the main sheet's SKU width so the chip flip never shifts the
   // columns (owner 2026-09-21, "the formatting changes"); gutter/img/level
   // widths already match via CSS. th.style is the CSP-safe styling path.
   const skuW = stockColAuto.sku || stockColWidths.sku || 0;
-  const skuTh = $('stockList').querySelector('.unl-table th.th-sku');
+  const skuTh = $('stockList').querySelector('.unl-table th:nth-child(3)');
   if (skuTh && skuW) {
     skuTh.style.width = `${skuW}px`;
     skuTh.style.minWidth = `${skuW}px`;
     skuTh.style.maxWidth = `${skuW}px`;
   }
-  wlRenderBar();
 }
 
 
@@ -5422,7 +5406,6 @@ $('stockActionsDlg').addEventListener('click', (e) => {
   else if (act === 'wfs') openWfs();
   else if (act === 'wholesale') openWsList();
   else if (act === 'bulk') bulkOpen();
-  else if (act === 'walmart') wlOpenUploads();
   else if (act === 'export:linnworks') stockExportLinnworks();
   else if (act === 'export:sales') stockExportSales();
   else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
@@ -12052,12 +12035,21 @@ $("stockList").addEventListener("dragend", () => {
   document.querySelectorAll(".stock-table th.col-drop").forEach(x => x.classList.remove("col-drop"));
 });
 
-/* ---------- rename a Linnworks SKU (stock hover tray pencil) ---------- */
+/* ---------- edit a Linnworks item: SKU and title (stock hover tray pencil) ---------- */
+// The title sits beside the SKU (owner 2026-10-22: "change the title for
+// it, not just the SKU"); Save writes only what changed.
 let rnCtx = null;
+function rnItemOf(stockItemId, sku) {
+  const all = [...((stockCache && stockCache.items) || []), ...(recvItems || [])];
+  return all.find(i => stockItemId && i.stockItemId === stockItemId)
+    || all.find(i => String(i.sku).toUpperCase() === String(sku).toUpperCase()) || null;
+}
 function openRenameDialog(sku, stockItemId) {
-  rnCtx = { sku, stockItemId };
+  const it = rnItemOf(stockItemId, sku);
+  rnCtx = { sku, stockItemId, title: (it && it.title) || '' };
   $("rnOld").textContent = sku;
   $("rnNew").value = sku;
+  $("rnTitle").value = rnCtx.title;
   $("rnErr").hidden = true;
   $("renameDialog").showModal();
   $("rnNew").focus();
@@ -12073,38 +12065,74 @@ $("rnDelete").addEventListener("click", () => {
   openStockDelete(sku, stockItemId);
 });
 $("rnNew").addEventListener("input", () => { $("rnNew").value = $("rnNew").value.toUpperCase(); });
-$("rnNew").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
+for (const id of ["rnNew", "rnTitle"]) {
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
+}
+// local caches follow a title change at once; the grid reloads after
+function rnSetLocalTitle(stockItemId, title) {
+  for (const it of [...((stockCache && stockCache.items) || []), ...(recvItems || [])]) {
+    if (it.stockItemId === stockItemId) it.title = title;
+  }
+}
 $("rnSave").addEventListener("click", async () => {
   if (!rnCtx) return;
+  const ctx = rnCtx;
   const next = $("rnNew").value.trim().toUpperCase();
+  const title = $("rnTitle").value.replace(/\s+/g, " ").trim();
+  const skuChanged = next !== String(ctx.sku).toUpperCase();
+  const titleChanged = title !== ctx.title;
+  if (!skuChanged && !titleChanged) { $("renameDialog").close(); return; }
+  const fail = (msg) => { $("rnErr").textContent = msg; $("rnErr").hidden = false; };
   $("rnSave").disabled = true;
-  const res = await api.stockRenameSku(rnCtx.stockItemId, rnCtx.sku, next).catch(err => ({ ok: false, error: err.message }));
+  let newSku = ctx.sku;
+  if (skuChanged) {
+    const res = await api.stockRenameSku(ctx.stockItemId, ctx.sku, next).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { $("rnSave").disabled = false; fail((res && res.error) || "Rename failed."); return; }
+    newSku = res.sku;
+    // local caches follow immediately; the grid reloads for everything else
+    if (stockCache) {
+      const it = stockCache.items.find(i => i.sku === ctx.sku);
+      if (it) it.sku = newSku;
+    }
+    if (recvBySku && recvBySku.has(ctx.sku.toLowerCase())) {
+      const it = recvBySku.get(ctx.sku.toLowerCase());
+      recvBySku.delete(ctx.sku.toLowerCase());
+      it.sku = newSku;
+      recvBySku.set(newSku.toLowerCase(), it);
+    }
+    const oldSku = ctx.sku;
+    const sid = ctx.stockItemId;
+    pushUndo(`rename ${newSku} back to ${oldSku}`, async () => {
+      const r = await api.stockRenameSku(sid, newSku, oldSku);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
+      loadStock();
+    });
+  }
+  if (titleChanged) {
+    const res = await api.stockSetTitle(ctx.stockItemId, title).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) {
+      $("rnSave").disabled = false;
+      // a rename that already went through stays; the dialog now edits the new SKU
+      if (skuChanged) { rnCtx = { ...ctx, sku: newSku }; $("rnOld").textContent = newSku; }
+      fail(`${skuChanged ? `Renamed to ${newSku}, but the title` : "The title"} did not save: ${(res && res.error) || "Linnworks refused it."}`);
+      loadStock();
+      return;
+    }
+    rnSetLocalTitle(ctx.stockItemId, res.title);
+    const oldTitle = ctx.title;
+    const sid = ctx.stockItemId;
+    pushUndo(`put the old title back on ${newSku}`, async () => {
+      const r = await api.stockSetTitle(sid, oldTitle);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Title change back failed');
+      rnSetLocalTitle(sid, oldTitle);
+      loadStock();
+    });
+  }
   $("rnSave").disabled = false;
-  if (!res || !res.ok) {
-    $("rnErr").textContent = (res && res.error) || "Rename failed.";
-    $("rnErr").hidden = false;
-    return;
-  }
-  // local caches follow immediately; the grid reloads for everything else
-  if (stockCache) {
-    const it = stockCache.items.find(i => i.sku === rnCtx.sku);
-    if (it) it.sku = res.sku;
-  }
-  if (recvBySku && recvBySku.has(rnCtx.sku.toLowerCase())) {
-    const it = recvBySku.get(rnCtx.sku.toLowerCase());
-    recvBySku.delete(rnCtx.sku.toLowerCase());
-    it.sku = res.sku;
-    recvBySku.set(res.sku.toLowerCase(), it);
-  }
   $("renameDialog").close();
-  const oldSku = rnCtx.sku;
-  const sid = rnCtx.stockItemId;
-  pushUndo(`rename ${res.sku} back to ${oldSku}`, async () => {
-    const r = await api.stockRenameSku(sid, res.sku, oldSku);
-    if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
-    loadStock();
-  });
-  toast(`${oldSku} renamed to ${res.sku} — links and history followed`);
+  toast(skuChanged && titleChanged ? `${ctx.sku} renamed to ${newSku} and its title saved`
+    : skuChanged ? `${ctx.sku} renamed to ${newSku} — links and history followed`
+    : `Title saved for ${newSku}`);
   rnCtx = null;
   loadStock();
 });
@@ -12328,9 +12356,10 @@ $("retRefreshBtn").addEventListener("click", () => {
 });
 
 /* ==================== List on Walmart (owner 2026-10-22) ====================
-   Approved mockup: variants/walmart-api-lister.html. Tick SKUs on the Stock
-   page's Unlisted view -> per SKU, search Walmart's catalog BY NAME (the
-   owner's pick over UPC lookups), confirm the right item, set condition /
+   Approved mockup: variants/walmart-api-lister.html. Its own Walmart tab (the
+   owner moved it off Stock → Unlisted): add SKUs from the inventory -> per
+   SKU, the owner searches Walmart's catalog BY NAME (nothing is searched
+   until they press Search), confirms the right item, sets condition /
    price / stock -> review -> one offer feed (MP_ITEM_MATCH) -> track it.
    Walmart's name search returns no UPCs, yet an offer must name one: the
    UPC comes from the Linnworks barcode or one scan of the box, and is
@@ -12338,15 +12367,13 @@ $("retRefreshBtn").addEventListener("click", () => {
    The offer SKU is the Linnworks SKU, so Linnworks links each new listing on
    its next channel scan and owns price + stock from then on. */
 
-const wlSel = new Set(); // SKUs ticked on the Unlisted view
-let wlRows = [];         // Unlisted rows that can be ticked (missing on Walmart)
-let wl = null;           // the open dialog: { step, items, cur, feeds, feed, conn }
+let wl = null;           // the Walmart tab: { step, items, cur, feeds, feed, conn }
 let wlQueries = null;    // per-SKU search text the owner typed (this desktop)
 let wlSent = null;       // SKU -> { at, ok } for uploads not turned down (last 7 days)
 let wlSentLoading = false;
 
-// SKUs in a recent upload Walmart hasn't turned down: they wait for
-// Linnworks to link them instead of being offered for listing again
+// SKUs in a recent upload Walmart hasn't turned down: adding one again
+// warns instead of quietly sending a second offer
 async function wlLoadSent(force) {
   if ((wlSent && !force) || wlSentLoading) return;
   wlSentLoading = true;
@@ -12361,9 +12388,7 @@ async function wlLoadSent(force) {
         map[o.sku] = { at: f.at, ok: st === 'SUCCESS' };
       }
     }
-    const was = JSON.stringify(wlSent);
     wlSent = map;
-    if (was !== JSON.stringify(map) && activePage === 'stock' && stockUnlistedActive) renderStock();
   } finally {
     wlSentLoading = false;
   }
@@ -12394,10 +12419,22 @@ function wlStockItem(sku) {
 }
 
 // condition by the Stock page's own views (Open Box / Used / Scrap); anything
-// else is New. Walmart takes non-new only from Pre-Owned approved sellers.
+// else is New
 function wlCondOf(d) {
   const v = (stockViews || []).find(x => !x.plain && stockViewMatch(d, x.pattern));
   return v ? v.label : 'New';
+}
+
+// Walmart's offer conditions (non-New needs Pre-Owned approval, which the
+// owner has — 2026-10-22). The SKU's kind picks the default: Open Box ->
+// Like New, Used -> Good; Scrap has no default, as every Pre-Owned grade
+// is a working unit. Pre-Owned offers must carry a photo (mainImageUrl).
+const WL_CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured', 'New with defects'];
+function wlDefaultCond(kind) {
+  if (kind === 'New') return 'New';
+  if (/open/i.test(kind)) return 'Pre-Owned: Like New';
+  if (/used/i.test(kind)) return 'Pre-Owned: Good';
+  return '';
 }
 
 /* ----- match chips: does a Walmart result agree with the SKU? ----- */
@@ -12454,51 +12491,7 @@ function wlScore(facts, r) {
   return { chips, score };
 }
 
-/* ----- the Unlisted view's selection bar ----- */
-
-function wlRenderBar() {
-  const bar = $('wlBar');
-  if (!bar) return;
-  const n = wlSel.size;
-  const units = wlRows.filter(d => wlSel.has(d.sku)).reduce((a, d) => a + (Number(d.avail) || 0), 0);
-  bar.innerHTML = n
-    ? `<span class="wl-bar-n">${n} selected</span><span class="wl-bar-sub">· ${units} unit${units === 1 ? '' : 's'}</span>
-       <button type="button" class="btn btn-ghost wl-bar-push" data-wlup>Walmart uploads</button>
-       <button type="button" class="btn btn-ghost" data-wlclear>Clear</button>
-       <button type="button" class="btn btn-primary wl-go" data-wlgo><span class="wl-spark">✱</span>List ${n} on Walmart</button>`
-    : `<span class="wl-bar-sub">Tick the SKUs missing on Walmart to list them there, found by name in Walmart's catalog.</span>
-       <button type="button" class="btn btn-ghost wl-bar-push" data-wlup>Walmart uploads</button>`;
-}
-
-$('stockList').addEventListener('change', (e) => {
-  const cb = e.target.closest('[data-wlsku]');
-  if (cb) {
-    if (cb.checked) wlSel.add(cb.dataset.wlsku); else wlSel.delete(cb.dataset.wlsku);
-    const tr = cb.closest('tr');
-    if (tr) tr.classList.toggle('wl-picked', cb.checked);
-    const all = $('wlAll');
-    if (all) all.checked = wlRows.length > 0 && wlRows.every(d => wlSel.has(d.sku));
-    wlRenderBar();
-    return;
-  }
-  if (e.target.id === 'wlAll') {
-    for (const d of wlRows) { if (e.target.checked) wlSel.add(d.sku); else wlSel.delete(d.sku); }
-    for (const box of $('stockList').querySelectorAll('[data-wlsku]')) {
-      box.checked = wlSel.has(box.dataset.wlsku);
-      const tr = box.closest('tr');
-      if (tr) tr.classList.toggle('wl-picked', box.checked);
-    }
-    wlRenderBar();
-  }
-});
-
-$('stockList').addEventListener('click', (e) => {
-  if (e.target.closest('[data-wlclear]')) { wlSel.clear(); renderStock(); return; }
-  if (e.target.closest('[data-wlup]')) { wlOpenUploads(); return; }
-  if (e.target.closest('[data-wlgo]')) wlStart();
-});
-
-/* ----- opening the dialog ----- */
+/* ----- the Walmart tab ----- */
 
 async function wlConn() {
   const st = await api.walmartStatus().catch(() => null);
@@ -12508,44 +12501,65 @@ async function wlConn() {
 function wlAcctLine() {
   const c = (wl && wl.conn) || {};
   $('wlAcct').innerHTML = c.configured
-    ? `<span class="wl-dot"></span>Walmart API${c.sandbox ? ' · <b>sandbox</b>' : ''}`
+    ? '<span class="wl-dot"></span>Walmart API'
     : '<span class="wl-dot is-off"></span>Walmart API not connected';
 }
 
-async function wlStart() {
-  const rows = wlRows.filter(d => wlSel.has(d.sku));
-  if (!rows.length) return;
-  const conn = await wlConn();
-  const shipLb = Number(conn.shipWeightLb) || 1;
-  wl = {
-    step: 'find', cur: 0, conn, feeds: null, feed: null,
-    items: rows.map(d => {
-      const it = wlStockItem(d.sku) || {};
-      const cond = wlCondOf(d);
-      return {
-        sku: d.sku, stockItemId: d.stockItemId, title: d.title || it.title || '', avail: Number(d.avail) || 0,
-        barcode: it.barcode || '', cond, query: wlQueryFor(d),
-        upc: String(it.barcode || '').replace(/\D/g, ''), upcCheck: null, // { upc, itemId, state, title }
-        facts: wlSkuFacts(d.sku),
-        results: null, loading: false, error: '', pick: '',
-        price: Number(it.retailPrice) > 0 ? Number(it.retailPrice).toFixed(2) : '',
-        qty: String(Number(d.avail) || 0), shipLb: String(shipLb),
-        state: cond === 'New' ? 'todo' : 'blocked',
-      };
-    }),
-  };
-  wl.cur = Math.max(0, wl.items.findIndex(i => i.state === 'todo'));
-  wlAcctLine();
-  wlRender();
-  $('wlDialog').showModal();
-  if (conn.configured) wlSearchCur();
+function wlBlank() {
+  return { step: 'find', items: [], cur: -1, conn: { configured: false }, feeds: null, feed: null };
 }
 
-async function wlOpenUploads() {
-  wl = { step: 'uploads', items: [], cur: 0, conn: await wlConn(), feeds: null, feed: null };
+// landing on the tab: keep whatever list is in progress, refresh the
+// connection line, warm the inventory for the Add SKU picker. No Walmart
+// search runs here — only the owner's Search does that.
+async function wlEnter() {
+  if (!wl) wl = wlBlank();
+  wl.conn = await wlConn();
   wlAcctLine();
   wlRender();
-  $('wlDialog').showModal();
+  ensureInventory();
+  wlLoadSent();
+}
+
+// one inventory item -> a row of the list
+function wlItemFrom(inv) {
+  const d = { sku: inv.sku, title: inv.title || '' };
+  const cond = wlCondOf(d);
+  const avail = invAvailAtPrimary(inv);
+  return {
+    sku: inv.sku, stockItemId: inv.stockItemId || '', title: inv.title || '', avail: avail == null ? 0 : avail,
+    barcode: inv.barcode || '', cond, wmCond: wlDefaultCond(cond), photo: inv.image || '',
+    query: '', suggest: wlQueryFor(d),
+    upc: String(inv.barcode || '').replace(/\D/g, ''), upcCheck: null, // { upc, itemId, state, title }
+    facts: wlSkuFacts(inv.sku),
+    results: null, loading: false, error: '', pick: '',
+    price: Number(inv.retailPrice) > 0 ? Number(inv.retailPrice).toFixed(2) : '',
+    qty: String(avail == null ? 0 : avail), shipLb: String(Number(wl.conn.shipWeightLb) || 1),
+    state: 'todo',
+  };
+}
+
+makeCombo($('wlAdd'), $('wlAddList'), (inv) => {
+  $('wlAdd').value = '';
+  if (!wl) wl = wlBlank();
+  const have = wl.items.findIndex(x => x.sku.toUpperCase() === inv.sku.toUpperCase());
+  if (have >= 0) { wl.cur = have; wl.step = 'find'; wlRender(); return; }
+  const sent = wlSentFor(inv.sku);
+  if (sent) toast(`${inv.sku} was already sent to Walmart ${new Date(sent.at).toLocaleDateString()} (${sent.ok ? 'accepted' : 'still processing'}): see Uploads before sending it again.`, 7000);
+  wl.items.push(wlItemFrom(inv));
+  wl.cur = wl.items.length - 1;
+  wl.step = 'find';
+  wlRender();
+  $('wlQ') && $('wlQ').focus();
+});
+$('wlAdd').addEventListener('focus', () => ensureInventory());
+
+async function wlOpenUploads() {
+  if (!wl) wl = wlBlank();
+  wlReadOffer();
+  wl.step = 'uploads';
+  wl.feeds = null;
+  wlRender();
   const res = await api.walmartFeeds().catch(err => ({ ok: false, error: err.message }));
   if (!wl || wl.step !== 'uploads') return;
   wl.feeds = res && res.ok ? res.feeds : [];
@@ -12553,19 +12567,16 @@ async function wlOpenUploads() {
   wlRender();
 }
 
-$('wlClose').addEventListener('click', () => $('wlDialog').close());
-$('wlDialog').addEventListener('close', () => { wl = null; });
-
 /* ----- searching ----- */
 
 async function wlSearchCur() {
   const it = wl && wl.items[wl.cur];
-  if (!it || it.state === 'blocked') return;
+  if (!it) return;
   it.loading = true;
   it.error = '';
   wlRender();
-  const res = await api.walmartSearch(it.query, it.barcode).catch(err => ({ ok: false, error: err.message }));
-  if (!wl || !wl.items.includes(it)) return; // dialog closed meanwhile
+  const res = await api.walmartSearch(it.query, '').catch(err => ({ ok: false, error: err.message }));
+  if (!wl || !wl.items.includes(it)) return; // removed from the list meanwhile
   it.loading = false;
   if (!res || !res.ok) {
     it.error = (res && res.error) || 'Walmart search failed.';
@@ -12575,9 +12586,6 @@ async function wlSearchCur() {
       .sort((a, b) => b.score - a.score);
     // pre-select the best match only when it agrees with the SKU somewhere
     if (!it.pick && it.results[0] && it.results[0].score > 0) it.pick = it.results[0].itemId;
-    // the barcode lookup already named its item: that pairing is proven
-    const byUpc = it.results.find(r => r.byUpc);
-    if (byUpc && it.upc) it.upcCheck = { upc: it.upc, itemId: byUpc.itemId, state: 'found', title: byUpc.title };
     if (!it.results.length) it.state = it.state === 'picked' ? it.state : 'notfound';
     else if (it.state === 'notfound') it.state = 'todo';
   }
@@ -12632,11 +12640,16 @@ function wlStepsHtml(on) {
 function wlRender() {
   if (!wl) return;
   const steps = $('wlSteps');
+  const listing = wl.step === 'find' || wl.step === 'review';
   steps.hidden = wl.step === 'uploads';
   steps.innerHTML = wl.step === 'uploads' ? '' : wlStepsHtml(wl.step);
+  $('wlAddRow').hidden = !listing;
+  for (const b of document.querySelectorAll('#walmartPage [data-wltab]')) {
+    b.classList.toggle('is-on', (b.dataset.wltab === 'uploads') === (wl.step === 'uploads'));
+  }
   if (!wl.conn.configured) {
     $('wlBody').innerHTML = `<div class="wl-empty"><b>Connect Walmart first.</b> Add your Walmart Marketplace API keys (Client ID and Client secret, made at developer.walmart.com under API Keys) in Settings › Shipping (the same keys Ship with Walmart labels use), then press Test.</div>`;
-    $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclose>Close</button><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div>`;
+    $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div>`;
     return;
   }
   if (wl.step === 'find') wlRenderFind();
@@ -12649,16 +12662,16 @@ function wlRailHtml() {
   const picked = wl.items.filter(i => i.state === 'picked').length;
   const rows = wl.items.map((it, i) => {
     const on = i === wl.cur;
-    const st = it.state === 'picked' ? ['st-ok', '✓'] : it.state === 'blocked' ? ['st-no', '!']
+    const st = it.state === 'picked' ? ['st-ok', '✓']
       : it.state === 'notfound' ? ['st-no', '?'] : it.state === 'skipped' ? ['st-todo', '–'] : [on ? 'st-on' : 'st-todo', String(i + 1)];
-    const sub = it.state === 'picked' ? `${esc(it.cond)} · ${wlMoney(it.price)} · ${esc(it.qty)}`
-      : it.state === 'blocked' ? `${esc(it.cond)} · needs Pre-Owned approval`
+    const sub = it.state === 'picked' ? `${esc(it.wmCond)} · ${wlMoney(it.price)} · ${esc(it.qty)}`
       : it.state === 'notfound' ? 'not found on Walmart'
       : it.state === 'skipped' ? 'skipped' : on ? 'choosing…' : 'to do';
-    return `<button type="button" class="wl-ri ${on ? 'is-on' : ''} ${it.state === 'blocked' ? 'is-dim' : ''}" data-wlcur="${i}">
-      <span class="wl-st ${st[0]}">${st[1]}</span><span class="wl-ri-s">${esc(it.sku)}<small>${sub}</small></span></button>`;
+    return `<div class="wl-ri ${on ? 'is-on' : ''}" data-wlcur="${i}" role="button" tabindex="0">
+      <span class="wl-st ${st[0]}">${st[1]}</span><span class="wl-ri-s">${esc(it.sku)}<small>${sub}</small></span>
+      <button type="button" class="wl-ri-x" data-wlrm="${i}" title="Take ${esc(it.sku)} off the list" aria-label="Remove">✕</button></div>`;
   }).join('');
-  return `<div class="wl-rail"><h5>Your SKUs <span>${picked} of ${wl.items.length} picked</span></h5>${rows}</div>`;
+  return `<div class="wl-rail"><h5>Your SKUs <span>${picked} of ${wl.items.length} picked</span></h5>${rows || '<p class="wl-rail-empty">None yet: add one above.</p>'}</div>`;
 }
 
 function wlResultHtml(it, r) {
@@ -12696,14 +12709,14 @@ function wlUpcFieldHtml(it) {
 function wlRenderFind() {
   const it = wl.items[wl.cur];
   let pane;
-  if (!it) pane = '<div class="wl-empty">Nothing to find.</div>';
-  else if (it.state === 'blocked') {
-    pane = `<div class="wl-cur"><span class="wl-cur-sku">${esc(it.sku)}</span><span class="wl-cur-meta">${it.avail} available</span></div>
-      <div class="wl-empty"><b>${esc(it.cond)} can't be listed on Walmart yet.</b> Walmart only takes used, open-box or refurbished items from sellers approved for its Pre-Owned program (apply in Seller Center → Exclusive programs). Until then this SKU stays off the upload.</div>`;
-  } else {
+  if (!it) {
+    pane = wl.items.length ? '<div class="wl-empty">Pick a SKU on the left.</div>'
+      : '<div class="wl-empty"><b>Add the SKUs you want on Walmart</b> with the box above (SKU, title or barcode). For each one you search Walmart by name, pick the matching item, check its UPC, and set the condition, price and stock. Nothing is sent until you press List on Walmart.</div>';
+  }
+  else {
     const results = it.loading ? '<div class="wl-empty"><span class="wl-spin"></span>Searching Walmart…</div>'
       : it.error ? `<div class="wl-empty wl-err">${esc(it.error)}</div>`
-      : !it.results ? ''
+      : !it.results ? '<div class="wl-empty">Type what to look for above and press <b>Search Walmart</b>.</div>'
       : !it.results.length ? `<div class="wl-empty">Nothing on Walmart matched “${esc(it.query)}”. Try fewer or different words above (the model name usually works best), or skip it: a product Walmart doesn't carry yet needs a full setup in Seller Center.</div>`
       : `<div class="wl-rhead">Walmart's best picks <span>${it.results.length} result${it.results.length === 1 ? '' : 's'}</span></div>
          <div class="wl-results">${it.results.slice(0, 8).map(r => wlResultHtml(it, r)).join('')}</div>`;
@@ -12711,16 +12724,19 @@ function wlRenderFind() {
     pane = `<div class="wl-cur"><span class="wl-cur-sku">${esc(it.sku)}</span><span class="wl-cur-meta"><b>${it.avail}</b> available${it.title ? ` · Linnworks title “${esc(it.title)}”` : ''}</span></div>
       <form class="wl-sbox" data-wlsearch>
         <div class="search-field"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
-          <input id="wlQ" class="search-input" type="text" value="${esc(it.query)}" autocomplete="off" spellcheck="false" /></div>
+          <input id="wlQ" class="search-input" type="text" value="${esc(it.query)}" placeholder="Search Walmart's catalog, e.g. ${esc(it.suggest)}" autocomplete="off" spellcheck="false" /></div>
         <button type="submit" class="btn btn-secondary">Search Walmart</button>
       </form>
-      <div class="wl-shint">${it.title ? 'Built from the Linnworks title.' : 'Built from the SKU.'} Change the words and search again if the right item isn't below.${it.barcode ? ' Your Linnworks barcode is looked up too.' : ''}</div>
+      <div class="wl-shint">${it.suggest && it.suggest !== it.query ? `Suggestion from ${it.title ? 'the Linnworks title' : 'the SKU'}: <a href="#" class="wl-link" data-wlsuggest>${esc(it.suggest)}</a> (click to fill in, then Search).` : 'The model name usually finds it best.'}</div>
       ${results}
       ${pickR ? `<div class="wl-offer">
         <h6>Your offer on the picked item</h6>
-        <div class="wl-f"><label>Condition</label>
-          <div class="wl-seg"><button type="button" class="on">✓ New</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Open Box</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Used</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Refurbished</button></div>
-          <div class="wl-hint">Only New until Walmart approves you for its Pre-Owned program.</div></div>
+        <div class="wl-f"><label for="wlCond">Condition</label>
+          <select id="wlCond" class="input wl-cond-sel">${it.wmCond ? '' : '<option value="" selected>Choose…</option>'}${WL_CONDS.map(c => `<option ${c === it.wmCond ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          <div class="wl-hint">${it.cond === 'New' ? 'A New SKU.' : `A ${esc(it.cond)} SKU.`}${/scrap/i.test(it.cond) ? ' Scrap is for parts / not working; every Walmart Pre-Owned grade is a working unit, so only pick one if this unit works.' : it.wmCond && it.wmCond !== 'New' ? ' Walmart shows the condition on the listing.' : ''}</div></div>
+        ${it.wmCond && it.wmCond !== 'New' ? `<div class="wl-f wl-f-photo"><label for="wlPhoto">Photo of the item (URL)</label>
+          <input id="wlPhoto" class="wl-in" type="text" value="${esc(it.photo)}" placeholder="https://…" autocomplete="off" spellcheck="false" />
+          <div class="wl-hint">${it.photo ? 'The Linnworks item photo.' : 'This item has no Linnworks photo: paste a public image link.'} Walmart requires one on Pre-Owned offers.</div></div>` : ''}
         ${wlUpcFieldHtml(it)}
         <div class="wl-f"><label for="wlPrice">Your price ($)</label><input id="wlPrice" class="wl-in" type="text" inputmode="decimal" value="${esc(it.price)}" placeholder="0.00" />
           <div class="wl-hint">${pickR.price ? `Walmart shows ${wlMoney(pickR.price)}${Number(it.price) > 0 ? ` — you'd be ${Number(it.price) <= pickR.price ? 'at or under it' : `${wlMoney(Number(it.price) - pickR.price)} over`}` : ''}.` : 'Set your selling price.'}</div></div>
@@ -12735,12 +12751,11 @@ function wlRenderFind() {
   $('wlBody').innerHTML = `<div class="wl-find">${wlRailHtml()}<div class="wl-pane">${pane}</div></div>`;
   const picked = wl.items.filter(i => i.state === 'picked').length;
   $('wlFoot').innerHTML = `<div class="wl-foot-info">Walmart's search doesn't give out UPCs, and an offer needs one: it comes from the <b>Linnworks barcode</b> or one scan of the box, and is saved to Linnworks so the next restock needs no scan.</div>
-    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclose>Cancel</button>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclearlist ${wl.items.length ? '' : 'disabled'}>Clear list</button>
     <button type="button" class="btn btn-secondary" data-wlreview ${picked ? '' : 'disabled'}>Review ${picked} picked →</button></div>`;
 }
 
 function wlReasonOff(it) {
-  if (it.state === 'blocked') return ['p-no', "Can't list", `${esc(it.cond)} needs Walmart's Pre-Owned approval`];
   if (it.state === 'notfound') return ['p-new', 'Not found on Walmart', 'Needs a full setup in Seller Center'];
   return ['p-wait', 'Skipped', ''];
 }
@@ -12755,7 +12770,7 @@ function wlRenderReview() {
       <td class="wl-sku">${esc(it.sku)}</td>
       <td><div class="wl-match">${wlThumb(r)}<div class="wl-mt"><div class="t">${esc(r.title || '')}</div>
         <div class="m">item ${esc(r.itemId || '')} · <a href="#" data-wlview="${esc(r.url || '')}">View on Walmart ↗</a></div></div></div></td>
-      <td><span class="wl-cond">New</span></td>
+      <td><span class="wl-cond ${it.wmCond === 'New' ? '' : 'ob'}">${esc(it.wmCond)}</span></td>
       <td class="num"><input class="wl-in" data-wlrp="${i}" value="${esc(it.price)}" />${r.price ? `<span class="wl-price-hint">Walmart ${wlMoney(r.price)}</span>` : ''}</td>
       <td class="num"><input class="wl-in wl-in-qty" data-wlrq="${i}" value="${esc(it.qty)}" /></td>
       <td class="wl-why"><span class="wl-pill p-ok">✓ Ready</span><div class="d"><a href="#" data-wlcur="${i}">change</a></div></td>
@@ -12764,7 +12779,7 @@ function wlRenderReview() {
     const [cls, pill, why] = wlReasonOff(it);
     return `<tr class="is-off">
       <td class="wl-sku">${esc(it.sku)}</td><td><span class="wl-none">${it.state === 'notfound' ? `Nothing matched “${esc(it.query)}”.` : '—'}</span></td>
-      <td><span class="wl-cond ${it.cond === 'New' ? '' : 'ob'}">${esc(it.cond)}</span></td><td class="num">—</td><td class="num">${it.avail}</td>
+      <td><span class="wl-cond ${it.cond === 'New' ? '' : 'ob'}">${esc(it.wmCond || it.cond)}</span></td><td class="num">—</td><td class="num">${it.avail}</td>
       <td class="wl-why"><span class="wl-pill ${cls}">${pill}</span>${why ? `<div class="d">${why}</div>` : ''}</td></tr>`;
   }).join('');
   $('wlBody').innerHTML = `<div class="wl-sum"><span class="wl-pill p-ok">${go.length} ready</span>${off.length ? `<span class="wl-pill p-wait">${off.length} not sent</span>` : ''}</div>
@@ -12806,7 +12821,7 @@ function wlRenderTrack() {
     ${f.error ? `<div class="wl-empty wl-err">${esc(f.error)}</div>` : ''}
     <table class="wl-tbl wl-tbl-track"><thead><tr><th>Your SKU</th><th>Walmart item</th><th class="num">Price</th><th class="num">Stock</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
   $('wlFoot').innerHTML = `<div class="wl-foot-info">Safe to close. The app checks again every 15 minutes and shows a message when this upload is finished. Listed SKUs drop off the Unlisted view once Linnworks links them.</div>
-    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlcheck>Check now</button><button type="button" class="btn btn-primary" data-wlclose>Close</button></div>`;
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlcheck>Check now</button><button type="button" class="btn btn-primary" data-wlclose>Back to the list</button></div>`;
 }
 
 function wlRenderUploads() {
@@ -12825,7 +12840,7 @@ function wlRenderUploads() {
         <td class="num"><button type="button" class="btn btn-ghost" data-wlfeed="${esc(f.feedId)}">Open</button></td></tr>`;
     }).join('')}</tbody></table>`;
   $('wlBody').innerHTML = `<h3 class="wl-up-h">Walmart uploads</h3>${body}`;
-  $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlclose>Close</button></div>`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlclose>Back to the list</button></div>`;
 }
 
 /* ----- dialog actions ----- */
@@ -12838,6 +12853,8 @@ function wlReadOffer() {
   if ($('wlQty')) it.qty = $('wlQty').value.trim();
   if ($('wlShip')) it.shipLb = $('wlShip').value.trim();
   if ($('wlUpc')) it.upc = $('wlUpc').value.replace(/\D/g, '');
+  if ($('wlCond')) it.wmCond = $('wlCond').value;
+  if ($('wlPhoto')) it.photo = $('wlPhoto').value.trim();
   if ($('wlQ')) it.query = $('wlQ').value.trim() || it.query;
 }
 
@@ -12847,6 +12864,8 @@ function wlOfferProblem(it) {
   if (!(Number(it.price) > 0)) return 'Enter your price.';
   if (!/^\d+$/.test(String(it.qty))) return 'Starting stock must be a whole number.';
   if (!(Number(it.shipLb) > 0)) return 'Enter a shipping weight in lb.';
+  if (!WL_CONDS.includes(it.wmCond)) return 'Choose the condition.';
+  if (it.wmCond !== 'New' && !/^https:\/\//i.test(it.photo)) return 'Pre-Owned offers need a photo link (https://…).';
   return '';
 }
 
@@ -12856,14 +12875,13 @@ function wlNext() {
   if (j >= 0) {
     wl.cur = j;
     wlRender();
-    if (!wl.items[j].results) wlSearchCur();
   } else {
     wl.step = 'review';
     wlRender();
   }
 }
 
-$('wlDialog').addEventListener('submit', (e) => {
+$('walmartPage').addEventListener('submit', (e) => {
   if (!e.target.closest('[data-wlsearch]')) return;
   e.preventDefault();
   const it = wl && wl.items[wl.cur];
@@ -12880,21 +12898,25 @@ $('wlDialog').addEventListener('submit', (e) => {
 });
 
 // a USB scanner types the UPC then Enter: check it straight away
-$('wlDialog').addEventListener('keydown', (e) => {
+$('walmartPage').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !wl || e.target.id !== 'wlUpc') return;
   e.preventDefault();
   wlReadOffer();
   wlCheckUpc(wl.items[wl.cur]);
 });
 
-$('wlDialog').addEventListener('change', (e) => {
+$('walmartPage').addEventListener('change', (e) => {
   if (!wl) return;
+  if (e.target.id === 'wlCond') {
+    wlReadOffer();
+    wlRender();
+    return;
+  }
   if (e.target.name === 'wlPick') {
     wlReadOffer();
     const it = wl.items[wl.cur];
     it.pick = e.target.value;
     wlRender();
-    if (wlUpcState(it).state === 'unchecked') wlCheckUpc(it);
     return;
   }
   const rp = e.target.closest('[data-wlrp]');
@@ -12903,7 +12925,7 @@ $('wlDialog').addEventListener('change', (e) => {
   if (rq) wl.items[Number(rq.dataset.wlrq)].qty = rq.value.trim();
 });
 
-$('wlDialog').addEventListener('click', async (e) => {
+$('walmartPage').addEventListener('click', async (e) => {
   if (!wl) return;
   const view = e.target.closest('[data-wlview]');
   if (view) {
@@ -12911,8 +12933,39 @@ $('wlDialog').addEventListener('click', async (e) => {
     if (view.dataset.wlview) api.openExternalUrl(view.dataset.wlview);
     return;
   }
-  if (e.target.closest('[data-wlclose]')) { $('wlDialog').close(); return; }
-  if (e.target.closest('[data-wlsettings]')) { $('wlDialog').close(); openSettings(); return; }
+  const tab = e.target.closest('[data-wltab]');
+  if (tab) {
+    if (tab.dataset.wltab === 'uploads') wlOpenUploads();
+    else { wl.step = 'find'; wlRender(); }
+    return;
+  }
+  if (e.target.closest('[data-wlclose]')) { wl.step = 'find'; wlRender(); return; }
+  if (e.target.closest('[data-wlsettings]')) { openSettings(); return; }
+  const rm = e.target.closest('[data-wlrm]');
+  if (rm) {
+    wlReadOffer();
+    const i = Number(rm.dataset.wlrm);
+    wl.items.splice(i, 1);
+    if (wl.cur >= wl.items.length || wl.cur === i) wl.cur = Math.min(i, wl.items.length - 1);
+    else if (wl.cur > i) wl.cur--;
+    if (!wl.items.length) wl.step = 'find';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlclearlist]')) {
+    if (!wl.items.length || !window.confirm(`Clear all ${wl.items.length} SKU${wl.items.length === 1 ? '' : 's'} from the list? Nothing has been sent for them.`)) return;
+    wl.items = [];
+    wl.cur = -1;
+    wl.step = 'find';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlsuggest]')) {
+    e.preventDefault();
+    const it = wl.items[wl.cur];
+    if (it && $('wlQ')) { $('wlQ').value = it.suggest; $('wlQ').focus(); }
+    return;
+  }
   const cur = e.target.closest('[data-wlcur]');
   if (cur) {
     e.preventDefault();
@@ -12922,7 +12975,6 @@ $('wlDialog').addEventListener('click', async (e) => {
     const it = wl.items[wl.cur];
     if (it.state === 'skipped') it.state = 'todo';
     wlRender();
-    if (it.state !== 'blocked' && !it.results) wlSearchCur();
     return;
   }
   if (e.target.closest('[data-wlupc]')) {
@@ -12932,7 +12984,7 @@ $('wlDialog').addEventListener('click', async (e) => {
   }
   if (e.target.closest('[data-wlskip]')) {
     const it = wl.items[wl.cur];
-    if (it.state !== 'blocked' && it.state !== 'notfound') it.state = 'skipped';
+    if (it.state !== 'notfound') it.state = 'skipped';
     wlNext();
     return;
   }
@@ -12990,7 +13042,8 @@ function wlOffersFrom(items) {
       sku: it.sku, stockItemId: it.stockItemId, linnworksBarcode: it.barcode,
       itemId: r.itemId, title: r.title || '', image: r.image || '', url: r.url || '',
       upc: it.upc,
-      price: Number(it.price), qty: Number(it.qty), shipLb: Number(it.shipLb), condition: 'New',
+      price: Number(it.price), qty: Number(it.qty), shipLb: Number(it.shipLb),
+      condition: it.wmCond, mainImageUrl: it.wmCond === 'New' ? '' : it.photo,
     };
   });
 }
@@ -13014,9 +13067,10 @@ async function wlSendOffers(offers, items) {
   }
   wl.feed = res.feed;
   wlLoadSent(true);
+  // sent SKUs leave the list; anything not sent stays for later
   if (items) {
-    for (const it of items) wlSel.delete(it.sku);
-    if (activePage === 'stock' && stockUnlistedActive) renderStock();
+    wl.items = wl.items.filter(x => !items.includes(x));
+    wl.cur = wl.items.length ? 0 : -1;
   }
   if (res.barcodeNote) toast(res.barcodeNote, 6000);
   wlRender();

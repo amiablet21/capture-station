@@ -13,6 +13,8 @@
       <button id="tabOverview" class="tab" hidden>Overview</button>
       <button id="tabCapture" class="tab is-active">Orders</button>
       <button id="tabStock" class="tab">Stock</button>
+      <!-- List on Walmart (owner 2026-10-22): its own tab, not the Unlisted view -->
+      <button id="tabWalmart" class="tab" hidden>Walmart</button>
       <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
@@ -34,8 +36,6 @@
       <button class="tab-menu-item" data-act="wfs" title="Log a shipment to Walmart Fulfillment Services — deducts the warehouse, keeps a personal record; the WFS location stays Walmart-fed">WFS Shipments</button>
       <!-- wholesale (owner 2026-09-30): only on stations with the Settings tick -->
       <button class="tab-menu-item" data-act="wholesale" id="stockActWholesale" hidden title="Wholesale invoices — units leave the warehouse when an invoice is saved; price and shipping optional">Wholesale invoices</button>
-      <div class="tab-menu-sep"></div>
-      <button class="tab-menu-item" data-act="walmart" title="Uploads sent with List on Walmart: what went live, what Walmart is still processing, and anything it turned down">Walmart uploads</button>
       <div class="tab-menu-sep"></div>
       <button class="tab-menu-item" data-act="bulk" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import</button>
       <button class="tab-menu-item" data-act="export:linnworks" title="Every Linnworks inventory item with its channel mappings — a SKUs sheet (one row per item, the mapped Walmart / eBay / Temu SKUs beside it) and a Mappings sheet (one row per link). Excel, or two CSVs">Export Linnworks SKUs</button>
@@ -189,6 +189,35 @@
        Toolbar docked to the sheet as a spreadsheet header band (owner pick
        2026-08-17, mockup B): search + chips left, stats + gaps + actions
        right, the table growing straight out of the band's bottom edge -->
+  <!-- List on Walmart (owner 2026-10-22, approved mockup
+       variants/walmart-api-lister.html; its own tab at the owner's ask):
+       add SKUs from the inventory, search Walmart by name only when asked,
+       confirm the item + UPC, set condition / price / stock, review, send
+       one feed, track it. renderer.js draws steps, body and foot. -->
+  <section id="walmartPage" class="wlp" hidden>
+    <div class="wlp-card">
+      <div class="wl-head">
+        <h2 class="dlg-title">List on Walmart</h2>
+        <div class="wlp-tabs" role="tablist">
+          <button type="button" class="wlp-tab is-on" data-wltab="list">List</button>
+          <button type="button" class="wlp-tab" data-wltab="uploads">Uploads</button>
+        </div>
+        <span id="wlAcct" class="wl-acct"></span>
+      </div>
+      <div id="wlAddRow" class="wlp-add">
+        <div class="combo wlp-add-combo">
+          <input id="wlAdd" class="input mono" type="text" placeholder="Add a SKU to list: type its SKU, title or barcode…"
+                 autocomplete="off" spellcheck="false" role="combobox" aria-label="Add a SKU" />
+          <div id="wlAddList" class="combo-list" hidden></div>
+        </div>
+        <span class="wlp-add-hint">Searches your Linnworks inventory. Nothing goes to Walmart until you press Search.</span>
+      </div>
+      <div id="wlSteps" class="wl-steps"></div>
+      <div id="wlBody" class="wl-body"></div>
+      <div id="wlFoot" class="wl-foot"></div>
+    </div>
+  </section>
+
   <section id="stockPage" class="stock-page" hidden>
     <div class="stock-sheet-row">
       <div id="stockMain" class="stock-main">
@@ -834,33 +863,19 @@
     </div>
   </dialog>
 
-  <!-- List on Walmart (owner 2026-10-22, approved mockup
-       variants/walmart-api-lister.html): find each SKU on Walmart by name,
-       set condition / price / stock, review, send one feed, track it.
-       renderer.js draws the body for the active step. -->
-  <dialog id="wlDialog" class="dlg wl-dlg">
-    <div class="wl-head">
-      <h2 class="dlg-title">List on Walmart</h2>
-      <span id="wlAcct" class="wl-acct"></span>
-      <button id="wlClose" class="btn-icon wl-x" title="Close" aria-label="Close">✕</button>
-    </div>
-    <div id="wlSteps" class="wl-steps"></div>
-    <div id="wlBody" class="wl-body"></div>
-    <div id="wlFoot" class="wl-foot"></div>
-  </dialog>
-
   <!-- rename a Linnworks SKU: the item survives, only the string changes -->
   <dialog id="renameDialog" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title">Rename SKU</h2>
+      <h2 class="dlg-title">Edit item</h2>
       <p class="dlg-note mono" id="rnOld" style="margin-bottom:10px"></p>
-      <div class="ebg-row"><label for="rnNew">New SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
-      <p class="dlg-note">Stock, history and channel links follow the item automatically. Marketplace listings keep their own channel SKUs — future auto-linking matches the new name.</p>
+      <div class="ebg-row"><label for="rnNew">SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
+      <div class="ebg-row"><label for="rnTitle">Title</label><input id="rnTitle" class="input" autocomplete="off" maxlength="255" placeholder="No title in Linnworks" /></div>
+      <p class="dlg-note">A new SKU: stock, history and channel links follow the item automatically; marketplace listings keep their own channel SKUs and future auto-linking matches the new name. The title is the Linnworks item title.</p>
       <p class="dlg-note" id="rnErr" style="color:var(--neg-text)" hidden></p>
       <div class="dlg-actions">
         <button id="rnDelete" class="btn btn-ghost rn-del" title="Delete this SKU from Linnworks — opens the delete confirmation with the blast radius (stock lost, linked listings left unsynced)">Delete SKU…</button>
         <button id="rnCancel" class="btn btn-ghost">Cancel</button>
-        <button id="rnSave" class="btn btn-primary">Rename</button>
+        <button id="rnSave" class="btn btn-primary">Save</button>
       </div>
     </div>
   </dialog>

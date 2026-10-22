@@ -220,6 +220,7 @@ contextBridge.exposeInMainWorld('api', {
   mappingLinkedSets: () => ipcRenderer.invoke('mapping:linkedSets'),
   stockDeleteSku: (stockItemId, sku) => ipcRenderer.invoke('stock:deleteSku', { stockItemId, sku }),
   stockRenameSku: (stockItemId, oldSku, newSku) => ipcRenderer.invoke('stock:renameSku', { stockItemId, oldSku, newSku }),
+  stockSetTitle: (stockItemId, title) => ipcRenderer.invoke('stock:setTitle', { stockItemId, title }),
   unlistedIgnore: (sku, remove) => ipcRenderer.invoke('stock:unlistedIgnore', { sku, remove }),
   browserPlatformMenu: () => ipcRenderer.invoke('browser:platformMenu'),
   browserNav: (action) => ipcRenderer.invoke('browser:nav', { action }),

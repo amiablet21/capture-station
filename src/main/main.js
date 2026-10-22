@@ -2396,6 +2396,23 @@ function registerIpc() {
     }
   });
 
+  // the item's title, edited beside its SKU (owner 2026-10-22)
+  ipcMain.handle('stock:setTitle', async (_e, { stockItemId, title }) => {
+    invCacheClear();
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    const next = String(title || '').replace(/\s+/g, ' ').trim();
+    if (next.length > 255) return { ok: false, error: 'Titles are 255 characters at most.' };
+    try {
+      await new LinnworksClient(cfg.linnworks).setTitle(stockItemId, next);
+      skuImageCache = { at: 0, map: null, skus: null, promise: null };
+      return { ok: true, title: next };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('stock:deleteSku', async (_e, { stockItemId, sku }) => {
     invCacheClear();
     const cfg = config.load();
@@ -4317,11 +4334,19 @@ exit 1
       sku: String(o.sku || '').trim(), stockItemId: o.stockItemId || '', linnworksBarcode: String(o.linnworksBarcode || ''),
       itemId: String(o.itemId || ''), title: String(o.title || ''), image: String(o.image || ''), url: String(o.url || ''),
       upc: String(o.upc || '').replace(/\D/g, ''), price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
-      condition: 'New',
+      condition: String(o.condition || ''), mainImageUrl: String(o.mainImageUrl || '').trim(),
     }));
     const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
     if (!list.length) return { ok: false, error: 'Nothing to send.' };
     if (bad) return { ok: false, error: `${bad.sku || 'An offer'} is missing its UPC, price, stock or shipping weight.` };
+    // Pre-Owned offers (the owner is approved, 2026-10-22) must carry a photo
+    const badCond = list.find(o => !wmT.MATCH_CONDITIONS.includes(o.condition)
+      || (o.condition !== 'New' && !/^https:\/\//i.test(o.mainImageUrl)));
+    if (badCond) {
+      return { ok: false, error: wmT.MATCH_CONDITIONS.includes(badCond.condition)
+        ? `${badCond.sku}: ${badCond.condition} offers need a photo link (https://…).`
+        : `${badCond.sku}: choose its condition.` };
+    }
     try {
       const c = wmClient();
       const feedId = await c.submitMatchFeed(list);

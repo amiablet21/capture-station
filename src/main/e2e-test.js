@@ -1326,6 +1326,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.unparkOrder('119990000000001')`);
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.stockSetTitle('sid-1', 'A title')`);
+    check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.walmartSearch('Galaxy Tab A9', '')`);
     check('walmart:search refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
@@ -1340,6 +1342,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && !('businessUnit' in feed.MPItemFeedHeader) && it0.productIdentifiers.productIdType === 'GTIN'
           && it0.productIdentifiers.productId === '00887276790801' && it0.price === 116.99
           && it0.ShippingWeight === 1.2 && it0.condition === 'New' && it0.sku === 'X110-64GB-GRAY', feed);
+      const po = w.buildMatchFeed([{ sku: 'USED-X', upc: '887276790801', price: 89, shipLb: 1, condition: 'Pre-Owned: Good', mainImageUrl: 'https://img/x.jpg' },
+        { sku: 'NEW-X', upc: '887276790801', price: 99, shipLb: 1, condition: 'New', mainImageUrl: 'https://img/x.jpg' }]).MPItem;
+      check('walmart feed: a Pre-Owned offer carries its condition and photo, New carries no photo',
+        po[0].Item.condition === 'Pre-Owned: Good' && po[0].Item.mainImageUrl === 'https://img/x.jpg'
+          && po[1].Item.condition === 'New' && !('mainImageUrl' in po[1].Item)
+          && w.MATCH_CONDITIONS.includes('Pre-Owned: Fair') && !w.MATCH_CONDITIONS.includes('Open Box'), po);
       check('walmart ids: 12 -> upc, 13 -> ean, 14 -> gtin, 11 widened, junk refused',
         w.idParam('887276790801').param === 'upc' && w.idParam('8806094912345').param === 'ean'
           && w.idParam('00887276790801').param === 'gtin' && w.idParam('87276790801').value === '087276790801'

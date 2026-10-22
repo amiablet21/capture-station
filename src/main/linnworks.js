@@ -339,6 +339,20 @@ class LinnworksClient {
     throw last;
   }
 
+  // The item's title (owner 2026-10-22, the rename dialog edits it too).
+  // 'Title' is the documented field name; 'ItemTitle' is the spelling
+  // GetStockItemsFull answers with, tried if the first is refused.
+  async setTitle(stockItemId, title) {
+    let last = null;
+    for (const fieldName of ['Title', 'ItemTitle']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(title) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+
   // The item's cost (owner 2026-10-05): the Linnworks purchase price, so it
   // is one number on every desktop
   async setPurchasePrice(stockItemId, price) {
