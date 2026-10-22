@@ -2,21 +2,41 @@
 // Config stored in userData/config.json. Credentials never hardcoded.
 // Linnworks API credentials are encrypted at rest with the OS user's key
 // (Electron safeStorage / Windows DPAPI): config.json holds `linnworksEnc`
-// and is useless if copied to another machine or user account. The Walmart
-// Marketplace API keys get the same treatment (`walmartEnc`).
+// and is useless if copied to another machine or user account.
 const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const SECRET_FIELDS = ['applicationId', 'applicationSecret', 'token'];
-const WALMART_SECRET_FIELDS = ['clientId', 'clientSecret'];
 
-function encryptCreds(creds, fields = SECRET_FIELDS) {
+function encryptCreds(linnworks) {
   try {
     if (!safeStorage.isEncryptionAvailable()) return null;
     const secrets = {};
-    for (const f of fields) secrets[f] = (creds || {})[f] || '';
+    for (const f of SECRET_FIELDS) secrets[f] = linnworks[f] || '';
     return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+// the UPS client IDs and secrets ride the same OS-key encryption, one
+// blob for both accounts (upsEnc)
+function encryptUps(ups) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const secrets = ((ups && ups.accounts) || []).map(a => ({ clientId: a.clientId || '', clientSecret: a.clientSecret || '' }));
+    return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+// the Walmart key pair too (walmartEnc)
+function encryptWalmart(w) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.encryptString(JSON.stringify({ clientId: (w && w.clientId) || '', clientSecret: (w && w.clientSecret) || '' })).toString('base64');
   } catch {
     return null;
   }
@@ -76,7 +96,36 @@ const DEFAULTS = {
   // all of these and shows Capture alone. (Receiving lives inside the Stock
   // page; the third tab is Returns.)
   // (Pricing is opt-in — off until ticked in Settings, owner 2026-09-18.)
-  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false },
+  // (Recovery is opt-in too and needs Returns, since it reads the Returns log.)
+  pages: { stock: true, history: true, returns: false, pricing: false, wholesale: false, cost: false, recovery: false, ship: false },
+  // Ship tab (owner 2026-10-19): UPS labels on either company's account.
+  // Each account is its own UPS developer app (client ID + secret) billed to
+  // its shipper number; name is what the Ship tab shows. shipFrom is the
+  // warehouse (and the Shipper on every label); returnTo is where return
+  // labels send the parcel. test = UPS's test servers (no charge, labels
+  // not valid). printer: '' = ask with the print dialog every time.
+  ups: {
+    test: false,
+    printer: '',
+    accounts: [
+      { id: 'a', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+      { id: 'b', name: '', accountNumber: '', clientId: '', clientSecret: '' },
+    ],
+    shipFrom: { name: '', company: '', phone: '', email: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    returnTo: { name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', zip: '' },
+    boxes: [
+      { name: 'Phone box', length: 8, width: 6, height: 4 },
+      { name: 'Tablet box', length: 13, width: 10, height: 4 },
+      { name: '2-phone box', length: 10, width: 8, height: 5 },
+    ],
+  },
+  // Ship with Walmart (owner 2026-10-20): the seller's own Walmart key pair
+  // (Seller Center → API Key Management) for Walmart's label rates on
+  // Walmart orders. Empty = Walmart rates simply don't show.
+  walmart: { clientId: '', clientSecret: '' },
+  // Browser access (owner 2026-10-20): the whole app at http://localhost:<port>
+  // on this computer only, opened with a private key (the link in Settings)
+  web: { enabled: false, port: 47391, key: '' },
   // Low-stock alerting: optional webhook POSTed once per SKU when Available
   // crosses below the minimum level (re-armed when it recovers above).
   lowStock: { webhookUrl: '' },
@@ -93,6 +142,11 @@ const DEFAULTS = {
   // shared returns across desktops: a file-synced folder (Google Drive /
   // OneDrive / network share) + this station's name. Both empty = sync off.
   returnsSync: { folder: '', station: '' },
+  // Recovery page: the alert email for "Email me this list", the make.com
+  // webhook the dispute digest POSTs to, and the digest's last-sent memory
+  // (so the same set of cases is not re-sent within 20 hours)
+  // (the tab itself is unlocked with the Settings PIN — no code of its own)
+  recovery: { email: '', webhookUrl: '', lastDigestKey: '', lastDigestAt: 0 },
   // Click a PO# -> open the order on its marketplace. {po} is replaced with
   // the order number. Empty template = clicking just selects the row.
   orderUrlTemplates: {
@@ -118,6 +172,13 @@ const DEFAULTS = {
     walmart: 'https://seller.walmart.com/orders/disputes?status=ALL&viewCase={case}',
     ebay: '',
     temu: '',
+  },
+  // Recovery's PO# menu (owner 2026-10-12: "order page or transaction
+  // page"): its second entry opens the PO in Seller Center's payments
+  // transactions. {po} is replaced; editable in Settings → Recovery.
+  txnUrlTemplates: {
+    // the PO search form (owner 2026-10-13), not the free-text searchTerm
+    walmart: 'https://seller.walmart.com/payments/transactions?searchType=poNo&searchValue={po}',
   },
   // Click a channel SKU in the Stock popup -> open that listing on the
   // marketplace, searched by the channel SKU. {sku} is replaced.
@@ -164,11 +225,10 @@ const DEFAULTS = {
   browserPane: { visible: false, width: 480, zoom: 1 },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
-  // Walmart Marketplace API (List on Walmart, owner 2026-10-22): the
-  // seller's own keys from developer.walmart.com. sandbox = Walmart's test
-  // environment. shipWeightLb is the offer's default shipping weight —
-  // Walmart requires one on every offer.
-  walmartApi: { clientId: '', clientSecret: '', sandbox: false, shipWeightLb: 1 },
+  // List on Walmart (owner 2026-10-22): the offer's default shipping weight
+  // in lb — Walmart requires one on every offer. The API keys are the Ship
+  // with Walmart ones (walmart.clientId / clientSecret).
+  walmartListing: { shipWeightLb: 1 },
   lastSync: null, // { at, synced, failed, dryRun }
 };
 
@@ -191,9 +251,21 @@ function load() {
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
   }
+  // the Recovery tab's own access code retired (owner 2026-10-20): the
+  // Settings PIN unlocks it, so an old saved code is dropped
+  if (stored.recovery) delete stored.recovery.codeHash;
+  if (stored.upsEnc) {
+    let secrets = null;
+    try { secrets = JSON.parse(safeStorage.decryptString(Buffer.from(stored.upsEnc, 'base64'))); } catch { /* other machine */ }
+    if (Array.isArray(secrets) && stored.ups && Array.isArray(stored.ups.accounts)) {
+      stored.ups.accounts.forEach((a, i) => { if (a && secrets[i]) Object.assign(a, secrets[i]); });
+    }
+    delete stored.upsEnc;
+  }
   if (stored.walmartEnc) {
-    const secrets = decryptCreds(stored.walmartEnc);
-    if (secrets) stored.walmartApi = { ...(stored.walmartApi || {}), ...secrets };
+    let w = null;
+    try { w = JSON.parse(safeStorage.decryptString(Buffer.from(stored.walmartEnc, 'base64'))); } catch { /* other machine */ }
+    if (w) stored.walmart = { ...(stored.walmart || {}), ...w };
     delete stored.walmartEnc;
   }
   // migration: Temu shipped with no order URL; fill in the real one for
@@ -215,6 +287,12 @@ function load() {
       && stored.listingUrlTemplates.walmart === 'https://seller.walmart.com/items-and-inventory/manage-items?searchQuery={sku}') {
     stored.listingUrlTemplates.walmart = DEFAULTS.listingUrlTemplates.walmart;
   }
+  // migration: the Transaction page link moves from the free-text search to
+  // Seller Center's PO search (owner 2026-10-13)
+  if (stored.txnUrlTemplates
+      && stored.txnUrlTemplates.walmart === 'https://seller.walmart.com/payments/transactions?searchTerm={po}') {
+    stored.txnUrlTemplates.walmart = DEFAULTS.txnUrlTemplates.walmart;
+  }
   // migration: the Receiving tab became Returns (receiving moved into Stock)
   if (stored.pages && stored.pages.returns === undefined && stored.pages.receiving !== undefined) {
     stored.pages.returns = !!stored.pages.receiving;
@@ -229,6 +307,9 @@ function load() {
     }
   }
   cached = deepMerge(structuredClone(DEFAULTS), stored);
+  // the Ship tab always has its two account slots, whatever was saved
+  const accts = Array.isArray(cached.ups.accounts) ? cached.ups.accounts : [];
+  cached.ups.accounts = DEFAULTS.ups.accounts.map((def, i) => ({ ...def, ...(accts[i] || {}), id: def.id }));
   return cached;
 }
 
@@ -250,10 +331,15 @@ function save(patch) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
   }
-  const wenc = encryptCreds(cfg.walmartApi, WALMART_SECRET_FIELDS);
-  if (wenc && persisted.walmartApi) {
-    persisted.walmartEnc = wenc;
-    for (const f of WALMART_SECRET_FIELDS) persisted.walmartApi[f] = '';
+  const upsEnc = encryptUps(cfg.ups);
+  if (upsEnc && persisted.ups && Array.isArray(persisted.ups.accounts)) {
+    persisted.upsEnc = upsEnc;
+    for (const a of persisted.ups.accounts) { a.clientId = ''; a.clientSecret = ''; }
+  }
+  const wEnc = encryptWalmart(cfg.walmart);
+  if (wEnc) {
+    persisted.walmartEnc = wEnc;
+    persisted.walmart = { ...(persisted.walmart || {}), clientId: '', clientSecret: '' };
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

@@ -65,6 +65,58 @@ function orderNetCharge(totalCharge, tax) {
   return Math.round(Math.max(0, total - Math.min(t, total)) * 100) / 100;
 }
 
+// an order (open or full processed shape — both carry CustomerInfo,
+// TotalsInfo and Items) as the Ship tab's party + summary
+// a Linnworks date as a local YYYY-MM-DD; '' when unset (Linnworks fills
+// empty dates with 0001-01-01 or the epoch)
+function dayOf(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2010) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function labelOrder(o, status, ref) {
+  const ci = o.CustomerInfo || {};
+  const gi = o.GeneralInfo || {};
+  // the marketplace's delivery window, when the channel sends one (Amazon,
+  // Walmart and eBay scheduled/estimated delivery); the despatch-by date always
+  const sd = gi.ScheduledDelivery || {};
+  const a = ci.Address || {};
+  const t = (v) => String(v || '').trim();
+  const items = (o.Items || []).filter(it => !it.IsService).map(it => ({
+    sku: it.SKU || it.ItemNumber || '',
+    title: it.Title || '',
+    quantity: it.Quantity || 1,
+    // what the line sold for (the Ship drawer shows it beside the item)
+    lineTotal: Math.round((Number(it.CostIncTax) > 0 ? Number(it.CostIncTax) : (Number(it.PricePerUnit) || 0) * (it.Quantity || 1)) * 100) / 100,
+  }));
+  return {
+    reference: o.GeneralInfo ? t(o.GeneralInfo.ReferenceNum) || ref : ref,
+    source: o.GeneralInfo ? t(o.GeneralInfo.Source) : '',
+    status,
+    orderedOn: dayOf(gi.ReceivedDate),
+    deliverBy: dayOf(sd.To) || dayOf(sd.From),
+    shipBy: dayOf(gi.DespatchByDate),
+    // what the buyer paid before sales tax — the label's declared value
+    // starts here and the owner can change it
+    total: orderNetCharge(o.TotalsInfo && (o.TotalsInfo.TotalCharge ?? o.TotalsInfo.fTotalCharge), o.TotalsInfo && o.TotalsInfo.Tax),
+    items,
+    party: {
+      name: t(a.FullName || ci.ChannelBuyerName),
+      company: t(a.Company),
+      line1: t(a.Address1),
+      line2: [t(a.Address2), t(a.Address3)].filter(Boolean).join(', '),
+      city: t(a.Town),
+      state: t(a.Region),
+      zip: t(a.PostCode),
+      country: t(a.Country),
+      phone: t(a.PhoneNumber),
+      email: t(a.EmailAddress || ci.EmailAddress),
+    },
+  };
+}
+
 class LinnworksClient {
   constructor({ applicationId, applicationSecret, token }) {
     this.creds = { applicationId, applicationSecret, token };
@@ -384,7 +436,10 @@ class LinnworksClient {
       try {
         items = await this.call('Stock/GetStockItemsFull', {
           keyword: '',
-          loadCompositeParents: false,
+          // composite parents (a listing that draws from other items) are
+          // real inventory rows too (owner 2026-10-14: the case listing
+          // vanished from the Stock page the moment it became a composite)
+          loadCompositeParents: true,
           loadVariationParents: false,
           entriesPerPage: 200,
           pageNumber: page,
@@ -410,6 +465,7 @@ class LinnworksClient {
           title: it.ItemTitle || '',
           barcode: it.BarcodeNumber || '',
           category: it.CategoryName || '',
+          isComposite: !!it.IsComposite,
           purchasePrice: it.PurchasePrice || 0,
           retailPrice: it.RetailPrice || 0,
           image: img ? (img.Source || img.FullSource || '') : '',
@@ -562,7 +618,7 @@ class LinnworksClient {
     try {
       items = await this.call('Stock/GetStockItemsFull', {
         keyword: String(sku).trim(),
-        loadCompositeParents: false,
+        loadCompositeParents: true,
         loadVariationParents: false,
         entriesPerPage: 50,
         pageNumber: 1,
@@ -706,6 +762,33 @@ class LinnworksClient {
     return out;
   }
 
+  // Ship tab (owner 2026-10-19): one order by its channel reference, open
+  // or already processed, with the ship-to address split into fields and
+  // the order's value — everything a UPS label needs. Open orders are
+  // looked up at each of the station's locations in turn (Linnworks only
+  // searches "Default" without one — the dropship location holds orders
+  // too); a processed order is read in full by id.
+  async findOrderForLabel(reference, fulfilmentCenters) {
+    const ref = String(reference || '').trim();
+    if (!ref) return null;
+    const centers = [...new Set((fulfilmentCenters || []).filter(Boolean))];
+    for (const fc of centers.length ? centers : ['00000000-0000-0000-0000-000000000000']) {
+      const open = await this.call('Orders/GetOpenOrders', {
+        entriesPerPage: 10,
+        pageNumber: 1,
+        fulfilmentCenter: fc,
+        filters: { TextFields: [{ FieldCode: 'GENERAL_INFO_REFERENCE_NUMBER', Type: 'Equal', Text: ref }] },
+      });
+      const hit = ((open && open.Data) || []).find(o => o.GeneralInfo && String(o.GeneralInfo.ReferenceNum).trim() === ref);
+      if (hit) return labelOrder(hit, 'open', ref);
+    }
+    const done = await this.findProcessedOrder(ref, { light: true });
+    if (!done || !done.orderId) return null;
+    const full = await this.call('Orders/GetOrdersById', { pkOrderIds: [done.orderId] });
+    const order = (full || [])[0];
+    return order ? labelOrder(order, 'processed', ref) : null;
+  }
+
   // Sales page: every processed-order item line in a date window.
   // Verified against apidocs.linnworks.net: SearchProcessedOrders takes a
   // `request` wrapper (SearchTerm, DateField 'processed', FromDate/ToDate,
@@ -792,6 +875,10 @@ class LinnworksClient {
             // as Cost; failing that, the inc-tax total minus its Tax; failing
             // that, the unit price times quantity.
             revenue: lineExTax(it, qty),
+            // a composite line's children: the items its sale really took
+            // from the shelf (owner 2026-10-14) — readers credit their
+            // pace from this, never as lines of their own
+            children: (it.CompositeSubItems || []).map(c => ({ sku: c.SKU || c.ItemNumber || '', qty: (c.Quantity || 1) })).filter(c => c.sku),
           });
         }
       }

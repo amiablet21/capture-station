@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Cheapest rate — six styles</title>
+<!--
+  Owner 2026-10-20: "different styles of the cheapest, perhaps like a star
+  icon or something better". The same rate list six ways; A is the pill the
+  mockups use today.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: var(--canvas); }
+  .pg { max-width: 1180px; margin: 0 auto; padding: 22px 24px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 22px; }
+  .opt .lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
+  .opt .lbl b { color: var(--text); }
+  .rates { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .rate { position: relative; display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--border-soft); }
+  .rate:first-child { border-top: none; }
+  .rate.on { background: var(--accent-soft); }
+  .rd { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--faint); display: grid; place-items: center; }
+  .rate.on .rd { border-color: var(--accent); }
+  .rate.on .rd::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .sv { font-size: 12.5px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .via { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
+  .via.wm { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .via.a { background: var(--accent-soft); color: var(--accent-soft-text); }
+  .via.b { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+  .rate.on .via.a { background: #fff; }
+  .eta { font-size: 11px; color: var(--muted); }
+  .pr { font-family: var(--mono); font-weight: 700; font-size: 13px; text-align: right; }
+
+  /* A — the pill used today */
+  .A .best { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--badge-green-bg); color: var(--badge-green-text); }
+
+  /* B — a gold star before the service */
+  .B .star { width: 15px; height: 15px; color: #E3A008; flex: none; margin-left: -2px; }
+
+  /* C — the price itself turns green, "lowest" under it */
+  .C .pr.low { color: var(--pos-text); }
+  .C .pr small { display: block; font-family: var(--font); font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--pos-text); }
+
+  /* D — a green edge on the row and a green price */
+  .D .rate.low::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #3E9B5F; }
+  .D .pr.low { color: var(--pos-text); }
+
+  /* E — a small green tag hanging off the price */
+  .E .tagwrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .E .tag { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #fff; background: #3E9B5F; border-radius: 4px; padding: 1px 6px; }
+  .E .tag svg { width: 10px; height: 10px; }
+
+  /* F — the cheapest sits in its own band above the rest */
+  .F .top { padding: 10px 12px; background: #F2F8F3; border-bottom: 1px solid #DCEBDF; }
+  .F .top .k { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pos-text); margin: 0 0 5px 28px; display: flex; align-items: center; gap: 4px; }
+  .F .top .k svg { width: 11px; height: 11px; }
+  .F .top .rate { padding: 0; border: none; background: none; }
+  .F .rest .rate:first-child { border-top: none; }
+</style>
+</head>
+<body>
+<div class="pg" id="pg"></div>
+<script>
+const RATES = [
+  { svc: 'UPS Ground', via: 'wm', d: 'Fri, Oct 23', p: 8.40 },
+  { svc: 'FedEx Ground', via: 'wm', d: 'Fri, Oct 23', p: 8.95 },
+  { svc: 'UPS Ground', via: 'b', d: 'Fri, Oct 23', p: 10.34 },
+  { svc: 'UPS Ground', via: 'a', d: 'Fri, Oct 23', p: 10.95 },
+  { svc: 'FedEx 2Day', via: 'wm', d: 'Wed, Oct 21', p: 11.80 },
+];
+const VIA = { wm: 'Walmart', a: 'DWS UPS', b: 'Company 2 UPS' };
+const STAR = '<svg class="star" viewBox="0 0 256 256" fill="currentColor"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"/></svg>';
+const DOWN = '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,141.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,48,128h72V40a8,8,0,0,1,16,0v88h72a8,8,0,0,1,5.66,13.66Z"/></svg>';
+const money = n => '$' + n.toFixed(2);
+
+function row(r, i, k) {
+  const low = i === 0;
+  let name = `${r.svc}<span class="via ${r.via}">${VIA[r.via]}</span>`;
+  let price = `<span class="pr${low ? ' low' : ''}">${money(r.p)}</span>`;
+  if (k === 'A' && low) name += '<span class="best">Cheapest</span>';
+  if (k === 'B' && low) name = STAR + name;
+  if (k === 'C' && low) price = `<span class="pr low">${money(r.p)}<small>Lowest</small></span>`;
+  if (k === 'E' && low) price = `<span class="tagwrap"><span class="pr">${money(r.p)}</span><span class="tag">${DOWN}Lowest</span></span>`;
+  return `<div class="rate${i === 0 ? ' on' : ''}${low ? ' low' : ''}"><span class="rd"></span><div><div class="sv">${name}</div><div class="eta">${r.d}</div></div>${price}</div>`;
+}
+
+const OPTS = [
+  ['A', 'Pill', 'today'],
+  ['B', 'Star', 'a gold star before the name'],
+  ['C', 'Green price', 'the price turns green, "Lowest" under it'],
+  ['D', 'Green edge', 'a green line down the row, green price'],
+  ['E', 'Price tag', 'a green "↓ Lowest" tag under the price'],
+  ['F', 'Top band', 'the cheapest in its own green band'],
+];
+document.getElementById('pg').innerHTML = OPTS.map(([k, t, s]) => {
+  let list;
+  if (k === 'F') list = `<div class="top"><div class="k">${STAR.replace('class="star"', '')}Cheapest</div>${row(RATES[0], 0, k)}</div><div class="rest">${RATES.slice(1).map((r, i) => row(r, i + 1, k)).join('')}</div>`;
+  else list = RATES.map((r, i) => row(r, i, k)).join('');
+  return `<div class="opt ${k}"><div class="lbl"><b>${k} · ${t}</b> — ${s}</div><div class="rates">${list}</div></div>`;
+}).join('');
+</script>
+</body>
+</html>
