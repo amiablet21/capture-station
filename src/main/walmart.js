@@ -349,6 +349,10 @@ function normalizeSearch(j) {
       brand: String(it.brand || ''),
       image: (arr(it.images)[0] || {}).url || '',
       price: Number.isFinite(amount) ? amount : 0,
+      // star average ("4.7") and review count ("198") arrive as strings;
+      // 0 / 0 = no reviews yet
+      rating: Math.min(5, Math.max(0, Number(it.customerRating) || 0)),
+      reviews: Math.max(0, Math.floor(Number(it.properties && it.properties.numReviews) || 0)),
       productType: String(it.productType || ''),
       // walmart.com's product page for an item id (convention, not in the docs)
       url: `https://www.walmart.com/ip/${encodeURIComponent(String(it.itemId))}`,

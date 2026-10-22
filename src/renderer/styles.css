@@ -6108,3 +6108,63 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-prog-l .mono { font-size: 10.5px; color: var(--faint); }
 .wl-up-h { font-size: 13px; font-weight: 600; padding: 4px 20px 10px; }
 .wm-sandbox { align-self: end; margin-bottom: 14px; }
+
+/* rating + reviews on a search result (owner pick B, variants/walmart-ratings.html) */
+.wl-rline { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--muted); }
+.wl-rline b { color: var(--text); font-weight: 600; }
+.wl-stars { position: relative; display: inline-block; font-size: 12px; line-height: 1; letter-spacing: 1px; color: #DCDAD4; vertical-align: -1px; }
+.wl-stars::before { content: '\2605\2605\2605\2605\2605'; }
+.wl-stars i { position: absolute; left: 0; top: 0; overflow: hidden; white-space: nowrap; color: #E8A317; font-style: normal; }
+.wl-stars i::before { content: '\2605\2605\2605\2605\2605'; }
+.wl-few { font-size: 10px; font-weight: 600; color: var(--badge-yellow-text); background: var(--badge-yellow-bg); border-radius: 999px; padding: 0 7px; line-height: 16px; }
+.wl-stars i.w0 { width: 0%; }
+.wl-stars i.w2 { width: 2%; }
+.wl-stars i.w4 { width: 4%; }
+.wl-stars i.w6 { width: 6%; }
+.wl-stars i.w8 { width: 8%; }
+.wl-stars i.w10 { width: 10%; }
+.wl-stars i.w12 { width: 12%; }
+.wl-stars i.w14 { width: 14%; }
+.wl-stars i.w16 { width: 16%; }
+.wl-stars i.w18 { width: 18%; }
+.wl-stars i.w20 { width: 20%; }
+.wl-stars i.w22 { width: 22%; }
+.wl-stars i.w24 { width: 24%; }
+.wl-stars i.w26 { width: 26%; }
+.wl-stars i.w28 { width: 28%; }
+.wl-stars i.w30 { width: 30%; }
+.wl-stars i.w32 { width: 32%; }
+.wl-stars i.w34 { width: 34%; }
+.wl-stars i.w36 { width: 36%; }
+.wl-stars i.w38 { width: 38%; }
+.wl-stars i.w40 { width: 40%; }
+.wl-stars i.w42 { width: 42%; }
+.wl-stars i.w44 { width: 44%; }
+.wl-stars i.w46 { width: 46%; }
+.wl-stars i.w48 { width: 48%; }
+.wl-stars i.w50 { width: 50%; }
+.wl-stars i.w52 { width: 52%; }
+.wl-stars i.w54 { width: 54%; }
+.wl-stars i.w56 { width: 56%; }
+.wl-stars i.w58 { width: 58%; }
+.wl-stars i.w60 { width: 60%; }
+.wl-stars i.w62 { width: 62%; }
+.wl-stars i.w64 { width: 64%; }
+.wl-stars i.w66 { width: 66%; }
+.wl-stars i.w68 { width: 68%; }
+.wl-stars i.w70 { width: 70%; }
+.wl-stars i.w72 { width: 72%; }
+.wl-stars i.w74 { width: 74%; }
+.wl-stars i.w76 { width: 76%; }
+.wl-stars i.w78 { width: 78%; }
+.wl-stars i.w80 { width: 80%; }
+.wl-stars i.w82 { width: 82%; }
+.wl-stars i.w84 { width: 84%; }
+.wl-stars i.w86 { width: 86%; }
+.wl-stars i.w88 { width: 88%; }
+.wl-stars i.w90 { width: 90%; }
+.wl-stars i.w92 { width: 92%; }
+.wl-stars i.w94 { width: 94%; }
+.wl-stars i.w96 { width: 96%; }
+.wl-stars i.w98 { width: 98%; }
+.wl-stars i.w100 { width: 100%; }

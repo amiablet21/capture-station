@@ -1352,9 +1352,10 @@ module.exports = async function run({ app, win, db, clipboard }) {
         w.idParam('887276790801').param === 'upc' && w.idParam('8806094912345').param === 'ean'
           && w.idParam('00887276790801').param === 'gtin' && w.idParam('87276790801').value === '087276790801'
           && w.idParam('123') === null && w.toGtin14('12') === '', null);
-      const ns = w.normalizeSearch({ items: [{ itemId: 5, title: 'T', brand: 'B', price: { amount: '9.68', currency: 'USD' }, images: [{ url: 'https://i/x.jpg' }] }, { itemId: '6', title: 'U' }] });
-      check('walmart search: string price read, missing price is 0, page URL, {} is no match',
+      const ns = w.normalizeSearch({ items: [{ itemId: 5, title: 'T', brand: 'B', price: { amount: '9.68', currency: 'USD' }, images: [{ url: 'https://i/x.jpg' }], customerRating: '4.7', properties: { numReviews: '198' } }, { itemId: '6', title: 'U' }] });
+      check('walmart search: string price, rating and review count read, missing ones are 0, page URL, {} is no match',
         ns.length === 2 && ns[0].price === 9.68 && ns[1].price === 0 && ns[0].url === 'https://www.walmart.com/ip/5'
+          && ns[0].rating === 4.7 && ns[0].reviews === 198 && ns[1].rating === 0 && ns[1].reviews === 0
           && ns[0].image === 'https://i/x.jpg' && w.normalizeSearch({}).length === 0, ns);
       const st = w.parseFeedStatus({ feedStatus: 'PROCESSED', itemsReceived: 2, itemsSucceeded: 1, itemsFailed: 1,
         itemDetails: { itemIngestionStatus: [

@@ -12677,6 +12677,19 @@ function wlRailHtml() {
   return `<div class="wl-rail"><h5>Your SKUs <span>${picked} of ${wl.items.length} picked</span></h5>${rows || '<p class="wl-rail-empty">None yet: add one above.</p>'}</div>`;
 }
 
+// star line under a result's title (owner pick B, variants/walmart-ratings.html):
+// five stars filled to the average, the number, the review count; 1–9
+// reviews get a "few reviews" tag. The fill is a class in 2% steps (the
+// page's CSP refuses inline widths).
+function wlRatingHtml(r) {
+  const n = Number(r.reviews) || 0;
+  const avg = Number(r.rating) || 0;
+  if (!n && !avg) return '<div class="wl-rline"><span class="wl-stars"><i class="w0"></i></span><span>No reviews yet</span></div>';
+  const fill = Math.round((avg / 5) * 50) * 2;
+  return `<div class="wl-rline" title="${avg.toFixed(1)} out of 5 from ${n.toLocaleString()} review${n === 1 ? '' : 's'} on Walmart">
+    <span class="wl-stars"><i class="w${fill}"></i></span><b>${avg.toFixed(1)}</b><span>${n.toLocaleString()} review${n === 1 ? '' : 's'}</span>${n > 0 && n < 10 ? '<span class="wl-few">few reviews</span>' : ''}</div>`;
+}
+
 function wlResultHtml(it, r) {
   const sel = it.pick === r.itemId;
   const best = it.results[0] === r && r.score > 0;
@@ -12686,6 +12699,7 @@ function wlResultHtml(it, r) {
     ${wlThumb(r)}
     <div class="wl-res-b">
       <div class="wl-res-t">${esc(r.title)}${best ? ' <span class="wl-best">Best match</span>' : ''}</div>
+      ${wlRatingHtml(r)}
       <div class="wl-res-m">${r.brand ? `${esc(r.brand)} · ` : ''}item <span class="mono">${esc(r.itemId)}</span>${r.byUpc ? ' · <b>found by your UPC</b>' : ''}</div>
       ${chips ? `<div class="wl-chips">${chips}</div>` : ''}
     </div>

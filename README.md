@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.105 highlights
+
+- **Rating and reviews on Walmart search results** (owner pick B, `variants/walmart-ratings.html`): under each result's title, five stars filled to the average, the number and the review count ("★★★★½ 4.6 · 2,341 reviews"); 1–9 reviews get a "few reviews" tag, none reads "No reviews yet". Walmart's search already returns both, so no extra calls.
+
 ## v1.32.104 highlights
 
 - **Walmart has its own tick** under Settings › General › Pages on this station (it was riding the Stock tick, so it could not be found or switched off). It starts ticked wherever Stock is on; untick it to hide the Walmart tab on that station.
