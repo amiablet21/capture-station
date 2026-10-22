@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>List on Walmart (API) — mockup</title>
+<!--
+  Owner 2026-10-22: "show me what it would look like" — bulk listing through
+  Walmart's Marketplace API instead of Seller Central by hand. Lives on the
+  Stock page's Unlisted view (the Listings tab is gone, v1.31.25):
+    1. tick SKUs missing a Walmart listing -> "List on Walmart"
+    2. the app looks each UPC up in Walmart's catalog and shows the match,
+       your price and qty; only matched NEW items can go (offer-only setup,
+       feed MP_ITEM_MATCH). No UPC / no match / Open Box are explained, not sent
+    3. one feed carries every offer; per-SKU results come back as Walmart
+       processes it (minutes to hours). Offer SKU = Linnworks SKU, so
+       Linnworks links each listing on its own and keeps price + stock.
+  Built on the real styles.css. Mockup only — nothing here is wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1280px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 980px; line-height: 1.5; }
+  .win { width: 1280px; margin: 8px auto 26px; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); position: relative; }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .stock-page { padding: 8px 24px 18px; }
+  .win .stock-list { max-height: none; overflow: visible; }
+
+  /* ---------- 1: Unlisted view + selection ---------- */
+  .wl-chk { width: 40px; text-align: center; padding-left: 0 !important; padding-right: 0 !important; text-overflow: clip !important; }
+  .wl-chk input { width: 15px; height: 15px; accent-color: var(--accent); vertical-align: -3px; cursor: pointer; }
+  .unl-table .th-upc { width: 140px; }
+  .wl-upc { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .wl-upc.is-miss { color: var(--badge-yellow-text); font-family: var(--font); font-size: 11px; font-weight: 600; }
+  .unl-table tr.is-picked td { background: #F3F6FB; }
+  .unl-table tr.is-picked td.cell-gutter { background: var(--accent-soft); color: var(--accent-soft-text); font-weight: 600; }
+  .wl-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--r-card) var(--r-card); }
+  .wl-bar .n { font-weight: 600; }
+  .wl-bar .sub { font-size: 11.5px; color: var(--muted); }
+  .wl-bar .btn-primary { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+  .wl-spark { width: 16px; height: 16px; border-radius: 999px; background: #FFC220; display: inline-flex; align-items: center; justify-content: center; color: #1E3A66; font-size: 10px; font-weight: 800; }
+
+  /* ---------- dialogs, drawn open over a dimmed page ---------- */
+  .scrim { position: relative; padding: 34px 0 40px; background: rgba(47,52,55,0.28); display: flex; justify-content: center; }
+  .scrim::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 34px, transparent 34px 35px); pointer-events: none; }
+  .wl-dlg { position: relative; width: 1040px; background: var(--surface); border-radius: var(--r-modal); box-shadow: 0 24px 60px rgba(47,52,55,0.28); overflow: hidden; }
+  .wl-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px 6px; }
+  .wl-head .dlg-title { margin: 0; }
+  .wl-head .acct { margin-left: auto; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .wl-head .acct .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--pos-text); }
+  .wl-steps { display: flex; gap: 6px; padding: 4px 20px 12px; font-size: 11px; color: var(--faint); }
+  .wl-steps span { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); }
+  .wl-steps span.on { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; font-weight: 600; }
+  .wl-steps span.done { color: var(--pos-text); border-color: var(--pos-bg); background: var(--pos-bg); }
+  .wl-sum { display: flex; gap: 8px; padding: 0 20px 12px; }
+  .wl-pill { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 11px; }
+  .p-ok { background: var(--pos-bg); color: var(--pos-text); }
+  .p-new { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .p-upc { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .p-no { background: var(--badge-red-bg); color: var(--badge-red-text); }
+  .p-wait { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+
+  .wl-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; }
+  .wl-tbl th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); text-align: left; padding: 7px 10px; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .wl-tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  .wl-tbl tr.is-off td { background: #FBFBFA; }
+  .wl-tbl tr.is-off td:not(.wl-why):not(.wl-sku) { opacity: .55; }
+  .wl-tbl .num { text-align: right; font-family: var(--mono); }
+  .wl-sku { font-family: var(--mono); font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wl-sku small { display: block; font-family: var(--font); font-weight: 400; color: var(--faint); font-size: 10.5px; }
+  .wl-match { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .wl-thumb { flex: none; width: 38px; height: 38px; border-radius: 6px; border: 1px solid var(--border); background: linear-gradient(135deg, #F1F3F6, #DDE3EC); display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--faint); }
+  .wl-thumb.tab { background: linear-gradient(135deg, #EEF0F2, #CDD3DA); }
+  .wl-mt { min-width: 0; }
+  .wl-mt .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wl-mt .m { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
+  .wl-mt .m b { font-family: var(--font); color: var(--text); font-weight: 600; }
+  .wl-none { font-size: 12px; color: var(--muted); font-style: italic; }
+  .wl-in { width: 84px; font-family: var(--mono); font-size: 12px; padding: 4px 7px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); text-align: right; color: var(--text); }
+  .wl-in.upc { width: 132px; text-align: left; border-color: var(--badge-yellow-text); border-style: dashed; }
+  .wl-in::placeholder { color: var(--faint); }
+  .wl-cond { white-space: nowrap; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--badge-green-bg); color: var(--badge-green-text); }
+  .wl-cond.ob { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+  .wl-why { font-size: 11px; line-height: 1.4; }
+  .wl-why .wl-pill { display: inline-block; margin-bottom: 3px; }
+  .wl-why .d { color: var(--muted); }
+  .wl-why a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .wl-price-hint { display: block; white-space: nowrap; font-size: 10px; color: var(--faint); font-family: var(--mono); margin-top: 2px; }
+  .wl-price-hint.warn { color: var(--badge-yellow-text); }
+  .wl-foot { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .wl-foot .info { font-size: 11.5px; color: var(--muted); line-height: 1.45; max-width: 600px; }
+  .wl-foot .info b { color: var(--text); }
+  .wl-foot .btns { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- results ---------- */
+  .wl-prog { padding: 0 20px 14px; }
+  .wl-prog .bar { height: 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+  .wl-prog .bar i { display: block; height: 100%; width: 67%; background: var(--accent); border-radius: 999px; }
+  .wl-prog .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .wl-prog .lbl .mono { font-size: 10.5px; color: var(--faint); }
+  .wl-err { color: var(--neg-text); }
+  .wl-fix { display: flex; gap: 6px; align-items: center; margin-top: 5px; }
+  .wl-fix .btn { padding: 3px 10px; font-size: 11px; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 999px; vertical-align: -1px; margin-right: 5px; }
+</style></head>
+<body>
+
+<!-- ==================== 1 ==================== -->
+<div class="note">
+  <h2>1 · Stock → Unlisted: pick what to list</h2>
+  <p>The Unlisted view already knows which in-stock SKUs have no Walmart listing. It gains a tick box and a UPC column (Walmart matches on the UPC). Tick the rows, press <b>List on Walmart</b>. Rows with no UPC can still be ticked; the next step asks for it.</p>
+</div>
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs" id="pageTabs">
+      <button class="tab">Overview</button>
+      <button class="tab">Capture</button>
+      <button class="tab is-active">Stock</button>
+      <button class="tab">Returns <span class="tab-caret">▾</span></button>
+    </nav>
+    <div class="topbar-right"></div>
+  </header>
+  <section class="stock-page">
+    <div class="stock-sheet-row"><div class="stock-main">
+      <div class="stock-band">
+        <div class="search-field stock-search">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+          <input class="search-input" type="text" placeholder="Search SKU, title or barcode" />
+        </div>
+        <div class="stock-chips"><div class="chip-tray"><button class="view-chip is-active">All</button><button class="view-chip tint-green">New</button><button class="view-chip tint-blue">Open Box</button><button class="view-chip tint-yellow">Used</button><button class="view-chip tint-red">Scrap</button><button class="view-chip">DropShip</button></div><button class="view-chip chip-unlisted is-active">Unlisted · 6</button></div>
+        <div class="stock-band-right"><div class="stock-actions">
+          <button class="btn btn-ghost stock-actions-btn">Actions <span class="tab-caret">▾</span></button>
+        </div></div>
+      </div>
+      <div class="stock-list" style="border-radius:0">
+        <table class="stock-table unl-table">
+          <thead><tr>
+            <th class="wl-chk"><input type="checkbox" /></th>
+            <th class="th-gutter">#</th>
+            <th class="th-img"></th>
+            <th>SKU</th>
+            <th class="th-upc">UPC</th>
+            <th class="num th-level">Avail</th>
+            <th class="th-chn">Channels</th>
+            <th class="th-actions"></th>
+          </tr></thead>
+          <tbody>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">1</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">S26-PLUS-256GB-WHITE</span></td><td class="wl-upc">887276812345</td><td class="num">2</td><td><button class="unl-chn">Walmart ✗</button><span class="unl-chn is-listed">eBay ✓</span><button class="unl-chn">Temu ✗</button></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">2</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">X230-128GB-GRAY</span></td><td class="wl-upc">887276829911</td><td class="num">14</td><td><button class="unl-chn">Walmart ✗</button><span class="unl-chn is-listed">eBay ✓</span><span class="unl-chn is-listed">Temu ✓</span></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">3</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">X135-64GB-SILVER</span></td><td class="wl-upc">887276802441</td><td class="num">196</td><td><button class="unl-chn">Walmart ✗</button><span class="unl-chn is-listed">eBay ✓</span><span class="unl-chn is-listed">Temu ✓</span></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">4</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">X110-64GB-GRAY</span></td><td class="wl-upc">887276790801</td><td class="num">31</td><td><button class="unl-chn">Walmart ✗</button><button class="unl-chn">eBay ✗</button><span class="unl-chn is-listed">Temu ✓</span></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">5</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">T220RES</span></td><td class="wl-upc is-miss">no UPC</td><td class="num">5</td><td><button class="unl-chn">Walmart ✗</button><span class="unl-chn is-listed">eBay ✓</span><button class="unl-chn">Temu ✗</button></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+            <tr class="is-picked"><td class="wl-chk"><input type="checkbox" checked /></td><td class="cell-gutter">6</td><td class="cell-img"><span class="stock-img stock-img-none">+</span></td><td class="mono"><span class="sku-link">OPEN-BOX-S25-FE-128GB</span></td><td class="wl-upc">887276799012</td><td class="num">1</td><td><button class="unl-chn">Walmart ✗</button><span class="unl-chn is-listed">eBay ✓</span><button class="unl-chn is-skip">Temu —</button></td><td class="cell-actions"><button class="ret-todo-copy">copy</button> <button class="ret-todo-ign">✕</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="wl-bar" style="border:1px solid var(--border);border-top:none">
+        <span class="n">6 selected</span><span class="sub">· 249 units · 1 has no UPC yet</span>
+        <button class="btn btn-ghost" style="margin-left:auto">Clear</button>
+        <button class="btn btn-primary" style="margin-left:0"><span class="wl-spark">✱</span>List 6 on Walmart</button>
+      </div>
+    </div></div>
+  </section>
+</div>
+
+<!-- ==================== 2 ==================== -->
+<div class="note">
+  <h2>2 · Check against Walmart's catalog</h2>
+  <p>The app looks every UPC up in Walmart's catalog (a few seconds) and shows what it found. Matched <b>New</b> items only need your price and quantity, because Walmart supplies the title, photos and description. Everything else is explained here rather than sent and rejected later.</p>
+</div>
+<div class="win">
+  <div class="scrim">
+    <div class="wl-dlg">
+      <div class="wl-head">
+        <h2 class="dlg-title">List on Walmart</h2>
+        <span class="acct"><span class="dot"></span>Walmart API · connected (Digital World Shop)</span>
+      </div>
+      <div class="wl-steps"><span class="done">1 · Pick ✓</span><span class="on">2 · Check catalog</span><span>3 · Send &amp; track</span></div>
+      <div class="wl-sum">
+        <span class="wl-pill p-ok">3 ready</span>
+        <span class="wl-pill p-upc">1 needs a UPC</span>
+        <span class="wl-pill p-new">1 not on Walmart yet</span>
+        <span class="wl-pill p-no">1 can't list</span>
+      </div>
+      <table class="wl-tbl">
+        <colgroup><col style="width:34px"><col style="width:190px"><col><col style="width:124px"><col style="width:66px"><col style="width:96px"><col style="width:220px"></colgroup>
+        <thead><tr><th></th><th>Your SKU</th><th>Walmart catalog match</th><th style="text-align:right">Your price</th><th style="text-align:right">Qty</th><th>Condition</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="wl-chk"><input type="checkbox" checked /></td>
+            <td class="wl-sku">S26-PLUS-256GB-WHITE<small>UPC 887276812345</small></td>
+            <td><div class="wl-match"><span class="wl-thumb">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy S26+ 256GB Unlocked Smartphone, White</div><div class="m"><b>4 sellers</b> · lowest $949.00 · item 5123448790</div></div></div></td>
+            <td class="num"><input class="wl-in" value="969.99" /><span class="wl-price-hint warn">+$20.99 vs lowest</span></td>
+            <td class="num"><input class="wl-in" style="width:52px" value="2" /></td>
+            <td><span class="wl-cond">New</span></td>
+            <td class="wl-why"><span class="wl-pill p-ok">✓ Match found</span><div class="d">Goes up as an offer on this item</div></td>
+          </tr>
+          <tr>
+            <td class="wl-chk"><input type="checkbox" checked /></td>
+            <td class="wl-sku">X230-128GB-GRAY<small>UPC 887276829911</small></td>
+            <td><div class="wl-match"><span class="wl-thumb tab">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy Tab A11+ 11" 128GB Wi-Fi Tablet, Gray</div><div class="m"><b>7 sellers</b> · lowest $219.00 · item 6011935207</div></div></div></td>
+            <td class="num"><input class="wl-in" value="214.99" /><span class="wl-price-hint">lowest by $4.01</span></td>
+            <td class="num"><input class="wl-in" style="width:52px" value="14" /></td>
+            <td><span class="wl-cond">New</span></td>
+            <td class="wl-why"><span class="wl-pill p-ok">✓ Match found</span><div class="d">Goes up as an offer on this item</div></td>
+          </tr>
+          <tr>
+            <td class="wl-chk"><input type="checkbox" checked /></td>
+            <td class="wl-sku">X135-64GB-SILVER<small>UPC 887276802441</small></td>
+            <td><div class="wl-match"><span class="wl-thumb tab">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet, Silver</div><div class="m"><b>12 sellers</b> · lowest $99.00 · item 2318840951</div></div></div></td>
+            <td class="num"><input class="wl-in" value="94.99" /><span class="wl-price-hint">lowest by $4.01</span></td>
+            <td class="num"><input class="wl-in" style="width:52px" value="196" /></td>
+            <td><span class="wl-cond">New</span></td>
+            <td class="wl-why"><span class="wl-pill p-ok">✓ Match found</span><div class="d">Goes up as an offer on this item</div></td>
+          </tr>
+          <tr>
+            <td class="wl-chk"><input type="checkbox" /></td>
+            <td class="wl-sku">T220RES<small>no UPC in Linnworks</small></td>
+            <td><span class="wl-none">Walmart matches on the UPC. Type or scan it, and it's saved to the Linnworks barcode too:</span><div class="wl-fix"><input class="wl-in upc" placeholder="Scan or type UPC" /><button class="btn btn-secondary">Look up</button></div></td>
+            <td class="num">—</td>
+            <td class="num">5</td>
+            <td><span class="wl-cond">New</span></td>
+            <td class="wl-why"><span class="wl-pill p-upc">Needs a UPC</span><div class="d">Ticks itself once a match is found</div></td>
+          </tr>
+          <tr class="is-off">
+            <td class="wl-chk"><input type="checkbox" disabled /></td>
+            <td class="wl-sku">X110-64GB-GRAY<small>UPC 887276790801</small></td>
+            <td><span class="wl-none">No item with this UPC on Walmart.</span></td>
+            <td class="num">—</td>
+            <td class="num">31</td>
+            <td><span class="wl-cond">New</span></td>
+            <td class="wl-why"><span class="wl-pill p-new">Not on Walmart yet</span><div class="d">Needs a full setup (title, photos, specs). <a href="#">Set it up in Seller Center ↗</a></div></td>
+          </tr>
+          <tr class="is-off">
+            <td class="wl-chk"><input type="checkbox" disabled /></td>
+            <td class="wl-sku">OPEN-BOX-S25-FE-128GB<small>UPC 887276799012</small></td>
+            <td><div class="wl-match"><span class="wl-thumb">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy S25 FE 128GB Unlocked Smartphone</div><div class="m">item 7720419386</div></div></div></td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td><span class="wl-cond ob">Open Box</span></td>
+            <td class="wl-why"><span class="wl-pill p-no">Can't list</span><div class="d">Walmart only takes used or open-box from sellers approved for its Pre-Owned program</div></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="wl-foot">
+        <div class="info">Each offer goes up under <b>your Linnworks SKU</b>, so Linnworks links the new listing on its next channel scan and keeps its <b>price and stock</b> in sync from then on.</div>
+        <div class="btns"><button class="btn btn-ghost">Back</button><button class="btn btn-primary">Send 3 offers to Walmart</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 3 ==================== -->
+<div class="note">
+  <h2>3 · Sent: results come back per SKU</h2>
+  <p>All offers go to Walmart in one upload. Walmart takes anywhere from a few minutes to a few hours, so the dialog can be closed. The app keeps checking and shows a toast when the results are in. Problems are shown in plain words with a fix-and-resend for that row only.</p>
+</div>
+<div class="win">
+  <div class="scrim">
+    <div class="wl-dlg">
+      <div class="wl-head">
+        <h2 class="dlg-title">List on Walmart</h2>
+        <span class="acct"><span class="dot"></span>Walmart API · connected (Digital World Shop)</span>
+      </div>
+      <div class="wl-steps"><span class="done">1 · Pick ✓</span><span class="done">2 · Check catalog ✓</span><span class="on">3 · Send &amp; track</span></div>
+      <div class="wl-prog">
+        <div class="bar"><i></i></div>
+        <div class="lbl"><span><b style="color:var(--text)">2 of 3 done</b> · sent 2:14 PM · last checked 2:31 PM</span><span class="mono">upload F129C19240844B97A3C6AD8F1A2C4997</span></div>
+      </div>
+      <table class="wl-tbl">
+        <colgroup><col style="width:210px"><col><col style="width:100px"><col style="width:60px"><col style="width:300px"></colgroup>
+        <thead><tr><th>Your SKU</th><th>Walmart item</th><th style="text-align:right">Price</th><th style="text-align:right">Qty</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="wl-sku">S26-PLUS-256GB-WHITE</td>
+            <td><div class="wl-match"><span class="wl-thumb">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy S26+ 256GB Unlocked Smartphone, White</div><div class="m">item 5123448790</div></div></div></td>
+            <td class="num">$969.99</td><td class="num">2</td>
+            <td class="wl-why"><span class="wl-pill p-ok">✓ Live on Walmart</span><div class="d">Linnworks will link it on its next scan · <a href="#">view ↗</a></div></td>
+          </tr>
+          <tr>
+            <td class="wl-sku">X230-128GB-GRAY</td>
+            <td><div class="wl-match"><span class="wl-thumb tab">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy Tab A11+ 11" 128GB Wi-Fi Tablet, Gray</div><div class="m">item 6011935207</div></div></div></td>
+            <td class="num">$214.99</td><td class="num">14</td>
+            <td class="wl-why"><span class="wl-pill p-wait"><span class="spin"></span>Walmart is processing</span><div class="d">Usually under an hour</div></td>
+          </tr>
+          <tr>
+            <td class="wl-sku">X135-64GB-SILVER</td>
+            <td><div class="wl-match"><span class="wl-thumb tab">IMG</span><div class="wl-mt"><div class="t">Samsung Galaxy Tab A9+ 11" 64GB Wi-Fi Tablet, Silver</div><div class="m">item 2318840951</div></div></div></td>
+            <td class="num">$94.99</td><td class="num">196</td>
+            <td class="wl-why"><span class="wl-pill p-no">✗ Not accepted</span><div class="d wl-err">Walmart: price is too far below its reference price for this item.</div>
+              <div class="wl-fix"><input class="wl-in" value="94.99" /><button class="btn btn-secondary">Resend this one</button></div></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="wl-foot">
+        <div class="info">Safe to close. The app keeps checking every 15 minutes and shows a toast when this upload is finished. Listed SKUs drop off the Unlisted view once Linnworks links them.</div>
+        <div class="btns"><button class="btn btn-primary">Close</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
