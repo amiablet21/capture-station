@@ -6729,8 +6729,7 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
 // the entry row's phase, worn where the eye already is (approved demo
 // pending-entry.html, owner 2026-09-14): while the lookup runs the +
 // becomes a loading circle (just the circle — no gray wash); a loaded,
-// not-yet-saved row tints green and the gutter turns into a ✓, so the
-// draft never reads as an already-saved row
+// not-yet-saved row tints green and the gutter turns into a Save button
 function wsSetPhase(p) {
   if (!retEntryTr) return;
   retEntryTr.classList.toggle('is-ready', p === 'ready');
@@ -6740,8 +6739,10 @@ function wsSetPhase(p) {
     plus.innerHTML = '<span class="ws-spin" aria-label="Looking the order up"></span>';
     plus.title = 'Looking the order up…';
   } else if (p === 'ready') {
-    plus.textContent = '✓';
-    plus.title = 'Order loaded — Enter (or click here) saves this return';
+    // "Save", not ✓ (owner 2026-10-22): a ✓ read as already saved, and
+    // loaded returns were left unsaved in the room
+    plus.textContent = 'Save';
+    plus.title = 'Order loaded, NOT saved yet — Enter (or click here) saves this return';
   } else {
     plus.textContent = '+';
     plus.title = 'Save this return';

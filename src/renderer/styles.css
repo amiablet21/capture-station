@@ -2098,7 +2098,11 @@ button.pr-csku:hover { color: var(--badge-blue-text); text-decoration: underline
 .ret-log-table tr.ws-row.is-ready td.ws-gutter {
   background: var(--accent);
   color: #fff;
-  font-size: 13px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding-left: 0;
+  padding-right: 0;
 }
 .ret-log-table tr.ws-row.is-ready td.ws-gutter:hover { background: var(--accent-soft-text); }
 .ws-in {
