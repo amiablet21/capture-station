@@ -504,12 +504,12 @@ module.exports = async function run({ app, win, db, clipboard }) {
       && inlineGot.orderNumber === '119888000000001', inlineGot);
     // a scan typed while the save runs survives the save's row clear
     await exec(`window.__rvKeep = rvCreate; window.__rvGot2 = null;
-      rvCreate = async (p) => { window.__rvGot2 = p; await new Promise(r => setTimeout(r, 400)); return { ok: true, id: 997 }; };
+      rvCreate = async (p) => { window.__rvGot2 = p; await new Promise(r => { window.__rvDone = r; }); return { ok: true, id: 997 }; };
       wsReset(); $('wsPo').value = 'PO-A'; ws.looked = 'PO-A'; $('ws_sku').value = 'S25-128GB-NAVY';
       $('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
     await sleep(100);
-    await exec(`$('wsPo').value = 'PO-B'; $('wsPo').dispatchEvent(new Event('input', { bubbles: true })); 0;`);
-    await sleep(700);
+    await exec(`$('wsPo').value = 'PO-B'; $('wsPo').dispatchEvent(new Event('input', { bubbles: true })); window.__rvDone(); 0;`);
+    await sleep(300);
     uns = await exec(`[window.__rvGot2 && window.__rvGot2.orderNumber, $('wsPo').value, $('ws_sku').value,
       JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
     check('a PO typed during a save is kept; the saved cells clear; nothing lands on the card',
