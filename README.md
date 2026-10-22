@@ -2,6 +2,15 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.26 highlights
+
+- **List on Walmart** (Stock → Unlisted, owner-approved mockup `variants/walmart-api-lister.html`). Rows missing on Walmart get a tick box and show the name the app will search Walmart for. Tick them and press **List on Walmart**:
+  1. **Find on Walmart**, one SKU at a time: the app searches Walmart's catalog by name (the Linnworks title, else the SKU; edit and search again, and the words are remembered per SKU) and lists the best picks, each with **View on Walmart ↗**. Chips show what agrees with the SKU (model, storage, colour) and what doesn't; the closest is pre-selected as **Best match**. Then set the offer: condition (New only, since Open Box / Used / Refurbished need Walmart's Pre-Owned approval), price, starting stock and shipping weight.
+  2. **UPC.** Walmart's search gives out no UPCs, yet an offer must carry one: it comes from the Linnworks barcode (looked up automatically) or one scan of the box, and is checked against Walmart to prove it is the item you picked. A proven UPC is saved to the Linnworks barcode, so the next restock needs no scan.
+  3. **Review**, then **List on Walmart** sends every offer in one upload (offer-only setup on Walmart's existing item, under your Linnworks SKU, so Linnworks links the new listing and keeps price and stock).
+  4. **Send & track**: per SKU, accepted / processing / not accepted with Walmart's reason and a resend. The app checks open uploads every 15 minutes, sets the starting stock on each accepted SKU once, and says when an upload finishes. Sent SKUs show "Sent to Walmart" on the Unlisted view instead of a tick box. Past uploads: Stock → Actions → **Walmart uploads**.
+- **Settings → Walmart API**: Client ID and secret (from developer.walmart.com → API Keys, stored encrypted like the Linnworks keys), a Sandbox tick, the default shipping weight, and Test connection.
+
 ## v1.31.25 highlights
 
 - **The Listings tab is gone** (owner: never used). The eBay lister, the Temu lister, their phone photo page, photo editor, gear dialogs and the Listings tick in Settings are removed, along with the code behind them (Seller Hub CSV and Temu workbook builders, Linnworks eBay configurator publishing). Stock, Returns, Mappings and the channel-SKU exports are untouched. Old lister settings left in a station's config are ignored, and any `Documents\Capture Station\listing photos` folder is no longer used and can be deleted.

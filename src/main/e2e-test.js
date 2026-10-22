@@ -1325,6 +1325,39 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.unparkOrder('119990000000001')`);
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartSearch('Galaxy Tab A9', '')`);
+    check('walmart:search refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
+    check('walmart:submit refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    {
+      // List on Walmart: the API client's pure builders + parsers
+      const w = require('./walmart.js')._test;
+      const feed = w.buildMatchFeed([{ sku: 'X110-64GB-GRAY', upc: '887276790801', price: 116.989, shipLb: 1.2 }]);
+      const it0 = feed.MPItem[0].Item;
+      check('walmart feed: 4.2 match header, GTIN-14 offer, New, rounded price',
+        feed.MPItemFeedHeader.version === '4.2' && feed.MPItemFeedHeader.sellingChannel === 'mpsetupbymatch'
+          && !('businessUnit' in feed.MPItemFeedHeader) && it0.productIdentifiers.productIdType === 'GTIN'
+          && it0.productIdentifiers.productId === '00887276790801' && it0.price === 116.99
+          && it0.ShippingWeight === 1.2 && it0.condition === 'New' && it0.sku === 'X110-64GB-GRAY', feed);
+      check('walmart ids: 12 -> upc, 13 -> ean, 14 -> gtin, 11 widened, junk refused',
+        w.idParam('887276790801').param === 'upc' && w.idParam('8806094912345').param === 'ean'
+          && w.idParam('00887276790801').param === 'gtin' && w.idParam('87276790801').value === '087276790801'
+          && w.idParam('123') === null && w.toGtin14('12') === '', null);
+      const ns = w.normalizeSearch({ items: [{ itemId: 5, title: 'T', brand: 'B', price: { amount: '9.68', currency: 'USD' }, images: [{ url: 'https://i/x.jpg' }] }, { itemId: '6', title: 'U' }] });
+      check('walmart search: string price read, missing price is 0, page URL, {} is no match',
+        ns.length === 2 && ns[0].price === 9.68 && ns[1].price === 0 && ns[0].url === 'https://www.walmart.com/ip/5'
+          && ns[0].image === 'https://i/x.jpg' && w.normalizeSearch({}).length === 0, ns);
+      const st = w.parseFeedStatus({ feedStatus: 'PROCESSED', itemsReceived: 2, itemsSucceeded: 1, itemsFailed: 1,
+        itemDetails: { itemIngestionStatus: [
+          { sku: 'A', ingestionStatus: 'SUCCESS', wpid: 'W1', ingestionErrors: null },
+          { sku: 'B', ingestionStatus: 'DATA_ERROR', wpid: null, ingestionErrors: { ingestionError: [{ type: 'DATA_ERROR', code: 'E1', field: 'price', description: 'too low' }] } },
+        ] } });
+      check('walmart feed status: per-SKU state, readable errors, settled states',
+        st.status === 'PROCESSED' && st.items.A.status === 'SUCCESS' && st.items.B.errors[0] === 'price: too low'
+          && st.counts.failed === 1 && w.isFinal('DATA_ERROR') && w.isFinal('SUCCESS') && !w.isFinal('INPROGRESS'), st);
+      check('walmart errors: JSON error lists read as one line',
+        w.errText(JSON.stringify({ errors: { error: [{ code: 'X', description: 'Bad SKU' }] } })) === 'Bad SKU', null);
+    }
 
     const prevLookup2 = await exec('recvLookup');
     await exec(`

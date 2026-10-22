@@ -1239,6 +1239,13 @@ async function openSettings() {
   $('setAppId').value = cfg.linnworks.applicationId;
   $('setAppSecret').value = cfg.linnworks.applicationSecret;
   $('setToken').value = cfg.linnworks.token;
+  const wm = cfg.walmartApi || {};
+  $('setWmClientId').value = wm.clientId || '';
+  $('setWmSecret').value = wm.clientSecret || '';
+  $('setWmSandbox').checked = !!wm.sandbox;
+  $('setWmShipLb').value = String(wm.shipWeightLb || 1);
+  $('wmTestResult').textContent = '';
+  $('wmTestResult').className = 'test-result';
   const sel = $('setLocation');
   sel.innerHTML = cfg.linnworks.locationId
     ? `<option value="${esc(cfg.linnworks.locationId)}">${esc(cfg.linnworks.locationName || cfg.linnworks.locationId)}</option>`
@@ -1348,6 +1355,12 @@ $('settingsSave').addEventListener('click', async () => {
       token: $('setToken').value.trim(),
       locationId: sel.value,
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
+    },
+    walmartApi: {
+      clientId: $('setWmClientId').value.trim(),
+      clientSecret: $('setWmSecret').value.trim(),
+      sandbox: $('setWmSandbox').checked,
+      shipWeightLb: Number($('setWmShipLb').value) > 0 ? Number($('setWmShipLb').value) : 1,
     },
     dryRun: $('setDryRun').checked,
     shipCutoff: /^\d{1,2}:\d{2}$/.test($('setShipCutoff').value.trim()) ? $('setShipCutoff').value.trim() : '16:00',
@@ -3003,11 +3016,26 @@ function renderUnlistedView() {
       return { sku: s, title: it ? it.title || '' : '', image: it ? it.image || '' : '', stockItemId: it ? it.stockItemId : '', avail: l ? Math.max(Number(l.stockLevel) || 0, Number(l.available) || 0) : null };
     })
     .filter(stockCondOk); // the dim rows follow the active slice too
+  // List on Walmart (owner 2026-10-22): a tick box on every row still
+  // missing on Walmart, and the name the app will search Walmart for
+  const wlOn = unlChanKeys().includes('walmart');
+  if (wlOn) wlLoadSent();
+  const wlMissing = (d) => d.missing.includes('walmart') && !chanSkipKind(d.sku, 'walmart');
+  // a SKU already on its way to Walmart can't be ticked twice
+  const wlCan = (d) => wlMissing(d) && !wlSentFor(d.sku);
+  const wlCells = (d, mode) => !wlOn ? ['', ''] : [
+    `<td class="wl-chk">${!mode && wlCan(d) ? `<input type="checkbox" data-wlsku="${esc(d.sku)}" ${wlSel.has(d.sku) ? 'checked' : ''} title="Tick to list on Walmart" />` : ''}</td>`,
+    `<td class="wl-q">${mode || !wlMissing(d) ? ''
+      : wlSentFor(d.sku) ? `<span class="wl-sent" title="Sent with List on Walmart ${esc(new Date(wlSentFor(d.sku).at).toLocaleString())} — Stock → Actions → Walmart uploads">${wlSentFor(d.sku).ok ? '✓ Accepted by Walmart, linking…' : 'Sent to Walmart, processing…'}</span>`
+      : esc(wlQueryFor(d))}</td>`,
+  ];
   const rowHtml = (d, idx, mode) => `
-        <tr${mode ? ` class="unl-dim is-${mode}"` : ''}>
+        <tr${mode ? ` class="unl-dim is-${mode}"` : (wlSel.has(d.sku) ? ' class="wl-picked"' : '')}>
+          ${wlCells(d, mode)[0]}
           <td class="cell-gutter">${mode ? '·' : idx}</td>
           <td class="cell-img"><button class="img-btn" data-imgsku="${esc(d.sku)}" data-sid="${esc(d.stockItemId || '')}" title="${d.image ? 'Click to add another image' : 'Click to add an image'}">${d.image ? `<img class="stock-img" src="${esc(d.image)}" loading="lazy" alt="" />` : '<span class="stock-img stock-img-none">+</span>'}</button></td>
           <td class="mono"><span class="sku-link" data-chsku="${esc(d.sku)}" data-chsid="${esc(d.stockItemId || '')}" title="${esc(d.title)}&#10;Click to see linked channel SKUs">${esc(d.sku)}</span></td>
+          ${wlCells(d, mode)[1]}
           <td class="num">${d.avail == null ? '—' : d.avail}</td>
           <td>${mode === 'ignored'
     ? `<span class="unl-dim-note">never listed</span>`
@@ -3018,13 +3046,18 @@ function renderUnlistedView() {
             <button class="ret-todo-ign" data-ign="${esc(d.sku)}" title="Never list this SKU (claim bins, fakes) — moves it to the never-listed rows below">✕</button>`}</td>
         </tr>`;
   const dimCount = parked.length + ignoredRows.length;
+  // the tick boxes only ever cover rows on screen that can still go
+  wlRows = rows.filter(wlCan);
+  for (const sku of [...wlSel]) if (!wlRows.some(d => d.sku === sku)) wlSel.delete(sku);
   $('stockList').innerHTML = (rows.length === 0 && dimCount === 0)
     ? `<p class="dlg-note">Nothing here — every in-stock ${stockActiveView ? `${esc(stockActiveView.label)} ` : ''}SKU is listed on every channel it's expected on. 🎉</p>`
     : `${rows.length === 0 ? '<p class="dlg-note">Nothing expected is missing — the rows below are skipped or removed.</p>' : ''}<table class="stock-table unl-table">
       <thead><tr>
+        ${wlOn ? `<th class="wl-chk"><input type="checkbox" id="wlAll" title="Tick every row missing on Walmart" ${wlRows.length && wlRows.every(d => wlSel.has(d.sku)) ? 'checked' : ''} /></th>` : ''}
         <th class="th-gutter">#</th>
         <th class="th-img"></th>
-        <th>SKU</th>
+        <th class="th-sku">SKU</th>
+        ${wlOn ? '<th class="th-q" title="What List on Walmart searches Walmart\'s catalog for: the Linnworks title, or the SKU when there is none. You can change it in the dialog">Searches Walmart for</th>' : ''}
         <th class="num th-level unl-sort-th" data-unlsort title="${unlSortUnits ? 'Sorting by most units — click to sort by most gaps' : 'Click to sort by most units'}">Avail${unlSortUnits ? ' ↓' : ''}</th>
         <th class="th-chn">Channels
           <button type="button" id="unlChanFilterBtn" class="unl-funnel ${unlChanSel.length ? 'is-active' : ''}"
@@ -3034,22 +3067,24 @@ function renderUnlistedView() {
       </tr></thead>
       <tbody>${rows.map((d, idx) => rowHtml(d, idx + 1, '')).join('')}</tbody>
       ${dimCount ? `<tbody class="unl-dim-body">
-        <tr class="unl-sec-tr"><td colspan="6" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
+        <tr class="unl-sec-tr"><td colspan="${wlOn ? 8 : 6}" class="unl-sec">Skipped or removed · ${dimCount} — kept here so nothing is forgotten</td></tr>
         ${parked.map(d => rowHtml(d, 0, 'parked')).join('')}
         ${ignoredRows.map(d => rowHtml(d, 0, 'ignored')).join('')}
       </tbody>` : ''}
     </table>
+    ${wlOn ? '<div id="wlBar" class="wl-bar"></div>' : ''}
     <p class="dlg-note">Create the listing on the marketplace using <b>exactly</b> the SKU string — Linnworks links it automatically and the row leaves this view within the hour (or on restart). Greyed — chips restore with a click; never-listed rows come back with ↩.</p>`;
   // wear the main sheet's SKU width so the chip flip never shifts the
   // columns (owner 2026-09-21, "the formatting changes"); gutter/img/level
   // widths already match via CSS. th.style is the CSP-safe styling path.
   const skuW = stockColAuto.sku || stockColWidths.sku || 0;
-  const skuTh = $('stockList').querySelector('.unl-table th:nth-child(3)');
+  const skuTh = $('stockList').querySelector('.unl-table th.th-sku');
   if (skuTh && skuW) {
     skuTh.style.width = `${skuW}px`;
     skuTh.style.minWidth = `${skuW}px`;
     skuTh.style.maxWidth = `${skuW}px`;
   }
+  wlRenderBar();
 }
 
 
@@ -3469,6 +3504,7 @@ $('stockActionsDlg').addEventListener('click', (e) => {
   else if (act === 'wfs') openWfs();
   else if (act === 'wholesale') openWsList();
   else if (act === 'bulk') bulkOpen();
+  else if (act === 'walmart') wlOpenUploads();
   else if (act === 'export:linnworks') stockExportLinnworks();
   else if (act === 'export:sales') stockExportSales();
   else if (act.startsWith('export:')) stockExportChannel(act.slice(7));
@@ -10349,6 +10385,733 @@ $("retRefreshBtn").addEventListener("click", () => {
   loadRetPast();
   loadUnlisted(true); // fresh scan: cards update the moment it lands
   toast("Refreshing the log and listing scan…", 2000);
+});
+
+/* ==================== List on Walmart (owner 2026-10-22) ====================
+   Approved mockup: variants/walmart-api-lister.html. Tick SKUs on the Stock
+   page's Unlisted view -> per SKU, search Walmart's catalog BY NAME (the
+   owner's pick over UPC lookups), confirm the right item, set condition /
+   price / stock -> review -> one offer feed (MP_ITEM_MATCH) -> track it.
+   Walmart's name search returns no UPCs, yet an offer must name one: the
+   UPC comes from the Linnworks barcode or one scan of the box, and is
+   looked up on Walmart to prove it IS the picked item before it can go.
+   The offer SKU is the Linnworks SKU, so Linnworks links each new listing on
+   its next channel scan and owns price + stock from then on. */
+
+const wlSel = new Set(); // SKUs ticked on the Unlisted view
+let wlRows = [];         // Unlisted rows that can be ticked (missing on Walmart)
+let wl = null;           // the open dialog: { step, items, cur, feeds, feed, conn }
+let wlQueries = null;    // per-SKU search text the owner typed (this desktop)
+let wlSent = null;       // SKU -> { at, ok } for uploads not turned down (last 7 days)
+let wlSentLoading = false;
+
+// SKUs in a recent upload Walmart hasn't turned down: they wait for
+// Linnworks to link them instead of being offered for listing again
+async function wlLoadSent(force) {
+  if ((wlSent && !force) || wlSentLoading) return;
+  wlSentLoading = true;
+  try {
+    const res = await api.walmartFeeds().catch(() => null);
+    const map = {};
+    for (const f of (res && res.ok ? res.feeds : [])) {
+      if (Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      for (const o of f.offers || []) {
+        const st = String(((f.items || {})[o.sku] || {}).status || '').toUpperCase();
+        if (/ERROR/.test(st) || map[o.sku]) continue;
+        map[o.sku] = { at: f.at, ok: st === 'SUCCESS' };
+      }
+    }
+    const was = JSON.stringify(wlSent);
+    wlSent = map;
+    if (was !== JSON.stringify(map) && activePage === 'stock' && stockUnlistedActive) renderStock();
+  } finally {
+    wlSentLoading = false;
+  }
+}
+const wlSentFor = (sku) => (wlSent || {})[sku] || null;
+
+function wlSavedQueries() {
+  if (!wlQueries) {
+    try { wlQueries = JSON.parse(localStorage.getItem('wlQueries') || '{}') || {}; } catch { wlQueries = {}; }
+  }
+  return wlQueries;
+}
+
+// what the app searches Walmart for: the owner's own words for this SKU if
+// they ever changed it, else the Linnworks title, else the SKU spelled out
+function wlQueryFor(d) {
+  const key = String(d.sku).toUpperCase();
+  const saved = wlSavedQueries()[key];
+  if (saved) return saved;
+  const t = String(d.title || '').trim();
+  if (t) return t;
+  return String(d.sku).replace(/^(OPEN-?BOX|USED|SCRAP)-/i, '').replace(/[-_]+/g, ' ').trim();
+}
+
+function wlStockItem(sku) {
+  const want = String(sku).toUpperCase();
+  return ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === want) || null;
+}
+
+// condition by the Stock page's own views (Open Box / Used / Scrap); anything
+// else is New. Walmart takes non-new only from Pre-Owned approved sellers.
+function wlCondOf(d) {
+  const v = (stockViews || []).find(x => !x.plain && stockViewMatch(d, x.pattern));
+  return v ? v.label : 'New';
+}
+
+/* ----- match chips: does a Walmart result agree with the SKU? ----- */
+
+const WL_COLORS = ['black', 'white', 'gray', 'grey', 'graphite', 'silver', 'blue', 'navy', 'green', 'mint',
+  'red', 'pink', 'purple', 'lavender', 'violet', 'gold', 'yellow', 'orange', 'beige', 'cream', 'bronze', 'titanium'];
+const WL_NEAR = {
+  gray: ['grey', 'graphite', 'charcoal', 'titanium'], grey: ['gray', 'graphite', 'charcoal'],
+  black: ['graphite', 'onyx', 'phantom black', 'jet black'], silver: ['platinum', 'titanium'],
+  blue: ['navy', 'icy blue', 'icyblue'], navy: ['blue'], purple: ['lavender', 'violet'], green: ['mint'],
+};
+const wlCap = (s) => String(s).replace(/\b\w/g, c => c.toUpperCase());
+
+function wlSkuFacts(sku) {
+  const s = String(sku).toUpperCase().replace(/^(OPEN-?BOX|USED|SCRAP)-/, '');
+  const parts = s.split(/[-_ ]+/).filter(Boolean);
+  const storage = (s.match(/(\d+)\s?(GB|TB)/) || [''])[0].replace(/\s/g, '');
+  const color = [...parts].reverse().find(p => /^[A-Z]{3,}$/.test(p)
+    && !/^(US|USA|GLOBAL|NEW|WIFI|LTE|UNLOCKED|OPENBOX|USED|SCRAP|RES|REF)$/.test(p)) || '';
+  return { model: parts[0] || '', storage, color: color.toLowerCase() };
+}
+
+function wlScore(facts, r) {
+  const t = ` ${String(r.title || '').toLowerCase().replace(/[^a-z0-9+ ]/g, ' ').replace(/\s+/g, ' ')} `;
+  const chips = [];
+  let score = 0;
+  if (r.byUpc) {
+    chips.push(['ok', 'Same UPC']);
+    score += 10;
+  }
+  if (facts.model.length >= 3) {
+    // "x110" also matches "sm-x110" — Walmart titles often carry the model code
+    if (t.includes(facts.model.toLowerCase())) { chips.push(['ok', facts.model]); score += 2; }
+  }
+  if (facts.storage) {
+    const want = facts.storage.toLowerCase();
+    const has = (t.match(/\b\d+ ?(gb|tb)\b/g) || []).map(x => x.replace(/ /g, ''));
+    if (has.includes(want)) { chips.push(['ok', facts.storage]); score += 3; }
+    else if (has.length) {
+      chips.push(['bad', `${has[has.length - 1].toUpperCase()} ≠ your ${facts.storage}`]);
+      score -= 3;
+    }
+  }
+  if (facts.color) {
+    const c = facts.color;
+    if (t.includes(` ${c} `) || t.includes(c)) { chips.push(['ok', wlCap(c)]); score += 2; }
+    else {
+      const near = (WL_NEAR[c] || []).find(n => t.includes(n));
+      const other = WL_COLORS.find(x => x !== c && t.includes(` ${x} `));
+      if (near) { chips.push(['near', `${wlCap(near)} ≈ ${wlCap(c)}`]); score += 1; }
+      else if (other) { chips.push(['bad', `${wlCap(other)} ≠ your ${wlCap(c)}`]); score -= 2; }
+    }
+  }
+  return { chips, score };
+}
+
+/* ----- the Unlisted view's selection bar ----- */
+
+function wlRenderBar() {
+  const bar = $('wlBar');
+  if (!bar) return;
+  const n = wlSel.size;
+  const units = wlRows.filter(d => wlSel.has(d.sku)).reduce((a, d) => a + (Number(d.avail) || 0), 0);
+  bar.innerHTML = n
+    ? `<span class="wl-bar-n">${n} selected</span><span class="wl-bar-sub">· ${units} unit${units === 1 ? '' : 's'}</span>
+       <button type="button" class="btn btn-ghost wl-bar-push" data-wlup>Walmart uploads</button>
+       <button type="button" class="btn btn-ghost" data-wlclear>Clear</button>
+       <button type="button" class="btn btn-primary wl-go" data-wlgo><span class="wl-spark">✱</span>List ${n} on Walmart</button>`
+    : `<span class="wl-bar-sub">Tick the SKUs missing on Walmart to list them there, found by name in Walmart's catalog.</span>
+       <button type="button" class="btn btn-ghost wl-bar-push" data-wlup>Walmart uploads</button>`;
+}
+
+$('stockList').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-wlsku]');
+  if (cb) {
+    if (cb.checked) wlSel.add(cb.dataset.wlsku); else wlSel.delete(cb.dataset.wlsku);
+    const tr = cb.closest('tr');
+    if (tr) tr.classList.toggle('wl-picked', cb.checked);
+    const all = $('wlAll');
+    if (all) all.checked = wlRows.length > 0 && wlRows.every(d => wlSel.has(d.sku));
+    wlRenderBar();
+    return;
+  }
+  if (e.target.id === 'wlAll') {
+    for (const d of wlRows) { if (e.target.checked) wlSel.add(d.sku); else wlSel.delete(d.sku); }
+    for (const box of $('stockList').querySelectorAll('[data-wlsku]')) {
+      box.checked = wlSel.has(box.dataset.wlsku);
+      const tr = box.closest('tr');
+      if (tr) tr.classList.toggle('wl-picked', box.checked);
+    }
+    wlRenderBar();
+  }
+});
+
+$('stockList').addEventListener('click', (e) => {
+  if (e.target.closest('[data-wlclear]')) { wlSel.clear(); renderStock(); return; }
+  if (e.target.closest('[data-wlup]')) { wlOpenUploads(); return; }
+  if (e.target.closest('[data-wlgo]')) wlStart();
+});
+
+/* ----- opening the dialog ----- */
+
+async function wlConn() {
+  const st = await api.walmartStatus().catch(() => null);
+  return st || { configured: false };
+}
+
+function wlAcctLine() {
+  const c = (wl && wl.conn) || {};
+  $('wlAcct').innerHTML = c.configured
+    ? `<span class="wl-dot"></span>Walmart API${c.sandbox ? ' · <b>sandbox</b>' : ''}`
+    : '<span class="wl-dot is-off"></span>Walmart API not connected';
+}
+
+async function wlStart() {
+  const rows = wlRows.filter(d => wlSel.has(d.sku));
+  if (!rows.length) return;
+  const conn = await wlConn();
+  const cfg = await api.getConfig().catch(() => ({}));
+  const shipLb = Number(((cfg || {}).walmartApi || {}).shipWeightLb) || 1;
+  wl = {
+    step: 'find', cur: 0, conn, feeds: null, feed: null,
+    items: rows.map(d => {
+      const it = wlStockItem(d.sku) || {};
+      const cond = wlCondOf(d);
+      return {
+        sku: d.sku, stockItemId: d.stockItemId, title: d.title || it.title || '', avail: Number(d.avail) || 0,
+        barcode: it.barcode || '', cond, query: wlQueryFor(d),
+        upc: String(it.barcode || '').replace(/\D/g, ''), upcCheck: null, // { upc, itemId, state, title }
+        facts: wlSkuFacts(d.sku),
+        results: null, loading: false, error: '', pick: '',
+        price: Number(it.retailPrice) > 0 ? Number(it.retailPrice).toFixed(2) : '',
+        qty: String(Number(d.avail) || 0), shipLb: String(shipLb),
+        state: cond === 'New' ? 'todo' : 'blocked',
+      };
+    }),
+  };
+  wl.cur = Math.max(0, wl.items.findIndex(i => i.state === 'todo'));
+  wlAcctLine();
+  wlRender();
+  $('wlDialog').showModal();
+  if (conn.configured) wlSearchCur();
+}
+
+async function wlOpenUploads() {
+  wl = { step: 'uploads', items: [], cur: 0, conn: await wlConn(), feeds: null, feed: null };
+  wlAcctLine();
+  wlRender();
+  $('wlDialog').showModal();
+  const res = await api.walmartFeeds().catch(err => ({ ok: false, error: err.message }));
+  if (!wl || wl.step !== 'uploads') return;
+  wl.feeds = res && res.ok ? res.feeds : [];
+  wl.feedsError = res && !res.ok ? res.error || 'Could not read the uploads.' : '';
+  wlRender();
+}
+
+$('wlClose').addEventListener('click', () => $('wlDialog').close());
+$('wlDialog').addEventListener('close', () => { wl = null; });
+
+/* ----- searching ----- */
+
+async function wlSearchCur() {
+  const it = wl && wl.items[wl.cur];
+  if (!it || it.state === 'blocked') return;
+  it.loading = true;
+  it.error = '';
+  wlRender();
+  const res = await api.walmartSearch(it.query, it.barcode).catch(err => ({ ok: false, error: err.message }));
+  if (!wl || !wl.items.includes(it)) return; // dialog closed meanwhile
+  it.loading = false;
+  if (!res || !res.ok) {
+    it.error = (res && res.error) || 'Walmart search failed.';
+    it.results = [];
+  } else {
+    it.results = (res.results || []).map(r => ({ ...r, ...wlScore(it.facts, r) }))
+      .sort((a, b) => b.score - a.score);
+    // pre-select the best match only when it agrees with the SKU somewhere
+    if (!it.pick && it.results[0] && it.results[0].score > 0) it.pick = it.results[0].itemId;
+    // the barcode lookup already named its item: that pairing is proven
+    const byUpc = it.results.find(r => r.byUpc);
+    if (byUpc && it.upc) it.upcCheck = { upc: it.upc, itemId: byUpc.itemId, state: 'found', title: byUpc.title };
+    if (!it.results.length) it.state = it.state === 'picked' ? it.state : 'notfound';
+    else if (it.state === 'notfound') it.state = 'todo';
+  }
+  wlRender();
+}
+
+// does the typed UPC belong to the picked Walmart item? (one identifier
+// lookup; the answer is cached per UPC so re-renders never re-ask)
+function wlUpcState(it) {
+  const c = it.upcCheck;
+  if (!it.upc) return { state: 'none' };
+  if (!c || c.upc !== it.upc) return { state: 'unchecked' };
+  if (c.state === 'checking' || c.state === 'error' || c.state === 'missing') return c;
+  return c.itemId === it.pick ? { ...c, state: 'ok' } : { ...c, state: 'other' };
+}
+
+async function wlCheckUpc(it) {
+  const upc = it.upc;
+  if (!/^\d{8,14}$/.test(upc)) { it.upcCheck = { upc, state: 'error', error: 'A UPC is 12 digits (8–14 for other barcodes).' }; wlRender(); return; }
+  it.upcCheck = { upc, state: 'checking' };
+  wlRender();
+  const res = await api.walmartUpc(upc).catch(err => ({ ok: false, error: err.message }));
+  if (!wl || !wl.items.includes(it) || it.upc !== upc) return;
+  if (!res || !res.ok) it.upcCheck = { upc, state: 'error', error: (res && res.error) || 'Lookup failed.' };
+  else if (!res.item) it.upcCheck = { upc, state: 'missing' };
+  else {
+    it.upcCheck = { upc, state: 'found', itemId: res.item.itemId, title: res.item.title };
+    // the scanned item may not have been in the name results: add it so it can be picked
+    if (!(it.results || []).some(r => r.itemId === res.item.itemId)) {
+      it.results = [{ ...res.item, byUpc: true, ...wlScore(it.facts, res.item) }, ...(it.results || [])];
+    }
+  }
+  wlRender();
+}
+
+/* ----- rendering ----- */
+
+const wlMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '');
+
+function wlThumb(r) {
+  return r && r.image
+    ? `<img class="wl-thumb" src="${esc(r.image)}" alt="" loading="lazy" />`
+    : '<span class="wl-thumb wl-thumb-none"></span>';
+}
+
+function wlStepsHtml(on) {
+  const steps = [['find', '1 · Find on Walmart'], ['review', '2 · Review'], ['track', '3 · Send & track']];
+  const at = steps.findIndex(s => s[0] === on);
+  return steps.map(([k, l], i) => `<span class="${i < at ? 'done' : i === at ? 'on' : ''}">${l}${i < at ? ' ✓' : ''}</span>`).join('');
+}
+
+function wlRender() {
+  if (!wl) return;
+  const steps = $('wlSteps');
+  steps.hidden = wl.step === 'uploads';
+  steps.innerHTML = wl.step === 'uploads' ? '' : wlStepsHtml(wl.step);
+  if (!wl.conn.configured) {
+    $('wlBody').innerHTML = `<div class="wl-empty"><b>Connect Walmart first.</b> Add your Walmart Marketplace API keys (Client ID and Client secret, made at developer.walmart.com under API Keys) in Settings → Walmart API, then press Test connection.</div>`;
+    $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclose>Close</button><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div>`;
+    return;
+  }
+  if (wl.step === 'find') wlRenderFind();
+  else if (wl.step === 'review') wlRenderReview();
+  else if (wl.step === 'track') wlRenderTrack();
+  else wlRenderUploads();
+}
+
+function wlRailHtml() {
+  const picked = wl.items.filter(i => i.state === 'picked').length;
+  const rows = wl.items.map((it, i) => {
+    const on = i === wl.cur;
+    const st = it.state === 'picked' ? ['st-ok', '✓'] : it.state === 'blocked' ? ['st-no', '!']
+      : it.state === 'notfound' ? ['st-no', '?'] : it.state === 'skipped' ? ['st-todo', '–'] : [on ? 'st-on' : 'st-todo', String(i + 1)];
+    const sub = it.state === 'picked' ? `${esc(it.cond)} · ${wlMoney(it.price)} · ${esc(it.qty)}`
+      : it.state === 'blocked' ? `${esc(it.cond)} · needs Pre-Owned approval`
+      : it.state === 'notfound' ? 'not found on Walmart'
+      : it.state === 'skipped' ? 'skipped' : on ? 'choosing…' : 'to do';
+    return `<button type="button" class="wl-ri ${on ? 'is-on' : ''} ${it.state === 'blocked' ? 'is-dim' : ''}" data-wlcur="${i}">
+      <span class="wl-st ${st[0]}">${st[1]}</span><span class="wl-ri-s">${esc(it.sku)}<small>${sub}</small></span></button>`;
+  }).join('');
+  return `<div class="wl-rail"><h5>Your SKUs <span>${picked} of ${wl.items.length} picked</span></h5>${rows}</div>`;
+}
+
+function wlResultHtml(it, r) {
+  const sel = it.pick === r.itemId;
+  const best = it.results[0] === r && r.score > 0;
+  const chips = r.chips.map(([k, l]) => `<span class="wl-k k-${k}">${esc(l)}${k === 'ok' ? ' ✓' : ''}</span>`).join('');
+  return `<label class="wl-res ${sel ? 'is-sel' : ''} ${r.score < 0 ? 'is-weak' : ''}">
+    <input type="radio" name="wlPick" value="${esc(r.itemId)}" ${sel ? 'checked' : ''} />
+    ${wlThumb(r)}
+    <div class="wl-res-b">
+      <div class="wl-res-t">${esc(r.title)}${best ? ' <span class="wl-best">Best match</span>' : ''}</div>
+      <div class="wl-res-m">${r.brand ? `${esc(r.brand)} · ` : ''}item <span class="mono">${esc(r.itemId)}</span>${r.byUpc ? ' · <b>found by your UPC</b>' : ''}</div>
+      ${chips ? `<div class="wl-chips">${chips}</div>` : ''}
+    </div>
+    <div class="wl-res-side">${r.price ? `<span class="wl-res-p"><small>Walmart</small>${wlMoney(r.price)}</span>` : ''}
+      <a class="wl-link" href="#" data-wlview="${esc(r.url)}">View on Walmart ↗</a></div>
+  </label>`;
+}
+
+function wlUpcFieldHtml(it) {
+  const u = wlUpcState(it);
+  const msg = u.state === 'none' ? '<span class="wl-upc-st is-warn">Scan the box barcode or type the UPC. Walmart needs it to list.</span>'
+    : u.state === 'unchecked' ? '<span class="wl-upc-st">Press Check to confirm it is this item.</span>'
+    : u.state === 'checking' ? '<span class="wl-upc-st"><span class="wl-spin"></span>Checking on Walmart…</span>'
+    : u.state === 'ok' ? '<span class="wl-upc-st is-ok">✓ This UPC is the item you picked</span>'
+    : u.state === 'other' ? `<span class="wl-upc-st is-bad">✗ This UPC is a different Walmart item: “${esc(u.title || '')}”. Pick that one, or check the barcode.</span>`
+    : u.state === 'missing' ? '<span class="wl-upc-st is-bad">✗ Walmart has no item with this UPC.</span>'
+    : `<span class="wl-upc-st is-bad">✗ ${esc(u.error || 'Could not check.')}</span>`;
+  return `<div class="wl-f wl-f-upc"><label for="wlUpc">UPC</label>
+    <div class="wl-upc-row"><input id="wlUpc" class="wl-in" type="text" inputmode="numeric" value="${esc(it.upc)}" placeholder="Scan or type" autocomplete="off" />
+    <button type="button" class="btn btn-secondary" data-wlupc>Check</button></div>
+    <div class="wl-hint">${msg}${it.barcode ? '' : (u.state === 'ok' ? ' Saved to the Linnworks barcode when you list.' : '')}</div></div>`;
+}
+
+function wlRenderFind() {
+  const it = wl.items[wl.cur];
+  let pane;
+  if (!it) pane = '<div class="wl-empty">Nothing to find.</div>';
+  else if (it.state === 'blocked') {
+    pane = `<div class="wl-cur"><span class="wl-cur-sku">${esc(it.sku)}</span><span class="wl-cur-meta">${it.avail} available</span></div>
+      <div class="wl-empty"><b>${esc(it.cond)} can't be listed on Walmart yet.</b> Walmart only takes used, open-box or refurbished items from sellers approved for its Pre-Owned program (apply in Seller Center → Exclusive programs). Until then this SKU stays off the upload.</div>`;
+  } else {
+    const results = it.loading ? '<div class="wl-empty"><span class="wl-spin"></span>Searching Walmart…</div>'
+      : it.error ? `<div class="wl-empty wl-err">${esc(it.error)}</div>`
+      : !it.results ? ''
+      : !it.results.length ? `<div class="wl-empty">Nothing on Walmart matched “${esc(it.query)}”. Try fewer or different words above (the model name usually works best), or skip it: a product Walmart doesn't carry yet needs a full setup in Seller Center.</div>`
+      : `<div class="wl-rhead">Walmart's best picks <span>${it.results.length} result${it.results.length === 1 ? '' : 's'}</span></div>
+         <div class="wl-results">${it.results.slice(0, 8).map(r => wlResultHtml(it, r)).join('')}</div>`;
+    const pickR = (it.results || []).find(r => r.itemId === it.pick);
+    pane = `<div class="wl-cur"><span class="wl-cur-sku">${esc(it.sku)}</span><span class="wl-cur-meta"><b>${it.avail}</b> available${it.title ? ` · Linnworks title “${esc(it.title)}”` : ''}</span></div>
+      <form class="wl-sbox" data-wlsearch>
+        <div class="search-field"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+          <input id="wlQ" class="search-input" type="text" value="${esc(it.query)}" autocomplete="off" spellcheck="false" /></div>
+        <button type="submit" class="btn btn-secondary">Search Walmart</button>
+      </form>
+      <div class="wl-shint">${it.title ? 'Built from the Linnworks title.' : 'Built from the SKU.'} Change the words and search again if the right item isn't below.${it.barcode ? ' Your Linnworks barcode is looked up too.' : ''}</div>
+      ${results}
+      ${pickR ? `<div class="wl-offer">
+        <h6>Your offer on the picked item</h6>
+        <div class="wl-f"><label>Condition</label>
+          <div class="wl-seg"><button type="button" class="on">✓ New</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Open Box</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Used</button><button type="button" class="lock" disabled title="Needs Walmart Pre-Owned approval">🔒 Refurbished</button></div>
+          <div class="wl-hint">Only New until Walmart approves you for its Pre-Owned program.</div></div>
+        ${wlUpcFieldHtml(it)}
+        <div class="wl-f"><label for="wlPrice">Your price ($)</label><input id="wlPrice" class="wl-in" type="text" inputmode="decimal" value="${esc(it.price)}" placeholder="0.00" />
+          <div class="wl-hint">${pickR.price ? `Walmart shows ${wlMoney(pickR.price)}${Number(it.price) > 0 ? ` — you'd be ${Number(it.price) <= pickR.price ? 'at or under it' : `${wlMoney(Number(it.price) - pickR.price)} over`}` : ''}.` : 'Set your selling price.'}</div></div>
+        <div class="wl-f"><label for="wlQty">Starting stock</label><input id="wlQty" class="wl-in" type="text" inputmode="numeric" value="${esc(it.qty)}" />
+          <div class="wl-hint">From Linnworks. Linnworks keeps it in sync after.</div></div>
+        <div class="wl-f"><label for="wlShip">Ship weight (lb)</label><input id="wlShip" class="wl-in" type="text" inputmode="decimal" value="${esc(it.shipLb)}" />
+          <div class="wl-hint">Walmart requires one.</div></div>
+      </div>` : ''}
+      <div class="wl-pfoot"><button type="button" class="btn btn-ghost" data-wlskip>Skip this SKU</button>
+        <button type="button" class="btn btn-primary" data-wlpicknext ${pickR ? '' : 'disabled'}>Pick &amp; next →</button></div>`;
+  }
+  $('wlBody').innerHTML = `<div class="wl-find">${wlRailHtml()}<div class="wl-pane">${pane}</div></div>`;
+  const picked = wl.items.filter(i => i.state === 'picked').length;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Walmart's search doesn't give out UPCs, and an offer needs one: it comes from the <b>Linnworks barcode</b> or one scan of the box, and is saved to Linnworks so the next restock needs no scan.</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclose>Cancel</button>
+    <button type="button" class="btn btn-secondary" data-wlreview ${picked ? '' : 'disabled'}>Review ${picked} picked →</button></div>`;
+}
+
+function wlReasonOff(it) {
+  if (it.state === 'blocked') return ['p-no', "Can't list", `${esc(it.cond)} needs Walmart's Pre-Owned approval`];
+  if (it.state === 'notfound') return ['p-new', 'Not found on Walmart', 'Needs a full setup in Seller Center'];
+  return ['p-wait', 'Skipped', ''];
+}
+
+function wlRenderReview() {
+  const go = wl.items.filter(i => i.state === 'picked');
+  const off = wl.items.filter(i => i.state !== 'picked');
+  const rows = go.map((it) => {
+    const r = (it.results || []).find(x => x.itemId === it.pick) || {};
+    const i = wl.items.indexOf(it);
+    return `<tr>
+      <td class="wl-sku">${esc(it.sku)}</td>
+      <td><div class="wl-match">${wlThumb(r)}<div class="wl-mt"><div class="t">${esc(r.title || '')}</div>
+        <div class="m">item ${esc(r.itemId || '')} · <a href="#" data-wlview="${esc(r.url || '')}">View on Walmart ↗</a></div></div></div></td>
+      <td><span class="wl-cond">New</span></td>
+      <td class="num"><input class="wl-in" data-wlrp="${i}" value="${esc(it.price)}" />${r.price ? `<span class="wl-price-hint">Walmart ${wlMoney(r.price)}</span>` : ''}</td>
+      <td class="num"><input class="wl-in wl-in-qty" data-wlrq="${i}" value="${esc(it.qty)}" /></td>
+      <td class="wl-why"><span class="wl-pill p-ok">✓ Ready</span><div class="d"><a href="#" data-wlcur="${i}">change</a></div></td>
+    </tr>`;
+  }).join('') + off.map((it) => {
+    const [cls, pill, why] = wlReasonOff(it);
+    return `<tr class="is-off">
+      <td class="wl-sku">${esc(it.sku)}</td><td><span class="wl-none">${it.state === 'notfound' ? `Nothing matched “${esc(it.query)}”.` : '—'}</span></td>
+      <td><span class="wl-cond ${it.cond === 'New' ? '' : 'ob'}">${esc(it.cond)}</span></td><td class="num">—</td><td class="num">${it.avail}</td>
+      <td class="wl-why"><span class="wl-pill ${cls}">${pill}</span>${why ? `<div class="d">${why}</div>` : ''}</td></tr>`;
+  }).join('');
+  $('wlBody').innerHTML = `<div class="wl-sum"><span class="wl-pill p-ok">${go.length} ready</span>${off.length ? `<span class="wl-pill p-wait">${off.length} not sent</span>` : ''}</div>
+    <table class="wl-tbl wl-tbl-review"><thead><tr><th>Your SKU</th><th>Walmart item</th><th>Condition</th><th class="num">Your price</th><th class="num">Stock</th><th>Status</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Each offer goes up under <b>your Linnworks SKU</b>, so Linnworks links the new listing on its next channel scan and keeps its <b>price and stock</b> in sync from then on.${wl.conn.sandbox ? ' <b>Sandbox:</b> nothing goes live.' : ''}</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlback>Back</button>
+    <button type="button" class="btn btn-primary" data-wlsend ${go.length ? '' : 'disabled'}>List ${go.length} on Walmart</button></div>`;
+}
+
+// one feed's per-SKU state, in plain words
+function wlResultPill(st, sandbox) {
+  const s = String((st && st.status) || 'INPROGRESS').toUpperCase();
+  if (s === 'SUCCESS') return ['p-ok', sandbox ? '✓ Accepted (sandbox)' : '✓ Accepted by Walmart', 'Linnworks links it on its next channel scan'];
+  if (/ERROR/.test(s)) return ['p-no', '✗ Not accepted', ''];
+  return ['p-wait', '<span class="wl-spin"></span>Walmart is processing', 'Usually minutes, sometimes a few hours'];
+}
+
+function wlRenderTrack() {
+  const f = wl.feed;
+  if (!f) { $('wlBody').innerHTML = '<div class="wl-empty"><span class="wl-spin"></span>Sending…</div>'; $('wlFoot').innerHTML = ''; return; }
+  const done = f.offers.filter(o => { const s = String(((f.items || {})[o.sku] || {}).status || '').toUpperCase(); return s === 'SUCCESS' || /ERROR/.test(s); }).length;
+  const pct = f.offers.length ? Math.round(done / f.offers.length * 100) : 0;
+  const rows = f.offers.map((o) => {
+    const st = (f.items || {})[o.sku] || {};
+    const [cls, pill, d] = wlResultPill(st, f.sandbox);
+    const errs = (st.errors || []).map(x => esc(x)).join('<br>');
+    return `<tr>
+      <td class="wl-sku">${esc(o.sku)}</td>
+      <td><div class="wl-match">${wlThumb(o)}<div class="wl-mt"><div class="t">${esc(o.title || '')}</div><div class="m">item ${esc(o.itemId || '')}${o.url ? ` · <a href="#" data-wlview="${esc(o.url)}">View on Walmart ↗</a>` : ''}</div></div></div></td>
+      <td class="num">${wlMoney(o.price)}</td><td class="num">${esc(o.qty)}</td>
+      <td class="wl-why"><span class="wl-pill ${cls}">${pill}</span>${errs ? `<div class="d wl-err">${errs}</div>
+        <div class="wl-fix"><input class="wl-in" data-wlfixp="${esc(o.sku)}" value="${esc(o.price)}" /><button type="button" class="btn btn-secondary" data-wlresend="${esc(o.sku)}">Resend this one</button></div>` : d ? `<div class="d">${d}</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const when = new Date(f.at);
+  $('wlBody').innerHTML = `<div class="wl-prog"><div class="wl-bar-track"><i class="w${Math.round(pct / 5) * 5}"></i></div>
+      <div class="wl-prog-l"><span><b>${done} of ${f.offers.length} done</b> · sent ${when.toLocaleString()}${f.checkedAt ? ` · last checked ${new Date(f.checkedAt).toLocaleTimeString()}` : ''}${f.sandbox ? ' · sandbox' : ''}</span><span class="mono">upload ${esc(f.feedId)}</span></div></div>
+    ${f.error ? `<div class="wl-empty wl-err">${esc(f.error)}</div>` : ''}
+    <table class="wl-tbl wl-tbl-track"><thead><tr><th>Your SKU</th><th>Walmart item</th><th class="num">Price</th><th class="num">Stock</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Safe to close. The app checks again every 15 minutes and shows a message when this upload is finished. Listed SKUs drop off the Unlisted view once Linnworks links them.</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlcheck>Check now</button><button type="button" class="btn btn-primary" data-wlclose>Close</button></div>`;
+}
+
+function wlRenderUploads() {
+  const feeds = wl.feeds;
+  const body = feeds === null ? '<div class="wl-empty"><span class="wl-spin"></span>Loading…</div>'
+    : wl.feedsError ? `<div class="wl-empty wl-err">${esc(wl.feedsError)}</div>`
+    : !feeds.length ? '<div class="wl-empty">Nothing sent yet. Tick SKUs on Stock → Unlisted and press List on Walmart.</div>'
+    : `<table class="wl-tbl wl-tbl-up"><thead><tr><th>Sent</th><th>SKUs</th><th>Result</th><th></th></tr></thead><tbody>${feeds.map(f => {
+      const sts = f.offers.map(o => String(((f.items || {})[o.sku] || {}).status || '').toUpperCase());
+      const ok = sts.filter(s => s === 'SUCCESS').length;
+      const bad = sts.filter(s => /ERROR/.test(s)).length;
+      const wait = sts.length - ok - bad;
+      return `<tr><td>${new Date(f.at).toLocaleString()}${f.sandbox ? ' <span class="wl-pill p-wait">sandbox</span>' : ''}</td>
+        <td class="wl-sku">${f.offers.map(o => esc(o.sku)).join(', ')}</td>
+        <td>${ok ? `<span class="wl-pill p-ok">${ok} accepted</span> ` : ''}${bad ? `<span class="wl-pill p-no">${bad} not accepted</span> ` : ''}${wait ? `<span class="wl-pill p-wait">${wait} processing</span>` : ''}</td>
+        <td class="num"><button type="button" class="btn btn-ghost" data-wlfeed="${esc(f.feedId)}">Open</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+  $('wlBody').innerHTML = `<h3 class="wl-up-h">Walmart uploads</h3>${body}`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlclose>Close</button></div>`;
+}
+
+/* ----- dialog actions ----- */
+
+// pull the find pane's typed values into the current item before moving
+function wlReadOffer() {
+  const it = wl && wl.items[wl.cur];
+  if (!it || wl.step !== 'find') return;
+  if ($('wlPrice')) it.price = $('wlPrice').value.trim().replace(/^\$/, '');
+  if ($('wlQty')) it.qty = $('wlQty').value.trim();
+  if ($('wlShip')) it.shipLb = $('wlShip').value.trim();
+  if ($('wlUpc')) it.upc = $('wlUpc').value.replace(/\D/g, '');
+  if ($('wlQ')) it.query = $('wlQ').value.trim() || it.query;
+}
+
+function wlOfferProblem(it) {
+  if (!it.pick) return 'Pick the matching Walmart item first.';
+  if (wlUpcState(it).state !== 'ok') return 'Add the UPC and press Check: it must be the item you picked.';
+  if (!(Number(it.price) > 0)) return 'Enter your price.';
+  if (!/^\d+$/.test(String(it.qty))) return 'Starting stock must be a whole number.';
+  if (!(Number(it.shipLb) > 0)) return 'Enter a shipping weight in lb.';
+  return '';
+}
+
+function wlNext() {
+  const i = wl.items.findIndex((x, k) => k > wl.cur && x.state === 'todo');
+  const j = i >= 0 ? i : wl.items.findIndex(x => x.state === 'todo');
+  if (j >= 0) {
+    wl.cur = j;
+    wlRender();
+    if (!wl.items[j].results) wlSearchCur();
+  } else {
+    wl.step = 'review';
+    wlRender();
+  }
+}
+
+$('wlDialog').addEventListener('submit', (e) => {
+  if (!e.target.closest('[data-wlsearch]')) return;
+  e.preventDefault();
+  const it = wl && wl.items[wl.cur];
+  if (!it) return;
+  wlReadOffer();
+  const q = $('wlQ').value.trim();
+  if (!q) return;
+  it.query = q;
+  it.pick = '';
+  const saved = wlSavedQueries();
+  saved[String(it.sku).toUpperCase()] = q;
+  try { localStorage.setItem('wlQueries', JSON.stringify(saved)); } catch { /* best effort */ }
+  wlSearchCur();
+});
+
+// a USB scanner types the UPC then Enter: check it straight away
+$('wlDialog').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !wl || e.target.id !== 'wlUpc') return;
+  e.preventDefault();
+  wlReadOffer();
+  wlCheckUpc(wl.items[wl.cur]);
+});
+
+$('wlDialog').addEventListener('change', (e) => {
+  if (!wl) return;
+  if (e.target.name === 'wlPick') {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    it.pick = e.target.value;
+    wlRender();
+    if (wlUpcState(it).state === 'unchecked') wlCheckUpc(it);
+    return;
+  }
+  const rp = e.target.closest('[data-wlrp]');
+  if (rp) { wl.items[Number(rp.dataset.wlrp)].price = rp.value.trim().replace(/^\$/, ''); return; }
+  const rq = e.target.closest('[data-wlrq]');
+  if (rq) wl.items[Number(rq.dataset.wlrq)].qty = rq.value.trim();
+});
+
+$('wlDialog').addEventListener('click', async (e) => {
+  if (!wl) return;
+  const view = e.target.closest('[data-wlview]');
+  if (view) {
+    e.preventDefault();
+    if (view.dataset.wlview) api.openExternalUrl(view.dataset.wlview);
+    return;
+  }
+  if (e.target.closest('[data-wlclose]')) { $('wlDialog').close(); return; }
+  if (e.target.closest('[data-wlsettings]')) { $('wlDialog').close(); openSettings(); return; }
+  const cur = e.target.closest('[data-wlcur]');
+  if (cur) {
+    e.preventDefault();
+    wlReadOffer();
+    wl.step = 'find';
+    wl.cur = Number(cur.dataset.wlcur);
+    const it = wl.items[wl.cur];
+    if (it.state === 'skipped') it.state = 'todo';
+    wlRender();
+    if (it.state !== 'blocked' && !it.results) wlSearchCur();
+    return;
+  }
+  if (e.target.closest('[data-wlupc]')) {
+    wlReadOffer();
+    wlCheckUpc(wl.items[wl.cur]);
+    return;
+  }
+  if (e.target.closest('[data-wlskip]')) {
+    const it = wl.items[wl.cur];
+    if (it.state !== 'blocked' && it.state !== 'notfound') it.state = 'skipped';
+    wlNext();
+    return;
+  }
+  if (e.target.closest('[data-wlpicknext]')) {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    const bad = wlOfferProblem(it);
+    if (bad) { toast(bad); return; }
+    it.state = 'picked';
+    wlNext();
+    return;
+  }
+  if (e.target.closest('[data-wlreview]')) { wlReadOffer(); wl.step = 'review'; wlRender(); return; }
+  if (e.target.closest('[data-wlback]')) { wl.step = 'find'; wlRender(); return; }
+  if (e.target.closest('[data-wlsend]')) {
+    const go = wl.items.filter(i => i.state === 'picked');
+    const bad = go.map(it => [it, wlOfferProblem(it)]).find(([, p]) => p);
+    if (bad) { toast(`${bad[0].sku}: ${bad[1]}`); return; }
+    requireOwner(() => wlSend(go));
+    return;
+  }
+  if (e.target.closest('[data-wlcheck]')) {
+    const res = await api.walmartFeedCheck(wl.feed.feedId).catch(err => ({ ok: false, error: err.message }));
+    if (!wl) return;
+    if (!res.ok) { toast(res.error || 'Could not check the upload.'); return; }
+    wl.feed = res.feed;
+    wlRender();
+    return;
+  }
+  const rs = e.target.closest('[data-wlresend]');
+  if (rs) {
+    const o = wl.feed.offers.find(x => x.sku === rs.dataset.wlresend);
+    const inp = $('wlBody').querySelector(`[data-wlfixp="${CSS.escape(rs.dataset.wlresend)}"]`);
+    const price = inp ? inp.value.trim().replace(/^\$/, '') : String(o.price);
+    if (!(Number(price) > 0)) { toast('Enter a price.'); return; }
+    requireOwner(() => wlSendOffers([{ ...o, price: Number(price) }]));
+    return;
+  }
+  const fd = e.target.closest('[data-wlfeed]');
+  if (fd) {
+    const f = (wl.feeds || []).find(x => x.feedId === fd.dataset.wlfeed);
+    if (!f) return;
+    wl.step = 'track';
+    wl.feed = f;
+    wlRender();
+    const res = await api.walmartFeedCheck(f.feedId).catch(() => null);
+    if (wl && wl.feed && wl.feed.feedId === f.feedId && res && res.ok) { wl.feed = res.feed; wlRender(); }
+  }
+});
+
+function wlOffersFrom(items) {
+  return items.map((it) => {
+    const r = (it.results || []).find(x => x.itemId === it.pick) || {};
+    return {
+      sku: it.sku, stockItemId: it.stockItemId, linnworksBarcode: it.barcode,
+      itemId: r.itemId, title: r.title || '', image: r.image || '', url: r.url || '',
+      upc: it.upc,
+      price: Number(it.price), qty: Number(it.qty), shipLb: Number(it.shipLb), condition: 'New',
+    };
+  });
+}
+
+async function wlSend(items) {
+  await wlSendOffers(wlOffersFrom(items), items);
+}
+
+async function wlSendOffers(offers, items) {
+  wl.step = 'track';
+  wl.feed = null;
+  wlRender();
+  const res = await api.walmartSubmit(offers).catch(err => ({ ok: false, error: err.message }));
+  if (!wl) return;
+  if (!res || !res.ok) {
+    toast((res && res.error) || 'Walmart did not take the upload.', 7000);
+    wl.step = items ? 'review' : 'uploads';
+    if (!items) { wlOpenUploads(); return; }
+    wlRender();
+    return;
+  }
+  wl.feed = res.feed;
+  wlLoadSent(true);
+  if (items) {
+    for (const it of items) wlSel.delete(it.sku);
+    if (activePage === 'stock' && stockUnlistedActive) renderStock();
+  }
+  if (res.barcodeNote) toast(res.barcodeNote, 6000);
+  wlRender();
+}
+
+// a background check finished in main: refresh the open upload in place
+api.on('walmart:feed', (feed) => {
+  wlLoadSent(true);
+  if (!wl || !feed) return;
+  if (wl.step === 'track' && wl.feed && wl.feed.feedId === feed.feedId) { wl.feed = feed; wlRender(); }
+  if (wl.step === 'uploads' && wl.feeds) {
+    wl.feeds = wl.feeds.map(f => (f.feedId === feed.feedId ? feed : f));
+    wlRender();
+  }
+});
+
+/* ---------- Settings: Walmart API ---------- */
+
+$('wmTestBtn').addEventListener('click', async () => {
+  const out = $('wmTestResult');
+  out.className = 'test-result';
+  out.textContent = 'Connecting…';
+  const res = await api.walmartTest({
+    clientId: $('setWmClientId').value.trim(),
+    clientSecret: $('setWmSecret').value.trim(),
+    sandbox: $('setWmSandbox').checked,
+  }).catch(err => ({ ok: false, error: err.message }));
+  if (!res || !res.ok) {
+    out.textContent = (res && res.error) || 'Could not connect.';
+    out.classList.add('is-fail');
+    return;
+  }
+  out.textContent = `Connected${res.sandbox ? ' (sandbox)' : ''}`;
+  out.classList.add('is-ok');
 });
 
 /* ==================== Overview tab ==================== */

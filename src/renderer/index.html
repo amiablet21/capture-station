@@ -30,6 +30,8 @@
       <!-- wholesale (owner 2026-09-30): only on stations with the Settings tick -->
       <button class="tab-menu-item" data-act="wholesale" id="stockActWholesale" hidden title="Wholesale invoices — units leave the warehouse when an invoice is saved; price and shipping optional">Wholesale invoices</button>
       <div class="tab-menu-sep"></div>
+      <button class="tab-menu-item" data-act="walmart" title="Uploads sent with List on Walmart: what went live, what Walmart is still processing, and anything it turned down">Walmart uploads</button>
+      <div class="tab-menu-sep"></div>
       <button class="tab-menu-item" data-act="bulk" title="Import a SKU + Qty sheet — add newly received units or set corrected counts, with a history of every import">Bulk import</button>
       <button class="tab-menu-item" data-act="export:linnworks" title="Every Linnworks inventory item with its channel mappings — a SKUs sheet (one row per item, the mapped Walmart / eBay / Temu SKUs beside it) and a Mappings sheet (one row per link). Excel, or two CSVs">Export Linnworks SKUs</button>
       <button class="tab-menu-item" data-act="export:sales" title="Every Linnworks SKU with its last 30 days of sales — stock, units sold (30 / 14 / 7 days, per channel), pace, days left and a suggested order, worst first; a Daily sheet and an About sheet explaining each figure. Excel, or three CSVs. Hand it to Claude to plan purchasing">Export SKUs + 30-day sales</button>
@@ -363,6 +365,21 @@
     </div>
   </dialog>
 
+  <!-- List on Walmart (owner 2026-10-22, approved mockup
+       variants/walmart-api-lister.html): find each SKU on Walmart by name,
+       set condition / price / stock, review, send one feed, track it.
+       renderer.js draws the body for the active step. -->
+  <dialog id="wlDialog" class="dlg wl-dlg">
+    <div class="wl-head">
+      <h2 class="dlg-title">List on Walmart</h2>
+      <span id="wlAcct" class="wl-acct"></span>
+      <button id="wlClose" class="btn-icon wl-x" title="Close" aria-label="Close">✕</button>
+    </div>
+    <div id="wlSteps" class="wl-steps"></div>
+    <div id="wlBody" class="wl-body"></div>
+    <div id="wlFoot" class="wl-foot"></div>
+  </dialog>
+
   <!-- rename a Linnworks SKU: the item survives, only the string changes -->
   <dialog id="renameDialog" class="dlg">
     <div class="dlg-body">
@@ -609,6 +626,28 @@
         <button id="testConnBtn" class="btn btn-secondary">Test connection</button>
         <span id="testConnResult" class="test-result"></span>
       </div>
+
+      <h3 class="dlg-section">Walmart API</h3>
+      <div class="grid2">
+        <label class="field">
+          <span class="field-label">Client ID</span>
+          <input id="setWmClientId" type="text" class="input mono" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span class="field-label">Client secret</span>
+          <input id="setWmSecret" type="password" class="input mono" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span class="field-label">Default shipping weight (lb)</span>
+          <input id="setWmShipLb" type="text" class="input mono" inputmode="decimal" placeholder="1" autocomplete="off" />
+        </label>
+        <label class="check wm-sandbox"><input id="setWmSandbox" type="checkbox" /> Sandbox (Walmart's test environment, nothing goes live)</label>
+      </div>
+      <div class="settings-row">
+        <button id="wmTestBtn" class="btn btn-secondary">Test connection</button>
+        <span id="wmTestResult" class="test-result"></span>
+      </div>
+      <p class="dlg-note">Used by List on Walmart (Stock → Unlisted). Make the keys at developer.walmart.com under API Keys, signed in with the seller account. Stored encrypted on this computer.</p>
 
       <h3 class="dlg-section">Sync</h3>
       <div class="settings-row">

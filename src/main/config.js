@@ -2,18 +2,20 @@
 // Config stored in userData/config.json. Credentials never hardcoded.
 // Linnworks API credentials are encrypted at rest with the OS user's key
 // (Electron safeStorage / Windows DPAPI): config.json holds `linnworksEnc`
-// and is useless if copied to another machine or user account.
+// and is useless if copied to another machine or user account. The Walmart
+// Marketplace API keys get the same treatment (`walmartEnc`).
 const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const SECRET_FIELDS = ['applicationId', 'applicationSecret', 'token'];
+const WALMART_SECRET_FIELDS = ['clientId', 'clientSecret'];
 
-function encryptCreds(linnworks) {
+function encryptCreds(creds, fields = SECRET_FIELDS) {
   try {
     if (!safeStorage.isEncryptionAvailable()) return null;
     const secrets = {};
-    for (const f of SECRET_FIELDS) secrets[f] = linnworks[f] || '';
+    for (const f of fields) secrets[f] = (creds || {})[f] || '';
     return safeStorage.encryptString(JSON.stringify(secrets)).toString('base64');
   } catch {
     return null;
@@ -162,6 +164,11 @@ const DEFAULTS = {
   browserPane: { visible: false, width: 480, zoom: 1 },
   csvFolder: '', // empty = Documents\Capture Station
   clipboardPollMs: 300,
+  // Walmart Marketplace API (List on Walmart, owner 2026-10-22): the
+  // seller's own keys from developer.walmart.com. sandbox = Walmart's test
+  // environment. shipWeightLb is the offer's default shipping weight —
+  // Walmart requires one on every offer.
+  walmartApi: { clientId: '', clientSecret: '', sandbox: false, shipWeightLb: 1 },
   lastSync: null, // { at, synced, failed, dryRun }
 };
 
@@ -183,6 +190,11 @@ function load() {
     const secrets = decryptCreds(stored.linnworksEnc);
     if (secrets) stored.linnworks = { ...(stored.linnworks || {}), ...secrets };
     delete stored.linnworksEnc;
+  }
+  if (stored.walmartEnc) {
+    const secrets = decryptCreds(stored.walmartEnc);
+    if (secrets) stored.walmartApi = { ...(stored.walmartApi || {}), ...secrets };
+    delete stored.walmartEnc;
   }
   // migration: Temu shipped with no order URL; fill in the real one for
   // configs saved before it was known (a blank means "never set", not
@@ -237,6 +249,11 @@ function save(patch) {
   if (enc) {
     persisted.linnworksEnc = enc;
     for (const f of SECRET_FIELDS) persisted.linnworks[f] = '';
+  }
+  const wenc = encryptCreds(cfg.walmartApi, WALMART_SECRET_FIELDS);
+  if (wenc && persisted.walmartApi) {
+    persisted.walmartEnc = wenc;
+    for (const f of WALMART_SECRET_FIELDS) persisted.walmartApi[f] = '';
   }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(persisted, null, 2), 'utf8');

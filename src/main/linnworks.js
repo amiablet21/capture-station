@@ -273,6 +273,20 @@ class LinnworksClient {
     });
   }
 
+  // List on Walmart saves the proven UPC as the item's barcode. The field
+  // name is not confirmed in Linnworks' docs: 'Barcode' first, then the
+  // GetStockItemsFull spelling. The caller treats a failure as a note.
+  async setBarcode(stockItemId, code) {
+    let last = null;
+    for (const fieldName of ['Barcode', 'BarcodeNumber']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(code) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+
   // The item's cost (owner 2026-10-05): the Linnworks purchase price, so it
   // is one number on every desktop
   async setPurchasePrice(stockItemId, price) {

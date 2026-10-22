@@ -4142,6 +4142,167 @@ exit 1
     return { ok: true };
   });
 
+  /* ---------- List on Walmart: Walmart Marketplace API (owner 2026-10-22) ----------
+     The renderer's dialog finds each SKU on Walmart by name, proves its UPC
+     by identifier lookup, then sends one MP_ITEM_MATCH feed per batch. Each
+     upload is kept in userData/walmart-feeds.json (newest first, last 50) so
+     its per-SKU results can be followed for days; a 15-minute check settles
+     the open ones, sets the starting stock on every accepted SKU once, and
+     says so when an upload finishes. */
+  const { WalmartClient, _test: wmT } = require('./walmart.js');
+  const wmFeedsPath = () => path.join(app.getPath('userData'), 'walmart-feeds.json');
+  // one client per key set, so its 15-minute token is reused across calls
+  let wmCached = null;
+  const wmClient = () => {
+    const w = config.load().walmartApi || {};
+    const key = `${w.clientId}|${w.clientSecret}|${!!w.sandbox}`;
+    if (!wmCached || wmCached.key !== key) wmCached = { key, client: new WalmartClient(w) };
+    return wmCached.client;
+  };
+  const wmReadFeeds = () => { try { return JSON.parse(fs.readFileSync(wmFeedsPath(), 'utf8')) || []; } catch { return []; } };
+  const wmWriteFeeds = (list) => fs.writeFileSync(wmFeedsPath(), JSON.stringify(list.slice(0, 50), null, 2), 'utf8');
+  const wmSettled = (f) => f.offers.every(o => wmT.isFinal(((f.items || {})[o.sku] || {}).status)) || f.status === 'ERROR';
+
+  ipcMain.handle('walmart:status', () => {
+    const c = wmClient();
+    return { configured: c.configured(), sandbox: c.sandbox };
+  });
+
+  ipcMain.handle('walmart:test', async (_e, creds) => {
+    try {
+      return await new WalmartClient(creds || config.load().walmartApi || {}).test();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // name search, plus the Linnworks barcode's own item when there is one —
+  // that one comes back first and flagged, since its UPC is already proven
+  ipcMain.handle('walmart:search', async (_e, { query, barcode } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const c = wmClient();
+      const [byName, byUpc] = await Promise.all([
+        c.searchByName(query),
+        barcode ? c.lookupUpc(barcode).catch(() => null) : null,
+      ]);
+      const results = byName.filter(r => !byUpc || r.itemId !== byUpc.itemId);
+      if (byUpc) results.unshift({ ...byUpc, byUpc: true });
+      return { ok: true, results };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:upc', async (_e, { upc } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!wmT.idParam(upc)) return { ok: false, error: 'A UPC is 12 digits (8–14 for other barcodes).' };
+    try {
+      return { ok: true, item: await wmClient().lookupUpc(upc) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:submit', async (_e, { offers } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = (offers || []).map(o => ({
+      sku: String(o.sku || '').trim(), stockItemId: o.stockItemId || '', linnworksBarcode: String(o.linnworksBarcode || ''),
+      itemId: String(o.itemId || ''), title: String(o.title || ''), image: String(o.image || ''), url: String(o.url || ''),
+      upc: String(o.upc || '').replace(/\D/g, ''), price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
+      condition: 'New',
+    }));
+    const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
+    if (!list.length) return { ok: false, error: 'Nothing to send.' };
+    if (bad) return { ok: false, error: `${bad.sku || 'An offer'} is missing its UPC, price, stock or shipping weight.` };
+    try {
+      const c = wmClient();
+      const feedId = await c.submitMatchFeed(list);
+      const feed = { feedId, at: new Date().toISOString(), sandbox: c.sandbox, status: 'RECEIVED', items: {}, counts: {}, invSet: {}, offers: list };
+      wmWriteFeeds([feed, ...wmReadFeeds().filter(f => f.feedId !== feedId)]);
+      // the proven UPC becomes the Linnworks barcode where there was none,
+      // so the next restock lists without a scan — best effort, never blocks
+      const failed = [];
+      const lw = new LinnworksClient(cfg.linnworks);
+      for (const o of list) {
+        if (o.linnworksBarcode || !o.stockItemId) continue;
+        try { await lw.setBarcode(o.stockItemId, o.upc); } catch { failed.push(o.sku); }
+      }
+      return {
+        ok: true, feed,
+        barcodeNote: failed.length ? `Sent to Walmart. Linnworks didn't take the UPC as the barcode for ${failed.join(', ')} — add it there by hand.` : '',
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:feeds', () => ({ ok: true, feeds: wmReadFeeds() }));
+
+  // re-read one upload's per-SKU results; accepted SKUs get their starting
+  // stock once (an offer set up by match has no quantity of its own)
+  async function wmCheckFeed(feedId) {
+    const list = wmReadFeeds();
+    const f = list.find(x => x.feedId === feedId);
+    if (!f) throw new Error('That upload is not on this computer.');
+    const c = wmClient();
+    const st = await c.feedStatus(feedId);
+    f.status = st.status;
+    f.counts = st.counts;
+    f.items = { ...(f.items || {}), ...st.items };
+    f.error = st.feedErrors.join('; ');
+    f.checkedAt = new Date().toISOString();
+    f.invSet = f.invSet || {};
+    for (const o of f.offers) {
+      const s = f.items[o.sku];
+      if (!s || s.status !== 'SUCCESS' || f.invSet[o.sku]) continue;
+      try {
+        await c.setInventory(o.sku, o.qty);
+        f.invSet[o.sku] = true;
+      } catch (e) {
+        s.errors = [...(s.errors || []), `Listed, but the starting stock didn't save (${e.message}) — Linnworks sets it once it links the listing.`];
+      }
+    }
+    wmWriteFeeds(list);
+    if (win && !win.isDestroyed()) win.webContents.send('walmart:feed', f);
+    return f;
+  }
+
+  ipcMain.handle('walmart:feedCheck', async (_e, { feedId } = {}) => {
+    try {
+      return { ok: true, feed: await wmCheckFeed(feedId) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // the 15-minute check: open uploads under a week old; a finished one says
+  // so once ("3 accepted, 1 not accepted")
+  async function wmPoll() {
+    const cfg = config.load();
+    if (cfg.captureOnly || !wmClient().configured()) return;
+    for (const f of wmReadFeeds()) {
+      if (f.notified || Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      try {
+        const g = await wmCheckFeed(f.feedId);
+        if (!wmSettled(g)) continue;
+        const sts = g.offers.map(o => ((g.items || {})[o.sku] || {}).status);
+        const ok = sts.filter(s => s === 'SUCCESS').length;
+        const list = wmReadFeeds();
+        const rec = list.find(x => x.feedId === g.feedId);
+        if (rec) { rec.notified = true; wmWriteFeeds(list); }
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('app:notice', { message: `Walmart upload finished: ${ok} accepted${sts.length - ok ? `, ${sts.length - ok} not accepted (Stock → Actions → Walmart uploads)` : ''}.` });
+        }
+      } catch { /* next round retries */ }
+    }
+  }
+  if (!IS_TEST_RUN) {
+    setTimeout(() => wmPoll().catch(() => {}), 60 * 1000);
+    setInterval(() => wmPoll().catch(() => {}), 15 * 60 * 1000);
+  }
+
   /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
 
   // Order series come straight from SQLite (cheap, always fresh); the three
