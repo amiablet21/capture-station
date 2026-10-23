@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · lite results — mockup</title>
+<!--
+  Owner 2026-10-23: "make the results on Walmart not break and strip down the
+  look to not slow down the software ... essentially just getting the
+  information". The search runs on walmart.com out of sight; only the
+  results (item number, title, price, photo, rating, sponsored, seller) come
+  back and are drawn here in the app's own grid. Same order as walmart.com.
+  "+ List this" on hover, a green "Listed by you" badge on what you already
+  sell (variants/walmart-listed-badges.html). Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1280px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 1000px; line-height: 1.5; }
+  .win { width: 1280px; margin: 8px auto 26px; background: var(--canvas); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); }
+  .win .topbar { padding: 14px 24px 6px; }
+  .win .wlp { padding: 8px 24px 18px; }
+  .wl-lgrid { grid-template-columns: minmax(0, 1fr) 360px; height: 720px; }
+  .lr { overflow: hidden; display: flex; flex-direction: column; }
+  .lr-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 18px 8px; font-size: 12px; color: var(--muted); }
+  .lr-head b { color: var(--text); font-size: 13px; }
+  .lr-head .sp { margin-left: auto; }
+  .lr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 4px 18px 18px; overflow: hidden; }
+  .lc { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .lc.is-hover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .lc .ph { height: 120px; border-radius: 6px; background: linear-gradient(135deg, #F1F3F6, #DDE3EC); }
+  .lc .tag { position: absolute; top: 14px; left: 14px; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
+  .lc .p { font-weight: 700; font-size: 15px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .lc .t { font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .lc .r { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .lc .s { font-size: 11px; color: var(--muted); }
+  .lc .go { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); font: 600 12.5px var(--font); color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 8px 15px; box-shadow: 0 4px 14px rgba(0,0,0,.2); white-space: nowrap; }
+  .lc .go.ghost { background: var(--surface); color: var(--accent); border: 1.5px solid var(--accent); box-shadow: none; top: 92px; }
+  .lc .mine { position: absolute; top: 10px; left: 10px; right: 10px; background: var(--pos-bg); color: var(--pos-text); border: 1.5px solid var(--pos-text); border-radius: 8px; padding: 5px 8px; font-size: 11px; font-weight: 600; line-height: 1.35; }
+  .lc .mine span { display: block; font-family: var(--mono); font-weight: 500; font-size: 10.5px; }
+  .lc.is-mine .ph { opacity: .55; }
+  .lc .hv { position: absolute; top: -9px; right: 8px; font-size: 9.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 7px; }
+  .lr-more { text-align: center; padding: 0 0 14px; }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>Walmart → List · results drawn by the app</h2>
+  <p>You search here; walmart.com runs the search out of sight and only the results come back: item number, title, price, photo, rating, seller, sponsored. Same order as on walmart.com. No Walmart page on screen, so nothing heavy runs and nothing breaks when Walmart changes its look. Hover a product for <b>+ List this</b>; what you already sell carries a green badge. "Show on walmart.com" is still there if you want the real page (or Walmart asks for a robot check).</p>
+</div>
+<div class="win">
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="../phone-icon.png" alt="" width="30" height="30" /></div>
+    <nav class="tabs"><button class="tab">Orders</button><button class="tab">Stock</button><button class="tab is-active">Walmart</button><button class="tab">Pricing</button><button class="tab">Returns <span class="tab-caret">▾</span></button><button class="tab">Ship</button></nav>
+  </header>
+  <section class="wlp"><div class="wlp-card">
+    <div class="wl-head">
+      <h2 class="dlg-title">Walmart</h2>
+      <div class="wlp-tabs"><button class="wlp-tab is-on">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab">Pricing</button><button class="wlp-tab">Incentives</button></div>
+      <span class="wl-acct"><span class="wl-dot"></span>Walmart API</span>
+    </div>
+    <form class="wl-sbar"><input class="input" value="Samsung Galaxy Tab A9+" /><button class="btn btn-primary" type="button">Search</button></form>
+    <div class="wl-lgrid">
+      <div class="lr">
+        <div class="lr-head"><b>33 results</b> from walmart.com · same order as Walmart<span class="sp"><a class="wl-link" href="#">Show on walmart.com ↗</a></span></div>
+        <div class="lr-grid">
+          <div class="lc"><span class="tag">Sponsored</span><div class="ph"></div><div class="p">$209.99</div><div class="t">Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</div><div class="r"><span class="wl-stars"><i class="w84"></i></span>4.2 (12)</div><div class="s">Sold by HotDeals</div></div>
+          <div class="lc is-hover"><span class="hv">mouse here</span><span class="tag">Sponsored</span><div class="ph"></div><button class="go">+ List this</button><div class="p">$269.00</div><div class="t">Samsung Galaxy Tab A11+ Widescreen Tablet, 128GB, Android 16, Silver</div><div class="r"><span class="wl-stars"><i class="w88"></i></span>4.4 (58)</div><div class="s">Sold by Walmart.com</div></div>
+          <div class="lc is-mine is-hover"><span class="hv">mouse here</span><div class="ph"></div><div class="mine">✓ Listed by you<span>X216-64GB-GRAY · $229.99</span></div><button class="go ghost">+ List another</button><div class="p">$229.99</div><div class="t">Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</div><div class="r"><span class="wl-stars"><i class="w84"></i></span>4.2 (12)</div><div class="s">Sold by you + 3 sellers</div></div>
+          <div class="lc"><div class="ph"></div><div class="p">$209.99</div><div class="t">Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi</div><div class="r"><span class="wl-stars"><i class="w90"></i></span>4.5 (341)</div><div class="s">Sold by Walmart.com</div></div>
+          <div class="lc"><div class="ph"></div><div class="p">$149.00</div><div class="t">Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite</div><div class="r"><span class="wl-stars"><i class="w94"></i></span>4.7 (1,102)</div><div class="s">Sold by Walmart.com</div></div>
+          <div class="lc is-mine"><div class="ph"></div><div class="mine">✓ Listed by you<span>X110-64GB-GRAY · $124.99</span></div><div class="p">$119.00</div><div class="t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite</div><div class="r"><span class="wl-stars"><i class="w92"></i></span>4.6 (2,341)</div><div class="s">Sold by Walmart.com</div></div>
+          <div class="lc"><div class="ph"></div><div class="p">$299.99</div><div class="t">Samsung Galaxy Tab S9 FE 10.9" 128GB, Gray</div><div class="r"><span class="wl-stars"><i class="w92"></i></span>4.6 (902)</div><div class="s">Sold by Walmart.com</div></div>
+          <div class="lc"><span class="tag">Sponsored</span><div class="ph"></div><div class="p">$178.00</div><div class="t">Samsung Galaxy Tab A11 8.7" 64GB, Gray</div><div class="r"><span class="wl-stars"><i class="w86"></i></span>4.3 (44)</div><div class="s">Sold by TechDeals Direct</div></div>
+        </div>
+        <div class="lr-more"><button class="btn btn-ghost">Next page →</button></div>
+      </div>
+      <aside class="wl-offerp"><div class="wl-empty"><b>Pick a product to list.</b> Hover it and press <b>+ List this</b>. You choose the SKU, condition, price and quantity here.</div></aside>
+    </div>
+  </div></section>
+</div>
+
+</body>
+</html>

@@ -6047,6 +6047,7 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-st-amt .input:first-child { width: 110px; }
 
 /* Pricing: strategy cards + the selected group's items */
+.wl-note { margin: 0 20px 12px; padding: 9px 12px; border-radius: 8px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); font-size: 12px; line-height: 1.45; }
 .wl-rpsum { display: flex; align-items: baseline; gap: 8px 14px; padding: 2px 20px 12px; flex-wrap: wrap; }
 .wl-rpsum > b { font-size: 20px; font-weight: 700; color: var(--neg-text); font-variant-numeric: tabular-nums; }
 .wl-rpsum .of { font-size: 14px; font-weight: 600; }

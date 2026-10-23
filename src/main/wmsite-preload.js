@@ -10,8 +10,18 @@
 
 const { ipcRenderer } = require('electron');
 
-const ID_RE = /\/ip\/(?:[^/?#]+\/)?(\d{5,})(?:[/?#]|$)/;
+const ID_RE = /\/ip\/(?:[^/?#]+\/)?(\d{5,})(?:[/?#&]|$)/;
 const idOf = (href) => { const m = ID_RE.exec(String(href || '')); return m ? m[1] : ''; };
+// a product link's item number: Walmart's own link-identifier, the /ip/
+// path, or (sponsored products) the /ip/ address inside the tracking link
+function linkId(a) {
+  const li = a.getAttribute('link-identifier');
+  if (li && /^\d{5,}$/.test(li)) return li;
+  const href = a.getAttribute('href') || '';
+  let id = idOf(href);
+  if (!id && /%2Fip%2F/i.test(href)) { try { id = idOf(decodeURIComponent(href)); } catch { /* not encoded */ } }
+  return id;
+}
 const clip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 const priceIn = (el) => {
   const m = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/.exec(el ? el.innerText || '' : '');
@@ -66,18 +76,24 @@ function cardOf(link) {
   return null;
 }
 
+// links already looked at: Walmart's pages mutate constantly, so each scan
+// only does work for new links (and puts back a button React threw away)
+const looked = new WeakSet();
 function scan() {
   // search / category / shelf pages: one button per card
-  const seen = new Set();
-  for (const a of document.querySelectorAll('a[href*="/ip/"]')) {
-    const id = idOf(a.href);
-    if (!id || seen.has(id)) continue;
+  for (const a of document.querySelectorAll('a[href*="/ip/"], a[href*="%2Fip%2F"], a[link-identifier]')) {
+    if (looked.has(a)) continue;
+    looked.add(a);
+    const id = linkId(a);
+    if (!id) continue;
     const card = cardOf(a);
-    if (!card || card.dataset.dwsCard) { if (card) seen.add(id); continue; }
-    seen.add(id);
+    if (!card || card.dataset.dwsCard) continue;
     card.dataset.dwsCard = id;
     if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
     card.appendChild(button('+ List this', id, card));
+  }
+  for (const card of document.querySelectorAll('[data-dws-card]')) {
+    if (!card.querySelector(':scope > .dws-list')) card.appendChild(button('+ List this', card.dataset.dwsCard, card));
   }
   // a product page: one big button for the item itself
   const own = idOf(location.pathname);
@@ -93,7 +109,8 @@ function scan() {
 }
 
 let timer = null;
-const later = () => { clearTimeout(timer); timer = setTimeout(scan, 350); };
+// idle-time scans, at most every 600 ms: never in the way of scrolling
+const later = () => { if (timer) return; timer = setTimeout(() => { timer = null; (window.requestIdleCallback || setTimeout)(scan); }, 600); };
 window.addEventListener('DOMContentLoaded', () => {
   scan();
   new MutationObserver(later).observe(document.documentElement, { childList: true, subtree: true });

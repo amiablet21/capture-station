@@ -46,6 +46,7 @@ let runUnlistedScanShared = async () => unlistedCache; // bound to registerIpc's
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
 let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
+let wmSiteZoomHook = null; // set in registerIpc: the Walmart tab's walmart.com view takes the menu's zoom
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -4365,6 +4366,15 @@ exit 1
     });
     const wc = wmSiteView.webContents;
     wc.on('dom-ready', () => wc.insertCSS(WM_SITE_CSS).catch(() => {}));
+    // Cmd/Ctrl + / - / 0 and Cmd/Ctrl + wheel zoom walmart.com itself
+    // (owner 2026-10-23), remembered across restarts
+    wc.on('did-navigate', () => wc.setZoomFactor(Number((config.load().walmartListing || {}).siteZoom) || 1));
+    wc.on('zoom-changed', (_e, dir) => wmSiteZoom(dir === 'in' ? 'in' : 'out'));
+    wc.on('before-input-event', (e, input) => {
+      if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
+      const dir = input.key === '=' || input.key === '+' ? 'in' : input.key === '-' ? 'out' : input.key === '0' ? 'reset' : '';
+      if (dir) { e.preventDefault(); wmSiteZoom(dir); }
+    });
     // walmart.com only: anything else opens in the real browser
     wc.on('will-navigate', (e, u) => {
       if (wmSiteOk(u)) return;
@@ -4385,6 +4395,23 @@ exit 1
     for (const ev of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) wc.on(ev, wmSiteState);
     return wmSiteView;
   }
+  let wmZoomSave = null;
+  function wmSiteZoom(dir) {
+    if (!wmSiteView) return;
+    const wc = wmSiteView.webContents;
+    const cur = wc.getZoomFactor();
+    const f = Math.round(Math.min(3, Math.max(0.3, dir === 'reset' ? 1 : dir === 'in' ? cur * 1.1 : cur / 1.1)) * 100) / 100;
+    wc.setZoomFactor(f);
+    clearTimeout(wmZoomSave);
+    wmZoomSave = setTimeout(() => config.save({ walmartListing: { ...(config.load().walmartListing || {}), siteZoom: f } }), 400);
+  }
+  // the app menu's Zoom In / Out / Actual Size act on walmart.com while it
+  // has the keyboard (on a Mac the menu sees Cmd + before the page does)
+  wmSiteZoomHook = (dir) => {
+    if (!wmSiteView || !wmSiteAttached || !wmSiteView.webContents.isFocused()) return false;
+    wmSiteZoom(dir);
+    return true;
+  };
   // the renderer owns the geometry (and hides the view while a dialog is
   // open: a native view always draws above the page)
   ipcMain.handle('wmsite:layout', (_e, b = {}) => {
@@ -4444,12 +4471,17 @@ exit 1
   // the item's own walmart.com page, read once in a hidden window on the
   // same session as the tab's view (its robot check, once passed, holds)
   async function wmReadProductPage(id) {
-    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true } });
+    // the item's page is already on screen ("List this item" on it): read
+    // that one, no second load
+    const onScreen = wmSiteView && new RegExp(`/ip/(?:[^/]+/)?${id}(?:[/?#]|$)`).test(wmSiteView.webContents.getURL());
+    // otherwise a hidden window without images (faster, lighter)
+    const w = onScreen ? null : new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    const wc = onScreen ? wmSiteView.webContents : w.webContents;
     let found = { codes: [], blocked: false, page: null };
     try {
-      await w.loadURL(`${WM_SITE}/ip/${id}`).catch(() => {});
+      if (w) await w.loadURL(`${WM_SITE}/ip/${id}`).catch(() => {});
       for (let i = 0; i < 8; i++) {
-        found = await w.webContents.executeJavaScript(`(() => {
+        found = await wc.executeJavaScript(`(() => {
           const body = document.body ? document.body.innerText : '';
           const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
           const codes = [];
@@ -4470,7 +4502,7 @@ exit 1
         await new Promise(r => setTimeout(r, 750));
       }
     } finally {
-      w.destroy();
+      if (w) w.destroy();
     }
     return found;
   }
@@ -4702,7 +4734,23 @@ exit 1
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const c = wmClient();
-      const [items, strategies] = await Promise.all([c.pricingInsights(), c.strategies()]);
+      const [first, strategies] = await Promise.all([c.pricingInsights(), c.strategies()]);
+      let items = first;
+      let source = 'insights';
+      // nothing back (the owner's first run, 2026-10-23): ask again SKU by
+      // SKU from the catalog; failing that, show the catalog's prices alone
+      if (!items.length) {
+        const catalog = await c.allItems().catch(() => []);
+        const skus = catalog.filter(x => x.published !== 'UNPUBLISHED').map(x => x.sku);
+        items = skus.length ? await c.insightsBySku(skus.slice(0, 2000)).catch(() => []) : [];
+        source = 'insights-sku';
+        if (!items.length) {
+          source = 'catalog';
+          items = catalog.map(x => wmT.parseInsight({ sku: x.sku, itemName: x.title, currentPrice: x.price }));
+        }
+      }
+      // the raw first answer, for when the numbers look wrong
+      try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, first: c.lastInsights }, null, 2).slice(0, 200000)); } catch { /* diagnosis only */ }
       syncCosts();
       const costs = db.costsAll();
       const map = recoveryChannelMap();
@@ -4711,7 +4759,7 @@ exit 1
         const row = costs[k] || costs[String(map.get(k) || '').toUpperCase()];
         it.cost = row && Number(row.cost) > 0 ? Number(row.cost) : null;
       }
-      return { ok: true, items, strategies, at: new Date().toISOString(), feePct: wmFeePct() };
+      return { ok: true, items, strategies, source, at: new Date().toISOString(), feePct: wmFeePct() };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -8014,9 +8062,9 @@ function buildMenu() {
         // roles zoomed the page but never told browserLayout, so the native
         // marketplace pane kept its old bounds and overlapped the sheet
         // (owner 2026-09-17, "the split screen for the capture page is broken")
-        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => win && win.webContents.send('ui:zoom', { dir: 'reset' }) },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => win && win.webContents.send('ui:zoom', { dir: 'in' }) },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => win && win.webContents.send('ui:zoom', { dir: 'out' }) },
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('reset')) return; if (win) win.webContents.send('ui:zoom', { dir: 'reset' }); } },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('in')) return; if (win) win.webContents.send('ui:zoom', { dir: 'in' }); } },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('out')) return; if (win) win.webContents.send('ui:zoom', { dir: 'out' }); } },
       ],
     },
   ];

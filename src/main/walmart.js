@@ -321,17 +321,55 @@ class WalmartClient {
   /* ----- Pricing: repricer + Buy Box (owner 2026-10-23) ----- */
 
   // every listing's price, Buy Box price / win rate and repricer setup in
-  // one paged answer (Pricing Insights; the item report takes 15-45 min)
-  async pricingInsights() {
+  // one paged answer (Pricing Insights; the item report takes 15-45 min).
+  // The owner's first run (2026-10-23) came back with no rows, so the rows
+  // are looked for wherever the answer keeps them, paging stops when a page
+  // brings nothing new, and the raw first answer is kept for diagnosis.
+  async pricingInsights(extra = {}) {
     const rows = [];
+    const seen = new Set();
     for (let page = 0; page < 200; page++) {
-      const j = await this.call('POST', '/v3/price/getPricingInsights', { pageNumber: page, sort: { sortField: 'GMVL30D', sortOrder: 'DESC' } });
-      const list = arr(j && j.pricingInsightsResponseList);
-      rows.push(...list.map(parseInsight).filter(Boolean));
+      const j = await this.call('POST', '/v3/price/getPricingInsights', { pageNumber: page, ...extra });
+      if (page === 0) this.lastInsights = j;
+      const list = insightRows(j).map(parseInsight).filter(r => r && !seen.has(r.sku));
+      list.forEach(r => seen.add(r.sku));
+      rows.push(...list);
       const pc = (j && j.pageContext) || {};
       if (!list.length || (Number(pc.totalPages) > 0 && page + 1 >= Number(pc.totalPages))) break;
     }
     return rows;
+  }
+
+  // the same, asked SKU by SKU (100 at a time) for the given SKUs
+  async insightsBySku(skus) {
+    const rows = [];
+    for (let i = 0; i < skus.length; i += 100) {
+      rows.push(...await this.pricingInsights({ searchCriteria: { searchField: 'SKU', searchValue: skus.slice(i, i + 100) } }));
+    }
+    return rows;
+  }
+
+  // every item in the seller's catalog (Get all items, 200 a page by
+  // cursor): SKU, title, price, published status, GTIN, item id when given
+  async allItems() {
+    const out = [];
+    let cursor = '*';
+    for (let i = 0; i < 200 && cursor; i++) {
+      const j = await this.call('GET', `/v3/items?limit=200&nextCursor=${encodeURIComponent(cursor)}`);
+      const list = arr(j && (j.ItemResponse || j.itemResponse || j.items));
+      for (const it of list) {
+        if (!it || !it.sku) continue;
+        out.push({
+          sku: String(it.sku), title: clip(it.productName, 300),
+          price: money2(it.price && typeof it.price === 'object' ? it.price.amount : it.price),
+          published: String(it.publishedStatus || '').toUpperCase(),
+          gtin: String(it.gtin || it.upc || '').replace(/\D/g, ''), itemId: String(it.itemId || it.itemID || ''),
+        });
+      }
+      const next = j && j.nextCursor;
+      cursor = list.length && next && next !== cursor ? next : '';
+    }
+    return out;
   }
 
   async strategies() {
@@ -541,6 +579,19 @@ const money2 = (v) => { const n = Number(v); return Number.isFinite(n) && v !== 
 // the repricer's "take it out" value (Walmart's reserved strategy name)
 const NO_STRATEGY = 'No Strategy/Delete from Repricer';
 
+// the rows of a Pricing Insights answer: pricingInsightsResponseList, or the
+// first list of SKU objects found one or two levels down
+function insightRows(j) {
+  if (!j || typeof j !== 'object') return [];
+  if (Array.isArray(j.pricingInsightsResponseList)) return j.pricingInsightsResponseList;
+  const lists = [];
+  for (const v of Object.values(j)) {
+    if (Array.isArray(v)) lists.push(v);
+    else if (v && typeof v === 'object') for (const w of Object.values(v)) if (Array.isArray(w)) lists.push(w);
+  }
+  return lists.find(l => l.length && l[0] && typeof l[0] === 'object' && 'sku' in l[0]) || [];
+}
+
 // one Pricing Insights row -> what the Pricing tab shows. buyBoxWinRate
 // arrives as a string ("0.0", "87.5"): a percentage.
 function parseInsight(r) {
@@ -702,5 +753,5 @@ module.exports = {
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
   parseItemStatus, parseProductPage,
-  parseInsight, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY,
+  parseInsight, insightRows, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY,
 };

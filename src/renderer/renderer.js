@@ -12604,6 +12604,7 @@ function wlShowTab(tab) {
 
 var wlSiteShown = false; // var: wlSiteSync() can run before this line (showPage at startup)
 var wlSiteQueued = false;
+var wlSiteLast = '';
 function wlSiteSync() {
   if (wlSiteQueued) return;
   wlSiteQueued = true;
@@ -12613,10 +12614,14 @@ function wlSiteSync() {
       && !document.querySelector('dialog[open]');
     const r = on ? $('wlSite').getBoundingClientRect() : null;
     if (!on || r.width < 40 || r.height < 40) {
-      if (wlSiteShown) { api.wmsiteLayout({ visible: false }); wlSiteShown = false; }
+      if (wlSiteShown) { api.wmsiteLayout({ visible: false }); wlSiteShown = false; wlSiteLast = ''; }
       return;
     }
-    api.wmsiteLayout({ visible: true, x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, window.innerWidth - r.left), height: Math.min(r.height, window.innerHeight - r.top) });
+    const box = { visible: true, x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.width, window.innerWidth - r.left), height: Math.min(r.height, window.innerHeight - r.top) };
+    const key = JSON.stringify(box) + (api.uiZoomGet ? api.uiZoomGet() : 1); // the app zoom scales it too
+    if (wlSiteShown && key === wlSiteLast) return; // unchanged: no round trip
+    wlSiteLast = key;
+    api.wmsiteLayout(box);
     wlSiteShown = true;
   });
 }
@@ -13075,7 +13080,7 @@ async function wlLoadPricing() {
   wl.prBusy = false;
   if (!res || !res.ok) { wl.prErr = (res && res.error) || 'Could not read pricing from Walmart.'; wlRenderPricing(); return; }
   wl.pr = {
-    at: res.at, feePct: res.feePct, strategies: res.strategies,
+    at: res.at, feePct: res.feePct, strategies: res.strategies, source: res.source || 'insights',
     items: res.items.map(it => ({ ...it, strat: it.strategy || '', stratOrig: it.strategy || '', minOrig: it.min, maxOrig: it.max, priceNew: it.price })),
   };
   wl.prPicked = new Set();
@@ -13123,9 +13128,13 @@ function wlRenderPricing() {
   const P = wl.pr;
   const all = P.items;
   const losing = all.filter(wlPrLosing);
-  const groups = [['all', 'All items', all], ...P.strategies.map(s => [s.name, s.name, all.filter(it => it.strat === s.name)]), ['', 'No strategy', all.filter(it => !it.strat)]];
-  const cards = groups.map(([key, name, list]) => `<button type="button" class="wl-rpcard ${wl.prSel === key ? 'is-on' : ''}" data-wlprsel="${esc(key)}">
-      <span class="n">${esc(name)}</span><span class="c">${wlN(list.length, 'item')} · <b>${list.filter(wlPrLosing).length} losing</b></span></button>`).join('')
+  // catalog-only data (Walmart sent no repricer details): each strategy's
+  // count is Walmart's own, and which item is in which is unknown
+  const known = P.source !== 'catalog';
+  if (!known) wl.prShow = 'all'; // no Buy Box data: "losing" can't be told
+  const groups = [['all', 'All items', all], ...P.strategies.map(s => [s.name, s.name, all.filter(it => it.strat === s.name), s.count]), ...(known ? [['', 'No strategy', all.filter(it => !it.strat)]] : [])];
+  const cards = groups.map(([key, name, list, count]) => `<button type="button" class="wl-rpcard ${wl.prSel === key ? 'is-on' : ''}" data-wlprsel="${esc(key)}">
+      <span class="n" title="${esc(name)}">${esc(name)}</span><span class="c">${known || key === 'all' ? `${wlN(list.length, 'item')} · <b>${known ? `${list.filter(wlPrLosing).length} losing` : 'Buy Box unknown'}</b>` : `${wlN(count || 0, 'item')} on Walmart`}</span></button>`).join('')
     + '<button type="button" class="wl-rpcard is-add" data-wlstnew>+ New strategy</button>';
   const inSel = wl.prSel === 'all' ? all : all.filter(it => it.strat === wl.prSel);
   const st = wlPrStrat(wl.prSel);
@@ -13134,7 +13143,8 @@ function wlRenderPricing() {
   const rows = inSel.filter(it => wl.prShow === 'all' || wlPrLosing(it)).sort((a, b) => wlPrLosing(b) - wlPrLosing(a));
   const nPick = [...wl.prPicked].filter(i => inSel.includes(all[i])).length;
   const stratOpts = (cur) => `${P.strategies.map(s => `<option value="${esc(s.name)}" ${s.name === cur ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="" ${!cur ? 'selected' : ''}>No strategy</option>`;
-  body.innerHTML = `<div class="wl-rpsum"><b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>
+  const note = known ? '' : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
+  body.innerHTML = `${note}<div class="wl-rpsum">${known ? `<b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>` : `<span class="of">${wlN(all.length, 'item')} on Walmart</span>`}
       <span class="wl-muted">Walmart data from ${wlAgo(P.at)}</span>
       <label class="wl-muted wl-fee" title="Break-even = your cost + this Walmart referral fee">Fee for break-even <input id="wlFeePct" class="wl-in" inputmode="decimal" value="${esc(P.feePct)}">%</label>
       <button type="button" class="btn btn-ghost" data-wlprrefresh ${wl.prBusy ? 'disabled' : ''}>${wl.prBusy ? `${wlSpin}Refreshing…` : 'Refresh'}</button></div>
@@ -13146,7 +13156,7 @@ function wlRenderPricing() {
     ${rows.length ? `<table class="wl-tbl wl-tbl-pr"><thead><tr><th class="wl-ck"></th><th>Item</th><th class="num">Price</th><th>Buy Box</th><th>Min – max</th><th>Strategy</th><th>Why</th></tr></thead><tbody>${rows.map(it => {
       const i = all.indexOf(it);
       const be = wlBreakEven(it);
-      const mm = it.strat
+      const mm = known && it.strat
         ? `<input class="wl-in wl-mm ${it.min !== it.minOrig ? 'is-chg' : ''} ${be !== null && it.min !== null && it.min < be ? 'is-below' : ''}" data-wlprmn="${i}" inputmode="decimal" value="${it.min !== null ? it.min.toFixed(2) : ''}" title="${be !== null ? `Break-even ${wlMoney(be)}` : 'No cost on file: add one on the Stock page to see break-even'}" aria-label="Min for ${esc(it.sku)}"> – <input class="wl-in wl-mm ${it.max !== it.maxOrig ? 'is-chg' : ''}" data-wlprmx="${i}" inputmode="decimal" value="${it.max !== null ? it.max.toFixed(2) : ''}" aria-label="Max for ${esc(it.sku)}">`
         : '<span class="wl-muted">—</span>';
       return `<tr class="${wl.prPicked.has(i) ? 'is-sel' : ''}"><td class="wl-ck"><input type="checkbox" data-wlprpick="${i}" ${wl.prPicked.has(i) ? 'checked' : ''} aria-label="Select ${esc(it.sku)}"></td>
@@ -13154,10 +13164,10 @@ function wlRenderPricing() {
         <td class="num">${it.strat ? wlMoney(it.price) : `<input class="wl-in wl-pin ${it.priceNew !== it.price ? 'is-chg' : ''}" data-wlprp="${i}" inputmode="decimal" value="${it.priceNew !== null ? it.priceNew.toFixed(2) : ''}" aria-label="Price for ${esc(it.sku)}">`}</td>
         <td>${it.bbPrice !== null ? `<span class="${wlPrLosing(it) ? 'wl-lose' : 'wl-win'}">${wlMoney(it.bbPrice)}</span>` : '—'}${it.winRate !== null ? `<div class="d">you win ${Math.round(it.winRate)}%</div>` : ''}</td>
         <td class="wl-nowrap">${mm}</td>
-        <td><select class="input wl-stsel ${it.strat !== it.stratOrig ? 'is-chg' : ''}" data-wlprst="${i}" aria-label="Strategy for ${esc(it.sku)}">${stratOpts(it.strat)}</select></td>
+        <td>${known ? `<select class="input wl-stsel ${it.strat !== it.stratOrig ? 'is-chg' : ''}" data-wlprst="${i}" aria-label="Strategy for ${esc(it.sku)}">${stratOpts(it.strat)}</select>` : '<span class="wl-muted">not sent by Walmart</span>'}</td>
         <td>${wlPrWhyHtml(it, i)}</td></tr>`;
     }).join('')}</tbody></table>`
-    : `<div class="wl-empty"><b>${wl.prShow === 'losing' ? 'Nothing losing here.' : 'No items here.'}</b>${wl.prShow === 'losing' ? ' Every item in this group has the Buy Box.' : ''}</div>`}`;
+    : `<div class="wl-empty"><b>${!known && st ? "Walmart didn't say which items use this strategy." : wl.prShow === 'losing' ? 'Nothing losing here.' : 'No items here.'}</b>${known && wl.prShow === 'losing' ? ' Every item in this group has the Buy Box.' : ''}</div>`}`;
   const ch = all.filter(wlPrChanged).length;
   $('wlPrSave').hidden = !ch;
   $('wlPrSave').innerHTML = `<span>${wlN(ch, 'item')} changed</span><span class="wl-grow"></span><button type="button" class="btn btn-ghost" data-wlprundo>Undo</button><button type="button" class="btn btn-primary" data-wlprsave>Save to Walmart</button>`;
