@@ -12715,9 +12715,27 @@ function wlRenderPv() {
   const mine = wl.mine[it.itemId] || null;
   const sub = [rating !== null && rating !== undefined ? `<span class="wl-stars"><i class="w${Math.round((Number(rating) / 5) * 50) * 2}"></i></span>${Number(rating).toFixed(1)}${reviews !== null && reviews !== undefined ? ` · ${wlN(reviews, 'review')}` : ''}` : '',
     d.brand ? esc(d.brand) : '', `Item ${esc(it.itemId)}`, `<a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">walmart.com ↗</a>`].filter(Boolean).join('<span class="wl-pv-dot"></span>');
-  // the other versions (colour, storage...) as chips; one opens its own view
-  const vars = (d.variants || []).length > 1 ? `<div class="wl-pv-vars"><div class="wl-pv-vh">${wlN(d.variants.length, 'version')}</div><div class="wl-pv-vlist">${d.variants.map(v => `<button type="button" class="wl-pv-var ${v.current ? 'is-on' : ''} ${v.inStock ? '' : 'is-out'}" data-wlpvvar="${esc(v.itemId)}" ${v.current ? 'disabled' : ''}>
-      <span>${esc(v.labels.join(' · '))}</span><b>${v.price ? wlMoney(v.price) : v.inStock ? '' : 'Out of stock'}</b>${wl.mine[v.itemId] ? '<i>✓ Listed</i>' : ''}</button>`).join('')}</div></div>` : '';
+  // the other versions the way Walmart lays them out: one row per choice
+  // (Capacity, Color...); each value goes to the version with the other
+  // choices kept, else the nearest one that has it
+  const V = d.variants && d.variants.axes ? d.variants : { axes: [], list: [] };
+  const cur = V.list.find(v => v.current);
+  let vars = '';
+  if (V.list.length > 1 && cur) {
+    vars = `<div class="wl-pv-vars">${V.axes.map((ax, ai) => {
+      const chips = ax.values.map(val => {
+        const same = (v) => v.dims[ai] === val;
+        const exact = V.list.find(v => same(v) && v.dims.every((x, j) => j === ai || x === cur.dims[j]));
+        const near = exact || V.list.filter(same).sort((a, b) => b.inStock - a.inStock || b.dims.filter((x, j) => x === cur.dims[j]).length - a.dims.filter((x, j) => x === cur.dims[j]).length)[0];
+        if (!near) return '';
+        const on = cur.dims[ai] === val;
+        const out = !near.inStock;
+        return `<button type="button" class="wl-pv-var ${on ? 'is-on' : ''} ${out ? 'is-out' : ''} ${exact ? '' : 'is-far'}" data-wlpvvar="${esc(near.itemId)}" ${on ? 'disabled' : ''}>
+          <span>${esc(val)}</span>${exact && exact.price ? `<b>${wlMoney(exact.price)}</b>` : out ? '<b>Out of stock</b>' : ''}${wl.mine[near.itemId] && exact ? '<i>✓ Listed</i>' : ''}</button>`;
+      }).join('');
+      return `<div class="wl-pv-axis"><div class="wl-pv-vh">${esc(ax.name)}: <b>${esc(cur.dims[ai] || '')}</b></div><div class="wl-pv-vlist">${chips}</div></div>`;
+    }).join('')}</div>`;
+  }
   let sellers;
   if (P.busy) sellers = `<div class="wl-pv-wait">${wlSpin}Reading sellers from walmart.com…</div>`;
   else if (P.err) sellers = `<div class="wl-pv-wait">${P.blocked ? '<b>walmart.com asked to check this computer is not a robot.</b> ' : `${esc(P.err)} `}<a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">Show on walmart.com ↗</a></div>`;
@@ -13226,9 +13244,38 @@ async function wlLoadPricing() {
     items: res.items.map(it => ({ ...it, strat: it.strategy || '', stratOrig: it.strategy || '', minOrig: it.min, maxOrig: it.max, priceNew: it.price })),
   };
   wl.prPicked = new Set();
+  wlPrApplyMap(res.repricer);
   if (wl.prSel !== 'all' && wl.prSel !== '' && !wlPrStrat(wl.prSel)) wl.prSel = 'all';
   wlRenderPricing();
 }
+
+// which strategy each item is on, from Walmart's Item report (Pricing
+// Insights leaves it out): fills items that came without one; min / max
+// too when those came empty
+function wlPrApplyMap(rep) {
+  const P = wl.pr;
+  if (!P) return;
+  P.repricer = rep || null;
+  if (!rep || !rep.items) return;
+  const names = new Map(P.strategies.map(x => [x.name.toLowerCase(), x.name]));
+  let n = 0;
+  for (const it of P.items) {
+    const m = rep.items[it.sku.toUpperCase()];
+    if (!m || it.stratOrig || wlPrChanged(it)) continue;
+    const name = names.get(String(m.strategy).toLowerCase());
+    if (!name) continue;
+    it.strat = it.stratOrig = name;
+    if (it.min === null && m.min !== null) it.min = it.minOrig = m.min;
+    if (it.max === null && m.max !== null) it.max = it.maxOrig = m.max;
+    n++;
+  }
+  if (n) { P.fromReport = rep.at; P.stratKnown = undefined; }
+}
+api.on('walmart:repricer', (rep) => {
+  if (!wl || !wl.pr) return;
+  wlPrApplyMap(rep);
+  if (activePage === 'walmart' && wl.tab === 'pricing') wlRenderPricing();
+});
 
 function wlPrDiag(it) {
   if (!wlPrLosing(it)) return { k: it.winRate === null && !it.bbPrice ? 'nodata' : 'win' };
@@ -13293,11 +13340,16 @@ function wlRenderPricing() {
   const rows = inSel.filter(it => wl.prShow === 'all' || wlPrLosing(it)).sort((a, b) => wlPrLosing(b) - wlPrLosing(a));
   const nPick = [...wl.prPicked].filter(i => inSel.includes(all[i])).length;
   const stratOpts = (cur) => `${P.strategies.map(s => `<option value="${esc(s.name)}" ${s.name === cur ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="" ${!cur ? 'selected' : ''}>No strategy</option>`;
-  const note = known ? (stratKnown ? '' : `<div class="wl-note">Walmart sent each item's Buy Box but not which strategy it's on, so items aren't split by strategy here. Each strategy's item count is Walmart's own. You can still edit strategy rules, and move picked items into a strategy.</div>`) : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
+  const rep = P.repricer || {};
+  const when = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const note = known ? (stratKnown ? '' : `<div class="wl-note">${rep.pendingSince
+      ? `Walmart's price data doesn't say which strategy each item is on, so the app asked Walmart for its item report, which does (asked at ${when(rep.pendingSince)}). Walmart takes 15–45 minutes to make it; this page fills in by itself when it arrives. Until then each strategy shows Walmart's own count.`
+      : rep.error ? `${esc(rep.error)} Each strategy shows Walmart's own count until then.`
+      : "Walmart's price data doesn't say which strategy each item is on. Each strategy shows Walmart's own count."}</div>`) : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
   const limit = P.stale ? `<div class="wl-note">${esc(P.staleWhy)} Showing what Walmart sent ${wlAgo(P.at)}.</div>`
-    : P.partial ? `<div class="wl-note">Walmart's limit on requests was reached part-way, so ${wlN(all.length, 'item')} came back, not all of them. Press Refresh in a minute for the rest.</div>` : '';
+    : P.partial ? `<div class="wl-note">Walmart's limit on requests was reached part-way, so only ${wlN(all.length, 'item')} came back. Press Refresh in a minute for the rest.</div>` : '';
   body.innerHTML = `${limit}${note}<div class="wl-rpsum">${known ? `<b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>` : `<span class="of">${wlN(all.length, 'item')} on Walmart</span>`}
-      <span class="wl-muted">Walmart data from ${wlAgo(P.at)}</span>
+      <span class="wl-muted">Walmart data from ${wlAgo(P.at)}${P.fromReport ? ` · strategies from Walmart's item report, ${wlAgo(P.fromReport)}` : ''}</span>
       <label class="wl-muted wl-fee" title="Break-even = your cost + this Walmart referral fee">Fee for break-even <input id="wlFeePct" class="wl-in" inputmode="decimal" value="${esc(P.feePct)}">%</label>
       <button type="button" class="btn btn-ghost" data-wlprrefresh ${wl.prBusy ? 'disabled' : ''}>${wl.prBusy ? `${wlSpin}Refreshing…` : 'Refresh'}</button></div>
     <div class="wl-rpcards">${cards}</div>
@@ -13601,7 +13653,7 @@ $('walmartPage').addEventListener('click', async (e) => {
     return;
   }
   if ((el = hit('[data-wlpvvar]')) && wl.pv && wl.pv.data) {
-    const v = (wl.pv.data.variants || []).find(x => x.itemId === el.dataset.wlpvvar);
+    const v = ((wl.pv.data.variants && wl.pv.data.variants.list) || []).find(x => x.itemId === el.dataset.wlpvvar);
     const base = wl.pv.data.title || wl.pv.it.title || '';
     if (v) { const back = wl.pv.scroll; wlOpenProduct({ itemId: v.itemId, title: '', price: v.price || 0, image: '', rating: null, reviews: null, seller: '', base }); wl.pv.scroll = back; }
     return;

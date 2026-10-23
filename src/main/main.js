@@ -4715,7 +4715,7 @@ exit 1
         fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-product-last.json'), JSON.stringify({ at: new Date().toISOString(), itemId: id,
           page: found.page.json.map(t => t.slice(0, 1500000)), sellersPage: more ? more.json.map(t => t.slice(0, 1500000)) : null }));
       } catch { /* diagnosis only */ }
-      const variants = wmT.parseVariants(found.page.json, id);
+      const variants = wmT.parseVariantSet(found.page.json, id);
       const same = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
       for (const o of offers) {
         o.buyBox = same(o.seller, d.buyBoxSeller);
@@ -4970,6 +4970,67 @@ exit 1
     }
     return { items, feePct: wmFeePct() };
   }
+  // which strategy each item is on, from Walmart's Item report: asked for
+  // when Pricing opens (at most twice a day), checked every 4 minutes until
+  // Walmart has made it, then kept in walmart-repricer-map.json and sent to
+  // the page ({ at, items: { SKU: { strategy, min, max, status } } } or
+  // { pendingSince } / { error })
+  const wmRepFile = () => path.join(app.getPath('userData'), 'walmart-repricer-map.json');
+  const wmRepRead = () => { try { return JSON.parse(fs.readFileSync(wmRepFile(), 'utf8')); } catch { return {}; } };
+  const wmRepWrite = (st) => { try { fs.writeFileSync(wmRepFile(), JSON.stringify(st)); } catch { /* next time */ } };
+  const wmRepPublic = (st) => ({ at: st.at || '', items: st.items || null, pendingSince: st.requestId ? st.requestedAt : '', error: st.error || '' });
+  let wmRepTimer = null;
+  async function wmRepricerReport(force) {
+    const st = wmRepRead();
+    const c = wmClient();
+    try {
+      if (st.requestId) {
+        const status = await c.reportStatus(st.requestId);
+        if (status === 'READY') {
+          let buf = await c.reportFile(st.requestId);
+          if (buf[0] === 0x50 && buf[1] === 0x4b) {
+            const z = require('./shipfile.js').readZip(buf);
+            const name = [...z.entries.keys()].find(n => /\.csv$/i.test(n)) || [...z.entries.keys()][0];
+            buf = z.read(name);
+          }
+          const rows = require('./shipfile.js').parseCsv(buf.toString('utf8').replace(/^\uFEFF/, ''));
+          const items = wmT.parseRepricerReport(rows);
+          const next = items ? { at: new Date().toISOString(), items } : { at: st.at || '', items: st.items || null, error: "Walmart's item report had no Repricer Strategy column." };
+          wmRepWrite(next);
+          wmSend('walmart:repricer', wmRepPublic(next));
+          return;
+        }
+        if (/ERROR|FAIL/.test(status)) {
+          const next = { at: st.at || '', items: st.items || null, error: 'Walmart could not make the item report. It will be asked for again next time Pricing opens.' };
+          wmRepWrite(next);
+          wmSend('walmart:repricer', wmRepPublic(next));
+          return;
+        }
+        // still being made: look again in 4 minutes (a request older than
+        // 3 hours is given up and asked again)
+        if (Date.now() - new Date(st.requestedAt).getTime() > 3 * 3600 * 1000) { wmRepWrite({ at: st.at || '', items: st.items || null }); return wmRepricerReport(true); }
+        clearTimeout(wmRepTimer);
+        wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000);
+        return;
+      }
+      if (!force && st.items && Date.now() - new Date(st.at).getTime() < 12 * 3600 * 1000) return;
+      const requestId = await c.requestItemReport();
+      const next = { at: st.at || '', items: st.items || null, requestId, requestedAt: new Date().toISOString() };
+      wmRepWrite(next);
+      wmSend('walmart:repricer', wmRepPublic(next));
+      clearTimeout(wmRepTimer);
+      wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000);
+    } catch (e) {
+      // the limit or a hiccup: try again in 4 minutes while one is pending
+      if (st.requestId) { clearTimeout(wmRepTimer); wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000); }
+      else { wmRepWrite({ ...st, error: `The item report could not be asked for: ${e.message}` }); }
+    }
+  }
+  ipcMain.handle('walmart:repricerReport', async () => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    await wmRepricerReport(true).catch(() => {});
+    return { ok: true, repricer: wmRepPublic(wmRepRead()) };
+  });
   ipcMain.handle('walmart:pricing', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -4988,7 +5049,7 @@ exit 1
         [first, strategies] = await Promise.all([c.pricingInsights(), c.strategies().catch(e => { if (e.rateLimited && cached) return cached.strategies || []; throw e; })]);
       } catch (e) {
         const old = fromCache(e);
-        return { ok: true, ...old, ...wmPricingCosts(old.items) };
+        return { ok: true, ...old, repricer: wmRepPublic(wmRepRead()), ...wmPricingCosts(old.items) };
       }
       const partial = !!c.insightsPartial;
       let items = first;
@@ -5009,7 +5070,8 @@ exit 1
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, strategies: c.lastStrategies, first: c.lastInsights }, null, 2).slice(0, 400000)); } catch { /* diagnosis only */ }
       const at = new Date().toISOString();
       if (!partial) { try { fs.writeFileSync(cacheFile, JSON.stringify({ items, strategies, source, at })); } catch { /* the cache is optional */ } }
-      return { ok: true, items, strategies, source, at, partial, ...wmPricingCosts(items) };
+      if (!items.some(it => it.strategy) && strategies.some(x => x.count > 0)) wmRepricerReport().catch(() => {});
+      return { ok: true, items, strategies, source, at, partial, repricer: wmRepPublic(wmRepRead()), ...wmPricingCosts(items) };
     } catch (e) {
       return { ok: false, error: e.message };
     }

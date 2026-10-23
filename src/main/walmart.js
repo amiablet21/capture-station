@@ -360,7 +360,12 @@ class WalmartClient {
       list.forEach(r => seen.add(r.sku));
       rows.push(...list);
       const pc = (j && j.pageContext) || {};
-      if (!list.length || (Number(pc.totalPages) > 0 && page + 1 >= Number(pc.totalPages))) break;
+      const total = Number(pc.totalCount ?? pc.totalElements ?? pc.totalItems ?? j.totalCount ?? j.totalElements);
+      if (page === 0) this.insightsPageSize = list.length;
+      // the last page: told by the total, or a page shorter than the first
+      // (owner 2026-10-23: asking past the end ran into Walmart's limit)
+      if (!list.length || (Number(pc.totalPages) > 0 && page + 1 >= Number(pc.totalPages))
+        || (total > 0 && rows.length >= total) || list.length < this.insightsPageSize) break;
     }
     return rows;
   }
@@ -395,6 +400,31 @@ class WalmartClient {
       cursor = list.length && next && next !== cursor ? next : '';
     }
     return out;
+  }
+
+  // the on-request Item report (v3 has Repricer Strategy, Minimum / Maximum
+  // Seller Allowed Price and Repricer Status per SKU): Pricing Insights
+  // doesn't say which strategy an item is on (owner 2026-10-23). Walmart
+  // takes 15-45 minutes to make it
+  async requestItemReport() {
+    const j = await this.call('POST', '/v3/reports/reportRequests?reportType=ITEM&reportVersion=v3', {});
+    if (!j || !j.requestId) throw new WalmartError('Walmart took the report request but returned no request id.');
+    return String(j.requestId);
+  }
+
+  async reportStatus(requestId) {
+    const j = await this.call('GET', `/v3/reports/reportRequests/${encodeURIComponent(requestId)}`);
+    return String((j && j.requestStatus) || '').toUpperCase();
+  }
+
+  // the finished report's file (a zip of one CSV, or the CSV itself)
+  async reportFile(requestId) {
+    const j = await this.call('GET', `/v3/reports/downloadReport?requestId=${encodeURIComponent(requestId)}`);
+    const url = j && (j.downloadURL || j.downloadUrl);
+    if (!url || !/^https?:\/\//i.test(url)) throw new WalmartError('Walmart gave no download link for the report.');
+    const res = await fetch(url, { signal: AbortSignal.timeout(180000) });
+    if (!res.ok) throw new WalmartError(`The report download failed (${res.status}).`);
+    return Buffer.from(await res.arrayBuffer());
   }
 
   async strategies() {
@@ -908,11 +938,13 @@ function parseOffers(json = [], itemId = '') {
   return out.filter(r => r.condition || !out.some(x => x !== r && x.condition && x.seller.toLowerCase() === r.seller.toLowerCase() && x.price === r.price));
 }
 
-// a product's other versions (colour, storage...) from its page JSON:
-// variantCriteria names each choice ("Color: Gray"), variantsMap gives
-// each version's item number, price and stock -> [{ itemId, labels,
-// price, inStock, current }]
-function parseVariants(json = [], itemId = '') {
+// a product's other versions (colour, storage...) from its page JSON, the
+// way Walmart lays them out (owner 2026-10-23: "the variants are not
+// organized properly"): axes [{ name: 'Capacity', values: ['256GB', ...] }]
+// in Walmart's order, and each version's item number, one value per axis,
+// price, stock. variantCriteria names the choices, variantsMap gives each
+// version's item number, price and stock
+function parseVariantSet(json = [], itemId = '') {
   let crit = null;
   let map = null;
   const look = (o, depth) => {
@@ -926,43 +958,77 @@ function parseVariants(json = [], itemId = '') {
     try { look(JSON.parse(t), 0); } catch { /* not JSON */ }
     if (crit && map) break;
   }
-  if (!crit) return [];
-  // variant value id -> its label, and (fallback) item -> labels
-  const label = new Map();
+  if (!crit) return { axes: [], list: [] };
+  const axisName = (c) => clip(c.name || String(c.id || '').replace(/^actual_/, '').replace(/_/g, ' ').replace(/^\w/, m => m.toUpperCase()), 30);
+  // value id -> [axis index, value name]; item -> value per axis (fallback)
+  const axes = [];
+  const byId = new Map();
   const byItem = new Map();
   for (const c of crit) {
+    const values = [];
+    const ai = axes.length;
     for (const v of arr(c && c.variantList)) {
       const name = clip(v && (v.name || v.value), 40);
       if (!name) continue;
-      if (v.id) label.set(String(v.id), name);
+      if (!values.includes(name)) values.push(name);
+      if (v.id) byId.set(String(v.id), [ai, name]);
       for (const p of arr(v.products)) {
         const id = String(p && typeof p === 'object' ? p.usItemId || p.id || '' : p || '');
         if (!/^\d{5,}$/.test(id)) continue;
-        (byItem.get(id) || byItem.set(id, []).get(id)).push(name);
+        const dims = byItem.get(id) || byItem.set(id, []).get(id);
+        dims[ai] = name;
       }
     }
+    if (values.length) axes.push({ name: axisName(c), values });
   }
-  const out = [];
+  const list = [];
   const seen = new Set();
-  for (const [key, v] of Object.entries(map || {})) {
-    const id = String((v && v.usItemId) || key);
-    if (!/^\d{5,}$/.test(id) || seen.has(id)) continue;
+  const add = (id, dims, v) => {
+    if (!/^\d{5,}$/.test(id) || seen.has(id)) return;
     seen.add(id);
-    const labels = arr(v && v.variants).map(x => label.get(String(x))).filter(Boolean);
     const pi = (v && v.priceInfo) || {};
     const price = Number((pi.currentPrice && pi.currentPrice.price) ?? '');
     const status = String((v && v.availabilityStatus) || '');
-    out.push({ itemId: id, labels: labels.length ? labels : (byItem.get(id) || []), price: Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
+    list.push({ itemId: id, dims: axes.map((_, i) => dims[i] || ''), price: Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
       inStock: !/OUT_OF_STOCK|NOT_AVAILABLE/i.test(status), current: id === String(itemId) });
+  };
+  for (const [key, v] of Object.entries(map || {})) {
+    const id = String((v && v.usItemId) || key);
+    const dims = [];
+    for (const x of arr(v && v.variants)) { const hit = byId.get(String(x)); if (hit) dims[hit[0]] = hit[1]; }
+    add(id, dims.length ? dims : (byItem.get(id) || []), v);
   }
-  if (!out.length) for (const [id, labels] of byItem) out.push({ itemId: id, labels, price: null, inStock: true, current: id === String(itemId) });
-  return out.filter(v => v.labels.length).sort((a, b) => a.labels.join(' ').localeCompare(b.labels.join(' '), undefined, { numeric: true }));
+  if (!list.length) for (const [id, dims] of byItem) add(id, dims, null);
+  return { axes, list: list.filter(v => v.dims.some(Boolean)) };
+}
+// the versions alone, each with its labels (one per axis)
+function parseVariants(json = [], itemId = '') {
+  return parseVariantSet(json, itemId).list.map(v => ({ ...v, labels: v.dims.filter(Boolean) }));
+}
+
+// the Item report's rows -> { SKU: { strategy, min, max, status } } for
+// every SKU with a repricer strategy; headers matched loosely
+function parseRepricerReport(rows) {
+  const out = {};
+  const hi = arr(rows).findIndex(r => r.some(c => /^sku$/i.test(String(c).trim())) && r.some(c => /repricer\s*strategy/i.test(String(c))));
+  if (hi < 0) return null;
+  const h = rows[hi].map(c => String(c).trim().toLowerCase());
+  const col = (re) => h.findIndex(c => re.test(c));
+  const iSku = col(/^sku$/), iStrat = col(/repricer\s*strategy/), iMin = col(/minimum.*price|min.*allowed/), iMax = col(/maximum.*price|max.*allowed/), iSt = col(/repricer\s*status/);
+  const money = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return String(v ?? '').trim() && Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; };
+  for (const r of rows.slice(hi + 1)) {
+    const sku = String(r[iSku] || '').trim();
+    const strategy = String(r[iStrat] || '').trim();
+    if (!sku || !strategy || /^(n\/?a|none|-|no strategy)$/i.test(strategy)) continue;
+    out[sku.toUpperCase()] = { strategy: clip(strategy, 120), min: iMin >= 0 ? money(r[iMin]) : null, max: iMax >= 0 ? money(r[iMax]) : null, status: iSt >= 0 ? clip(r[iSt], 40) : '' };
+  }
+  return out;
 }
 
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
-  parseItemStatus, parseProductPage, parseOffers, parseVariants,
-  parseInsight, insightRows, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY, addOrderSales,
+  parseItemStatus, parseProductPage, parseOffers, parseVariants, parseVariantSet,
+  parseInsight, insightRows, parseRepricerReport, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY, addOrderSales,
 };

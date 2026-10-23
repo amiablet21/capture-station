@@ -6012,8 +6012,10 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-pv-price span { font-size: 13px; color: var(--muted); }
 .wl-pv-mine { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--pos-text); }
 .wl-pv-go { margin-top: 16px; font: 600 14px var(--font); color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 10px 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(30, 58, 102, .22); }
-.wl-pv-vars { margin: -6px 0 22px; }
-.wl-pv-vh { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+.wl-pv-vars { margin: -6px 0 22px; display: flex; flex-direction: column; gap: 14px; }
+.wl-pv-vh { font-size: 12.5px; font-weight: 500; color: var(--muted); margin-bottom: 7px; }
+.wl-pv-vh b { color: var(--text); font-weight: 600; }
+.wl-pv-var.is-far b { display: none; }
 .wl-pv-vlist { display: flex; flex-wrap: wrap; gap: 8px; }
 .wl-pv-var { font: 500 12.5px var(--font); color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; cursor: pointer; text-align: left; }
 .wl-pv-var:hover { border-color: var(--accent); }

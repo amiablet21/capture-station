@@ -1462,6 +1462,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('walmart product view: condition code 1 reads New, a junk arrival date is dropped, a real one reads as a day, other versions listed with price and stock',
         vo[0].condition === 'New' && vo[0].arrives === '' && /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}$/.test(vo[1].arrives)
           && vv.length === 3 && vv[0].current && vv[0].labels.join('/') === 'Gray/64 GB' && vv[1].price === 259 && vv[2].itemId === '30000000001' && vv[2].inStock === false, { vo, vv });
+      const rep = w.parseRepricerReport(require('./shipfile.js').parseCsv('\uFEFFSKU,Product Name,Repricer Strategy,Minimum Seller Allowed Price,Maximum Seller Allowed Price,Repricer Status\nX230-A,"Tab, gray",IMRAN BUY BOX,199.00,289.00,Active\nX230-B,Tab,,,,\n'.replace(/^\uFEFF/, '')));
+      const vs = w.parseVariantSet([vpage], '20944924919');
+      check('walmart pricing: the Item report gives each SKU its strategy and min / max; versions come back as Walmart\'s axes',
+        JSON.stringify(rep) === JSON.stringify({ 'X230-A': { strategy: 'IMRAN BUY BOX', min: 199, max: 289, status: 'Active' } })
+          && vs.axes.map(a => `${a.name}:${a.values.join('/')}`).join(' ') === 'Color:Gray/Silver Capacity:64 GB/128 GB' && vs.list[2].dims.join('/') === 'Silver/64 GB', { rep, vs });
       const sales = w.addOrderSales({}, [
         { orderLines: { orderLine: [
           { item: { sku: 'x230-a' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 224.8 } }, { chargeType: 'SHIPPING', chargeAmount: { amount: 5 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Shipped' }] } },
