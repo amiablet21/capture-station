@@ -373,7 +373,9 @@ class WalmartClient {
   }
 
   async strategies() {
-    return arr((await this.call('GET', '/v3/repricer/strategies')).strategyCollections).map(parseStrategy).filter(Boolean);
+    const j = await this.call('GET', '/v3/repricer/strategies');
+    this.lastStrategies = j;
+    return arr(j && j.strategyCollections).map(parseStrategy).filter(Boolean);
   }
 
   // create (no id) or update a strategy; answers the saved one
@@ -594,6 +596,9 @@ function insightRows(j) {
 
 // one Pricing Insights row -> what the Pricing tab shows. buyBoxWinRate
 // arrives as a string ("0.0", "87.5"): a percentage.
+// the first value that is set: a field Walmart may spell several ways
+const first = (...v) => v.find(x => x !== undefined && x !== null && x !== '');
+
 function parseInsight(r) {
   if (!r || !r.sku) return null;
   const rate = Number(r.buyBoxWinRate);
@@ -605,11 +610,15 @@ function parseInsight(r) {
     bbTotal: money2(r.buyBoxTotalPrice),
     winRate: Number.isFinite(rate) && r.buyBoxWinRate !== null && r.buyBoxWinRate !== '' ? Math.max(0, Math.min(100, rate)) : null,
     competitor: money2(r.competitorPrice),
-    strategy: clip(r.repricerStrategyName, 120),
+    // the documented name first; live answers (owner 2026-10-23: every item
+    // read as "No strategy" while Seller Center shows 131 on IMRAN BUY BOX)
+    // may name it otherwise, so look for the likely alternatives too
+    strategy: clip(first(r.repricerStrategyName, r.repricerStrategy, r.strategyName, r.repricerStrategyCollectionName,
+      r.repricer && (r.repricer.strategyName || r.repricer.repricerStrategy || r.repricer.name)), 120),
     strategyType: clip(r.repricerStrategyType, 60),
     repricerStatus: clip(r.repricerStatus, 60),
-    min: money2(r.repricerMinPrice),
-    max: money2(r.repricerMaxPrice),
+    min: money2(first(r.repricerMinPrice, r.minimumSellerAllowedPrice, r.repricerMinimumPrice, r.minPrice, r.repricer && r.repricer.minPrice)),
+    max: money2(first(r.repricerMaxPrice, r.maximumSellerAllowedPrice, r.repricerMaximumPrice, r.maxPrice, r.repricer && r.repricer.maxPrice)),
     suggested: money2(r.suggestedPrice),
     fulfillment: clip(r.fulfillment, 40),
     stock: r.inventoryCount === null || r.inventoryCount === undefined ? null : Number(r.inventoryCount) || 0,
@@ -624,7 +633,7 @@ function parseStrategy(s) {
     id: String(s.strategyCollectionId || ''),
     name: clip(s.repricerStrategy, 120),
     enabled: s.enabled !== false,
-    count: Number(s.assignedCount) || 0,
+    count: Number(first(s.assignedCount, s.assignedItemCount, s.itemCount, s.itemsCount, s.totalItems)) || 0,
     type: String(rule.strategyType || 'Buy Box Price'),
     unit: String(rule.adjustmentType || 'UNIT').toUpperCase() === 'PERCENTAGE' ? '%' : '$',
     value: Number(rule.adjustmentValue) || 0,

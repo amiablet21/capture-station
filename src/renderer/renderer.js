@@ -13170,7 +13170,7 @@ async function wlLoadPricing() {
 
 function wlPrDiag(it) {
   if (!wlPrLosing(it)) return { k: it.winRate === null && !it.bbPrice ? 'nodata' : 'win' };
-  if (!it.strat) return { k: 'none' };
+  if (!it.strat) return { k: wl.prStratKnown === false ? 'unknown' : 'none' };
   const t = wlPrTarget(it);
   if (t !== null && it.min !== null && it.min > t) return { k: 'min', t };
   if (wlPrChanged(it)) return { k: 'pending', t };
@@ -13182,6 +13182,7 @@ function wlPrWhyHtml(it, i) {
   const be = wlBreakEven(it);
   if (d.k === 'win') return `<span class="wl-win">Winning${it.winRate !== null ? ` · ${Math.round(it.winRate)}%` : ''}</span>`;
   if (d.k === 'nodata') return '<span class="wl-muted">No Buy Box data from Walmart</span>';
+  if (d.k === 'unknown') return '<div class="wl-why">Losing the Buy Box. Walmart didn\'t say which strategy this item is on, so check its min in Seller Center.</div>';
   if (d.k === 'none') {
     const first = wl.pr.strategies[0];
     return `<div class="wl-why">No repricer, so the price stays at <b>${wlMoney(it.priceNew)}</b>.</div>${first ? `<button type="button" class="btn btn-secondary wl-fix" data-wlpradd="${i}">Add to ${esc(first.name)}</button>` : ''}`;
@@ -13212,9 +13213,16 @@ function wlRenderPricing() {
   // count is Walmart's own, and which item is in which is unknown
   const known = P.source !== 'catalog';
   if (!known) wl.prShow = 'all'; // no Buy Box data: "losing" can't be told
-  const groups = [['all', 'All items', all], ...P.strategies.map(s => [s.name, s.name, all.filter(it => it.strat === s.name), s.count]), ...(known ? [['', 'No strategy', all.filter(it => !it.strat)]] : [])];
+  // Buy Box sent but not which strategy each item is on (owner 2026-10-23:
+  // all 467 read as "No strategy", IMRAN BUY BOX as 0 against 131 in Seller
+  // Center): no per-item split, Walmart's own counts on the strategies
+  if (P.stratKnown === undefined) P.stratKnown = known && (all.some(it => it.stratOrig) || !P.strategies.some(s => s.count > 0));
+  const stratKnown = P.stratKnown;
+  wl.prStratKnown = stratKnown;
+  if (!stratKnown && wl.prSel === '') wl.prSel = 'all';
+  const groups = [['all', 'All items', all], ...P.strategies.map(s => [s.name, s.name, all.filter(it => it.strat === s.name), s.count]), ...(stratKnown ? [['', 'No strategy', all.filter(it => !it.strat)]] : [])];
   const cards = groups.map(([key, name, list, count]) => `<button type="button" class="wl-rpcard ${wl.prSel === key ? 'is-on' : ''}" data-wlprsel="${esc(key)}">
-      <span class="n" title="${esc(name)}">${esc(name)}</span><span class="c">${known || key === 'all' ? `${wlN(list.length, 'item')} · <b>${known ? `${list.filter(wlPrLosing).length} losing` : 'Buy Box unknown'}</b>` : `${wlN(count || 0, 'item')} on Walmart`}</span></button>`).join('')
+      <span class="n" title="${esc(name)}">${esc(name)}</span><span class="c">${stratKnown || key === 'all' ? `${wlN(list.length, 'item')} · <b>${known ? `${list.filter(wlPrLosing).length} losing` : 'Buy Box unknown'}</b>` : `${wlN(count || 0, 'item')} on Walmart`}</span></button>`).join('')
     + '<button type="button" class="wl-rpcard is-add" data-wlstnew>+ New strategy</button>';
   const inSel = wl.prSel === 'all' ? all : all.filter(it => it.strat === wl.prSel);
   const st = wlPrStrat(wl.prSel);
@@ -13223,7 +13231,7 @@ function wlRenderPricing() {
   const rows = inSel.filter(it => wl.prShow === 'all' || wlPrLosing(it)).sort((a, b) => wlPrLosing(b) - wlPrLosing(a));
   const nPick = [...wl.prPicked].filter(i => inSel.includes(all[i])).length;
   const stratOpts = (cur) => `${P.strategies.map(s => `<option value="${esc(s.name)}" ${s.name === cur ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="" ${!cur ? 'selected' : ''}>No strategy</option>`;
-  const note = known ? '' : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
+  const note = known ? (stratKnown ? '' : `<div class="wl-note">Walmart sent each item's Buy Box but not which strategy it's on, so items aren't split by strategy here. Each strategy's item count is Walmart's own. You can still edit strategy rules, and move picked items into a strategy.</div>`) : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
   body.innerHTML = `${note}<div class="wl-rpsum">${known ? `<b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>` : `<span class="of">${wlN(all.length, 'item')} on Walmart</span>`}
       <span class="wl-muted">Walmart data from ${wlAgo(P.at)}</span>
       <label class="wl-muted wl-fee" title="Break-even = your cost + this Walmart referral fee">Fee for break-even <input id="wlFeePct" class="wl-in" inputmode="decimal" value="${esc(P.feePct)}">%</label>
@@ -13241,13 +13249,13 @@ function wlRenderPricing() {
         : '<span class="wl-muted">—</span>';
       return `<tr class="${wl.prPicked.has(i) ? 'is-sel' : ''}"><td class="wl-ck"><input type="checkbox" data-wlprpick="${i}" ${wl.prPicked.has(i) ? 'checked' : ''} aria-label="Select ${esc(it.sku)}"></td>
         <td><span class="mono wl-strong">${esc(it.sku)}</span><div class="d">${esc(it.title)}</div></td>
-        <td class="num">${it.strat ? wlMoney(it.price) : `<input class="wl-in wl-pin ${it.priceNew !== it.price ? 'is-chg' : ''}" data-wlprp="${i}" inputmode="decimal" value="${it.priceNew !== null ? it.priceNew.toFixed(2) : ''}" aria-label="Price for ${esc(it.sku)}">`}</td>
+        <td class="num">${it.strat || !stratKnown ? wlMoney(it.price) : `<input class="wl-in wl-pin ${it.priceNew !== it.price ? 'is-chg' : ''}" data-wlprp="${i}" inputmode="decimal" value="${it.priceNew !== null ? it.priceNew.toFixed(2) : ''}" aria-label="Price for ${esc(it.sku)}">`}</td>
         <td>${it.bbPrice !== null ? `<span class="${wlPrLosing(it) ? 'wl-lose' : 'wl-win'}">${wlMoney(it.bbPrice)}</span>` : '—'}${it.winRate !== null ? `<div class="d">you win ${Math.round(it.winRate)}%</div>` : ''}</td>
         <td class="wl-nowrap">${mm}</td>
-        <td>${known ? `<select class="input wl-stsel ${it.strat !== it.stratOrig ? 'is-chg' : ''}" data-wlprst="${i}" aria-label="Strategy for ${esc(it.sku)}">${stratOpts(it.strat)}</select>` : '<span class="wl-muted">not sent by Walmart</span>'}</td>
+        <td>${stratKnown || it.strat !== it.stratOrig ? `<select class="input wl-stsel ${it.strat !== it.stratOrig ? 'is-chg' : ''}" data-wlprst="${i}" aria-label="Strategy for ${esc(it.sku)}">${stratOpts(it.strat)}</select>` : '<span class="wl-muted">not sent by Walmart</span>'}</td>
         <td>${wlPrWhyHtml(it, i)}</td></tr>`;
     }).join('')}</tbody></table>`
-    : `<div class="wl-empty"><b>${!known && st ? "Walmart didn't say which items use this strategy." : wl.prShow === 'losing' ? 'Nothing losing here.' : 'No items here.'}</b>${known && wl.prShow === 'losing' ? ' Every item in this group has the Buy Box.' : ''}</div>`}`;
+    : `<div class="wl-empty"><b>${!stratKnown && st ? "Walmart didn't say which items use this strategy." : wl.prShow === 'losing' ? 'Nothing losing here.' : 'No items here.'}</b>${stratKnown && wl.prShow === 'losing' ? ' Every item in this group has the Buy Box.' : ''}</div>`}`;
   const ch = all.filter(wlPrChanged).length;
   $('wlPrSave').hidden = !ch;
   $('wlPrSave').innerHTML = `<span>${wlN(ch, 'item')} changed</span><span class="wl-grow"></span><button type="button" class="btn btn-ghost" data-wlprundo>Undo</button><button type="button" class="btn btn-primary" data-wlprsave>Save to Walmart</button>`;
@@ -13327,7 +13335,7 @@ $('wlStYes').addEventListener('click', async () => {
 $('wlStDel').addEventListener('click', async () => {
   const s = wlStEdit;
   if (!s || !s.id) return;
-  const n = wl.pr.items.filter(it => it.stratOrig === s.name).length;
+  const n = wl.prStratKnown === false ? s.count : wl.pr.items.filter(it => it.stratOrig === s.name).length;
   $('wlStratDialog').close();
   const ok = await wlConfirmAsk(`Delete ${s.name}?`, n ? `${wlN(n, 'item')} use it. Walmart takes them off the repricer, so their prices stay where they are.` : 'No items use it.', [], 'Delete');
   if (!ok) return;

@@ -4519,11 +4519,16 @@ exit 1
     if (nd) {
       let data = null;
       try { data = JSON.parse(nd.textContent); } catch { /* a page mid-update */ }
+      // a product's colour / size options carry their own usItemId and a
+      // name like "Gray" (owner 2026-10-23: "why do some of the boxes just
+      // say Gray?"): never descend into them, and only take an entry with
+      // the price or photo block a result tile has
+      const VARIANTS = /^(variantList|variants|variantCriteria|variantsMap|swatches|swatchList|colors)$/i;
       const walk = (o, depth) => {
         if (!o || typeof o !== 'object' || depth > 14) return;
         if (Array.isArray(o)) { for (const v of o) walk(v, depth + 1); return; }
         const id = String(o.usItemId || '');
-        if (/^\d{5,}$/.test(id) && typeof o.name === 'string' && !seen.has(id)) {
+        if (/^\d{5,}$/.test(id) && typeof o.name === 'string' && (o.__typename === 'Product' || o.priceInfo || o.imageInfo) && !seen.has(id)) {
           seen.add(id);
           const pi = o.priceInfo || {};
           const cur = pi.currentPrice || {};
@@ -4540,7 +4545,7 @@ exit 1
         }
         if (!total && Number.isFinite(Number(o.aggregatedCount))) total = Number(o.aggregatedCount);
         if (o.paginationV2 && Number(o.paginationV2.maxPage)) maxPage = Number(o.paginationV2.maxPage);
-        for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v, depth + 1);
+        for (const [k, v] of Object.entries(o)) if (v && typeof v === 'object' && !VARIANTS.test(k)) walk(v, depth + 1);
       };
       if (data) walk(data, 0);
     }
@@ -4887,7 +4892,7 @@ exit 1
         }
       }
       // the raw first answer, for when the numbers look wrong
-      try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, first: c.lastInsights }, null, 2).slice(0, 200000)); } catch { /* diagnosis only */ }
+      try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, strategies: c.lastStrategies, first: c.lastInsights }, null, 2).slice(0, 400000)); } catch { /* diagnosis only */ }
       syncCosts();
       const costs = db.costsAll();
       const map = recoveryChannelMap();
