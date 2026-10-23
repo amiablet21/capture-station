@@ -253,6 +253,8 @@ contextBridge.exposeInMainWorld('api', {
   walmartDeleteStrategy: (id) => ipcRenderer.invoke('walmart:deleteStrategy', { id }),
   walmartPricingSave: (repricer, prices) => ipcRenderer.invoke('walmart:pricingSave', { repricer, prices }),
   walmartIncentives: () => ipcRenderer.invoke('walmart:incentives'),
+  walmartProductView: (itemId, myPrices) => ipcRenderer.invoke('walmart:productView', { itemId, myPrices: myPrices || [] }),
+  walmartIncentiveExtras: (fresh) => ipcRenderer.invoke('walmart:incentiveExtras', { fresh: !!fresh }),
   walmartIncentiveEnroll: (items, enroll) => ipcRenderer.invoke('walmart:incentiveEnroll', { items, enroll: !!enroll }),
   walmartWfOpt: (skus, optIn) => ipcRenderer.invoke('walmart:wfOpt', { skus, optIn: !!optIn }),
   walmartWfAll: (on) => ipcRenderer.invoke('walmart:wfAll', { on: !!on }),

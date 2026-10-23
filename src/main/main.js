@@ -4612,7 +4612,42 @@ exit 1
   /* ----- the picked item: UPC + what its page says ----- */
   // the item's own walmart.com page, read once in a hidden window on the
   // same session as the tab's view (its robot check, once passed, holds)
+  // kept 3 minutes: the product view reads a page, then "List this" on it
+  // reads the same page again
+  const wmPageCache = new Map();
   async function wmReadProductPage(id) {
+    const hit = wmPageCache.get(id);
+    if (hit && Date.now() - hit.at < 3 * 60000) return hit.found;
+    const found = await wmReadProductPageNow(id);
+    if (found.page && !found.blocked) {
+      wmPageCache.set(id, { at: Date.now(), found });
+      if (wmPageCache.size > 20) wmPageCache.delete(wmPageCache.keys().next().value);
+    }
+    return found;
+  }
+  // any other walmart.com page's JSON (the "Compare all sellers" page),
+  // read the same way, out of sight with images off
+  async function wmReadPageJson(url) {
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    try {
+      await w.loadURL(url).catch(() => {});
+      for (let i = 0; i < 8; i++) {
+        const r = await w.webContents.executeJavaScript(`(() => {
+          const body = document.body ? document.body.innerText : '';
+          const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+          const nd = document.getElementById('__NEXT_DATA__');
+          const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => x.textContent).concat(nd ? nd.textContent : '');
+          return { blocked, ready: !!nd, json: json.map(t => t.slice(0, 3000000)) };
+        })()`, true).catch(() => ({ blocked: false, ready: false, json: [] }));
+        if (r.blocked || r.ready) return r;
+        await new Promise(res => setTimeout(res, 750));
+      }
+      return { blocked: false, ready: false, json: [] };
+    } finally {
+      w.destroy();
+    }
+  }
+  async function wmReadProductPageNow(id) {
     // the item's page is already on screen ("List this item" on it): read
     // that one, no second load
     const onScreen = wmSiteView && new RegExp(`/ip/(?:[^/]+/)?${id}(?:[/?#]|$)`).test(wmSiteView.webContents.getURL());
@@ -4648,6 +4683,41 @@ exit 1
     }
     return found;
   }
+  // a clicked search result, plain (owner 2026-10-23: "press into each
+  // individual listing ... see the prices and the other sellers, but
+  // stripped down"): the page's own details plus every seller's offer,
+  // from the "Compare all sellers" page when the product page shows fewer.
+  // `myPrices` (this seller's prices for the item) mark the offers at one
+  // of them: a price match, not proof the offer is theirs
+  ipcMain.handle('walmart:productView', async (_e, { itemId, myPrices = [] } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick a Walmart item first.' };
+    try {
+      const found = await wmReadProductPage(id);
+      if (found.blocked) return { ok: false, blocked: true, error: 'walmart.com asked to check this computer is not a robot.' };
+      if (!found.page) return { ok: false, error: 'walmart.com did not answer. Try again.' };
+      const d = wmT.parseProductPage(found.page);
+      let offers = wmT.parseOffers(found.page.json, id);
+      if (d.sellers && offers.length < d.sellers) {
+        const more = await wmReadPageJson(`${WM_SITE}/product/${id}/sellers`).catch(() => null);
+        if (more && more.json.length) {
+          const all = wmT.parseOffers(found.page.json.concat(more.json), id);
+          if (all.length > offers.length) offers = all;
+        }
+      }
+      const same = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+      for (const o of offers) {
+        o.buyBox = same(o.seller, d.buyBoxSeller);
+        o.atMyPrice = myPrices.some(p => Math.abs(Number(p) - o.price) < 0.005);
+      }
+      const rank = (c) => (/^new$/i.test(c) || !c ? 0 : 1);
+      offers.sort((a, b) => b.buyBox - a.buyBox || rank(a.condition) - rank(b.condition) || a.price - b.price);
+      return { ok: true, ...d, offers, sellers: Math.max(d.sellers || 0, offers.length) || null };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
   ipcMain.handle('walmart:itemDetails', async (_e, { itemId } = {}) => {
     if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const id = String(itemId || '').replace(/\D/g, '');
@@ -4959,6 +5029,24 @@ exit 1
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  });
+  // the slow extras for the Incentives tables, asked after the table shows:
+  // each SKU's own listed price (the price before a Walmart-funded discount,
+  // which Walmart's incentives answer leaves out) and its last-90-day sales
+  // from the Orders API (kept 3 hours: it pages through every order)
+  let wmSalesCache = null;
+  ipcMain.handle('walmart:incentiveExtras', async (_e, { fresh } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const c = wmClient();
+    const out = { ok: true, prices: {}, sales: null, salesErr: '' };
+    try {
+      for (const it of await c.allItems()) if (it.price !== null) out.prices[it.sku.toUpperCase()] = it.price;
+    } catch (e) { out.pricesErr = e.message; }
+    try {
+      if (fresh || !wmSalesCache || Date.now() - wmSalesCache.at > 3 * 3600 * 1000) wmSalesCache = { at: Date.now(), sales: await c.salesBySku(90) };
+      out.sales = wmSalesCache.sales;
+    } catch (e) { out.salesErr = e.message; }
+    return out;
   });
   ipcMain.handle('walmart:incentiveEnroll', async (_e, { items = [], enroll } = {}) => {
     if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };

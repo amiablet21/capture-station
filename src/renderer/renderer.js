@@ -12659,6 +12659,7 @@ function wlRenderSiteBar() {
 /* the results, drawn by the app (owner 2026-10-23: "strip down the look") */
 async function wlLiteSearch(query, page) {
   wl.mode = 'lite';
+  wl.pv = null;
   wl.lite = { q: query, page: page || 1, busy: true, items: (wl.lite && wl.lite.q === query) ? wl.lite.items : [], total: 0, maxPage: 0, err: '', blocked: false };
   wlRenderSiteBar();
   wlRenderLite();
@@ -12682,9 +12683,67 @@ async function wlLoadMine(force) {
   if (wl.tab === 'list') { wlRenderLite(); wlRenderOffer(); }
 }
 
+// a photo walmart.com won't serve: no broken-image box
+$('wlRes').addEventListener('error', (e) => { if (e.target && e.target.tagName === 'IMG') e.target.hidden = true; }, true);
+
+// a clicked result, plain: photo, Buy Box, every seller (owner 2026-10-23,
+// variants/walmart-product-view.html). Back returns to the same scroll spot
+async function wlOpenProduct(it) {
+  wl.pv = { it, busy: true, data: null, err: '', blocked: false, scroll: $('wlRes').scrollTop };
+  wlRenderLite();
+  $('wlRes').scrollTop = 0;
+  const P = wl.pv;
+  const mine = (wl.mine[it.itemId] || []).map(m => m.price).filter(Boolean);
+  const res = await api.walmartProductView(it.itemId, mine).catch(err => ({ ok: false, error: err.message }));
+  if (!wl || wl.pv !== P) return;
+  P.busy = false;
+  if (!res || !res.ok) { P.err = (res && res.error) || 'walmart.com did not answer.'; P.blocked = !!(res && res.blocked); }
+  else P.data = res;
+  wlRenderLite();
+}
+
+function wlRenderPv() {
+  const P = wl.pv;
+  const it = P.it;
+  const d = P.data || {};
+  const title = it.title || d.title;
+  const image = /^https:\/\//.test(d.image || '') ? d.image : it.image;
+  const price = d.price || it.price;
+  const rating = d.rating ?? it.rating;
+  const reviews = d.reviews ?? it.reviews;
+  const holder = d.buyBoxSeller || it.seller;
+  const mine = wl.mine[it.itemId] || null;
+  const sub = [rating !== null && rating !== undefined ? `<span class="wl-stars"><i class="w${Math.round((Number(rating) / 5) * 50) * 2}"></i></span>${Number(rating).toFixed(1)}${reviews !== null && reviews !== undefined ? ` · ${wlN(reviews, 'review')}` : ''}` : '',
+    d.brand ? esc(d.brand) : '', `Item ${esc(it.itemId)}`].filter(Boolean).join('<span class="wl-pv-dot"></span>');
+  let sellers;
+  if (P.busy) sellers = `<div class="wl-pv-wait">${wlSpin}Reading sellers from walmart.com…</div>`;
+  else if (P.err) sellers = `<div class="wl-pv-wait">${P.blocked ? '<b>walmart.com asked to check this computer is not a robot.</b> ' : `${esc(P.err)} `}<a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">Show on walmart.com ↗</a></div>`;
+  else if (!d.offers.length) sellers = `<div class="wl-pv-wait">Walmart's page didn't list the sellers. <a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">Show on walmart.com ↗</a></div>`;
+  else {
+    const low = Math.min(...d.offers.map(o => o.price));
+    sellers = `<div class="wl-pv-sh"><b>${wlN(d.sellers || d.offers.length, 'seller')}</b><span>${d.sellers > d.offers.length ? `showing ${d.offers.length} · ` : ''}from ${wlMoney(low)}</span></div>${d.offers.map(o => {
+      const tags = `${o.buyBox ? '<span class="wl-pv-pill is-bb">Buy Box</span>' : ''}${o.atMyPrice ? '<span class="wl-pv-pill is-you">Your price</span>' : ''}${o.condition && !/^new$/i.test(o.condition) ? `<span class="wl-pv-pill is-used">${esc(o.condition)}</span>` : ''}`;
+      const meta = [/^new$/i.test(o.condition) ? 'New' : '', o.ship === 0 ? 'Free shipping' : o.ship ? `+${wlMoney(o.ship)} shipping` : '', o.arrives ? `arrives ${esc(o.arrives)}` : ''].filter(Boolean).join(' · ');
+      return `<div class="wl-pv-row ${o.atMyPrice ? 'is-you' : ''}"><div><div class="wl-pv-who">${esc(o.seller)}${tags}</div>${meta ? `<div class="wl-pv-meta">${meta}</div>` : ''}</div>
+        <div class="wl-pv-p">${wlMoney(o.price)}</div></div>`;
+    }).join('')}`;
+  }
+  return `<div class="wl-pv"><button type="button" class="wl-pv-back" data-wlpvback>← Back to results</button>
+    <div class="wl-pv-hero"><div class="wl-pv-ph">${/^https:\/\//.test(image || '') ? `<img src="${esc(image)}" alt="" />` : ''}</div>
+      <div><h3 class="wl-pv-t">${esc(title)}</h3><div class="wl-pv-sub">${sub}</div>
+        ${price ? `<div class="wl-pv-price"><b>${wlMoney(price)}</b>${holder ? `<span>Buy Box · ${esc(holder)}</span>` : ''}</div>` : ''}
+        ${mine ? `<div class="wl-pv-mine">✓ You list this: ${mine.slice(0, 3).map(m => {
+          const over = m.price && price && m.price > price ? Math.round((m.price - price) * 100) / 100 : 0;
+          return `${esc(m.sku)}${m.price ? ` · ${wlMoney(m.price)}` : ''}${over ? ` <span class="wl-lose">(${wlMoney(over)} over the Buy Box)</span>` : ''}`;
+        }).join(', ')}</div>` : ''}
+        <button type="button" class="wl-pv-go" data-wllist="${esc(it.itemId)}">${mine ? '+ List another' : '+ List this'}</button></div></div>
+    <div class="wl-pv-sellers">${sellers}</div></div>`;
+}
+
 function wlRenderLite() {
   const L = wl.lite;
   const box = $('wlRes');
+  if (L && wl.pv) { box.innerHTML = wlRenderPv(); return; }
   if (!L) {
     box.innerHTML = '<div class="wl-empty"><b>Search Walmart above.</b> The results show here; hover a product and press <b>+ List this</b>. Products you already sell are marked <b>Listed by you</b>. Pasting an item number or a walmart.com link picks that product straight away.</div>';
     return;
@@ -13388,7 +13447,7 @@ $('wlSecPricing').addEventListener('change', (e) => {
 
 /* ----- Incentives (Seller Center's Incentives page) ----- */
 
-async function wlLoadInc() {
+async function wlLoadInc(fresh) {
   wl.incBusy = true;
   wl.incErr = '';
   wlRenderInc();
@@ -13398,6 +13457,29 @@ async function wlLoadInc() {
   if (!res || !res.ok) wl.incErr = (res && res.error) || 'Could not read incentives from Walmart.';
   else { wl.inc = res; wl.incPicked = new Set(); wl.incSent = new Set(); }
   wlRenderInc();
+  // listed prices + 90-day sales come after: the sales page through every order
+  if (!res || !res.ok) return;
+  wl.incX = { busy: true };
+  const x = await api.walmartIncentiveExtras(!!fresh).catch(err => ({ ok: false, error: err.message }));
+  if (!wl) return;
+  wl.incX = x && x.ok ? x : { prices: null, sales: null, salesErr: (x && x.error) || 'Walmart did not answer.' };
+  if (activePage === 'walmart' && wl.tab === 'incentives') wlRenderInc();
+}
+
+// the price before a discount: the SKU's own listed price (undefined while
+// loading, null when Walmart's catalog doesn't have it)
+function wlIncBefore(r) {
+  const X = wl.incX;
+  if (!X || X.busy) return undefined;
+  const v = X.prices ? X.prices[r.sku.toUpperCase()] : null;
+  return v === undefined ? null : v;
+}
+function wlIncSalesCell(r) {
+  const X = wl.incX;
+  if (!X || X.busy) return `<td class="num wl-muted">${wlSpin}</td>`;
+  if (!X.sales) return `<td class="num wl-muted" title="${esc(X.salesErr || '')}">—</td>`;
+  const s = X.sales[r.sku.toUpperCase()];
+  return s && s.gmv > 0 ? `<td class="num"><b>${wlMoney(s.gmv)}</b><div class="d">${wlN(s.units, 'unit')}</div></td>` : '<td class="num wl-muted">No sales</td>';
 }
 
 // fees arrive as plain numbers: a percentage unless it can't be one
@@ -13448,12 +13530,18 @@ function wlRenderInc() {
   const head = `<th class="wl-ck"><input type="checkbox" data-wlincall ${allOn ? 'checked' : ''} aria-label="Select all"></th><th>Item</th>`;
   const ck = (r) => `<td class="wl-ck"><input type="checkbox" data-wlincpick="${esc(r.sku)}" ${wl.incPicked.has(r.sku) ? 'checked' : ''} ${wl.incSent.has(r.sku) ? 'disabled' : ''} aria-label="Select ${esc(r.sku)}"></td>`;
   $('wlIncBody').innerHTML = wl.incProg === 'rr'
-    ? `<table class="wl-tbl"><thead><tr>${head}<th class="num">Price</th><th class="num">Referral fee</th><th class="num">Inventory</th><th>Expires</th><th></th></tr></thead><tbody>${rows.map(r => `<tr class="${wl.incPicked.has(r.sku) ? 'is-sel' : ''}">${ck(r)}<td>${item(r)}</td>
+    ? `<table class="wl-tbl"><thead><tr>${head}<th class="num">Price</th><th class="num">Referral fee</th><th class="num" title="Item sales from your Walmart orders">Last 90 days sales</th><th class="num">Inventory</th><th>Expires</th><th></th></tr></thead><tbody>${rows.map(r => `<tr class="${wl.incPicked.has(r.sku) ? 'is-sel' : ''}">${ck(r)}<td>${item(r)}</td>
         <td class="num">${r.target !== null && r.price !== null && r.target < r.price && wl.incView.rr === 'ready' ? `<s class="wl-was">${wlMoney(r.price)}</s> <b>${wlMoney(r.target)}</b>` : `<b>${wlMoney(r.price)}</b>`}</td>
         <td class="num"><s class="wl-was">${wlFee(r.baseFee)}</s> <b class="wl-win">${wlFee(r.reducedFee)}</b></td>
-        <td class="num">${r.stock ?? '—'}</td><td class="${wlSoon(r.expires) ? 'wl-lose' : ''}">${wlDay(r.expires)}</td><td class="num">${btn(r)}</td></tr>`).join('')}</tbody></table>`
-    : `<table class="wl-tbl"><thead><tr>${head}<th class="num">Your price</th><th class="num">Inventory</th><th></th></tr></thead><tbody>${rows.map(r => `<tr class="${wl.incPicked.has(r.sku) ? 'is-sel' : ''}">${ck(r)}<td>${item(r)}</td>
-        <td class="num"><b>${wlMoney(r.price)}</b></td><td class="num">${r.stock ?? '—'}</td><td class="num">${btn(r)}</td></tr>`).join('')}</tbody></table>`;
+        ${wlIncSalesCell(r)}<td class="num">${r.stock ?? '—'}</td><td class="${wlSoon(r.expires) ? 'wl-lose' : ''}">${wlDay(r.expires)}</td><td class="num">${btn(r)}</td></tr>`).join('')}</tbody></table>`
+    : `<table class="wl-tbl"><thead><tr>${head}<th class="num" title="Your own listed price">Price before</th><th class="num" title="What shoppers pay with Walmart's discount">Price after</th><th class="num" title="Item sales from your Walmart orders">Last 90 days sales</th><th class="num">Inventory</th><th></th></tr></thead><tbody>${rows.map(r => {
+        const before = wlIncBefore(r);
+        const off = before && r.price !== null && before > r.price ? Math.round((before - r.price) * 100) / 100 : 0;
+        return `<tr class="${wl.incPicked.has(r.sku) ? 'is-sel' : ''}">${ck(r)}<td>${item(r)}</td>
+        <td class="num">${before === undefined ? `<span class="wl-muted">${wlSpin}</span>` : before === null ? '<span class="wl-muted">—</span>' : wlMoney(before)}</td>
+        <td class="num"><b>${wlMoney(r.price)}</b>${off ? `<div class="d wl-win">${wlMoney(off)} off</div>` : ''}${r.ship ? `<div class="d">+ ${wlMoney(r.ship)} shipping</div>` : ''}</td>
+        ${wlIncSalesCell(r)}<td class="num">${r.stock ?? '—'}</td><td class="num">${btn(r)}</td></tr>`;
+      }).join('')}</tbody></table>`;
 }
 
 async function wlIncAct(skus) {
@@ -13505,6 +13593,13 @@ $('walmartPage').addEventListener('click', async (e) => {
     const it = ((wl.lite && wl.lite.items) || []).find(x => x.itemId === el.dataset.wllist);
     if (it) wlPickItem({ itemId: it.itemId, title: it.title, price: it.price, image: it.image });
     wlRenderLite();
+    return;
+  }
+  if (hit('[data-wlpvback]')) { const y = wl.pv ? wl.pv.scroll : 0; wl.pv = null; wlRenderLite(); $('wlRes').scrollTop = y; return; }
+  if ((el = hit('#wlRes .wl-lc')) && !wl.pv) {
+    const i = [...$('wlRes').querySelectorAll('.wl-lc')].indexOf(el);
+    const it = wl.lite && wl.lite.items[i];
+    if (it) wlOpenProduct(it);
     return;
   }
   if ((el = hit('[data-wlpg]'))) { if (wl.lite) wlLiteSearch(wl.lite.q, Math.max(1, wl.lite.page + Number(el.dataset.wlpg))); return; }
@@ -13572,7 +13667,7 @@ $('walmartPage').addEventListener('click', async (e) => {
   // Incentives
   if ((el = hit('[data-wlincprog]'))) { wl.incProg = el.dataset.wlincprog; wl.incPicked = new Set(); wlRenderInc(); return; }
   if ((el = hit('[data-wlincview]'))) { wl.incView[wl.incProg] = el.dataset.wlincview; wl.incPicked = new Set(); wlRenderInc(); return; }
-  if (hit('[data-wlincrefresh]')) { wlLoadInc(); return; }
+  if (hit('[data-wlincrefresh]')) { wlLoadInc(true); return; }
   if ((el = hit('[data-wlincpick]'))) { const s = el.dataset.wlincpick; if (wl.incPicked.has(s)) wl.incPicked.delete(s); else wl.incPicked.add(s); wlRenderInc(); return; }
   if (hit('[data-wlincall]')) {
     const rows = wlIncRows().filter(r => !wl.incSent.has(r.sku));

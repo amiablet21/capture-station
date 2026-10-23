@@ -5995,7 +5995,40 @@ tr.os-open > td { background: var(--accent-soft); }
 .wl-lr-head b { color: var(--text); font-size: 13px; }
 .wl-lr-open { margin-left: auto; }
 .wl-lr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; padding: 4px 18px 14px; }
-.wl-lc { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wl-lc { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; cursor: pointer; }
+.wl-lc:hover { border-color: var(--accent); }
+/* a clicked result, plain (variants/walmart-product-view.html) */
+.wl-pv { padding: 16px 28px 28px; max-width: 900px; }
+.wl-pv-back { font: 500 12.5px var(--font); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; }
+.wl-pv-back:hover { color: var(--text); }
+.wl-pv-hero { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: center; margin: 20px 0 26px; }
+.wl-pv-ph { aspect-ratio: 1; border-radius: 16px; background: #fff; border: 1px solid var(--border); display: grid; place-items: center; overflow: hidden; }
+.wl-pv-ph img { width: 82%; height: 82%; object-fit: contain; }
+.wl-pv-t { font-size: 19px; line-height: 1.35; font-weight: 600; margin: 0; }
+.wl-pv-sub { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wl-pv-dot { width: 3px; height: 3px; border-radius: 9px; background: var(--faint); }
+.wl-pv-price { margin-top: 18px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wl-pv-price b { font-size: 28px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.wl-pv-price span { font-size: 13px; color: var(--muted); }
+.wl-pv-mine { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--pos-text); }
+.wl-pv-go { margin-top: 16px; font: 600 14px var(--font); color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 10px 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(30, 58, 102, .22); }
+.wl-pv-sellers { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.wl-pv-sh { display: flex; align-items: baseline; justify-content: space-between; padding: 13px 20px; border-bottom: 1px solid var(--border); }
+.wl-pv-sh b { font-size: 13.5px; }
+.wl-pv-sh span { font-size: 12px; color: var(--muted); }
+.wl-pv-wait { padding: 18px 20px; font-size: 12.5px; color: var(--muted); }
+.wl-pv-wait b { color: var(--text); }
+.wl-pv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.wl-pv-row:last-child { border-bottom: none; }
+.wl-pv-row.is-you { background: #F4F7FC; box-shadow: inset 3px 0 0 var(--accent); }
+.wl-pv-who { font-size: 13.5px; font-weight: 500; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wl-pv-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.wl-pv-p { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.wl-pv-p small { display: block; font-size: 11px; font-weight: 500; color: var(--neg-text); }
+.wl-pv-pill { font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+.wl-pv-pill.is-bb { background: var(--pos-bg); color: var(--pos-text); }
+.wl-pv-pill.is-you { background: var(--accent); color: #fff; }
+.wl-pv-pill.is-used { background: #F3EFE6; color: #7A5B1E; }
 .wl-lc:hover { border-color: var(--accent); }
 .wl-lc.is-on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .wl-lc-ph { height: 130px; border-radius: 6px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }

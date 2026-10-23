@@ -420,6 +420,26 @@ class WalmartClient {
     return rows;
   }
 
+  // what each SKU sold for over the last `days` days, from the Orders API
+  // (seller-fulfilled and WFS): { SKU: { gmv, units } }. Walmart's
+  // incentives answer has no GMV (owner 2026-10-23: "include the GMV")
+  async salesBySku(days = 90) {
+    const out = {};
+    const since = new Date(Date.now() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    for (const node of ['SellerFulfilled', 'WFSFulfilled']) {
+      let next = `?limit=200&createdStartDate=${encodeURIComponent(since)}&shipNodeType=${node}`;
+      for (let i = 0; i < 500 && next; i++) {
+        let j;
+        try { j = await this.call('GET', `/v3/orders${next}`); } catch (e) { if (i === 0 && node !== 'SellerFulfilled') break; throw e; }
+        const list = (j && j.list) || {};
+        addOrderSales(out, arr(list.elements && list.elements.order));
+        const cur = list.meta && list.meta.nextCursor;
+        next = cur && String(cur).startsWith('?') && cur !== next ? String(cur) : '';
+      }
+    }
+    return out;
+  }
+
   // reduced referral fee: [{ sku, incentiveId }] enroll (true) or leave
   async incentiveEnroll(items, enroll) {
     const j = await this.call('POST', '/v3/feeds?feedType=INCENTIVE_ENROLLMENT', buildIncentiveFeed(items, enroll));
@@ -671,6 +691,27 @@ function buildRepricerFeed(items) {
   };
 }
 
+// orders -> per-SKU item sales (the PRODUCT charge of each line that was
+// not cancelled), added into `out` as { SKU: { gmv, units } }
+function addOrderSales(out, orders) {
+  for (const o of arr(orders)) {
+    for (const l of arr(o && o.orderLines && o.orderLines.orderLine)) {
+      const sku = String((l.item && l.item.sku) || '').toUpperCase();
+      if (!sku) continue;
+      const sts = arr(l.orderLineStatuses && l.orderLineStatuses.orderLineStatus);
+      if (sts.length && sts.every(x => /cancel/i.test(String(x.status || '')))) continue;
+      let amt = 0;
+      for (const ch of arr(l.charges && l.charges.charge)) {
+        if (/^product$/i.test(String(ch.chargeType || ''))) amt += Number(ch.chargeAmount && ch.chargeAmount.amount) || 0;
+      }
+      const row = out[sku] || (out[sku] = { gmv: 0, units: 0 });
+      row.gmv = Math.round((row.gmv + amt) * 100) / 100;
+      row.units += Number(l.orderLineQuantity && l.orderLineQuantity.amount) || 1;
+    }
+  }
+  return out;
+}
+
 // epoch-ms strings -> YYYY-MM-DD ('' when unset)
 function parseIncentive(r) {
   if (!r || !(r.skuId || r.sku)) return null;
@@ -757,10 +798,80 @@ function parseProductPage({ json = [], body = '', title = '', image = '' } = {})
   };
 }
 
+// every seller's offer a walmart.com product page (or its "Compare all
+// sellers" page) carries: [{ seller, price, condition, ship, arrives }].
+// Offers are found by shape (a seller name beside a price) and anything
+// about another item number (carousels, accessories) is skipped
+function parseOffers(json = [], itemId = '') {
+  const out = [];
+  const seen = new Set();
+  const money = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; };
+  const priceOf = (o) => {
+    const pi = o.priceInfo || {};
+    for (const v of [pi.currentPrice && pi.currentPrice.price, pi.currentPrice && pi.currentPrice.priceString, o.price && typeof o.price === 'object' ? o.price.price : o.price, o.offerPrice]) {
+      const n = money(v);
+      if (n) return n;
+    }
+    return null;
+  };
+  // a value somewhere inside an offer, by key name, a few levels down
+  const find = (o, keyRe, ok, depth = 0) => {
+    if (!o || typeof o !== 'object' || depth > 4) return undefined;
+    for (const [k, v] of Object.entries(o)) {
+      if (keyRe.test(k) && ok(v)) return v;
+    }
+    for (const v of Object.values(o)) {
+      if (Array.isArray(v) && v.some(x => x && typeof x === 'object' && (x.sellerName || x.sellerDisplayName || x.seller))) continue; // other sellers' offers
+      const r = find(v, keyRe, ok, depth + 1);
+      if (r !== undefined) return r;
+    }
+    return undefined;
+  };
+  const conditionOf = (o) => {
+    const c = (o.conditionV2 && (o.conditionV2.name || o.conditionV2.code)) || (o.condition && typeof o.condition === 'object' ? o.condition.name : o.condition) || o.offerCondition || o.itemCondition || '';
+    const m = /schema\.org\/(\w+?)Condition/i.exec(String(c));
+    const t = m ? m[1] : String(c);
+    return clip(/^new$/i.test(t) ? 'New' : /^used$/i.test(t) ? 'Pre-Owned' : /^refurbished$/i.test(t) ? 'Restored' : t.replace(/_/g, ' '), 40);
+  };
+  const shipOf = (o) => {
+    const v = find(o, /^(ship|shipping)(Price|Fee|Charge|Cost|Amount)$/i, x => x !== null && x !== undefined);
+    if (v === undefined) return null;
+    const n = Number(String(v && typeof v === 'object' ? (v.price ?? v.amount ?? '') : v).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+  };
+  const arrivesOf = (o) => {
+    const v = find(o, /^(deliveryDate|arrivalDate|deliveryText|fulfillmentText|displayArrivalDate|arrivalText)$/i, x => typeof x === 'string' && x.trim());
+    return v ? clip(v.replace(/^arrives\s*/i, ''), 40) : '';
+  };
+  const walk = (o, depth) => {
+    if (!o || typeof o !== 'object' || depth > 16) return;
+    if (Array.isArray(o)) { for (const v of o) walk(v, depth + 1); return; }
+    const other = o.usItemId && itemId && String(o.usItemId) !== String(itemId);
+    if (other) return;
+    const sellerObj = o.seller && typeof o.seller === 'object' ? o.seller : null;
+    const seller = o.sellerDisplayName || o.sellerName || (sellerObj && (sellerObj.name || sellerObj.displayName)) || '';
+    const price = typeof seller === 'string' && seller.trim() ? priceOf(o) : null;
+    if (price) {
+      const row = { seller: clip(seller, 80), price, condition: conditionOf(o), ship: shipOf(o), arrives: arrivesOf(o) };
+      const key = `${row.seller.toLowerCase()}|${row.price}|${row.condition.toLowerCase()}`;
+      if (!seen.has(key)) { seen.add(key); out.push(row); }
+    }
+    for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v, depth + 1);
+  };
+  for (const t of arr(json)) {
+    let data = null;
+    try { data = JSON.parse(t); } catch { continue; }
+    walk(data, 0);
+  }
+  // one row per seller and condition: the ld+json copy of the Buy Box
+  // offer has no condition, so it folds into the full one
+  return out.filter(r => r.condition || !out.some(x => x !== r && x.condition && x.seller.toLowerCase() === r.seller.toLowerCase() && x.price === r.price));
+}
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
-  parseItemStatus, parseProductPage,
-  parseInsight, insightRows, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY,
+  parseItemStatus, parseProductPage, parseOffers,
+  parseInsight, insightRows, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY, addOrderSales,
 };

@@ -1383,7 +1383,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     for (const [label, call] of [['wmsite:go', `api.wmsiteGo('galaxy tab a9')`], ['walmart:siteSearch', `api.walmartSiteSearch('galaxy tab a9', 1)`], ['walmart:mine', 'api.walmartMine()'], ['walmart:itemDetails', `api.walmartItemDetails('1735902284')`],
       ['walmart:mapState', `api.walmartMapState(['X'])`], ['walmart:pricing', 'api.walmartPricing()'],
       ['walmart:pricingSave', `api.walmartPricingSave([{ sku: 'X', strategy: 'S', min: 1, max: 2 }], [])`],
-      ['walmart:saveStrategy', `api.walmartSaveStrategy({ name: 'S' })`], ['walmart:incentives', 'api.walmartIncentives()'],
+      ['walmart:saveStrategy', `api.walmartSaveStrategy({ name: 'S' })`], ['walmart:incentives', 'api.walmartIncentives()'], ['walmart:incentiveExtras', 'api.walmartIncentiveExtras()'], ['walmart:productView', `api.walmartProductView('1735902284')`],
       ['walmart:incentiveEnroll', `api.walmartIncentiveEnroll([{ sku: 'X' }], true)`], ['walmart:wfOpt', `api.walmartWfOpt(['X'], false)`],
       ['walmart:wfAll', 'api.walmartWfAll(false)']]) {
       res = await exec(call);
@@ -1443,6 +1443,24 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && rf.Item[0].Strategy.minimumSellerAllowedPrice === 100 && rf.Item[0].Strategy.maximumSellerAllowedPrice === 150
           && rf.Item[1].Strategy.repricerStrategy === w.NO_STRATEGY && !('minimumSellerAllowedPrice' in rf.Item[1].Strategy), rf);
       const inc = w.parseIncentive({ skuId: 'S1', itemId: 649861121, productName: 'P', currentPrice: 20.5, targetPrice: 20, baseReferralFee: 8, reducedReferralFee: 7, incentiveType: 'REDUCED_REFERRAL', incentiveStatus: 'NEW', inventoryCount: '200', expirationDate: '1660805999000', incentiveId: 'i1', productUrl: 'https://www.walmart.com/ip/649861121' });
+      const offers = w.parseOffers([
+        JSON.stringify({ '@type': 'Product', offers: { price: 119, seller: { name: 'Walmart.com' } } }),
+        JSON.stringify({ props: { pageProps: { initialData: { data: { product: { usItemId: '1735902284', priceInfo: { currentPrice: { price: 119 } }, sellerDisplayName: 'Walmart.com', conditionV2: { name: 'New' }, shippingOption: { shipPrice: { price: 0 } }, deliveryDate: 'Tue, Oct 28',
+          allOffers: [{ sellerDisplayName: 'Gadget Outlet', priceInfo: { currentPrice: { priceString: '$89.00' } }, conditionV2: { name: 'Pre-Owned: Good' }, shippingOption: { shipPrice: { price: 5.99 } } }] },
+          similarItems: [{ usItemId: '9999999999', priceInfo: { currentPrice: { price: 12.99 } }, sellerName: 'CaseCo' }] } } } } }),
+      ], '1735902284');
+      check('walmart product view: every seller offer read by shape, ld+json copy folded in, other items skipped',
+        offers.length === 2 && offers[0].seller === 'Walmart.com' && offers[0].condition === 'New' && offers[0].ship === 0 && offers[0].arrives === 'Tue, Oct 28'
+          && offers[1].price === 89 && offers[1].condition === 'Pre-Owned: Good' && offers[1].ship === 5.99, offers);
+      const sales = w.addOrderSales({}, [
+        { orderLines: { orderLine: [
+          { item: { sku: 'x230-a' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 224.8 } }, { chargeType: 'SHIPPING', chargeAmount: { amount: 5 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Shipped' }] } },
+          { item: { sku: 'X230-A' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 259 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Cancelled' }] } },
+        ] } },
+        { orderLines: { orderLine: { item: { sku: 'X230-A' }, orderLineQuantity: { amount: '2' }, charges: { charge: { chargeType: 'PRODUCT', chargeAmount: { amount: 449.6 } } } } } },
+      ]);
+      check('walmart incentives: 90-day sales add PRODUCT charges per SKU, skip cancelled lines and shipping',
+        JSON.stringify(sales) === JSON.stringify({ 'X230-A': { gmv: 674.4, units: 3 } }), sales);
       const ef = w.buildIncentiveFeed([{ sku: 'S1', incentiveId: 'i1' }], true);
       const wf = w.buildWalmartFundedFeed(['S1'], false);
       check('walmart incentives: skuId read, epoch-ms dates as days, enroll Y with the incentive id, Walmart-funded Opt-out',
