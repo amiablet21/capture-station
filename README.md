@@ -2,6 +2,11 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.102 highlights
+
+- **Pick the size when saving a PDF.** **PDF** (Ship › Labels) and **Save PDF** (after Create label) open the print popup. Choose **Label 4×6 · Letter · A4**, see the preview, and press **Save PDF**. Letter and A4 put the label across the top half of the page, like paper prints. File names end in `-letter` or `-A4`.
+- The browser Download PDF takes `&paper=letter` or `&paper=a4` too, and stays 4×6 without it.
+
 ## v1.32.101 highlights
 
 - **One row per UPS service.** UPS sometimes sends a service twice (e.g. Ground plus a dearer Saturday-delivery Ground). Both rows used to get picked together. Each service now shows once, at the standard price that is actually bought, and the "less than the other account" amounts are right again.
