@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Ship drawer — three redesigns</title>
+<!--
+  Owner 2026-10-23: "make 3 unique redesigns of this sliding thing".
+  ?d=1 Checkout — one narrow column, top to bottom, a recommended rate first
+  ?d=2 Ticket  — a dark order ticket on the left, package and rates on the right
+  ?d=3 Compare — rates as a grid: one row per service, one column per account
+  Sample data: the owner's order 129129720682217. Static, nothing is bought.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: hidden; display: block; background: #C9C9C5; }
+  .scrim { position: fixed; inset: 0; background: rgba(47,52,55,.22); }
+  .dw { position: fixed; top: 0; right: 0; bottom: 0; background: var(--canvas); box-shadow: -24px 0 60px rgba(47,52,55,.18); display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
+  .mono { font-family: var(--mono); }
+  .mk { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .due { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 9px; border-radius: 999px; background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+  .x { margin-left: auto; color: var(--muted); font-size: 18px; }
+  .input { width: 100%; }
+  .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .f > span { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .lock { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 7px 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .star { color: #E3A008; }
+  .late { color: var(--neg-text); }
+  .foot { display: flex; align-items: center; gap: 14px; padding: 14px 20px; background: var(--surface); border-top: 1px solid var(--border); }
+  .foot .sum { font-size: 13px; color: var(--muted); }
+  .foot .sum b { color: var(--text); }
+  .foot .btn { margin-left: auto; padding: 11px 26px; font-size: 14px; font-weight: 600; }
+  .t { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+  .via { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-left: 6px; background: var(--accent-soft); color: var(--accent-soft-text); }
+  .via.wm { background: var(--badge-blue-bg); color: var(--badge-blue-text); }
+  .via.vb { background: var(--badge-purple-bg); color: var(--badge-purple-text); }
+  .via { white-space: nowrap; flex: none; }
+  .c1 .more .r .eta.late, .c2 .rc .eta.late, .c1 .rec .eta.late { color: var(--neg-text); font-weight: 600; }
+  section[data-d] { display: none; }
+  body.d1 [data-d="1"], body.d2 [data-d="2"], body.d3 [data-d="3"] { display: grid; }
+
+  /* ---------- 1 · Checkout ---------- */
+  .c1 { width: 560px; }
+  .c1 .h { display: flex; align-items: center; gap: 10px; padding: 16px 22px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .c1 .h .po { font-family: var(--mono); font-size: 17px; font-weight: 700; }
+  .c1 .b { overflow: auto; padding: 0 22px 18px; }
+  .c1 .who { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .c1 .who .n { font-size: 15px; font-weight: 600; }
+  .c1 .who .a { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .c1 .who .d { margin-left: auto; text-align: right; }
+  .c1 .who .d span { display: block; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+  .c1 .who .d b { font-family: var(--mono); font-size: 15px; color: var(--accent-soft-text); }
+  .c1 .it { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .c1 .it .sku { font-family: var(--mono); font-weight: 600; }
+  .c1 .it .q { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--muted); }
+  .c1 .it .p { margin-left: auto; font-family: var(--mono); font-weight: 700; }
+  .c1 .step { padding: 16px 0 4px; }
+  .c1 .step .t { margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .c1 .step .t .ok { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 11.5px; color: var(--pos-text); }
+  .c1 .pk { display: grid; grid-template-columns: 1.3fr .7fr 1.6fr; gap: 8px; }
+  .c1 .dims { display: flex; gap: 4px; align-items: center; } .c1 .dims .input { text-align: center; }
+  .c1 .refs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .c1 .rec { border: 2px solid var(--accent); background: var(--accent-soft); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .c1 .rec .lbl { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent-soft-text); }
+  .c1 .rec .sv { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .c1 .rec .eta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .c1 .rec .pr { margin-left: auto; font-family: var(--mono); font-size: 20px; font-weight: 800; }
+  .c1 .more { margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+  .c1 .more .r { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--border-soft); font-size: 13px; }
+  .c1 .more .r:first-child { border-top: none; }
+  .c1 .more .r .eta { font-size: 11.5px; color: var(--muted); margin-left: 8px; }
+  .c1 .more .r .pr { margin-left: auto; font-family: var(--mono); font-weight: 700; }
+
+  /* ---------- 2 · Ticket ---------- */
+  .c2 { width: 900px; grid-template-rows: minmax(0,1fr) auto; }
+  .c2 .split { display: grid; grid-template-columns: 300px minmax(0,1fr); min-height: 0; }
+  .c2 .tk { background: #1F2A3D; color: #E8ECF3; padding: 20px 22px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
+  .c2 .tk .mk { background: rgba(255,255,255,.12); color: #CFE4FF; }
+  .c2 .tk .po { font-family: var(--mono); font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin-top: 8px; }
+  .c2 .tk .sub { font-size: 11.5px; color: #9AA6BA; margin-top: 4px; }
+  .c2 .tk .t { color: #8391A8; margin-bottom: 8px; }
+  .c2 .tk .n { font-size: 15px; font-weight: 600; }
+  .c2 .tk .a { font-size: 12.5px; color: #C4CCD9; line-height: 1.55; margin-top: 4px; }
+  .c2 .tk .dates { display: flex; flex-direction: column; gap: 0; border-top: 1px dashed rgba(255,255,255,.18); border-bottom: 1px dashed rgba(255,255,255,.18); padding: 10px 0; }
+  .c2 .tk .dt { display: flex; justify-content: space-between; font-size: 12.5px; padding: 4px 0; color: #C4CCD9; }
+  .c2 .tk .dt b { font-family: var(--mono); color: #fff; font-weight: 600; }
+  .c2 .tk .dt.key { color: #FFD48A; } .c2 .tk .dt.key b { color: #FFD48A; }
+  .c2 .tk .item { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+  .c2 .tk .item .sku { font-family: var(--mono); font-weight: 600; color: #fff; overflow-wrap: anywhere; }
+  .c2 .tk .item .p { font-family: var(--mono); font-weight: 700; color: #fff; white-space: nowrap; }
+  .c2 .tk .refs { font-size: 11.5px; color: #9AA6BA; line-height: 1.7; margin-top: auto; }
+  .c2 .tk .refs b { font-family: var(--mono); color: #E8ECF3; font-weight: 500; }
+  .c2 .rt { overflow: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .c2 .top { display: flex; align-items: center; } .c2 .top .x { font-size: 18px; }
+  .c2 .pk { display: grid; grid-template-columns: 1.4fr .7fr .9fr 1.6fr; gap: 8px; }
+  .c2 .dims { display: flex; gap: 4px; } .c2 .dims .input { text-align: center; padding-left: 2px; padding-right: 2px; }
+  .c2 .ref2 { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .c2 .chips { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 3px; margin-left: auto; }
+  .c2 .chips span { font-size: 11.5px; padding: 3px 11px; border-radius: 999px; color: var(--muted); }
+  .c2 .chips span.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(47,52,55,.1); }
+  .c2 .rates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .c2 .rc { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 11px 13px; }
+  .c2 .rc.on { border: 2px solid var(--accent); padding: 10px 12px; background: var(--accent-soft); }
+  .c2 .rc .sv { font-size: 13px; font-weight: 600; display: flex; align-items: center; }
+  .c2 .rc .row2 { display: flex; align-items: baseline; margin-top: 6px; }
+  .c2 .rc .eta { font-size: 11.5px; color: var(--muted); }
+  .c2 .rc .pr { margin-left: auto; font-family: var(--mono); font-weight: 800; font-size: 16px; }
+
+  /* ---------- 3 · Compare ---------- */
+  .c3 { width: 940px; }
+  .c3 .h { display: flex; align-items: center; gap: 12px; padding: 14px 22px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .c3 .h .po { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+  .c3 .info { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap: 10px; padding: 14px 22px 0; }
+  .c3 .ib { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; }
+  .c3 .ib .t { margin-bottom: 4px; }
+  .c3 .ib b { font-size: 13.5px; }
+  .c3 .ib .m { color: var(--muted); }
+  .c3 .ib .dl { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent-soft-text); }
+  .c3 .b { overflow: auto; padding: 12px 22px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .c3 .pkbar { display: grid; grid-template-columns: 1.3fr .6fr 1.5fr .8fr 1.3fr 1.6fr; gap: 8px; align-items: end; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+  .c3 .dims { display: flex; gap: 3px; } .c3 .dims .input { text-align: center; padding-left: 2px; padding-right: 2px; }
+  .c3 table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .c3 th { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .c3 th.ac { text-align: center; }
+  .c3 td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+  .c3 tr:last-child td { border-bottom: none; }
+  .c3 td.sv { padding-left: 14px; font-weight: 600; }
+  .c3 td.sv small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); }
+  .c3 .cell { display: block; text-align: center; font-family: var(--mono); font-weight: 700; border-radius: 9px; padding: 8px 6px; border: 1px solid transparent; }
+  .c3 .cell:hover { border-color: var(--border); }
+  .c3 .cell.best { background: #EAF6EE; color: var(--pos-text); }
+  .c3 .cell.on { background: var(--accent-soft); border: 2px solid var(--accent); color: var(--accent-soft-text); }
+  .c3 .cell.late small { color: var(--neg-text); font-weight: 600; }
+  .c3 .cell small { display: block; font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+  .c3 .cell.na { color: var(--faint); font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="scrim"></div>
+
+<!-- 1 · Checkout -->
+<section class="dw c1" data-d="1">
+  <div class="h"><span class="mk">Walmart</span><span class="po">129129720682217</span><span class="due">Due today</span><span class="x">✕</span></div>
+  <div class="b">
+    <div class="who">
+      <div><div class="n">Emkoy Thomas</div><div class="a">7397 Cranleigh St, Covington, GA 30014<br><span class="mono">912-582-9128</span></div></div>
+      <div class="d"><span>Deliver by</span><b>Mon 10/26</b><span style="margin-top:2px">ordered 10/23 · ship by 10/23</span></div>
+    </div>
+    <div class="it"><span class="sku">S26-ULTRA-512GB-BLACK</span><span class="q">×1</span><span class="p">$1,177.00</span></div>
+    <div class="step"><div class="t">Package <span class="ok">✓ Saved for this item</span></div>
+      <div class="pk">
+        <label class="f"><span>Box</span><select class="input"><option>Custom size</option></select></label>
+        <label class="f"><span>Weight (lb)</span><input class="input mono" value="1" /></label>
+        <div class="f"><span>Dimensions (in)</span><div class="dims"><input class="input mono" value="8" />×<input class="input mono" value="6" />×<input class="input mono" value="3" /></div></div>
+      </div>
+      <div class="refs">
+        <div class="f"><span>Reference #1</span><div class="lock">129129720682217</div></div>
+        <label class="f"><span>Reference #2</span><input class="input mono" value="S26-ULTRA-512GB-BLACK | 1 unit sold" /></label>
+      </div>
+    </div>
+    <div class="step"><div class="t">Rate</div>
+      <div class="rec"><div><div class="lbl">★ Best on time</div><div class="sv">FedEx Home Delivery <span class="via wm">Walmart</span></div><div class="eta">Mon, Oct 26 · on time</div></div><span class="pr">$27.27</span></div>
+      <div class="more">
+        <div class="r">UPS 2nd Day Air <span class="via vb">3V85X3</span><span class="eta late">Tue, Oct 27 · late</span><span class="pr">$11.75</span></div>
+        <div class="r">UPS Ground <span class="via">432419</span><span class="eta late">Tue, Oct 27 · late</span><span class="pr">$13.46</span></div>
+        <div class="r">UPS Next Day Air Saver <span class="via">432419</span><span class="eta">Mon, Oct 26</span><span class="pr">$31.08</span></div>
+        <div class="r">UPS Next Day Air <span class="via">432419</span><span class="eta">Mon, Oct 26</span><span class="pr">$32.42</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="sum"><b>FedEx Home Delivery</b> · Walmart <b class="mono">$27.27</b></span><button class="btn btn-primary">Create label</button></div>
+</section>
+
+<!-- 2 · Ticket -->
+<section class="dw c2" data-d="2">
+  <div class="split">
+    <aside class="tk">
+      <div><span class="mk">Walmart</span> <span class="due" style="margin-left:6px">Due today</span><div class="po">129129720682217</div><div class="sub">Captured 14:48</div></div>
+      <div><div class="t">Ship to</div><div class="n">Emkoy Thomas</div><div class="a">7397 Cranleigh St<br>Covington, GA 30014<br><span class="mono">912-582-9128</span></div></div>
+      <div class="dates">
+        <div class="dt"><span>Ordered</span><b>10/23</b></div>
+        <div class="dt"><span>Ship by</span><b>10/23</b></div>
+        <div class="dt key"><span>Deliver by</span><b>Mon 10/26</b></div>
+      </div>
+      <div><div class="t">Item</div><div class="item"><span class="sku">S26-ULTRA-512GB-BLACK ×1</span><span class="p">$1,177.00</span></div></div>
+      <div class="refs">Ref 1 <b>129129720682217</b><br>Ref 2 <b>S26-ULTRA-512GB-BLACK | 1 unit sold</b></div>
+    </aside>
+    <div class="rt">
+      <div class="top"><div class="t">Package</div><span style="margin-left:10px;font-size:11.5px;color:var(--pos-text)">✓ Saved for this item</span><span class="x">✕</span></div>
+      <div class="pk">
+        <label class="f"><span>Box</span><select class="input"><option>Custom size</option></select></label>
+        <label class="f"><span>Weight</span><input class="input mono" value="1" /></label>
+        <label class="f"><span>Declared</span><input class="input mono" placeholder="0.00" /></label>
+        <div class="f"><span>Dimensions (in)</span><div class="dims"><input class="input mono" value="8" /><input class="input mono" value="6" /><input class="input mono" value="3" /></div></div>
+      </div>
+      <div class="top"><div class="t">Rates</div><div class="chips"><span class="on">All</span><span>Walmart</span><span>432419</span><span>3V85X3</span></div></div>
+      <div class="rates">
+        <div class="rc on"><div class="sv"><span class="star">★</span>&nbsp;FedEx Home Delivery <span class="via wm">Walmart</span></div><div class="row2"><span class="eta">Mon, Oct 26</span><span class="pr">$27.27</span></div></div>
+        <div class="rc"><div class="sv">UPS 2nd Day Air <span class="via vb">3V85X3</span></div><div class="row2"><span class="eta late">Tue, Oct 27</span><span class="pr">$11.75</span></div></div>
+        <div class="rc"><div class="sv">UPS Ground <span class="via">432419</span></div><div class="row2"><span class="eta late">Tue, Oct 27</span><span class="pr">$13.46</span></div></div>
+        <div class="rc"><div class="sv">UPS 3 Day Select <span class="via">432419</span></div><div class="row2"><span class="eta late">Wed, Oct 28</span><span class="pr">$18.93</span></div></div>
+        <div class="rc"><div class="sv">UPS 2nd Day Air <span class="via">432419</span></div><div class="row2"><span class="eta late">Tue, Oct 27</span><span class="pr">$19.69</span></div></div>
+        <div class="rc"><div class="sv">UPS Next Day Air Saver <span class="via">432419</span></div><div class="row2"><span class="eta">Mon, Oct 26</span><span class="pr">$31.08</span></div></div>
+        <div class="rc"><div class="sv">UPS Next Day Air <span class="via">432419</span></div><div class="row2"><span class="eta">Mon, Oct 26</span><span class="pr">$32.42</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="sum"><b>FedEx Home Delivery</b> · Walmart <b class="mono">$27.27</b></span><button class="btn btn-primary">Create label</button></div>
+</section>
+
+<!-- 3 · Compare -->
+<section class="dw c3" data-d="3">
+  <div class="h"><span class="mk">Walmart</span><span class="po">129129720682217</span><span class="due">Due today</span><span style="font-size:12px;color:var(--faint)">Captured 14:48</span><span class="x">✕</span></div>
+  <div class="info">
+    <div class="ib"><div class="t">Ship to</div><b>Emkoy Thomas</b><div class="m">7397 Cranleigh St, Covington, GA 30014 · <span class="mono">912-582-9128</span></div></div>
+    <div class="ib"><div class="t">Item</div><b class="mono" style="font-size:12.5px">S26-ULTRA-512GB-BLACK ×1</b><div class="m">$1,177.00</div></div>
+    <div class="ib"><div class="t">Deliver by</div><div class="dl">Mon 10/26</div><div class="m">ordered 10/23 · ship by 10/23</div></div>
+  </div>
+  <div class="b">
+    <div class="pkbar">
+      <label class="f"><span>Box</span><select class="input"><option>Custom size</option></select></label>
+      <label class="f"><span>Weight</span><input class="input mono" value="1" /></label>
+      <div class="f"><span>Dimensions (in)</span><div class="dims"><input class="input mono" value="8" /><input class="input mono" value="6" /><input class="input mono" value="3" /></div></div>
+      <label class="f"><span>Declared</span><input class="input mono" placeholder="0.00" /></label>
+      <div class="f"><span>Ref 1</span><div class="lock">129129720682217</div></div>
+      <label class="f"><span>Ref 2</span><input class="input mono" value="S26-ULTRA-512GB-BLACK | 1 unit sold" /></label>
+    </div>
+    <table>
+      <thead><tr><th>Service</th><th class="ac">Walmart</th><th class="ac">432419</th><th class="ac">3V85X3</th></tr></thead>
+      <tbody>
+        <tr><td class="sv">Ground<small>3–5 days</small></td><td><span class="cell na">—</span></td><td><span class="cell late">$13.46<small>Tue 10/27 · late</small></span></td><td><span class="cell late">$45.17<small>Tue 10/27 · late</small></span></td></tr>
+        <tr><td class="sv">Home Delivery<small>FedEx</small></td><td><span class="cell on">$27.27<small>Mon 10/26 ★</small></span></td><td><span class="cell na">—</span></td><td><span class="cell na">—</span></td></tr>
+        <tr><td class="sv">3 Day Select<small>UPS</small></td><td><span class="cell na">—</span></td><td><span class="cell late">$18.93<small>Wed 10/28 · late</small></span></td><td><span class="cell na">—</span></td></tr>
+        <tr><td class="sv">2nd Day Air<small>UPS</small></td><td><span class="cell na">—</span></td><td><span class="cell late">$19.69<small>Tue 10/27 · late</small></span></td><td><span class="cell late">$11.75<small>Tue 10/27 · late</small></span></td></tr>
+        <tr><td class="sv">Next Day Air Saver<small>UPS</small></td><td><span class="cell na">—</span></td><td><span class="cell">$31.08<small>Mon 10/26</small></span></td><td><span class="cell">$58.40<small>Mon 10/26</small></span></td></tr>
+        <tr><td class="sv">Next Day Air<small>UPS</small></td><td><span class="cell na">—</span></td><td><span class="cell">$32.42<small>Mon 10/26</small></span></td><td><span class="cell">$61.02<small>Mon 10/26</small></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span class="sum"><b>FedEx Home Delivery</b> · Walmart <b class="mono">$27.27</b></span><button class="btn btn-primary">Create label</button></div>
+</section>
+
+<script>document.body.className = 'd' + (new URLSearchParams(location.search).get('d') || '1');</script>
+</body>
+</html>
