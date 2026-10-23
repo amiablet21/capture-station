@@ -4699,13 +4699,23 @@ exit 1
       if (!found.page) return { ok: false, error: 'walmart.com did not answer. Try again.' };
       const d = wmT.parseProductPage(found.page);
       let offers = wmT.parseOffers(found.page.json, id);
-      if (d.sellers && offers.length < d.sellers) {
-        const more = await wmReadPageJson(`${WM_SITE}/product/${id}/sellers`).catch(() => null);
+      // the product page often names only the Buy Box seller (owner
+      // 2026-10-23: "1 seller"): the Compare all sellers page unless the
+      // page says there is just the one
+      let more = null;
+      if (d.sellers !== 1 && offers.length < (d.sellers || 2)) {
+        more = await wmReadPageJson(`${WM_SITE}/product/${id}/sellers`).catch(() => null);
         if (more && more.json.length) {
           const all = wmT.parseOffers(found.page.json.concat(more.json), id);
           if (all.length > offers.length) offers = all;
         }
       }
+      // what the page held, for when a view looks wrong
+      try {
+        fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-product-last.json'), JSON.stringify({ at: new Date().toISOString(), itemId: id,
+          page: found.page.json.map(t => t.slice(0, 1500000)), sellersPage: more ? more.json.map(t => t.slice(0, 1500000)) : null }));
+      } catch { /* diagnosis only */ }
+      const variants = wmT.parseVariants(found.page.json, id);
       const same = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
       for (const o of offers) {
         o.buyBox = same(o.seller, d.buyBoxSeller);
@@ -4713,7 +4723,14 @@ exit 1
       }
       const rank = (c) => (/^new$/i.test(c) || !c ? 0 : 1);
       offers.sort((a, b) => b.buyBox - a.buyBox || rank(a.condition) - rank(b.condition) || a.price - b.price);
-      return { ok: true, ...d, offers, sellers: Math.max(d.sellers || 0, offers.length) || null };
+      // the Buy Box offer's own price is the Buy Box price (the page's
+      // first "price" can be another figure: $229.99 shown beside a $209.99
+      // Buy Box offer, owner 2026-10-23)
+      const bb = offers.find(o => o.buyBox && d.price && Math.abs(o.price - d.price) < 0.005) || offers.find(o => o.buyBox);
+      for (const o of offers) o.buyBox = o === bb;
+      if (bb) d.price = bb.price;
+      offers.sort((a, b) => b.buyBox - a.buyBox || rank(a.condition) - rank(b.condition) || a.price - b.price);
+      return { ok: true, ...d, offers, variants, sellers: Math.max(d.sellers || 0, offers.length) || null };
     } catch (e) {
       return { ok: false, error: e.message };
     }

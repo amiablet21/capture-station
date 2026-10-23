@@ -845,17 +845,21 @@ function parseOffers(json = [], itemId = '') {
     for (const [k, v] of Object.entries(o)) {
       if (keyRe.test(k) && ok(v)) return v;
     }
-    for (const v of Object.values(o)) {
+    for (const [k, v] of Object.entries(o)) {
+      if (/^(variantsMap|variantCriteria|similar|related|recommend)/i.test(k)) continue; // other versions / items
       if (Array.isArray(v) && v.some(x => x && typeof x === 'object' && (x.sellerName || x.sellerDisplayName || x.seller))) continue; // other sellers' offers
       const r = find(v, keyRe, ok, depth + 1);
       if (r !== undefined) return r;
     }
     return undefined;
   };
+  // a condition's name; Walmart's bare codes (owner 2026-10-23: a "1" tag)
+  // read as New for 1 and are otherwise left out
   const conditionOf = (o) => {
-    const c = (o.conditionV2 && (o.conditionV2.name || o.conditionV2.code)) || (o.condition && typeof o.condition === 'object' ? o.condition.name : o.condition) || o.offerCondition || o.itemCondition || '';
+    const c = (o.conditionV2 && (o.conditionV2.name || o.conditionV2.code)) || (o.condition && typeof o.condition === 'object' ? (o.condition.name || o.condition.code) : o.condition) || o.offerCondition || o.itemCondition || '';
     const m = /schema\.org\/(\w+?)Condition/i.exec(String(c));
-    const t = m ? m[1] : String(c);
+    const t = m ? m[1] : String(c).trim();
+    if (/^\d+$/.test(t)) return t === '1' ? 'New' : '';
     return clip(/^new$/i.test(t) ? 'New' : /^used$/i.test(t) ? 'Pre-Owned' : /^refurbished$/i.test(t) ? 'Restored' : t.replace(/_/g, ' '), 40);
   };
   const shipOf = (o) => {
@@ -864,9 +868,20 @@ function parseOffers(json = [], itemId = '') {
     const n = Number(String(v && typeof v === 'object' ? (v.price ?? v.amount ?? '') : v).replace(/[^0-9.]/g, ''));
     return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
   };
+  // "Tue, Oct 28": a date Walmart sends as a timestamp or ISO text is
+  // shown as a day, and only when it is a real one in the next two months
+  // (owner 2026-10-23: "arrives +058781-05-04T01:35:57.000-04:00");
+  // wording ("Tomorrow", "Oct 28") is kept as it is
   const arrivesOf = (o) => {
-    const v = find(o, /^(deliveryDate|arrivalDate|deliveryText|fulfillmentText|displayArrivalDate|arrivalText)$/i, x => typeof x === 'string' && x.trim());
-    return v ? clip(v.replace(/^arrives\s*/i, ''), 40) : '';
+    const v = find(o, /^(deliveryDate|arrivalDate|deliveryText|fulfillmentText|displayArrivalDate|arrivalText|displayDeliveryDate)$/i, x => (typeof x === 'string' && x.trim()) || (typeof x === 'number' && x > 0));
+    if (v === undefined) return '';
+    const t = String(v).trim().replace(/^arrives\s*/i, '');
+    const dateLike = typeof v === 'number' || /^\d{10,}$/.test(t) || /^[+-]?\d{4,6}-\d{2}-\d{2}/.test(t);
+    if (!dateLike) return clip(t, 40);
+    const d = new Date(/^\d+$/.test(t) ? Number(t) * (t.length <= 10 ? 1000 : 1) : t);
+    const ms = d.getTime() - Date.now();
+    if (Number.isNaN(ms) || ms < -86400000 || ms > 62 * 86400000) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
   const walk = (o, depth) => {
     if (!o || typeof o !== 'object' || depth > 16) return;
@@ -893,10 +908,61 @@ function parseOffers(json = [], itemId = '') {
   return out.filter(r => r.condition || !out.some(x => x !== r && x.condition && x.seller.toLowerCase() === r.seller.toLowerCase() && x.price === r.price));
 }
 
+// a product's other versions (colour, storage...) from its page JSON:
+// variantCriteria names each choice ("Color: Gray"), variantsMap gives
+// each version's item number, price and stock -> [{ itemId, labels,
+// price, inStock, current }]
+function parseVariants(json = [], itemId = '') {
+  let crit = null;
+  let map = null;
+  const look = (o, depth) => {
+    if (!o || typeof o !== 'object' || depth > 14 || (crit && map)) return;
+    if (Array.isArray(o)) { for (const v of o) look(v, depth + 1); return; }
+    if (!crit && Array.isArray(o.variantCriteria) && o.variantCriteria.length) crit = o.variantCriteria;
+    if (!map && o.variantsMap && typeof o.variantsMap === 'object' && !Array.isArray(o.variantsMap)) map = o.variantsMap;
+    for (const v of Object.values(o)) if (v && typeof v === 'object') look(v, depth + 1);
+  };
+  for (const t of arr(json)) {
+    try { look(JSON.parse(t), 0); } catch { /* not JSON */ }
+    if (crit && map) break;
+  }
+  if (!crit) return [];
+  // variant value id -> its label, and (fallback) item -> labels
+  const label = new Map();
+  const byItem = new Map();
+  for (const c of crit) {
+    for (const v of arr(c && c.variantList)) {
+      const name = clip(v && (v.name || v.value), 40);
+      if (!name) continue;
+      if (v.id) label.set(String(v.id), name);
+      for (const p of arr(v.products)) {
+        const id = String(p && typeof p === 'object' ? p.usItemId || p.id || '' : p || '');
+        if (!/^\d{5,}$/.test(id)) continue;
+        (byItem.get(id) || byItem.set(id, []).get(id)).push(name);
+      }
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  for (const [key, v] of Object.entries(map || {})) {
+    const id = String((v && v.usItemId) || key);
+    if (!/^\d{5,}$/.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    const labels = arr(v && v.variants).map(x => label.get(String(x))).filter(Boolean);
+    const pi = (v && v.priceInfo) || {};
+    const price = Number((pi.currentPrice && pi.currentPrice.price) ?? '');
+    const status = String((v && v.availabilityStatus) || '');
+    out.push({ itemId: id, labels: labels.length ? labels : (byItem.get(id) || []), price: Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
+      inStock: !/OUT_OF_STOCK|NOT_AVAILABLE/i.test(status), current: id === String(itemId) });
+  }
+  if (!out.length) for (const [id, labels] of byItem) out.push({ itemId: id, labels, price: null, inStock: true, current: id === String(itemId) });
+  return out.filter(v => v.labels.length).sort((a, b) => a.labels.join(' ').localeCompare(b.labels.join(' '), undefined, { numeric: true }));
+}
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
-  parseItemStatus, parseProductPage, parseOffers,
+  parseItemStatus, parseProductPage, parseOffers, parseVariants,
   parseInsight, insightRows, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY, addOrderSales,
 };

@@ -12706,7 +12706,7 @@ function wlRenderPv() {
   const P = wl.pv;
   const it = P.it;
   const d = P.data || {};
-  const title = it.title || d.title;
+  const title = it.title || d.title || it.base || '';
   const image = /^https:\/\//.test(d.image || '') ? d.image : it.image;
   const price = d.price || it.price;
   const rating = d.rating ?? it.rating;
@@ -12714,7 +12714,10 @@ function wlRenderPv() {
   const holder = d.buyBoxSeller || it.seller;
   const mine = wl.mine[it.itemId] || null;
   const sub = [rating !== null && rating !== undefined ? `<span class="wl-stars"><i class="w${Math.round((Number(rating) / 5) * 50) * 2}"></i></span>${Number(rating).toFixed(1)}${reviews !== null && reviews !== undefined ? ` · ${wlN(reviews, 'review')}` : ''}` : '',
-    d.brand ? esc(d.brand) : '', `Item ${esc(it.itemId)}`].filter(Boolean).join('<span class="wl-pv-dot"></span>');
+    d.brand ? esc(d.brand) : '', `Item ${esc(it.itemId)}`, `<a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">walmart.com ↗</a>`].filter(Boolean).join('<span class="wl-pv-dot"></span>');
+  // the other versions (colour, storage...) as chips; one opens its own view
+  const vars = (d.variants || []).length > 1 ? `<div class="wl-pv-vars"><div class="wl-pv-vh">${wlN(d.variants.length, 'version')}</div><div class="wl-pv-vlist">${d.variants.map(v => `<button type="button" class="wl-pv-var ${v.current ? 'is-on' : ''} ${v.inStock ? '' : 'is-out'}" data-wlpvvar="${esc(v.itemId)}" ${v.current ? 'disabled' : ''}>
+      <span>${esc(v.labels.join(' · '))}</span><b>${v.price ? wlMoney(v.price) : v.inStock ? '' : 'Out of stock'}</b>${wl.mine[v.itemId] ? '<i>✓ Listed</i>' : ''}</button>`).join('')}</div></div>` : '';
   let sellers;
   if (P.busy) sellers = `<div class="wl-pv-wait">${wlSpin}Reading sellers from walmart.com…</div>`;
   else if (P.err) sellers = `<div class="wl-pv-wait">${P.blocked ? '<b>walmart.com asked to check this computer is not a robot.</b> ' : `${esc(P.err)} `}<a href="#" class="wl-link" data-wlopen="${esc(it.itemId)}">Show on walmart.com ↗</a></div>`;
@@ -12737,7 +12740,7 @@ function wlRenderPv() {
           return `${esc(m.sku)}${m.price ? ` · ${wlMoney(m.price)}` : ''}${over ? ` <span class="wl-lose">(${wlMoney(over)} over the Buy Box)</span>` : ''}`;
         }).join(', ')}</div>` : ''}
         <button type="button" class="wl-pv-go" data-wllist="${esc(it.itemId)}">${mine ? '+ List another' : '+ List this'}</button></div></div>
-    <div class="wl-pv-sellers">${sellers}</div></div>`;
+    ${vars}<div class="wl-pv-sellers">${sellers}</div></div>`;
 }
 
 function wlRenderLite() {
@@ -13595,6 +13598,12 @@ $('walmartPage').addEventListener('click', async (e) => {
     const it = ((wl.lite && wl.lite.items) || []).find(x => x.itemId === el.dataset.wllist);
     if (it) wlPickItem({ itemId: it.itemId, title: it.title, price: it.price, image: it.image });
     wlRenderLite();
+    return;
+  }
+  if ((el = hit('[data-wlpvvar]')) && wl.pv && wl.pv.data) {
+    const v = (wl.pv.data.variants || []).find(x => x.itemId === el.dataset.wlpvvar);
+    const base = wl.pv.data.title || wl.pv.it.title || '';
+    if (v) { const back = wl.pv.scroll; wlOpenProduct({ itemId: v.itemId, title: '', price: v.price || 0, image: '', rating: null, reviews: null, seller: '', base }); wl.pv.scroll = back; }
     return;
   }
   if (hit('[data-wlpvback]')) { const y = wl.pv ? wl.pv.scroll : 0; wl.pv = null; wlRenderLite(); $('wlRes').scrollTop = y; return; }

@@ -1452,6 +1452,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('walmart product view: every seller offer read by shape, ld+json copy folded in, other items skipped',
         offers.length === 2 && offers[0].seller === 'Walmart.com' && offers[0].condition === 'New' && offers[0].ship === 0 && offers[0].arrives === 'Tue, Oct 28'
           && offers[1].price === 89 && offers[1].condition === 'Pre-Owned: Good' && offers[1].ship === 5.99, offers);
+      const soonMs = Date.now() + 3 * 86400000;
+      const vpage = JSON.stringify({ product: { usItemId: '20944924919', priceInfo: { currentPrice: { price: 209.99 } }, sellerDisplayName: 'HotDeals', conditionV2: { code: 1 }, deliveryDate: '+058781-05-04T01:35:57.000-04:00',
+        variantCriteria: [{ name: 'Color', variantList: [{ name: 'Gray', id: 'c-gray', products: ['20944924919', '20944924920'] }, { name: 'Silver', id: 'c-silver', products: ['30000000001'] }] }, { name: 'Capacity', variantList: [{ name: '64 GB', id: 'k-64', products: ['20944924919', '30000000001'] }, { name: '128 GB', id: 'k-128', products: ['20944924920'] }] }],
+        variantsMap: { 20944924919: { usItemId: '20944924919', variants: ['c-gray', 'k-64'], priceInfo: { currentPrice: { price: 209.99 } }, availabilityStatus: 'IN_STOCK' }, 20944924920: { usItemId: '20944924920', variants: ['c-gray', 'k-128'], priceInfo: { currentPrice: { price: 259 } }, deliveryDate: String(soonMs) }, 30000000001: { variants: ['c-silver', 'k-64'], availabilityStatus: 'OUT_OF_STOCK' } } },
+        other: { sellerName: 'Other', priceInfo: { currentPrice: { price: 215 } }, deliveryDate: String(soonMs) } });
+      const vo = w.parseOffers([vpage], '20944924919');
+      const vv = w.parseVariants([vpage], '20944924919');
+      check('walmart product view: condition code 1 reads New, a junk arrival date is dropped, a real one reads as a day, other versions listed with price and stock',
+        vo[0].condition === 'New' && vo[0].arrives === '' && /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}$/.test(vo[1].arrives)
+          && vv.length === 3 && vv[0].current && vv[0].labels.join('/') === 'Gray/64 GB' && vv[1].price === 259 && vv[2].itemId === '30000000001' && vv[2].inStock === false, { vo, vv });
       const sales = w.addOrderSales({}, [
         { orderLines: { orderLine: [
           { item: { sku: 'x230-a' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 224.8 } }, { chargeType: 'SHIPPING', chargeAmount: { amount: 5 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Shipped' }] } },
