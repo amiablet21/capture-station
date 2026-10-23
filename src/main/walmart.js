@@ -214,7 +214,7 @@ class WalmartClient {
   }
 
   // accept: 'application/json' answers parsed JSON; anything else a Buffer
-  async call(method, pathname, payload, { accept = 'application/json', retried = false } = {}) {
+  async call(method, pathname, payload, { accept = 'application/json', retried = false, waited = 0 } = {}) {
     const token = await this.token();
     const res = await fetch(`${this.host}${pathname}`, {
       method,
@@ -224,7 +224,23 @@ class WalmartClient {
     });
     if (res.status === 401 && !retried) {
       WalmartClient.tokens.clear();
-      return this.call(method, pathname, payload, { accept, retried: true });
+      return this.call(method, pathname, payload, { accept, retried: true, waited });
+    }
+    // over Walmart's per-API request limit (owner 2026-10-23, Pricing: "You
+    // have exceeded your API calls threshold"): wait for the next refill
+    // when it is close, twice at most, else say when to try again
+    if (res.status === 429) {
+      const next = Number(res.headers.get('x-next-replenishment-time'));
+      const after = Number(res.headers.get('retry-after'));
+      const ms = Number.isFinite(next) && next > Date.now() ? next - Date.now() : Number.isFinite(after) && after > 0 ? after * 1000 : 3000 * (waited + 1);
+      if (waited < 2 && ms <= 20000) {
+        await new Promise(r => setTimeout(r, ms + 250));
+        return this.call(method, pathname, payload, { accept, retried, waited: waited + 1 });
+      }
+      const err = new WalmartError(`Walmart's limit on requests was reached. ${ms > 90000 ? `Try again after ${new Date(Date.now() + ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.` : 'Try again in a minute.'}`);
+      err.rateLimited = true;
+      err.retryAt = Date.now() + ms;
+      throw err;
     }
     if (accept !== 'application/json' && res.ok) return { status: res.status, buffer: Buffer.from(await res.arrayBuffer()) };
     const body = await res.json().catch(() => null);
@@ -328,8 +344,17 @@ class WalmartClient {
   async pricingInsights(extra = {}) {
     const rows = [];
     const seen = new Set();
+    this.insightsPartial = false;
     for (let page = 0; page < 200; page++) {
-      const j = await this.call('POST', '/v3/price/getPricingInsights', { pageNumber: page, ...extra });
+      let j;
+      try {
+        j = await this.call('POST', '/v3/price/getPricingInsights', { pageNumber: page, ...extra });
+      } catch (e) {
+        // the limit hit part-way: keep the pages already read
+        if (!e.rateLimited || !rows.length) throw e;
+        this.insightsPartial = true;
+        break;
+      }
       if (page === 0) this.lastInsights = j;
       const list = insightRows(j).map(parseInsight).filter(r => r && !seen.has(r.sku));
       list.forEach(r => seen.add(r.sku));

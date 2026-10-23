@@ -4941,12 +4941,39 @@ exit 1
      Break-even = the listing's cost (the cost store, by the Walmart SKU or
      the Linnworks SKU it maps to) plus Walmart's referral fee. */
   const wmFeePct = () => Math.min(50, Math.max(0, Number((config.load().walmartListing || {}).feePct) || 8));
+  // each item's cost (break-even) and the fee, added to a Pricing answer
+  function wmPricingCosts(items) {
+    syncCosts();
+    const costs = db.costsAll();
+    const map = recoveryChannelMap();
+    for (const it of items) {
+      const k = it.sku.toUpperCase();
+      const row = costs[k] || costs[String(map.get(k) || '').toUpperCase()];
+      it.cost = row && Number(row.cost) > 0 ? Number(row.cost) : null;
+    }
+    return { items, feePct: wmFeePct() };
+  }
   ipcMain.handle('walmart:pricing', async () => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
       const c = wmClient();
-      const [first, strategies] = await Promise.all([c.pricingInsights(), c.strategies()]);
+      const cacheFile = path.join(app.getPath('userData'), 'walmart-pricing-cache.json');
+      let cached = null;
+      try { cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch { /* none yet */ }
+      // Walmart's request limit: the last good answer, marked as old
+      const fromCache = (e) => {
+        if (!e.rateLimited || !cached || !Array.isArray(cached.items)) throw e;
+        return { ...cached, items: cached.items.map(x => ({ ...x })), stale: true, staleWhy: e.message };
+      };
+      let first, strategies;
+      try {
+        [first, strategies] = await Promise.all([c.pricingInsights(), c.strategies().catch(e => { if (e.rateLimited && cached) return cached.strategies || []; throw e; })]);
+      } catch (e) {
+        const old = fromCache(e);
+        return { ok: true, ...old, ...wmPricingCosts(old.items) };
+      }
+      const partial = !!c.insightsPartial;
       let items = first;
       let source = 'insights';
       // nothing back (the owner's first run, 2026-10-23): ask again SKU by
@@ -4963,15 +4990,9 @@ exit 1
       }
       // the raw first answer, for when the numbers look wrong
       try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, strategies: c.lastStrategies, first: c.lastInsights }, null, 2).slice(0, 400000)); } catch { /* diagnosis only */ }
-      syncCosts();
-      const costs = db.costsAll();
-      const map = recoveryChannelMap();
-      for (const it of items) {
-        const k = it.sku.toUpperCase();
-        const row = costs[k] || costs[String(map.get(k) || '').toUpperCase()];
-        it.cost = row && Number(row.cost) > 0 ? Number(row.cost) : null;
-      }
-      return { ok: true, items, strategies, source, at: new Date().toISOString(), feePct: wmFeePct() };
+      const at = new Date().toISOString();
+      if (!partial) { try { fs.writeFileSync(cacheFile, JSON.stringify({ items, strategies, source, at })); } catch { /* the cache is optional */ } }
+      return { ok: true, items, strategies, source, at, partial, ...wmPricingCosts(items) };
     } catch (e) {
       return { ok: false, error: e.message };
     }

@@ -12608,7 +12608,7 @@ function wlShowTab(tab) {
   if (ok) {
     if (tab === 'list') wlRenderList();
     else if (tab === 'uploads') wlLoadFeeds();
-    else if (tab === 'pricing') { if (!wl.pr || Date.now() - new Date(wl.pr.at).getTime() > 15 * 60000) wlLoadPricing(); else wlRenderPricing(); }
+    else if (tab === 'pricing') { if (!wl.pr || Date.now() - wl.pr.loadedAt > 15 * 60000) wlLoadPricing(); else wlRenderPricing(); }
     else if (tab === 'incentives') { if (!wl.inc) wlLoadInc(); else wlRenderInc(); }
   }
   wlSiteSync();
@@ -13219,7 +13219,7 @@ async function wlLoadPricing() {
   wl.prBusy = false;
   if (!res || !res.ok) { wl.prErr = (res && res.error) || 'Could not read pricing from Walmart.'; wlRenderPricing(); return; }
   wl.pr = {
-    at: res.at, feePct: res.feePct, strategies: res.strategies, source: res.source || 'insights',
+    at: res.at, loadedAt: Date.now(), feePct: res.feePct, strategies: res.strategies, source: res.source || 'insights', stale: !!res.stale, staleWhy: res.staleWhy || '', partial: !!res.partial,
     items: res.items.map(it => ({ ...it, strat: it.strategy || '', stratOrig: it.strategy || '', minOrig: it.min, maxOrig: it.max, priceNew: it.price })),
   };
   wl.prPicked = new Set();
@@ -13291,7 +13291,9 @@ function wlRenderPricing() {
   const nPick = [...wl.prPicked].filter(i => inSel.includes(all[i])).length;
   const stratOpts = (cur) => `${P.strategies.map(s => `<option value="${esc(s.name)}" ${s.name === cur ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="" ${!cur ? 'selected' : ''}>No strategy</option>`;
   const note = known ? (stratKnown ? '' : `<div class="wl-note">Walmart sent each item's Buy Box but not which strategy it's on, so items aren't split by strategy here. Each strategy's item count is Walmart's own. You can still edit strategy rules, and move picked items into a strategy.</div>`) : `<div class="wl-note">Walmart's Pricing Insights sent back no Buy Box or repricer details for your items, so this shows your catalog prices only. Each strategy's item count is Walmart's own. You can still edit strategy rules. Press Refresh to ask again.</div>`;
-  body.innerHTML = `${note}<div class="wl-rpsum">${known ? `<b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>` : `<span class="of">${wlN(all.length, 'item')} on Walmart</span>`}
+  const limit = P.stale ? `<div class="wl-note">${esc(P.staleWhy)} Showing what Walmart sent ${wlAgo(P.at)}.</div>`
+    : P.partial ? `<div class="wl-note">Walmart's limit on requests was reached part-way, so ${wlN(all.length, 'item')} came back, not all of them. Press Refresh in a minute for the rest.</div>` : '';
+  body.innerHTML = `${limit}${note}<div class="wl-rpsum">${known ? `<b>${losing.length}</b><span class="of">of ${wlN(all.length, 'item')} losing the Buy Box</span>` : `<span class="of">${wlN(all.length, 'item')} on Walmart</span>`}
       <span class="wl-muted">Walmart data from ${wlAgo(P.at)}</span>
       <label class="wl-muted wl-fee" title="Break-even = your cost + this Walmart referral fee">Fee for break-even <input id="wlFeePct" class="wl-in" inputmode="decimal" value="${esc(P.feePct)}">%</label>
       <button type="button" class="btn btn-ghost" data-wlprrefresh ${wl.prBusy ? 'disabled' : ''}>${wl.prBusy ? `${wlSpin}Refreshing…` : 'Refresh'}</button></div>
