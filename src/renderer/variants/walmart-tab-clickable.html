@@ -188,6 +188,17 @@ tr.fade td { animation: fade .5s ease; }
 .tray-list span button { background: none; border: none; color: inherit; padding: 0 5px; font-size: 12px; }
 
 /* Uploads */
+.mapq { padding: 0 20px 10px; display: flex; }
+.mapq input { flex: 1; }
+.maplist { padding: 0 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; max-height: 260px; }
+.maplist button { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.maplist button:hover { background: var(--row-on); }
+.maplist button[aria-pressed="true"] { border-color: var(--accent); background: var(--row-on); box-shadow: 0 0 0 2px var(--accent-soft); }
+.maplist small { color: var(--muted); white-space: nowrap; }
+.maplist .t { display: block; font-size: 12px; color: var(--muted); }
+.mapped { color: var(--pos-text); font-weight: 600; white-space: nowrap; }
+.why2 { display: block; font-size: 12px; color: var(--neg-text); margin-top: 3px; }
+.note2 { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
 .up-lines td { background: var(--surface-2); font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
 .up-lines .why { color: var(--neg-text); }
 .linkish { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; }
@@ -252,7 +263,8 @@ tr.fade td { animation: fade .5s ease; }
 
     <!-- Uploads -->
     <section id="sec-uploads" hidden>
-      <div class="tbl-wrap"><table><thead><tr><th>Sent</th><th>Items</th><th>Status</th><th>Result</th><th class="act"></th></tr></thead><tbody id="upBody"></tbody></table></div>
+      <div class="bar" id="upBar"></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Listing</th><th>Sent</th><th>On Walmart</th><th>Linnworks</th></tr></thead><tbody id="upBody"></tbody></table></div>
     </section>
 
     <!-- Pricing -->
@@ -283,6 +295,15 @@ tr.fade td { animation: fade .5s ease; }
     <p id="cText"></p>
     <ul id="cList"></ul>
     <div class="foot"><button type="button" class="btn btn-ghost" id="cNo">Cancel</button><button type="button" class="btn btn-primary" id="cYes"></button></div>
+  </div>
+</div>
+<div class="scrim" id="mapDlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h2 id="mTitle">Map to Linnworks</h2>
+    <p id="mText"></p>
+    <div class="mapq"><input id="mapQ" type="search" placeholder="Search your Linnworks SKUs" autocomplete="off" aria-label="Search Linnworks SKUs"></div>
+    <div class="maplist" id="mapList"></div>
+    <div class="foot"><button type="button" class="btn btn-ghost" id="mNo">Cancel</button><button type="button" class="btn btn-primary" id="mYes" disabled>Link</button></div>
   </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -321,20 +342,19 @@ const LINN = [
   { sku: 'SCRAP-A15-128GB-BLACK', title: 'Galaxy A15 128GB Black (scrap)', avail: 3 },
 ];
 const CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured'];
-const condFor = (sku) => /^USED|^SCRAP/i.test(sku) ? 'Pre-Owned: Good' : /OPEN[\s-]?BOX/i.test(sku) ? 'Pre-Owned: Like New' : 'New';
 
 const SEED = () => ({
   sub: 'list',
   list: { mode: 'list', q: 'galaxy tab a9', results: null, pick: null, sku: '', cond: 'New', price: '', qty: '', batch: [] },
-  uploads: [
-    { id: 'u2', sent: 'Today 9:41 AM', state: 'done', open: false, lines: [
-      { sku: 'S25-256GB-ICYBLUE', title: 'Galaxy S25 256GB Icyblue', ok: true },
-      { sku: 'BUDS3-PRO-SILVER', title: 'Galaxy Buds3 Pro Silver', ok: true },
-      { sku: 'USED-X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray (used)', ok: false, why: 'Pre-Owned items need a photo of the actual item.' } ] },
-    { id: 'u1', sent: 'Oct 20, 3:12 PM', state: 'done', open: false, lines: [
-      { sku: 'A15-128GB-BLACK', title: 'Galaxy A15 128GB Black', ok: true },
-      { sku: 'S23-128GB-CREAM', title: 'Galaxy S23 128GB Cream', ok: true } ] },
+  sent: [
+    { id: 'l1', sku: 'S25-256GB-ICYBLUE', title: 'Samsung Galaxy S25 256GB Unlocked Smartphone, Icyblue', when: 'Today 9:41 AM', wm: 'live', lw: 'mapped', mappedTo: 'S25-256GB-ICYBLUE' },
+    { id: 'l2', sku: 'WM-BUDS3PRO-SLV', title: 'Samsung Galaxy Buds3 Pro True Wireless Earbuds, Silver', when: 'Today 9:41 AM', wm: 'live', lw: 'ready' },
+    { id: 'l3', sku: 'USED-TABA9-64', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite', when: 'Today 9:41 AM', wm: 'bad', why: 'Pre-Owned items need a photo of the actual item.' },
+    { id: 'l4', sku: 'A15-128GB-BLACK', title: 'Samsung Galaxy A15 128GB Unlocked Smartphone, Black', when: 'Oct 20', wm: 'live', lw: 'mapped', mappedTo: 'A15-128GB-BLACK' },
+    { id: 'l5', sku: 'S23-128-CRM', title: 'Samsung Galaxy S23 128GB Unlocked Smartphone, Cream', when: 'Oct 20', wm: 'unpub', why: 'Walmart unpublished it: price above its price limit.', lw: 'mapped', mappedTo: 'S23-128GB-CREAM' },
   ],
+  sentFilter: 'all',
+  mapFor: null, mapPick: '', mapQ: '',
   upNew: false,
   pricing: { filter: 'all', rows: [
     { sku: 'S25-128GB-NAVY', price: 699, orig: 699, bb: 684.99, rp: 'Beat by $1', rpOrig: 'Beat by $1', inc: 'Lower fee', incSku: 'r1' },
@@ -429,29 +449,21 @@ function renderList() {
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === L.mode)));
   renderOffer();
 }
+function offerReady() { const L = S.list; return !!(L.sku.trim() && parseFloat(L.price) > 0 && /^\d+$/.test(String(L.qty).trim())); }
 function renderOffer() {
   const L = S.list;
   const it = CATALOG.find(c => c.itemId === L.pick);
-  if (!it) { $('offer').innerHTML = `<div class="offer-empty"><b>Pick a Walmart item</b>Press “Sell this” on a result. You choose which of your SKUs it is after that.</div>`; return; }
-  const q = L.sku.trim().toLowerCase();
-  const linn = LINN.find(x => x.sku.toLowerCase() === q);
-  // suggestions: typed text first, otherwise SKUs that share words with the Walmart title
-  const words = it.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/);
-  const score = (x) => x.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && words.includes(w)).length;
-  const sugg = linn ? [] : (q ? LINN.filter(x => x.sku.toLowerCase().includes(q) || x.title.toLowerCase().includes(q))
-    : LINN.map(x => [x, score(x)]).filter(x => x[1] >= 3).sort((a, b) => b[1] - a[1]).map(x => x[0])).slice(0, 4);
-  const ready = L.sku.trim() && parseFloat(L.price) > 0 && parseInt(L.qty, 10) >= 0 && L.qty !== '';
+  if (!it) { $('offer').innerHTML = `<div class="offer-empty"><b>Pick a Walmart item</b>Press “Sell this” on a result to set up your listing.</div>`; return; }
   $('offer').innerHTML = `
     <h3>${esc(it.title)}</h3><div class="sub">item <span class="mono">${it.itemId}</span> · UPC found: <b class="mono">${it.upc}</b></div>
-    <label class="f"><span>Your SKU</span><input id="oSku" class="mono" value="${esc(L.sku)}" placeholder="Type or pick a Linnworks SKU" autocomplete="off"></label>
-    ${sugg.length ? `<div class="sugg" aria-label="Linnworks matches">${sugg.map(x => `<button type="button" data-sku="${esc(x.sku)}"><span class="sku">${esc(x.sku)}</span><small>${x.avail} in stock</small></button>`).join('')}</div>` : ''}
-    ${linn ? `<div class="map-ok">✓ Linked to Linnworks · ${linn.avail} in stock</div>` : L.sku.trim() ? `<div class="map-new">Not in Linnworks yet. It still lists; Linnworks syncs it once the SKU exists there.</div>` : ''}
+    <label class="f"><span>SKU for this listing</span><input id="oSku" class="mono" value="${esc(L.sku)}" placeholder="e.g. S25-128GB-NAVY" autocomplete="off" spellcheck="false"></label>
+    <div class="note2">Any SKU you like. You map it to Linnworks once it's live.</div>
     <label class="f"><span>Condition</span><select id="oCond">${CONDS.map(c => `<option ${c === L.cond ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     <div class="f2">
       <label class="f"><span>Price · Walmart's ${money(it.price)}</span><input id="oPrice" class="mono" inputmode="decimal" value="${esc(L.price)}"></label>
-      <label class="f"><span>Quantity</span><input id="oQty" class="mono" inputmode="numeric" value="${esc(L.qty)}" placeholder="${linn ? linn.avail : '0'}"></label>
+      <label class="f"><span>Quantity</span><input id="oQty" class="mono" inputmode="numeric" value="${esc(L.qty)}" placeholder="0"></label>
     </div>
-    <button type="button" class="btn btn-primary" id="addBatch" ${ready ? '' : 'disabled'}>Add to batch</button>`;
+    <button type="button" class="btn btn-primary" id="addBatch" ${offerReady() ? '' : 'disabled'}>Add to batch</button>`;
 }
 function renderTray() {
   const b = S.list.batch;
@@ -462,15 +474,48 @@ function renderTray() {
 
 /* ---------- Uploads ---------- */
 function renderUploads() {
-  $('upBody').innerHTML = S.uploads.map(u => {
-    const ok = u.lines.filter(l => l.ok).length, bad = u.lines.length - ok;
-    const status = u.state === 'processing' ? '<span class="pill wait">Walmart is processing</span>' : bad ? '<span class="pill bad">Done · needs a fix</span>' : '<span class="pill ok">Done</span>';
-    const result = u.state === 'processing' ? '<span class="dash">usually minutes, sometimes hours</span>' : `${ok} live${bad ? ` · <span class="no">${bad} turned down</span>` : ''}`;
-    const lines = u.open ? u.lines.map(l => `<tr class="up-lines"><td></td><td><span class="sku">${esc(l.sku)}</span> · ${esc(l.title)}</td><td>${u.state === 'processing' ? '<span class="pill wait">Processing</span>' : l.ok ? '<span class="pill ok">Live</span>' : '<span class="pill bad">Turned down</span>'}</td><td class="${l.ok ? '' : 'why'}">${l.ok || u.state === 'processing' ? '' : esc(l.why)}</td><td class="act">${!l.ok && u.state !== 'processing' ? `<button type="button" class="row-btn quiet" data-fix="${esc(l.sku)}">Fix &amp; resend</button>` : ''}</td></tr>`).join('') : '';
-    return `<tr class="${u.flash ? 'fade' : ''}"><td>${u.sent}</td><td>${plural(u.lines.length, 'item')}</td><td>${status}</td><td>${result}</td><td class="act"><button type="button" class="linkish" data-up="${u.id}">${u.open ? 'Hide' : 'Show items'}</button></td></tr>${lines}`;
-  }).join('');
-  S.uploads.forEach(u => { u.flash = false; });
+  const all = S.sent, f = S.sentFilter;
+  const needs = (x) => x.lw === 'ready' || x.lw === 'waiting';
+  const prob = (x) => x.wm === 'bad' || x.wm === 'unpub';
+  $('upBar').innerHTML = `<button type="button" class="chip" data-sf="all" aria-pressed="${f === 'all'}">All<b>${all.length}</b></button>
+    <button type="button" class="chip" data-sf="map" aria-pressed="${f === 'map'}">Needs mapping<b>${all.filter(needs).length}</b></button>
+    <button type="button" class="chip" data-sf="prob" aria-pressed="${f === 'prob'}">Problems<b>${all.filter(prob).length}</b></button>`;
+  const list = all.filter(x => f === 'all' || (f === 'map' ? needs(x) : prob(x)));
+  $('upBody').innerHTML = list.length ? list.map(x => {
+    const wm = x.wm === 'processing' ? '<span class="pill wait">Processing</span><span class="note2">usually minutes</span>'
+      : x.wm === 'live' ? '<span class="pill ok">Live</span>'
+      : x.wm === 'unpub' ? `<span class="pill bad">Unpublished</span><span class="why2">${esc(x.why)}</span>`
+      : `<span class="pill bad">Turned down</span><span class="why2">${esc(x.why)}</span>`;
+    const lw = x.wm !== 'live' && x.lw !== 'mapped' ? '<span class="dash">—</span>'
+      : x.lw === 'mapped' ? `<span class="mapped">✓ ${esc(x.mappedTo)}</span> <button type="button" class="linkish" data-map="${x.id}">Change</button>`
+      : x.lw === 'waiting' ? '<span class="pill wait">Waiting for Linnworks</span><span class="note2">it downloads new listings every few hours</span>'
+      : `<button type="button" class="row-btn on" data-map="${x.id}">Map to Linnworks</button>`;
+    return `<tr class="${x.flash ? 'fade' : ''}"><td><span class="sku strong">${esc(x.sku)}</span><span class="note2">${esc(x.title)}</span></td><td class="exp">${x.when}</td><td>${wm}</td><td>${lw}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">Nothing here.</td></tr>';
+  all.forEach(x => { x.flash = false; });
 }
+
+/* ---------- Map to Linnworks ---------- */
+function openMap(id) {
+  const x = S.sent.find(r => r.id === id);
+  S.mapFor = id; S.mapPick = x.lw === 'mapped' ? x.mappedTo : ''; S.mapQ = '';
+  $('mTitle').textContent = `Map ${x.sku} to Linnworks`;
+  $('mText').textContent = 'Pick the Linnworks item this Walmart listing sells. Linnworks then syncs its stock and links its orders.';
+  $('mapQ').value = '';
+  $('mapDlg').hidden = false; renderMap(); $('mapQ').focus();
+}
+function renderMap() {
+  const x = S.sent.find(r => r.id === S.mapFor); if (!x) return;
+  const words = x.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/);
+  const score = (l) => l.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && words.includes(w)).length;
+  const q = S.mapQ.trim().toLowerCase();
+  const list = (q ? LINN.filter(l => l.sku.toLowerCase().includes(q) || l.title.toLowerCase().includes(q))
+    : LINN.map(l => [l, score(l)]).filter(a => a[1] >= 2).sort((a, b) => b[1] - a[1]).map(a => a[0])).slice(0, 6);
+  $('mapList').innerHTML = list.length ? (q ? '' : '<span class="note2">Best matches for this listing</span>') + list.map(l => `<button type="button" data-mapsku="${esc(l.sku)}" aria-pressed="${S.mapPick === l.sku}"><span><span class="sku">${esc(l.sku)}</span><span class="t">${esc(l.title)}</span></span><small>${l.avail} in stock</small></button>`).join('')
+    : '<span class="note2">No Linnworks SKU matches that.</span>';
+  $('mYes').disabled = !S.mapPick;
+}
+function closeMap() { S.mapFor = null; $('mapDlg').hidden = true; }
 
 /* ---------- Pricing ---------- */
 function renderPricing() {
@@ -617,15 +662,16 @@ function apply() {
 }
 function sendBatch() {
   const b = S.list.batch;
-  openConfirm(`Send ${plural(b.length, 'item')} to Walmart?`, 'Each goes up under your SKU. Walmart usually takes a few minutes to put them live.',
+  openConfirm(`Send ${plural(b.length, 'item')} to Walmart?`, 'Each goes up under the SKU you typed. Walmart usually takes a few minutes to put them live.',
     b.map(x => `<li><span><span class="sku">${esc(x.sku)}</span> · ${esc(x.cond)}</span><span class="chg">${money(x.price)} · qty ${x.qty}</span></li>`), 'Send', () => {
       closeConfirm();
-      const up = { id: 'u' + Date.now(), sent: 'Just now', state: 'processing', open: true, flash: true,
-        lines: b.map(x => ({ sku: x.sku, title: x.title, ok: true })) };
-      S.uploads.unshift(up); S.list.batch = []; S.upNew = true;
+      const recs = b.map((x, i) => ({ id: 'n' + Date.now() + i, sku: x.sku, title: x.title, when: 'Just now', wm: 'processing', lw: 'none', flash: true }));
+      S.sent.unshift(...recs); S.list.batch = []; S.sentFilter = 'all';
       showSub('uploads');
-      toast(`Sent ${plural(up.lines.length, 'item')} to Walmart`);
-      setTimeout(() => { up.state = 'done'; up.flash = true; if (S.sub === 'uploads') renderUploads(); else { S.upNew = true; $('upDot').hidden = false; } toast('Walmart finished your upload'); }, 3500);
+      toast(`Sent ${plural(recs.length, 'item')} to Walmart`);
+      const later = (ms, fn, msg) => setTimeout(() => { fn(); recs.forEach(r => { r.flash = true; }); if (S.sub === 'uploads') renderUploads(); else { S.upNew = true; $('upDot').hidden = false; } toast(msg); }, ms);
+      later(3500, () => recs.forEach(r => { r.wm = 'live'; r.lw = 'waiting'; }), `${plural(recs.length, 'listing')} live on Walmart`);
+      later(8000, () => recs.forEach(r => { r.lw = 'ready'; }), 'Linnworks has the new listings: ready to map');
     });
 }
 
@@ -636,16 +682,18 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.try) { runSearch(t.dataset.try); }
   else if (t.dataset.mode) { S.list.mode = t.dataset.mode; renderList(); }
   else if (t.dataset.pickItem) { pick(t.dataset.pickItem); renderList(); }
-  else if (t.dataset.sku) { const L = S.list; L.sku = t.dataset.sku; const x = LINN.find(l => l.sku === L.sku); L.cond = condFor(L.sku); if (x) L.qty = String(x.avail); renderOffer(); }
   else if (t.id === 'addBatch') {
-    const L = S.list, it = CATALOG.find(c => c.itemId === L.pick), linn = LINN.find(x => x.sku.toLowerCase() === L.sku.trim().toLowerCase());
-    L.batch.push({ itemId: it.itemId, title: it.title, sku: linn ? linn.sku : L.sku.trim(), cond: L.cond, price: parseFloat(L.price), qty: parseInt(L.qty, 10), linked: !!linn && L.cond === 'New' });
-    toast(`${linn ? linn.sku : L.sku.trim()} added to the batch`); L.pick = null; renderList(); renderTray();
+    const L = S.list, it = CATALOG.find(c => c.itemId === L.pick);
+    L.batch.push({ itemId: it.itemId, title: it.title, sku: L.sku.trim(), cond: L.cond, price: parseFloat(L.price), qty: parseInt(L.qty, 10) });
+    toast(`${L.sku.trim()} added to the batch`); L.pick = null; renderList(); renderTray();
   }
   else if (t.dataset.unbatch) { S.list.batch.splice(+t.dataset.unbatch, 1); renderTray(); renderList(); }
   else if (t.id === 'send') sendBatch();
-  else if (t.dataset.up) { const u = S.uploads.find(x => x.id === t.dataset.up); u.open = !u.open; renderUploads(); }
-  else if (t.dataset.fix) { showSub('list'); runSearch(''); toast(`Search for ${t.dataset.fix} again to fix and resend`); }
+  else if (t.dataset.sf) { S.sentFilter = t.dataset.sf; renderUploads(); }
+  else if (t.dataset.map) openMap(t.dataset.map);
+  else if (t.dataset.mapsku) { S.mapPick = t.dataset.mapsku; renderMap(); }
+  else if (t.id === 'mYes') { const x = S.sent.find(r => r.id === S.mapFor); x.lw = 'mapped'; x.mappedTo = S.mapPick; x.flash = true; closeMap(); renderUploads(); toast(`${x.sku} mapped to ${x.mappedTo}`); }
+  else if (t.id === 'mNo') closeMap();
   else if (t.dataset.pf) { S.pricing.filter = t.dataset.pf; renderPricing(); }
   else if (t.dataset.join) { showSub('incentives'); prog = 'rrf'; view.rrf = 'ready'; render(); ask([t.dataset.join]); }
   else if (t.id === 'pUndo') { S.pricing.rows.forEach(r => { r.price = r.orig; r.rp = r.rpOrig; }); renderPricing(); }
@@ -663,9 +711,10 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('input', (e) => {
   const t = e.target, L = S.list;
-  if (t.id === 'oSku') { L.sku = t.value; const x = LINN.find(l => l.sku.toLowerCase() === t.value.trim().toLowerCase()); if (x) { L.cond = condFor(x.sku); L.qty = String(x.avail); } const pos = t.selectionStart; renderOffer(); const n = $('oSku'); n.focus(); n.setSelectionRange(pos, pos); }
-  else if (t.id === 'oPrice') { L.price = t.value; $('addBatch').disabled = !(L.sku.trim() && parseFloat(L.price) > 0 && L.qty !== ''); }
-  else if (t.id === 'oQty') { L.qty = t.value; $('addBatch').disabled = !(L.sku.trim() && parseFloat(L.price) > 0 && L.qty !== ''); }
+  if (t.id === 'oSku') { L.sku = t.value; $('addBatch').disabled = !offerReady(); }
+  else if (t.id === 'oPrice') { L.price = t.value; $('addBatch').disabled = !offerReady(); }
+  else if (t.id === 'oQty') { L.qty = t.value; $('addBatch').disabled = !offerReady(); }
+  else if (t.id === 'mapQ') { S.mapQ = t.value; renderMap(); }
   else if (t.dataset.price) { const r = S.pricing.rows[+t.dataset.price]; const v = parseFloat(t.value); if (v > 0) { r.price = Math.round(v * 100) / 100; t.classList.toggle('chg', r.price !== r.orig); renderSave(); } }
 });
 document.addEventListener('change', (e) => {
@@ -675,7 +724,8 @@ document.addEventListener('change', (e) => {
 });
 $('sForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch($('sQ').value); });
 $('confirm').addEventListener('click', (e) => { if (e.target === $('confirm')) closeConfirm(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('confirm').hidden) closeConfirm(); });
+$('mapDlg').addEventListener('click', (e) => { if (e.target === $('mapDlg')) closeMap(); });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('confirm').hidden) closeConfirm(); if (!$('mapDlg').hidden) closeMap(); });
 runSearch(S.list.q);
 showSub('list');
 </script>
