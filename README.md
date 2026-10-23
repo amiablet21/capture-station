@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.112 highlights
+
+- **Mapping in the stock history** (owner: "I want to be able to see when I unmapped certain things in the history"). Linking a marketplace listing to a Linnworks SKU (Stock → Channel mapping, or Map to Linnworks on the Walmart tab's Uploads) adds a blue **MAPPED** line to that SKU's stock history; unlinking one adds a purple **UNMAPPED** line. Each names the listing's SKU and its channel ("linked to WM-TABA9-64 on Walmart (Walmart US)"), with the computer and time like every other line, and moves no stock. Both have their own filter pill. Links made or removed in Linnworks itself aren't seen by the app, so only the ones made here are recorded.
+
 ## v1.32.111 highlights
 
 - **Walmart → List draws the results itself** (owner: "strip down the look to not slow down the software, essentially just getting the information"; mockup `variants/walmart-lite-results.html`). A search runs walmart.com's own search page out of sight (one hidden window, no images) and only the results come back: item number, title, price, photo, rating and reviews, seller, sponsored, in walmart.com's order, read from the page's data block (product cards as the fallback). The tab draws them as a light grid with paging; hover a product for **+ List this**. Nothing of Walmart's runs on screen, so it doesn't lag and Walmart's redesigns don't break the layout. **Show on walmart.com** still opens the real page (and is where a robot check is passed); **Back to results** returns. A pasted item number or product link picks that item straight away.

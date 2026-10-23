@@ -2572,6 +2572,7 @@ function registerIpc() {
       }
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
+      recordMappingRow('mapped', { sku: targetSku, channelSku, source, subSource });
       // Retro-link check (owner 2026-08-14): whether Linnworks attaches a NEW
       // link to open orders that already carried this channel SKU was an open
       // question — so it is verified per-mapping instead of assumed. Their
@@ -2612,7 +2613,7 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('mapping:unlink', async (_e, { rowId }) => {
+  ipcMain.handle('mapping:unlink', async (_e, { rowId, sku, channelSku, source, subSource }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!rowId) return { ok: false, error: 'This listing carries no link id — rescan the channel in Linnworks.' };
@@ -2621,6 +2622,7 @@ function registerIpc() {
       await client.unlinkChannelSku(rowId);
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      recordMappingRow('unmapped', { sku, channelSku, source, subSource });
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -8239,6 +8241,20 @@ function stockLogReason(changeSource, meta) {
 let invCacheClearHook = null; // set by registerIpc: drops the Stock page's inventory copy
 // one door for every stock_log write: local db (insert-if-absent by gid),
 // then the shared folder so the other desktops pick the rows up
+// a channel link made or removed (owner 2026-10-23: "see when I unmapped
+// certain things in the history"): a MAPPED / UNMAPPED line on the
+// Linnworks SKU, delta 0 (never a stock move), the listing in data
+function recordMappingRow(kind, { sku, channelSku, source, subSource }) {
+  if (!sku) return;
+  const cfg = config.load();
+  try {
+    recordStockRows([{
+      sku, locationId: (cfg.linnworks && cfg.linnworks.locationId) || '', delta: 0, levelAfter: null,
+      reason: kind, changeSource: 'Capture Station mapping', ref: '', note: '',
+      computer: stockLogComputer(), by: '', data: { channelSku: String(channelSku || ''), source: String(source || ''), subSource: String(subSource || '') },
+    }]);
+  } catch { /* the link itself stands; the history line is best effort */ }
+}
 function recordStockRows(rows, { share = true } = {}) {
   if (typeof invCacheClearHook === 'function') invCacheClearHook(); // the Stock page's minute-old copy is stale now
   const inserted = db.logStockChanges(rows);

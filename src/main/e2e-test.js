@@ -1125,6 +1125,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('stock_log today summary: count 2, last = the hand-set row',
       shToday['SH-TEST-SKU'] && shToday['SH-TEST-SKU'].count === 2 && shToday['SH-TEST-SKU'].lastReason === 'set' && shToday['SH-TEST-SKU'].lastComputer === 'Office',
       shToday['SH-TEST-SKU']);
+    // channel links made / removed land as MAPPED / UNMAPPED lines (owner 2026-10-23);
+    // dated a month back so the History dialog's last-7-days check never sees them
+    db.logStockChanges([
+      { sku: 'sh-map-sku', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), delta: 0, reason: 'mapped', changeSource: 'Capture Station mapping', computer: 'Office', data: { channelSku: 'WM-TABA9-64', source: 'WALMART', subSource: 'Walmart US' } },
+      { sku: 'sh-map-sku', createdAt: new Date(Date.now() - 29 * 86400000).toISOString(), delta: 0, reason: 'unmapped', changeSource: 'Capture Station mapping', computer: 'Office', data: { channelSku: 'OLD-EBAY-1', source: 'EBAY', subSource: 'EBAY0' } },
+    ]);
+    res = await exec(`api.stockHistory('sh-map-sku').then(r => r.rows.map(e => shRowHtml(e, false, false)).join('|'))`);
+    check('stock history: MAPPED / UNMAPPED lines name the listing and the channel, no stock move',
+      /MAPPED/.test(res) && /linked to<\/span> <span class="mono">WM-TABA9-64<\/span>/.test(res) && /on Walmart \(Walmart US\)/.test(res)
+        && /UNMAPPED/.test(res) && /no longer linked to<\/span> <span class="mono">OLD-EBAY-1<\/span>/.test(res) && /on eBay/.test(res) && !/sh-edit-btn/.test(res), res);
     res = await exec(`api.stockHistory('sh-test-sku')`);
     check('stock:history IPC returns the rows', res && res.ok === true && res.rows.length === 2 && res.rows[0].sku === 'SH-TEST-SKU', res);
     res = await exec(`api.stockHistoryToday()`);

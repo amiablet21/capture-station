@@ -7259,7 +7259,9 @@ $('chmapWmBody').addEventListener('click', async (e) => {
       renderChmap();
       return;
     }
-    const res = await api.mappingUnlink(item.rowId);
+    // which Linnworks SKU it was linked to, for the stock history's UNMAPPED line
+    const invSku = item.linkedSkuOverride || ((recvItems || []).find(it => it.stockItemId && it.stockItemId === item.linkedItemId) || {}).sku || '';
+    const res = await api.mappingUnlink(item.rowId, { sku: invSku, channelSku: item.sku, source: chmap.chan.source, subSource: chmap.chan.subSource });
     if (!res.ok) { toast(res.error || 'Could not unlink.'); return; }
     // mirror of the link path — but the item may hold ANOTHER link on the
     // same channel (a WFS listing, a second SKU), so the chip only flips to
@@ -8497,8 +8499,10 @@ const SH_ACT = {
   set: { word: 'SET', cls: 'act-set' },
   edited: { word: 'EDITED', cls: 'act-edited' },
   deleted: { word: 'DELETED', cls: 'act-deleted' },
+  mapped: { word: 'MAPPED', cls: 'act-mapped' },
+  unmapped: { word: 'UNMAPPED', cls: 'act-unmapped' },
 };
-const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'cost', 'set', 'edited', 'deleted'];
+const SH_ACT_ORDER = ['sold', 'returned', 'added', 'removed', 'shipped', 'wholesale', 'cost', 'set', 'edited', 'deleted', 'mapped', 'unmapped'];
 function shActionOf(e) {
   switch (e.reason) {
     case 'sale': return 'sold';
@@ -8512,6 +8516,8 @@ function shActionOf(e) {
     case 'wfs': case 'substitution': return 'shipped';
     case 'wholesale': case 'wholesale-void': return 'wholesale';
     case 'cost': return 'cost';
+    case 'mapped': return 'mapped';
+    case 'unmapped': return 'unmapped';
     default: return (e.delta === null || e.delta === undefined || e.delta >= 0) ? 'added' : 'removed';
   }
 }
@@ -8580,6 +8586,12 @@ function shWhat(e, withSku) {
     // a cost change: from → to, the unit cost in dollars
     const d = e.dataObj || {};
     return `${withSku ? `${skuEl(e.sku)} ` : ''}<span class="sh-dim">${Number(d.from) > 0 ? fmtCost(d.from) : 'no cost'}</span> <span class="sh-arrow">→</span> <b>${fmtCost(d.to)}</b>${e.note ? ` <span class="sh-dim">· ${esc(e.note)}</span>` : ''}`;
+  }
+  if (e.reason === 'mapped' || e.reason === 'unmapped') {
+    // a channel link made / removed: which listing, on which channel
+    const d = e.dataObj || {};
+    const chan = /walmart/i.test(d.source) ? 'Walmart' : /ebay/i.test(d.source) ? 'eBay' : /temu/i.test(d.source) ? 'Temu' : (d.source || 'a channel');
+    return `${withSku ? `${skuEl(e.sku)} ` : ''}<span class="sh-dim">${e.reason === 'mapped' ? 'linked to' : 'no longer linked to'}</span> <span class="mono">${esc(d.channelSku || '?')}</span> <span class="sh-dim">on ${esc(chan)}${d.subSource && d.subSource !== d.source ? ` (${esc(d.subSource)})` : ''}</span>`;
   }
   if (e.reason === 'wholesale' || e.reason === 'wholesale-void') {
     // an invoice line: "10 units (Bright Tech · #2041)", a void reads +N

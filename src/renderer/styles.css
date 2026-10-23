@@ -4967,6 +4967,10 @@ th:last-child > .col-grip { right: 0; }
 .stock-edit.stock-cost-edit::-webkit-inner-spin-button, .stock-edit.stock-cost-edit::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* the COST pill in Stock history */
 .act-cost { color: var(--badge-yellow-text); background: var(--badge-yellow-bg); }
+.act-mapped { color: var(--badge-blue-text); background: var(--badge-blue-bg); }
+.sh-act-dot.act-mapped { background: var(--badge-blue-text); }
+.act-unmapped { color: var(--badge-purple-text); background: var(--badge-purple-bg); }
+.sh-act-dot.act-unmapped { background: var(--badge-purple-text); }
 .sh-act-dot.act-cost { background: var(--badge-yellow-text); }
 .sh-strip .v.is-cost { color: var(--badge-yellow-text); }
 
