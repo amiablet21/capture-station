@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.113 highlights
+
+- **Click a Walmart result to see it** (owner: "press into each individual listing ... see the prices and the other sellers, but stripped down"). Walmart → List: clicking a result (anywhere but **+ List this**) opens a plain view: photo, the Buy Box price and who holds it, "You list this" with how far over the Buy Box you are, and every seller with condition, shipping and arrival, read from the product page or its Compare all sellers page out of sight. Sellers at your exact price are tagged **Your price**. **← Back to results** returns to the same spot.
+- **No more "Gray" tiles in results.** A product's colour options were being read as separate results; they're skipped now.
+- **Pricing doesn't fake a strategy split.** When Walmart sends each item's Buy Box but not which strategy it's on, strategies show Walmart's own item count, the false "No strategy" group is gone and a note says why. The strategy is also looked for under more field names, and Walmart's raw strategies answer is saved to `walmart-insights-last.json` for diagnosis.
+- **Incentives: price before / after and 90-day sales** (owner: "I want the price before and price during, include the GMV"). Walmart-funded shows your listed price, Walmart's discounted price with the amount off, and **Last 90 days sales** added up from your Walmart orders (seller- and WFS-fulfilled, cancelled lines left out; may differ slightly from Seller Center's GMV). Reduced referral fees gets the sales column too.
+
 ## v1.32.112 highlights
 
 - **Mapping in the stock history** (owner: "I want to be able to see when I unmapped certain things in the history"). Linking a marketplace listing to a Linnworks SKU (Stock → Channel mapping, or Map to Linnworks on the Walmart tab's Uploads) adds a blue **MAPPED** line to that SKU's stock history; unlinking one adds a purple **UNMAPPED** line. Each names the listing's SKU and its channel ("linked to WM-TABA9-64 on Walmart (Walmart US)"), with the computer and time like every other line, and moves no stock. Both have their own filter pill. Links made or removed in Linnworks itself aren't seen by the app, so only the ones made here are recorded.
