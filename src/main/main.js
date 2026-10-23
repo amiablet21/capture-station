@@ -6424,6 +6424,9 @@ exit 1
   }
   const printPageSize = (paper) => (paper === 'letter' ? 'Letter' : paper === 'a4' ? 'A4' : { width: 101600, height: 152400 });
   const printPaper = (paper) => (paper === 'letter' || paper === 'a4' ? paper : 'label');
+  // printToPDF takes inches; Letter / A4 by name
+  const pdfPageSize = (paper) => (paper === 'letter' ? 'Letter' : paper === 'a4' ? 'A4' : { width: 4, height: 6 });
+  const pdfSuffix = (paper) => (paper === 'letter' ? '-letter' : paper === 'a4' ? '-A4' : '');
   // store: false keeps the label record untouched (the browser download is
   // read-only); a Walmart image still missing is then fetched but not kept
   async function shipLabelWindow(id, { store = true, paper = 'label' } = {}) {
@@ -6444,7 +6447,7 @@ exit 1
   // answers Walmart messages): an EXISTING label as a 4x6 PDF, by id,
   // tracking or PO#. Read-only: never buys, re-creates, voids or edits a
   // label; a voided label is not served.
-  labelPdfFor = async ({ id, tracking, po } = {}) => {
+  labelPdfFor = async ({ id, tracking, po, paper } = {}) => {
     let l = null;
     if (id) l = db.shipLabelGet(Number(id));
     else if (tracking || po) l = db.shipLabelFind({ tracking, reference: po });
@@ -6453,10 +6456,11 @@ exit 1
     if (l.voided_at) return { ok: false, status: 410, error: `The label ${l.tracking} was voided.` };
     let pw = null;
     try {
-      ({ pw } = await shipLabelWindow(l.id, { store: false }));
-      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      const p = printPaper(paper);
+      ({ pw } = await shipLabelWindow(l.id, { store: false, paper: p }));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: pdfPageSize(p), margins: { marginType: 'none' } });
       const ref = String(l.reference || l.tracking).replace(/[^\w.-]+/g, '_');
-      return { ok: true, pdf, filename: `${l.kind === 'return' ? 'return' : 'label'}-${ref}.pdf` };
+      return { ok: true, pdf, filename: `${l.kind === 'return' ? 'return' : 'label'}-${ref}${pdfSuffix(p)}.pdf` };
     } catch (e) {
       return { ok: false, status: 502, error: `The PDF could not be made: ${e.message}` };
     } finally {
@@ -6520,16 +6524,18 @@ exit 1
     }
   });
 
-  ipcMain.handle('ship:pdf', async (_e, { id } = {}) => {
+  // paper (owner 2026-10-23): Label 4x6, Letter or A4, as picked in the popup
+  ipcMain.handle('ship:pdf', async (_e, { id, paper } = {}) => {
     let pw = null;
     try {
       const l = db.shipLabelGet(id);
       if (!l) return { ok: false, error: 'Label not found.' };
-      const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}.pdf`;
+      const p = printPaper(paper);
+      const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}${pdfSuffix(p)}.pdf`;
       const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
       if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
-      ({ pw } = await shipLabelWindow(id));
-      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      ({ pw } = await shipLabelWindow(id, { paper: p }));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: pdfPageSize(p), margins: { marginType: 'none' } });
       fs.writeFileSync(pick.filePath, pdf);
       shell.showItemInFolder(pick.filePath);
       return { ok: true, path: pick.filePath };

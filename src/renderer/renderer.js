@@ -14969,7 +14969,7 @@ function spRenderDone() {
     </div>
   </div>`;
   $('spDonePrint').onclick = () => spOpenPrint(l.id);
-  $('spDonePdf').onclick = () => spPdf(l.id);
+  $('spDonePdf').onclick = () => spOpenPrint(l.id, { pdf: true });
   $('spDoneCopy').onclick = async () => { await api.copyText(l.tracking); toast('Tracking copied'); };
   $('spAgain').onclick = spReset;
 }
@@ -15016,8 +15016,8 @@ async function spDownload(a) {
   }
 }
 
-async function spPdf(id) {
-  const res = await api.shipPdf(id);
+async function spPdf(id, paper) {
+  const res = await api.shipPdf(id, paper);
   if (res.ok) toast('Label saved as PDF');
   else if (!res.canceled) toast(`PDF failed: ${res.error}`, 4000);
 }
@@ -15141,7 +15141,7 @@ $('spLogBody').addEventListener('click', async (e) => {
   const id = Number(b.closest('tr').dataset.id);
   if (b.dataset.act === 'download') { e.preventDefault(); spDownload(b); return; }
   if (b.dataset.act === 'print') spOpenPrint(id);
-  else if (b.dataset.act === 'pdf') spPdf(id);
+  else if (b.dataset.act === 'pdf') spOpenPrint(id, { pdf: true });
   else if (b.dataset.act === 'void') {
     const l = sp.log.find(x => x.id === id);
     if (!l || !confirm(`Void the UPS label ${l.tracking}${l.reference ? ` (${l.reference})` : ''}?\nUPS credits an unused label back to the ${l.account_name} account.`)) return;
@@ -15628,11 +15628,14 @@ $('osScrim').addEventListener('click', () => { if (os && !os.creating) { osClose
 $('osCreate').addEventListener('click', osCreate);
 
 // the print popup: the label, Print ready under Enter
-function osShowLabel(res, { reprint = false, ids = null } = {}) {
+function osShowLabel(res, { reprint = false, ids = null, pdf = false } = {}) {
   const { label: l, gif, size } = res;
   // several labels: the first one shows, all of them print
   $('osLabelDlg').dataset.ids = ids && ids.length > 1 ? ids.join(',') : '';
-  $('osLabelTitle').textContent = ids && ids.length > 1 ? `Print ${ids.length} labels` : reprint ? 'Reprint label' : 'Label created';
+  $('osLabelDlg').dataset.pdf = pdf ? '1' : '';
+  $('osLabelTitle').textContent = pdf ? 'Save as PDF' : ids && ids.length > 1 ? `Print ${ids.length} labels` : reprint ? 'Reprint label' : 'Label created';
+  $('osLabelPrint').textContent = pdf ? 'Save PDF' : 'Print';
+  $('osPrinter').hidden = pdf;
   $('osLabelOk').hidden = reprint;
   osPrintSetup();
   const wide = size && size.width > size.height;
@@ -15676,11 +15679,12 @@ $('osPrintFmt').addEventListener('click', (e) => {
 });
 $('osPrinter').addEventListener('change', () => osPrintSet(`osPrinter-${$('osPrintFmt').dataset.fmt || 'label'}`, $('osPrinter').value));
 // Reprint (Ship › Labels and the Orders line): the same popup, same choices
-async function spOpenPrint(id) {
+// pdf: the same popup saves a PDF in the size picked (owner 2026-10-23)
+async function spOpenPrint(id, { pdf = false } = {}) {
   const res = await api.shipLabel(id);
-  if (!res || !res.ok) { toast(`Reprint failed: ${(res && res.error) || 'label not found'}`, 4000); return; }
+  if (!res || !res.ok) { toast(`${pdf ? 'PDF' : 'Reprint'} failed: ${(res && res.error) || 'label not found'}`, 4000); return; }
   if (!sp.info) { const info = await api.shipInfo(); sp.info = info && info.ok ? info : null; }
-  osShowLabel(res, { reprint: true });
+  osShowLabel(res, { reprint: true, pdf });
 }
 // Void from the Orders line: the label goes back to UPS (or Walmart) and the
 // line gets its tracking back off
@@ -15695,7 +15699,9 @@ $('osLabelPrint').addEventListener('click', async () => {
   const paper = OS_FMTS.includes($('osPrintFmt').dataset.fmt) ? $('osPrintFmt').dataset.fmt : 'label';
   const printer = $('osPrinter').value;
   const many = ($('osLabelDlg').dataset.ids || '').split(',').filter(Boolean).map(Number);
+  const pdf = $('osLabelDlg').dataset.pdf === '1';
   $('osLabelDlg').close();
+  if (pdf) { await spPdf(id, paper); return; }
   if (many.length > 1) {
     const r = await api.shipPrintMany(many, { paper, printer });
     if (!r.ok) toast(`Print failed: ${r.error}`, 5000);

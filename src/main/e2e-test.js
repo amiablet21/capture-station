@@ -2094,9 +2094,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
             out.open = $('osLabelDlg').open; out.title = $('osLabelTitle').textContent; out.ids = $('osLabelDlg').dataset.ids.split(',').length;
             $('osLabelDlg').close();
             out.none = await api.shipPrintMany([987654], {});
+            const pdfBtn = document.querySelector('#spLogBody [data-act="pdf"]');
+            if (pdfBtn) { pdfBtn.click(); await new Promise(r => setTimeout(r, 600)); }
+            out.pdf = { open: $('osLabelDlg').open, title: $('osLabelTitle').textContent, btn: $('osLabelPrint').textContent, printerHidden: $('osPrinter').hidden,
+              fmts: $('osPrintFmt').querySelectorAll('[data-fmt]').length };
+            $('osLabelDlg').close();
             return out; })()`);
           check('ship: tick labels in the list and Print selected prints them together (unknown labels refused)',
             many.n === 2 && many.btn && many.open && many.title === 'Print 2 labels' && many.ids === 2 && many.none.ok === false, many);
+          check('ship: PDF opens the popup to pick Label 4x6, Letter or A4, then Save PDF',
+            many.pdf.open && many.pdf.title === 'Save as PDF' && many.pdf.btn === 'Save PDF' && many.pdf.printerHidden && many.pdf.fmts === 3, many.pdf);
           r = await exec(`api.orderShipPrep(${wRow.id})`);
           check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
           if (process.env.CAPTURE_E2E_SHOT) {
@@ -2199,6 +2206,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       const byTracking = pdfOk(r, 'return-SAMPLE-PO-1001.pdf');
       r = await req({ path: '/labels/pdf?po=SAMPLE-PO-1001', headers: { ...host, Cookie: cookie } });
       check('web: the same PDF by tracking number or by PO#', byTracking && pdfOk(r, 'return-SAMPLE-PO-1001.pdf'), r.status);
+      r = await req({ path: '/labels/pdf?po=SAMPLE-PO-1001&paper=a4', headers: { ...host, Cookie: cookie } });
+      check('web: ?paper=a4 gives an A4 page named …-A4.pdf', pdfOk(r, 'return-SAMPLE-PO-1001-A4.pdf') && /MediaBox\s*\[\s*0\s+0\s+595/.test(String(r.body)), { status: r.status, cd: r.headers && r.headers['content-disposition'] });
       r = await req({ path: `/labels/${sample.id}/pdf`, headers: host });
       check('web: Download PDF needs the key like everything else', r.status === 401 && !String(r.body).startsWith('%PDF'), r.status);
       r = await req({ path: '/labels/pdf?tracking=1ZNOTHERE000000000', headers: { ...host, Cookie: cookie } });

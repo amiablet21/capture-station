@@ -159,6 +159,7 @@ function createServer({ port, getKey, handlers, eventTarget, labelPdf }) {
     if (lm) {
       if (typeof labelPdf !== 'function') return send(res, 404, JSON.stringify({ error: 'Labels are not available.' }), MIME['.json']);
       const q = lm[1] ? { id: Number(lm[1]) } : { tracking: url.searchParams.get('tracking') || '', po: url.searchParams.get('po') || '' };
+      q.paper = url.searchParams.get('paper') || ''; // letter / a4; 4x6 when left out
       const out = await labelPdf(q);
       if (!out || !out.ok) return send(res, (out && out.status) || 500, JSON.stringify({ error: (out && out.error) || 'The PDF could not be made.' }), MIME['.json']);
       const name = String(out.filename || 'label.pdf').replace(/[^\w.-]+/g, '_');

@@ -170,7 +170,7 @@ contextBridge.exposeInMainWorld('api', {
   shipLabel: (id) => ipcRenderer.invoke('ship:label', { id }),
   shipPrint: (id, opts) => ipcRenderer.invoke('ship:print', { id, ...(opts || {}) }),
   shipPrintMany: (ids, opts) => ipcRenderer.invoke('ship:printMany', { ids, ...(opts || {}) }),
-  shipPdf: (id) => ipcRenderer.invoke('ship:pdf', { id }),
+  shipPdf: (id, paper) => ipcRenderer.invoke('ship:pdf', { id, paper }),
   shipVoid: (id) => ipcRenderer.invoke('ship:void', { id }),
   shipAddresses: () => ipcRenderer.invoke('ship:addresses'),
   shipAddressDelete: (id) => ipcRenderer.invoke('ship:addressDelete', { id }),
