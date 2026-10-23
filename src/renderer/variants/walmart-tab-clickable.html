@@ -132,6 +132,8 @@ tr.fade td { animation: fade .5s ease; }
 .browser-bar .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
 .browser-bar .url { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; font-family: var(--mono); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .browser-note { padding: 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border-soft); }
+.browser-page { max-height: 620px; overflow-y: auto; }
+.browser-page .empty { padding: 60px 20px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 14px; }
 .tile { position: relative; border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .tile .img { aspect-ratio: 1; max-width: 100%; border-radius: 6px; background: var(--surface-2); display: grid; place-items: center; color: var(--faint); }
@@ -177,6 +179,10 @@ tr.fade td { animation: fade .5s ease; }
 .map-new { font-size: 12px; color: var(--warn-text); }
 .upc { font-size: 12px; color: var(--muted); }
 .upc b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.about { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.about div { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.about dt { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.about dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .offer-empty { color: var(--muted); font-size: 13px; padding: 30px 0; text-align: center; }
 .offer-empty b { display: block; color: var(--text); margin-bottom: 4px; }
 
@@ -253,7 +259,6 @@ tr.fade td { animation: fade .5s ease; }
         <input id="sQ" type="search" placeholder="Search Walmart by name, or paste an item ID or walmart.com link" autocomplete="off" aria-label="Search Walmart">
         <button type="submit" class="btn btn-primary">Search</button>
       </form>
-      <div class="modes" role="group" aria-label="How to show Walmart"><button type="button" class="chip" data-mode="list" aria-pressed="true">Results list</button><button type="button" class="chip" data-mode="browse" aria-pressed="false">Walmart page</button></div>
       <div class="hint">Try <button type="button" data-try="galaxy s25">galaxy s25</button>, <button type="button" data-try="buds3 pro">buds3 pro</button>, or paste <button type="button" data-try="https://www.walmart.com/ip/1735902284">a walmart.com link</button></div>
       <div class="lgrid">
         <div class="lres" id="lRes"></div>
@@ -319,15 +324,15 @@ function toast(msg) { $('toast').textContent = msg; $('toast').hidden = false; c
 
 /* ---------- sample data ---------- */
 const CATALOG = [
-  { itemId: '1735902284', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 119.00, rating: 4.6, reviews: 2341, upc: '887276790801' },
-  { itemId: '1735902291', title: 'Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 149.00, rating: 4.7, reviews: 1102, upc: '887276790818' },
-  { itemId: '1735902307', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Silver', brand: 'SAMSUNG', price: 121.50, rating: 4.5, reviews: 87, upc: '887276790825' },
-  { itemId: '5310492875', title: 'Samsung Galaxy S25 128GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 684.99, rating: 4.7, reviews: 512, upc: '887276801231' },
-  { itemId: '5310492881', title: 'Samsung Galaxy S25 256GB Unlocked Smartphone, Icyblue', brand: 'SAMSUNG', price: 759.99, rating: 4.8, reviews: 233, upc: '887276801248' },
-  { itemId: '5310492899', title: 'Samsung Galaxy S25+ 256GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 899.99, rating: 4.6, reviews: 96, upc: '887276801255' },
-  { itemId: '6640271195', title: 'Samsung Galaxy Buds3 Pro True Wireless Earbuds, Silver', brand: 'SAMSUNG', price: 182.50, rating: 4.3, reviews: 1890, upc: '887276772210' },
-  { itemId: '6640271201', title: 'Samsung Galaxy Buds3 True Wireless Earbuds, White', brand: 'SAMSUNG', price: 129.00, rating: 4.4, reviews: 640, upc: '887276772227' },
-  { itemId: '7720419386', title: 'Samsung Galaxy A15 128GB Unlocked Smartphone, Black', brand: 'SAMSUNG', price: 139.00, rating: 4.2, reviews: 6, upc: '887276799012' },
+  { itemId: '1735902284', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 119.00, rating: 4.6, reviews: 2341, upc: '887276790801', sellers: 14, bbBy: 'Walmart.com', first: 'Nov 2023' },
+  { itemId: '1735902291', title: 'Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 149.00, rating: 4.7, reviews: 1102, upc: '887276790818', sellers: 6, bbBy: 'TechDeals Direct', first: 'Dec 2023' },
+  { itemId: '1735902307', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Silver', brand: 'SAMSUNG', price: 121.50, rating: 4.5, reviews: 87, upc: '887276790825', sellers: 3, bbBy: 'Walmart.com', first: 'Jan 2024' },
+  { itemId: '5310492875', title: 'Samsung Galaxy S25 128GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 684.99, rating: 4.7, reviews: 512, upc: '887276801231', sellers: 9, bbBy: 'Walmart.com', first: 'Feb 2025' },
+  { itemId: '5310492881', title: 'Samsung Galaxy S25 256GB Unlocked Smartphone, Icyblue', brand: 'SAMSUNG', price: 759.99, rating: 4.8, reviews: 233, upc: '887276801248', sellers: 5, bbBy: 'PhoneHub USA', first: 'Feb 2025' },
+  { itemId: '5310492899', title: 'Samsung Galaxy S25+ 256GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 899.99, rating: 4.6, reviews: 96, upc: '887276801255', sellers: 2, bbBy: 'Walmart.com', first: 'Mar 2025' },
+  { itemId: '6640271195', title: 'Samsung Galaxy Buds3 Pro True Wireless Earbuds, Silver', brand: 'SAMSUNG', price: 182.50, rating: 4.3, reviews: 1890, upc: '887276772210', sellers: 11, bbBy: 'Walmart.com', first: 'Jul 2024' },
+  { itemId: '6640271201', title: 'Samsung Galaxy Buds3 True Wireless Earbuds, White', brand: 'SAMSUNG', price: 129.00, rating: 4.4, reviews: 640, upc: '887276772227', sellers: 7, bbBy: 'Gadget Outlet', first: 'Aug 2024' },
+  { itemId: '7720419386', title: 'Samsung Galaxy A15 128GB Unlocked Smartphone, Black', brand: 'SAMSUNG', price: 139.00, rating: 4.2, reviews: 6, upc: '887276799012', sellers: 1, bbBy: 'Walmart.com', first: 'Sep 2025' },
 ];
 const LINN = [
   { sku: 'X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray', avail: 31 },
@@ -345,7 +350,7 @@ const CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair
 
 const SEED = () => ({
   sub: 'list',
-  list: { mode: 'list', q: 'galaxy tab a9', results: null, pick: null, sku: '', cond: 'New', price: '', qty: '', batch: [] },
+  list: { q: 'samsung galaxy', results: null, pick: null, sku: '', cond: 'New', price: '', qty: '', batch: [] },
   sent: [
     { id: 'l1', sku: 'S25-256GB-ICYBLUE', title: 'Samsung Galaxy S25 256GB Unlocked Smartphone, Icyblue', when: 'Today 9:41 AM', wm: 'live', lw: 'mapped', mappedTo: 'S25-256GB-ICYBLUE' },
     { id: 'l2', sku: 'WM-BUDS3PRO-SLV', title: 'Samsung Galaxy Buds3 Pro True Wireless Earbuds, Silver', when: 'Today 9:41 AM', wm: 'live', lw: 'ready' },
@@ -424,38 +429,33 @@ function stars(r) { return `<span class="stars" aria-hidden="true"><i style="wid
 function renderList() {
   const L = S.list;
   $('sQ').value = L.q;
-  let h;
-  if (L.results === null) h = '';
-  else if (!L.results.length) h = `<div class="empty"><b>${L.byId ? 'No Walmart item with that number' : 'Nothing found'}</b>${L.byId ? 'Check the number, or search by name.' : 'Try fewer words, like the model and storage.'}</div>`;
-  else h = `<div class="lres-h">${L.byId ? 'Item ' + L.byId : plural(L.results.length, 'result')} from Walmart</div>` + L.results.map(c => {
+  const url = L.byId ? `walmart.com/ip/${L.byId}` : `walmart.com/search?q=${encodeURIComponent(L.q).replace(/%20/g, '+')}`;
+  let page;
+  if (!L.results || !L.results.length) page = `<div class="empty"><b>${L.byId ? 'No Walmart item with that number' : 'Nothing found'}</b>${L.byId ? 'Check the number, or search by name.' : 'Try fewer words, like the model and storage.'}</div>`;
+  else page = `<div class="tiles">${L.results.map(c => {
     const inBatch = L.batch.some(b => b.itemId === c.itemId);
-    return `<div class="res ${L.pick === c.itemId ? 'on' : ''}"><div class="ph">${IMG}</div><div class="tx"><div class="t">${esc(c.title)}</div>
-      <div class="m">${stars(c.rating)}<b>${c.rating}</b> · ${c.reviews.toLocaleString()} reviews · ${c.brand} · item <span class="mono">${c.itemId}</span></div></div>
-      <div class="side"><span class="p">${money(c.price)}</span><a href="https://www.walmart.com/search?q=${encodeURIComponent(c.title)}" target="_blank" rel="noopener">View on Walmart ↗</a>
-      ${inBatch ? '<span class="pill ok">In batch</span>' : `<button type="button" class="row-btn ${L.pick === c.itemId ? 'on' : ''}" data-pick-item="${c.itemId}">${L.pick === c.itemId ? 'Selected' : 'Sell this'}</button>`}</div></div>`;
-  }).join('');
-  if (L.mode === 'browse' && L.results && L.results.length) {
-    const url = L.byId ? `walmart.com/ip/${L.byId}` : `walmart.com/search?q=${encodeURIComponent(L.q).replace(/%20/g, '+')}`;
-    h = `<div class="browser"><div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">${esc(url)}</span></div>
-      <div class="browser-note">Walmart's own site, shown inside the app. Hover a product and press “List this”.</div>
-      <div class="tiles">${L.results.map(c => {
-        const inBatch = L.batch.some(b => b.itemId === c.itemId);
-        return `<div class="tile ${L.pick === c.itemId ? 'on' : ''}"><div class="img">${IMG}</div>
-          ${inBatch ? '<span class="pill ok lt">In batch</span>' : `<button type="button" class="btn btn-primary lt" data-pick-item="${c.itemId}">${L.pick === c.itemId ? 'Selected' : '+ List this'}</button>`}
-          <div class="p">${money(c.price)}</div><div class="t">${esc(c.title)}</div><div class="r">${stars(c.rating)}${c.reviews.toLocaleString()}</div></div>`;
-      }).join('')}</div></div>`;
-  }
-  $('lRes').innerHTML = h;
-  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === L.mode)));
+    return `<div class="tile ${L.pick === c.itemId ? 'on' : ''}"><div class="img">${IMG}</div>
+      ${inBatch ? '<span class="pill ok lt">In batch</span>' : `<button type="button" class="btn btn-primary lt" data-pick-item="${c.itemId}">${L.pick === c.itemId ? 'Selected' : '+ List this'}</button>`}
+      <div class="p">${money(c.price)}</div><div class="t">${esc(c.title)}</div><div class="r">${stars(c.rating)}${c.reviews.toLocaleString()}</div></div>`;
+  }).join('')}</div>`;
+  $('lRes').innerHTML = `<div class="browser"><div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">${esc(url)}</span></div>
+    <div class="browser-note">Walmart's own site inside the app (a stand-in here). Scroll, hover a product, press “List this”.</div>
+    <div class="browser-page">${page}</div></div>`;
   renderOffer();
 }
 function offerReady() { const L = S.list; return !!(L.sku.trim() && parseFloat(L.price) > 0 && /^\d+$/.test(String(L.qty).trim())); }
 function renderOffer() {
   const L = S.list;
   const it = CATALOG.find(c => c.itemId === L.pick);
-  if (!it) { $('offer').innerHTML = `<div class="offer-empty"><b>Pick a Walmart item</b>Press “Sell this” on a result to set up your listing.</div>`; return; }
+  if (!it) { $('offer').innerHTML = `<div class="offer-empty"><b>Pick a Walmart item</b>Press “List this” on a product to set up your listing.</div>`; return; }
   $('offer').innerHTML = `
     <h3>${esc(it.title)}</h3><div class="sub">item <span class="mono">${it.itemId}</span> · UPC found: <b class="mono">${it.upc}</b></div>
+    <dl class="about">
+      <div><dt>Sellers</dt><dd>${it.sellers}</dd></div>
+      <div><dt>Buy Box</dt><dd>${money(it.price)} · ${esc(it.bbBy)}</dd></div>
+      <div><dt>Rating</dt><dd>${it.rating} · ${it.reviews.toLocaleString()} reviews</dd></div>
+      <div><dt>First review</dt><dd>${it.first}</dd></div>
+    </dl>
     <label class="f"><span>SKU for this listing</span><input id="oSku" class="mono" value="${esc(L.sku)}" placeholder="e.g. S25-128GB-NAVY" autocomplete="off" spellcheck="false"></label>
     <div class="note2">Any SKU you like. You map it to Linnworks once it's live.</div>
     <label class="f"><span>Condition</span><select id="oCond">${CONDS.map(c => `<option ${c === L.cond ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
@@ -680,7 +680,6 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, input[type=checkbox]'); if (!t) return;
   if (t.dataset.sub) showSub(t.dataset.sub);
   else if (t.dataset.try) { runSearch(t.dataset.try); }
-  else if (t.dataset.mode) { S.list.mode = t.dataset.mode; renderList(); }
   else if (t.dataset.pickItem) { pick(t.dataset.pickItem); renderList(); }
   else if (t.id === 'addBatch') {
     const L = S.list, it = CATALOG.find(c => c.itemId === L.pick);
