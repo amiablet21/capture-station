@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell, WebContentsView, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell, WebContentsView, session } = require('electron');
 // every IPC handler is also kept here, so the browser version of the app
 // (webserve.js, owner 2026-10-20) runs the very same code as this window
 const ipcHandlers = new Map();
@@ -866,7 +866,9 @@ function writeReturnsCsv() {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
     const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched,dispute_settlement'];
-    for (const r of db.listReturns(1000).slice().reverse()) {
+    // every return, not the newest 1000: past that the oldest silently
+    // fell off the CSV (owner 2026-10-22; the returns room logs ~30 a day)
+    for (const r of db.listReturns(1e9).slice().reverse()) {
       // a PO-only return has no item lines: one placeholder row keeps it in the CSV
       const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
       for (const it of its) {
@@ -2059,11 +2061,6 @@ async function startClaims() {
   try {
     claimsRun = await claims.start({
       dir,
-      // eBay lister QR capture: raw shots per draft SKU, swept after 14 days
-      listingDir: path.join(app.getPath('documents'), 'Capture Station', 'listing photos'),
-      onListingUpload: ({ sku, file }) => {
-        if (win && !win.isDestroyed()) win.webContents.send('ebay:photoUploaded', { sku, file });
-      },
       port: 0, // ephemeral — the QR carries the port, nobody types the URL
       // tap chips on the phone: today's received returns, newest first
       listToday: () => {
@@ -2396,6 +2393,23 @@ function registerIpc() {
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
       skuImageCache = { at: 0, map: null, skus: null, promise: null };
       return { ok: true, sku: next };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // the item's title, edited beside its SKU (owner 2026-10-22)
+  ipcMain.handle('stock:setTitle', async (_e, { stockItemId, title }) => {
+    invCacheClear();
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    const next = String(title || '').replace(/\s+/g, ' ').trim();
+    if (next.length > 255) return { ok: false, error: 'Titles are 255 characters at most.' };
+    try {
+      await new LinnworksClient(cfg.linnworks).setTitle(stockItemId, next);
+      skuImageCache = { at: 0, map: null, skus: null, promise: null };
+      return { ok: true, title: next };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3085,20 +3099,6 @@ function registerIpc() {
     priceGroupLog({ op: 'ignore', parent: p, child: c });
     pricingCache = { at: 0, data: null };
     return { ok: true };
-  });
-
-  // copy a lister photo (edited pixels) onto the OS clipboard — paste it
-  // straight into eBay's photo box instead of exporting files (owner
-  // 2026-09-18). OS clipboards hold ONE image, so it is per-photo.
-  ipcMain.handle('util:copyImage', (_e, { path: p, dataUrl } = {}) => {
-    try {
-      const img = dataUrl ? nativeImage.createFromDataURL(String(dataUrl)) : nativeImage.createFromPath(String(p || ''));
-      if (!img || img.isEmpty()) return { ok: false, error: 'Could not read the image.' };
-      clipboard.writeImage(img);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
   });
 
   /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
@@ -3814,7 +3814,7 @@ exit 1
         if (!k || Number.isNaN(ts)) return;
         if (!arrived.has(k) || ts > arrived.get(k)) arrived.set(k, ts);
       };
-      for (const r of db.listReturns(1000)) {
+      for (const r of db.listReturns(1e9)) { // all of them: a SKU's last return may be old
         const ts = Date.parse(r.created_at);
         for (const it of r.items || []) bump(it.targetSku || it.sku, ts);
       }
@@ -4282,268 +4282,230 @@ exit 1
     return { ok: true };
   });
 
-  /* ---------- eBay lister ---------- */
+  /* ---------- List on Walmart: Walmart Marketplace API (owner 2026-10-22) ----------
+     The renderer's dialog finds each SKU on Walmart by name, proves its UPC
+     by identifier lookup, then sends one MP_ITEM_MATCH feed per batch. Each
+     upload is kept in userData/walmart-feeds.json (newest first, last 50) so
+     its per-SKU results can be followed for days; a 15-minute check settles
+     the open ones, sets the starting stock on every accepted SKU once, and
+     says so when an upload finishes. */
+  // same keys as Ship with Walmart (Settings › Shipping); the client keeps
+  // its 15-minute token across calls
+  const wmT = walmart; // the shared Walmart client module
+  const wmClient = () => new wmT.WalmartClient(config.load().walmart || {});
+  const wmKeys = () => { const w = config.load().walmart || {}; return !!(w.clientId && w.clientSecret); };
+  const wmFeedsPath = () => path.join(app.getPath('userData'), 'walmart-feeds.json');
+  const wmReadFeeds = () => { try { return JSON.parse(fs.readFileSync(wmFeedsPath(), 'utf8')) || []; } catch { return []; } };
+  const wmWriteFeeds = (list) => fs.writeFileSync(wmFeedsPath(), JSON.stringify(list.slice(0, 50), null, 2), 'utf8');
+  const wmSettled = (f) => f.offers.every(o => wmT.isFinal(((f.items || {})[o.sku] || {}).status)) || f.status === 'ERROR';
 
-  // eBay 403s plain fetches (bot detection), so the listing page is read by a
-  // real hidden Chromium window on the marketplace session (the seller's own
-  // cookies ride along) and the specifics come straight off the DOM.
-  async function fetchEbayListingDom(itemId) {
-    const w = new BrowserWindow({
-      show: false, width: 1100, height: 900,
-      webPreferences: { partition: PANE_PARTITION, sandbox: true },
-    });
+  ipcMain.handle('walmart:status', () => ({ configured: wmKeys(), shipWeightLb: Number((config.load().walmartListing || {}).shipWeightLb) || 1 }));
+
+  // name search, plus the Linnworks barcode's own item when there is one —
+  // that one comes back first and flagged, since its UPC is already proven
+  ipcMain.handle('walmart:search', async (_e, { query, barcode } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
-      await w.loadURL(`https://www.ebay.com/itm/${encodeURIComponent(itemId)}`);
-      await new Promise(r => setTimeout(r, 4000)); // lazy sections settle
-      // specifics live in dl dt/dd pairs (verified live 2026-08-12); the
-      // category id rides the deepest breadcrumb /b/ link
-      return await w.webContents.executeJavaScript(`(() => {
-        const specs = {};
-        // seller-view rows (Views, Buyer ID, timings, shipping blocks) are
-        // page furniture, not item specifics — keep them out of the card
-        const junk = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
-        document.querySelectorAll('dl').forEach(dl => {
-          const dts = [...dl.querySelectorAll('dt')];
-          const dds = [...dl.querySelectorAll('dd')];
-          dts.forEach((dt, i) => {
-            const k = dt.innerText.trim().replace(/:$/, '');
-            const v = (dds[i] ? dds[i].innerText : '').replace(/\\s*Read more[\\s\\S]*$/i, '').trim();
-            if (k && v && !junk.test(k) && !specs[k]) specs[k] = v;
-          });
-        });
-        const h1 = document.querySelector('h1');
-        const title = (h1 ? h1.innerText.trim() : document.title.replace(/\\s*\\|\\s*eBay\\s*$/i, '')).trim();
-        const priceEl = document.querySelector('.x-price-primary');
-        const priceM = ((priceEl && priceEl.innerText) || '').match(/([\\d,]+\\.?\\d*)/);
-        let categoryId = '';
-        for (const a of [...document.querySelectorAll('a[href*="/b/"]')].reverse()) {
-          const m = String(a.href).match(/\\/(\\d{3,8})\\//);
-          if (m) { categoryId = m[1]; break; }
-        }
-        return {
-          title,
-          price: priceM ? Number(priceM[1].replace(/,/g, '')) : 0,
-          categoryId,
-          specs,
-        };
-      })()`, true);
+      const c = wmClient();
+      const [byName, byUpc] = await Promise.all([
+        c.searchByName(query),
+        barcode ? c.lookupUpc(barcode).catch(() => null) : null,
+      ]);
+      const results = byName.filter(r => !byUpc || r.itemId !== byUpc.itemId);
+      if (byUpc) results.unshift({ ...byUpc, byUpc: true });
+      return { ok: true, results };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:upc', async (_e, { upc } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!wmT.idParam(upc)) return { ok: false, error: 'A UPC is 12 digits (8–14 for other barcodes).' };
+    try {
+      return { ok: true, item: await wmClient().lookupUpc(upc) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Walmart item number -> its UPC (owner 2026-10-22: "I already have the
+  // item ID, can it not find it itself?"). Walmart's API answers UPC ->
+  // item but never item -> UPC, so the item's own walmart.com page is read
+  // once in a hidden window (only when the owner presses the button), every
+  // barcode-looking value on it is collected, and each is looked up through
+  // the API: only a UPC that points back to THIS item number is returned,
+  // so a misread page can never fill in a wrong UPC. Its own session, never
+  // the Seller Center pane's.
+  const WM_SITE_PARTITION = 'persist:walmart-site';
+  ipcMain.handle('walmart:upcFromItem', async (_e, { itemId } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick the Walmart item first.' };
+    // first the API: Get an item by item number carries gtin / upc (for
+    // items Walmart counts as in this seller's catalog); proven by lookup
+    try {
+      const c = wmClient();
+      for (const code of (await c.itemIdentifiers(id).catch(() => [])).slice(0, 4)) {
+        const item = await c.lookupUpc(code).catch(() => null);
+        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'api' };
+      }
+    } catch { /* fall through to the product page */ }
+    const site = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
+    const ses = session.fromPartition(WM_SITE_PARTITION);
+    ses.setUserAgent(ses.getUserAgent()
+      .replace(/\sElectron\/\S+/i, '')
+      .replace(/\s(?:capture[- ]?station|Capture ?Station|dws[- ]?stock)\/\S+/i, ''));
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: ses, sandbox: true, contextIsolation: true, javascript: true } });
+    let found = { codes: [], blocked: false };
+    try {
+      await w.loadURL(`${site}/ip/${id}`).catch(() => {}); // a slow sub-resource is no failure
+      for (let i = 0; i < 8; i++) {
+        found = await w.webContents.executeJavaScript(`(() => {
+          const body = document.body ? document.body.innerText : '';
+          const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+          const codes = [];
+          const add = (c) => { c = String(c || '').replace(/\\D/g, ''); if (c.length >= 8 && c.length <= 14 && !codes.includes(c)) codes.push(c); };
+          const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => x.textContent)
+            .concat((document.getElementById('__NEXT_DATA__') || {}).textContent || '');
+          for (const t of json) {
+            const re = /"(?:upc|productUpc|gtin|gtin8|gtin12|gtin13|gtin14)"\\s*:\\s*"?(\\d{8,14})"?/g;
+            for (let m = re.exec(t); m; m = re.exec(t)) add(m[1]);
+          }
+          const spec = /\\bUPC\\b[^0-9]{0,24}(\\d{8,14})/i.exec(body);
+          if (spec) add(spec[1]);
+          return { codes, blocked, ready: !!(document.getElementById('__NEXT_DATA__') || codes.length) };
+        })()`, true).catch(() => ({ codes: [], blocked: false, ready: false }));
+        if (found.codes.length || found.blocked || found.ready) break;
+        await new Promise(r => setTimeout(r, 750));
+      }
     } finally {
       w.destroy();
     }
+    if (found.blocked && !found.codes.length) {
+      return { ok: false, error: 'Walmart.com asked to check this computer is not a robot, so the page could not be read. Open View on Walmart, scroll to Specifications and copy the UPC from there.' };
+    }
+    try {
+      const c = wmClient();
+      for (const code of found.codes.slice(0, 6)) {
+        const item = await c.lookupUpc(code).catch(() => null);
+        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'page' };
+      }
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    return { ok: false, error: found.codes.length
+      ? `This item's page lists ${found.codes.length === 1 ? 'a barcode' : 'barcodes'} (${found.codes.slice(0, 3).join(', ')}) but none leads back to item ${id} on Walmart — scan the box instead.`
+      : "This item's walmart.com page doesn't show a UPC. Scan the box barcode, or copy it from View on Walmart → Specifications." };
+  });
+
+  ipcMain.handle('walmart:submit', async (_e, { offers } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = (offers || []).map(o => ({
+      sku: String(o.sku || '').trim(), stockItemId: o.stockItemId || '', linnworksBarcode: String(o.linnworksBarcode || ''),
+      itemId: String(o.itemId || ''), title: String(o.title || ''), image: String(o.image || ''), url: String(o.url || ''),
+      upc: String(o.upc || '').replace(/\D/g, ''), price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
+      condition: String(o.condition || ''), mainImageUrl: String(o.mainImageUrl || '').trim(),
+    }));
+    const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
+    if (!list.length) return { ok: false, error: 'Nothing to send.' };
+    if (bad) return { ok: false, error: `${bad.sku || 'An offer'} is missing its UPC, price, stock or shipping weight.` };
+    // Pre-Owned offers (the owner is approved, 2026-10-22) must carry a photo
+    const badCond = list.find(o => !wmT.MATCH_CONDITIONS.includes(o.condition)
+      || (o.condition !== 'New' && !/^https:\/\//i.test(o.mainImageUrl)));
+    if (badCond) {
+      return { ok: false, error: wmT.MATCH_CONDITIONS.includes(badCond.condition)
+        ? `${badCond.sku}: ${badCond.condition} offers need a photo link (https://…).`
+        : `${badCond.sku}: choose its condition.` };
+    }
+    try {
+      const c = wmClient();
+      const feedId = await c.submitMatchFeed(list);
+      const feed = { feedId, at: new Date().toISOString(), status: 'RECEIVED', items: {}, counts: {}, invSet: {}, offers: list };
+      wmWriteFeeds([feed, ...wmReadFeeds().filter(f => f.feedId !== feedId)]);
+      // the proven UPC becomes the Linnworks barcode where there was none,
+      // so the next restock lists without a scan — best effort, never blocks
+      const failed = [];
+      const lw = new LinnworksClient(cfg.linnworks);
+      for (const o of list) {
+        if (o.linnworksBarcode || !o.stockItemId) continue;
+        try { await lw.setBarcode(o.stockItemId, o.upc); } catch { failed.push(o.sku); }
+      }
+      return {
+        ok: true, feed,
+        barcodeNote: failed.length ? `Sent to Walmart. Linnworks didn't take the UPC as the barcode for ${failed.join(', ')} — add it there by hand.` : '',
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:feeds', () => ({ ok: true, feeds: wmReadFeeds() }));
+
+  // re-read one upload's per-SKU results; accepted SKUs get their starting
+  // stock once (an offer set up by match has no quantity of its own)
+  async function wmCheckFeed(feedId) {
+    const list = wmReadFeeds();
+    const f = list.find(x => x.feedId === feedId);
+    if (!f) throw new Error('That upload is not on this computer.');
+    const c = wmClient();
+    const st = await c.feedStatus(feedId);
+    f.status = st.status;
+    f.counts = st.counts;
+    f.items = { ...(f.items || {}), ...st.items };
+    f.error = st.feedErrors.join('; ');
+    f.checkedAt = new Date().toISOString();
+    f.invSet = f.invSet || {};
+    for (const o of f.offers) {
+      const s = f.items[o.sku];
+      if (!s || s.status !== 'SUCCESS' || f.invSet[o.sku]) continue;
+      try {
+        await c.setInventory(o.sku, o.qty);
+        f.invSet[o.sku] = true;
+      } catch (e) {
+        s.errors = [...(s.errors || []), `Listed, but the starting stock didn't save (${e.message}) — Linnworks sets it once it links the listing.`];
+      }
+    }
+    wmWriteFeeds(list);
+    if (win && !win.isDestroyed()) win.webContents.send('walmart:feed', f);
+    return f;
   }
 
-  // Public catalog title lookup: an eBay search resolves a UPC (or a model
-  // query) to the product's full marketing title — independent of the
-  // seller's own listings. First real result tile wins.
-  ipcMain.handle('listing:titleLookup', async (_e, { upc, query }) => {
+  ipcMain.handle('walmart:feedCheck', async (_e, { feedId } = {}) => {
+    try {
+      return { ok: true, feed: await wmCheckFeed(feedId) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // the 15-minute check: open uploads under a week old; a finished one says
+  // so once ("3 accepted, 1 not accepted")
+  async function wmPoll() {
     const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const q = String(upc || '').trim() || String(query || '').trim();
-    if (!q) return { ok: false, error: 'No UPC on the item and nothing to search with.' };
-    const w = new BrowserWindow({
-      show: false, width: 1100, height: 900,
-      webPreferences: { partition: PANE_PARTITION, sandbox: true },
-    });
-    try {
-      await w.loadURL(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}`);
-      await new Promise(r => setTimeout(r, 3000)); // result tiles settle
-      const title = await w.webContents.executeJavaScript(`(() => {
-        const bad = /^(shop on ebay|results matching|tell us what)/i;
-        for (const el of document.querySelectorAll('.s-item__title, .s-card__title')) {
-          const t = el.innerText.replace(/^New listing\\s*/i, '').trim();
-          if (t && !bad.test(t) && t.length > 15) return t;
+    if (cfg.captureOnly || !wmKeys()) return;
+    for (const f of wmReadFeeds()) {
+      if (f.notified || Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      try {
+        const g = await wmCheckFeed(f.feedId);
+        if (!wmSettled(g)) continue;
+        const sts = g.offers.map(o => ((g.items || {})[o.sku] || {}).status);
+        const ok = sts.filter(s => s === 'SUCCESS').length;
+        const list = wmReadFeeds();
+        const rec = list.find(x => x.feedId === g.feedId);
+        if (rec) { rec.notified = true; wmWriteFeeds(list); }
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('app:notice', { message: `Walmart upload finished: ${ok} accepted${sts.length - ok ? `, ${sts.length - ok} not accepted (Stock → Actions → Walmart uploads)` : ''}.` });
         }
-        return '';
-      })()`, true);
-      if (!title) return { ok: false, error: 'No catalog match for that search.' };
-      return { ok: true, title };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    } finally {
-      w.destroy();
+      } catch { /* next round retries */ }
     }
-  });
-
-  // Copy the item specifics off the seller's own LIVE listing of the base
-  // model: base SKU -> eBay link record (channelRefId = the item number) ->
-  // public listing page -> "About this item" table. The renderer caches the
-  // result per model in config.ebayModelCards, so this runs once per family.
-  ipcMain.handle('ebay:specs', async (_e, { baseSku }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const channels = await client.getMappingChannels();
-      const eb = channels.find(ch => /ebay/i.test(ch.source));
-      if (!eb) return { ok: false, error: 'No eBay channel in Linnworks.' };
-      const key = `${eb.id}|${eb.source}|${eb.subSource}`;
-      let items = mappingCache.get(key)?.items;
-      if (!items || Date.now() - mappingCache.get(key).at > 10 * 60 * 1000) {
-        items = await client.getChannelItems(eb.id, eb.source, eb.subSource);
-        mappingCache.set(key, { at: Date.now(), items });
-      }
-      const want = String(baseSku).trim().toUpperCase();
-      const hit = items.find(i => String(i.sku).trim().toUpperCase() === want && i.channelRefId);
-      if (!hit) return { ok: false, error: `No live eBay listing found for ${baseSku}.` };
-      const parsed = await fetchEbayListingDom(hit.channelRefId);
-      if (!parsed || !Object.keys(parsed.specs || {}).length) {
-        return { ok: false, error: 'Could not read the specifics off the listing page.' };
-      }
-      return { ok: true, itemId: String(hit.channelRefId), ...parsed };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  // QR for the lister's Photos row: the phone page is locked to the draft SKU
-  ipcMain.handle('ebay:qr', async (_e, { sku }) => {
-    if (!claimsRun || !claimsRun.listingUrl) return { ok: false, error: 'The upload server is not running — restart the app.' };
-    if (!String(sku || '').trim()) return { ok: false, error: 'Type a SKU first.' };
-    try {
-      const url = claimsRun.listingUrl(sku);
-      const qr = await require('qrcode').toDataURL(url, { margin: 1, width: 300, color: { dark: '#2f3437', light: '#ffffff' } });
-      return { ok: true, url, qr };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('ebay:photosPick', async () => {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Listing photos',
-      properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
-    });
-    return { ok: true, files: r.canceled ? [] : r.filePaths };
-  });
-
-  // Export: host the chosen photos on the Linnworks item (eBay's CSV upload
-  // fetches PicURL over the internet), build the CSV, save where the user
-  // picks. Nothing touches eBay until they upload the file in Seller Hub.
-  // photos land on the Linnworks item (hosted URLs), and the description's
-  // {{PHOTO_GALLERY}} placeholder becomes the two-column grid of them —
-  // shared by the CSV export and the Linnworks-native publish below
-  async function hostEbayMedia(client, listing, photoPaths) {
-    let picUrls = [];
-    if (photoPaths && photoPaths.length) {
-      let stockItemId = listing.stockItemId;
-      if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
-      if (!stockItemId) throw new Error(`${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.`);
-      // entries are plain paths (untouched photos) or {dataUrl, name}
-      // (baked in the editor — the EDITED pixels are what eBay gets)
-      const files = photoPaths.map((p, i) => {
-        if (p && typeof p === 'object' && p.dataUrl) {
-          const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-          if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-          return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-        }
-        const fp = typeof p === 'object' ? p.path : p;
-        return {
-          buffer: fs.readFileSync(fp),
-          name: path.basename(fp),
-          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-        };
-      });
-      picUrls = await client.addItemImages(stockItemId, files);
-    }
-    // two-column grid (owner pick 2026-08-13); a single photo stays full width
-    const gallery = picUrls.length
-      ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
-      : '';
-    const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
-    return { picUrls, description };
+  }
+  if (!IS_TEST_RUN) {
+    setTimeout(() => wmPoll().catch(() => {}), 60 * 1000);
+    setInterval(() => wmPoll().catch(() => {}), 15 * 60 * 1000);
   }
 
-  ipcMain.handle('ebay:export', async (_e, { listing, photoPaths }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    try {
-      const { buildEbayCsv } = require('./ebaycsv.js');
-      const client = new LinnworksClient(cfg.linnworks);
-      const { picUrls, description } = await hostEbayMedia(client, listing, photoPaths);
-      const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
-      const stamp = new Date();
-      const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
-      const r = await dialog.showSaveDialog(win, {
-        title: 'Save the eBay upload file',
-        defaultPath: path.join(app.getPath('downloads'), name),
-        filters: [{ name: 'CSV', extensions: ['csv'] }],
-      });
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8'); // BOM: Seller Hub reads UTF-8 reliably
-      return { ok: true, path: r.filePath, picCount: picUrls.length };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  /* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
-     "rework the listings tab based on what linnworks does": instead of the
-     Seller Hub CSV round-trip, ask Linnworks to list directly through its
-     stored eBay authorization. Configurators (made once in Linnworks' UI)
-     carry the shared settings including the eBay CONDITION, so the app maps
-     each of its four conditions to a configurator. The CSV export stays as
-     the fallback. */
-  ipcMain.handle('ebay:lwConfigs', async () => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      return { ok: true, configs: await client.getEbayConfigurators(), saved: cfg.ebayLw || {} };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('ebay:lwPublish', async (_e, { listing, photoPaths, configId, subSource }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!configId) return { ok: false, error: 'Pick a Linnworks configurator for this condition first.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      let stockItemId = listing.stockItemId || await client.findStockItemIdBySku(listing.sku).catch(() => null);
-      if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks.` };
-      const { description } = await hostEbayMedia(client, { ...listing, stockItemId }, photoPaths);
-      const tpls = await client.createEbayTemplates({ configId, subSource, inventoryItemIds: [stockItemId] });
-      const tpl = tpls.find(t => t.InventoryItemId === stockItemId) || tpls[0];
-      if (!tpl) return { ok: false, error: 'Linnworks returned no template — check the configurator and that the eBay channel is enabled.' };
-      if (tpl.ErrorMessage) return { ok: false, error: `Linnworks template error: ${tpl.ErrorMessage}` };
-      // the form's values overlay whatever the configurator + item produced
-      if (listing.title) tpl.Title = String(listing.title).slice(0, 80);
-      if (description) tpl.Description = description;
-      const qty = Number(listing.qty) || 0;
-      if (qty > 0) tpl.AvailableQuantity = qty;
-      const price = Number(listing.price) || 0;
-      if (price > 0) {
-        tpl.Price = tpl.Price || { StartPrice: 0, ReservePrice: 0, BINPrice: 0, AutoAccept: 0, AutoDecline: 0, OriginalRetailPrice: 0 };
-        tpl.Price.StartPrice = price;
-        tpl.Price.BINPrice = price;
-      }
-      const have = new Map((tpl.Attributes || []).map(a => [String(a.AttrName || '').toLowerCase(), a]));
-      for (const [name, value] of Object.entries(listing.specs || {})) {
-        if (!String(value || '').trim()) continue;
-        const hit = have.get(String(name).toLowerCase());
-        if (hit) hit.Value = String(value);
-        else (tpl.Attributes = tpl.Attributes || []).push({ AttrName: name, Value: String(value), IsUserDefined: true, IsRequired: false });
-      }
-      await client.processEbayListings([tpl], 'Create');
-      return { ok: true, templateId: tpl.TemplateId, subSource: subSource || '' };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('ebay:lwStatus', async (_e, { templateId, subSource }) => {
-    const cfg = config.load();
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const t = (await client.getEbayTemplates({ templateIds: [templateId], subSource }))[0];
-      if (!t) return { ok: true, status: 'UNKNOWN', error: '', listingIds: [] };
-      return { ok: true, status: String(t.Status || ''), error: t.ErrorMessage || '', listingIds: t.ListingIds || [] };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
   /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
 
   // Order series come straight from SQLite (cheap, always fresh); the three
@@ -5588,112 +5550,6 @@ exit 1
       });
     }
   }, 15000);
-
-  /* ---------- Temu lister: template intake + workbook export ---------- */
-
-  const temuTemplatePath = () => path.join(app.getPath('userData'), 'temu-template.xlsx');
-
-  ipcMain.handle('temu:state', () => {
-    const cfg = config.load();
-    return {
-      ok: true,
-      hasTemplate: fs.existsSync(temuTemplatePath()),
-      template: cfg.temuTemplate || null,
-      profiles: cfg.temuProfiles || {},
-      packages: cfg.temuPackages || {},
-      titles: cfg.temuTitles || {},
-    };
-  });
-
-  // a typed title teaches the model family: stored with {storage}/{color}
-  // tokens so every sibling SKU fills it in for itself
-  ipcMain.handle('temu:titles', (_e, { model, title }) => {
-    const cfg = config.load();
-    const all = { ...(cfg.temuTitles || {}) };
-    if (String(title || '').trim()) all[String(model).toUpperCase()] = String(title).trim();
-    else delete all[String(model).toUpperCase()];
-    config.save({ temuTitles: all });
-    return { ok: true };
-  });
-
-  // The seller downloads Temu's category template once; the app keeps a copy
-  // in userData and writes every export into a fresh copy of it.
-  ipcMain.handle('temu:template', async () => {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Pick the Temu upload template (downloaded from Seller Central)',
-      defaultPath: app.getPath('downloads'),
-      properties: ['openFile'],
-      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-    try {
-      const { readTemplate } = require('./temuxlsx.js');
-      const info = readTemplate(r.filePaths[0]); // throws when it is not a Temu template
-      fs.copyFileSync(r.filePaths[0], temuTemplatePath());
-      config.save({ temuTemplate: { name: path.basename(r.filePaths[0]), savedAt: new Date().toISOString() } });
-      return { ok: true, name: path.basename(r.filePaths[0]), columns: info.columns.length };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('temu:packages', (_e, { model, pack }) => {
-    const cfg = config.load();
-    const all = { ...(cfg.temuPackages || {}) };
-    if (pack) all[String(model).toUpperCase()] = pack;
-    config.save({ temuPackages: all });
-    return { ok: true };
-  });
-
-  // Export: host each variation's photos on its Linnworks item (Temu fetches
-  // image URLs over the internet, same as eBay's PicURL), fill the template
-  // copy, save to Documents. Nothing touches Temu until the seller uploads
-  // the workbook in Seller Central.
-  ipcMain.handle('temu:export', async (_e, { products }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!fs.existsSync(temuTemplatePath())) return { ok: false, error: 'Pick the Temu template file first (gear button).' };
-    try {
-      const { fillWorkbook } = require('./temuxlsx.js');
-      const client = new LinnworksClient(cfg.linnworks);
-      for (const prod of products || []) {
-        for (const v of prod.variations || []) {
-          const paths = v.photoPaths || [];
-          if (!paths.length) { v.images = v.images || []; continue; }
-          let stockItemId = v.stockItemId;
-          if (!stockItemId) stockItemId = await client.findStockItemIdBySku(v.sku).catch(() => null);
-          if (!stockItemId) return { ok: false, error: `${v.sku} is not in Linnworks - photos need a home item.` };
-          const files = paths.map((p, i) => {
-            if (p && typeof p === 'object' && p.dataUrl) {
-              const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-              if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-              return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-            }
-            const fp = typeof p === 'object' ? p.path : p;
-            return {
-              buffer: fs.readFileSync(fp),
-              name: path.basename(fp),
-              mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-            };
-          });
-          v.images = await client.addItemImages(stockItemId, files);
-        }
-      }
-      const out = fillWorkbook(temuTemplatePath(), products, cfg.temuProfiles || {});
-      const stamp = new Date();
-      const name = `Temu-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.xlsx`;
-      const r = await dialog.showSaveDialog(win, {
-        title: 'Save the Temu upload workbook',
-        defaultPath: path.join(app.getPath('downloads'), name),
-        filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
-      });
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(r.filePath, out);
-      return { ok: true, path: r.filePath };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
 
   // Inline log editing: one UNIT of one return record. Record-level fields
   // (PO#, date, customer, tracking) apply to the whole record; SKU/condition

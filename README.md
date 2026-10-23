@@ -2,10 +2,44 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.109 highlights
+
+- **`returns.csv` keeps every return.** The CSV mirror beside the daily capture files held only the newest 1000 returns, so a busy station's oldest ones quietly fell off it (the returns room logs about 30 a day). It now carries the whole log. The Stock page's "last arrived" date reads every return too, not the newest 1000. The shared `returns-log.csv` in the sync folder always had everything.
+
+## v1.32.108 highlights
+
+- **Returns can no longer vanish from the entry row.** Every return the returns room saved was in the shared folder and in `returns-log.csv`; the missing ones never saved at all. Scanning a PO only *loads* the order and the return saves on the next Enter; the loaded row's gutter now reads **Save** instead of a ✓, which looked like it was already saved. Pressing Esc, scanning the next PO over a loaded row, or closing / updating the app used to throw that draft away without a word. Now each one lands on a red **"N returns were NOT saved"** card above the log, with when it happened and why. **Put back** returns it to the entry row (order included) for an Enter to save; **Discard** drops it. A scan typed while a save is still running is also kept now instead of being wiped when the save finishes, and a quick double Enter can no longer save one return twice.
+
+## v1.32.107 highlights
+
+- **Reference #2 fills itself on the order line's Ship drawer** (owner: "so when my employee prints it, it will be easier"): it starts as the order's SKU and how many units sold, e.g. `X133-128GB-GRAY | 1 unit sold` (`| 3 units sold` for more). Several SKUs are listed comma-separated; UPS prints 35 characters, so a long list is cut and the count is always kept. Typing over it wins, and the field stays editable.
+
+## v1.32.106 highlights
+
+- **Get from Walmart** beside the UPC box on the Walmart tab (owner: "I already have the item ID, can it not find it itself?"). Walmart's catalog search never returns a UPC, so for the picked item the app asks Walmart's Get an item call by item number first (it answers for items Walmart counts as yours), then reads the UPC off the item's walmart.com page in a hidden window. Every candidate is looked up through the API and only a UPC that leads back to that exact item number is filled in, so a misread can never list the wrong product. If walmart.com shows its robot check, the message says to copy the UPC from View on Walmart → Specifications. Typing the item number into the UPC box now says so instead of "Walmart has no item with this UPC".
+
+## v1.32.105 highlights
+
+- **Rating and reviews on Walmart search results** (owner pick B, `variants/walmart-ratings.html`): under each result's title, five stars filled to the average, the number and the review count ("★★★★½ 4.6 · 2,341 reviews"); 1–9 reviews get a "few reviews" tag, none reads "No reviews yet". Walmart's search already returns both, so no extra calls.
+
+## v1.32.104 highlights
+
+- **Walmart has its own tick** under Settings › General › Pages on this station (it was riding the Stock tick, so it could not be found or switched off). It starts ticked wherever Stock is on; untick it to hide the Walmart tab on that station.
+
+## v1.32.103 highlights
+
+- **List on Walmart has its own Walmart tab** (owner: not tied to Stock → Unlisted). Add the SKUs you want with the box at the top (SKU, title or barcode, from the Linnworks inventory); the Unlisted view is back to how it was. **Nothing is searched for you**: the search box starts empty with the SKU's name only as a suggestion (click to fill in), Walmart is asked only when you press Search, and a UPC is checked only when you press Check or scan it. Remove a SKU with its ✕, or Clear list. **List | Uploads** switches to past uploads, each with per-SKU results.
+- **Pre-Owned conditions** (the account is Pre-Owned approved): every SKU can be listed, its condition picked from the Walmart list (New, Pre-Owned: Like New / Good / Fair, Remanufactured, New with defects). Open Box defaults to Like New and Used to Good; Scrap has no default, since every Pre-Owned grade is a working unit. Pre-Owned offers carry the item photo Walmart requires (the Linnworks image, editable). v1.32.102 wrongly held these back as "needs Pre-Owned approval".
+- **Edit item** (the Stock tray pencil, was Rename SKU): change the SKU, the Linnworks title, or both; each change can be undone with Ctrl+Z.
+
 ## v1.32.102 highlights
 
-- **Pick the size when saving a PDF.** **PDF** (Ship › Labels) and **Save PDF** (after Create label) open the print popup. Choose **Label 4×6 · Letter · A4**, see the preview, and press **Save PDF**. Letter and A4 put the label across the top half of the page, like paper prints. File names end in `-letter` or `-A4`.
-- The browser Download PDF takes `&paper=letter` or `&paper=a4` too, and stays 4×6 without it.
+- **The Listings tab is gone** (owner: never used). The eBay lister, the Temu lister, their phone photo page, photo editor, gear dialogs and the Listings tick in Settings are removed, with the code behind them (Seller Hub CSV and Temu workbook builders, Linnworks eBay configurator publishing). Old lister settings left in a station's config are ignored; a `Documents\Capture Station\listing photos` folder is no longer used and can be deleted.
+- **List on Walmart** (Stock → Unlisted, owner-approved mockup `variants/walmart-api-lister.html`), on the same Walmart API keys as Ship with Walmart (Settings › Shipping). Rows missing on Walmart get a tick box and show the name the app will search Walmart for. Tick them and press **List on Walmart**:
+  1. **Find on Walmart**, one SKU at a time: Walmart's catalog searched by name (the Linnworks title, else the SKU; edit and search again, remembered per SKU), the best picks each with **View on Walmart ↗**, chips for what agrees with the SKU (model, storage, colour) and what doesn't, the closest pre-selected. Then the offer: condition (New only; Open Box / Used / Refurbished need Walmart's Pre-Owned approval), price, starting stock, shipping weight.
+  2. **UPC.** Walmart's search gives out no UPCs, yet an offer must carry one: it comes from the Linnworks barcode (looked up automatically) or one scan of the box, and is checked on Walmart to prove it is the picked item. A proven UPC is saved to the Linnworks barcode.
+  3. **Review**, then one upload sends every offer (offer-only setup on Walmart's existing item, under the Linnworks SKU, so Linnworks links the listing and keeps price and stock).
+  4. **Send & track**: per SKU accepted / processing / not accepted with Walmart's reason and a resend. Open uploads are checked every 15 minutes, accepted SKUs get their starting stock once, and a message says when an upload finishes. Sent SKUs show "Sent to Walmart" on the Unlisted view. Past uploads: Stock → Actions → **Walmart uploads**.
 
 ## v1.32.101 highlights
 

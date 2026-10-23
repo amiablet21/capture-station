@@ -337,14 +337,10 @@ function render() {
 
   // per-install page flags (capture is always on); capture-only wins over all
   const pages = state.pages || { stock: true, history: true, returns: false };
-  // the eBay lister rides the Returns flag: same installs, same people
   // Overview has its OWN flag (owner 2026-08-25: employees must not see the
   // money dashboard) — it still needs stock access to have data to show.
-  // Listings split from the returns flag the same day ("I just need them to
-  // process returns") so a returns-only station shows Returns alone.
-  const lst = !!pages.returns && pages.listings !== false;
   // Recovery rides the Returns flag too (it reads the Returns log) and is opt-in like Pricing
-  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ebay: lst, temu: lst, ship: !!pages.ship };
+  const pageEnabled = { overview: !!pages.stock && pages.overview !== false, capture: true, stock: !!pages.stock, pricing: !!pages.stock && !!pages.pricing, shelf: !!pages.stock, returns: !!pages.returns, recovery: !!pages.returns && !!pages.recovery, ship: !!pages.ship, walmart: !!pages.stock && pages.walmart !== false };
   if (activePage !== 'capture' && (state.captureOnly || !pageEnabled[activePage])) {
     showPage('capture'); // showPage re-renders
     return;
@@ -362,8 +358,9 @@ function render() {
   $('tabPricing').hidden = !pages.stock || !pages.pricing; // opt-in (owner 2026-09-18): off until ticked in Settings
   $('tabReturns').hidden = !pages.returns;
   $('tabRecovery').hidden = !pages.returns || !pages.recovery; // opt-in (owner 2026-10-11), needs Returns
-  $('tabListings').hidden = !(pages.returns && pages.listings !== false);
   $('tabShip').hidden = !pages.ship; // UPS labels, per-station opt-in (owner 2026-10-19)
+  // List on Walmart: its own tick, on by default wherever Stock is (it reads the Linnworks inventory)
+  $('tabWalmart').hidden = !pages.stock || pages.walmart === false;
   $('pageTabs').hidden = state.captureOnly || !(pages.stock || pages.returns || pages.ship);
   $('historyBtn').hidden = !pages.history;
   $('stockActWholesale').hidden = !(pages.stock && pages.wholesale); // Actions menu item, per-station opt-in (owner 2026-09-30)
@@ -1305,10 +1302,10 @@ async function openSettings(group) {
   $('setPageHistory').checked = pg.history !== false;
   $('setPageReturns').checked = !!pg.returns;
   $('setPageRecovery').checked = !!pg.recovery; // opt-in: default off, needs Returns
-  $('setPageListings').checked = pg.listings !== false;
   $('setPageWholesale').checked = !!pg.wholesale; // opt-in: default off
   $('setPageCost').checked = !!pg.cost; // opt-in: default off (owner 2026-10-05)
   $('setPageShip').checked = !!pg.ship; // opt-in: default off (owner 2026-10-19)
+  $('setPageWalmart').checked = pg.walmart !== false; // List on Walmart: on unless unticked
   fillUpsSettings(cfg.ups || {});
   const rcv = cfg.receiving || {};
   $('setRecvFolder').textContent = rcv.folder || 'Documents\\Capture Station\\receiving';
@@ -1437,10 +1434,10 @@ $('settingsSave').addEventListener('click', async () => {
       history: $('setPageHistory').checked,
       returns: $('setPageReturns').checked,
       recovery: $('setPageRecovery').checked,
-      listings: $('setPageListings').checked,
       wholesale: $('setPageWholesale').checked,
       cost: $('setPageCost').checked,
       ship: $('setPageShip').checked,
+      walmart: $('setPageWalmart').checked,
     },
     ups: readUpsSettings(),
     walmart: { clientId: $('setWmId').value.trim(), clientSecret: $('setWmSecret').value.trim() },
@@ -1536,7 +1533,7 @@ let activePage = 'capture';
 let bootPageDone = false; // first state render hops to Overview once
 
 /* ----- page fade on switch (the gliding pill was removed at owner request) ----- */
-const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ebay: 'ebayPage', temu: 'temuPage', ship: 'shipPage' };
+const PAGE_SECTIONS = { overview: 'overviewPage', capture: 'rowsRow', stock: 'stockPage', returns: 'returnsPage', recovery: 'recoveryPage', ship: 'shipPage', walmart: 'walmartPage' };
 let showPageSettle = 0; // rapid tab flights only do heavy work where they land
 function pageFadeIn(page) {
   const el = $(PAGE_SECTIONS[page] || 'rowsRow');
@@ -1578,20 +1575,16 @@ function showPage(page) {
   $('shelfPage').hidden = page !== 'shelf';
   $('returnsPage').hidden = page !== 'returns';
   $('recoveryPage').hidden = page !== 'recovery';
-  $('ebayPage').hidden = page !== 'ebay';
-  $('temuPage').hidden = page !== 'temu';
   $('shipPage').hidden = page !== 'ship';
+  $('walmartPage').hidden = page !== 'walmart';
   $('tabOverview').classList.toggle('is-active', page === 'overview');
   $('tabCapture').classList.toggle('is-active', page === 'capture');
   $('tabStock').classList.toggle('is-active', page === 'stock');
   $('tabPricing').classList.toggle('is-active', page === 'pricing');
   $('tabReturns').classList.toggle('is-active', page === 'returns' || page === 'shelf');
   $('tabRecovery').classList.toggle('is-active', page === 'recovery');
-  $('tabListings').classList.toggle('is-active', page === 'ebay' || page === 'temu');
   $('tabShip').classList.toggle('is-active', page === 'ship');
-  if (page === 'ebay' || page === 'temu') {
-    try { localStorage.setItem('listingsChannel', page); } catch { /* best effort */ }
-  }
+  $('tabWalmart').classList.toggle('is-active', page === 'walmart');
   // the VISUAL switch is instant (pill, fade, hidden flags); each page's
   // heavy entry work — table renders, data refreshes — waits until the user
   // SETTLES here for a beat, so flying across tabs never stacks re-renders
@@ -1603,10 +1596,6 @@ function showPage(page) {
     if (activePage !== page) return; // flew past this tab
     if (page === 'overview') {
       enterOverview();
-    } else if (page === 'ebay') {
-      enterEbay();
-    } else if (page === 'temu') {
-      enterTemu();
     } else if (page === 'stock') {
       // a click-through (Overview SKU, Returns reminder) names the SKU to
       // land on; it goes into the search box BEFORE the grid draws
@@ -1627,6 +1616,8 @@ function showPage(page) {
       enterShelf();
     } else if (page === 'ship') {
       enterShip();
+    } else if (page === 'walmart') {
+      wlEnter();
     } else if (page === 'returns') {
       applySheetWidth($('retMain'), 'retSheetWidth');
       enterReturns();
@@ -1674,6 +1665,7 @@ $('rcCodeForm').addEventListener('submit', async (e) => {
   showPage('recovery');
 });
 $('tabShip').addEventListener('click', () => showPage('ship'));
+$('tabWalmart').addEventListener('click', () => showPage('walmart'));
 // Returns is a dropdown (Returns log | Shelf): first click lands on the log
 // as always; the caret — or a click while already on either page — opens the
 // in-app menu (a <dialog>, so the native marketplace pane yields while it is
@@ -4260,7 +4252,6 @@ async function loadChLinked() {
       chSkuMap = {};
       for (const [id, list] of Object.entries(res.chskus || {})) chSkuMap[id] = list.map(s => String(s));
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
-      if (activePage === 'ebay') renderEbayQueue(); // the queue reads the eBay link set
     }
   } finally {
     chLinkedLoading = false;
@@ -5119,11 +5110,10 @@ function beginPadEdit(btn) {
 // Inline edit of the In stock number: click -> type -> Enter saves to Linnworks.
 /* ---------- global undo: Ctrl/Cmd+Z reverses the last reversible action
    (owner 2026-09-16, "for anything — like changing the stock qty").
-   Routing: text fields keep the browser's native text undo; the eBay/Temu
-   listers keep their own history (they bind Ctrl+Z themselves); the
-   capture page routes to its undo engine; everywhere else pops this
-   stack. Deleting a SKU and listings already live on eBay stay OUT —
-   they are not reversible, which is why delete has its checkbox. */
+   Routing: text fields keep the browser's native text undo; the capture
+   page routes to its undo engine; everywhere else pops this stack.
+   Deleting a SKU stays OUT — it is not reversible, which is why delete
+   has its checkbox. */
 const undoStack = []; // { label, run: async () => {} }, newest last
 let undoBusy = false;
 
@@ -5137,7 +5127,6 @@ window.addEventListener('keydown', async (e) => {
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return; // native text undo wins
   if (anyDialogOpen()) return;
-  if (activePage === 'ebay' || activePage === 'temu') return; // the lister's own Ctrl+Z history
   e.preventDefault();
   if (activePage === 'capture') {
     if ($('undoBtn').disabled) toast('Nothing to undo');
@@ -6359,6 +6348,135 @@ function wsBlank() {
   return { orderId: null, source: '', unmatched: true, items: [], targets: null, condition: 'new', pick: '', busy: false, looked: '' };
 }
 
+/* ---- unsaved drafts (owner 2026-10-22: returns typed in the returns room
+   were "not being recorded / disappearing"; every saved one was in the
+   shared folder, so the losses were drafts that never saved). A looked-up
+   order sits in the row until a second Enter; Esc, a new PO over it, a
+   save that wiped what was typed meanwhile, or closing the app threw it
+   away without a word. Each of those now lands here, kept on this
+   station, until it is put back and saved or discarded. ---- */
+const WS_UNSAVED_KEY = 'retUnsaved';
+let wsPrev = null; // the loaded draft a newly typed PO is replacing
+
+function wsUnsavedList() {
+  try { return JSON.parse(localStorage.getItem(WS_UNSAVED_KEY) || '[]') || []; } catch { return []; }
+}
+function wsUnsavedStore(list) {
+  try { localStorage.setItem(WS_UNSAVED_KEY, JSON.stringify(list.slice(0, 100))); } catch { /* storage full: the card shows what it can */ }
+  renderRetUnsaved();
+}
+
+// the row as typed + the loaded order behind it
+function wsSnapshot() {
+  const v = {};
+  for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
+  return {
+    v, recv: wsRecvVal(), condition: ws.condition, pick: ws.pick, targets: ws.targets,
+    orderId: ws.orderId, source: ws.source, unmatched: ws.unmatched, items: ws.items, looked: ws.looked,
+  };
+}
+
+// a stray PO keystroke is not a return; a SKU, a loaded order or a PO
+// that was Entered (looked up) is
+function wsWorthKeeping(s) {
+  return !!(s && (s.v.sku || s.recv || s.orderId || s.looked));
+}
+
+function wsKeepUnsaved(s, why) {
+  if (!wsWorthKeeping(s)) return;
+  const sku = (s.v.sku || s.recv).toUpperCase();
+  const list = wsUnsavedList().filter(d => !(d.v.po === s.v.po && (d.v.sku || d.recv || '').toUpperCase() === sku));
+  list.unshift({ ...s, at: new Date().toISOString(), why });
+  wsUnsavedStore(list);
+}
+
+// Esc: the row clears as before, the draft is kept
+function wsDiscard() {
+  if (wsPrev) wsKeepUnsaved(wsPrev, 'replaced by a new PO, then cleared');
+  wsPrev = null;
+  wsKeepUnsaved(wsSnapshot(), 'cleared with Esc before saving');
+  wsReset();
+}
+
+// a new PO is being looked up or saved: the draft it typed over is kept
+// unless it was the same PO all along
+function wsSettlePrev() {
+  if (!wsPrev) return;
+  if (wsPrev.v.po !== wsEls.po.value.trim()) {
+    wsKeepUnsaved(wsPrev, `replaced by PO ${wsEls.po.value.trim() || '(blank)'} before saving`);
+  }
+  wsPrev = null;
+}
+
+function renderRetUnsaved() {
+  const box = $('retUnsaved');
+  if (!box) return;
+  const list = wsUnsavedList();
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div class="ret-uns-head">
+      <span class="ret-uns-title">⚠ ${list.length} return${list.length === 1 ? ' was' : 's were'} NOT saved</span>
+      <span class="ret-uns-sub">Put one back in the entry row and press Enter to save it, or discard it.</span>
+      <button type="button" class="ret-uns-btn ret-uns-x" data-unsall="1">Discard all</button>
+    </div>
+    ${list.map((d, n) => `
+      <div class="ret-uns-row">
+        <span class="mono ret-uns-when">${esc(retDateUS(d.at))} ${esc(new Date(d.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</span>
+        <span class="mono">${esc(d.v.po || '(no PO)')}</span>
+        <span class="mono ret-uns-sku">${esc(d.v.sku || d.recv || '(no SKU)')}</span>
+        <span class="ret-uns-cond">${esc(retCondLabel(d.condition))}${d.v.units && d.v.units !== '1' ? ` ×${esc(d.v.units)}` : ''}</span>
+        <span class="ret-uns-why">${esc(d.why)}</span>
+        <button type="button" class="ret-uns-btn" data-unsput="${n}">Put back</button>
+        <button type="button" class="ret-uns-btn ret-uns-x" data-unsdel="${n}">Discard</button>
+      </div>`).join('')}`;
+}
+
+$('retUnsaved').addEventListener('click', (e) => {
+  const all = e.target.closest('[data-unsall]');
+  if (all) {
+    if (confirm('Discard every unsaved return in this list? They were never saved, so they will be gone.')) wsUnsavedStore([]);
+    return;
+  }
+  const del = e.target.closest('[data-unsdel]');
+  if (del) {
+    const list = wsUnsavedList();
+    list.splice(Number(del.dataset.unsdel), 1);
+    wsUnsavedStore(list);
+    return;
+  }
+  const put = e.target.closest('[data-unsput]');
+  if (!put || !wsEls) return;
+  if (ws.busy || wsWorthKeeping(wsSnapshot())) { toast('Save or clear (Esc) the entry row first.'); return; }
+  const list = wsUnsavedList();
+  const d = list.splice(Number(put.dataset.unsput), 1)[0];
+  if (!d) return;
+  wsReset();
+  for (const [key] of WS_FIELDS) if (d.v[key] != null && (key !== 'date' || d.v.date)) wsEls[key].value = d.v[key];
+  wsDateAuto = false;
+  Object.assign(ws, {
+    condition: d.condition || 'new', pick: d.pick || '', targets: d.targets || null,
+    orderId: d.orderId || null, source: d.source || '', unmatched: d.unmatched !== false,
+    items: d.items || [], looked: d.looked || '',
+  });
+  wsRenderCond();
+  const r = wsRecvEl();
+  if (r && d.recv) r.value = d.recv;
+  wsSetPhase(ws.orderId ? 'ready' : 'idle');
+  wsUnsavedStore(list);
+  wsEls.sku.focus();
+  toast('Back in the entry row — press Enter to save it.', 3000);
+});
+
+// closing or restarting the app (Update now included) keeps the draft too
+window.addEventListener('beforeunload', () => {
+  if (!wsEls) return;
+  if (wsPrev) wsKeepUnsaved(wsPrev, 'replaced by a new PO, then the app closed');
+  wsKeepUnsaved(wsSnapshot(), ws.busy
+    ? 'the app closed mid-save — check the log before saving it again'
+    : 'the app closed before it was saved');
+});
+
 // Different return keeps the ORDERED SKU in the cell and grows a second
 // "→ what came back" line under it (owner 2026-09-10: same look as the
 // log's arrow line) — this manages that extra input's life cycle
@@ -6373,7 +6491,7 @@ function wsSyncRecv() {
     placeholder="→ what came back…" autocomplete="off" spellcheck="false" aria-label="What actually came back" />`);
   r = wsRecvEl();
   r.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); wsDiscard(); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
     wsSave();
@@ -6419,7 +6537,7 @@ function retEntryRow() {
   for (const [key] of WS_FIELDS) {
     wsEls[key].addEventListener('keydown', (e) => {
       if (key === 'sku' && skuListLive() && (e.key === 'Enter' || e.key === 'Escape')) return;
-      if (e.key === 'Escape') { e.preventDefault(); wsReset(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); wsDiscard(); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
       const po = wsEls.po.value.trim();
@@ -6443,6 +6561,13 @@ function retEntryRow() {
   // editing the PO after a match voids the match (a stale orderId must
   // never ride along); a re-typed SKU is no longer "that order line"
   wsEls.po.addEventListener('input', () => {
+    // typing over a LOADED order: hold on to that draft until the new PO
+    // is Entered (wsSettlePrev), the row is Esc'd or the app closes. A
+    // failed lookup overwrote nothing, so retyping its PO is a correction.
+    if (!wsPrev && !ws.busy && ws.orderId) {
+      wsPrev = wsSnapshot();
+      wsPrev.v.po = ws.looked;
+    }
     ws.orderId = null; ws.source = ''; ws.unmatched = true;
     ws.items = []; ws.looked = '';
     wsSetPhase('idle'); // the edited PO is a new draft, not the loaded order
@@ -6604,8 +6729,7 @@ makeCombo($('wsFixPick'), document.querySelector('#wsFix .combo-list'), async (i
 // the entry row's phase, worn where the eye already is (approved demo
 // pending-entry.html, owner 2026-09-14): while the lookup runs the +
 // becomes a loading circle (just the circle — no gray wash); a loaded,
-// not-yet-saved row tints green and the gutter turns into a ✓, so the
-// draft never reads as an already-saved row
+// not-yet-saved row tints green and the gutter turns into a Save button
 function wsSetPhase(p) {
   if (!retEntryTr) return;
   retEntryTr.classList.toggle('is-ready', p === 'ready');
@@ -6615,8 +6739,10 @@ function wsSetPhase(p) {
     plus.innerHTML = '<span class="ws-spin" aria-label="Looking the order up"></span>';
     plus.title = 'Looking the order up…';
   } else if (p === 'ready') {
-    plus.textContent = '✓';
-    plus.title = 'Order loaded — Enter (or click here) saves this return';
+    // "Save", not ✓ (owner 2026-10-22): a ✓ read as already saved, and
+    // loaded returns were left unsaved in the room
+    plus.textContent = 'Save';
+    plus.title = 'Order loaded, NOT saved yet — Enter (or click here) saves this return';
   } else {
     plus.textContent = '+';
     plus.title = 'Save this return';
@@ -6628,6 +6754,7 @@ function wsSetPhase(p) {
 // the sheet types like Excel, the lookup stamps the order's truth on it
 async function wsLookup(po) {
   if (ws.busy) return;
+  wsSettlePrev();
   ws.busy = true;
   wsSetPhase('pending');
   const res = await wsLookupApi(po).catch(e => ({ ok: false, error: e.message }));
@@ -6721,9 +6848,14 @@ function wsReset() {
 async function wsSave() {
   if (!ws || ws.busy) return;
   const v = {};
-  for (const [key] of WS_FIELDS) v[key] = wsEls[key].value.trim();
+  const sent = {}; // raw cells, to tell later typing from this entry
+  for (const [key] of WS_FIELDS) { sent[key] = wsEls[key].value; v[key] = sent[key].trim(); }
   const sku = v.sku.toUpperCase();
   if (!v.po && !sku && !v.cust && !v.trk && !v.note) return; // a blank row is a stray Enter
+  wsSettlePrev();
+  // the order behind THIS row, taken now: a PO typed while the save runs
+  // clears ws and must not leak into (or out of) this entry
+  const order = { orderId: ws.orderId, source: ws.source, unmatched: ws.unmatched };
   let receivedDay = '';
   if (v.date) {
     const m = v.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -6748,8 +6880,11 @@ async function wsSave() {
     } else {
       target = ws.condition === 'new' ? sku : (((ws.targets || {})[ws.condition]) || String(ws.pick || '').trim());
       if (!target) {
-        // one quiet resolve attempt before complaining (hand-typed SKUs)
+        // one quiet resolve attempt before complaining (hand-typed SKUs);
+        // busy, so a second Enter meanwhile can't save the entry twice
+        ws.busy = true;
         const tr = await api.returnsTargets(sku).catch(() => null);
+        ws.busy = false;
         if (tr && tr.ok) {
           ws.targets = { ...(tr.targets || {}), ...(ws.targets || {}) };
           target = (ws.targets[ws.condition]) || '';
@@ -6772,14 +6907,14 @@ async function wsSave() {
   if (by) retReceivedBy = by;
   ws.busy = true;
   const res = await rvCreate({
-    orderId: ws.orderId || undefined,
+    orderId: order.orderId || undefined,
     orderNumber: v.po,
-    source: ws.source,
+    source: order.source,
     customer: v.cust,
     tracking: v.trk,
     receivedBy: by,
     receivedDay, // the typed Date Received cell (empty = today)
-    unmatched: !!ws.unmatched,
+    unmatched: !!order.unmatched,
     note: (sku || received) ? '' : v.note,
     items: (sku || received) ? [{
       // no ordered SKU on record: what came back IS the line
@@ -6793,9 +6928,20 @@ async function wsSave() {
   ws.busy = false;
   if (!res || !res.ok) { toast((res && res.error) || 'Could not save the return.'); return; }
   toast((sku || received) ? `Received ${sku || received} ×${qty}` : `Logged ${v.po}`, 2500);
+  // the next return may already be going in (a scan lands while the save
+  // runs): clear only the cells still holding what was just saved
+  const typed = {};
+  for (const [key] of WS_FIELDS) if (wsEls[key].value !== sent[key]) typed[key] = wsEls[key].value;
+  wsPrev = null;
   wsReset();
+  for (const key of Object.keys(typed)) wsEls[key].value = typed[key];
+  if (typed.date != null) wsDateAuto = false;
+  // a put-back draft that just saved leaves the unsaved card
+  const savedSku = (sku || received).toUpperCase();
+  const left = wsUnsavedList().filter(d => !(d.v.po === v.po && (d.v.sku || d.recv || '').toUpperCase() === savedSku));
+  if (left.length !== wsUnsavedList().length) wsUnsavedStore(left);
   loadRetPast();
-  wsEls.po.focus();
+  if (!Object.keys(typed).length) wsEls.po.focus();
 }
 
 
@@ -6933,7 +7079,6 @@ async function loadUnlisted(force) {
       chanSkips = res.chanSkips || {};
       if (activePage === 'returns') { renderRetLog(); renderRetTodo(); }
       if (activePage === 'stock' && stockCache) { renderStockChips(); renderStock(); }
-      if (activePage === 'ebay') renderEbayQueue();
     }
   } finally {
     unlistedLoading = false;
@@ -7306,13 +7451,6 @@ $('retTodo').addEventListener('click', async (e) => {
       loadUnlisted();
     });
     return;
-  }
-  const g = e.target.closest('[data-goto]');
-  if (g) {
-    // straight to the eBay tab with this SKU's listing started (owner
-    // request 2026-08-12 — was the Stock Unlisted view before)
-    showPage('ebay');
-    ebSelect(g.dataset.goto, false);
   }
 });
 
@@ -7801,6 +7939,7 @@ async function loadRetPast() {
   }
   renderRetLog();
   renderRetDisputes();
+  renderRetUnsaved();
   retFreshGids.clear(); // washed once; later re-renders stay calm
 }
 
@@ -12010,1048 +12149,6 @@ api.on('claims:uploaded', ({ po, name, todayCount }) => {
   toast(`Photo saved: ${name}`, 3000);
 });
 
-/* ---------- eBay lister tab ---------- */
-// Approved design: variants/ebay-lister.html. Queue = the unlisted scan
-// filtered to condition SKUs; specifics copy once per model from the live
-// NEW listing (config.ebayModelCards); Export writes the Seller Hub CSV.
-
-const EB_PREFIX = { new: "", openbox: "OPEN-BOX", used: "USED", scrap: "SCRAP" };
-const EB_CONDL = { new: "Brand New", openbox: "Open Box", used: "USED • TESTED & WORKING", scrap: "FOR PARTS OR REPAIR — NOT WORKING" };
-const EB_BADGE = { new: "c-new", openbox: "c-open", used: "c-used", scrap: "c-scrap" };
-
-let ebCur = null;      // the listing being built
-let ebCfg = null;      // config snapshot (model cards + profiles)
-let ebBusy = false;
-
-function ebParseSku(sku) {
-  const s = String(sku || "").toUpperCase();
-  const cond = s.startsWith("OPEN-BOX-") ? "openbox" : s.startsWith("USED-") ? "used" : s.startsWith("SCRAP-") ? "scrap" : "";
-  const base = s.replace(/^(OPEN-BOX|USED|SCRAP)-/, "");
-  const m = base.match(/(\d+(?:GB|TB))/i);
-  const parts = base.split("-").filter(Boolean);
-  const last = parts[parts.length - 1] || "";
-  // tokens after the storage size: one = the color, more = a bundle or
-  // accessory SKU (X210-64GB-GRAY-CASE-USBC) that is NOT a color variant
-  const after = m ? base.slice(base.indexOf(m[1]) + m[1].length).split("-").filter(Boolean) : [];
-  return {
-    cond, base,
-    model: m ? base.slice(0, Math.max(0, base.indexOf(m[1]) - 1)) : (parts[0] || ""),
-    storage: m ? m[1] : "",
-    color: last && !/GB|TB/i.test(last) ? last[0] + last.slice(1).toLowerCase() : "",
-    plain: !!m && after.length === 1,
-    // the SKU never spells the brand out — the model token implies it
-    // (same heuristic the Temu tab uses)
-    brand: /IPAD|IPHONE|APPLE/i.test(s) ? "Apple" : "Samsung",
-  };
-}
-
-function ebTitleFor(baseTitle, cond) {
-  const tag = cond === "new" ? "" : cond === "openbox" ? " - Open Box" : cond === "used" ? " - Used" : " - For Parts";
-  // drop a trailing "New" (wrong for condition listings) and any old suffix,
-  // then trim the BASE so the suffix always fits whole inside 80 chars
-  const base = String(baseTitle || "")
-    .replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "")
-    .replace(/\s+New\s*$/i, "")
-    .trim();
-  return (base.slice(0, 80 - tag.length).trim() + tag) || base;
-}
-
-// junk the live-page reader may have cached before it learned better —
-// cards clean themselves on every use
-const EB_SPEC_JUNK = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
-function ebCleanSpecs(specs) {
-  const out = {};
-  // eBay's page renders model numbers with non-breaking hyphens (U+2011);
-  // an MPN carrying them never matches the catalog — plain hyphens here
-  const plainDash = (v) => String(v ?? "").replace(/[\u2010\u2011\u2012\u2013]/g, "-");
-  for (const [k, v] of Object.entries(specs || {})) if (!EB_SPEC_JUNK.test(k)) out[k] = plainDash(v);
-  return out;
-}
-
-// eBay category when no live listing lent us one: the two leaf categories
-// this store lists in (owner's upload was refused for an empty category,
-// 2026-09-28 — eBay's upload has no "fill it later")
-const EB_CATEGORY = { tablet: "171485", phone: "9355" }; // Tablets & eBook Readers / Cell Phones & Smartphones
-function ebDefaultCategory(sku, title) {
-  return EB_CATEGORY[tmGuessCat(sku, title || "")] || EB_CATEGORY.phone;
-}
-
-// mirror of main/ebaycsv.js buildDescription: the live preview IS the export
-function ebDescription(forExport) {
-  const c = {
-    new: { label: "BRAND NEW • FACTORY SEALED", bg: "#2e7d32", fg: "#ffffff",
-      blurb: "Item is brand new in its original, unopened retail packaging with the factory seal intact. All original contents are included. Never opened, never activated.",
-      inc: "everything, factory sealed in the original retail box.", row: "New" },
-    openbox: { label: "OPEN BOX", bg: "#6a1b9a", fg: "#ffffff",
-      blurb: "Box has been opened, but the item is in like-new condition — no dents, scratches, or signs of wear. Fully tested and working. All included accessories are original. Original box may show light shelf wear.",
-      inc: "the device + all original accessories, original box (may show light shelf wear).", row: "Open Box" },
-    used: { label: "USED • TESTED & WORKING", bg: "#fbc02d", fg: "#222222",
-      blurb: "Item has been previously used and may show cosmetic wear such as light scratches or scuffs (see photos for actual condition). Fully tested and 100% functional.",
-      inc: "the device + accessories exactly as listed — original accessories may not be included. Wall charger not included.", row: "Used — Tested & Working" },
-    scrap: { label: "FOR PARTS OR REPAIR — NOT WORKING", bg: "#c62828", fg: "#ffffff",
-      blurb: "Item is sold as-is for parts or repair and does not function as intended. Sold with no guarantee of functionality. No returns for non-working condition — please review photos carefully before purchasing.",
-      inc: "the device only — sold as-is.", row: "For Parts or Repair" },
-  }[ebCur.cond];
-  // Every element wears BOTH a class and the inline style: the app's CSP
-  // strips inline styles, so the preview leans on .ebp-* rules; eBay's page
-  // knows nothing of our classes and uses the inline styles. Same string.
-  // Version (US vs Global/International) rides the description ONLY — it is
-  // deliberately kept out of the CSV item specifics (owner, 2026-08-13)
-  const specRows = [...Object.entries(ebCur.specs), ["Version", ebCur.version || "US"]]
-    .filter(([, v]) => String(v || "").trim())
-    .map(([k, v]) => `<tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(k)}</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${esc(v)}</td></tr>`).join("");
-  return `
-    <div class="ebp-head" style="border-bottom:3px solid #2361EB;padding:6px 0 8px;margin-bottom:12px;text-align:center">
-      <div class="ebp-brand" style="font-size:17px;letter-spacing:4px;font-weight:700"><span class="ebp-blue" style="color:#2361EB">WIRELESS</span><span class="ebp-black" style="color:#16181C">TECHNO</span><span class="ebp-blue" style="color:#2361EB">STORE</span></div>
-      <div class="ebp-tagline" style="font-size:8.5px;letter-spacing:2px;color:#5B6472;margin-top:2px">30-DAY MONEY BACK GUARANTEE &middot; FAST MESSAGING RESPONSE</div>
-    </div>
-    <h2 class="ebp-title">${esc(ebCur.title)}</h2>
-    <p class="ebp-center" style="text-align:center;margin:6px 0"><span class="ebp-badge ebp-badge-${ebCur.cond}" style="display:inline-block;background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:2px 10px;border-radius:3px">${c.label}</span></p>
-    <p class="ebp-center ebp-body" style="text-align:center;font-size:12px;color:#333">${c.blurb}</p>
-    <table class="ebp-table" style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0;color:#333">
-      <tr><th class="ebp-th" style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;width:38%;text-align:left">Specification</th><th class="ebp-th" style="border:1px solid #ddd;padding:6px 8px;background:#f5f5f5;text-align:left">Details</th></tr>
-      ${specRows}
-      <tr><td class="ebp-td" style="border:1px solid #ddd;padding:8px">Condition</td><td class="ebp-td" style="border:1px solid #ddd;padding:8px">${c.row}</td></tr>
-    </table>
-    <p class="ebp-body" style="font-size:12px;color:#333;margin:6px 0"><b>Package Includes:</b> ${c.inc}</p>
-    ${ebGallery(forExport)}
-    <div class="ebp-foot" style="border-top:3px solid #2361EB;text-align:center;padding-top:6px;margin-top:10px;font-size:10.5px;color:#888"><b><span class="ebp-blue" style="color:#2361EB">Wireless</span><span class="ebp-black" style="color:#16181C">Techno</span><span class="ebp-blue" style="color:#2361EB">Store</span></b> — Every device inspected and tested before shipping</div>`;
-}
-
-// photo section inside the description: the preview shows the local files
-// (with their edits); the export carries a token the main process swaps for
-// the hosted Linnworks URLs once the photos are uploaded
-function ebGallery(forExport) {
-  if (!ebCur.photos.length) return forExport ? "" : "";
-  if (forExport) return "{{PHOTO_GALLERY}}";
-  return `<h3 class="ebp-h3" style="margin:10px 0 4px">Photos</h3>
-    <div class="ebp-gallery">${ebCur.photos.map(p =>
-      `<img src="${ebFileUrl(p.path)}" style="${ebThumbCss(p)}" alt="" />`).join("")}</div>`;
-}
-
-// SKUs "claimed" by an accepted export leave the queue at once; the claim
-// clears itself when the scan stops reporting the SKU as unlisted (listing
-// went live + linked), or after 14 days if the upload never happened
-let ebClaimed = {};
-try { ebClaimed = JSON.parse(localStorage.getItem("ebayClaimed") || "{}"); } catch { /* fresh start */ }
-function ebClaim(skus) {
-  const now = Date.now();
-  for (const s of skus) ebClaimed[String(s).toUpperCase()] = now;
-  try { localStorage.setItem("ebayClaimed", JSON.stringify(ebClaimed)); } catch { /* best effort */ }
-}
-
-function ebQueueRows() {
-  const rows = [];
-  const cutoff = Date.now() - 14 * 86400000;
-  // EVERY in-stock SKU with no eBay listing, New included (owner 2026-09-17:
-  // "the listings page will show all listings not listed on eBay or Temu").
-  // Needs the stock sheet + the truthful link sets; until they load, the
-  // zero-listing scan stands in (those SKUs are missing everywhere anyway).
-  const src = (stockCache && chLinked && chLinked.ebay)
-    ? unlMissingRows().filter(d => d.missing.includes('ebay') && !chanSkipKind(d.sku, 'ebay'))
-    : (unlistedDetail || []);
-  for (const d of src) {
-    const p = ebParseSku(d.sku);
-    const claim = ebClaimed[String(d.sku).toUpperCase()];
-    if (claim && claim > cutoff) continue; // exported — off the to-do list
-    rows.push({ sku: d.sku, cond: p.cond || "new", qty: Math.max(1, Number(d.avail) || 1), stockItemId: d.stockItemId, title: d.title || "" });
-  }
-  return rows;
-}
-
-// condition chips over the queue (owner 2026-09-17: "just a filter for the
-// conditions" — the sheet redesign was passed on, the one-column queue
-// stays). Session-only; All on every open.
-let ebQFilter = '';
-
-function renderEbayQueue() {
-  const box = $("ebQueue");
-  const all = ebQueueRows();
-  const chips = $("ebQChips");
-  if (chips) {
-    const counts = { new: 0, openbox: 0, used: 0, scrap: 0 };
-    for (const r of all) if (counts[r.cond] != null) counts[r.cond] += 1;
-    if (ebQFilter && !counts[ebQFilter]) ebQFilter = ''; // the filtered slice emptied out
-    const chip = (key, label, n) => `<button type="button" class="eb-qchip ${ebQFilter === key ? 'is-on' : ''}" data-qcond="${key}">${label} · ${n}</button>`;
-    chips.innerHTML = all.length ? [
-      chip('', 'All', all.length),
-      counts.new ? chip('new', 'New', counts.new) : '',
-      counts.openbox ? chip('openbox', 'Open Box', counts.openbox) : '',
-      counts.used ? chip('used', 'Used', counts.used) : '',
-      counts.scrap ? chip('scrap', 'Parts', counts.scrap) : '',
-    ].join('') : '';
-  }
-  const rows = ebQFilter ? all.filter(r => r.cond === ebQFilter) : all;
-  if (!rows.length) {
-    box.innerHTML = `<div class="ebay-qempty">${all.length
-      ? 'Nothing in this condition — pick another chip.'
-      : 'Nothing waiting — every in-stock SKU has an eBay listing. Press New listing to start one from scratch.'}</div>`;
-    return;
-  }
-  box.innerHTML = rows.map(r => `
-    <div class="ebay-qrow ${ebCur && ebCur.sku === r.sku ? "is-on" : ""}" data-sku="${esc(r.sku)}">
-      <span class="sku">${esc(r.sku)}${ebDrafts[r.sku] ? '<span class="ebay-qdraft" title="Draft in progress — click to resume">draft</span>' : ""}</span>
-      <span class="sub"><span class="ebay-qcond ${EB_BADGE[r.cond]}">${EB_CONDL[r.cond]}</span><span>${r.qty} unit${r.qty === 1 ? "" : "s"}</span></span>
-    </div>`).join("");
-}
-
-async function ebLoadCfg() {
-  if (!ebCfg) ebCfg = await api.getConfig().catch(() => ({}));
-  return ebCfg;
-}
-
-// pick a queue row (or scratch): fill the form, resolve the model card
-async function ebSelect(sku, scratch) {
-  const p = ebParseSku(sku);
-  const q = ebQueueRows().find(r => r.sku === sku);
-  ebHist = []; ebHistIdx = -1; // history is per-listing
-  // a saved draft resumes exactly where it was left
-  const draft = !scratch && sku && ebDrafts[sku];
-  if (draft) {
-    ebCur = JSON.parse(JSON.stringify(draft));
-    renderEbayQueue();
-    renderEbayForm();
-    return;
-  }
-  ebCur = {
-    sku, scratch: !!scratch,
-    // queue rows carry their real condition (a base SKU is New); a scratch
-    // SKU typed by hand keeps the old open-box default until parsed
-    cond: (q && q.cond) || p.cond || (scratch ? "openbox" : "new"),
-    stockItemId: (q && q.stockItemId) || "",
-    categoryId: sku ? ebDefaultCategory(sku, q && q.title) : "",
-    title: "", price: "", qty: q ? q.qty : 1,
-    specs: {}, vars: [], photos: [],
-    src: "", item: "",
-  };
-  if (sku && !scratch) ebAutoSiblings();
-  renderEbayQueue();
-  renderEbayForm();
-  if (!sku || scratch) return;
-  const cfg = await ebLoadCfg();
-  const card = (cfg.ebayModelCards || {})[p.model];
-  if (card) {
-    ebApplyCard(card, p);
-    renderEbayForm();
-    return;
-  }
-  // no card yet: read the live NEW listing once, save the card for good
-  $("ebSpecSrc").innerHTML = "⏳ reading your live eBay listing for " + esc(p.base) + "…";
-  const res = await api.ebaySpecs(p.base).catch(e => ({ ok: false, error: e.message }));
-  if (ebCur.sku !== sku) return; // user moved on
-  if (res && res.ok) {
-    const newCard = { title: res.title, item: res.itemId, categoryId: res.categoryId, price: res.price, specs: res.specs };
-    ebCfg.ebayModelCards = { ...(ebCfg.ebayModelCards || {}), [p.model]: newCard };
-    api.setConfig({ ebayModelCards: ebCfg.ebayModelCards }).catch(() => {});
-    ebApplyCard(newCard, p);
-  } else {
-    ebCur.src = "manual";
-    ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
-    ebCur.specs = ebManualSpecs(p);
-    ebCur.err = (res && res.error) || "no listing found";
-    // public catalog rescue: the item's UPC resolves to a real marketing
-    // title even when we have no live listing of the model anywhere.
-    // The brand rides the query — "A15 128GB Black" alone matched iPhone 13
-    // listings (the A15 Bionic chip), minting Apple titles on Samsung drafts
-    const inv = recvBySku && recvBySku.get(String(sku).toLowerCase());
-    const upc = (inv && inv.barcode) || "";
-    api.titleLookup(upc, `${p.brand} ${p.model} ${p.storage} ${p.color}`.trim()).then(lk => {
-      if (!lk || !lk.ok || !lk.title || !ebCur || ebCur.sku !== sku || ebCur.src !== "manual") return;
-      ebCur.title = ebTitleFor(lk.title, ebCur.cond);
-      ebCur.err = "";
-      ebCur.src = "catalog";
-      renderEbayForm();
-    }).catch(() => { /* the manual title stands */ });
-  }
-  renderEbayForm();
-}
-
-function ebApplyCard(card, p) {
-  ebCur.src = "ebay";
-  ebCur.item = card.item || "";
-  // the card's category (read off the live listing, or typed once) wins;
-  // a card without one falls to the phone/tablet default
-  ebCur.categoryId = card.categoryId || ebDefaultCategory(ebCur.sku, card.title);
-  ebCur.catSrc = card.categoryId ? "card" : "default";
-  ebCur.title = ebTitleFor(card.title, ebCur.cond);
-  ebCur.price = card.price ? (Math.max(1, card.price * 0.92)).toFixed(2) : "";
-  ebCur.specs = ebCleanSpecs(card.specs);
-  // the SKU knows better than the card for these three
-  if (p.storage) ebCur.specs["Storage Capacity"] = p.storage;
-  if (p.color) ebCur.specs["Color"] = p.color;
-}
-
-// manual mode opens with the FULL standard spec sheet already laid out —
-// eBay's usual phone/tablet specifics, empty fields simply stay off the
-// listing (owner request 2026-08-12: no add-specific clicking)
-const EB_SPEC_TEMPLATE = ['Brand', 'Model', 'MPN', 'Storage Capacity', 'Color', 'Screen Size', 'Processor', 'RAM Size', 'Type', 'Internet Connectivity', 'Operating System', 'Network', 'Connectivity', 'Display Type', 'Maximum Resolution', 'Features', 'Charger Included', 'Country of Origin'];
-function ebManualSpecs(p) {
-  const s = {};
-  for (const k of EB_SPEC_TEMPLATE) s[k] = '';
-  s.Brand = p.brand;
-  s.Model = p.model;
-  s['Storage Capacity'] = p.storage;
-  s.Color = p.color;
-  return s;
-}
-
-function ebVarSku(v) {
-  if (v.sku) return v.sku; // auto-filled siblings carry their real SKU
-  const p = ebParseSku(ebCur.sku);
-  const prefix = EB_PREFIX[ebCur.cond] ? `${EB_PREFIX[ebCur.cond]}-` : ""; // New has no prefix
-  return v.storage && v.color
-    ? `${prefix}${p.model}-${String(v.storage).toUpperCase()}-${String(v.color).toUpperCase()}`
-    : "";
-}
-
-// queue siblings (same model + condition) land in the variations already
-// filled — ✕ ejects one back to its own place in the queue
-function ebAutoSiblings() {
-  if (!ebCur || !ebCur.sku) return;
-  const p = ebParseSku(ebCur.sku);
-  if (!p.model) return; // New SKUs pair too (cond '' matches cond '')
-  for (const r of ebQueueRows()) {
-    if (r.sku === ebCur.sku) continue;
-    const ps = ebParseSku(r.sku);
-    if (ps.cond !== p.cond || ps.model !== p.model) continue;
-    if (!ps.plain) continue; // -CASE / -BUNDLE SKUs are products of their own, not colors
-    if (ebCur.vars.some(v => ebVarSku(v) === r.sku)) continue;
-    ebCur.vars.push({ sku: r.sku, storage: ps.storage, color: ps.color, price: "", qty: r.qty, auto: true });
-    // one product, one draft: absorbing a sibling retires its own draft
-    // immediately (owner, 2026-08-13) — ejecting it later rebuilds fresh
-    if (ebDrafts[r.sku]) {
-      delete ebDrafts[r.sku];
-      try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
-    }
-  }
-}
-
-// family members ALREADY live on eBay: ghost cards, never exported.
-// Best-effort — needs the inventory cache + the eBay link set loaded.
-function ebLiveFamily() {
-  if (!ebCur || !ebCur.sku || !recvItems || !chLinked || !chLinked.ebay) return [];
-  const p = ebParseSku(ebCur.sku);
-  if (!p.model) return [];
-  const pre = EB_PREFIX[p.cond || ebCur.cond]; // New has no prefix
-  const prefix = pre ? `${pre}-${p.model}-` : `${p.model}-`;
-  const inListing = new Set([ebCur.sku, ...ebCur.vars.map(v => ebVarSku(v))]);
-  const out = [];
-  for (const it of recvItems) {
-    const sku = String(it.sku).toUpperCase();
-    if (!sku.startsWith(prefix) || inListing.has(sku)) continue;
-    if (!it.stockItemId || !chLinked.ebay.has(it.stockItemId)) continue;
-    const ps = ebParseSku(sku);
-    if (!ps.plain) continue;
-    out.push({ sku, storage: ps.storage, color: ps.color });
-  }
-  return out;
-}
-
-function renderEbayForm() {
-  const has = !!ebCur;
-  $("ebSku").value = has ? ebCur.sku : "";
-  $("ebSku").readOnly = !has || !ebCur.scratch;
-  $("ebTitle").value = has ? ebCur.title : "";
-  $("ebTitleN").textContent = ($("ebTitle").value || "").length;
-  document.querySelectorAll(".ebay-condbtn").forEach(b => b.classList.toggle("is-on", has && b.dataset.cond === ebCur.cond));
-  $("ebVersion").value = has ? (ebCur.version || "US") : "US";
-  $("ebVersion").disabled = !has;
-  $("ebCategory").value = has ? (ebCur.categoryId || "") : "";
-  $("ebCategory").disabled = !has;
-  $("ebCategory").classList.toggle("is-missing", has && !ebCur.categoryId);
-  $("ebCategoryHint").textContent = !has ? ""
-    : !ebCur.categoryId ? "required for the CSV upload — eBay refuses a row without one"
-    : ebCur.catSrc === "card" ? "from your live listing of this model — edit to override"
-    : ebCur.catSrc === "typed" ? `saved for every future ${ebParseSku(ebCur.sku).model || ""} listing`
-    : `${ebCur.categoryId === EB_CATEGORY.tablet ? "Tablets & eBook Readers" : "Cell Phones & Smartphones"} — the store default; the Linnworks path takes its own from the configurator`;
-  $("ebPrice").value = has ? ebCur.price : "";
-  $("ebPriceHint").textContent = has && ebCur.src === "ebay" && ebCur.price ? "your live listing price − 8% — edit freely" : "";
-  $("ebQty").value = has ? ebCur.qty : "";
-  // specifics grid: all card specs, editable; amber when empty in manual mode
-  const EB_CORE_SPECS = ["Brand", "Model", "Storage Capacity", "Color"];
-  $("ebSpecs").innerHTML = !has ? "" : Object.entries(ebCur.specs).map(([k, v]) => `
-    <span class="ebay-spec"><label>${esc(k)}</label><input class="input ${ebCur.src === "manual" && !v && EB_CORE_SPECS.includes(k) ? "is-missing" : ""}" data-spec="${esc(k)}" value="${esc(v)}" /></span>`).join("")
-    + `<span class="ebay-spec ebay-spec-add"><button class="ebay-addbtn eb-m0" id="ebSpecAdd">add specific</button></span>`;
-  $("ebSpecSrc").innerHTML = !has ? "" : ebCur.src === "ebay"
-    ? `✓ copied from your live NEW listing <span class="mono">${esc(ebCur.item)}</span>`
-    : ebCur.src === "manual"
-      ? `<span style="color:var(--badge-yellow-text);font-weight:600">⚠ ${esc(ebCur.err || "no NEW listing found")}</span> — fill once, saved for every future ${esc(ebParseSku(ebCur.sku).model || "")} return`
-      : "";
-  // variations
-  // auto-filled queue siblings render as compact cards; hand-added ones stay
-  // editable; family members already live on eBay show as ghost cards
-  $("ebVars").innerHTML = !has ? "" : ebCur.vars.map((v, vi) => v.auto ? `
-    <span class="ebay-varcard is-auto">
-      <span class="vline"><span>${esc(v.storage)} · ${esc(v.color)}</span><span class="vsku is-ok">${esc(v.sku)}</span>
-        <input data-vf="price" data-vi="${vi}" value="${esc(v.price)}" placeholder="${esc(ebCur.price || "price")}" title="Price for this variation (blank = the listing price)" class="input mono eb-w76" />
-        <input data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" title="Units" class="input mono eb-w50" /></span>
-      <button class="ebay-varx" data-varx="${vi}" title="Not this one — it keeps its own place in the queue">✕</button>
-    </span>` : `
-    <span class="ebay-varcard">
-      <span class="vgrid">
-        <span class="ebay-spec"><label>Storage</label><input class="input mono" data-vf="storage" data-vi="${vi}" value="${esc(v.storage)}" /></span>
-        <span class="ebay-spec"><label>Color</label><input class="input mono" data-vf="color" data-vi="${vi}" value="${esc(v.color)}" /></span>
-        <span class="ebay-spec"><label>Price</label><input class="input mono" data-vf="price" data-vi="${vi}" value="${esc(v.price)}" /></span>
-        <span class="ebay-spec"><label>Qty</label><input class="input mono" data-vf="qty" data-vi="${vi}" value="${esc(v.qty)}" /></span>
-      </span>
-      <span class="vsku ${ebVarSku(v) ? "is-ok" : "is-empty"}">${ebVarSku(v) || "(fills in from storage + color)"}</span>
-      <button class="ebay-varx" data-varx="${vi}">✕</button>
-    </span>`).join("")
-    + ebLiveFamily().map(g => `
-    <span class="ebay-varcard is-live">
-      <span class="vline"><span>${esc(g.storage)} · ${esc(g.color)}</span><span class="vsku">${esc(g.sku)}</span>
-        <span class="ebay-livetag">live on eBay</span>
-        <button class="ebay-liveopen" data-liveopen="${esc(g.sku)}" title="Already listed — add stock there instead of a twin">open ↗</button></span>
-    </span>`).join("")
-    + `<button class="ebay-addbtn eb-m0 eb-selfstart" id="ebVarAdd">add variation</button>`
-    + (has && ebCur.vars.some(v => v.auto) ? `<span class="ebay-fhint">siblings from the queue auto-filled — ✕ ejects one back; exporting removes every included SKU from the queue</span>` : "");
-  // photos: objects carrying edit params; thumbs preview the edits live.
-  // Click a thumb to edit, ✕ removes, 📷 opens the phone QR for this draft.
-  // the app CSP strips style attributes from injected HTML — thumbnails are
-  // painted via CSSOM right after render (owner hit blank thumbs 2026-08-13)
-  $("ebShots").innerHTML = !has ? "" : ebCur.photos.map((p, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-shoti="${i}" title="Click to edit"><button class="x" data-shotx="${i}">✕</button><button class="cp" data-shotc="${i}" title="Copy this photo (with its edits) — then paste with Ctrl+V straight into eBay's photo box">⧉</button></span>`).join("")
-    + `<button class="qrbtn" id="ebShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
-    + `<button class="ebay-addbtn eb-m0" id="ebShotAdd">add photos</button>`
-    + (ebCur.photos.some(ebPhotoEdited) ? `<span class="ebay-fhint eb-fullrow">✎ edits bake into the exported photos</span>` : "");
-  if (has) {
-    document.querySelectorAll("#ebShots .ebay-shot[data-shoti]").forEach(el => {
-      const p = ebCur.photos[Number(el.dataset.shoti)];
-      if (!p) return;
-      el.style.backgroundImage = `url("file:///${String(p.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
-      el.style.filter = ebFilter(p);
-      el.style.transform = `rotate(${p.rot}deg)`;
-    });
-  }
-  // preview + export note
-  $("ebPrev").innerHTML = has ? ebDescription() : `<div class="ebay-prev-empty">Pick a SKU from the queue, or press New listing.</div>`;
-  const missing = [];
-  if (has && !ebCur.photos.length) missing.push("no photos yet — eBay wants at least one");
-  if (has && !ebCur.categoryId) missing.push("no eBay category — the CSV cannot upload without one");
-  $("ebExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
-  $("ebExport").disabled = !has;
-  $("ebLwList").disabled = !has;
-  if (!ebLw.configs) ebLwLoadConfigs(); else ebLwFillSelect(); // tracks the condition toggles
-  ebHistPush();  // every rendered state is one undo step
-  ebSaveDraft(); // and the draft survives restarts / tab switches
-}
-
-/* ----- drafts: one per SKU, resumed on selection ----- */
-let ebDrafts = {};
-try { ebDrafts = JSON.parse(localStorage.getItem("ebayDrafts") || "{}"); } catch { /* fresh start */ }
-function ebSaveDraft() {
-  if (!ebCur || !ebCur.sku) return;
-  ebDrafts[ebCur.sku] = JSON.parse(JSON.stringify(ebCur));
-  try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* storage full: drafts are a convenience */ }
-}
-
-/* ----- undo / redo across the whole form ----- */
-let ebHist = [];
-let ebHistIdx = -1;
-let ebHistNav = false;
-function ebHistBtns() {
-  $("ebUndo").disabled = ebHistIdx <= 0;
-  $("ebRedo").disabled = ebHistIdx >= ebHist.length - 1;
-}
-function ebHistPush() {
-  if (!ebCur || ebHistNav) { ebHistBtns(); return; }
-  const snap = JSON.stringify(ebCur);
-  if (ebHist[ebHistIdx] === snap) { ebHistBtns(); return; }
-  ebHist = ebHist.slice(0, ebHistIdx + 1);
-  ebHist.push(snap);
-  ebHistIdx++;
-  ebHistBtns();
-}
-function ebHistGo(delta) {
-  const next = ebHistIdx + delta;
-  if (next < 0 || next >= ebHist.length) return;
-  ebHistIdx = next;
-  ebHistNav = true;
-  ebCur = JSON.parse(ebHist[next]);
-  renderEbayQueue();
-  renderEbayForm();
-  ebHistNav = false;
-  ebSaveDraft();
-  ebHistBtns();
-}
-// blur on the free-typed fields lands one clean history step + draft save
-["ebTitle", "ebPrice", "ebQty"].forEach(id => $(id).addEventListener("change", () => { if (ebCur) renderEbayForm(); }));
-$("ebVersion").addEventListener("change", (e) => {
-  if (!ebCur) return;
-  ebCur.version = e.target.value;
-  renderEbayForm(); // preview + history + draft in one go
-});
-// a typed category is remembered on the model card, so the next return of
-// the same model (any condition) opens with it
-$("ebCategory").addEventListener("change", async (e) => {
-  if (!ebCur) return;
-  const id = e.target.value.replace(/\D/g, "");
-  ebCur.categoryId = id;
-  ebCur.catSrc = id ? "typed" : "";
-  const model = ebParseSku(ebCur.sku).model;
-  if (id && model && !ebCur.scratch) {
-    const cfg = await ebLoadCfg();
-    const cards = { ...(cfg.ebayModelCards || {}) };
-    cards[model] = { ...(cards[model] || {}), categoryId: id };
-    ebCfg.ebayModelCards = cards;
-    api.setConfig({ ebayModelCards: cards }).catch(() => {});
-  }
-  renderEbayForm();
-});
-$("ebUndo").addEventListener("click", () => ebHistGo(-1));
-$("ebRedo").addEventListener("click", () => ebHistGo(1));
-document.addEventListener("keydown", (e) => {
-  if (activePage !== "ebay" || anyDialogOpen()) return;
-  const t = e.target;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return; // native text undo wins
-  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); ebHistGo(-1); }
-  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); ebHistGo(1); }
-});
-
-/* ----- discard: throw the draft away, rebuild fresh ----- */
-$("ebDiscard").addEventListener("click", () => {
-  if (!ebCur) return;
-  const sku = ebCur.sku;
-  const scratch = ebCur.scratch;
-  if (sku) {
-    delete ebDrafts[sku];
-    try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
-  }
-  ebHist = []; ebHistIdx = -1;
-  if (scratch || !sku) $("ebScratch").click();
-  else ebSelect(sku, false);
-  toast("Draft discarded — rebuilt fresh");
-});
-
-function enterEbay() {
-  ebLoadCfg();
-  if (!unlistedDetail) loadUnlisted();
-  ensureInventory(); // ghost cards need sku -> stockItemId
-  loadChLinked();    // ...and the eBay link set
-  // the queue is now "everything missing an eBay listing", which reads the
-  // stock sheet — load it here too, then swap the fuller queue in
-  if (!stockCache) loadStock().then(() => { if (activePage === 'ebay') renderEbayQueue(); }).catch(() => {});
-  renderEbayQueue();
-  renderEbayForm();
-}
-
-$("ebQueue").addEventListener("click", (e) => {
-  const r = e.target.closest(".ebay-qrow");
-  if (r) ebSelect(r.dataset.sku, false);
-});
-$("ebQChips").addEventListener("click", (e) => {
-  const c = e.target.closest("[data-qcond]");
-  if (!c) return;
-  ebQFilter = c.dataset.qcond;
-  renderEbayQueue();
-});
-$("ebScratch").addEventListener("click", () => {
-  ebSelect("", true);
-  $("ebSku").readOnly = false;
-  $("ebSku").placeholder = "type any SKU — OPEN-BOX-…, USED-…, SCRAP-…";
-  $("ebSku").focus();
-});
-$("ebSku").addEventListener("change", (e) => {
-  if (!ebCur || !ebCur.scratch) return;
-  const sku = e.target.value.trim().toUpperCase();
-  const p = ebParseSku(sku);
-  ebCur.sku = sku;
-  if (p.cond) ebCur.cond = p.cond;
-  ebCur.specs = ebManualSpecs(p);
-  ebCur.src = "manual";
-  ebCur.err = "from-scratch listing";
-  ebCur.categoryId = ebDefaultCategory(sku, "");
-  ebCur.catSrc = "default";
-  ebCur.title = ebTitleFor(`${p.brand} ${p.model} ${p.storage} ${p.color}`.trim(), ebCur.cond);
-  renderEbayForm();
-});
-$("ebTitle").addEventListener("input", (e) => { if (ebCur) { ebCur.title = e.target.value; $("ebTitleN").textContent = e.target.value.length; $("ebPrev").innerHTML = ebDescription(); } });
-$("ebPrice").addEventListener("input", (e) => { if (ebCur) ebCur.price = e.target.value; });
-$("ebQty").addEventListener("input", (e) => { if (ebCur) ebCur.qty = e.target.value; });
-document.querySelector(".ebay-condrow").addEventListener("click", (e) => {
-  const b = e.target.closest(".ebay-condbtn");
-  if (!b || !ebCur) return;
-  ebCur.cond = b.dataset.cond;
-  ebCur.title = ebTitleFor(ebCur.title, ebCur.cond);
-  renderEbayForm();
-});
-$("ebSpecs").addEventListener("change", (e) => {
-  const f = e.target.closest("[data-spec]");
-  if (f && ebCur) { ebCur.specs[f.dataset.spec] = e.target.value; $("ebPrev").innerHTML = ebDescription(); }
-});
-// window.prompt does not exist in Electron (the button silently no-opped,
-// owner report 2026-08-12) — the button becomes an inline name field instead
-$("ebSpecs").addEventListener("click", (e) => {
-  const btn = e.target.closest("#ebSpecAdd");
-  if (!btn || !ebCur) return;
-  const cell = btn.parentElement;
-  cell.innerHTML = `<label>New specific</label><input class="input" id="ebSpecNew" placeholder="e.g. Processor" />`;
-  const inp = cell.querySelector("#ebSpecNew");
-  inp.focus();
-  inp.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && inp.value.trim()) {
-      const name = inp.value.trim();
-      if (!(name in ebCur.specs)) ebCur.specs[name] = "";
-      renderEbayForm();
-      const field = document.querySelector(`#ebSpecs [data-spec="${CSS.escape(name)}"]`);
-      if (field) field.focus();
-    } else if (ev.key === "Escape") {
-      renderEbayForm();
-    }
-  });
-  inp.addEventListener("blur", () => { if (!inp.value.trim()) renderEbayForm(); });
-});
-$("ebVars").addEventListener("click", (e) => {
-  const lo = e.target.closest("[data-liveopen]");
-  if (lo) { api.listingOpen(lo.dataset.liveopen, "ebay", true); return; }
-  if (e.target.closest("#ebVarAdd") && ebCur) { ebCur.vars.push({ storage: "", color: "", price: "", qty: 1 }); renderEbayForm(); return; }
-  const x = e.target.closest("[data-varx]");
-  if (x && ebCur) { ebCur.vars.splice(Number(x.dataset.varx), 1); renderEbayForm(); }
-});
-$("ebVars").addEventListener("change", (e) => {
-  const f = e.target.closest("[data-vf]");
-  if (f && ebCur) { ebCur.vars[Number(f.dataset.vi)][f.dataset.vf] = e.target.value.trim(); renderEbayForm(); }
-});
-$("ebShots").addEventListener("click", async (e) => {
-  if (e.target.closest("#ebShotAdd") && ebCur) {
-    const r = await api.ebayPhotosPick();
-    if (r && r.ok && r.files.length) { ebCur.photos.push(...r.files.map(ebPhotoObj)); renderEbayForm(); }
-    return;
-  }
-  if (e.target.closest("#ebShotQr") && ebCur) { ebOpenQr(); return; }
-  const x = e.target.closest("[data-shotx]");
-  if (x && ebCur) { e.stopPropagation(); ebCur.photos.splice(Number(x.dataset.shotx), 1); renderEbayForm(); return; }
-  // copy one photo (edits baked) onto the clipboard — pasting with Ctrl+V
-  // into eBay's photo box uploads it without exporting files (owner
-  // 2026-09-18). Clipboards hold one image, so it goes photo by photo.
-  const cp = e.target.closest("[data-shotc]");
-  if (cp && ebCur) {
-    e.stopPropagation();
-    const p = ebCur.photos[Number(cp.dataset.shotc)];
-    if (!p) return;
-    try {
-      const baked = (await ebBakePhotos([p]))[0];
-      const res = await api.copyImage(typeof baked === "string" ? { path: baked } : { dataUrl: baked.dataUrl });
-      toast(res && res.ok ? "Photo copied — paste it into eBay's photo box with Ctrl+V (⌘V on the Mac)" : (res && res.error) || "Could not copy the photo.");
-    } catch (err) {
-      toast(`Could not copy the photo: ${err.message}`);
-    }
-    return;
-  }
-  const th = e.target.closest("[data-shoti]");
-  if (th && ebCur) ebEditOpen(Number(th.dataset.shoti));
-});
-// the form's state as the payload the export AND the Linnworks publish
-// both send — one assembly, no drift between the two paths
-function ebBuildListingPayload() {
-  // storage + color travel as fields; main/ebaycsv.js writes them in eBay's
-  // upload syntax (`Storage Capacity=64GB|Color=Gray`)
-  const vars = ebCur.vars.filter(v => v.storage && v.color).map(v => ({
-    sku: ebVarSku(v),
-    storage: String(v.storage).trim(), color: String(v.color).trim(),
-    price: v.price || ebCur.price, qty: Number(v.qty) || 1,
-  }));
-  if (vars.length) {
-    // the primary SKU is itself one of the variations — without this row its
-    // own price/qty would fall off the parent listing
-    const ps = ebParseSku(ebCur.sku);
-    vars.unshift({
-      sku: ebCur.sku,
-      storage: ps.storage || ebCur.specs["Storage Capacity"] || "",
-      color: ps.color || ebCur.specs["Color"] || "",
-      price: ebCur.price, qty: Number(ebCur.qty) || 1,
-    });
-  }
-  const listing = {
-    sku: ebCur.sku, stockItemId: ebCur.stockItemId, categoryId: ebCur.categoryId || "",
-    title: ebCur.title, cond: ebCur.cond,
-    // untouched template fields stay off the listing entirely
-    specs: Object.fromEntries(Object.entries(ebCur.specs).filter(([, v]) => String(v || "").trim())),
-    description: ebDescription(true).replace(/\n\s*/g, " "),
-    price: ebCur.price, qty: Number(ebCur.qty) || 1,
-    variations: vars,
-  };
-  return { vars, listing };
-}
-
-$("ebExport").addEventListener("click", async () => {
-  if (!ebCur || ebBusy) return;
-  if (!ebCur.sku) { toast("Type a SKU first."); return; }
-  if (!String(ebCur.categoryId || "").trim()) { toast("Type the eBay category ID first — eBay refuses an upload row without one."); $("ebCategory").focus(); return; }
-  ebBusy = true;
-  $("ebExport").textContent = "Exporting…";
-  const { vars, listing } = ebBuildListingPayload();
-  let photos;
-  try {
-    photos = await ebBakePhotos(ebCur.photos); // edited pixels, not originals
-  } catch (err) {
-    ebBusy = false;
-    $("ebExport").textContent = "Export eBay CSV";
-    toast(`Could not process a photo: ${err.message}`);
-    return;
-  }
-  const res = await api.ebayExport(listing, photos).catch(err => ({ ok: false, error: err.message }));
-  ebBusy = false;
-  $("ebExport").textContent = "Export eBay CSV";
-  if (res && res.ok) {
-    // accepting removes every included SKU from the queue and its draft
-    const included = [...new Set([ebCur.sku, ...vars.map(v => v.sku)])].filter(Boolean);
-    ebClaim(included);
-    for (const s of included) delete ebDrafts[s];
-    try { localStorage.setItem("ebayDrafts", JSON.stringify(ebDrafts)); } catch { /* best effort */ }
-    toast(`Saved ${res.path.split(/[\\/]/).pop()} — ${included.length > 1 ? `${included.length} SKUs left the queue · ` : ""}upload it at Seller Hub → Reports → Upload${res.picCount ? ` (${res.picCount} photos hosted)` : ""}`, 6000);
-    ebCur = null;
-    renderEbayQueue();
-    renderEbayForm();
-  } else if (res && !res.canceled) {
-    toast(res.error || "Export failed.");
-  }
-});
-// where the exported file gets uploaded: Seller Hub -> Reports -> Upload
-$("ebUploadPage").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/sh/reports/uploads"));
-
-/* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
-   "List on eBay" hands the SAME payload the CSV export builds to Linnworks'
-   configurator pipeline: template from the condition's configurator, the
-   form's fields overlaid, pushed through Linnworks' stored eBay connection.
-   Variations still ride the CSV path. Configurator picks persist per
-   condition (they carry the eBay condition, so one per condition). */
-// error = why the list is empty (Linnworks refused, or it holds none) — the
-// dropdown and the List button both read it out instead of going quiet
-// (owner hit a dead dropdown with no explanation, 2026-09-28)
-let ebLw = { configs: null, byCond: {}, subSource: '', error: '', loading: false };
-
-// a short, honest reason for an empty configurator list
-function ebLwReason() {
-  if (ebLw.loading) return 'reading configurators from Linnworks…';
-  if (ebLw.error) {
-    const st = ebLw.error.match(/\((\d{3})\)/);
-    if (st && (st[1] === '403' || st[1] === '401')) return `Linnworks refused (${st[1]}) — the API application needs the Listings permission`;
-    const msg = String(ebLw.error).replace(/\s+/g, ' ').trim();
-    return `Linnworks: ${msg.length > 90 ? msg.slice(0, 87) + '…' : msg}`;
-  }
-  return 'no eBay configurators in Linnworks yet — make one there, then Refresh';
-}
-
-async function ebLwLoadConfigs(force) {
-  if (state && state.captureOnly) { ebLwFillSelect(); return; }
-  if (ebLw.configs && !force) { ebLwFillSelect(); return; }
-  if (ebLw.loading) { ebLwFillSelect(); return; } // a mid-load render keeps the condition current
-  ebLw.loading = true;
-  ebLw.error = '';
-  ebLwFillSelect();
-  const res = await api.ebayLwConfigs().catch(err => ({ ok: false, error: err.message }));
-  ebLw.loading = false;
-  if (res && res.ok) {
-    ebLw.configs = res.configs || [];
-    ebLw.byCond = (res.saved && res.saved.byCond) || {};
-    ebLw.subSource = (res.saved && res.saved.subSource) || '';
-  } else {
-    ebLw.configs = [];
-    ebLw.error = (res && res.error) || 'no answer from Linnworks';
-    toast(`Could not read the eBay configurators — ${ebLwReason()}`, 9000);
-  }
-  ebLwFillSelect();
-}
-
-function ebLwFillSelect() {
-  const sel = $('ebLwConfig');
-  const cond = ebCur ? ebCur.cond : 'new';
-  const list = ebLw.configs || [];
-  // an empty list explains itself in the placeholder; the tooltip carries
-  // the full Linnworks message when there is one
-  const head = list.length ? `configurator for ${esc(cond)}…` : esc(ebLwReason());
-  sel.innerHTML = `<option value="">${head}</option>` + list.map(c =>
-    `<option value="${esc(c.id)}"${ebLw.byCond[cond] === c.id ? ' selected' : ''}>${esc(c.name || c.site || String(c.id).slice(0, 8))}${c.condition ? ` · ${esc(String(c.condition))}` : ''}${c.account ? ` · ${esc(c.account)}` : ''}</option>`).join('');
-  sel.disabled = !list.length;
-  sel.title = list.length
-    ? 'The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)'
-    : ebLwReason();
-}
-
-$('ebLwConfig').addEventListener('change', async () => {
-  const cond = ebCur ? ebCur.cond : 'new';
-  ebLw.byCond[cond] = $('ebLwConfig').value;
-  const chosen = (ebLw.configs || []).find(c => c.id === $('ebLwConfig').value);
-  if (chosen && chosen.account) ebLw.subSource = chosen.account;
-  await api.setConfig({ ebayLw: { subSource: ebLw.subSource, byCond: ebLw.byCond } }).catch(() => { /* re-picked next session */ });
-});
-
-$('ebLwList').addEventListener('click', async () => {
-  if (!ebCur || ebBusy) return;
-  if (!ebCur.sku) { toast('Type a SKU first.'); return; }
-  const configId = ebLw.byCond[ebCur.cond];
-  if (!configId) {
-    // no list at all: say WHY, never point at a dropdown that cannot open
-    if (!(ebLw.configs || []).length) { toast(`Cannot list through Linnworks yet — ${ebLwReason()}`, 9000); return; }
-    toast(`Pick the Linnworks configurator for ${ebCur.cond} first — the dropdown beside this button.`);
-    return;
-  }
-  const { vars, listing } = ebBuildListingPayload();
-  if (vars.length) { toast('Variation listings still go through Export eBay CSV for now.'); return; }
-  ebBusy = true;
-  $('ebLwList').textContent = 'Listing…';
-  const done = (msg, ms) => { ebBusy = false; $('ebLwList').textContent = 'List on eBay'; if (msg) toast(msg, ms || 8000); };
-  let photos;
-  try {
-    photos = await ebBakePhotos(ebCur.photos);
-  } catch (err) { done(`Could not process a photo: ${err.message}`); return; }
-  const res = await api.ebayLwPublish(listing, photos, configId, ebLw.subSource).catch(err => ({ ok: false, error: err.message }));
-  if (!res || !res.ok) { done((res && res.error) || 'Linnworks refused the listing.', 9000); return; }
-  // give Linnworks a beat to talk to eBay, then read the verdict
-  await new Promise(r => setTimeout(r, 4000));
-  const st = await api.ebayLwStatus(res.templateId, res.subSource).catch(() => null);
-  if (st && st.ok && st.error) { done(`Linnworks: ${st.error}`, 9000); return; }
-  const sku = ebCur.sku;
-  ebClaim([sku]);
-  delete ebDrafts[sku];
-  try { localStorage.setItem('ebayDrafts', JSON.stringify(ebDrafts)); } catch { /* best effort */ }
-  const status = st && st.ok ? st.status : '';
-  done(status === 'OK'
-    ? `${sku} is live on eBay${st.listingIds && st.listingIds.length ? ` · #${st.listingIds[0]}` : ''}`
-    : `${sku} handed to Linnworks (${status || 'listing'}) — eBay usually confirms within a minute`);
-  ebCur = null;
-  renderEbayQueue();
-  renderEbayForm();
-});
-$("ebGear").addEventListener("click", async () => {
-  const cfg = await ebLoadCfg();
-  const p = cfg.ebayProfiles || {};
-  $("ebgShip").value = p.shipping || "";
-  $("ebgRet").value = p.returns || "";
-  $("ebgPay").value = p.payment || "";
-  $("ebgLoc").value = p.location || "";
-  $("ebgDisp").value = p.dispatchDays ?? 1;
-  $("ebGearDialog").showModal();
-});
-$("ebgCancel").addEventListener("click", () => $("ebGearDialog").close());
-// the names live at Seller Hub -> Account settings -> Business Policies;
-// the marketplace pane doesn't exist on this page, so open the real browser
-$("ebgOpen").addEventListener("click", () => api.openExternalUrl("https://www.ebay.com/bp/manage"));
-$("ebgSave").addEventListener("click", async () => {
-  ebCfg.ebayProfiles = {
-    shipping: $("ebgShip").value.trim(), returns: $("ebgRet").value.trim(),
-    payment: $("ebgPay").value.trim(), location: $("ebgLoc").value.trim(),
-    dispatchDays: Math.max(0, Number($("ebgDisp").value) || 1),
-  };
-  await api.setConfig({ ebayProfiles: ebCfg.ebayProfiles }).catch(() => {});
-  $("ebGearDialog").close();
-  toast("eBay listing settings saved");
-});
-// Listings is a dropdown (eBay lister | Temu lister), the same pattern as
-// Returns ▾ (owner picked option A, 2026-09-17 — the floating pill row is
-// gone): first click lands on the last-used lister; the caret — or a click
-// while already on either lister — opens the menu
-$("tabListings").addEventListener("click", (e) => {
-  const wantMenu = e.target.closest(".tab-caret") || activePage === "ebay" || activePage === "temu";
-  if (!wantMenu) {
-    let ch = "ebay";
-    try { if (localStorage.getItem("listingsChannel") === "temu") ch = "temu"; } catch { /* default */ }
-    showPage(ch);
-    return;
-  }
-  const dlg = $("listingsMenuDlg");
-  for (const b of dlg.querySelectorAll(".tab-menu-item")) b.classList.toggle("is-current", activePage === b.dataset.page);
-  dlg.showModal();
-  const r = $("tabListings").getBoundingClientRect();
-  dlg.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - dlg.offsetWidth - 8)))}px`;
-  dlg.style.top = `${Math.round(r.bottom + 4)}px`;
-});
-$("listingsMenuDlg").addEventListener("click", (e) => {
-  const item = e.target.closest(".tab-menu-item");
-  $("listingsMenuDlg").close();
-  if (item) showPage(item.dataset.page);
-});
-
-/* ---------- eBay lister: photo objects, QR capture, editor ---------- */
-// Approved designs: variants/ebay-photos-qr.html (phone = capture only) and
-// variants/ebay-photo-editor.html (Canva-style editing on the PC).
-
-function ebPhotoObj(path) {
-  return { path, bright: 100, con: 100, warm: 0, rot: 0, crop: "free" };
-}
-function ebPhotoEdited(p) {
-  return p.bright !== 100 || p.con !== 100 || p.warm !== 0 || p.rot !== 0 || p.crop !== "free";
-}
-function ebFileUrl(p) {
-  return "file:///" + esc(String(p).replace(/\\/g, "/"));
-}
-function ebFilter(p) {
-  return `brightness(${p.bright}%) contrast(${p.con}%) sepia(${Math.max(0, p.warm) / 100}) hue-rotate(${Math.min(0, p.warm) * 0.6}deg)`;
-}
-function ebThumbCss(p) {
-  return `filter:${ebFilter(p)};transform:rotate(${p.rot}deg)`;
-}
-
-/* ----- QR: phone shoots straight into this draft ----- */
-async function ebOpenQr() {
-  if (!ebCur || !ebCur.sku) { toast("Type a SKU first."); return; }
-  const res = await api.ebayQr(ebCur.sku).catch(err => ({ ok: false, error: err.message }));
-  if (!res || !res.ok) { toast((res && res.error) || "QR unavailable."); return; }
-  $("ebQrImg").src = res.qr;
-  $("ebQrSku").innerHTML = `<span class="mono">${esc(ebCur.sku)}</span>`;
-  $("ebQrPop").hidden = false;
-}
-$("ebQrClose").addEventListener("click", () => { $("ebQrPop").hidden = true; });
-document.addEventListener("click", (e) => {
-  if ($("ebQrPop").hidden) return;
-  if (e.target.closest("#ebQrPop") || e.target.closest("#ebShotQr") || e.target.closest("#tmShotQr")) return;
-  $("ebQrPop").hidden = true;
-});
-api.on("ebay:photoUploaded", ({ sku, file }) => {
-  if (!ebCur || String(ebCur.sku).toUpperCase() !== String(sku).toUpperCase()) return;
-  ebCur.photos.push(ebPhotoObj(file));
-  renderEbayForm();
-  toast(`Photo from the phone added to ${sku}`, 2500);
-});
-
-/* ----- editor: edits live on the photo object, baked at export ----- */
-let ebedIdx = 0;
-let ebedHist = [];
-let ebedHi = 0;
-
-function ebedSnap() {
-  ebedHist = ebedHist.slice(0, ebedHi + 1);
-  ebedHist.push(JSON.stringify(ebCur.photos));
-  ebedHi++;
-  ebedHistBtns();
-}
-function ebedHistBtns() {
-  $("ebedUndo").disabled = ebedHi === 0;
-  $("ebedRedo").disabled = ebedHi === ebedHist.length - 1;
-}
-function ebedRestore() {
-  ebCur.photos.splice(0, ebCur.photos.length, ...JSON.parse(ebedHist[ebedHi]));
-  ebedHistBtns();
-  if (ebedIdx >= ebCur.photos.length) ebedIdx = Math.max(0, ebCur.photos.length - 1);
-  ebedPaint();
-}
-
-function ebEditOpen(i) {
-  if (!ebCur || !ebCur.photos.length) return;
-  ebedIdx = Math.min(i, ebCur.photos.length - 1);
-  ebedHist = [JSON.stringify(ebCur.photos)];
-  ebedHi = 0;
-  ebedHistBtns();
-  ebedPaint();
-  $("ebEditDialog").showModal();
-}
-
-function ebedPaint() {
-  const list = ebCur.photos;
-  if (!list.length) { $("ebEditDialog").close(); renderEbayForm(); return; }
-  const p = list[ebedIdx];
-  const img = $("ebedImg");
-  img.src = ebFileUrl(p.path).replace(/&#039;/g, "'");
-  img.style.filter = ebFilter(p);
-  img.style.transform = `rotate(${p.rot}deg) scale(${p.rot % 180 ? 0.72 : 1})`;
-  $("ebedN").textContent = ebedIdx + 1;
-  $("ebedM").textContent = list.length;
-  $("ebedBright").value = p.bright; $("ebedBrightV").textContent = p.bright - 100;
-  $("ebedCon").value = p.con; $("ebedConV").textContent = p.con - 100;
-  $("ebedWarm").value = p.warm; $("ebedWarmV").textContent = p.warm;
-  document.querySelectorAll(".ebed-chip").forEach(c => c.classList.toggle("is-on", c.dataset.crop === p.crop));
-  $("ebedMain").textContent = ebedIdx === 0 ? "★ This is the main photo" : "★ Use as main photo";
-  $("ebedStrip").innerHTML = list.map((q, i) => `
-    <span class="ebed-th ${i === ebedIdx ? "is-on" : ""} ${i === 0 ? "is-main" : ""}" data-ebedth="${i}"></span>`).join("");
-  // CSP strips inline styles from injected HTML: paint the strip via CSSOM
-  document.querySelectorAll("#ebedStrip .ebed-th").forEach(el => {
-    const q = list[Number(el.dataset.ebedth)];
-    if (!q) return;
-    el.style.backgroundImage = `url("file:///${String(q.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
-    el.style.filter = ebFilter(q);
-    el.style.transform = `rotate(${q.rot}deg)`;
-  });
-}
-
-const ebedWire = (id, key) => {
-  $(id).addEventListener("input", (e) => {
-    const p = ebCur && ebCur.photos[ebedIdx];
-    if (!p) return;
-    p[key] = Number(e.target.value);
-    ebedPaint();
-  });
-  $(id).addEventListener("change", () => ebedSnap());
-};
-ebedWire("ebedBright", "bright");
-ebedWire("ebedCon", "con");
-ebedWire("ebedWarm", "warm");
-
-$("ebedRot").addEventListener("click", () => {
-  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
-  p.rot = (p.rot + 90) % 360; ebedSnap(); ebedPaint();
-});
-document.querySelectorAll(".ebed-chip").forEach(c => c.addEventListener("click", () => {
-  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
-  p.crop = c.dataset.crop; ebedSnap(); ebedPaint();
-}));
-$("ebedMain").addEventListener("click", () => {
-  if (!ebCur || ebedIdx === 0) return;
-  const [p] = ebCur.photos.splice(ebedIdx, 1);
-  ebCur.photos.unshift(p);
-  ebedIdx = 0; ebedSnap(); ebedPaint();
-});
-$("ebedDel").addEventListener("click", () => {
-  if (!ebCur) return;
-  ebCur.photos.splice(ebedIdx, 1);
-  if (ebedIdx >= ebCur.photos.length) ebedIdx = Math.max(0, ebCur.photos.length - 1);
-  ebedSnap(); ebedPaint();
-});
-$("ebedReset").addEventListener("click", () => {
-  const p = ebCur && ebCur.photos[ebedIdx]; if (!p) return;
-  Object.assign(p, { bright: 100, con: 100, warm: 0, rot: 0, crop: "free" });
-  ebedSnap(); ebedPaint();
-});
-$("ebedStrip").addEventListener("click", (e) => {
-  const t = e.target.closest("[data-ebedth]");
-  if (t) { ebedIdx = Number(t.dataset.ebedth); ebedPaint(); }
-});
-$("ebedUndo").addEventListener("click", () => { if (ebedHi > 0) { ebedHi--; ebedRestore(); } });
-$("ebedRedo").addEventListener("click", () => { if (ebedHi < ebedHist.length - 1) { ebedHi++; ebedRestore(); } });
-$("ebEditDialog").addEventListener("keydown", (e) => {
-  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); $("ebedUndo").click(); }
-  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); $("ebedRedo").click(); }
-});
-$("ebedDone").addEventListener("click", () => { $("ebEditDialog").close(); renderEbayForm(); });
-
-/* ----- bake: apply the edits to real pixels for export ----- */
-function ebLoadImage(path) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`could not read ${path.split("\\").pop()}`));
-    img.src = "file:///" + String(path).replace(/\\/g, "/");
-  });
-}
-
-async function ebBakePhotos(photos) {
-  const out = [];
-  for (const p of photos) {
-    if (!ebPhotoEdited(p)) { out.push(p.path); continue; }
-    const img = await ebLoadImage(p.path);
-    // crop from the center first, in source pixels
-    let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
-    if (p.crop === "1:1") {
-      const side = Math.min(sw, sh);
-      sx = (sw - side) / 2; sy = (sh - side) / 2; sw = side; sh = side;
-    } else if (p.crop === "4:3") {
-      if (sw / sh > 4 / 3) { const w = sh * 4 / 3; sx = (sw - w) / 2; sw = w; }
-      else { const h = sw * 3 / 4; sy = (sh - h) / 2; sh = h; }
-    }
-    const rot = ((p.rot % 360) + 360) % 360;
-    const cvs = document.createElement("canvas");
-    cvs.width = rot % 180 ? sh : sw;
-    cvs.height = rot % 180 ? sw : sh;
-    const ctx = cvs.getContext("2d");
-    ctx.filter = ebFilter(p);
-    ctx.translate(cvs.width / 2, cvs.height / 2);
-    ctx.rotate(rot * Math.PI / 180);
-    ctx.drawImage(img, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh);
-    out.push({ dataUrl: cvs.toDataURL("image/jpeg", 0.92), name: (p.path.split("\\").pop() || "photo").replace(/\.[a-z0-9]+$/i, "") + "-edited.jpg" });
-  }
-  return out;
-}
-
 /* ---------- stock columns: drag a header to rearrange ---------- */
 // HTML5 drag on the th; the resize grip keeps its own mousedown (dragging
 // from the grip is suppressed so resizing never turns into a move)
@@ -13099,12 +12196,21 @@ $("stockList").addEventListener("dragend", () => {
   document.querySelectorAll(".stock-table th.col-drop").forEach(x => x.classList.remove("col-drop"));
 });
 
-/* ---------- rename a Linnworks SKU (stock hover tray pencil) ---------- */
+/* ---------- edit a Linnworks item: SKU and title (stock hover tray pencil) ---------- */
+// The title sits beside the SKU (owner 2026-10-22: "change the title for
+// it, not just the SKU"); Save writes only what changed.
 let rnCtx = null;
+function rnItemOf(stockItemId, sku) {
+  const all = [...((stockCache && stockCache.items) || []), ...(recvItems || [])];
+  return all.find(i => stockItemId && i.stockItemId === stockItemId)
+    || all.find(i => String(i.sku).toUpperCase() === String(sku).toUpperCase()) || null;
+}
 function openRenameDialog(sku, stockItemId) {
-  rnCtx = { sku, stockItemId };
+  const it = rnItemOf(stockItemId, sku);
+  rnCtx = { sku, stockItemId, title: (it && it.title) || '' };
   $("rnOld").textContent = sku;
   $("rnNew").value = sku;
+  $("rnTitle").value = rnCtx.title;
   $("rnErr").hidden = true;
   $("renameDialog").showModal();
   $("rnNew").focus();
@@ -13120,38 +12226,74 @@ $("rnDelete").addEventListener("click", () => {
   openStockDelete(sku, stockItemId);
 });
 $("rnNew").addEventListener("input", () => { $("rnNew").value = $("rnNew").value.toUpperCase(); });
-$("rnNew").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
+for (const id of ["rnNew", "rnTitle"]) {
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rnSave").click(); } });
+}
+// local caches follow a title change at once; the grid reloads after
+function rnSetLocalTitle(stockItemId, title) {
+  for (const it of [...((stockCache && stockCache.items) || []), ...(recvItems || [])]) {
+    if (it.stockItemId === stockItemId) it.title = title;
+  }
+}
 $("rnSave").addEventListener("click", async () => {
   if (!rnCtx) return;
+  const ctx = rnCtx;
   const next = $("rnNew").value.trim().toUpperCase();
+  const title = $("rnTitle").value.replace(/\s+/g, " ").trim();
+  const skuChanged = next !== String(ctx.sku).toUpperCase();
+  const titleChanged = title !== ctx.title;
+  if (!skuChanged && !titleChanged) { $("renameDialog").close(); return; }
+  const fail = (msg) => { $("rnErr").textContent = msg; $("rnErr").hidden = false; };
   $("rnSave").disabled = true;
-  const res = await api.stockRenameSku(rnCtx.stockItemId, rnCtx.sku, next).catch(err => ({ ok: false, error: err.message }));
+  let newSku = ctx.sku;
+  if (skuChanged) {
+    const res = await api.stockRenameSku(ctx.stockItemId, ctx.sku, next).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) { $("rnSave").disabled = false; fail((res && res.error) || "Rename failed."); return; }
+    newSku = res.sku;
+    // local caches follow immediately; the grid reloads for everything else
+    if (stockCache) {
+      const it = stockCache.items.find(i => i.sku === ctx.sku);
+      if (it) it.sku = newSku;
+    }
+    if (recvBySku && recvBySku.has(ctx.sku.toLowerCase())) {
+      const it = recvBySku.get(ctx.sku.toLowerCase());
+      recvBySku.delete(ctx.sku.toLowerCase());
+      it.sku = newSku;
+      recvBySku.set(newSku.toLowerCase(), it);
+    }
+    const oldSku = ctx.sku;
+    const sid = ctx.stockItemId;
+    pushUndo(`rename ${newSku} back to ${oldSku}`, async () => {
+      const r = await api.stockRenameSku(sid, newSku, oldSku);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
+      loadStock();
+    });
+  }
+  if (titleChanged) {
+    const res = await api.stockSetTitle(ctx.stockItemId, title).catch(err => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) {
+      $("rnSave").disabled = false;
+      // a rename that already went through stays; the dialog now edits the new SKU
+      if (skuChanged) { rnCtx = { ...ctx, sku: newSku }; $("rnOld").textContent = newSku; }
+      fail(`${skuChanged ? `Renamed to ${newSku}, but the title` : "The title"} did not save: ${(res && res.error) || "Linnworks refused it."}`);
+      loadStock();
+      return;
+    }
+    rnSetLocalTitle(ctx.stockItemId, res.title);
+    const oldTitle = ctx.title;
+    const sid = ctx.stockItemId;
+    pushUndo(`put the old title back on ${newSku}`, async () => {
+      const r = await api.stockSetTitle(sid, oldTitle);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Title change back failed');
+      rnSetLocalTitle(sid, oldTitle);
+      loadStock();
+    });
+  }
   $("rnSave").disabled = false;
-  if (!res || !res.ok) {
-    $("rnErr").textContent = (res && res.error) || "Rename failed.";
-    $("rnErr").hidden = false;
-    return;
-  }
-  // local caches follow immediately; the grid reloads for everything else
-  if (stockCache) {
-    const it = stockCache.items.find(i => i.sku === rnCtx.sku);
-    if (it) it.sku = res.sku;
-  }
-  if (recvBySku && recvBySku.has(rnCtx.sku.toLowerCase())) {
-    const it = recvBySku.get(rnCtx.sku.toLowerCase());
-    recvBySku.delete(rnCtx.sku.toLowerCase());
-    it.sku = res.sku;
-    recvBySku.set(res.sku.toLowerCase(), it);
-  }
   $("renameDialog").close();
-  const oldSku = rnCtx.sku;
-  const sid = rnCtx.stockItemId;
-  pushUndo(`rename ${res.sku} back to ${oldSku}`, async () => {
-    const r = await api.stockRenameSku(sid, res.sku, oldSku);
-    if (!r || !r.ok) throw new Error((r && r.error) || 'Rename back failed');
-    loadStock();
-  });
-  toast(`${oldSku} renamed to ${res.sku} — links and history followed`);
+  toast(skuChanged && titleChanged ? `${ctx.sku} renamed to ${newSku} and its title saved`
+    : skuChanged ? `${ctx.sku} renamed to ${newSku} — links and history followed`
+    : `Title saved for ${newSku}`);
   rnCtx = null;
   loadStock();
 });
@@ -13362,7 +12504,7 @@ $('retFixDialog').addEventListener('close', () => {
   if (!retFixPending) retFix = null;
 });
 
-/* ---------- page refresh buttons (Returns + eBay), mirroring Stock ---------- */
+/* ---------- page refresh button (Returns), mirroring Stock ---------- */
 $('retExportBtn').addEventListener('click', async () => {
   const r = await api.returnsExport().catch(e => ({ ok: false, error: e.message }));
   if (r && r.ok) toast('Returns log saved.');
@@ -13373,13 +12515,779 @@ $("retRefreshBtn").addEventListener("click", () => {
   loadUnlisted(true); // fresh scan: cards update the moment it lands
   toast("Refreshing the log and listing scan…", 2000);
 });
-$("ebRefresh").addEventListener("click", () => {
-  chLinked = null;
-  loadChLinked();
-  loadUnlisted(true);
-  ebLwLoadConfigs(true); // a configurator made in Linnworks a minute ago shows up
-  toast("Re-scanning listings…", 2000);
+
+/* ==================== List on Walmart (owner 2026-10-22) ====================
+   Approved mockup: variants/walmart-api-lister.html. Its own Walmart tab (the
+   owner moved it off Stock → Unlisted): add SKUs from the inventory -> per
+   SKU, the owner searches Walmart's catalog BY NAME (nothing is searched
+   until they press Search), confirms the right item, sets condition /
+   price / stock -> review -> one offer feed (MP_ITEM_MATCH) -> track it.
+   Walmart's name search returns no UPCs, yet an offer must name one: the
+   UPC comes from the Linnworks barcode or one scan of the box, and is
+   looked up on Walmart to prove it IS the picked item before it can go.
+   The offer SKU is the Linnworks SKU, so Linnworks links each new listing on
+   its next channel scan and owns price + stock from then on. */
+
+let wl = null;           // the Walmart tab: { step, items, cur, feeds, feed, conn }
+let wlQueries = null;    // per-SKU search text the owner typed (this desktop)
+let wlSent = null;       // SKU -> { at, ok } for uploads not turned down (last 7 days)
+let wlSentLoading = false;
+
+// SKUs in a recent upload Walmart hasn't turned down: adding one again
+// warns instead of quietly sending a second offer
+async function wlLoadSent(force) {
+  if ((wlSent && !force) || wlSentLoading) return;
+  wlSentLoading = true;
+  try {
+    const res = await api.walmartFeeds().catch(() => null);
+    const map = {};
+    for (const f of (res && res.ok ? res.feeds : [])) {
+      if (Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      for (const o of f.offers || []) {
+        const st = String(((f.items || {})[o.sku] || {}).status || '').toUpperCase();
+        if (/ERROR/.test(st) || map[o.sku]) continue;
+        map[o.sku] = { at: f.at, ok: st === 'SUCCESS' };
+      }
+    }
+    wlSent = map;
+  } finally {
+    wlSentLoading = false;
+  }
+}
+const wlSentFor = (sku) => (wlSent || {})[sku] || null;
+
+function wlSavedQueries() {
+  if (!wlQueries) {
+    try { wlQueries = JSON.parse(localStorage.getItem('wlQueries') || '{}') || {}; } catch { wlQueries = {}; }
+  }
+  return wlQueries;
+}
+
+// what the app searches Walmart for: the owner's own words for this SKU if
+// they ever changed it, else the Linnworks title, else the SKU spelled out
+function wlQueryFor(d) {
+  const key = String(d.sku).toUpperCase();
+  const saved = wlSavedQueries()[key];
+  if (saved) return saved;
+  const t = String(d.title || '').trim();
+  if (t) return t;
+  return String(d.sku).replace(/^(OPEN-?BOX|USED|SCRAP)-/i, '').replace(/[-_]+/g, ' ').trim();
+}
+
+function wlStockItem(sku) {
+  const want = String(sku).toUpperCase();
+  return ((stockCache && stockCache.items) || []).find(i => String(i.sku).toUpperCase() === want) || null;
+}
+
+// condition by the Stock page's own views (Open Box / Used / Scrap); anything
+// else is New
+function wlCondOf(d) {
+  const v = (stockViews || []).find(x => !x.plain && stockViewMatch(d, x.pattern));
+  return v ? v.label : 'New';
+}
+
+// Walmart's offer conditions (non-New needs Pre-Owned approval, which the
+// owner has — 2026-10-22). The SKU's kind picks the default: Open Box ->
+// Like New, Used -> Good; Scrap has no default, as every Pre-Owned grade
+// is a working unit. Pre-Owned offers must carry a photo (mainImageUrl).
+const WL_CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured', 'New with defects'];
+function wlDefaultCond(kind) {
+  if (kind === 'New') return 'New';
+  if (/open/i.test(kind)) return 'Pre-Owned: Like New';
+  if (/used/i.test(kind)) return 'Pre-Owned: Good';
+  return '';
+}
+
+/* ----- match chips: does a Walmart result agree with the SKU? ----- */
+
+const WL_COLORS = ['black', 'white', 'gray', 'grey', 'graphite', 'silver', 'blue', 'navy', 'green', 'mint',
+  'red', 'pink', 'purple', 'lavender', 'violet', 'gold', 'yellow', 'orange', 'beige', 'cream', 'bronze', 'titanium'];
+const WL_NEAR = {
+  gray: ['grey', 'graphite', 'charcoal', 'titanium'], grey: ['gray', 'graphite', 'charcoal'],
+  black: ['graphite', 'onyx', 'phantom black', 'jet black'], silver: ['platinum', 'titanium'],
+  blue: ['navy', 'icy blue', 'icyblue'], navy: ['blue'], purple: ['lavender', 'violet'], green: ['mint'],
+};
+const wlCap = (s) => String(s).replace(/\b\w/g, c => c.toUpperCase());
+
+function wlSkuFacts(sku) {
+  const s = String(sku).toUpperCase().replace(/^(OPEN-?BOX|USED|SCRAP)-/, '');
+  const parts = s.split(/[-_ ]+/).filter(Boolean);
+  const storage = (s.match(/(\d+)\s?(GB|TB)/) || [''])[0].replace(/\s/g, '');
+  const color = [...parts].reverse().find(p => /^[A-Z]{3,}$/.test(p)
+    && !/^(US|USA|GLOBAL|NEW|WIFI|LTE|UNLOCKED|OPENBOX|USED|SCRAP|RES|REF)$/.test(p)) || '';
+  return { model: parts[0] || '', storage, color: color.toLowerCase() };
+}
+
+function wlScore(facts, r) {
+  const t = ` ${String(r.title || '').toLowerCase().replace(/[^a-z0-9+ ]/g, ' ').replace(/\s+/g, ' ')} `;
+  const chips = [];
+  let score = 0;
+  if (r.byUpc) {
+    chips.push(['ok', 'Same UPC']);
+    score += 10;
+  }
+  if (facts.model.length >= 3) {
+    // "x110" also matches "sm-x110" — Walmart titles often carry the model code
+    if (t.includes(facts.model.toLowerCase())) { chips.push(['ok', facts.model]); score += 2; }
+  }
+  if (facts.storage) {
+    const want = facts.storage.toLowerCase();
+    const has = (t.match(/\b\d+ ?(gb|tb)\b/g) || []).map(x => x.replace(/ /g, ''));
+    if (has.includes(want)) { chips.push(['ok', facts.storage]); score += 3; }
+    else if (has.length) {
+      chips.push(['bad', `${has[has.length - 1].toUpperCase()} ≠ your ${facts.storage}`]);
+      score -= 3;
+    }
+  }
+  if (facts.color) {
+    const c = facts.color;
+    if (t.includes(` ${c} `) || t.includes(c)) { chips.push(['ok', wlCap(c)]); score += 2; }
+    else {
+      const near = (WL_NEAR[c] || []).find(n => t.includes(n));
+      const other = WL_COLORS.find(x => x !== c && t.includes(` ${x} `));
+      if (near) { chips.push(['near', `${wlCap(near)} ≈ ${wlCap(c)}`]); score += 1; }
+      else if (other) { chips.push(['bad', `${wlCap(other)} ≠ your ${wlCap(c)}`]); score -= 2; }
+    }
+  }
+  return { chips, score };
+}
+
+/* ----- the Walmart tab ----- */
+
+async function wlConn() {
+  const st = await api.walmartStatus().catch(() => null);
+  return st || { configured: false };
+}
+
+function wlAcctLine() {
+  const c = (wl && wl.conn) || {};
+  $('wlAcct').innerHTML = c.configured
+    ? '<span class="wl-dot"></span>Walmart API'
+    : '<span class="wl-dot is-off"></span>Walmart API not connected';
+}
+
+function wlBlank() {
+  return { step: 'find', items: [], cur: -1, conn: { configured: false }, feeds: null, feed: null };
+}
+
+// landing on the tab: keep whatever list is in progress, refresh the
+// connection line, warm the inventory for the Add SKU picker. No Walmart
+// search runs here — only the owner's Search does that.
+async function wlEnter() {
+  if (!wl) wl = wlBlank();
+  wl.conn = await wlConn();
+  wlAcctLine();
+  wlRender();
+  ensureInventory();
+  wlLoadSent();
+}
+
+// one inventory item -> a row of the list
+function wlItemFrom(inv) {
+  const d = { sku: inv.sku, title: inv.title || '' };
+  const cond = wlCondOf(d);
+  const avail = invAvailAtPrimary(inv);
+  return {
+    sku: inv.sku, stockItemId: inv.stockItemId || '', title: inv.title || '', avail: avail == null ? 0 : avail,
+    barcode: inv.barcode || '', cond, wmCond: wlDefaultCond(cond), photo: inv.image || '',
+    query: '', suggest: wlQueryFor(d),
+    upc: String(inv.barcode || '').replace(/\D/g, ''), upcCheck: null, // { upc, itemId, state, title }
+    facts: wlSkuFacts(inv.sku),
+    results: null, loading: false, error: '', pick: '',
+    price: Number(inv.retailPrice) > 0 ? Number(inv.retailPrice).toFixed(2) : '',
+    qty: String(avail == null ? 0 : avail), shipLb: String(Number(wl.conn.shipWeightLb) || 1),
+    state: 'todo',
+  };
+}
+
+makeCombo($('wlAdd'), $('wlAddList'), (inv) => {
+  $('wlAdd').value = '';
+  if (!wl) wl = wlBlank();
+  const have = wl.items.findIndex(x => x.sku.toUpperCase() === inv.sku.toUpperCase());
+  if (have >= 0) { wl.cur = have; wl.step = 'find'; wlRender(); return; }
+  const sent = wlSentFor(inv.sku);
+  if (sent) toast(`${inv.sku} was already sent to Walmart ${new Date(sent.at).toLocaleDateString()} (${sent.ok ? 'accepted' : 'still processing'}): see Uploads before sending it again.`, 7000);
+  wl.items.push(wlItemFrom(inv));
+  wl.cur = wl.items.length - 1;
+  wl.step = 'find';
+  wlRender();
+  $('wlQ') && $('wlQ').focus();
 });
+$('wlAdd').addEventListener('focus', () => ensureInventory());
+
+async function wlOpenUploads() {
+  if (!wl) wl = wlBlank();
+  wlReadOffer();
+  wl.step = 'uploads';
+  wl.feeds = null;
+  wlRender();
+  const res = await api.walmartFeeds().catch(err => ({ ok: false, error: err.message }));
+  if (!wl || wl.step !== 'uploads') return;
+  wl.feeds = res && res.ok ? res.feeds : [];
+  wl.feedsError = res && !res.ok ? res.error || 'Could not read the uploads.' : '';
+  wlRender();
+}
+
+/* ----- searching ----- */
+
+async function wlSearchCur() {
+  const it = wl && wl.items[wl.cur];
+  if (!it) return;
+  it.loading = true;
+  it.error = '';
+  wlRender();
+  const res = await api.walmartSearch(it.query, '').catch(err => ({ ok: false, error: err.message }));
+  if (!wl || !wl.items.includes(it)) return; // removed from the list meanwhile
+  it.loading = false;
+  if (!res || !res.ok) {
+    it.error = (res && res.error) || 'Walmart search failed.';
+    it.results = [];
+  } else {
+    it.results = (res.results || []).map(r => ({ ...r, ...wlScore(it.facts, r) }))
+      .sort((a, b) => b.score - a.score);
+    // pre-select the best match only when it agrees with the SKU somewhere
+    if (!it.pick && it.results[0] && it.results[0].score > 0) it.pick = it.results[0].itemId;
+    if (!it.results.length) it.state = it.state === 'picked' ? it.state : 'notfound';
+    else if (it.state === 'notfound') it.state = 'todo';
+  }
+  wlRender();
+}
+
+// does the typed UPC belong to the picked Walmart item? (one identifier
+// lookup; the answer is cached per UPC so re-renders never re-ask)
+function wlUpcState(it) {
+  const c = it.upcCheck;
+  if (c && c.state === 'fetching') return c;
+  if (c && c.state === 'fetchfail' && c.upc === it.upc) return c;
+  if (!it.upc) return { state: 'none' };
+  // the Walmart item number typed where the UPC goes (owner hit it 2026-10-22)
+  if (it.pick && it.upc === String(it.pick).replace(/\D/g, '')) return { state: 'itemid' };
+  if (!c || c.upc !== it.upc) return { state: 'unchecked' };
+  if (c.state === 'checking' || c.state === 'error' || c.state === 'missing') return c;
+  return c.itemId === it.pick ? { ...c, state: 'ok' } : { ...c, state: 'other' };
+}
+
+async function wlCheckUpc(it) {
+  const upc = it.upc;
+  if (!/^\d{8,14}$/.test(upc)) { it.upcCheck = { upc, state: 'error', error: 'A UPC is 12 digits (8–14 for other barcodes).' }; wlRender(); return; }
+  it.upcCheck = { upc, state: 'checking' };
+  wlRender();
+  const res = await api.walmartUpc(upc).catch(err => ({ ok: false, error: err.message }));
+  if (!wl || !wl.items.includes(it) || it.upc !== upc) return;
+  if (!res || !res.ok) it.upcCheck = { upc, state: 'error', error: (res && res.error) || 'Lookup failed.' };
+  else if (!res.item) it.upcCheck = { upc, state: 'missing' };
+  else {
+    it.upcCheck = { upc, state: 'found', itemId: res.item.itemId, title: res.item.title };
+    // the scanned item may not have been in the name results: add it so it can be picked
+    if (!(it.results || []).some(r => r.itemId === res.item.itemId)) {
+      it.results = [{ ...res.item, byUpc: true, ...wlScore(it.facts, res.item) }, ...(it.results || [])];
+    }
+  }
+  wlRender();
+}
+
+/* ----- rendering ----- */
+
+const wlMoney = (v) => (Number(v) > 0 ? `$${Number(v).toFixed(2)}` : '');
+
+function wlThumb(r) {
+  return r && r.image
+    ? `<img class="wl-thumb" src="${esc(r.image)}" alt="" loading="lazy" />`
+    : '<span class="wl-thumb wl-thumb-none"></span>';
+}
+
+function wlStepsHtml(on) {
+  const steps = [['find', '1 · Find on Walmart'], ['review', '2 · Review'], ['track', '3 · Send & track']];
+  const at = steps.findIndex(s => s[0] === on);
+  return steps.map(([k, l], i) => `<span class="${i < at ? 'done' : i === at ? 'on' : ''}">${l}${i < at ? ' ✓' : ''}</span>`).join('');
+}
+
+function wlRender() {
+  if (!wl) return;
+  const steps = $('wlSteps');
+  const listing = wl.step === 'find' || wl.step === 'review';
+  steps.hidden = wl.step === 'uploads';
+  steps.innerHTML = wl.step === 'uploads' ? '' : wlStepsHtml(wl.step);
+  $('wlAddRow').hidden = !listing;
+  for (const b of document.querySelectorAll('#walmartPage [data-wltab]')) {
+    b.classList.toggle('is-on', (b.dataset.wltab === 'uploads') === (wl.step === 'uploads'));
+  }
+  if (!wl.conn.configured) {
+    $('wlBody').innerHTML = `<div class="wl-empty"><b>Connect Walmart first.</b> Add your Walmart Marketplace API keys (Client ID and Client secret, made at developer.walmart.com under API Keys) in Settings › Shipping (the same keys Ship with Walmart labels use), then press Test.</div>`;
+    $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div>`;
+    return;
+  }
+  if (wl.step === 'find') wlRenderFind();
+  else if (wl.step === 'review') wlRenderReview();
+  else if (wl.step === 'track') wlRenderTrack();
+  else wlRenderUploads();
+}
+
+function wlRailHtml() {
+  const picked = wl.items.filter(i => i.state === 'picked').length;
+  const rows = wl.items.map((it, i) => {
+    const on = i === wl.cur;
+    const st = it.state === 'picked' ? ['st-ok', '✓']
+      : it.state === 'notfound' ? ['st-no', '?'] : it.state === 'skipped' ? ['st-todo', '–'] : [on ? 'st-on' : 'st-todo', String(i + 1)];
+    const sub = it.state === 'picked' ? `${esc(it.wmCond)} · ${wlMoney(it.price)} · ${esc(it.qty)}`
+      : it.state === 'notfound' ? 'not found on Walmart'
+      : it.state === 'skipped' ? 'skipped' : on ? 'choosing…' : 'to do';
+    return `<div class="wl-ri ${on ? 'is-on' : ''}" data-wlcur="${i}" role="button" tabindex="0">
+      <span class="wl-st ${st[0]}">${st[1]}</span><span class="wl-ri-s">${esc(it.sku)}<small>${sub}</small></span>
+      <button type="button" class="wl-ri-x" data-wlrm="${i}" title="Take ${esc(it.sku)} off the list" aria-label="Remove">✕</button></div>`;
+  }).join('');
+  return `<div class="wl-rail"><h5>Your SKUs <span>${picked} of ${wl.items.length} picked</span></h5>${rows || '<p class="wl-rail-empty">None yet: add one above.</p>'}</div>`;
+}
+
+// star line under a result's title (owner pick B, variants/walmart-ratings.html):
+// five stars filled to the average, the number, the review count; 1–9
+// reviews get a "few reviews" tag. The fill is a class in 2% steps (the
+// page's CSP refuses inline widths).
+function wlRatingHtml(r) {
+  const n = Number(r.reviews) || 0;
+  const avg = Number(r.rating) || 0;
+  if (!n && !avg) return '<div class="wl-rline"><span class="wl-stars"><i class="w0"></i></span><span>No reviews yet</span></div>';
+  const fill = Math.round((avg / 5) * 50) * 2;
+  return `<div class="wl-rline" title="${avg.toFixed(1)} out of 5 from ${n.toLocaleString()} review${n === 1 ? '' : 's'} on Walmart">
+    <span class="wl-stars"><i class="w${fill}"></i></span><b>${avg.toFixed(1)}</b><span>${n.toLocaleString()} review${n === 1 ? '' : 's'}</span>${n > 0 && n < 10 ? '<span class="wl-few">few reviews</span>' : ''}</div>`;
+}
+
+function wlResultHtml(it, r) {
+  const sel = it.pick === r.itemId;
+  const best = it.results[0] === r && r.score > 0;
+  const chips = r.chips.map(([k, l]) => `<span class="wl-k k-${k}">${esc(l)}${k === 'ok' ? ' ✓' : ''}</span>`).join('');
+  return `<label class="wl-res ${sel ? 'is-sel' : ''} ${r.score < 0 ? 'is-weak' : ''}">
+    <input type="radio" name="wlPick" value="${esc(r.itemId)}" ${sel ? 'checked' : ''} />
+    ${wlThumb(r)}
+    <div class="wl-res-b">
+      <div class="wl-res-t">${esc(r.title)}${best ? ' <span class="wl-best">Best match</span>' : ''}</div>
+      ${wlRatingHtml(r)}
+      <div class="wl-res-m">${r.brand ? `${esc(r.brand)} · ` : ''}item <span class="mono">${esc(r.itemId)}</span>${r.byUpc ? ' · <b>found by your UPC</b>' : ''}</div>
+      ${chips ? `<div class="wl-chips">${chips}</div>` : ''}
+    </div>
+    <div class="wl-res-side">${r.price ? `<span class="wl-res-p"><small>Walmart</small>${wlMoney(r.price)}</span>` : ''}
+      <a class="wl-link" href="#" data-wlview="${esc(r.url)}">View on Walmart ↗</a></div>
+  </label>`;
+}
+
+function wlUpcFieldHtml(it) {
+  const u = wlUpcState(it);
+  const msg = u.state === 'none' ? '<span class="wl-upc-st is-warn">Walmart needs the UPC to list: press <b>Get from Walmart</b>, or scan the box barcode.</span>'
+    : u.state === 'itemid' ? '<span class="wl-upc-st is-bad">✗ That is the Walmart item number, not the UPC. Press <b>Get from Walmart</b> to find the UPC.</span>'
+    : u.state === 'fetching' ? '<span class="wl-upc-st"><span class="wl-spin"></span>Reading the UPC off the item on walmart.com…</span>'
+    : u.state === 'fetchfail' ? `<span class="wl-upc-st is-bad">✗ ${esc(u.error || 'Could not get the UPC.')}</span>`
+    : u.state === 'unchecked' ? '<span class="wl-upc-st">Press Check to confirm it is this item.</span>'
+    : u.state === 'checking' ? '<span class="wl-upc-st"><span class="wl-spin"></span>Checking on Walmart…</span>'
+    : u.state === 'ok' ? '<span class="wl-upc-st is-ok">✓ This UPC is the item you picked</span>'
+    : u.state === 'other' ? `<span class="wl-upc-st is-bad">✗ This UPC is a different Walmart item: “${esc(u.title || '')}”. Pick that one, or check the barcode.</span>`
+    : u.state === 'missing' ? '<span class="wl-upc-st is-bad">✗ Walmart has no item with this UPC.</span>'
+    : `<span class="wl-upc-st is-bad">✗ ${esc(u.error || 'Could not check.')}</span>`;
+  return `<div class="wl-f wl-f-upc"><label for="wlUpc">UPC</label>
+    <div class="wl-upc-row"><input id="wlUpc" class="wl-in" type="text" inputmode="numeric" value="${esc(it.upc)}" placeholder="Scan or type" autocomplete="off" />
+    <button type="button" class="btn btn-secondary" data-wlupc>Check</button>
+    <button type="button" class="btn btn-secondary" data-wlupcfetch title="Find this item's UPC on its walmart.com page, then confirm it through Walmart's API">Get from Walmart</button></div>
+    <div class="wl-hint">${msg}${it.barcode ? '' : (u.state === 'ok' ? ' Saved to the Linnworks barcode when you list.' : '')}</div></div>`;
+}
+
+function wlRenderFind() {
+  const it = wl.items[wl.cur];
+  let pane;
+  if (!it) {
+    pane = wl.items.length ? '<div class="wl-empty">Pick a SKU on the left.</div>'
+      : '<div class="wl-empty"><b>Add the SKUs you want on Walmart</b> with the box above (SKU, title or barcode). For each one you search Walmart by name, pick the matching item, check its UPC, and set the condition, price and stock. Nothing is sent until you press List on Walmart.</div>';
+  }
+  else {
+    const results = it.loading ? '<div class="wl-empty"><span class="wl-spin"></span>Searching Walmart…</div>'
+      : it.error ? `<div class="wl-empty wl-err">${esc(it.error)}</div>`
+      : !it.results ? '<div class="wl-empty">Type what to look for above and press <b>Search Walmart</b>.</div>'
+      : !it.results.length ? `<div class="wl-empty">Nothing on Walmart matched “${esc(it.query)}”. Try fewer or different words above (the model name usually works best), or skip it: a product Walmart doesn't carry yet needs a full setup in Seller Center.</div>`
+      : `<div class="wl-rhead">Walmart's best picks <span>${it.results.length} result${it.results.length === 1 ? '' : 's'}</span></div>
+         <div class="wl-results">${it.results.slice(0, 8).map(r => wlResultHtml(it, r)).join('')}</div>`;
+    const pickR = (it.results || []).find(r => r.itemId === it.pick);
+    pane = `<div class="wl-cur"><span class="wl-cur-sku">${esc(it.sku)}</span><span class="wl-cur-meta"><b>${it.avail}</b> available${it.title ? ` · Linnworks title “${esc(it.title)}”` : ''}</span></div>
+      <form class="wl-sbox" data-wlsearch>
+        <div class="search-field"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+          <input id="wlQ" class="search-input" type="text" value="${esc(it.query)}" placeholder="Search Walmart's catalog, e.g. ${esc(it.suggest)}" autocomplete="off" spellcheck="false" /></div>
+        <button type="submit" class="btn btn-secondary">Search Walmart</button>
+      </form>
+      <div class="wl-shint">${it.suggest && it.suggest !== it.query ? `Suggestion from ${it.title ? 'the Linnworks title' : 'the SKU'}: <a href="#" class="wl-link" data-wlsuggest>${esc(it.suggest)}</a> (click to fill in, then Search).` : 'The model name usually finds it best.'}</div>
+      ${results}
+      ${pickR ? `<div class="wl-offer">
+        <h6>Your offer on the picked item</h6>
+        <div class="wl-f"><label for="wlCond">Condition</label>
+          <select id="wlCond" class="input wl-cond-sel">${it.wmCond ? '' : '<option value="" selected>Choose…</option>'}${WL_CONDS.map(c => `<option ${c === it.wmCond ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          <div class="wl-hint">${it.cond === 'New' ? 'A New SKU.' : `A ${esc(it.cond)} SKU.`}${/scrap/i.test(it.cond) ? ' Scrap is for parts / not working; every Walmart Pre-Owned grade is a working unit, so only pick one if this unit works.' : it.wmCond && it.wmCond !== 'New' ? ' Walmart shows the condition on the listing.' : ''}</div></div>
+        ${it.wmCond && it.wmCond !== 'New' ? `<div class="wl-f wl-f-photo"><label for="wlPhoto">Photo of the item (URL)</label>
+          <input id="wlPhoto" class="wl-in" type="text" value="${esc(it.photo)}" placeholder="https://…" autocomplete="off" spellcheck="false" />
+          <div class="wl-hint">${it.photo ? 'The Linnworks item photo.' : 'This item has no Linnworks photo: paste a public image link.'} Walmart requires one on Pre-Owned offers.</div></div>` : ''}
+        ${wlUpcFieldHtml(it)}
+        <div class="wl-f"><label for="wlPrice">Your price ($)</label><input id="wlPrice" class="wl-in" type="text" inputmode="decimal" value="${esc(it.price)}" placeholder="0.00" />
+          <div class="wl-hint">${pickR.price ? `Walmart shows ${wlMoney(pickR.price)}${Number(it.price) > 0 ? ` — you'd be ${Number(it.price) <= pickR.price ? 'at or under it' : `${wlMoney(Number(it.price) - pickR.price)} over`}` : ''}.` : 'Set your selling price.'}</div></div>
+        <div class="wl-f"><label for="wlQty">Starting stock</label><input id="wlQty" class="wl-in" type="text" inputmode="numeric" value="${esc(it.qty)}" />
+          <div class="wl-hint">From Linnworks. Linnworks keeps it in sync after.</div></div>
+        <div class="wl-f"><label for="wlShip">Ship weight (lb)</label><input id="wlShip" class="wl-in" type="text" inputmode="decimal" value="${esc(it.shipLb)}" />
+          <div class="wl-hint">Walmart requires one.</div></div>
+      </div>` : ''}
+      <div class="wl-pfoot"><button type="button" class="btn btn-ghost" data-wlskip>Skip this SKU</button>
+        <button type="button" class="btn btn-primary" data-wlpicknext ${pickR ? '' : 'disabled'}>Pick &amp; next →</button></div>`;
+  }
+  $('wlBody').innerHTML = `<div class="wl-find">${wlRailHtml()}<div class="wl-pane">${pane}</div></div>`;
+  const picked = wl.items.filter(i => i.state === 'picked').length;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Walmart's search doesn't give out UPCs, and an offer needs one: press <b>Get from Walmart</b> on the picked item, or it comes from the <b>Linnworks barcode</b> or a scan of the box. It is saved to Linnworks, so the next restock needs none of this.</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlclearlist ${wl.items.length ? '' : 'disabled'}>Clear list</button>
+    <button type="button" class="btn btn-secondary" data-wlreview ${picked ? '' : 'disabled'}>Review ${picked} picked →</button></div>`;
+}
+
+function wlReasonOff(it) {
+  if (it.state === 'notfound') return ['p-new', 'Not found on Walmart', 'Needs a full setup in Seller Center'];
+  return ['p-wait', 'Skipped', ''];
+}
+
+function wlRenderReview() {
+  const go = wl.items.filter(i => i.state === 'picked');
+  const off = wl.items.filter(i => i.state !== 'picked');
+  const rows = go.map((it) => {
+    const r = (it.results || []).find(x => x.itemId === it.pick) || {};
+    const i = wl.items.indexOf(it);
+    return `<tr>
+      <td class="wl-sku">${esc(it.sku)}</td>
+      <td><div class="wl-match">${wlThumb(r)}<div class="wl-mt"><div class="t">${esc(r.title || '')}</div>
+        <div class="m">item ${esc(r.itemId || '')} · <a href="#" data-wlview="${esc(r.url || '')}">View on Walmart ↗</a></div></div></div></td>
+      <td><span class="wl-cond ${it.wmCond === 'New' ? '' : 'ob'}">${esc(it.wmCond)}</span></td>
+      <td class="num"><input class="wl-in" data-wlrp="${i}" value="${esc(it.price)}" />${r.price ? `<span class="wl-price-hint">Walmart ${wlMoney(r.price)}</span>` : ''}</td>
+      <td class="num"><input class="wl-in wl-in-qty" data-wlrq="${i}" value="${esc(it.qty)}" /></td>
+      <td class="wl-why"><span class="wl-pill p-ok">✓ Ready</span><div class="d"><a href="#" data-wlcur="${i}">change</a></div></td>
+    </tr>`;
+  }).join('') + off.map((it) => {
+    const [cls, pill, why] = wlReasonOff(it);
+    return `<tr class="is-off">
+      <td class="wl-sku">${esc(it.sku)}</td><td><span class="wl-none">${it.state === 'notfound' ? `Nothing matched “${esc(it.query)}”.` : '—'}</span></td>
+      <td><span class="wl-cond ${it.cond === 'New' ? '' : 'ob'}">${esc(it.wmCond || it.cond)}</span></td><td class="num">—</td><td class="num">${it.avail}</td>
+      <td class="wl-why"><span class="wl-pill ${cls}">${pill}</span>${why ? `<div class="d">${why}</div>` : ''}</td></tr>`;
+  }).join('');
+  $('wlBody').innerHTML = `<div class="wl-sum"><span class="wl-pill p-ok">${go.length} ready</span>${off.length ? `<span class="wl-pill p-wait">${off.length} not sent</span>` : ''}</div>
+    <table class="wl-tbl wl-tbl-review"><thead><tr><th>Your SKU</th><th>Walmart item</th><th>Condition</th><th class="num">Your price</th><th class="num">Stock</th><th>Status</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Each offer goes up under <b>your Linnworks SKU</b>, so Linnworks links the new listing on its next channel scan and keeps its <b>price and stock</b> in sync from then on.${wl.conn.sandbox ? ' <b>Sandbox:</b> nothing goes live.' : ''}</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlback>Back</button>
+    <button type="button" class="btn btn-primary" data-wlsend ${go.length ? '' : 'disabled'}>List ${go.length} on Walmart</button></div>`;
+}
+
+// one feed's per-SKU state, in plain words
+function wlResultPill(st, sandbox) {
+  const s = String((st && st.status) || 'INPROGRESS').toUpperCase();
+  if (s === 'SUCCESS') return ['p-ok', sandbox ? '✓ Accepted (sandbox)' : '✓ Accepted by Walmart', 'Linnworks links it on its next channel scan'];
+  if (/ERROR/.test(s)) return ['p-no', '✗ Not accepted', ''];
+  return ['p-wait', '<span class="wl-spin"></span>Walmart is processing', 'Usually minutes, sometimes a few hours'];
+}
+
+function wlRenderTrack() {
+  const f = wl.feed;
+  if (!f) { $('wlBody').innerHTML = '<div class="wl-empty"><span class="wl-spin"></span>Sending…</div>'; $('wlFoot').innerHTML = ''; return; }
+  const done = f.offers.filter(o => { const s = String(((f.items || {})[o.sku] || {}).status || '').toUpperCase(); return s === 'SUCCESS' || /ERROR/.test(s); }).length;
+  const pct = f.offers.length ? Math.round(done / f.offers.length * 100) : 0;
+  const rows = f.offers.map((o) => {
+    const st = (f.items || {})[o.sku] || {};
+    const [cls, pill, d] = wlResultPill(st, f.sandbox);
+    const errs = (st.errors || []).map(x => esc(x)).join('<br>');
+    return `<tr>
+      <td class="wl-sku">${esc(o.sku)}</td>
+      <td><div class="wl-match">${wlThumb(o)}<div class="wl-mt"><div class="t">${esc(o.title || '')}</div><div class="m">item ${esc(o.itemId || '')}${o.url ? ` · <a href="#" data-wlview="${esc(o.url)}">View on Walmart ↗</a>` : ''}</div></div></div></td>
+      <td class="num">${wlMoney(o.price)}</td><td class="num">${esc(o.qty)}</td>
+      <td class="wl-why"><span class="wl-pill ${cls}">${pill}</span>${errs ? `<div class="d wl-err">${errs}</div>
+        <div class="wl-fix"><input class="wl-in" data-wlfixp="${esc(o.sku)}" value="${esc(o.price)}" /><button type="button" class="btn btn-secondary" data-wlresend="${esc(o.sku)}">Resend this one</button></div>` : d ? `<div class="d">${d}</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const when = new Date(f.at);
+  $('wlBody').innerHTML = `<div class="wl-prog"><div class="wl-bar-track"><i class="w${Math.round(pct / 5) * 5}"></i></div>
+      <div class="wl-prog-l"><span><b>${done} of ${f.offers.length} done</b> · sent ${when.toLocaleString()}${f.checkedAt ? ` · last checked ${new Date(f.checkedAt).toLocaleTimeString()}` : ''}${f.sandbox ? ' · sandbox' : ''}</span><span class="mono">upload ${esc(f.feedId)}</span></div></div>
+    ${f.error ? `<div class="wl-empty wl-err">${esc(f.error)}</div>` : ''}
+    <table class="wl-tbl wl-tbl-track"><thead><tr><th>Your SKU</th><th>Walmart item</th><th class="num">Price</th><th class="num">Stock</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-info">Safe to close. The app checks again every 15 minutes and shows a message when this upload is finished. Listed SKUs drop off the Unlisted view once Linnworks links them.</div>
+    <div class="wl-foot-btns"><button type="button" class="btn btn-ghost" data-wlcheck>Check now</button><button type="button" class="btn btn-primary" data-wlclose>Back to the list</button></div>`;
+}
+
+function wlRenderUploads() {
+  const feeds = wl.feeds;
+  const body = feeds === null ? '<div class="wl-empty"><span class="wl-spin"></span>Loading…</div>'
+    : wl.feedsError ? `<div class="wl-empty wl-err">${esc(wl.feedsError)}</div>`
+    : !feeds.length ? '<div class="wl-empty">Nothing sent yet. Tick SKUs on Stock → Unlisted and press List on Walmart.</div>'
+    : `<table class="wl-tbl wl-tbl-up"><thead><tr><th>Sent</th><th>SKUs</th><th>Result</th><th></th></tr></thead><tbody>${feeds.map(f => {
+      const sts = f.offers.map(o => String(((f.items || {})[o.sku] || {}).status || '').toUpperCase());
+      const ok = sts.filter(s => s === 'SUCCESS').length;
+      const bad = sts.filter(s => /ERROR/.test(s)).length;
+      const wait = sts.length - ok - bad;
+      return `<tr><td>${new Date(f.at).toLocaleString()}${f.sandbox ? ' <span class="wl-pill p-wait">sandbox</span>' : ''}</td>
+        <td class="wl-sku">${f.offers.map(o => esc(o.sku)).join(', ')}</td>
+        <td>${ok ? `<span class="wl-pill p-ok">${ok} accepted</span> ` : ''}${bad ? `<span class="wl-pill p-no">${bad} not accepted</span> ` : ''}${wait ? `<span class="wl-pill p-wait">${wait} processing</span>` : ''}</td>
+        <td class="num"><button type="button" class="btn btn-ghost" data-wlfeed="${esc(f.feedId)}">Open</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+  $('wlBody').innerHTML = `<h3 class="wl-up-h">Walmart uploads</h3>${body}`;
+  $('wlFoot').innerHTML = `<div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlclose>Back to the list</button></div>`;
+}
+
+/* ----- dialog actions ----- */
+
+// pull the find pane's typed values into the current item before moving
+function wlReadOffer() {
+  const it = wl && wl.items[wl.cur];
+  if (!it || wl.step !== 'find') return;
+  if ($('wlPrice')) it.price = $('wlPrice').value.trim().replace(/^\$/, '');
+  if ($('wlQty')) it.qty = $('wlQty').value.trim();
+  if ($('wlShip')) it.shipLb = $('wlShip').value.trim();
+  if ($('wlUpc')) it.upc = $('wlUpc').value.replace(/\D/g, '');
+  if ($('wlCond')) it.wmCond = $('wlCond').value;
+  if ($('wlPhoto')) it.photo = $('wlPhoto').value.trim();
+  if ($('wlQ')) it.query = $('wlQ').value.trim() || it.query;
+}
+
+function wlOfferProblem(it) {
+  if (!it.pick) return 'Pick the matching Walmart item first.';
+  if (wlUpcState(it).state !== 'ok') return 'Add the UPC and press Check: it must be the item you picked.';
+  if (!(Number(it.price) > 0)) return 'Enter your price.';
+  if (!/^\d+$/.test(String(it.qty))) return 'Starting stock must be a whole number.';
+  if (!(Number(it.shipLb) > 0)) return 'Enter a shipping weight in lb.';
+  if (!WL_CONDS.includes(it.wmCond)) return 'Choose the condition.';
+  if (it.wmCond !== 'New' && !/^https:\/\//i.test(it.photo)) return 'Pre-Owned offers need a photo link (https://…).';
+  return '';
+}
+
+function wlNext() {
+  const i = wl.items.findIndex((x, k) => k > wl.cur && x.state === 'todo');
+  const j = i >= 0 ? i : wl.items.findIndex(x => x.state === 'todo');
+  if (j >= 0) {
+    wl.cur = j;
+    wlRender();
+  } else {
+    wl.step = 'review';
+    wlRender();
+  }
+}
+
+$('walmartPage').addEventListener('submit', (e) => {
+  if (!e.target.closest('[data-wlsearch]')) return;
+  e.preventDefault();
+  const it = wl && wl.items[wl.cur];
+  if (!it) return;
+  wlReadOffer();
+  const q = $('wlQ').value.trim();
+  if (!q) return;
+  it.query = q;
+  it.pick = '';
+  const saved = wlSavedQueries();
+  saved[String(it.sku).toUpperCase()] = q;
+  try { localStorage.setItem('wlQueries', JSON.stringify(saved)); } catch { /* best effort */ }
+  wlSearchCur();
+});
+
+// a USB scanner types the UPC then Enter: check it straight away
+$('walmartPage').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !wl || e.target.id !== 'wlUpc') return;
+  e.preventDefault();
+  wlReadOffer();
+  wlCheckUpc(wl.items[wl.cur]);
+});
+
+$('walmartPage').addEventListener('change', (e) => {
+  if (!wl) return;
+  if (e.target.id === 'wlCond') {
+    wlReadOffer();
+    wlRender();
+    return;
+  }
+  if (e.target.name === 'wlPick') {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    it.pick = e.target.value;
+    wlRender();
+    return;
+  }
+  const rp = e.target.closest('[data-wlrp]');
+  if (rp) { wl.items[Number(rp.dataset.wlrp)].price = rp.value.trim().replace(/^\$/, ''); return; }
+  const rq = e.target.closest('[data-wlrq]');
+  if (rq) wl.items[Number(rq.dataset.wlrq)].qty = rq.value.trim();
+});
+
+$('walmartPage').addEventListener('click', async (e) => {
+  if (!wl) return;
+  const view = e.target.closest('[data-wlview]');
+  if (view) {
+    e.preventDefault();
+    if (view.dataset.wlview) api.openExternalUrl(view.dataset.wlview);
+    return;
+  }
+  const tab = e.target.closest('[data-wltab]');
+  if (tab) {
+    if (tab.dataset.wltab === 'uploads') wlOpenUploads();
+    else { wl.step = 'find'; wlRender(); }
+    return;
+  }
+  if (e.target.closest('[data-wlclose]')) { wl.step = 'find'; wlRender(); return; }
+  if (e.target.closest('[data-wlsettings]')) { openSettings(); return; }
+  const rm = e.target.closest('[data-wlrm]');
+  if (rm) {
+    wlReadOffer();
+    const i = Number(rm.dataset.wlrm);
+    wl.items.splice(i, 1);
+    if (wl.cur >= wl.items.length || wl.cur === i) wl.cur = Math.min(i, wl.items.length - 1);
+    else if (wl.cur > i) wl.cur--;
+    if (!wl.items.length) wl.step = 'find';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlclearlist]')) {
+    if (!wl.items.length || !window.confirm(`Clear all ${wl.items.length} SKU${wl.items.length === 1 ? '' : 's'} from the list? Nothing has been sent for them.`)) return;
+    wl.items = [];
+    wl.cur = -1;
+    wl.step = 'find';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlsuggest]')) {
+    e.preventDefault();
+    const it = wl.items[wl.cur];
+    if (it && $('wlQ')) { $('wlQ').value = it.suggest; $('wlQ').focus(); }
+    return;
+  }
+  const cur = e.target.closest('[data-wlcur]');
+  if (cur) {
+    e.preventDefault();
+    wlReadOffer();
+    wl.step = 'find';
+    wl.cur = Number(cur.dataset.wlcur);
+    const it = wl.items[wl.cur];
+    if (it.state === 'skipped') it.state = 'todo';
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlupcfetch]')) {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    if (!it || !it.pick) { toast('Pick the matching Walmart item first.'); return; }
+    const pick = it.pick;
+    it.upcCheck = { state: 'fetching' };
+    wlRender();
+    const res = await api.walmartUpcFromItem(pick).catch(err => ({ ok: false, error: err.message }));
+    if (!wl || !wl.items.includes(it) || it.pick !== pick) return;
+    if (res && res.ok) {
+      it.upc = res.upc;
+      it.upcCheck = { upc: res.upc, state: 'found', itemId: String(res.item.itemId), title: res.item.title };
+    } else {
+      it.upcCheck = { upc: it.upc, state: 'fetchfail', error: (res && res.error) || 'Could not get the UPC.' };
+    }
+    wlRender();
+    return;
+  }
+  if (e.target.closest('[data-wlupc]')) {
+    wlReadOffer();
+    wlCheckUpc(wl.items[wl.cur]);
+    return;
+  }
+  if (e.target.closest('[data-wlskip]')) {
+    const it = wl.items[wl.cur];
+    if (it.state !== 'notfound') it.state = 'skipped';
+    wlNext();
+    return;
+  }
+  if (e.target.closest('[data-wlpicknext]')) {
+    wlReadOffer();
+    const it = wl.items[wl.cur];
+    const bad = wlOfferProblem(it);
+    if (bad) { toast(bad); return; }
+    it.state = 'picked';
+    wlNext();
+    return;
+  }
+  if (e.target.closest('[data-wlreview]')) { wlReadOffer(); wl.step = 'review'; wlRender(); return; }
+  if (e.target.closest('[data-wlback]')) { wl.step = 'find'; wlRender(); return; }
+  if (e.target.closest('[data-wlsend]')) {
+    const go = wl.items.filter(i => i.state === 'picked');
+    const bad = go.map(it => [it, wlOfferProblem(it)]).find(([, p]) => p);
+    if (bad) { toast(`${bad[0].sku}: ${bad[1]}`); return; }
+    requireOwner(() => wlSend(go));
+    return;
+  }
+  if (e.target.closest('[data-wlcheck]')) {
+    const res = await api.walmartFeedCheck(wl.feed.feedId).catch(err => ({ ok: false, error: err.message }));
+    if (!wl) return;
+    if (!res.ok) { toast(res.error || 'Could not check the upload.'); return; }
+    wl.feed = res.feed;
+    wlRender();
+    return;
+  }
+  const rs = e.target.closest('[data-wlresend]');
+  if (rs) {
+    const o = wl.feed.offers.find(x => x.sku === rs.dataset.wlresend);
+    const inp = $('wlBody').querySelector(`[data-wlfixp="${CSS.escape(rs.dataset.wlresend)}"]`);
+    const price = inp ? inp.value.trim().replace(/^\$/, '') : String(o.price);
+    if (!(Number(price) > 0)) { toast('Enter a price.'); return; }
+    requireOwner(() => wlSendOffers([{ ...o, price: Number(price) }]));
+    return;
+  }
+  const fd = e.target.closest('[data-wlfeed]');
+  if (fd) {
+    const f = (wl.feeds || []).find(x => x.feedId === fd.dataset.wlfeed);
+    if (!f) return;
+    wl.step = 'track';
+    wl.feed = f;
+    wlRender();
+    const res = await api.walmartFeedCheck(f.feedId).catch(() => null);
+    if (wl && wl.feed && wl.feed.feedId === f.feedId && res && res.ok) { wl.feed = res.feed; wlRender(); }
+  }
+});
+
+function wlOffersFrom(items) {
+  return items.map((it) => {
+    const r = (it.results || []).find(x => x.itemId === it.pick) || {};
+    return {
+      sku: it.sku, stockItemId: it.stockItemId, linnworksBarcode: it.barcode,
+      itemId: r.itemId, title: r.title || '', image: r.image || '', url: r.url || '',
+      upc: it.upc,
+      price: Number(it.price), qty: Number(it.qty), shipLb: Number(it.shipLb),
+      condition: it.wmCond, mainImageUrl: it.wmCond === 'New' ? '' : it.photo,
+    };
+  });
+}
+
+async function wlSend(items) {
+  await wlSendOffers(wlOffersFrom(items), items);
+}
+
+async function wlSendOffers(offers, items) {
+  wl.step = 'track';
+  wl.feed = null;
+  wlRender();
+  const res = await api.walmartSubmit(offers).catch(err => ({ ok: false, error: err.message }));
+  if (!wl) return;
+  if (!res || !res.ok) {
+    toast((res && res.error) || 'Walmart did not take the upload.', 7000);
+    wl.step = items ? 'review' : 'uploads';
+    if (!items) { wlOpenUploads(); return; }
+    wlRender();
+    return;
+  }
+  wl.feed = res.feed;
+  wlLoadSent(true);
+  // sent SKUs leave the list; anything not sent stays for later
+  if (items) {
+    wl.items = wl.items.filter(x => !items.includes(x));
+    wl.cur = wl.items.length ? 0 : -1;
+  }
+  if (res.barcodeNote) toast(res.barcodeNote, 6000);
+  wlRender();
+}
+
+// a background check finished in main: refresh the open upload in place
+api.on('walmart:feed', (feed) => {
+  wlLoadSent(true);
+  if (!wl || !feed) return;
+  if (wl.step === 'track' && wl.feed && wl.feed.feedId === feed.feedId) { wl.feed = feed; wlRender(); }
+  if (wl.step === 'uploads' && wl.feeds) {
+    wl.feeds = wl.feeds.map(f => (f.feedId === feed.feedId ? feed : f));
+    wlRender();
+  }
+});
+
 
 /* ==================== Overview tab ==================== */
 // Three columns (owner 2026-09-22; approved design variants/overview-3col.html,
@@ -13885,573 +13793,6 @@ $('phoneClose').addEventListener('click', () => $('phoneDialog').close());
 // a width saved by an earlier drag is forgotten so the page sits at its
 // designed 1160px
 try { localStorage.removeItem('overviewPageWidth'); } catch { /* best effort */ }
-
-/* ==================== Temu lister tab ==================== */
-// Fill Temu's own upload workbook from NEW in-stock SKUs (Temu sells new
-// only). Approved design: variants/temu-lister.html — the eBay three-panel
-// skeleton with an upload-sheet preview instead of a buyer preview.
-
-let tmCur = null;
-let tmState = { hasTemplate: false, template: null, profiles: {}, packages: {} };
-let tmClaimed = {};
-try { tmClaimed = JSON.parse(localStorage.getItem("temuClaimed") || "{}"); } catch { /* fresh start */ }
-let tmDrafts = {};
-try { tmDrafts = JSON.parse(localStorage.getItem("temuDrafts") || "{}"); } catch { /* fresh start */ }
-
-// Temu's fixed menus for phones (24388) and tablets (4080) — copied from the
-// template's dropdown sheets; the export writes these exact strings
-const TM_COLORS = ["Black", "White", "Red", "Orange", "Yellow", "Green", "Blue"];
-const TM_COLOR_MAP = { BLACK: "Black", JETBLACK: "Black", JBLK: "Black", BLK: "Black", GRAPHITE: "Black", GRAY: "Black", GREY: "Black", TITANIUM: "Black", PHANTOM: "Black", WHITE: "White", SILVER: "White", CREAM: "White", BEIGE: "White", GOLD: "White", PLATINUM: "White", SHADOW: "White", RED: "Red", BURGUNDY: "Red", CORAL: "Red", PINK: "Red", ROSE: "Red", ORANGE: "Orange", PEACH: "Orange", YELLOW: "Yellow", LEMON: "Yellow", GREEN: "Green", MINT: "Green", LIME: "Green", OLIVE: "Green", BLUE: "Blue", NAVY: "Blue", ICYBLUE: "Blue", ICEBLUE: "Blue", SKYBLUE: "Blue", VIOLET: "Blue", PURPLE: "Blue", LAVENDER: "Blue", SILVERBLUE: "Blue" };
-function tmColorFor(text) {
-  const t = String(text || "").toUpperCase().replace(/[^A-Z]/g, "");
-  for (const [k, v] of Object.entries(TM_COLOR_MAP)) if (t.includes(k)) return v;
-  return "Black";
-}
-const TM_SPECS = {
-  phone: [
-    ["os", "OS", ["Android", "Ios"]],
-    ["cell", "Cellular", ["4g", "5g", "3g", "2g", "none"]],
-    ["sim", "SIM slots", ["1", "2", "0"]],
-    ["power", "Power", ["USB Charging", "Battery Powered/USB Dual Use", "Battery Powered"]],
-    ["battery", "Battery", ["Rechargeable Battery", "Without Battery"]],
-    ["wireless", "Wireless", ["With Wi-Fi function", "Including 2.4G/3G/4G/5G and other func", "NFC"]],
-  ],
-  tablet: [
-    ["os", "OS", ["Android", "Ios", "Windows", "Chromeos"]],
-    ["cell", "Cellular", ["none", "4g", "5g", "3g", "2g"]],
-    ["power", "Power", ["USB Charging", "Battery Powered/USB Dual Use", "Battery Powered"]],
-    ["battery", "Battery", ["Rechargeable Battery", "Without Battery"]],
-    ["wireless", "Wireless", ["With Wi-Fi function", "Including 2.4G/3G/4G/5G and other func", "NFC"]],
-    ["material", "Material", ["Plastic", "Aluminum", "Aluminum Alloy", "Stainless Steel"]],
-    ["age", "Age group", ["14 Years+", "18 Years+", "6 Years+", "3 Years+"]],
-  ],
-};
-const TM_SPEC_IDS = { os: "318", cell: "162", sim: "461", power: "1067", battery: "2153", wireless: "2149", material: "1920", age: "1117" };
-
-function tmGuessCat(sku, title) {
-  const t = `${sku} ${title}`.toUpperCase();
-  if (/IPAD|\bTAB\b|TABLET|SM-?[TX]\d|^[TX]\d{3}/.test(t)) return "tablet";
-  return "phone";
-}
-
-/* ----- titles: template + one-typed-title-per-model memory ----- */
-const tmNice = (w) => String(w || "").toLowerCase().replace(/(^|[ -])([a-z])/g, (m, a, b) => a + b.toUpperCase());
-function tmTitleCtx(cur) {
-  const p = ebParseSku(cur.sku);
-  return {
-    brand: tmNice(cur.brand || ""), model: p.model || cur.sku,
-    storage: p.storage || cur.rom || "", ram: cur.ram || "",
-    color: tmNice(cur.colorSrc || cur.color || ""),
-    type: cur.cat === "tablet" ? "Tablet" : "Phone",
-  };
-}
-function tmFillTitle(tpl, ctx) {
-  return String(tpl || "")
-    .replace(/\{brand\}/g, ctx.brand).replace(/\{model\}/g, ctx.model)
-    .replace(/\{storage\}/g, ctx.storage).replace(/\{ram\}/g, ctx.ram)
-    .replace(/\{color\}/g, ctx.color).replace(/\{type\}/g, ctx.type)
-    .replace(/\s+/g, " ").trim();
-}
-function tmAutoTitle(cur) {
-  const ctx = tmTitleCtx(cur);
-  const learned = (tmState.titles || {})[String(ctx.model).toUpperCase()];
-  if (learned) return tmFillTitle(learned, ctx);
-  return tmFillTitle((tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color} {type} - Brand New Sealed", ctx);
-}
-// a marketing title from anywhere (his live eBay listing, a typed one)
-// becomes a model template: storage numbers and color words turn into tokens
-function tmTemplateFromTitle(title) {
-  let t = String(title || "")
-    .replace(/\s*-\s*(Open Box|Used|For Parts)\s*$/i, "")
-    .replace(/\b\d+\s?(GB|TB)\b/ig, "{storage}")
-    .replace(/\b(black|jet ?black|white|red|orange|yellow|green|blue|gray|grey|silver|navy|graphite|gold|pink|violet|purple|mint|beige|cream|titanium|shadow)\b/ig, "{color}");
-  return t.replace(/\{storage\}([\s,/]*\{storage\})+/g, "{storage}")
-    .replace(/\{color\}([\s,/]*\{color\})+/g, "{color}")
-    .replace(/\s+/g, " ").trim();
-}
-
-// no learned title yet: borrow the model's title from his live eBay listing
-// (the same card the eBay lister copies) — fetched once, remembered for good
-async function tmFetchTitle(cur) {
-  const p = ebParseSku(cur.sku);
-  if (!p.model) return;
-  const cfg2 = await ebLoadCfg();
-  let card = (cfg2.ebayModelCards || {})[p.model];
-  if (!card) {
-    const res = await api.ebaySpecs(p.base).catch(() => null);
-    if (res && res.ok && res.title) {
-      card = { title: res.title, item: res.itemId, categoryId: res.categoryId, price: res.price, specs: res.specs };
-      ebCfg.ebayModelCards = { ...(ebCfg.ebayModelCards || {}), [p.model]: card };
-      api.setConfig({ ebayModelCards: ebCfg.ebayModelCards }).catch(() => {});
-    }
-  }
-  if (!card || !card.title) {
-    // no listing of ours anywhere — ask the public catalog by UPC (or by a
-    // model query when the item carries no barcode)
-    const lk = await api.titleLookup(cur.barcode || "", `${cur.brand} ${p.model} ${p.storage}`.trim()).catch(() => null);
-    if (lk && lk.ok && lk.title) card = { title: lk.title };
-  }
-  if (!card || !card.title || tmCur !== cur) return;
-  const tpl = tmTemplateFromTitle(card.title);
-  tmState.titles = { ...(tmState.titles || {}), [String(p.model).toUpperCase()]: tpl };
-  api.temuTitles(p.model, tpl).catch(() => {});
-  if (cur.titleAuto) {
-    cur.title = tmAutoTitle(cur);
-    renderTmForm();
-  }
-}
-
-// a typed title teaches the model: the storage and color words become tokens
-// so every sibling color/size fills the same title for itself
-function tmLearnTitle(cur, title) {
-  const ctx = tmTitleCtx(cur);
-  let t = String(title || "").trim();
-  if (!t || !ctx.model) return;
-  if (ctx.storage) t = t.replace(new RegExp(ctx.storage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "{storage}");
-  if (ctx.color) t = t.replace(new RegExp(ctx.color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "{color}");
-  tmState.titles = { ...(tmState.titles || {}), [String(ctx.model).toUpperCase()]: t };
-  api.temuTitles(ctx.model, t).catch(() => {});
-}
-
-function tmClaim(skus) {
-  const now = Date.now();
-  for (const s of skus) tmClaimed[String(s).toUpperCase()] = now;
-  try { localStorage.setItem("temuClaimed", JSON.stringify(tmClaimed)); } catch { /* best effort */ }
-}
-
-function tmSaveDraft() {
-  if (!tmCur || !tmCur.sku) return;
-  tmDrafts[tmCur.sku] = JSON.parse(JSON.stringify(tmCur));
-  try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
-}
-
-function tmQueueRows() {
-  const out = [];
-  if (!recvItems) return out;
-  const cutoff = Date.now() - 14 * 86400000;
-  for (const it of recvItems) {
-    const lvl = (it.levels || []).find(l => l.locationId === recvLocationId) || {};
-    const avail = Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0);
-    if (avail <= 0) continue;
-    const p = ebParseSku(it.sku);
-    if (p.cond) continue; // condition SKUs never appear — Temu is new-only
-    if (stockViews && stockViews.some(v => stockViewMatch(it, v.pattern))) continue;
-    if (chLinked && chLinked.temu && chLinked.temu.has(it.stockItemId)) continue;
-    const claim = tmClaimed[String(it.sku).toUpperCase()];
-    if (claim && claim > cutoff) continue;
-    out.push({ sku: it.sku, stockItemId: it.stockItemId, title: it.title || "", qty: avail, cat: tmGuessCat(it.sku, it.title), barcode: it.barcode || "", price: Number(it.retailPrice) || 0 });
-  }
-  out.sort((a, b) => b.qty - a.qty);
-  return out;
-}
-
-function renderTmQueue() {
-  const box = $("tmQueue");
-  const rows = tmQueueRows();
-  box.innerHTML = !recvItems
-    ? `<div class="ebay-qempty">Loading the inventory…</div>`
-    : rows.length === 0
-      ? `<div class="ebay-qempty">Every new in-stock SKU already has a Temu listing.</div>`
-      : rows.map(r => `
-        <div class="ebay-qrow ${tmCur && tmCur.sku === r.sku ? "is-on" : ""}" data-tmq="${esc(r.sku)}">
-          <span class="ebay-qsku mono">${esc(r.sku)}</span>
-          <span class="ebay-qmeta"><span class="ebay-qcond c-new">${r.cat === "tablet" ? "Tablet" : "Phone"}</span> ${r.qty} unit${r.qty === 1 ? "" : "s"}${tmDrafts[r.sku] ? " · <b>draft</b>" : ""}</span>
-        </div>`).join("");
-}
-
-// siblings: same model, NEW, still in the queue — pre-filled as variations
-function tmSiblings(sku) {
-  const p = ebParseSku(sku);
-  if (!p.model) return [];
-  return tmQueueRows().filter(r => {
-    if (r.sku === sku) return false;
-    const ps = ebParseSku(r.sku);
-    return ps.model === p.model;
-  }).map(r => {
-    const ps = ebParseSku(r.sku);
-    return { sku: r.sku, stockItemId: r.stockItemId, rom: ps.storage || "", color: tmColorFor(ps.color || r.sku), colorSrc: ps.color || "", qty: r.qty, price: "", auto: true, barcode: r.barcode };
-  });
-}
-
-function tmSelect(sku, fresh) {
-  const item = recvBySku && recvBySku.get(String(sku).toLowerCase());
-  const draft = !fresh && tmDrafts[sku];
-  if (draft) { tmCur = JSON.parse(JSON.stringify(draft)); renderTmQueue(); renderTmForm(); return; }
-  const p = ebParseSku(sku);
-  const cat = tmGuessCat(sku, (item && item.title) || "");
-  const title = ""; // filled from the template below (Linnworks titles are empty here)
-  const apple = /IPAD|IPHONE|APPLE/i.test(`${sku} ${title}`);
-  const five = /5G/i.test(`${sku} ${title}`);
-  const model = p.model || sku;
-  const pack = (tmState.packages || {})[String(model).toUpperCase()] || {};
-  tmCur = {
-    sku, stockItemId: (item && item.stockItemId) || "", scratch: !item,
-    cat, title, brand: apple ? "APPLE" : "SAMSUNG", origin: "Vietnam",
-    os: apple ? "Ios" : "Android",
-    cell: cat === "tablet" ? (five ? "5g" : /LTE|CELL/i.test(`${sku} ${title}`) ? "4g" : "none") : (five ? "5g" : "4g"),
-    sim: "1", power: "USB Charging", battery: "Rechargeable Battery",
-    wireless: "With Wi-Fi function", material: "Plastic", age: "14 Years+",
-    ram: cat === "tablet" ? "4GB" : "8GB", rom: p.storage || "64GB",
-    color: tmColorFor(p.color || sku), colorSrc: p.color || "",
-    base: item && item.retailPrice ? String(item.retailPrice) : "", list: "",
-    qty: "", photos: [], vars: tmSiblings(sku),
-    barcode: (item && item.barcode) || "",
-  };
-  const lvl = item && (item.levels || []).find(l => l.locationId === recvLocationId);
-  if (lvl) tmCur.qty = String(Math.max(Number(lvl.available) || 0, Number(lvl.stockLevel) || 0));
-  tmCur.title = tmAutoTitle(tmCur);
-  tmCur.titleAuto = true; // regenerates while untouched; a typed title wins
-  renderTmQueue();
-  renderTmForm();
-  // no saved title for this model yet: borrow it from his live eBay listing
-  const modelKey = String(ebParseSku(sku).model || "").toUpperCase();
-  if (modelKey && !(tmState.titles || {})[modelKey] && !tmCur.scratch) tmFetchTitle(tmCur);
-}
-
-function tmRows() { // upload-sheet rows: primary first, then included siblings
-  if (!tmCur) return [];
-  const ram = tmCur.ram || "8GB";
-  const rows = [{
-    sku: tmCur.sku, stockItemId: tmCur.stockItemId, color: tmCur.color,
-    ramrom: `${ram}+${tmCur.rom || "64GB"}`, qty: tmCur.qty, base: tmCur.base,
-    list: tmCur.list, barcode: tmCur.barcode,
-  }];
-  for (const v of tmCur.vars || []) {
-    rows.push({
-      sku: v.sku, stockItemId: v.stockItemId, color: v.color,
-      ramrom: `${ram}+${v.rom || tmCur.rom || "64GB"}`, qty: v.qty,
-      base: v.price || tmCur.base, list: tmCur.list, barcode: v.barcode,
-    });
-  }
-  return rows;
-}
-
-function renderTmForm() {
-  const has = !!tmCur;
-  $("tmSku").value = has ? tmCur.sku : "";
-  $("tmSku").readOnly = !(has && tmCur.scratch && !tmCur.sku);
-  $("tmTitle").value = has ? tmCur.title : "";
-  $("tmTitleHint").textContent = !has ? ""
-    : tmCur.titleAuto
-      ? ((tmState.titles || {})[String(ebParseSku(tmCur.sku).model || "").toUpperCase()]
-        ? "from the saved title for this model — edit to reteach it"
-        : "from the title template (⚙) — type once and this model remembers")
-      : "your title — saved for every future " + esc(ebParseSku(tmCur.sku).model || "") + " listing";
-  $("tmBrand").value = has ? tmCur.brand : "SAMSUNG";
-  $("tmOrigin").value = has ? tmCur.origin : "Vietnam";
-  $("tmCatPhone").classList.toggle("is-on", has && tmCur.cat === "phone");
-  $("tmCatTablet").classList.toggle("is-on", has && tmCur.cat === "tablet");
-  // spec selects for the active category
-  $("tmSpecs").innerHTML = !has ? "" : TM_SPECS[tmCur.cat].map(([key, label, opts]) => `
-    <span class="ebay-spec"><label>${esc(label)}</label>
-      <select class="input" data-tmspec="${key}">${opts.map(o => `<option ${tmCur[key] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></span>`).join("");
-  // RAM / ROM
-  const rams = ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"];
-  const roms = ["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB"];
-  $("tmRam").innerHTML = rams.map(r => `<option ${has && tmCur.ram === r ? "selected" : ""}>${r}</option>`).join("");
-  $("tmRom").innerHTML = roms.map(r => `<option ${has && tmCur.rom === r ? "selected" : ""}>${r}</option>`).join("");
-  $("tmColor").innerHTML = TM_COLORS.map(c => `<option ${has && tmCur.color === c ? "selected" : ""}>${c}</option>`).join("");
-  $("tmColorHint").textContent = has && tmCur.colorSrc && tmColorFor(tmCur.colorSrc) === tmCur.color
-    ? `${tmCur.colorSrc} → ${tmCur.color} (nearest Temu color — only 7 allowed)` : "Temu allows only these 7 colors";
-  $("tmBase").value = has ? tmCur.base : "";
-  $("tmList").value = has ? tmCur.list : "";
-  $("tmQty").value = has ? tmCur.qty : "";
-  const model = has ? (ebParseSku(tmCur.sku).model || tmCur.sku) : "";
-  const pack = (tmState.packages || {})[String(model).toUpperCase()] || {};
-  if (has) {
-    if (!$("tmWt").value && pack.weightLb) $("tmWt").value = pack.weightLb;
-    if (!$("tmLen").value && pack.lenIn) $("tmLen").value = pack.lenIn;
-    if (!$("tmWid").value && pack.widIn) $("tmWid").value = pack.widIn;
-    if (!$("tmHei").value && pack.heiIn) $("tmHei").value = pack.heiIn;
-  } else {
-    ["tmWt", "tmLen", "tmWid", "tmHei"].forEach(id => { $(id).value = ""; });
-  }
-  $("tmPackHint").textContent = has ? `saved for ${model} — reused next time` : "saved per model — reused next time";
-  // variations
-  $("tmVars").innerHTML = !has ? "" : (tmCur.vars || []).map((v, vi) => `
-    <span class="ebay-varcard is-auto">
-      <span class="vline"><span>${v.colorSrc ? `<span class="tm-cmap-from">${esc(v.colorSrc)}</span>` : ""}${esc(v.color)} · ${esc(v.rom || "")}</span><span class="vsku is-ok">${esc(v.sku)}</span>
-        <select class="input eb-w76" data-tmvcolor="${vi}" title="Temu color for this variation">${TM_COLORS.map(c => `<option ${v.color === c ? "selected" : ""}>${c}</option>`).join("")}</select>
-        <input data-tmvprice="${vi}" value="${esc(v.price)}" placeholder="${esc(tmCur.base || "price")}" title="Base price for this variation (blank = the listing price)" class="input mono eb-w76" />
-        <input data-tmvqty="${vi}" value="${esc(v.qty)}" title="Units" class="input mono eb-w50" /></span>
-      <button class="ebay-varx" data-tmvarx="${vi}" title="Not this one — it keeps its own place in the queue">✕</button>
-    </span>`).join("")
-    + ((tmCur.vars || []).length ? `<span class="ebay-fhint">siblings from the queue auto-filled — ✕ ejects one; exporting removes every included SKU from the queue</span>` : `<span class="ebay-fhint">no queue siblings for this model — single-SKU product</span>`);
-  // photos (shared across the variations; painted via CSSOM — CSP)
-  $("tmShots").innerHTML = !has ? "" : (tmCur.photos || []).map((p, i) => `
-    <span class="ebay-shot ${i === 0 ? "is-main" : ""}" data-tmshoti="${i}"><button class="x" data-tmshotx="${i}">✕</button></span>`).join("")
-    + `<button class="qrbtn" id="tmShotQr" title="Shoot on the phone — QR for this draft">${ICONS.camera}</button>`
-    + `<button class="ebay-addbtn eb-m0" id="tmShotAdd">add photos</button>`;
-  if (has) {
-    document.querySelectorAll("#tmShots .ebay-shot[data-tmshoti]").forEach(el => {
-      const p = tmCur.photos[Number(el.dataset.tmshoti)];
-      if (p) el.style.backgroundImage = `url("file:///${String(p.path).replace(/\\/g, "/").replace(/"/g, "")}")`;
-    });
-  }
-  renderTmSheet();
-  const missing = [];
-  if (has && !tmState.hasTemplate) missing.push("no template picked yet (⚙)");
-  if (has && !(tmCur.photos || []).length) missing.push("no photos yet");
-  if (has && (!tmCur.base || !tmCur.list)) missing.push("base + list price required");
-  if (has && !($("tmWt").value && $("tmLen").value && $("tmWid").value && $("tmHei").value)) missing.push("package weight + size required");
-  $("tmExportNote").textContent = has && missing.length ? missing.join(" · ") : "";
-  $("tmSavedNote").textContent = has && tmCur.sku ? "draft saved" : "";
-  $("tmExport").disabled = !has;
-  tmHistPush(); // every rendered state is one undo step
-  tmSaveDraft();
-}
-
-/* ----- undo / redo across the Temu form, mirroring the eBay lister ----- */
-let tmHist = [];
-let tmHistIdx = -1;
-let tmHistNav = false;
-function tmHistBtns() {
-  $("tmUndo").disabled = tmHistIdx <= 0;
-  $("tmRedo").disabled = tmHistIdx >= tmHist.length - 1;
-}
-function tmHistPush() {
-  if (!tmCur || tmHistNav) { tmHistBtns(); return; }
-  const snap = JSON.stringify(tmCur);
-  if (tmHist[tmHistIdx] === snap) { tmHistBtns(); return; }
-  tmHist = tmHist.slice(0, tmHistIdx + 1);
-  tmHist.push(snap);
-  tmHistIdx++;
-  tmHistBtns();
-}
-function tmHistGo(delta) {
-  const next = tmHistIdx + delta;
-  if (next < 0 || next >= tmHist.length) return;
-  tmHistIdx = next;
-  tmHistNav = true;
-  tmCur = JSON.parse(tmHist[next]);
-  renderTmQueue();
-  renderTmForm();
-  tmHistNav = false;
-  tmSaveDraft();
-  tmHistBtns();
-}
-
-function renderTmSheet() {
-  const rows = tmRows();
-  $("tmSheetN").textContent = tmCur ? `1 product · ${rows.length} row${rows.length === 1 ? "" : "s"}` : "";
-  $("tmSheet").innerHTML = !tmCur
-    ? `<div class="tm-sheet-empty">Pick a SKU from the queue, or press New listing.</div>`
-    : `<table><tr><th>Contribution SKU</th><th>Color</th><th>RAM+ROM</th><th>Qty</th><th>Base $</th><th>List $</th></tr>
-      ${rows.map(r => `<tr><td>${esc(r.sku)}</td><td>${esc(r.color)}</td><td>${esc(r.ramrom)}</td><td>${esc(r.qty)}</td><td>${esc(r.base)}</td><td>${esc(r.list)}</td></tr>`).join("")}</table>`;
-}
-
-function enterTemu() {
-  api.temuState().then(s => { if (s && s.ok) tmState = s; renderTmForm(); }).catch(() => {});
-  Promise.all([ensureInventory(), loadStockViews()]).then(() => { renderTmQueue(); if (tmCur) renderTmForm(); });
-  loadChLinked();
-  renderTmQueue();
-  renderTmForm();
-}
-
-$("tmQueue").addEventListener("click", (e) => {
-  const row = e.target.closest("[data-tmq]");
-  if (row) tmSelect(row.dataset.tmq, false);
-});
-$("tmRefresh").addEventListener("click", () => {
-  chLinked = null;
-  loadChLinked();
-  ensureInventory().then(renderTmQueue);
-  toast("Re-scanning the Temu link set…", 2000);
-});
-$("tmScratch").addEventListener("click", () => {
-  tmCur = { sku: "", stockItemId: "", scratch: true, cat: "phone", title: "", brand: "SAMSUNG", origin: "Vietnam", os: "Android", cell: "4g", sim: "1", power: "USB Charging", battery: "Rechargeable Battery", wireless: "With Wi-Fi function", material: "Plastic", age: "14 Years+", ram: "8GB", rom: "64GB", color: "Black", colorSrc: "", base: "", list: "", qty: "", photos: [], vars: [], barcode: "" };
-  renderTmQueue();
-  renderTmForm();
-  $("tmSku").readOnly = false;
-  $("tmSku").placeholder = "type any SKU — new items only";
-  $("tmSku").focus();
-});
-$("tmSku").addEventListener("change", () => {
-  if (!tmCur || !tmCur.scratch) return;
-  const sku = $("tmSku").value.trim().toUpperCase();
-  if (sku) tmSelect(sku, true);
-});
-$("tmDiscard").addEventListener("click", () => {
-  if (!tmCur) return;
-  const sku = tmCur.sku;
-  if (sku) {
-    delete tmDrafts[sku];
-    try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
-  }
-  if (sku && !tmCur.scratch) tmSelect(sku, true);
-  else { tmCur = null; renderTmQueue(); renderTmForm(); }
-});
-document.querySelectorAll("[data-tmcat]").forEach(btn => btn.addEventListener("click", () => {
-  if (!tmCur) { toast("Pick a SKU from the queue first, or press New listing."); return; }
-  tmCur.cat = btn.dataset.tmcat;
-  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur);
-  renderTmForm();
-}));
-$("tmUndo").addEventListener("click", () => tmHistGo(-1));
-$("tmRedo").addEventListener("click", () => tmHistGo(1));
-document.addEventListener("keydown", (e) => {
-  if (activePage !== "temu" || anyDialogOpen()) return;
-  const t = e.target;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return; // native text undo wins
-  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); tmHistGo(-1); }
-  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); tmHistGo(1); }
-});
-["tmTitle", "tmBrand", "tmOrigin", "tmBase", "tmList", "tmQty"].forEach(id => $(id).addEventListener("change", () => {
-  if (!tmCur) return;
-  const typed = $("tmTitle").value.trim();
-  if (id === "tmTitle" && typed && typed !== tmCur.title) {
-    tmCur.titleAuto = false;
-    tmLearnTitle(tmCur, typed); // one typed title serves the whole model
-  }
-  tmCur.title = typed;
-  tmCur.brand = $("tmBrand").value;
-  tmCur.origin = $("tmOrigin").value;
-  tmCur.base = $("tmBase").value.trim();
-  tmCur.list = $("tmList").value.trim();
-  tmCur.qty = $("tmQty").value.trim();
-  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur); // brand changes re-fill
-  renderTmForm();
-}));
-["tmRam", "tmRom", "tmColor"].forEach(id => $(id).addEventListener("change", () => {
-  if (!tmCur) return;
-  tmCur.ram = $("tmRam").value;
-  tmCur.rom = $("tmRom").value;
-  tmCur.color = $("tmColor").value;
-  if (tmCur.titleAuto) tmCur.title = tmAutoTitle(tmCur);
-  renderTmForm();
-}));
-$("tmSpecs").addEventListener("change", (e) => {
-  const sel = e.target.closest("[data-tmspec]");
-  if (!sel || !tmCur) return;
-  tmCur[sel.dataset.tmspec] = sel.value;
-  tmSaveDraft();
-});
-["tmWt", "tmLen", "tmWid", "tmHei"].forEach(id => $(id).addEventListener("change", () => {
-  if (!tmCur) return;
-  const model = ebParseSku(tmCur.sku).model || tmCur.sku;
-  const pack = { weightLb: $("tmWt").value.trim(), lenIn: $("tmLen").value.trim(), widIn: $("tmWid").value.trim(), heiIn: $("tmHei").value.trim() };
-  tmState.packages = { ...(tmState.packages || {}), [String(model).toUpperCase()]: pack };
-  api.temuPackages(model, pack).catch(() => {});
-  renderTmForm();
-}));
-$("tmVars").addEventListener("click", (e) => {
-  const x = e.target.closest("[data-tmvarx]");
-  if (x && tmCur) { tmCur.vars.splice(Number(x.dataset.tmvarx), 1); renderTmForm(); }
-});
-$("tmVars").addEventListener("change", (e) => {
-  if (!tmCur) return;
-  const c = e.target.closest("[data-tmvcolor]");
-  const p = e.target.closest("[data-tmvprice]");
-  const q = e.target.closest("[data-tmvqty]");
-  if (c) tmCur.vars[Number(c.dataset.tmvcolor)].color = c.value;
-  if (p) tmCur.vars[Number(p.dataset.tmvprice)].price = p.value.trim();
-  if (q) tmCur.vars[Number(q.dataset.tmvqty)].qty = q.value.trim();
-  renderTmForm();
-});
-$("tmShots").addEventListener("click", async (e) => {
-  if (e.target.closest("#tmShotQr") && tmCur) {
-    const res = await api.ebayQr(tmCur.sku).catch(err => ({ ok: false, error: err.message }));
-    if (!res || !res.ok) { toast((res && res.error) || "QR unavailable."); return; }
-    $("ebQrImg").src = res.qr;
-    $("ebQrSku").innerHTML = `<span class="mono">${esc(tmCur.sku)}</span>`;
-    $("ebQrPop").hidden = false;
-    return;
-  }
-  if (e.target.closest("#tmShotAdd") && tmCur) {
-    const r = await api.ebayPhotosPick();
-    if (r && r.files && r.files.length) {
-      for (const p of r.files) tmCur.photos.push({ path: p });
-      renderTmForm();
-    }
-    return;
-  }
-  const x = e.target.closest("[data-tmshotx]");
-  if (x && tmCur) { tmCur.photos.splice(Number(x.dataset.tmshotx), 1); renderTmForm(); }
-});
-api.on("ebay:photoUploaded", ({ sku, file }) => {
-  if (activePage !== "temu" || !tmCur || String(tmCur.sku).toUpperCase() !== String(sku).toUpperCase()) return;
-  tmCur.photos.push({ path: file });
-  renderTmForm();
-  toast(`Photo from the phone added to ${sku}`, 2500);
-});
-$("tmGear").addEventListener("click", async () => {
-  const s = await api.temuState().catch(() => null);
-  if (s && s.ok) tmState = s;
-  $("tmTplState").textContent = tmState.hasTemplate
-    ? `Template saved: ${(tmState.template && tmState.template.name) || "temu-template.xlsx"}`
-    : "No template yet — download the Cell Phones/Tablets template from Temu Seller Central (Add Products via Upload), then pick it here.";
-  $("tmShipTpl").value = (tmState.profiles && tmState.profiles.shippingTemplate) || "FREE SHIPPING";
-  $("tmHandling").value = (tmState.profiles && tmState.profiles.handlingTime) || "1 Day";
-  $("tmTitleTpl").value = (tmState.profiles && tmState.profiles.titleTemplate) || "{brand} {model} {storage} {color} {type} - Brand New Sealed";
-  $("tmGearDialog").showModal();
-});
-$("tmTplPick").addEventListener("click", async () => {
-  const r = await api.temuTemplate();
-  if (r && r.ok) {
-    tmState.hasTemplate = true;
-    tmState.template = { name: r.name };
-    $("tmTplState").textContent = `Template saved: ${r.name} (${r.columns} columns)`;
-    toast(`Temu template saved — ${r.columns} columns read`);
-  } else if (r && !r.canceled) {
-    toast(r.error || "That file is not a Temu template.");
-  }
-});
-$("tmGearSave").addEventListener("click", async () => {
-  const profiles = {
-    shippingTemplate: $("tmShipTpl").value.trim() || "FREE SHIPPING",
-    handlingTime: $("tmHandling").value,
-    titleTemplate: $("tmTitleTpl").value.trim() || "{brand} {model} {storage} {color} {type} - Brand New Sealed",
-  };
-  tmState.profiles = profiles;
-  await api.setConfig({ temuProfiles: profiles }).catch(() => {});
-  $("tmGearDialog").close();
-  renderTmForm();
-});
-$("tmGearClose").addEventListener("click", () => $("tmGearDialog").close());
-$("tmUploadPage").addEventListener("click", () => api.openExternalUrl("https://seller.temu.com/"));
-
-$("tmExport").addEventListener("click", async () => {
-  if (!tmCur) return;
-  if (!tmState.hasTemplate) { toast("Pick the Temu template file first (⚙)."); return; }
-  if (!tmCur.sku) { toast("Type a SKU first."); return; }
-  if (!tmCur.base || !tmCur.list) { toast("Base and list price are both required."); return; }
-  const wt = $("tmWt").value.trim(), len = $("tmLen").value.trim(), wid = $("tmWid").value.trim(), hei = $("tmHei").value.trim();
-  if (!wt || !len || !wid || !hei) { toast("Package weight and size are required."); return; }
-  const specs = {};
-  for (const [key] of TM_SPECS[tmCur.cat]) specs[TM_SPEC_IDS[key]] = tmCur[key];
-  const photoPaths = (tmCur.photos || []).map(p => p.path);
-  const variations = tmRows().map(r => ({
-    sku: r.sku, goods: tmCur.sku, stockItemId: r.stockItemId, color: r.color,
-    ramrom: r.ramrom, qty: r.qty || "1", base: r.base, list: r.list,
-    weightLb: wt, lenIn: len, widIn: wid, heiIn: hei,
-    photoPaths, upc: r.barcode,
-  }));
-  const product = {
-    category: tmCur.cat === "tablet" ? "4080" : "24388",
-    name: tmCur.title || tmCur.sku,
-    brand: tmCur.brand, origin: tmCur.origin, description: "",
-    variationTheme: tmCur.cat === "tablet" ? "RAM+ROM × Color" : "Color × RAM+ROM",
-    specs, variations,
-  };
-  $("tmExport").disabled = true;
-  $("tmExport").textContent = "Exporting…";
-  const res = await api.temuExport([product]).catch(err => ({ ok: false, error: err.message }));
-  $("tmExport").disabled = false;
-  $("tmExport").textContent = "Export Temu workbook";
-  if (!res || !res.ok) {
-    if (!res || !res.canceled) toast((res && res.error) || "Export failed.");
-    return;
-  }
-  const skus = variations.map(v => v.sku);
-  tmClaim(skus);
-  for (const s of skus) delete tmDrafts[s];
-  try { localStorage.setItem("temuDrafts", JSON.stringify(tmDrafts)); } catch { /* best effort */ }
-  toast(`Saved ${res.path} — upload it in Temu Seller Central. ${skus.length} SKU${skus.length === 1 ? "" : "s"} left the queue.`, 8000);
-  tmCur = null;
-  renderTmQueue();
-  renderTmForm();
-});
-
 
 /* ----- find on this page: Ctrl+F / Command+F (owner 2026-10-12) ----- */
 const pageFindBar = $('pageFindBar');
@@ -15390,6 +14731,7 @@ function osFillDrawer(row) {
   $('osWt').value = '';
   $('osVal').value = '';
   $('osRef2').value = '';
+  os.ref2Auto = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
   osRenderRates();
@@ -15405,8 +14747,23 @@ function osRenderCustomer(c) {
     + (c.phone ? `<div class="osd-ln">${OSD_PHONE}<div class="v mono">${esc(c.phone)}</div>${copy(c.phone)}</div>` : '');
 }
 
+// Reference #2 starts as "SKU | 1 unit sold" so the printed label tells the
+// packer what goes in the box (owner 2026-10-22); typing over it wins. UPS
+// prints 35 characters, so a long SKU list is cut and the count kept
+// (plain ASCII: no ellipsis on a carrier label).
+function osRef2Default(items) {
+  const skus = [...new Set(items.map(it => String(it.sku || '').trim()).filter(Boolean))];
+  if (!skus.length) return '';
+  const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
+  const tail = ` | ${n} unit${n === 1 ? '' : 's'} sold`;
+  const head = skus.join(', ');
+  return head.length + tail.length <= 35 ? head + tail : head.slice(0, 35 - tail.length).trim() + tail;
+}
+
 function osRenderItems(items) {
   const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
+  const ref2 = $('osRef2');
+  if (os && (!ref2.value.trim() || ref2.value === os.ref2Auto)) { os.ref2Auto = osRef2Default(items); ref2.value = os.ref2Auto; }
   $('osdItemsT').textContent = items.length > 1 || n > 1 ? `Items · ${n}` : 'Item';
   $('osdItems').innerHTML = items.length ? items.map(it => `<div class="osd-it">
       <div class="osd-ph">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" />` : ICONS.box}</div>

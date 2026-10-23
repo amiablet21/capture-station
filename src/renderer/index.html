@@ -13,13 +13,14 @@
       <button id="tabOverview" class="tab" hidden>Overview</button>
       <button id="tabCapture" class="tab is-active">Orders</button>
       <button id="tabStock" class="tab">Stock</button>
+      <!-- List on Walmart (owner 2026-10-22): its own tab, not the Unlisted view -->
+      <button id="tabWalmart" class="tab" hidden>Walmart</button>
       <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
       <!-- Recovery (2026-10-11): Walmart payment periods checked against the
            Returns log — opt-in in Settings, needs Returns -->
       <button id="tabRecovery" class="tab" hidden>Recovery</button>
-      <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
       <!-- Ship: UPS labels (owner 2026-10-19, design variants/ups-labels.html) -->
       <button id="tabShip" class="tab" hidden>Ship</button>
     </nav>
@@ -29,8 +30,6 @@
       <button class="tab-menu-item" data-page="returns">Returns log</button>
       <button class="tab-menu-item" data-page="shelf">Shelf</button>
     </dialog>
-    <!-- Listings tab menu (eBay | Temu): same dropdown pattern — replaced
-         the floating pill row (owner picked option A, 2026-09-17) -->
     <!-- Stock page Actions dropdown (anchored under #stockActionsBtn) -->
     <dialog id="stockActionsDlg" class="tab-menu stock-actions-menu">
       <button class="tab-menu-item" data-act="mappings" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
@@ -44,10 +43,6 @@
       <button class="tab-menu-item" data-act="export:walmart" title="Save every mapped Walmart listing to a CSV — inventory SKU, channel SKU, title, condition, listed qty, price, WFS. An active condition chip narrows the file to that slice">Export Walmart SKUs</button>
       <button class="tab-menu-item" data-act="export:ebay" title="Every mapped eBay listing as a CSV (the active condition chip narrows it)">Export eBay SKUs</button>
       <button class="tab-menu-item" data-act="export:temu" title="Every mapped Temu listing as a CSV (the active condition chip narrows it)">Export Temu SKUs</button>
-    </dialog>
-    <dialog id="listingsMenuDlg" class="tab-menu">
-      <button class="tab-menu-item" data-page="ebay">eBay lister</button>
-      <button class="tab-menu-item" data-page="temu">Temu lister</button>
     </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -194,6 +189,35 @@
        Toolbar docked to the sheet as a spreadsheet header band (owner pick
        2026-08-17, mockup B): search + chips left, stats + gaps + actions
        right, the table growing straight out of the band's bottom edge -->
+  <!-- List on Walmart (owner 2026-10-22, approved mockup
+       variants/walmart-api-lister.html; its own tab at the owner's ask):
+       add SKUs from the inventory, search Walmart by name only when asked,
+       confirm the item + UPC, set condition / price / stock, review, send
+       one feed, track it. renderer.js draws steps, body and foot. -->
+  <section id="walmartPage" class="wlp" hidden>
+    <div class="wlp-card">
+      <div class="wl-head">
+        <h2 class="dlg-title">List on Walmart</h2>
+        <div class="wlp-tabs" role="tablist">
+          <button type="button" class="wlp-tab is-on" data-wltab="list">List</button>
+          <button type="button" class="wlp-tab" data-wltab="uploads">Uploads</button>
+        </div>
+        <span id="wlAcct" class="wl-acct"></span>
+      </div>
+      <div id="wlAddRow" class="wlp-add">
+        <div class="combo wlp-add-combo">
+          <input id="wlAdd" class="input mono" type="text" placeholder="Add a SKU to list: type its SKU, title or barcode…"
+                 autocomplete="off" spellcheck="false" role="combobox" aria-label="Add a SKU" />
+          <div id="wlAddList" class="combo-list" hidden></div>
+        </div>
+        <span class="wlp-add-hint">Searches your Linnworks inventory. Nothing goes to Walmart until you press Search.</span>
+      </div>
+      <div id="wlSteps" class="wl-steps"></div>
+      <div id="wlBody" class="wl-body"></div>
+      <div id="wlFoot" class="wl-foot"></div>
+    </div>
+  </section>
+
   <section id="stockPage" class="stock-page" hidden>
     <div class="stock-sheet-row">
       <div id="stockMain" class="stock-main">
@@ -449,6 +473,9 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
+      <!-- entry-row drafts that were cleared, replaced or closed before they
+           were saved: never behind a chip, so a lost return is seen -->
+      <div id="retUnsaved" class="ret-unsaved" hidden></div>
       <!-- RETURNS-2 sheet (2026-09-04): the log owns the page; its first
            row is the launcher — a PO# typed there opens the receive popup
            (2026-09-05, "popup instead of on the line"); the pencil on a
@@ -839,290 +866,19 @@
     </div>
   </dialog>
 
-  <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
-       Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
-  <section id="ebayPage" class="ebay-page" hidden>
-    <!-- marketplace switch moved into the Listings ▾ tab dropdown (owner
-         picked option A, 2026-09-17) -->
-    <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
-         "I like the previous design") -->
-    <div class="ebay-cols ebay-cols-pad">
-      <div class="ebay-panel ebay-queue">
-        <div class="ebay-phead">To list on eBay
-          <span class="eb-right">
-            <button id="ebRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the eBay link set">Refresh</button>
-            <button id="ebScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
-          </span>
-        </div>
-        <div id="ebQChips" class="ebay-qchips"></div>
-        <div id="ebQueue" class="ebay-qlist"></div>
-      </div>
-
-      <div class="ebay-panel ebay-form">
-        <div class="ebay-phead">Listing
-          <span class="eb-right">
-            <button id="ebUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-            <button id="ebRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-            <button id="ebDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
-            <button id="ebGear" class="ebay-addbtn eb-ml0" title="Business policy names, location, dispatch time">⚙</button>
-          </span>
-        </div>
-        <div class="ebay-frows">
-          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="ebSku" class="input mono ebay-fin" readonly /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
-            <div><input id="ebTitle" class="input ebay-fin" maxlength="80" /><div class="ebay-fhint"><span id="ebTitleN">0</span>/80 characters</div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Condition</span>
-            <div class="ebay-condrow">
-              <button class="ebay-condbtn" data-cond="new">New</button>
-              <button class="ebay-condbtn" data-cond="openbox">Open Box</button>
-              <button class="ebay-condbtn" data-cond="used">Used</button>
-              <button class="ebay-condbtn" data-cond="scrap">Parts</button>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Version</span>
-            <div><select id="ebVersion" class="input ebay-fin eb-w180">
-              <option value="US">US</option>
-              <option value="Global/International">Global/International</option>
-            </select><div class="ebay-fhint">shown in the listing description only</div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Category</span>
-            <div><input id="ebCategory" class="input mono ebay-fin eb-w110" inputmode="numeric" placeholder="eBay category ID" title="eBay leaf category ID — copied from your live listing of this model, else the store's phone/tablet default; typing one saves it for the model" /><div class="ebay-fhint" id="ebCategoryHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Specifics</span>
-            <div>
-              <div id="ebSpecs" class="ebay-specgrid"></div>
-              <div class="ebay-fhint" id="ebSpecSrc"></div>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
-            <div><input id="ebPrice" class="input mono ebay-fin eb-w110" /><div class="ebay-fhint" id="ebPriceHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="ebQty" class="input mono ebay-fin eb-w70" /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
-            <div id="ebVars" class="ebay-vars"></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
-            <div id="ebShots" class="ebay-shots"></div>
-          </div>
-        </div>
-        <div class="ebay-factions">
-          <button id="ebLwList" class="btn btn-primary" title="List straight to eBay through Linnworks' stored eBay connection — no CSV, no Seller Hub trip">List on eBay</button>
-          <select id="ebLwConfig" class="input eb-lw-config" title="The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)"></select>
-          <button id="ebExport" class="btn btn-secondary">Export eBay CSV</button>
-          <button id="ebUploadPage" class="ebay-addbtn" title="Seller Hub → Reports → Upload — where the exported file goes">Open eBay upload page</button>
-          <span id="ebExportNote" class="ebay-fhint"></span>
-        </div>
-      </div>
-
-      <div class="ebay-out">
-        <div class="ebay-panel">
-          <div class="ebay-phead">Buyer sees</div>
-          <div id="ebPrev" class="ebay-prev"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
-       SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
-  <section id="temuPage" class="ebay-page" hidden>
-    <div class="ebay-cols ebay-cols-pad">
-      <div class="ebay-panel ebay-queue">
-        <div class="ebay-phead">To list on Temu
-          <span class="eb-right">
-            <button id="tmRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the Temu link set">Refresh</button>
-            <button id="tmScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
-          </span>
-        </div>
-        <div id="tmQueue" class="ebay-qlist"></div>
-        <div class="ebay-qfoot">New in-stock SKUs with no Temu listing — Temu sells new only.</div>
-      </div>
-
-      <div class="ebay-panel ebay-form">
-        <div class="ebay-phead">Listing
-          <span class="eb-right">
-            <button id="tmUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-            <button id="tmRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-            <button id="tmDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
-            <button id="tmGear" class="ebay-addbtn eb-ml0" title="Temu template file, title template, export defaults">⚙</button>
-          </span>
-        </div>
-        <div class="ebay-frows">
-          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="tmSku" class="input mono ebay-fin" readonly /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Type</span>
-            <div class="ebay-condrow">
-              <button class="ebay-condbtn" id="tmCatPhone" data-tmcat="phone">Phone</button>
-              <button class="ebay-condbtn" id="tmCatTablet" data-tmcat="tablet">Tablet</button>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
-            <div><input id="tmTitle" class="input ebay-fin" maxlength="500" /><div class="ebay-fhint" id="tmTitleHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Brand</span>
-            <div class="tm-two">
-              <select id="tmBrand" class="input ebay-fin"><option>SAMSUNG</option><option>APPLE</option><option value="">(no brand)</option></select>
-              <select id="tmOrigin" class="input ebay-fin"><option>Vietnam</option><option>Mainland China</option><option>South Korea</option><option>India</option><option>United States</option></select>
-            </div>
-            <div class="ebay-fhint tm-hint2">brand · country of origin</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Temu specs</span>
-            <div>
-              <div id="tmSpecs" class="ebay-specgrid"></div>
-              <div class="ebay-fhint">fixed Temu menus — pre-picked, change what's wrong</div>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">RAM+ROM</span>
-            <div class="tm-two">
-              <select id="tmRam" class="input ebay-fin"></select>
-              <select id="tmRom" class="input ebay-fin"></select>
-            </div>
-            <div class="ebay-fhint tm-hint2">Temu variation axis — RAM · storage</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Color</span>
-            <div><select id="tmColor" class="input ebay-fin eb-w180"></select>
-            <div class="ebay-fhint" id="tmColorHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
-            <div class="tm-two">
-              <input id="tmBase" class="input mono ebay-fin eb-w110" placeholder="base" />
-              <input id="tmList" class="input mono ebay-fin eb-w110" placeholder="list" />
-            </div>
-            <div class="ebay-fhint tm-hint2">base (your price) · list (compare-at)</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="tmQty" class="input mono ebay-fin eb-w70" /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
-            <div id="tmVars" class="ebay-vars"></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Package</span>
-            <div class="tm-pack">
-              <span class="ebay-spec"><label>Weight lb</label><input id="tmWt" class="input mono" /></span>
-              <span class="ebay-spec"><label>Length in</label><input id="tmLen" class="input mono" /></span>
-              <span class="ebay-spec"><label>Width in</label><input id="tmWid" class="input mono" /></span>
-              <span class="ebay-spec"><label>Height in</label><input id="tmHei" class="input mono" /></span>
-            </div>
-            <div class="ebay-fhint tm-hint2" id="tmPackHint">saved per model — reused next time</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
-            <div id="tmShots" class="ebay-shots"></div>
-          </div>
-        </div>
-        <div class="ebay-factions">
-          <button id="tmExport" class="btn btn-primary">Export Temu workbook</button>
-          <button id="tmUploadPage" class="ebay-addbtn" title="Seller Central → Add Products via Upload — where the exported file goes">Open Temu upload page</button>
-          <span id="tmSavedNote" class="ebay-fhint" title="Every change saves into this SKU's draft on its own — come back any time"></span>
-          <span id="tmExportNote" class="ebay-fhint"></span>
-        </div>
-      </div>
-
-      <div class="ebay-out">
-        <div class="ebay-panel">
-          <div class="ebay-phead">Upload sheet<span class="eb-right"><span id="tmSheetN" class="ebay-fhint"></span></span></div>
-          <div id="tmSheet" class="tm-sheet"></div>
-          <div class="tm-sheetnote">Rows write into a copy of Temu's own template workbook. Contribution SKU = your Linnworks SKU, so listings auto-link. Temu recommends 15 or fewer products on the first upload.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Temu lister: template + defaults -->
-  <dialog id="tmGearDialog" class="dlg">
-    <div class="dlg-body">
-      <h2 class="dlg-title">Temu export setup</h2>
-      <p class="dlg-note" id="tmTplState"></p>
-      <div class="ebg-row"><label>Template</label><button id="tmTplPick" class="ebay-addbtn eb-m0">Pick the downloaded template file…</button></div>
-      <div class="ebg-row"><label for="tmTitleTpl">Title template</label><input id="tmTitleTpl" class="input" />
-        <p class="dlg-note">tokens: {brand} {model} {storage} {ram} {color} {type} — typing a title on a listing teaches that model its own title</p></div>
-      <div class="ebg-row"><label for="tmShipTpl">Shipping template</label><input id="tmShipTpl" class="input" /></div>
-      <div class="ebg-row"><label for="tmHandling">Handling time</label>
-        <select id="tmHandling" class="input"><option>1 Day</option><option>2 Days</option></select>
-      </div>
-      <div class="dlg-actions">
-        <button id="tmGearSave" class="btn btn-primary">Save</button>
-        <button id="tmGearClose" class="btn">Close</button>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- eBay lister: QR for shooting draft photos on the phone -->
-  <div id="ebQrPop" class="claims-pop ebqr-pop" hidden>
-    <button id="ebQrClose" class="claims-close" title="Close">✕</button>
-    <h4>Listing Photos</h4>
-    <div id="ebQrSku" class="claims-sub"></div>
-    <img id="ebQrImg" class="claims-qr" alt="Scan with the phone" />
-  </div>
-
-  <!-- eBay lister: photo editor (Canva-style; approved design:
-       variants/ebay-photo-editor.html). Edits bake into the exported pixels. -->
-  <dialog id="ebEditDialog" class="dlg ebed-dlg">
-    <div class="ebed-tbar">
-      <span class="ebed-t">Edit photos</span>
-      <span class="ebed-sub"><span id="ebedN">1</span> of <span id="ebedM">1</span></span>
-      <span class="ebed-hist">
-        <button id="ebedUndo" class="ebed-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-        <button id="ebedRedo" class="ebed-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-      </span>
-      <button id="ebedDone" class="btn btn-primary">✓ Done</button>
-    </div>
-    <div class="ebed-mid">
-      <div class="ebed-work"><img id="ebedImg" alt="" /></div>
-      <div class="ebed-props">
-        <div class="ebed-grp"><h5>Light</h5>
-          <div class="ebed-sl"><label>Brightness</label><input type="range" id="ebedBright" min="50" max="150" value="100" /><span class="v" id="ebedBrightV">0</span></div>
-          <div class="ebed-sl"><label>Contrast</label><input type="range" id="ebedCon" min="50" max="150" value="100" /><span class="v" id="ebedConV">0</span></div>
-          <div class="ebed-sl"><label>Warmth</label><input type="range" id="ebedWarm" min="-50" max="50" value="0" /><span class="v" id="ebedWarmV">0</span></div>
-        </div>
-        <div class="ebed-grp"><h5>Crop</h5>
-          <div class="ebed-chips">
-            <button class="ebed-chip" data-crop="free">Free</button>
-            <button class="ebed-chip" data-crop="1:1">1:1 eBay</button>
-            <button class="ebed-chip" data-crop="4:3">4:3</button>
-          </div>
-          <div class="ebed-hint">presets crop from the center when the photo is saved</div>
-        </div>
-        <div class="ebed-grp"><h5>Photo</h5>
-          <div class="ebed-btns">
-            <button id="ebedRot" class="ebed-abtn">⟳ Rotate</button>
-            <button id="ebedDel" class="ebed-abtn is-danger">🗑 Remove</button>
-            <button id="ebedMain" class="ebed-abtn is-main">★ Use as main photo</button>
-          </div>
-        </div>
-        <button id="ebedReset" class="ebed-reset">Reset this photo</button>
-      </div>
-    </div>
-    <div class="ebed-strip" id="ebedStrip"></div>
-  </dialog>
-
   <!-- rename a Linnworks SKU: the item survives, only the string changes -->
   <dialog id="renameDialog" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title">Rename SKU</h2>
+      <h2 class="dlg-title">Edit item</h2>
       <p class="dlg-note mono" id="rnOld" style="margin-bottom:10px"></p>
-      <div class="ebg-row"><label for="rnNew">New SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
-      <p class="dlg-note">Stock, history and channel links follow the item automatically. Marketplace listings keep their own channel SKUs — future auto-linking matches the new name.</p>
+      <div class="ebg-row"><label for="rnNew">SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
+      <div class="ebg-row"><label for="rnTitle">Title</label><input id="rnTitle" class="input" autocomplete="off" maxlength="255" placeholder="No title in Linnworks" /></div>
+      <p class="dlg-note">A new SKU: stock, history and channel links follow the item automatically; marketplace listings keep their own channel SKUs and future auto-linking matches the new name. The title is the Linnworks item title.</p>
       <p class="dlg-note" id="rnErr" style="color:var(--neg-text)" hidden></p>
       <div class="dlg-actions">
         <button id="rnDelete" class="btn btn-ghost rn-del" title="Delete this SKU from Linnworks — opens the delete confirmation with the blast radius (stock lost, linked listings left unsynced)">Delete SKU…</button>
         <button id="rnCancel" class="btn btn-ghost">Cancel</button>
-        <button id="rnSave" class="btn btn-primary">Rename</button>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- eBay lister settings: business policy names live on the eBay account -->
-  <dialog id="ebGearDialog" class="dlg ebg-dlg">
-    <div class="dlg-body">
-      <h2 class="dlg-title">eBay listing settings</h2>
-      <div class="ebg-row"><label for="ebgShip">Shipping policy name</label><input id="ebgShip" class="input" placeholder="e.g. Standard shipping" /></div>
-      <div class="ebg-row"><label for="ebgRet">Return policy name</label><input id="ebgRet" class="input" placeholder="e.g. 30 day returns" /></div>
-      <div class="ebg-row"><label for="ebgPay">Payment policy name</label><input id="ebgPay" class="input" placeholder="e.g. eBay Payments" /></div>
-      <div class="ebg-row"><label for="ebgLoc">Item location</label><input id="ebgLoc" class="input" placeholder="e.g. Brooklyn, NY" /></div>
-      <div class="ebg-row"><label for="ebgDisp">Dispatch time (days)</label><input id="ebgDisp" class="input mono" type="number" min="0" value="1" style="width:90px" /></div>
-      <p class="dlg-note">The three names must match your eBay business policies exactly — the CSV references them by name.
-        <button id="ebgOpen" class="ebay-addbtn" style="margin-left:6px">Open them on eBay</button></p>
-      <div class="dlg-actions">
-        <button id="ebgCancel" class="btn btn-ghost">Cancel</button>
-        <button id="ebgSave" class="btn btn-primary">Save</button>
+        <button id="rnSave" class="btn btn-primary">Save</button>
       </div>
     </div>
   </dialog>
@@ -1302,12 +1058,12 @@
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
         <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
         <label class="check"><input id="setPageRecovery" type="checkbox" /> Recovery</label>
-        <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
         <label class="check"><input id="setPageWholesale" type="checkbox" /> Wholesale</label>
         <label class="check"><input id="setPageCost" type="checkbox" /> Cost</label>
         <label class="check"><input id="setPageShip" type="checkbox" /> Ship</label>
+        <label class="check"><input id="setPageWalmart" type="checkbox" /> Walmart</label>
       </div>
-      <p class="dlg-note">Capture is always on. Recovery needs Returns.</p>
+      <p class="dlg-note">Capture is always on. Recovery needs Returns; Walmart needs Stock.</p>
 
       <h3 class="dlg-section">Mode</h3>
       <div class="settings-row">
@@ -1364,6 +1120,7 @@
         <button id="testConnBtn" class="btn btn-secondary">Test</button>
         <span id="testConnResult" class="test-result"></span>
       </div>
+
 
       <h3 class="dlg-section">Sync</h3>
       <div class="settings-row">

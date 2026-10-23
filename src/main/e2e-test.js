@@ -473,6 +473,48 @@ module.exports = async function run({ app, win, db, clipboard }) {
       inlineGot && inlineGot.orderId === 'oid-77' && inlineGot.unmatched === false
         && inlineGot.items[0].price === 149.99 && inlineGot.items[0].settle === 149.99,
       inlineGot);
+    // 24c-unsaved (owner 2026-10-22, returns "disappearing"): a looked-up
+    // draft that a new PO replaces, or that Esc clears, is KEPT on the
+    // unsaved card instead of vanishing; Put back restores it to save
+    await exec(`localStorage.removeItem('retUnsaved'); wsReset();
+      $('wsPo').value = '119888000000001';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    await exec(`$('wsPo').value = 'PO-NEXT-2';
+      $('wsPo').dispatchEvent(new Event('input', { bubbles: true }));
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    let uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('retUnsaved').hidden]`);
+    check('a new PO over a loaded, unsaved return keeps that return on the unsaved card',
+      uns[0].length === 1 && uns[0][0].v.po === '119888000000001' && uns[0][0].v.sku === 'S25-128GB-NAVY'
+        && uns[0][0].orderId === 'oid-77' && /replaced by PO PO-NEXT-2/.test(uns[0][0].why) && uns[1] === false,
+      uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0;`);
+    uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('wsPo').value + $('ws_sku').value,
+      document.querySelectorAll('#retUnsaved .ret-uns-row').length]`);
+    check('Esc clears the row but keeps the draft (same PO + SKU listed once)',
+      uns[0].length === 1 && /Esc/.test(uns[0][0].why) && uns[1] === '' && uns[2] === 1, uns);
+    await exec(`window.__rvGot2 = null; document.querySelector('#retUnsaved [data-unsput="0"]').click(); 0;`);
+    uns = await exec(`[$('wsPo').value, $('ws_sku').value, ws.orderId, JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('Put back restores the draft, loaded order included, and leaves the card',
+      uns[0] === '119888000000001' && uns[1] === 'S25-128GB-NAVY' && uns[2] === 'oid-77' && uns[3] === 0, uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    for (let w = 0; w < 20 && !(inlineGot = await exec(`window.__rvGot2`)); w++) await sleep(150);
+    check('a put-back draft saves with its order', inlineGot && inlineGot.orderId === 'oid-77'
+      && inlineGot.orderNumber === '119888000000001', inlineGot);
+    // a scan typed while the save runs survives the save's row clear
+    await exec(`window.__rvKeep = rvCreate; window.__rvGot2 = null;
+      rvCreate = async (p) => { window.__rvGot2 = p; await new Promise(r => { window.__rvDone = r; }); return { ok: true, id: 997 }; };
+      wsReset(); $('wsPo').value = 'PO-A'; ws.looked = 'PO-A'; $('ws_sku').value = 'S25-128GB-NAVY';
+      $('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(100);
+    await exec(`$('wsPo').value = 'PO-B'; $('wsPo').dispatchEvent(new Event('input', { bubbles: true })); window.__rvDone(); 0;`);
+    await sleep(300);
+    uns = await exec(`[window.__rvGot2 && window.__rvGot2.orderNumber, $('wsPo').value, $('ws_sku').value,
+      JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('a PO typed during a save is kept; the saved cells clear; nothing lands on the card',
+      uns[0] === 'PO-A' && uns[1] === 'PO-B' && uns[2] === '' && uns[3] === 0, uns);
+    await exec(`rvCreate = window.__rvKeep; wsReset(); localStorage.removeItem('retUnsaved'); renderRetUnsaved(); 0;`);
     // the condition pill opens its 4-pill menu right in the row
     await exec(`$('ws_sku').value = 'S25-128GB-NAVY'; wsRenderCond(); document.querySelector('#wsCond').click(); 0;`);
     await sleep(150);
@@ -1326,135 +1368,51 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.unparkOrder('119990000000001')`);
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.stockSetTitle('sid-1', 'A title')`);
+    check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartSearch('Galaxy Tab A9', '')`);
+    check('walmart:search refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartUpcFromItem('1735902284')`);
+    check('walmart:upcFromItem refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
+    check('walmart:submit refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    {
+      // List on Walmart: the API client's pure builders + parsers
+      const w = require('./walmart.js');
+      const feed = w.buildMatchFeed([{ sku: 'X110-64GB-GRAY', upc: '887276790801', price: 116.989, shipLb: 1.2 }]);
+      const it0 = feed.MPItem[0].Item;
+      check('walmart feed: 4.2 match header, GTIN-14 offer, New, rounded price',
+        feed.MPItemFeedHeader.version === '4.2' && feed.MPItemFeedHeader.sellingChannel === 'mpsetupbymatch'
+          && !('businessUnit' in feed.MPItemFeedHeader) && it0.productIdentifiers.productIdType === 'GTIN'
+          && it0.productIdentifiers.productId === '00887276790801' && it0.price === 116.99
+          && it0.ShippingWeight === 1.2 && it0.condition === 'New' && it0.sku === 'X110-64GB-GRAY', feed);
+      const po = w.buildMatchFeed([{ sku: 'USED-X', upc: '887276790801', price: 89, shipLb: 1, condition: 'Pre-Owned: Good', mainImageUrl: 'https://img/x.jpg' },
+        { sku: 'NEW-X', upc: '887276790801', price: 99, shipLb: 1, condition: 'New', mainImageUrl: 'https://img/x.jpg' }]).MPItem;
+      check('walmart feed: a Pre-Owned offer carries its condition and photo, New carries no photo',
+        po[0].Item.condition === 'Pre-Owned: Good' && po[0].Item.mainImageUrl === 'https://img/x.jpg'
+          && po[1].Item.condition === 'New' && !('mainImageUrl' in po[1].Item)
+          && w.MATCH_CONDITIONS.includes('Pre-Owned: Fair') && !w.MATCH_CONDITIONS.includes('Open Box'), po);
+      check('walmart ids: 12 -> upc, 13 -> ean, 14 -> gtin, 11 widened, junk refused',
+        w.idParam('887276790801').param === 'upc' && w.idParam('8806094912345').param === 'ean'
+          && w.idParam('00887276790801').param === 'gtin' && w.idParam('87276790801').value === '087276790801'
+          && w.idParam('123') === null && w.toGtin14('12') === '', null);
+      const ns = w.normalizeSearch({ items: [{ itemId: 5, title: 'T', brand: 'B', price: { amount: '9.68', currency: 'USD' }, images: [{ url: 'https://i/x.jpg' }], customerRating: '4.7', properties: { numReviews: '198' } }, { itemId: '6', title: 'U' }] });
+      check('walmart search: string price, rating and review count read, missing ones are 0, page URL, {} is no match',
+        ns.length === 2 && ns[0].price === 9.68 && ns[1].price === 0 && ns[0].url === 'https://www.walmart.com/ip/5'
+          && ns[0].rating === 4.7 && ns[0].reviews === 198 && ns[1].rating === 0 && ns[1].reviews === 0
+          && ns[0].image === 'https://i/x.jpg' && w.normalizeSearch({}).length === 0, ns);
+      const st = w.parseFeedStatus({ feedStatus: 'PROCESSED', itemsReceived: 2, itemsSucceeded: 1, itemsFailed: 1,
+        itemDetails: { itemIngestionStatus: [
+          { sku: 'A', ingestionStatus: 'SUCCESS', wpid: 'W1', ingestionErrors: null },
+          { sku: 'B', ingestionStatus: 'DATA_ERROR', wpid: null, ingestionErrors: { ingestionError: [{ type: 'DATA_ERROR', code: 'E1', field: 'price', description: 'too low' }] } },
+        ] } });
+      check('walmart feed status: per-SKU state, readable errors, settled states',
+        st.status === 'PROCESSED' && st.items.A.status === 'SUCCESS' && st.items.B.errors[0] === 'price: too low'
+          && st.counts.failed === 1 && w.isFinal('DATA_ERROR') && w.isFinal('SUCCESS') && !w.isFinal('INPROGRESS'), st);
+      check('walmart errors: JSON error lists read as one line',
+        w.errorText({ errors: { error: [{ code: 'X', description: 'Bad SKU' }] } }, 400) === 'Bad SKU', null);
+    }
 
-    // 43. eBay lister: refusals + the pure CSV/description builders
-    res = await exec(`api.ebaySpecs('X133-64GB-GRAY')`);
-    check('ebay:specs refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.ebayExport({ sku: 'X' }, [])`);
-    check('ebay:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.temuExport([{ sku: 'X' }])`);
-    check('temu:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    {
-      const ecsv = require('./ebaycsv.js');
-      const desc = ecsv.buildDescription({ title: 'Tab A9+', cond: 'used', specs: { Brand: 'Samsung', 'Screen Size': '8.7 in' } });
-      check('ebay description: store template + condition block + spec rows',
-        desc.includes('WIRELESS') && desc.includes('USED') && desc.includes('8.7 in')
-          && desc.includes('#2361EB') && desc.includes('Wall charger not included'), desc.length);
-      const scrapDesc = ecsv.buildDescription({ title: 'T', cond: 'scrap', specs: {} });
-      check('ebay description: scrap block, no charger line',
-        scrapDesc.includes('FOR PARTS OR REPAIR') && scrapDesc.includes('sold as-is') && !scrapDesc.includes('Wall charger'), null);
-      const csv1 = ecsv.buildEbayCsv([{
-        sku: 'USED-X133-64GB-GRAY', categoryId: '171485', title: 'Tab, "quoted"', cond: 'used',
-        specs: { Brand: 'Samsung', Model: 'X133' }, picUrls: ['http://a/1.jpg', 'http://a/2.jpg'],
-        description: '<d>', price: '99.99', qty: 2,
-      }], { shipping: 'Ship1', returns: 'Ret1', payment: 'Pay1', location: 'Brooklyn, NY', dispatchDays: 1 });
-      const l1 = csv1.trim().split('\n');
-      check('ebay csv: header carries C: columns + profile columns',
-        l1[0].includes('C:Brand') && l1[0].includes('C:Model') && l1[0].includes('ShippingProfileName'), l1[0]);
-      check('ebay csv: row has condition id, piped pics, quoted title, profiles',
-        l1.length === 2 && l1[1].includes(',3000,') && l1[1].includes('http://a/1.jpg|http://a/2.jpg')
-          && l1[1].includes('"Tab, ""quoted"""') && l1[1].includes('Ship1') && l1[1].includes('FixedPrice'), l1[1]);
-      const csv2 = ecsv.buildEbayCsv([{
-        sku: 'USED-S26-ULTRA', categoryId: '9355', title: 'S26 Ultra', cond: 'used',
-        specs: { Brand: 'Samsung', 'Storage Capacity': '512GB', Color: 'Black' }, picUrls: [], description: 'd', price: '899.99', qty: 2,
-        variations: [
-          { sku: 'USED-S26-ULTRA-512GB-BLACK', storage: '512GB', color: 'Black', price: '899.99', qty: 2 },
-          { sku: 'USED-S26-ULTRA-256GB-GRAY', details: 'Storage=256GB;Color=Gray', price: '799.99', qty: 1 }, // old-style payload still reads
-        ],
-      }], {});
-      const l2 = csv2.trim().split('\n');
-      check('ebay csv: variation listing = parent + child rows with own SKUs',
-        l2.length === 4 && !l2[1].includes('Variation')
-          && l2[2].includes('USED-S26-ULTRA-512GB-BLACK') && l2[2].includes('Variation') && l2[2].includes('Storage Capacity=512GB|Color=Black')
-          && l2[3].includes('Storage Capacity=256GB|Color=Gray') && l2[3].includes('799.99'), l2.length);
-      // eBay's upload syntax: the parent lists every value per specific, pipe
-      // between specifics — and a varying specific never doubles as an item
-      // specific on the parent (the rejected 2026-09-28 upload)
-      check('ebay csv: parent row carries all variation values, no clashing item specifics',
-        l2[1].includes('Storage Capacity=512GB;256GB|Color=Black;Gray') && l2[1].includes(',Samsung,,,'), l2[1]);
-      const parsed = ecsv.parseEbayPage(`<meta property="og:title" content="Samsung Tab A9+ | eBay">
-        {"categoryId":"171485","price":"119.99"}
-        <div class="ux-labels-values__labels"><span>Brand</span></div><div class="ux-labels-values__values"><span>Samsung</span></div>
-        <div class="ux-labels-values__labels"><span>Screen Size</span></div><div class="ux-labels-values__values"><span>8.7 in</span></div>`);
-      check('ebay page parser: title, category, price, specifics',
-        parsed.title === 'Samsung Tab A9+' && parsed.categoryId === '171485' && parsed.price === 119.99
-          && parsed.specs.Brand === 'Samsung' && parsed.specs['Screen Size'] === '8.7 in', parsed);
-    }
-    {
-      // Temu workbook writer: pure pieces + a zip round-trip
-      const tx = require('./temuxlsx.js');
-      check('temu color map: nearest allowed color',
-        tx.temuColorFor('GRAPHITE') === 'Black' && tx.temuColorFor('Silver Shadow') === 'White'
-          && tx.temuColorFor('ICY-BLUE') === 'Blue' && tx.temuColorFor('unknowncolor') === 'Black', null);
-      check('temu column letters', tx._internal.colLetter(0) === 'A' && tx._internal.colLetter(27) === 'AB'
-        && tx._internal.colLetter(302) === 'KQ', tx._internal.colLetter(302));
-      const cols = [
-        { idx: 0, name: 'Category', key: 't_1_Category' },
-        { idx: 1, name: 'Product Name', key: 't_1_Product Name' },
-        { idx: 2, name: 'Contribution Goods', key: 't_1_Contribution Goods' },
-        { idx: 3, name: 'Contribution SKU', key: 't_1_Contribution SKU' },
-        { idx: 4, name: '318 - Operating System', key: 't_3_Property:318' },
-        { idx: 5, name: 'Variation Theme', key: 't_4_Variation Theme' },
-        { idx: 6, name: 'RAM+ROM', key: 't_4_Sale Property:75557797' },
-        { idx: 7, name: 'Color', key: 't_4_Sale Property:1001' },
-        { idx: 8, name: 'Quantity', key: 't_4_Custom Spec:15998553' }, // the theme axis DECOY
-        { idx: 9, name: 'SKU Images URL', key: 't_6_SKU Images URL' },
-        { idx: 10, name: 'Quantity', key: 't_6_Quantity' },
-        { idx: 11, name: 'Base Price - USD', key: 't_6_Base Price - USD' },
-        { idx: 12, name: 'California Proposition 65 Warning Type', key: 't_8_Governance Property:1000000001' },
-      ];
-      const rows = tx.buildRows(cols, [{
-        category: '24388', name: 'Phone', variationTheme: 'Color × RAM+ROM',
-        specs: { 318: 'Android' },
-        variations: [{ sku: 'R640-BLACK-US', goods: 'R640-BLACK-US', color: 'Black', ramrom: '8GB+256GB', qty: '9', base: '99.99', images: ['http://i/1.jpg'] }],
-      }], {});
-      const r0 = rows[0];
-      check('temu rows: right columns, decoy Quantity untouched, prop65 by name',
-        rows.length === 1 && r0.get(0) === '24388' && r0.get(4) === 'Android' && r0.get(6) === '8GB+256GB'
-          && r0.get(7) === 'Black' && !r0.has(8) && r0.get(10) === '9' && r0.get(12) === 'No Warning Applicable', [...r0.entries()]);
-      // zip round-trip: store-method fixture -> rebuild with a replacement -> re-read
-      const mkEntry = (name, body) => {
-        const nb = Buffer.from(name), db = Buffer.from(body);
-        const lh = Buffer.alloc(30);
-        lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0, 6); lh.writeUInt16LE(0, 8);
-        lh.writeUInt32LE(tx._internal.crc32(db), 14); lh.writeUInt32LE(db.length, 18); lh.writeUInt32LE(db.length, 22);
-        lh.writeUInt16LE(nb.length, 26);
-        return { nb, db, lh };
-      };
-      const ents = [mkEntry('a.xml', '<a>1</a>'), mkEntry('b.xml', '<b>2</b>')];
-      const chunks = []; const cds = []; let zoff = 0;
-      for (const e of ents) {
-        chunks.push(e.lh, e.nb, e.db);
-        const cdh = Buffer.alloc(46);
-        cdh.writeUInt32LE(0x02014b50, 0); cdh.writeUInt16LE(0, 10);
-        cdh.writeUInt32LE(tx._internal.crc32(e.db), 16); cdh.writeUInt32LE(e.db.length, 20); cdh.writeUInt32LE(e.db.length, 24);
-        cdh.writeUInt16LE(e.nb.length, 28); cdh.writeUInt32LE(zoff, 42);
-        cds.push(cdh, e.nb);
-        zoff += 30 + e.nb.length + e.db.length;
-      }
-      const cdBuf = Buffer.concat(cds);
-      const eo = Buffer.alloc(22);
-      eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(2, 8); eo.writeUInt16LE(2, 10);
-      eo.writeUInt32LE(cdBuf.length, 12); eo.writeUInt32LE(zoff, 16);
-      const fixture = Buffer.concat([...chunks, cdBuf, eo]);
-      const rebuilt = tx._internal.rebuildZip(fixture, new Map([['b.xml', '<b>CHANGED</b>']]));
-      const re = tx._internal.zipEntries(rebuilt);
-      check('temu zip rebuild: untouched part identical, replaced part swapped',
-        tx._internal.zipReadText(rebuilt, re, 'a.xml') === '<a>1</a>'
-          && tx._internal.zipReadText(rebuilt, re, 'b.xml') === '<b>CHANGED</b>', re.map(e => e.name));
-      // real-template smoke: only on machines that have the download
-      const tpl = path.join(require('os').homedir(), 'Downloads', 'TEMU_CELL-PHONES_TABLETS.xlsx');
-      if (fs.existsSync(tpl)) {
-        const out = tx.fillWorkbook(tpl, [{
-          category: '4080', name: 'Smoke tablet', variationTheme: 'RAM+ROM × Color', specs: { 318: 'Android' },
-          variations: [{ sku: 'SMOKE-1', goods: 'SMOKE-1', color: 'Black', ramrom: '4GB+64GB', qty: '1', base: '1.00', list: '2.00', weightLb: '1', lenIn: '1', widIn: '1', heiIn: '1', images: [] }],
-        }], {});
-        const oe = tx._internal.zipEntries(out);
-        const sheet = tx._internal.zipReadText(out, oe, tx.readTemplate(tpl).sheetPath);
-        check('temu real template: row 5 filled, token row untouched',
-          sheet.includes('SMOKE-1') && sheet.includes('prohibit any operation'), out.length);
-      }
-    }
     const prevLookup2 = await exec('recvLookup');
     await exec(`
       chmap.local = true;
@@ -1785,31 +1743,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       await crun.close();
     }
 
-    // 44. eBay lister QR capture: the /lup + /lphoto listing routes
+    // 44. claim photos: EXIF orientation parser
     {
-      const claims = require('./claims.js');
-      const cpath = require('path');
-      const ldir = cpath.join(app.getPath('userData'), 'listing-photos-test');
-      const lrun = await claims.start({
-        dir: cpath.join(app.getPath('userData'), 'claim-photos-test2'),
-        listingDir: ldir, port: 0,
-      });
-      const lbase = `http://127.0.0.1:${lrun.port}`;
-      const jpeg2 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0)]);
-      let lres = await fetch(`${lbase}/lup?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`);
-      check('listing photos: phone page carries the draft SKU',
-        lres.status === 200 && (await lres.text()).includes('OPEN-BOX-TEST-64GB-GRAY'), lres.status);
-      lres = await fetch(`${lbase}/lphoto?t=WRONG&sku=X`, { method: 'POST', body: jpeg2 });
-      check('listing photos: bad token rejected', lres.status === 403, lres.status);
-      const lup = await (await fetch(`${lbase}/lphoto?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`, { method: 'POST', body: jpeg2 })).json();
-      check('listing photos: file lands in the per-SKU folder',
-        lup.ok && /^OPEN-BOX-TEST-64GB-GRAY_1\.(png|jpg)$/.test(lup.name)
-          && fs.existsSync(cpath.join(ldir, 'OPEN-BOX-TEST-64GB-GRAY', lup.name)), lup);
-      const lurl = lrun.listingUrl('OPEN-BOX-TEST-64GB-GRAY');
-      check('listing photos: QR url carries route, token and sku',
-        lurl.includes('/lup?t=') && lurl.includes('sku=OPEN-BOX-TEST-64GB-GRAY'), lurl);
-      await lrun.close();
-
       // EXIF orientation parser: a handcrafted JPEG APP1 with Orientation=6
       const exif = Buffer.concat([
         Buffer.from([0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x20]),
@@ -2037,7 +1972,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
             const d = document.getElementById('osDrawer');
             const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
               ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent) && /×1/.test($('osdItems').textContent),
-              saveBtn: !!$('osPkSave') && $('osPkSave').disabled, noValue: $('osVal').value === '' };
+              saveBtn: !!$('osPkSave') && $('osPkSave').disabled, noValue: $('osVal').value === '', ref2: $('osRef2').value,
+              ref2Many: osRef2Default([{ sku: 'X133-128GB-GRAY', qty: 2 }, { sku: 'OPEN-BOX-S25-ULTRA-512GB-BLACK', qty: 1 }]) };
             render(); out.survives = d.classList.contains('is-open') && !!document.querySelector('#rowsBody tr.os-open');
             const wt = $('osWt'); wt.value = '1.3'; wt.dispatchEvent(new Event('input'));
             out.saveOn = !!$('osPkSave') && !$('osPkSave').disabled && /Save for this item/.test($('osPkSave').textContent);
@@ -2060,6 +1996,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
             ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
           check('order ship: no declared value unless typed', ui.noValue === true, ui);
+          check('order ship: Reference #2 starts as the SKU and units sold, cut to 35 with the count kept',
+            ui.ref2 === 'X133-128GB-GRAY | 1 unit sold' && ui.ref2Many === 'X133-128GB-GRAY, OPE | 3 units sold' && ui.ref2Many.length <= 35, ui);
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
@@ -2269,6 +2207,28 @@ module.exports = async function run({ app, win, db, clipboard }) {
       await sleep(400);
       r = await req({ path: '/', headers: host });
       check('web: switched off, nothing is listening', r.status === 0, r);
+    }
+
+    // returns.csv carries every return (it stopped at the newest 1000,
+    // so the oldest fell off once a station passed 1000 — owner 2026-10-22).
+    // Last in the suite: the extra returns would skew the log checks above.
+    {
+      const tag = `CSV-OLDEST-${Date.now()}`;
+      db.createReturn({ orderNumber: tag, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+        items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      for (let n = 0; n < 1000; n++) {
+        db.createReturn({ orderNumber: `CSV-FILL-${n}`, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+          items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      }
+      const wasCaptureOnly = (await exec('api.getConfig()')).captureOnly;
+      await exec(`api.setConfig({ captureOnly: false })`); // returns:create refuses capture-only
+      const made = await exec(`api.returnsCreate({ orderNumber: 'CSV-NEWEST', unmatched: true, items: [] })`);
+      await exec(`api.setConfig(${JSON.stringify({ captureOnly: !!wasCaptureOnly })})`);
+      const folder = (await exec('api.getConfig()')).csvFolder || path.join(app.getPath('documents'), 'Capture Station');
+      const csv = fs.readFileSync(path.join(folder, 'returns.csv'), 'utf8');
+      check('returns.csv keeps every return past 1000 — the oldest and the newest are both in it',
+        made && made.ok && csv.includes(tag) && csv.includes('CSV-NEWEST') && csv.split('\r\n').length - 1 >= db.listReturns(1e9).length,
+        { made, hasOldest: csv.includes(tag), lines: csv.split('\r\n').length - 1, returns: db.listReturns(1e9).length });
     }
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);

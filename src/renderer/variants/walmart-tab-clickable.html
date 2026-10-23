@@ -1,0 +1,681 @@
+<title>DWS Stock Incentives</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: the DWS Stock window (top bar, Walmart card) with every Walmart sub-tab live; sample data only. */
+:root {
+  --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8; --row-on: #F3F6FB;
+  --border: #EAEAEA; --border-soft: rgba(0,0,0,.06);
+  --text: #2F3437; --muted: #787774; --faint: #A5A29C;
+  --accent: #1E3A66; --accent-hover: #152B4E; --accent-soft: #E4EAF4; --accent-soft-text: #1E3A66; --on-accent: #FFFFFF;
+  --pos-bg: #EDF3EC; --pos-text: #346538; --neg-bg: #FDEBEC; --neg-text: #9F2F2D;
+  --warn-bg: #FBF3DB; --warn-text: #956400; --info-bg: #E1F3FE; --info-text: #1F6C9F;
+  --star: #E8A317; --star-off: #DCDAD4;
+  --shadow: rgba(47,52,55,.10); --scrim: rgba(30,35,40,.28);
+  --font: 'Geist', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Geist Mono', 'Cascadia Mono', ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #191A1C; --surface: #222326; --surface-2: #26272A; --row-on: #22293A;
+  --border: #34363A; --border-soft: rgba(255,255,255,.06);
+  --text: #E6E5E2; --muted: #A09E99; --faint: #6F6D69;
+  --accent: #8FB0E6; --accent-hover: #A9C3EE; --accent-soft: #2A3550; --accent-soft-text: #C9D8F2; --on-accent: #111827;
+  --pos-bg: #213025; --pos-text: #8BC79A; --neg-bg: #3A2224; --neg-text: #F09A97;
+  --warn-bg: #3A3020; --warn-text: #E3BE6A; --info-bg: #1E3240; --info-text: #8CC6EE;
+  --star: #E8B04A; --star-off: #45464A;
+  --shadow: rgba(0,0,0,.4); --scrim: rgba(0,0,0,.5); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --canvas: #191A1C; --surface: #222326; --surface-2: #26272A; --row-on: #22293A;
+  --border: #34363A; --border-soft: rgba(255,255,255,.06);
+  --text: #E6E5E2; --muted: #A09E99; --faint: #6F6D69;
+  --accent: #8FB0E6; --accent-hover: #A9C3EE; --accent-soft: #2A3550; --accent-soft-text: #C9D8F2; --on-accent: #111827;
+  --pos-bg: #213025; --pos-text: #8BC79A; --neg-bg: #3A2224; --neg-text: #F09A97;
+  --warn-bg: #3A3020; --warn-text: #E3BE6A; --info-bg: #1E3240; --info-text: #8CC6EE;
+  --star: #E8B04A; --star-off: #45464A;
+  --shadow: rgba(0,0,0,.4); --scrim: rgba(0,0,0,.5); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--canvas); color: var(--text); font-family: var(--font); font-size: 13.5px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 90px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input, select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.mono { font-family: var(--mono); }
+
+.demo-note { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.demo-note b { color: var(--text); font-weight: 600; }
+.demo-note button { background: none; border: none; color: var(--accent); font-weight: 600; padding: 0; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; font-size: 10px; letter-spacing: -.02em; }
+.apptabs { display: flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; overflow-x: auto; max-width: 100%; }
+.apptabs span { padding: 5px 14px; border-radius: 8px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.apptabs span.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px var(--shadow); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.head { display: flex; align-items: center; gap: 14px; padding: 16px 20px 12px; flex-wrap: wrap; }
+.head h1 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+.subtabs { display: flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; flex-wrap: wrap; }
+.subtabs button { border: none; background: none; padding: 4px 14px; border-radius: 8px; font-size: 12.5px; color: var(--muted); font-weight: 500; position: relative; }
+.subtabs button:hover { color: var(--text); }
+.subtabs button[aria-selected="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px var(--shadow); }
+.subtabs .dot { position: absolute; top: 3px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+.prog { display: flex; gap: 26px; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.prog button { background: none; border: none; border-bottom: 2px solid transparent; padding: 12px 0 11px; margin-bottom: -1px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.prog button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+
+.bar { display: flex; align-items: center; gap: 8px; padding: 14px 20px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; }
+.chip b { font-weight: 700; margin-left: 5px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-soft-text); border-color: transparent; }
+.bar .spacer { flex: 1; }
+.btn { border: 1px solid transparent; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
+.btn:disabled { opacity: .45; cursor: default; }
+.prog-pref { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sw { width: 36px; height: 20px; border-radius: 999px; background: var(--border); position: relative; border: none; padding: 0; }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px var(--shadow); transition: left .15s; }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { left: 18px; }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 820px; }
+th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 9px 12px; background: var(--surface-2); border-block: 1px solid var(--border); white-space: nowrap; }
+td { padding: 12px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+th:first-child, td:first-child { padding-left: 20px; }
+tr.sel td { background: var(--row-on); }
+tr.fade td { animation: fade .5s ease; }
+@keyframes fade { from { background: var(--pos-bg); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { tr.fade td { animation: none; } .sw::after { transition: none; } }
+.ck { width: 44px; }
+.ck input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; padding: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ph { width: 38px; height: 38px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); flex: none; display: grid; place-items: center; color: var(--faint); }
+.ph svg { width: 18px; height: 18px; }
+.item .tx { min-width: 0; }
+.item b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+.item small { display: block; font-size: 12px; color: var(--muted); }
+.sku { font-family: var(--mono); font-size: 12px; }
+.was { color: var(--faint); text-decoration: line-through; margin-right: 6px; }
+.strong { font-weight: 700; }
+.fee-old { color: var(--faint); text-decoration: line-through; margin-right: 6px; }
+.fee-new { color: var(--pos-text); font-weight: 700; }
+.exp { color: var(--muted); white-space: nowrap; }
+.exp.soon { color: var(--neg-text); font-weight: 600; }
+.act { text-align: right; padding-right: 20px; white-space: nowrap; }
+.row-btn { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 5px 14px; font-size: 12.5px; font-weight: 700; }
+.row-btn.quiet { color: var(--muted); border-color: var(--border); font-weight: 600; }
+.row-btn.on { background: var(--accent); color: var(--on-accent); }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pill.ok { background: var(--pos-bg); color: var(--pos-text); }
+.pill.wait { background: var(--warn-bg); color: var(--warn-text); }
+.pill.bad { background: var(--neg-bg); color: var(--neg-text); }
+.pill.off { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+.empty b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+
+/* List: search first, then set up the offer */
+.search { display: flex; gap: 8px; padding: 4px 20px 6px; flex-wrap: wrap; }
+.search input { flex: 1 1 360px; font-size: 14px; padding: 10px 14px; }
+.modes { display: flex; gap: 6px; padding: 4px 20px 8px; flex-wrap: wrap; }
+.browser { margin: 14px 20px 20px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.browser-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.browser-bar .dots { display: flex; gap: 5px; }
+.browser-bar .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+.browser-bar .url { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; font-family: var(--mono); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-note { padding: 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border-soft); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 14px; }
+.tile { position: relative; border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tile .img { aspect-ratio: 1; max-width: 100%; border-radius: 6px; background: var(--surface-2); display: grid; place-items: center; color: var(--faint); }
+.tile .img svg { width: 34px; height: 34px; }
+.tile .p { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.tile .t { font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tile .r { font-size: 11px; color: var(--muted); }
+.tile .lt { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity .12s; box-shadow: 0 4px 12px var(--shadow); }
+.tile:hover .lt, .tile:focus-within .lt, .tile.on .lt { opacity: 1; }
+@media (hover: none) { .tile .lt { opacity: 1; } }
+.tile.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.hint { padding: 0 20px 14px; font-size: 12px; color: var(--muted); }
+.hint button { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; font-size: 12px; }
+.lgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); border-top: 1px solid var(--border); }
+@media (max-width: 860px) { .lgrid { grid-template-columns: minmax(0, 1fr); } }
+.lres { min-width: 0; }
+.lres-h { padding: 10px 20px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border-soft); }
+.res { display: flex; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border-soft); }
+.res.on { background: var(--row-on); box-shadow: inset 3px 0 0 var(--accent); }
+.res .tx { flex: 1; min-width: 0; }
+.res .t { font-weight: 600; }
+.res .m { font-size: 12px; color: var(--muted); }
+.res .side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.res .p { font-weight: 700; font-variant-numeric: tabular-nums; }
+.res a { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600; }
+.stars { position: relative; display: inline-block; font-size: 12px; line-height: 1; letter-spacing: 1px; color: var(--star-off); vertical-align: -1px; margin-right: 4px; }
+.stars::before { content: '★★★★★'; }
+.stars i { position: absolute; left: 0; top: 0; overflow: hidden; white-space: nowrap; color: var(--star); font-style: normal; }
+.stars i::before { content: '★★★★★'; }
+.offer { border-left: 1px solid var(--border); padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; background: var(--surface-2); }
+@media (max-width: 860px) { .offer { border-left: none; border-top: 1px solid var(--border); } }
+.offer h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.offer .sub { font-size: 12px; color: var(--muted); margin-top: -8px; }
+.f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.f > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.f2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sugg { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.sugg button { display: flex; justify-content: space-between; gap: 10px; text-align: left; background: none; border: none; border-top: 1px solid var(--border-soft); padding: 7px 10px; color: var(--text); }
+.sugg button:first-child { border-top: none; }
+.sugg button:hover { background: var(--row-on); }
+.sugg small { color: var(--muted); white-space: nowrap; }
+.map-ok { font-size: 12px; color: var(--pos-text); font-weight: 600; }
+.map-new { font-size: 12px; color: var(--warn-text); }
+.upc { font-size: 12px; color: var(--muted); }
+.upc b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.offer-empty { color: var(--muted); font-size: 13px; padding: 30px 0; text-align: center; }
+.offer-empty b { display: block; color: var(--text); margin-bottom: 4px; }
+
+.tray { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -6px 20px var(--shadow); z-index: 15;
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.tray-in { max-width: 1240px; margin: 0 auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tray-list { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.tray-list span { font-family: var(--mono); font-size: 11.5px; background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 999px; padding: 3px 4px 3px 10px; display: inline-flex; align-items: center; gap: 4px; }
+.tray-list span button { background: none; border: none; color: inherit; padding: 0 5px; font-size: 12px; }
+
+/* Uploads */
+.up-lines td { background: var(--surface-2); font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
+.up-lines .why { color: var(--neg-text); }
+.linkish { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; }
+
+/* Pricing */
+.p-in { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+.p-in.chg, select.chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.yes { color: var(--pos-text); font-weight: 700; }
+.no { color: var(--neg-text); font-weight: 700; }
+.no small { color: var(--muted); font-weight: 500; font-size: 12.5px; margin-left: 6px; }
+.dash { color: var(--faint); }
+.inc-cell { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.joined { font-size: 12px; font-weight: 700; color: var(--pos-text); }
+.savebar { display: flex; gap: 8px; align-items: center; padding: 12px 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.savebar .spacer { flex: 1; }
+
+.scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; padding: 16px; z-index: 20; }
+.dlg { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: min(520px, 100%); box-shadow: 0 20px 50px var(--shadow); max-height: 90vh; display: flex; flex-direction: column; }
+.dlg h2 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; margin: 0; padding: 18px 20px 4px; }
+.dlg p { margin: 0; padding: 0 20px 12px; color: var(--muted); font-size: 13px; }
+.dlg ul { list-style: none; margin: 0; padding: 0 20px; overflow-y: auto; }
+.dlg li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border-soft); font-size: 13px; }
+.dlg li .sku { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlg li .chg { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dlg .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--border); margin-top: 8px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--text); color: var(--canvas); padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: 0 8px 24px var(--shadow); z-index: 30; max-width: calc(100% - 32px); }
+</style>
+
+<div class="wrap">
+  <div class="demo-note"><span><b>Clickable mockup.</b> Sample items; nothing goes to Walmart or Linnworks.</span><button type="button" id="reset">Start over</button></div>
+
+  <div class="top">
+    <div class="brand" aria-hidden="true">dws.</div>
+    <nav class="apptabs" aria-label="App pages (not clickable in this mockup)"><span>Orders</span><span>Stock</span><span class="on">Walmart</span><span>Pricing</span><span>Returns</span><span>Ship</span></nav>
+  </div>
+
+  <main class="card">
+    <div class="head">
+      <h1>Walmart</h1>
+      <div class="subtabs" role="tablist" aria-label="Walmart sections">
+        <button type="button" role="tab" data-sub="list" aria-selected="true">List</button>
+        <button type="button" role="tab" data-sub="uploads" aria-selected="false">Uploads<span class="dot" id="upDot" hidden></span></button>
+        <button type="button" role="tab" data-sub="pricing" aria-selected="false">Pricing</button>
+        <button type="button" role="tab" data-sub="incentives" aria-selected="false">Incentives</button>
+      </div>
+    </div>
+
+    <!-- List -->
+    <section id="sec-list">
+      <form class="search" id="sForm">
+        <input id="sQ" type="search" placeholder="Search Walmart by name, or paste an item ID or walmart.com link" autocomplete="off" aria-label="Search Walmart">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <div class="modes" role="group" aria-label="How to show Walmart"><button type="button" class="chip" data-mode="list" aria-pressed="true">Results list</button><button type="button" class="chip" data-mode="browse" aria-pressed="false">Walmart page</button></div>
+      <div class="hint">Try <button type="button" data-try="galaxy s25">galaxy s25</button>, <button type="button" data-try="buds3 pro">buds3 pro</button>, or paste <button type="button" data-try="https://www.walmart.com/ip/1735902284">a walmart.com link</button></div>
+      <div class="lgrid">
+        <div class="lres" id="lRes"></div>
+        <aside class="offer" id="offer"></aside>
+      </div>
+    </section>
+
+    <!-- Uploads -->
+    <section id="sec-uploads" hidden>
+      <div class="tbl-wrap"><table><thead><tr><th>Sent</th><th>Items</th><th>Status</th><th>Result</th><th class="act"></th></tr></thead><tbody id="upBody"></tbody></table></div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="sec-pricing" hidden>
+      <div class="bar" id="pBar"></div>
+      <div class="tbl-wrap"><table><thead><tr><th>SKU</th><th class="num">Price</th><th>Buy Box</th><th>Repricer</th><th>Incentive</th></tr></thead><tbody id="pBody"></tbody></table></div>
+      <div class="savebar" id="pSave" hidden></div>
+    </section>
+
+    <!-- Incentives -->
+    <section id="sec-incentives" hidden>
+      <div class="prog" role="tablist">
+        <button type="button" role="tab" id="tab-rrf" data-prog="rrf" aria-selected="true">Reduced referral fees</button>
+        <button type="button" role="tab" id="tab-wf" data-prog="wf" aria-selected="false">Walmart-funded</button>
+      </div>
+      <div class="bar" id="bar"></div>
+      <div class="tbl-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+      <div class="empty" id="empty" hidden></div>
+    </section>
+  </main>
+</div>
+
+<div class="tray" id="tray" hidden><div class="tray-in"><b id="trayN"></b><div class="tray-list" id="trayList"></div><button type="button" class="btn btn-primary" id="send">Send to Walmart</button></div></div>
+
+<div class="scrim" id="confirm" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+    <h2 id="cTitle"></h2>
+    <p id="cText"></p>
+    <ul id="cList"></ul>
+    <div class="foot"><button type="button" class="btn btn-ghost" id="cNo">Cancel</button><button type="button" class="btn btn-primary" id="cYes"></button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+const IMG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg>';
+const $ = (id) => document.getElementById(id);
+const money = (n) => '$' + Number(n).toFixed(2);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+let toastT = 0;
+function toast(msg) { $('toast').textContent = msg; $('toast').hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { $('toast').hidden = true; }, 2600); }
+
+/* ---------- sample data ---------- */
+const CATALOG = [
+  { itemId: '1735902284', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 119.00, rating: 4.6, reviews: 2341, upc: '887276790801' },
+  { itemId: '1735902291', title: 'Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite', brand: 'SAMSUNG', price: 149.00, rating: 4.7, reviews: 1102, upc: '887276790818' },
+  { itemId: '1735902307', title: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Silver', brand: 'SAMSUNG', price: 121.50, rating: 4.5, reviews: 87, upc: '887276790825' },
+  { itemId: '5310492875', title: 'Samsung Galaxy S25 128GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 684.99, rating: 4.7, reviews: 512, upc: '887276801231' },
+  { itemId: '5310492881', title: 'Samsung Galaxy S25 256GB Unlocked Smartphone, Icyblue', brand: 'SAMSUNG', price: 759.99, rating: 4.8, reviews: 233, upc: '887276801248' },
+  { itemId: '5310492899', title: 'Samsung Galaxy S25+ 256GB Unlocked Smartphone, Navy', brand: 'SAMSUNG', price: 899.99, rating: 4.6, reviews: 96, upc: '887276801255' },
+  { itemId: '6640271195', title: 'Samsung Galaxy Buds3 Pro True Wireless Earbuds, Silver', brand: 'SAMSUNG', price: 182.50, rating: 4.3, reviews: 1890, upc: '887276772210' },
+  { itemId: '6640271201', title: 'Samsung Galaxy Buds3 True Wireless Earbuds, White', brand: 'SAMSUNG', price: 129.00, rating: 4.4, reviews: 640, upc: '887276772227' },
+  { itemId: '7720419386', title: 'Samsung Galaxy A15 128GB Unlocked Smartphone, Black', brand: 'SAMSUNG', price: 139.00, rating: 4.2, reviews: 6, upc: '887276799012' },
+];
+const LINN = [
+  { sku: 'X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray', avail: 31 },
+  { sku: 'USED-X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray (used)', avail: 4 },
+  { sku: 'OPEN-BOX-X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray (open box)', avail: 2 },
+  { sku: 'X110-128GB-GRAY', title: 'Galaxy Tab A9 128GB Gray', avail: 9 },
+  { sku: 'S25-128GB-NAVY', title: 'Galaxy S25 128GB Navy', avail: 12 },
+  { sku: 'OPEN-BOX-S25-128GB-NAVY', title: 'Galaxy S25 128GB Navy (open box)', avail: 1 },
+  { sku: 'S25-256GB-ICYBLUE', title: 'Galaxy S25 256GB Icyblue', avail: 5 },
+  { sku: 'BUDS3-PRO-SILVER', title: 'Galaxy Buds3 Pro Silver', avail: 22 },
+  { sku: 'A15-128GB-BLACK', title: 'Galaxy A15 128GB Black', avail: 31 },
+  { sku: 'SCRAP-A15-128GB-BLACK', title: 'Galaxy A15 128GB Black (scrap)', avail: 3 },
+];
+const CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured'];
+const condFor = (sku) => /^USED|^SCRAP/i.test(sku) ? 'Pre-Owned: Good' : /OPEN[\s-]?BOX/i.test(sku) ? 'Pre-Owned: Like New' : 'New';
+
+const SEED = () => ({
+  sub: 'list',
+  list: { mode: 'list', q: 'galaxy tab a9', results: null, pick: null, sku: '', cond: 'New', price: '', qty: '', batch: [] },
+  uploads: [
+    { id: 'u2', sent: 'Today 9:41 AM', state: 'done', open: false, lines: [
+      { sku: 'S25-256GB-ICYBLUE', title: 'Galaxy S25 256GB Icyblue', ok: true },
+      { sku: 'BUDS3-PRO-SILVER', title: 'Galaxy Buds3 Pro Silver', ok: true },
+      { sku: 'USED-X110-64GB-GRAY', title: 'Galaxy Tab A9 64GB Gray (used)', ok: false, why: 'Pre-Owned items need a photo of the actual item.' } ] },
+    { id: 'u1', sent: 'Oct 20, 3:12 PM', state: 'done', open: false, lines: [
+      { sku: 'A15-128GB-BLACK', title: 'Galaxy A15 128GB Black', ok: true },
+      { sku: 'S23-128GB-CREAM', title: 'Galaxy S23 128GB Cream', ok: true } ] },
+  ],
+  upNew: false,
+  pricing: { filter: 'all', rows: [
+    { sku: 'S25-128GB-NAVY', price: 699, orig: 699, bb: 684.99, rp: 'Beat by $1', rpOrig: 'Beat by $1', inc: 'Lower fee', incSku: 'r1' },
+    { sku: 'S23-128GB-CREAM', price: 449, orig: 449, bb: null, rp: 'Match', rpOrig: 'Match', inc: 'Lower fee', incSku: 'r7' },
+    { sku: 'X110-64GB-GRAY', price: 124.99, orig: 124.99, bb: 119.00, rp: 'None', rpOrig: 'None', inc: 'Lower fee', incSku: 'r6' },
+    { sku: 'A15-128GB-BLACK', price: 142, orig: 142, bb: null, rp: 'None', rpOrig: 'None', inc: 'Lower fee', incSku: 'r2' },
+    { sku: 'OPEN-BOX-S24-256GB-BLACK', price: 529, orig: 529, bb: 519.95, rp: 'Beat by 2%', rpOrig: 'Beat by 2%', inc: '', incSku: '' },
+    { sku: 'S24FE-128GB-MINT', price: 409, orig: 409, bb: null, rp: 'Beat by $1', rpOrig: 'Beat by $1', inc: 'Lower fee', incSku: 'r8' },
+    { sku: 'USED-X110-64GB-GRAY', price: 89, orig: 89, bb: 84.50, rp: 'None', rpOrig: 'None', inc: '', incSku: '' },
+  ] },
+  rrf: [
+    { id: 'r1', name: 'Samsung Galaxy S25 128GB Unlocked, Navy', sku: 'S25-128GB-NAVY', itemId: '5310492875', price: 699, target: 689, base: 8, red: 6, inv: 12, exp: 'Nov 30', state: 'ready' },
+    { id: 'r2', name: 'Samsung Galaxy A15 128GB Unlocked, Black', sku: 'A15-128GB-BLACK', itemId: '7720419386', price: 142, target: 142, base: 8, red: 5, inv: 31, exp: 'Nov 30', state: 'ready' },
+    { id: 'r3', name: 'Samsung Galaxy Tab A9+ 11" 128GB Wi-Fi, Silver', sku: 'X210-128GB-SILVER', itemId: '2204918833', price: 219, target: 215, base: 15, red: 12, inv: 7, exp: 'Dec 15', state: 'ready' },
+    { id: 'r4', name: 'Samsung Galaxy S23 256GB Unlocked, Phantom Black', sku: 'OPEN-BOX-S23-256GB-BLACK', itemId: '1150387724', price: 419, target: 419, base: 8, red: 6, inv: 3, exp: 'in 2 days', soon: true, state: 'ready' },
+    { id: 'r5', name: 'Samsung Galaxy Buds3 Pro, Silver', sku: 'BUDS3-PRO-SILVER', itemId: '6640271195', price: 189, target: 184, base: 8, red: 6, inv: 22, exp: 'Nov 30', state: 'ready' },
+    { id: 'r6', name: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite', sku: 'X110-64GB-GRAY', itemId: '1735902284', price: 124.99, target: 121, base: 15, red: 12, inv: 31, exp: 'Dec 15', state: 'ready' },
+    { id: 'r7', name: 'Samsung Galaxy S23 128GB Unlocked, Cream', sku: 'S23-128GB-CREAM', itemId: '9013348120', price: 449, target: 449, base: 8, red: 6, inv: 9, exp: 'Nov 30', state: 'active' },
+    { id: 'r8', name: 'Samsung Galaxy S24 FE 128GB Unlocked, Mint', sku: 'S24FE-128GB-MINT', itemId: '4471920358', price: 409, target: 409, base: 8, red: 6, inv: 15, exp: 'Nov 30', state: 'active' },
+  ],
+  wf: [
+    { id: 'w1', name: 'Samsung Galaxy S24 FE 128GB Unlocked, Mint', sku: 'S24FE-128GB-MINT', itemId: '4471920358', price: 409, off: 5, inv: 15, exp: 'Nov 15', state: 'in' },
+    { id: 'w2', name: 'Samsung Galaxy Buds3 Pro, Silver', sku: 'BUDS3-PRO-SILVER', itemId: '6640271195', price: 189, off: 5, inv: 22, exp: 'Nov 15', state: 'in' },
+    { id: 'w3', name: 'Samsung Galaxy A15 128GB Unlocked, Black', sku: 'A15-128GB-BLACK', itemId: '7720419386', price: 142, off: 10, inv: 31, exp: 'Nov 20', state: 'in' },
+    { id: 'w4', name: 'Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi, Graphite', sku: 'X110-64GB-GRAY', itemId: '1735902284', price: 124.99, off: 5, inv: 31, exp: 'Nov 15', state: 'out' },
+  ],
+  wfOn: true,
+});
+let S = SEED();
+let prog = 'rrf', view = { rrf: 'ready', wf: 'in' }, picked = new Set(), pending = null;
+
+/* ---------- sub-tabs ---------- */
+function showSub(sub) {
+  S.sub = sub;
+  document.querySelectorAll('[data-sub]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.sub === sub)));
+  ['list', 'uploads', 'pricing', 'incentives'].forEach(k => { $('sec-' + k).hidden = k !== sub; });
+  if (sub === 'uploads') { S.upNew = false; }
+  $('upDot').hidden = !S.upNew;
+  renderTray();
+  if (sub === 'list') renderList();
+  if (sub === 'uploads') renderUploads();
+  if (sub === 'pricing') renderPricing();
+  if (sub === 'incentives') render();
+}
+
+/* ---------- List ---------- */
+function runSearch(q) {
+  const L = S.list;
+  L.q = q; L.pick = null;
+  const id = (q.match(/\/ip\/(?:[^/]+\/)?(\d{6,})/) || q.match(/^\s*(\d{6,})\s*$/) || [])[1];
+  if (id) { const hit = CATALOG.find(c => c.itemId === id); L.results = hit ? [hit] : []; L.byId = id; if (hit) pick(hit.itemId); }
+  else {
+    L.byId = '';
+    const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+    L.results = words.length ? CATALOG.map(c => [c, words.filter(w => c.title.toLowerCase().includes(w)).length])
+      .filter(x => x[1] === words.length).map(x => x[0]) : [];
+  }
+  renderList();
+}
+function pick(itemId) {
+  const L = S.list;
+  L.pick = itemId; L.sku = ''; L.cond = 'New'; L.qty = '';
+  const it = CATALOG.find(c => c.itemId === itemId);
+  L.price = it ? it.price.toFixed(2) : '';
+}
+function stars(r) { return `<span class="stars" aria-hidden="true"><i style="width:${Math.round(r / 5 * 100)}%"></i></span>`; }
+function renderList() {
+  const L = S.list;
+  $('sQ').value = L.q;
+  let h;
+  if (L.results === null) h = '';
+  else if (!L.results.length) h = `<div class="empty"><b>${L.byId ? 'No Walmart item with that number' : 'Nothing found'}</b>${L.byId ? 'Check the number, or search by name.' : 'Try fewer words, like the model and storage.'}</div>`;
+  else h = `<div class="lres-h">${L.byId ? 'Item ' + L.byId : plural(L.results.length, 'result')} from Walmart</div>` + L.results.map(c => {
+    const inBatch = L.batch.some(b => b.itemId === c.itemId);
+    return `<div class="res ${L.pick === c.itemId ? 'on' : ''}"><div class="ph">${IMG}</div><div class="tx"><div class="t">${esc(c.title)}</div>
+      <div class="m">${stars(c.rating)}<b>${c.rating}</b> · ${c.reviews.toLocaleString()} reviews · ${c.brand} · item <span class="mono">${c.itemId}</span></div></div>
+      <div class="side"><span class="p">${money(c.price)}</span><a href="https://www.walmart.com/search?q=${encodeURIComponent(c.title)}" target="_blank" rel="noopener">View on Walmart ↗</a>
+      ${inBatch ? '<span class="pill ok">In batch</span>' : `<button type="button" class="row-btn ${L.pick === c.itemId ? 'on' : ''}" data-pick-item="${c.itemId}">${L.pick === c.itemId ? 'Selected' : 'Sell this'}</button>`}</div></div>`;
+  }).join('');
+  if (L.mode === 'browse' && L.results && L.results.length) {
+    const url = L.byId ? `walmart.com/ip/${L.byId}` : `walmart.com/search?q=${encodeURIComponent(L.q).replace(/%20/g, '+')}`;
+    h = `<div class="browser"><div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">${esc(url)}</span></div>
+      <div class="browser-note">Walmart's own site, shown inside the app. Hover a product and press “List this”.</div>
+      <div class="tiles">${L.results.map(c => {
+        const inBatch = L.batch.some(b => b.itemId === c.itemId);
+        return `<div class="tile ${L.pick === c.itemId ? 'on' : ''}"><div class="img">${IMG}</div>
+          ${inBatch ? '<span class="pill ok lt">In batch</span>' : `<button type="button" class="btn btn-primary lt" data-pick-item="${c.itemId}">${L.pick === c.itemId ? 'Selected' : '+ List this'}</button>`}
+          <div class="p">${money(c.price)}</div><div class="t">${esc(c.title)}</div><div class="r">${stars(c.rating)}${c.reviews.toLocaleString()}</div></div>`;
+      }).join('')}</div></div>`;
+  }
+  $('lRes').innerHTML = h;
+  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === L.mode)));
+  renderOffer();
+}
+function renderOffer() {
+  const L = S.list;
+  const it = CATALOG.find(c => c.itemId === L.pick);
+  if (!it) { $('offer').innerHTML = `<div class="offer-empty"><b>Pick a Walmart item</b>Press “Sell this” on a result. You choose which of your SKUs it is after that.</div>`; return; }
+  const q = L.sku.trim().toLowerCase();
+  const linn = LINN.find(x => x.sku.toLowerCase() === q);
+  // suggestions: typed text first, otherwise SKUs that share words with the Walmart title
+  const words = it.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/);
+  const score = (x) => x.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && words.includes(w)).length;
+  const sugg = linn ? [] : (q ? LINN.filter(x => x.sku.toLowerCase().includes(q) || x.title.toLowerCase().includes(q))
+    : LINN.map(x => [x, score(x)]).filter(x => x[1] >= 3).sort((a, b) => b[1] - a[1]).map(x => x[0])).slice(0, 4);
+  const ready = L.sku.trim() && parseFloat(L.price) > 0 && parseInt(L.qty, 10) >= 0 && L.qty !== '';
+  $('offer').innerHTML = `
+    <h3>${esc(it.title)}</h3><div class="sub">item <span class="mono">${it.itemId}</span> · UPC found: <b class="mono">${it.upc}</b></div>
+    <label class="f"><span>Your SKU</span><input id="oSku" class="mono" value="${esc(L.sku)}" placeholder="Type or pick a Linnworks SKU" autocomplete="off"></label>
+    ${sugg.length ? `<div class="sugg" aria-label="Linnworks matches">${sugg.map(x => `<button type="button" data-sku="${esc(x.sku)}"><span class="sku">${esc(x.sku)}</span><small>${x.avail} in stock</small></button>`).join('')}</div>` : ''}
+    ${linn ? `<div class="map-ok">✓ Linked to Linnworks · ${linn.avail} in stock</div>` : L.sku.trim() ? `<div class="map-new">Not in Linnworks yet. It still lists; Linnworks syncs it once the SKU exists there.</div>` : ''}
+    <label class="f"><span>Condition</span><select id="oCond">${CONDS.map(c => `<option ${c === L.cond ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    <div class="f2">
+      <label class="f"><span>Price · Walmart's ${money(it.price)}</span><input id="oPrice" class="mono" inputmode="decimal" value="${esc(L.price)}"></label>
+      <label class="f"><span>Quantity</span><input id="oQty" class="mono" inputmode="numeric" value="${esc(L.qty)}" placeholder="${linn ? linn.avail : '0'}"></label>
+    </div>
+    <button type="button" class="btn btn-primary" id="addBatch" ${ready ? '' : 'disabled'}>Add to batch</button>`;
+}
+function renderTray() {
+  const b = S.list.batch;
+  $('tray').hidden = !(S.sub === 'list' && b.length);
+  $('trayN').textContent = plural(b.length, 'item') + ' ready';
+  $('trayList').innerHTML = b.map((x, i) => `<span>${esc(x.sku)}<button type="button" data-unbatch="${i}" aria-label="Remove ${esc(x.sku)}">✕</button></span>`).join('');
+}
+
+/* ---------- Uploads ---------- */
+function renderUploads() {
+  $('upBody').innerHTML = S.uploads.map(u => {
+    const ok = u.lines.filter(l => l.ok).length, bad = u.lines.length - ok;
+    const status = u.state === 'processing' ? '<span class="pill wait">Walmart is processing</span>' : bad ? '<span class="pill bad">Done · needs a fix</span>' : '<span class="pill ok">Done</span>';
+    const result = u.state === 'processing' ? '<span class="dash">usually minutes, sometimes hours</span>' : `${ok} live${bad ? ` · <span class="no">${bad} turned down</span>` : ''}`;
+    const lines = u.open ? u.lines.map(l => `<tr class="up-lines"><td></td><td><span class="sku">${esc(l.sku)}</span> · ${esc(l.title)}</td><td>${u.state === 'processing' ? '<span class="pill wait">Processing</span>' : l.ok ? '<span class="pill ok">Live</span>' : '<span class="pill bad">Turned down</span>'}</td><td class="${l.ok ? '' : 'why'}">${l.ok || u.state === 'processing' ? '' : esc(l.why)}</td><td class="act">${!l.ok && u.state !== 'processing' ? `<button type="button" class="row-btn quiet" data-fix="${esc(l.sku)}">Fix &amp; resend</button>` : ''}</td></tr>`).join('') : '';
+    return `<tr class="${u.flash ? 'fade' : ''}"><td>${u.sent}</td><td>${plural(u.lines.length, 'item')}</td><td>${status}</td><td>${result}</td><td class="act"><button type="button" class="linkish" data-up="${u.id}">${u.open ? 'Hide' : 'Show items'}</button></td></tr>${lines}`;
+  }).join('');
+  S.uploads.forEach(u => { u.flash = false; });
+}
+
+/* ---------- Pricing ---------- */
+function renderPricing() {
+  const P = S.pricing;
+  const losing = P.rows.filter(r => r.bb != null).length, inc = P.rows.filter(r => r.inc).length;
+  $('pBar').innerHTML = `<button type="button" class="chip" data-pf="all" aria-pressed="${P.filter === 'all'}">All<b>${P.rows.length}</b></button>
+    <button type="button" class="chip" data-pf="losing" aria-pressed="${P.filter === 'losing'}">Losing Buy Box<b>${losing}</b></button>
+    <button type="button" class="chip" data-pf="inc" aria-pressed="${P.filter === 'inc'}">Has incentive<b>${inc}</b></button>`;
+  const rows = P.rows.filter(r => P.filter === 'all' || (P.filter === 'losing' ? r.bb != null : !!r.inc));
+  $('pBody').innerHTML = rows.map(r => {
+    const i = P.rows.indexOf(r);
+    const incRow = r.incSku && S.rrf.find(x => x.id === r.incSku);
+    const joined = incRow && incRow.state !== 'ready';
+    const incCell = !r.inc ? '<span class="dash">—</span>' : `<div class="inc-cell">${r.inc} ${joined ? '<span class="joined">✓ Joined</span>' : `<button type="button" class="row-btn on" data-join="${r.incSku}">Join</button>`}</div>`;
+    return `<tr><td class="sku">${esc(r.sku)}</td>
+      <td class="num"><input class="p-in ${r.price !== r.orig ? 'chg' : ''}" data-price="${i}" inputmode="decimal" value="${r.price.toFixed(2)}" aria-label="Price for ${esc(r.sku)}"></td>
+      <td>${r.bb == null ? '<span class="yes">Yes</span>' : `<span class="no">No<small>${money(r.bb)} wins</small></span>`}</td>
+      <td><select data-rp="${i}" class="${r.rp !== r.rpOrig ? 'chg' : ''}" aria-label="Repricer for ${esc(r.sku)}">${['None', 'Beat by $1', 'Beat by 2%', 'Match'].map(o => `<option ${o === r.rp ? 'selected' : ''}>${o}</option>`).join('')}</select></td>
+      <td>${incCell}</td></tr>`;
+  }).join('');
+  renderSave();
+}
+function renderSave() {
+  const ch = S.pricing.rows.filter(r => r.price !== r.orig || r.rp !== r.rpOrig).length;
+  $('pSave').hidden = !ch;
+  $('pSave').innerHTML = `<span>${plural(ch, 'change')}</span><span class="spacer"></span><button type="button" class="btn btn-ghost" id="pUndo">Undo</button><button type="button" class="btn btn-primary" id="pSaveBtn">Save to Walmart</button>`;
+}
+
+/* ---------- Incentives ---------- */
+function rows() { return S[prog].filter(r => prog === 'rrf' ? (view.rrf === 'ready' ? r.state === 'ready' : r.state !== 'ready') : (view.wf === 'in' ? r.state === 'in' : r.state === 'out')); }
+function count(st) { return prog === 'rrf' ? S.rrf.filter(r => st === 'ready' ? r.state === 'ready' : r.state !== 'ready').length : S.wf.filter(r => r.state === st).length; }
+function itemCell(r) {
+  return `<div class="item"><div class="ph">${IMG}</div><div class="tx"><b title="${esc(r.name)}">${esc(r.name)}</b><small><span class="sku">${esc(r.sku)}</span> · ${r.itemId}</small></div></div>`;
+}
+function render() {
+  document.querySelectorAll('[data-prog]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.prog === prog)));
+  const list = rows();
+  picked = new Set([...picked].filter(id => list.some(r => r.id === id)));
+  const n = picked.size;
+  let bar;
+  if (prog === 'rrf') {
+    const ready = view.rrf === 'ready';
+    bar = `<button type="button" class="chip" data-view="ready" aria-pressed="${ready}">Ready to enroll<b>${count('ready')}</b></button>
+      <button type="button" class="chip" data-view="active" aria-pressed="${!ready}">Active<b>${count('active')}</b></button><span class="spacer"></span>
+      <button type="button" class="btn btn-primary" id="bulk" ${n ? '' : 'disabled'}>${ready ? 'Enroll' : 'Unenroll'} ${n ? n + ' selected' : 'selected'}</button>`;
+  } else {
+    const inV = view.wf === 'in';
+    bar = `<button type="button" class="chip" data-view="in" aria-pressed="${inV}">Enrolled<b>${count('in')}</b></button>
+      <button type="button" class="chip" data-view="out" aria-pressed="${!inV}">Opted out<b>${count('out')}</b></button><span class="spacer"></span>
+      <span class="prog-pref">Walmart-funded discounts <button type="button" class="sw" id="wfSw" role="switch" aria-checked="${S.wfOn}" aria-label="Walmart-funded discounts on or off"></button></span>
+      <button type="button" class="btn btn-primary" id="bulk" ${n && S.wfOn ? '' : 'disabled'}>${inV ? 'Opt out' : 'Opt back in'} ${n ? n + ' selected' : 'selected'}</button>`;
+  }
+  $('bar').innerHTML = bar;
+  const all = list.length && list.every(r => picked.has(r.id));
+  if (prog === 'rrf') {
+    $('thead').innerHTML = `<tr><th class="ck"><input type="checkbox" id="all" aria-label="Select all" ${all ? 'checked' : ''}></th><th>Item</th><th class="num">Price</th><th class="num">Referral fee</th><th class="num">Inventory</th><th>Expires</th><th class="act"></th></tr>`;
+    $('tbody').innerHTML = list.map(r => {
+      const ready = r.state === 'ready';
+      const price = ready && r.target < r.price ? `<span class="was">${money(r.price)}</span><span class="strong">${money(r.target)}</span>` : `<span class="strong">${money(ready ? r.price : r.target)}</span>`;
+      const act = ready ? `<button type="button" class="row-btn" data-one="${r.id}">Enroll</button>`
+        : r.state === 'pending' ? `<span class="pill wait">Sending to Walmart…</span>`
+        : `<span class="pill ok">Active</span> <button type="button" class="row-btn quiet" data-one="${r.id}">Unenroll</button>`;
+      return `<tr class="${picked.has(r.id) ? 'sel' : ''} ${r.flash ? 'fade' : ''}"><td class="ck"><input type="checkbox" data-pick="${r.id}" aria-label="Select ${esc(r.sku)}" ${picked.has(r.id) ? 'checked' : ''} ${r.state === 'pending' ? 'disabled' : ''}></td>
+        <td>${itemCell(r)}</td><td class="num">${price}</td>
+        <td class="num"><span class="fee-old">${r.base}%</span><span class="fee-new">${r.red}%</span></td>
+        <td class="num">${r.inv}</td><td class="exp ${r.soon ? 'soon' : ''}">${r.exp}</td><td class="act">${act}</td></tr>`;
+    }).join('');
+  } else {
+    $('thead').innerHTML = `<tr><th class="ck"><input type="checkbox" id="all" aria-label="Select all" ${all ? 'checked' : ''} ${S.wfOn ? '' : 'disabled'}></th><th>Item</th><th class="num">Your price</th><th class="num">Shopper pays</th><th class="num">Walmart pays</th><th>Ends</th><th class="act"></th></tr>`;
+    $('tbody').innerHTML = list.map(r => {
+      const inP = r.state === 'in';
+      const pays = r.price * r.off / 100;
+      const act = !S.wfOn ? `<span class="pill off">Program off</span>`
+        : inP ? `<button type="button" class="row-btn quiet" data-one="${r.id}">Opt out</button>` : `<button type="button" class="row-btn" data-one="${r.id}">Opt back in</button>`;
+      return `<tr class="${picked.has(r.id) ? 'sel' : ''} ${r.flash ? 'fade' : ''}"><td class="ck"><input type="checkbox" data-pick="${r.id}" aria-label="Select ${esc(r.sku)}" ${picked.has(r.id) ? 'checked' : ''} ${S.wfOn ? '' : 'disabled'}></td>
+        <td>${itemCell(r)}</td><td class="num strong">${money(r.price)}</td>
+        <td class="num">${inP && S.wfOn ? `<span class="was">${money(r.price)}</span>${money(r.price - pays)}` : money(r.price)}</td>
+        <td class="num">${inP && S.wfOn ? `<span class="fee-new">${r.off}% · ${money(pays)}</span>` : '<span class="exp">—</span>'}</td>
+        <td class="exp">${r.exp}</td><td class="act">${act}</td></tr>`;
+    }).join('');
+  }
+  S[prog].forEach(r => { r.flash = false; });
+  const empty = !list.length;
+  $('empty').hidden = !empty;
+  $('thead').parentElement.hidden = empty;
+  if (empty) {
+    const msg = prog === 'rrf'
+      ? (view.rrf === 'ready' ? ['Nothing left to enroll', 'Walmart has no more reduced-fee offers for your items right now.'] : ['No active incentives', 'Items you enroll show up here.'])
+      : (view.wf === 'in' ? ['No items enrolled', 'Items you opt back in show up here.'] : ['No items opted out', 'Walmart-funded discounts apply to all eligible items.']);
+    $('empty').innerHTML = `<b>${msg[0]}</b>${msg[1]}`;
+  }
+}
+
+/* ---------- confirm popup (incentives, sending a batch) ---------- */
+let confirmAction = null;
+function openConfirm(title, text, items, yes, action) {
+  confirmAction = action;
+  $('cTitle').textContent = title; $('cText').textContent = text; $('cYes').textContent = yes; $('cList').innerHTML = items.join('');
+  $('confirm').hidden = false; $('cYes').focus();
+}
+function closeConfirm() { confirmAction = null; pending = null; $('confirm').hidden = true; }
+
+function ask(ids) {
+  const items = ids.map(id => S[prog].find(r => r.id === id));
+  const n = items.length, s = n > 1 ? 's' : '';
+  pending = ids;
+  if (prog === 'rrf' && items[0].state === 'ready') {
+    const moves = items.some(r => r.target < r.price);
+    openConfirm(`Enroll ${n} item${s}?`, moves ? 'Walmart sets each item to its target price. The lower fee applies while the price stays at or below it.' : 'The lower fee applies while the price stays at or below the target.',
+      items.map(r => `<li><span class="sku">${esc(r.sku)}</span><span class="chg">${r.target < r.price ? `<span class="was">${money(r.price)}</span><b>${money(r.target)}</b>` : money(r.price)} · fee ${r.base}% → ${r.red}%</span></li>`), 'Enroll', apply);
+  } else if (prog === 'rrf') {
+    openConfirm(`Unenroll ${n} item${s}?`, 'The standard referral fee applies again. Prices stay where they are.',
+      items.map(r => `<li><span class="sku">${esc(r.sku)}</span><span class="chg">fee ${r.red}% → ${r.base}%</span></li>`), 'Unenroll', apply);
+  } else if (items[0].state === 'in') {
+    openConfirm(`Opt out ${n} item${s}?`, 'Shoppers stop getting the Walmart-paid discount on these items.',
+      items.map(r => `<li><span class="sku">${esc(r.sku)}</span><span class="chg">${r.off}% off ends</span></li>`), 'Opt out', apply);
+  } else {
+    openConfirm(`Opt ${n} item${s} back in?`, 'Walmart pays the discount; your payout does not change.',
+      items.map(r => `<li><span class="sku">${esc(r.sku)}</span><span class="chg">${r.off}% off, Walmart pays</span></li>`), 'Opt back in', apply);
+  }
+}
+function apply() {
+  const ids = pending; closeConfirm();
+  const items = ids.map(id => S[prog].find(r => r.id === id));
+  const n = items.length, s = n > 1 ? 's' : '';
+  if (prog === 'rrf' && items[0].state === 'ready') {
+    items.forEach(r => { r.state = 'pending'; });
+    view.rrf = 'active'; picked.clear(); render();
+    toast(`Sent ${n} item${s} to Walmart`);
+    setTimeout(() => {
+      items.forEach(r => { if (r.state === 'pending') { r.state = 'active'; r.flash = true; } });
+      items.forEach(r => { const p = S.pricing.rows.find(x => x.sku === r.sku); if (p) { p.price = p.orig = r.target; } });
+      if (S.sub === 'incentives' && prog === 'rrf') render(); else if (S.sub === 'pricing') renderPricing();
+      toast(`${n} item${s} enrolled · prices updated`);
+    }, 1800);
+  } else if (prog === 'rrf') {
+    items.forEach(r => { r.state = 'ready'; r.price = r.target; }); picked.clear(); render();
+    toast(`${n} item${s} unenrolled`);
+  } else {
+    const out = items[0].state === 'in';
+    items.forEach(r => { r.state = out ? 'out' : 'in'; r.flash = true; }); picked.clear(); render();
+    toast(out ? `${n} item${s} opted out` : `${n} item${s} opted back in`);
+  }
+}
+function sendBatch() {
+  const b = S.list.batch;
+  openConfirm(`Send ${plural(b.length, 'item')} to Walmart?`, 'Each goes up under your SKU. Walmart usually takes a few minutes to put them live.',
+    b.map(x => `<li><span><span class="sku">${esc(x.sku)}</span> · ${esc(x.cond)}</span><span class="chg">${money(x.price)} · qty ${x.qty}</span></li>`), 'Send', () => {
+      closeConfirm();
+      const up = { id: 'u' + Date.now(), sent: 'Just now', state: 'processing', open: true, flash: true,
+        lines: b.map(x => ({ sku: x.sku, title: x.title, ok: true })) };
+      S.uploads.unshift(up); S.list.batch = []; S.upNew = true;
+      showSub('uploads');
+      toast(`Sent ${plural(up.lines.length, 'item')} to Walmart`);
+      setTimeout(() => { up.state = 'done'; up.flash = true; if (S.sub === 'uploads') renderUploads(); else { S.upNew = true; $('upDot').hidden = false; } toast('Walmart finished your upload'); }, 3500);
+    });
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button, input[type=checkbox]'); if (!t) return;
+  if (t.dataset.sub) showSub(t.dataset.sub);
+  else if (t.dataset.try) { runSearch(t.dataset.try); }
+  else if (t.dataset.mode) { S.list.mode = t.dataset.mode; renderList(); }
+  else if (t.dataset.pickItem) { pick(t.dataset.pickItem); renderList(); }
+  else if (t.dataset.sku) { const L = S.list; L.sku = t.dataset.sku; const x = LINN.find(l => l.sku === L.sku); L.cond = condFor(L.sku); if (x) L.qty = String(x.avail); renderOffer(); }
+  else if (t.id === 'addBatch') {
+    const L = S.list, it = CATALOG.find(c => c.itemId === L.pick), linn = LINN.find(x => x.sku.toLowerCase() === L.sku.trim().toLowerCase());
+    L.batch.push({ itemId: it.itemId, title: it.title, sku: linn ? linn.sku : L.sku.trim(), cond: L.cond, price: parseFloat(L.price), qty: parseInt(L.qty, 10), linked: !!linn && L.cond === 'New' });
+    toast(`${linn ? linn.sku : L.sku.trim()} added to the batch`); L.pick = null; renderList(); renderTray();
+  }
+  else if (t.dataset.unbatch) { S.list.batch.splice(+t.dataset.unbatch, 1); renderTray(); renderList(); }
+  else if (t.id === 'send') sendBatch();
+  else if (t.dataset.up) { const u = S.uploads.find(x => x.id === t.dataset.up); u.open = !u.open; renderUploads(); }
+  else if (t.dataset.fix) { showSub('list'); runSearch(''); toast(`Search for ${t.dataset.fix} again to fix and resend`); }
+  else if (t.dataset.pf) { S.pricing.filter = t.dataset.pf; renderPricing(); }
+  else if (t.dataset.join) { showSub('incentives'); prog = 'rrf'; view.rrf = 'ready'; render(); ask([t.dataset.join]); }
+  else if (t.id === 'pUndo') { S.pricing.rows.forEach(r => { r.price = r.orig; r.rp = r.rpOrig; }); renderPricing(); }
+  else if (t.id === 'pSaveBtn') { const n = S.pricing.rows.filter(r => r.price !== r.orig || r.rp !== r.rpOrig).length; S.pricing.rows.forEach(r => { r.orig = r.price; r.rpOrig = r.rp; }); renderPricing(); toast(`${plural(n, 'change')} sent to Walmart`); }
+  else if (t.dataset.prog) { prog = t.dataset.prog; picked.clear(); render(); }
+  else if (t.dataset.view) { view[prog] = t.dataset.view; picked.clear(); render(); }
+  else if (t.dataset.one) ask([t.dataset.one]);
+  else if (t.dataset.pick) { picked.has(t.dataset.pick) ? picked.delete(t.dataset.pick) : picked.add(t.dataset.pick); render(); }
+  else if (t.id === 'all') { const list = rows().filter(r => r.state !== 'pending'); const on = !list.every(r => picked.has(r.id)); picked = new Set(on ? list.map(r => r.id) : []); render(); }
+  else if (t.id === 'bulk' && picked.size) ask([...picked]);
+  else if (t.id === 'wfSw') { S.wfOn = !S.wfOn; picked.clear(); render(); toast(S.wfOn ? 'Walmart-funded discounts turned on' : 'Walmart-funded discounts turned off for all items'); }
+  else if (t.id === 'cYes') { if (confirmAction) confirmAction(); }
+  else if (t.id === 'cNo') closeConfirm();
+  else if (t.id === 'reset') { S = SEED(); prog = 'rrf'; view = { rrf: 'ready', wf: 'in' }; picked.clear(); runSearch(S.list.q); showSub('list'); toast('Back to the start'); }
+});
+document.addEventListener('input', (e) => {
+  const t = e.target, L = S.list;
+  if (t.id === 'oSku') { L.sku = t.value; const x = LINN.find(l => l.sku.toLowerCase() === t.value.trim().toLowerCase()); if (x) { L.cond = condFor(x.sku); L.qty = String(x.avail); } const pos = t.selectionStart; renderOffer(); const n = $('oSku'); n.focus(); n.setSelectionRange(pos, pos); }
+  else if (t.id === 'oPrice') { L.price = t.value; $('addBatch').disabled = !(L.sku.trim() && parseFloat(L.price) > 0 && L.qty !== ''); }
+  else if (t.id === 'oQty') { L.qty = t.value; $('addBatch').disabled = !(L.sku.trim() && parseFloat(L.price) > 0 && L.qty !== ''); }
+  else if (t.dataset.price) { const r = S.pricing.rows[+t.dataset.price]; const v = parseFloat(t.value); if (v > 0) { r.price = Math.round(v * 100) / 100; t.classList.toggle('chg', r.price !== r.orig); renderSave(); } }
+});
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'oCond') S.list.cond = t.value;
+  else if (t.dataset.rp) { const r = S.pricing.rows[+t.dataset.rp]; r.rp = t.value; t.classList.toggle('chg', r.rp !== r.rpOrig); renderSave(); }
+});
+$('sForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch($('sQ').value); });
+$('confirm').addEventListener('click', (e) => { if (e.target === $('confirm')) closeConfirm(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('confirm').hidden) closeConfirm(); });
+runSearch(S.list.q);
+showSub('list');
+</script>

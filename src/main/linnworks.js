@@ -325,6 +325,34 @@ class LinnworksClient {
     });
   }
 
+  // List on Walmart saves the proven UPC as the item's barcode. The field
+  // name is not confirmed in Linnworks' docs: 'Barcode' first, then the
+  // GetStockItemsFull spelling. The caller treats a failure as a note.
+  async setBarcode(stockItemId, code) {
+    let last = null;
+    for (const fieldName of ['Barcode', 'BarcodeNumber']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(code) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+
+  // The item's title (owner 2026-10-22, the rename dialog edits it too).
+  // 'Title' is the documented field name; 'ItemTitle' is the spelling
+  // GetStockItemsFull answers with, tried if the first is refused.
+  async setTitle(stockItemId, title) {
+    let last = null;
+    for (const fieldName of ['Title', 'ItemTitle']) {
+      try {
+        await this.call('Inventory/UpdateInventoryItemField', { inventoryItemId: stockItemId, fieldName, fieldValue: String(title) });
+        return;
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+
   // The item's cost (owner 2026-10-05): the Linnworks purchase price, so it
   // is one number on every desktop
   async setPurchasePrice(stockItemId, price) {
@@ -701,43 +729,6 @@ class LinnworksClient {
     }
   }
 
-  // eBay lister: attach a BATCH of listing photos to the condition SKU's item
-  // and hand back their hosted URLs — Linnworks is the public host eBay's
-  // CSV upload fetches PicURL from. First photo becomes the main image.
-  async addItemImages(stockItemId, files) {
-    if (!this.session) await this.auth();
-    const ids = [];
-    for (const f of files) {
-      await this.throttle();
-      const form = new FormData();
-      form.append('file', new Blob([f.buffer], { type: f.mime || 'image/jpeg' }), f.name || 'photo.jpg');
-      const res = await fetch(`${this.session.server}/api/Uploader/UploadFile?type=Image&expiredInHours=24`, {
-        method: 'POST',
-        headers: { Authorization: this.session.token },
-        body: form,
-      });
-      const body = await res.text();
-      if (!res.ok) throw new LinnworksError(`UploadFile failed (${res.status}): ${trim(body)}`, { status: res.status, endpoint: 'Uploader/UploadFile' });
-      const up = JSON.parse(body);
-      const fileId = ((Array.isArray(up) ? up[0] : up) || {}).FileId;
-      if (!fileId) throw new LinnworksError('UploadFile returned no FileId');
-      ids.push(fileId);
-    }
-    if (!ids.length) return [];
-    const before = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }).catch(() => []) || [];
-    await this.call('Inventory/UploadImagesToInventoryItem', { inventoryItemId: stockItemId, imageIds: ids });
-    const after = await this.call(`Inventory/GetInventoryItemImages?inventoryItemId=${encodeURIComponent(stockItemId)}`, undefined, { method: 'GET' }) || [];
-    const seen = new Set(before.map(i => i.pkRowId));
-    const fresh = after.filter(i => !seen.has(i.pkRowId));
-    // first of the batch = the gallery/main photo
-    try {
-      if (fresh[0] && fresh[0].pkRowId) {
-        await this.call('Inventory/SetInventoryItemImageAsMain', { inventoryItemId: stockItemId, mainImageId: fresh[0].pkRowId });
-      }
-    } catch { /* main-flag is cosmetic */ }
-    return fresh.map(i => i.FullSource || i.Source).filter(Boolean);
-  }
-
   // Find a PROCESSED order by its channel reference (for returns): search,
   // then pull the full order for its item lines.
   // opts.light: skip the per-order items fetch (the sync's already-processed
@@ -965,64 +956,6 @@ class LinnworksClient {
       ignoreSync: !!c.IgnoreSync,
       refId: String(c.ChannelReferenceId || c.ChannelReferenceID || '').trim(), // eBay item number etc.
     }));
-  }
-
-  /* ---------- eBay listing tools (Linnworks' configurator pipeline) ----------
-     Modeled on the official LinnworksNetSDK Listings controller. The flow is
-     Linnworks' own: fetch the account's configurators (each carries the
-     shared listing settings INCLUDING the eBay condition, category and
-     policies), build a template for an inventory item through one, overlay
-     the form's title / price / qty / specifics / description, then ask
-     Linnworks to push the template to eBay with its stored channel
-     authorization. NOT yet verified against a live account — errors from
-     Linnworks surface verbatim to the caller. */
-
-  async getEbayConfigurators() {
-    const data = await this.call('Listings/GeteBayConfigurators', {});
-    return (data || []).map(c => ({
-      id: c.pkConfigId,
-      name: c.ConfigName || '',
-      account: c.EbayAccount || '',
-      site: c.Site || '',
-      condition: (c.Condition && (c.Condition.Value != null ? c.Condition.Value : c.Condition.Key)) || '',
-      listingType: c.ListingType || '',
-    }));
-  }
-
-  // returns the raw EbayListing templates (PagedResult.Items) — callers
-  // amend fields on the raw objects and hand them back to process
-  async createEbayTemplates({ configId, subSource, inventoryItemIds }) {
-    const data = await this.call('Listings/CreateEbayTemplates', {
-      parameters: {
-        Source: 'EBAY',
-        SubSource: subSource,
-        ConfigId: configId,
-        InventoryItemIds: inventoryItemIds,
-        Token: globalThis.crypto.randomUUID(),
-        TemplatesType: 'Simple',
-      },
-    });
-    return (data && data.Items) || [];
-  }
-
-  async processEbayListings(items, action = 'Create') {
-    await this.call('Listings/ProcesseBayListings', { items, force: true, action });
-  }
-
-  async getEbayTemplates({ templateIds, subSource }) {
-    const data = await this.call('Listings/GeteBayTemplates', {
-      parameters: {
-        TemplateIds: templateIds || null,
-        Source: 'EBAY',
-        SubSource: subSource,
-        TemplatesType: 'Both',
-        OnlyWithErrors: false,
-        PageNumber: 1,
-        EntriesPerPage: 50,
-        Token: globalThis.crypto.randomUUID(),
-      },
-    });
-    return (data && data.Items) || [];
   }
 
   // Channel prices stored in Linnworks for a stock item (Listing Descriptions:

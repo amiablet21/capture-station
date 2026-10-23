@@ -7,6 +7,10 @@
 // Shapes per developer.walmart.com (US Marketplace): Token API, Orders
 // (GET /v3/orders/{po}), Ship with Walmart shipping-estimates / labels /
 // labels/carriers/{carrier}/trackings/{tracking} (download + discard).
+// List on Walmart (owner 2026-10-22) rides the same keys: catalog search by
+// name, UPC lookup, the MP_ITEM_MATCH 4.2 offer feed, its per-SKU status
+// and the new offer's stock. Walmart's search gives out no UPCs, so the
+// caller brings one (Linnworks barcode or a scan) and proves it by lookup.
 
 const crypto = require('node:crypto');
 
@@ -23,7 +27,9 @@ const arr = (x) => (Array.isArray(x) ? x : x ? [x] : []);
 const clip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 function errorText(body, status) {
-  const errs = arr(body && (body.errors || (body.error && arr(body.error))));
+  // item / feed APIs wrap the list as {errors: {error: [...]}}
+  const wrapped = body && body.errors && !Array.isArray(body.errors) && body.errors.error;
+  const errs = arr(wrapped || (body && (body.errors || (body.error && arr(body.error)))));
   const msg = errs.map(e => clip(e.description || e.message || e.info || e.code, 300)).filter(Boolean).join(' · ');
   if (msg) return msg;
   if (body && body.error_description) return String(body.error_description);
@@ -259,6 +265,68 @@ class WalmartClient {
     throw new WalmartError('Walmart has not finished the label image yet. Try Reprint in a moment.');
   }
 
+  /* ----- List on Walmart ----- */
+
+  // keyword search of Walmart's catalog: up to 40 published items
+  async searchByName(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    return normalizeSearch(await this.call('GET', `/v3/items/walmart/search?query=${encodeURIComponent(q)}`));
+  }
+
+  // identifier lookup: 0 or 1 item (12 digits -> upc, 13 -> ean, 14 -> gtin)
+  async lookupUpc(code) {
+    const id = idParam(code);
+    if (!id) return null;
+    return normalizeSearch(await this.call('GET', `/v3/items/walmart/search?${id.param}=${id.value}`))[0] || null;
+  }
+
+  // GTIN / UPC an item number carries, via Get an item (productIdType=
+  // ITEM_ID). Walmart documents it for the seller's own "partner catalog",
+  // so for an item the seller does not sell yet it may answer nothing —
+  // callers treat [] as "try another way". Codes still need proving.
+  async itemIdentifiers(itemId) {
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return [];
+    const body = await this.call('GET', `/v3/items/${encodeURIComponent(id)}?productIdType=ITEM_ID`);
+    const rows = arr((body && (body.ItemResponse || body.itemResponse || body.items)) || body);
+    const codes = [];
+    for (const r of rows) {
+      // the 12-digit UPC first: it is what the box shows and Linnworks keeps
+      for (const v of [r && r.upc, r && r.gtin]) {
+        const d = String(v || '').replace(/\D/g, '');
+        if (d.length >= 8 && d.length <= 14 && !codes.includes(d)) codes.push(d);
+      }
+    }
+    return codes;
+  }
+
+  async submitMatchFeed(offers) {
+    const body = await this.call('POST', '/v3/feeds?feedType=MP_ITEM_MATCH', buildMatchFeed(offers));
+    if (!body || !body.feedId) throw new WalmartError(`Walmart took the upload but returned no feed id${body ? ` (${errorText(body, 200)})` : ''}.`);
+    return body.feedId;
+  }
+
+  // every page of per-SKU results (50 per page with details)
+  async feedStatus(feedId) {
+    let first = null;
+    const rows = [];
+    for (let offset = 0; offset < 10000; offset += 50) {
+      const j = await this.call('GET', `/v3/feeds/${encodeURIComponent(feedId)}?includeDetails=true&offset=${offset}&limit=50`);
+      if (!first) first = j;
+      const page = arr(j && j.itemDetails && j.itemDetails.itemIngestionStatus);
+      rows.push(...page);
+      if (page.length < 50) break;
+    }
+    return parseFeedStatus({ ...(first || {}), itemDetails: { itemIngestionStatus: rows } });
+  }
+
+  // an offer set up by match carries no quantity of its own
+  async setInventory(sku, amount) {
+    return this.call('PUT', `/v3/inventory?sku=${encodeURIComponent(sku)}`,
+      { sku, quantity: { unit: 'EACH', amount: Math.max(0, Math.floor(Number(amount) || 0)) } });
+  }
+
   async discard(carrier, tracking) {
     const body = await this.call('DELETE', `/v3/shipping/labels/carriers/${encodeURIComponent(carrier)}/trackings/${encodeURIComponent(tracking)}`);
     if (body && body.data !== undefined && String(body.data) !== 'true') throw new WalmartError('Walmart did not void the label.');
@@ -266,9 +334,109 @@ class WalmartClient {
   }
 }
 WalmartClient.tokens = new Map();
-WalmartClient.testHost = ''; // the e2e suite's fake Walmart
+// the e2e suite's fake Walmart (CAPTURE_WALMART_BASE: a stand-in for
+// driving the app by hand in test runs)
+WalmartClient.testHost = process.env.CAPTURE_WALMART_BASE || '';
+
+/* ---------- List on Walmart: pure builders + parsers (tested in e2e) ---------- */
+
+// digits only -> the search parameter Walmart takes for it
+function idParam(code) {
+  let d = String(code || '').replace(/\D/g, '');
+  if (d.length === 8 || d.length === 11) d = d.padStart(12, '0');
+  if (d.length === 12) return { param: 'upc', value: d };
+  if (d.length === 13) return { param: 'ean', value: d };
+  if (d.length === 14) return { param: 'gtin', value: d };
+  return null;
+}
+
+// any 8/11/12/13/14-digit barcode as the 14-digit GTIN the feed accepts
+function toGtin14(code) {
+  let d = String(code || '').replace(/\D/g, '');
+  if (d.length === 8 || d.length === 11) d = d.padStart(12, '0');
+  if (![12, 13, 14].includes(d.length)) return '';
+  return d.padStart(14, '0');
+}
+
+// DEFAULT-format search response -> what the dialog shows. Numbers arrive
+// as strings and price can be missing; {} means no match.
+function normalizeSearch(j) {
+  return arr(j && j.items).filter(it => it && it.itemId).map(it => {
+    const amount = it.price && it.price.amount != null ? Number(it.price.amount) : 0;
+    return {
+      itemId: String(it.itemId),
+      title: String(it.title || ''),
+      brand: String(it.brand || ''),
+      image: (arr(it.images)[0] || {}).url || '',
+      price: Number.isFinite(amount) ? amount : 0,
+      // star average ("4.7") and review count ("198") arrive as strings;
+      // 0 / 0 = no reviews yet
+      rating: Math.min(5, Math.max(0, Number(it.customerRating) || 0)),
+      reviews: Math.max(0, Math.floor(Number(it.properties && it.properties.numReviews) || 0)),
+      productType: String(it.productType || ''),
+      // walmart.com's product page for an item id (convention, not in the docs)
+      url: `https://www.walmart.com/ip/${encodeURIComponent(String(it.itemId))}`,
+    };
+  });
+}
+
+// the offer conditions an MP_ITEM_MATCH feed takes without extra ids
+// (Restored grades also need restoredProductIdentifier, spec 5.x only).
+// Everything but New needs Walmart's Pre-Owned approval and a photo.
+const MATCH_CONDITIONS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured', 'New with defects'];
+
+// offers -> MP_ITEM_MATCH 4.2 payload (official schema: no businessUnit in
+// the 4.2 header; condition / price / ShippingWeight / sku / ids required;
+// mainImageUrl required for every condition but New)
+function buildMatchFeed(offers) {
+  return {
+    MPItemFeedHeader: { sellingChannel: 'mpsetupbymatch', locale: 'en', version: '4.2', processMode: 'REPLACE', subset: 'EXTERNAL' },
+    MPItem: arr(offers).map(o => ({
+      Item: {
+        sku: String(o.sku).slice(0, 50),
+        productIdentifiers: { productIdType: 'GTIN', productId: toGtin14(o.upc) },
+        price: Math.round(Number(o.price) * 100) / 100,
+        ShippingWeight: Math.round(Number(o.shipLb) * 1000) / 1000,
+        condition: o.condition || 'New',
+        ...(o.condition && o.condition !== 'New' && o.mainImageUrl ? { mainImageUrl: String(o.mainImageUrl) } : {}),
+      },
+    })),
+  };
+}
+
+// feed status JSON -> { status, counts, items: { sku: { status, errors[], wpid, itemId } } }
+function parseFeedStatus(j) {
+  const items = {};
+  for (const r of arr(j && j.itemDetails && j.itemDetails.itemIngestionStatus)) {
+    if (!r || !r.sku) continue;
+    const errs = arr(r.ingestionErrors && r.ingestionErrors.ingestionError)
+      .map(e => [e.field ? `${e.field}: ` : '', e.description || e.code || e.type || ''].join('').trim())
+      .filter(Boolean);
+    items[String(r.sku)] = {
+      status: String(r.ingestionStatus || 'INPROGRESS').toUpperCase(),
+      errors: errs,
+      wpid: r.wpid || '',
+      itemId: r.itemid || r.itemId || '',
+    };
+  }
+  return {
+    status: String((j && j.feedStatus) || 'RECEIVED').toUpperCase(),
+    counts: {
+      received: Number(j && j.itemsReceived) || 0,
+      succeeded: Number(j && j.itemsSucceeded) || 0,
+      failed: Number(j && j.itemsFailed) || 0,
+      processing: Number(j && j.itemsProcessing) || 0,
+    },
+    items,
+    feedErrors: arr(j && j.ingestionErrors && j.ingestionErrors.ingestionError).map(e => e.description || e.code || '').filter(Boolean),
+  };
+}
+
+// a SKU is settled once Walmart says SUCCESS or any *_ERROR
+const isFinal = (s) => s === 'SUCCESS' || /ERROR$/.test(String(s || ''));
 
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
-  parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel,
+  parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
+  idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
 };
