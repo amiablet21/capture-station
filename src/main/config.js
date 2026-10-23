@@ -228,7 +228,7 @@ const DEFAULTS = {
   // List on Walmart (owner 2026-10-22): the offer's default shipping weight
   // in lb — Walmart requires one on every offer. The API keys are the Ship
   // with Walmart ones (walmart.clientId / clientSecret).
-  walmartListing: { shipWeightLb: 1 },
+  walmartListing: { shipWeightLb: 1, feePct: 8 }, // feePct: Walmart's referral fee for the Pricing tab's break-even
   lastSync: null, // { at, synced, failed, dryRun }
 };
 

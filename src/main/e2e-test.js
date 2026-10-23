@@ -1370,10 +1370,15 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.stockSetTitle('sid-1', 'A title')`);
     check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.walmartSearch('Galaxy Tab A9', '')`);
-    check('walmart:search refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.walmartUpcFromItem('1735902284')`);
-    check('walmart:upcFromItem refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    for (const [label, call] of [['wmsite:go', `api.wmsiteGo('galaxy tab a9')`], ['walmart:itemDetails', `api.walmartItemDetails('1735902284')`],
+      ['walmart:mapState', `api.walmartMapState(['X'])`], ['walmart:pricing', 'api.walmartPricing()'],
+      ['walmart:pricingSave', `api.walmartPricingSave([{ sku: 'X', strategy: 'S', min: 1, max: 2 }], [])`],
+      ['walmart:saveStrategy', `api.walmartSaveStrategy({ name: 'S' })`], ['walmart:incentives', 'api.walmartIncentives()'],
+      ['walmart:incentiveEnroll', `api.walmartIncentiveEnroll([{ sku: 'X' }], true)`], ['walmart:wfOpt', `api.walmartWfOpt(['X'], false)`],
+      ['walmart:wfAll', 'api.walmartWfAll(false)']]) {
+      res = await exec(call);
+      check(`${label} refused in capture-only mode`, res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    }
     res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
     check('walmart:submit refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     {
@@ -1411,6 +1416,38 @@ module.exports = async function run({ app, win, db, clipboard }) {
           && st.counts.failed === 1 && w.isFinal('DATA_ERROR') && w.isFinal('SUCCESS') && !w.isFinal('INPROGRESS'), st);
       check('walmart errors: JSON error lists read as one line',
         w.errorText({ errors: { error: [{ code: 'X', description: 'Bad SKU' }] } }, 400) === 'Bad SKU', null);
+      // Walmart tab (owner 2026-10-23): pricing, repricer, incentives, the product page
+      const ins = w.parseInsight({ sku: 'A', itemName: 'Tab', currentPrice: 124.99, buyBoxBasePrice: 119, buyBoxWinRate: '12.5', repricerStrategyName: 'Beat by $1', repricerMinPrice: 120, repricerMaxPrice: 150, competitorPrice: null });
+      check('walmart pricing insights: price, Buy Box, win rate (a percentage string), strategy, min / max',
+        ins.price === 124.99 && ins.bbPrice === 119 && ins.winRate === 12.5 && ins.strategy === 'Beat by $1' && ins.min === 120 && ins.max === 150
+          && ins.competitor === null && w.parseInsight({ sku: 'B', buyBoxWinRate: null }).winRate === null && w.parseInsight({}) === null, ins);
+      const stp = w.parseStrategy({ repricerStrategy: 'Open box 2%', strategyCollectionId: 'c1', enabled: true, assignedCount: 10, strategies: [{ strategyType: 'Buy Box Price', adjustmentType: 'PERCENTAGE', adjustmentValue: 2 }] });
+      const stb = w.buildStrategy({ name: 'Beat by $1', type: 'Buy Box Price', unit: '$', value: 1 });
+      check('walmart repricer strategy: read (name, id, count, % rule) and built (UNIT adjustment, flags off)',
+        stp.id === 'c1' && stp.name === 'Open box 2%' && stp.count === 10 && stp.unit === '%' && stp.value === 2
+          && stb.repricerStrategy === 'Beat by $1' && stb.strategies[0].strategyType === 'Buy Box Price' && stb.strategies[0].adjustmentType === 'UNIT'
+          && stb.strategies[0].adjustmentValue === 1 && stb.enableRepricerForPromotion === false, { stp, stb });
+      const rf = w.buildRepricerFeed([{ sku: 'A', strategy: 'Beat by $1', min: 99.999, max: 150 }, { sku: 'B', strategy: '' }]);
+      check('walmart repricer feed: items by strategy NAME with min / max; no strategy = the reserved take-out name',
+        rf.ItemFeedHeader.sellingChannel === 'repricerstrategy' && rf.Item[0].Strategy.repricerStrategy === 'Beat by $1'
+          && rf.Item[0].Strategy.minimumSellerAllowedPrice === 100 && rf.Item[0].Strategy.maximumSellerAllowedPrice === 150
+          && rf.Item[1].Strategy.repricerStrategy === w.NO_STRATEGY && !('minimumSellerAllowedPrice' in rf.Item[1].Strategy), rf);
+      const inc = w.parseIncentive({ skuId: 'S1', itemId: 649861121, productName: 'P', currentPrice: 20.5, targetPrice: 20, baseReferralFee: 8, reducedReferralFee: 7, incentiveType: 'REDUCED_REFERRAL', incentiveStatus: 'NEW', inventoryCount: '200', expirationDate: '1660805999000', incentiveId: 'i1', productUrl: 'https://www.walmart.com/ip/649861121' });
+      const ef = w.buildIncentiveFeed([{ sku: 'S1', incentiveId: 'i1' }], true);
+      const wf = w.buildWalmartFundedFeed(['S1'], false);
+      check('walmart incentives: skuId read, epoch-ms dates as days, enroll Y with the incentive id, Walmart-funded Opt-out',
+        inc.sku === 'S1' && inc.itemId === '649861121' && inc.target === 20 && inc.reducedFee === 7 && inc.stock === 200 && /^2022-08-1[78]$/.test(inc.expires)
+          && ef.ProgramActionFeedHeader.feedType === 'INCENTIVE_ENROLLMENT' && ef.ProgramAction[0].Programs.IncentivesEnrollment.referralFeeIncentiveEnrollment === 'Y'
+          && ef.ProgramAction[0].Programs.IncentivesEnrollment.incentiveId === 'i1'
+          && wf.ProgramAction[0].Programs.WalmartFundedIncentivesEnrollment.walmartFundedIncentivesEnrollment === 'Opt-out', { inc, ef, wf });
+      const pg = w.parseProductPage({ json: ['{"@type":"Product","brand":{"@type":"Brand","name":"SAMSUNG"},"aggregateRating":{"ratingValue":"4.6","reviewCount":"2341"}}', '{"product":{"currentPrice":{"price":119,"priceString":"$119.00"},"sellerDisplayName":"Walmart.com","additionalOfferCount":13}}'], body: 'More seller options (13)', title: 'Galaxy Tab A9', image: 'https://i5.walmartimages.com/x.jpg' });
+      check('walmart product page: sellers, Buy Box holder, price, rating, brand; nothing found = unknown, not 0',
+        pg.sellers === 14 && pg.buyBoxSeller === 'Walmart.com' && pg.price === 119 && pg.rating === 4.6 && pg.reviews === 2341 && pg.brand === 'SAMSUNG'
+          && w.parseProductPage({}).sellers === null && w.parseProductPage({}).rating === null, pg);
+      const is = w.parseItemStatus({ ItemResponse: [{ sku: 'A', publishedStatus: 'UNPUBLISHED', lifecycleStatus: 'ACTIVE', unpublishedReasons: { reason: ['No price was found for this listing.'] } }], totalItems: 1 });
+      check('walmart item status: published / unpublished with Walmart\'s reasons',
+        is.published === 'UNPUBLISHED' && is.reasons[0] === 'No price was found for this listing.' && w.parseItemStatus({ publishedStatus: 'PUBLISHED' }).published === 'PUBLISHED', is);
+      check('walmart errors: the repricer\'s errorMessage reads as the error', w.errorText({ status: 'BAD_REQUEST', errorMessage: 'Error(s) : Strategy name is duplicate' }, 400) === 'Error(s) : Strategy name is duplicate', null);
     }
 
     const prevLookup2 = await exec('recvLookup');

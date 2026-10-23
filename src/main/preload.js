@@ -11,6 +11,8 @@ const EVENTS = [
   'tracking:clipped',
   'orders:imported',
   'browser:state',
+  'wmsite:state',
+  'wmsite:pick',
   'browser:zoom',
   'mapping:overlay',
   'browser:download',
@@ -231,9 +233,28 @@ contextBridge.exposeInMainWorld('api', {
   overviewExportWas: (rows, min, mode, months) => ipcRenderer.invoke('overview:exportWas', { rows, min, mode, months }),
   overviewPhone: () => ipcRenderer.invoke('overview:phone'),
   walmartStatus: () => ipcRenderer.invoke('walmart:status'),
-  walmartSearch: (query, barcode) => ipcRenderer.invoke('walmart:search', { query, barcode }),
   walmartUpc: (upc) => ipcRenderer.invoke('walmart:upc', { upc }),
-  walmartUpcFromItem: (itemId) => ipcRenderer.invoke('walmart:upcFromItem', { itemId }),
+  walmartItemDetails: (itemId) => ipcRenderer.invoke('walmart:itemDetails', { itemId }),
+  walmartMapState: (skus, force) => ipcRenderer.invoke('walmart:mapState', { skus, force: !!force }),
+  walmartNoteMapped: (sku, targetSku) => ipcRenderer.invoke('walmart:noteMapped', { sku, targetSku }),
+  // walmart.com inside the Walmart tab: scaled like browserLayout
+  wmsiteLayout: (bounds) => {
+    const z = webFrame.getZoomFactor() || 1;
+    const b = bounds && bounds.visible
+      ? { visible: true, x: bounds.x * z, y: bounds.y * z, width: bounds.width * z, height: bounds.height * z }
+      : bounds;
+    return ipcRenderer.invoke('wmsite:layout', b);
+  },
+  wmsiteGo: (text) => ipcRenderer.invoke('wmsite:go', { text }),
+  walmartPricing: () => ipcRenderer.invoke('walmart:pricing'),
+  walmartSaveStrategy: (s) => ipcRenderer.invoke('walmart:saveStrategy', s),
+  walmartDeleteStrategy: (id) => ipcRenderer.invoke('walmart:deleteStrategy', { id }),
+  walmartPricingSave: (repricer, prices) => ipcRenderer.invoke('walmart:pricingSave', { repricer, prices }),
+  walmartIncentives: () => ipcRenderer.invoke('walmart:incentives'),
+  walmartIncentiveEnroll: (items, enroll) => ipcRenderer.invoke('walmart:incentiveEnroll', { items, enroll: !!enroll }),
+  walmartWfOpt: (skus, optIn) => ipcRenderer.invoke('walmart:wfOpt', { skus, optIn: !!optIn }),
+  walmartWfAll: (on) => ipcRenderer.invoke('walmart:wfAll', { on: !!on }),
+  wmsiteNav: (action) => ipcRenderer.invoke('wmsite:nav', { action }),
   walmartSubmit: (offers) => ipcRenderer.invoke('walmart:submit', { offers }),
   walmartFeeds: () => ipcRenderer.invoke('walmart:feeds'),
   walmartFeedCheck: (feedId) => ipcRenderer.invoke('walmart:feedCheck', { feedId }),

@@ -7,10 +7,12 @@
 // Shapes per developer.walmart.com (US Marketplace): Token API, Orders
 // (GET /v3/orders/{po}), Ship with Walmart shipping-estimates / labels /
 // labels/carriers/{carrier}/trackings/{tracking} (download + discard).
-// List on Walmart (owner 2026-10-22) rides the same keys: catalog search by
-// name, UPC lookup, the MP_ITEM_MATCH 4.2 offer feed, its per-SKU status
-// and the new offer's stock. Walmart's search gives out no UPCs, so the
-// caller brings one (Linnworks barcode or a scan) and proves it by lookup.
+// The Walmart tab (owner 2026-10-22 / 23) rides the same keys: UPC lookup
+// (proving a UPC read off walmart.com is the picked item), the MP_ITEM_MATCH
+// 4.2 offer feed, its per-SKU status, the new offer's stock and live status;
+// Pricing Insights + the repricer (strategies, repricerFeeds), single price
+// updates; price incentives (reduced referral fee enrollment, Walmart-funded
+// opt in / out). Shapes per developer.walmart.com's OpenAPI specs.
 
 const crypto = require('node:crypto');
 
@@ -33,6 +35,8 @@ function errorText(body, status) {
   const msg = errs.map(e => clip(e.description || e.message || e.info || e.code, 300)).filter(Boolean).join(' · ');
   if (msg) return msg;
   if (body && body.error_description) return String(body.error_description);
+  // the repricer answers { status, errorMessage }
+  if (body && body.errorMessage) return clip(body.errorMessage, 300);
   return `Walmart answered ${status}`;
 }
 
@@ -267,13 +271,6 @@ class WalmartClient {
 
   /* ----- List on Walmart ----- */
 
-  // keyword search of Walmart's catalog: up to 40 published items
-  async searchByName(query) {
-    const q = String(query || '').trim();
-    if (!q) return [];
-    return normalizeSearch(await this.call('GET', `/v3/items/walmart/search?query=${encodeURIComponent(q)}`));
-  }
-
   // identifier lookup: 0 or 1 item (12 digits -> upc, 13 -> ean, 14 -> gtin)
   async lookupUpc(code) {
     const id = idParam(code);
@@ -319,6 +316,94 @@ class WalmartClient {
       if (page.length < 50) break;
     }
     return parseFeedStatus({ ...(first || {}), itemDetails: { itemIngestionStatus: rows } });
+  }
+
+  /* ----- Pricing: repricer + Buy Box (owner 2026-10-23) ----- */
+
+  // every listing's price, Buy Box price / win rate and repricer setup in
+  // one paged answer (Pricing Insights; the item report takes 15-45 min)
+  async pricingInsights() {
+    const rows = [];
+    for (let page = 0; page < 200; page++) {
+      const j = await this.call('POST', '/v3/price/getPricingInsights', { pageNumber: page, sort: { sortField: 'GMVL30D', sortOrder: 'DESC' } });
+      const list = arr(j && j.pricingInsightsResponseList);
+      rows.push(...list.map(parseInsight).filter(Boolean));
+      const pc = (j && j.pageContext) || {};
+      if (!list.length || (Number(pc.totalPages) > 0 && page + 1 >= Number(pc.totalPages))) break;
+    }
+    return rows;
+  }
+
+  async strategies() {
+    return arr((await this.call('GET', '/v3/repricer/strategies')).strategyCollections).map(parseStrategy).filter(Boolean);
+  }
+
+  // create (no id) or update a strategy; answers the saved one
+  async saveStrategy(s) {
+    const body = buildStrategy(s);
+    const j = s.id
+      ? await this.call('PUT', `/v3/repricer/strategy/${encodeURIComponent(s.id)}`, body)
+      : await this.call('POST', '/v3/repricer/strategy', body);
+    return parseStrategy(j) || { ...s };
+  }
+
+  async deleteStrategy(id) {
+    return this.call('DELETE', `/v3/repricer/strategy/${encodeURIComponent(id)}`);
+  }
+
+  // [{ sku, strategy (name, or '' to take it out), min, max }] -> feed id
+  async repricerFeed(items) {
+    const j = await this.call('POST', '/v3/repricerFeeds', buildRepricerFeed(items));
+    if (!j || !j.feedId) throw new WalmartError('Walmart took the repricer change but returned no feed id.');
+    return j.feedId;
+  }
+
+  async setPrice(sku, amount) {
+    return this.call('PUT', '/v3/price', {
+      sku: String(sku),
+      pricing: [{ currentPriceType: 'BASE', currentPrice: { currency: 'USD', amount: Math.round(Number(amount) * 100) / 100 } }],
+    });
+  }
+
+  /* ----- Incentives (owner 2026-10-23) ----- */
+
+  // type REDUCED_REFERRAL | WALMART_FUNDED, status ELIGIBLE | ENROLLED
+  async incentives(type, status) {
+    const rows = [];
+    for (let offset = 0; offset < 20000; offset += 200) {
+      const j = await this.call('GET', `/v3/price/incentives?limit=200&offset=${offset}&incentiveType=${encodeURIComponent(type)}&incentiveStatus=${encodeURIComponent(status)}&sortBy=EXPIRATION_DATE&sortOrder=ASC`);
+      const list = arr(j && j.items);
+      rows.push(...list.map(parseIncentive).filter(Boolean));
+      const total = Number(j && j.pageContext && j.pageContext.totalCount);
+      if (list.length < 200 || (total && rows.length >= total)) break;
+    }
+    return rows;
+  }
+
+  // reduced referral fee: [{ sku, incentiveId }] enroll (true) or leave
+  async incentiveEnroll(items, enroll) {
+    const j = await this.call('POST', '/v3/feeds?feedType=INCENTIVE_ENROLLMENT', buildIncentiveFeed(items, enroll));
+    if (!j || !j.feedId) throw new WalmartError('Walmart took the enrollment but returned no feed id.');
+    return j.feedId;
+  }
+
+  // Walmart-funded discounts: [sku] opted in (true) or out
+  async walmartFundedOpt(skus, optIn) {
+    const j = await this.call('POST', '/v3/feeds?feedType=WALMART_FUNDED_INCENTIVES_ENROLLMENT', buildWalmartFundedFeed(skus, optIn));
+    if (!j || !j.feedId) throw new WalmartError('Walmart took the change but returned no feed id.');
+    return j.feedId;
+  }
+
+  // the whole catalog in or out of Walmart-funded discounts; Walmart locks
+  // the setting for 4 hours after a change (isDisabled)
+  async walmartFundedAll(on) {
+    const j = await this.call('PUT', `/v3/price/incentives/wfpreference?autoEnrollEnabled=${on ? 'true' : 'false'}`);
+    return { on: !!(j && j.autoEnrollEnabled), locked: !!(j && j.isDisabled) };
+  }
+
+  // one of the seller's own items by SKU: is it live on walmart.com?
+  async itemStatus(sku) {
+    return parseItemStatus(await this.call('GET', `/v3/items/${encodeURIComponent(String(sku))}`));
   }
 
   // an offer set up by match carries no quantity of its own
@@ -435,8 +520,187 @@ function parseFeedStatus(j) {
 // a SKU is settled once Walmart says SUCCESS or any *_ERROR
 const isFinal = (s) => s === 'SUCCESS' || /ERROR$/.test(String(s || ''));
 
+// Get an item (by SKU) -> { published, lifecycle, reasons[] }. The item can
+// come bare, in an ItemResponse list, or wrapped once more; the unpublished
+// reasons as a list or as { reason: [...] }.
+function parseItemStatus(j) {
+  const it = arr((j && (j.ItemResponse || j.itemResponse || j.items)) || j)[0] || {};
+  const raw = it.unpublishedReasons;
+  const reasons = arr(raw && !Array.isArray(raw) && typeof raw === 'object' ? raw.reason : raw)
+    .map(r => clip(typeof r === 'string' ? r : r && (r.reason || r.description || r.message), 300)).filter(Boolean);
+  return {
+    published: String(it.publishedStatus || '').toUpperCase(),
+    lifecycle: String(it.lifecycleStatus || '').toUpperCase(),
+    reasons,
+  };
+}
+
+/* ---------- Pricing + incentives: pure builders + parsers (tested in e2e) ---------- */
+
+const money2 = (v) => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== '' ? Math.round(n * 100) / 100 : null; };
+// the repricer's "take it out" value (Walmart's reserved strategy name)
+const NO_STRATEGY = 'No Strategy/Delete from Repricer';
+
+// one Pricing Insights row -> what the Pricing tab shows. buyBoxWinRate
+// arrives as a string ("0.0", "87.5"): a percentage.
+function parseInsight(r) {
+  if (!r || !r.sku) return null;
+  const rate = Number(r.buyBoxWinRate);
+  return {
+    sku: String(r.sku),
+    title: clip(r.itemName, 300),
+    price: money2(r.currentPrice),
+    bbPrice: money2(r.buyBoxBasePrice),
+    bbTotal: money2(r.buyBoxTotalPrice),
+    winRate: Number.isFinite(rate) && r.buyBoxWinRate !== null && r.buyBoxWinRate !== '' ? Math.max(0, Math.min(100, rate)) : null,
+    competitor: money2(r.competitorPrice),
+    strategy: clip(r.repricerStrategyName, 120),
+    strategyType: clip(r.repricerStrategyType, 60),
+    repricerStatus: clip(r.repricerStatus, 60),
+    min: money2(r.repricerMinPrice),
+    max: money2(r.repricerMaxPrice),
+    suggested: money2(r.suggestedPrice),
+    fulfillment: clip(r.fulfillment, 40),
+    stock: r.inventoryCount === null || r.inventoryCount === undefined ? null : Number(r.inventoryCount) || 0,
+  };
+}
+
+// a strategy collection -> { id, name, enabled, count, type, unit, value }
+function parseStrategy(s) {
+  if (!s || !s.repricerStrategy) return null;
+  const rule = arr(s.strategies)[0] || {};
+  return {
+    id: String(s.strategyCollectionId || ''),
+    name: clip(s.repricerStrategy, 120),
+    enabled: s.enabled !== false,
+    count: Number(s.assignedCount) || 0,
+    type: String(rule.strategyType || 'Buy Box Price'),
+    unit: String(rule.adjustmentType || 'UNIT').toUpperCase() === 'PERCENTAGE' ? '%' : '$',
+    value: Number(rule.adjustmentValue) || 0,
+  };
+}
+
+function buildStrategy(s) {
+  return {
+    repricerStrategy: clip(s.name, 120),
+    enabled: s.enabled !== false,
+    enableRepricerForPromotion: false,
+    restoreSellerPriceWithoutTarget: false,
+    enableBuyboxMeetExternal: false,
+    compareWith3pOfferOnly: false,
+    strategies: [{
+      strategyType: s.type === 'Competitive Price' ? 'Competitive Price' : 'Buy Box Price',
+      adjustmentType: s.unit === '%' ? 'PERCENTAGE' : 'UNIT',
+      adjustmentValue: Math.max(0, Math.round((Number(s.value) || 0) * 100) / 100),
+    }],
+  };
+}
+
+// items reference strategies by NAME; '' takes the item off the repricer
+function buildRepricerFeed(items) {
+  return {
+    ItemFeedHeader: { processMode: 'REPLACE', subset: 'EXTERNAL', mart: 'WALMART_US', sellingChannel: 'repricerstrategy', version: '1.1', locale: 'en' },
+    Item: arr(items).map(i => ({
+      Strategy: {
+        sku: String(i.sku),
+        repricerStrategy: i.strategy ? String(i.strategy) : NO_STRATEGY,
+        ...(i.strategy && money2(i.min) !== null ? { minimumSellerAllowedPrice: Math.max(0.01, money2(i.min)) } : {}),
+        ...(i.strategy && money2(i.max) !== null ? { maximumSellerAllowedPrice: Math.max(0.01, money2(i.max)) } : {}),
+      },
+    })),
+  };
+}
+
+// epoch-ms strings -> YYYY-MM-DD ('' when unset)
+function parseIncentive(r) {
+  if (!r || !(r.skuId || r.sku)) return null;
+  return {
+    sku: String(r.skuId || r.sku),
+    itemId: String(r.itemId || ''),
+    title: clip(r.productName, 300),
+    url: /^https:\/\//i.test(String(r.productUrl || '')) ? String(r.productUrl) : '',
+    image: /^https:\/\//i.test(String(r.productImageUrl || '')) ? String(r.productImageUrl) : '',
+    price: money2(r.currentPrice),
+    target: money2(r.targetPrice),
+    ship: money2(r.shippingPrice),
+    type: String(r.incentiveType || '').toUpperCase(),
+    status: String(r.incentiveStatus || '').toUpperCase(),
+    baseFee: money2(r.baseReferralFee),
+    reducedFee: money2(r.reducedReferralFee),
+    auto: String(r.enrollmentType || '').toUpperCase() === 'AUTO',
+    stock: r.inventoryCount === null || r.inventoryCount === undefined ? null : Number(r.inventoryCount) || 0,
+    starts: dayOf(r.startDate),
+    expires: dayOf(r.expirationDate),
+    enrolledOn: dayOf(r.enrollmentDate),
+    incentiveId: String(r.incentiveId || ''),
+  };
+}
+
+const programHeader = (feedType, version) => ({
+  requestId: crypto.randomUUID(), requestBatchId: crypto.randomUUID(), processMode: 'REPLACE', subset: 'EXTERNAL',
+  sellingChannel: 'online', version, locale: 'en', feedDate: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), feedType,
+});
+
+function buildIncentiveFeed(items, enroll) {
+  return {
+    ProgramActionFeedHeader: programHeader('INCENTIVE_ENROLLMENT', '5.0.20250322-01_07_46'),
+    ProgramAction: arr(items).map(i => ({
+      ItemIdentifiers: { sku: String(i.sku) },
+      Programs: { IncentivesEnrollment: {
+        referralFeeIncentiveEnrollment: enroll ? 'Y' : 'N',
+        incentiveType: 'Reduced Referral Fee',
+        ...(i.incentiveId ? { incentiveId: String(i.incentiveId) } : {}),
+      } },
+    })),
+  };
+}
+
+function buildWalmartFundedFeed(skus, optIn) {
+  return {
+    ProgramActionFeedHeader: programHeader('PROGRAM_ACTIONS', '5.0.20240805-15_25_31'),
+    ProgramAction: arr(skus).map(sku => ({
+      ItemIdentifiers: { sku: String(sku) },
+      Programs: { WalmartFundedIncentivesEnrollment: { walmartFundedIncentivesEnrollment: optIn ? 'Opt-in' : 'Opt-out' } },
+    })),
+  };
+}
+
+// What a walmart.com product page says about the item, read off the page
+// the Walmart tab's browser shows (owner 2026-10-23: sellers, who has the
+// Buy Box, rating). json = the page's ld+json and __NEXT_DATA__ texts,
+// body = its visible text. Every value is optional: Walmart reshuffles its
+// pages, and a missing value is shown as unknown, never guessed.
+function parseProductPage({ json = [], body = '', title = '', image = '' } = {}) {
+  const all = arr(json).join('\n');
+  const num = (re, src = all) => { const m = re.exec(src); return m ? Number(m[1]) : null; };
+  const str = (re, src = all) => { const m = re.exec(src); return m ? clip(m[1].replace(/\\u0026/g, '&').replace(/\\"/g, '"'), 120) : ''; };
+  const text = String(body || '');
+  // "Compare all 14 sellers" counts everyone; "More seller options (13)"
+  // and additionalOfferCount count the others beside the Buy Box offer
+  let sellers = num(/compare all\s+(\d+)\s+sellers/i, text);
+  if (sellers === null) { const more = num(/more seller options\s*\((\d+)\)/i, text); if (more !== null) sellers = more + 1; }
+  if (sellers === null) { const more = num(/"additionalOfferCount"\s*:\s*(\d+)/); if (more !== null) sellers = more + 1; }
+  const rating = num(/"averageRating"\s*:\s*"?(\d(?:\.\d+)?)/) ?? num(/"ratingValue"\s*:\s*"?(\d(?:\.\d+)?)/);
+  const reviews = num(/"numberOfReviews"\s*:\s*"?(\d+)/) ?? num(/"reviewCount"\s*:\s*"?(\d+)/);
+  const price = num(/"currentPrice"\s*:\s*\{[^{}]*?"price"\s*:\s*(\d+(?:\.\d+)?)/) ?? num(/"price"\s*:\s*"?(\d+(?:\.\d{1,2})?)"?\s*,\s*"priceCurrency"/);
+  let seller = str(/"sellerDisplayName"\s*:\s*"((?:[^"\\]|\\.){1,80})"/) || str(/"sellerName"\s*:\s*"((?:[^"\\]|\\.){1,80})"/);
+  if (!seller) { const m = /sold (?:and shipped )?by\s+([^\n]{2,60})/i.exec(text); if (m) seller = clip(m[1], 60); }
+  return {
+    title: clip(title, 300) || str(/"name"\s*:\s*"((?:[^"\\]|\\.){1,300})"/),
+    image: /^https:\/\//i.test(image) ? String(image) : '',
+    brand: str(/"brand"\s*:\s*(?:\{[^{}]*?"name"\s*:\s*)?"((?:[^"\\]|\\.){1,60})"/),
+    price: price && price > 0 ? Math.round(price * 100) / 100 : 0,
+    rating: rating !== null ? Math.min(5, Math.max(0, rating)) : null,
+    reviews: reviews !== null ? Math.max(0, Math.floor(reviews)) : null,
+    sellers: sellers !== null && sellers > 0 ? sellers : null,
+    buyBoxSeller: seller,
+  };
+}
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
+  parseItemStatus, parseProductPage,
+  parseInsight, parseStrategy, buildStrategy, buildRepricerFeed, parseIncentive, buildIncentiveFeed, buildWalmartFundedFeed, NO_STRATEGY,
 };

@@ -4282,15 +4282,21 @@ exit 1
     return { ok: true };
   });
 
-  /* ---------- List on Walmart: Walmart Marketplace API (owner 2026-10-22) ----------
-     The renderer's dialog finds each SKU on Walmart by name, proves its UPC
-     by identifier lookup, then sends one MP_ITEM_MATCH feed per batch. Each
-     upload is kept in userData/walmart-feeds.json (newest first, last 50) so
-     its per-SKU results can be followed for days; a 15-minute check settles
-     the open ones, sets the starting stock on every accepted SKU once, and
-     says so when an upload finishes. */
-  // same keys as Ship with Walmart (Settings › Shipping); the client keeps
-  // its 15-minute token across calls
+  /* ---------- Walmart tab: list, uploads (owner 2026-10-22 / 23) ----------
+     Approved clickable mockup: variants/walmart-tab-clickable.html.
+     List: the search bar opens walmart.com itself in a view inside the tab
+     (its own session, never the Seller Center pane's); a "List this" button
+     on every product sends its item number here. The picked item's page is
+     read once for its UPC (proven through the API: only a UPC that leads
+     back to that item number is used), sellers, Buy Box holder and rating.
+     The owner types ANY SKU for the listing: nothing is read from or written
+     to Linnworks while listing (owner 2026-10-23). Uploads: one MP_ITEM_MATCH
+     feed per batch, kept in userData/walmart-feeds.json (newest first, last
+     50); a 15-minute check settles open uploads, sets each accepted SKU's
+     starting stock once, reads whether it is live, and says when an upload
+     finishes. Once Linnworks has downloaded a live listing it can be mapped
+     to a Linnworks item from the Uploads tab (same link call as Channel
+     mapping). */
   const wmT = walmart; // the shared Walmart client module
   const wmClient = () => new wmT.WalmartClient(config.load().walmart || {});
   const wmKeys = () => { const w = config.load().walmart || {}; return !!(w.clientId && w.clientSecret); };
@@ -4298,68 +4304,150 @@ exit 1
   const wmReadFeeds = () => { try { return JSON.parse(fs.readFileSync(wmFeedsPath(), 'utf8')) || []; } catch { return []; } };
   const wmWriteFeeds = (list) => fs.writeFileSync(wmFeedsPath(), JSON.stringify(list.slice(0, 50), null, 2), 'utf8');
   const wmSettled = (f) => f.offers.every(o => wmT.isFinal(((f.items || {})[o.sku] || {}).status)) || f.status === 'ERROR';
+  const wmSend = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 
-  ipcMain.handle('walmart:status', () => ({ configured: wmKeys(), shipWeightLb: Number((config.load().walmartListing || {}).shipWeightLb) || 1 }));
-
-  // name search, plus the Linnworks barcode's own item when there is one —
-  // that one comes back first and flagged, since its UPC is already proven
-  ipcMain.handle('walmart:search', async (_e, { query, barcode } = {}) => {
-    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    try {
-      const c = wmClient();
-      const [byName, byUpc] = await Promise.all([
-        c.searchByName(query),
-        barcode ? c.lookupUpc(barcode).catch(() => null) : null,
-      ]);
-      const results = byName.filter(r => !byUpc || r.itemId !== byUpc.itemId);
-      if (byUpc) results.unshift({ ...byUpc, byUpc: true });
-      return { ok: true, results };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
+  ipcMain.handle('walmart:status', () => {
+    const l = config.load().walmartListing || {};
+    return { configured: wmKeys(), shipWeightLb: Number(l.shipWeightLb) || 1, feePct: Number(l.feePct) || 8 };
   });
 
-  ipcMain.handle('walmart:upc', async (_e, { upc } = {}) => {
-    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!wmT.idParam(upc)) return { ok: false, error: 'A UPC is 12 digits (8–14 for other barcodes).' };
-    try {
-      return { ok: true, item: await wmClient().lookupUpc(upc) };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  // Walmart item number -> its UPC (owner 2026-10-22: "I already have the
-  // item ID, can it not find it itself?"). Walmart's API answers UPC ->
-  // item but never item -> UPC, so the item's own walmart.com page is read
-  // once in a hidden window (only when the owner presses the button), every
-  // barcode-looking value on it is collected, and each is looked up through
-  // the API: only a UPC that points back to THIS item number is returned,
-  // so a misread page can never fill in a wrong UPC. Its own session, never
-  // the Seller Center pane's.
+  /* ----- walmart.com inside the tab ----- */
   const WM_SITE_PARTITION = 'persist:walmart-site';
-  ipcMain.handle('walmart:upcFromItem', async (_e, { itemId } = {}) => {
-    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const id = String(itemId || '').replace(/\D/g, '');
-    if (!id) return { ok: false, error: 'Pick the Walmart item first.' };
-    // first the API: Get an item by item number carries gtin / upc (for
-    // items Walmart counts as in this seller's catalog); proven by lookup
+  const WM_SITE = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
+  const wmSiteOk = (u) => {
     try {
-      const c = wmClient();
-      for (const code of (await c.itemIdentifiers(id).catch(() => [])).slice(0, 4)) {
-        const item = await c.lookupUpc(code).catch(() => null);
-        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'api' };
-      }
-    } catch { /* fall through to the product page */ }
-    const site = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
+      const url = new URL(u);
+      if (process.env.CAPTURE_WALMART_SITE && url.origin === new URL(WM_SITE).origin) return true;
+      return url.protocol === 'https:' && (url.hostname === 'walmart.com' || url.hostname.endsWith('.walmart.com'));
+    } catch { return false; }
+  };
+  const wmSiteSession = () => {
     const ses = session.fromPartition(WM_SITE_PARTITION);
+    // present as the Chrome build this is: walmart.com distrusts Electron
     ses.setUserAgent(ses.getUserAgent()
       .replace(/\sElectron\/\S+/i, '')
       .replace(/\s(?:capture[- ]?station|Capture ?Station|dws[- ]?stock)\/\S+/i, ''));
-    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: ses, sandbox: true, contextIsolation: true, javascript: true } });
-    let found = { codes: [], blocked: false };
+    return ses;
+  };
+  // the "List this" buttons: CSS from here (the page's own CSP can't refuse it)
+  const WM_SITE_CSS = `
+    .dws-list { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 50; opacity: 0;
+      font: 600 13px/1 system-ui, sans-serif; color: #fff; background: #1E3A66; border: none; border-radius: 999px;
+      padding: 9px 16px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25); transition: opacity .12s; white-space: nowrap; }
+    [data-dws-card]:hover .dws-list, .dws-list:focus { opacity: 1; }
+    .dws-list:hover { background: #152B4E; }
+    #dws-list-page { position: fixed; top: auto; left: auto; right: 24px; bottom: 24px; transform: none; opacity: 1; font-size: 15px; padding: 13px 22px; }`;
+  let wmSiteView = null;
+  let wmSiteAttached = false;
+  function wmSiteState() {
+    if (!wmSiteView) return;
+    const wc = wmSiteView.webContents;
+    let page = '';
     try {
-      await w.loadURL(`${site}/ip/${id}`).catch(() => {}); // a slow sub-resource is no failure
+      const u = new URL(wc.getURL());
+      const id = /\/ip\/(?:[^/]+\/)?(\d{5,})/.exec(u.pathname);
+      page = id ? `item ${id[1]}` : u.searchParams.get('q') ? `search: ${u.searchParams.get('q')}` : u.hostname.replace(/^www\./, '');
+    } catch { /* about:blank */ }
+    wmSend('wmsite:state', {
+      page, loading: wc.isLoading(),
+      canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(),
+    });
+  }
+  function ensureWmSite() {
+    if (wmSiteView) return wmSiteView;
+    wmSiteSession();
+    wmSiteView = new WebContentsView({
+      webPreferences: {
+        partition: WM_SITE_PARTITION,
+        preload: path.join(__dirname, 'wmsite-preload.js'),
+        contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false,
+      },
+    });
+    const wc = wmSiteView.webContents;
+    wc.on('dom-ready', () => wc.insertCSS(WM_SITE_CSS).catch(() => {}));
+    // walmart.com only: anything else opens in the real browser
+    wc.on('will-navigate', (e, u) => {
+      if (wmSiteOk(u)) return;
+      e.preventDefault();
+      if (/^https?:\/\//i.test(u)) shell.openExternal(u).catch(() => {});
+    });
+    wc.setWindowOpenHandler(({ url }) => {
+      if (wmSiteOk(url)) wc.loadURL(url).catch(() => {});
+      else if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => {});
+      return { action: 'deny' };
+    });
+    wc.on('context-menu', (_e, params) => {
+      const items = [];
+      if (params.isEditable) items.push({ role: 'cut', enabled: params.editFlags.canCut }, { role: 'copy', enabled: params.editFlags.canCopy }, { role: 'paste', enabled: params.editFlags.canPaste });
+      else if ((params.selectionText || '').trim()) items.push({ role: 'copy' });
+      if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+    });
+    for (const ev of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) wc.on(ev, wmSiteState);
+    return wmSiteView;
+  }
+  // the renderer owns the geometry (and hides the view while a dialog is
+  // open: a native view always draws above the page)
+  ipcMain.handle('wmsite:layout', (_e, b = {}) => {
+    if (!win || win.isDestroyed()) return { ok: false };
+    if (!b.visible || config.load().captureOnly) {
+      if (wmSiteView && wmSiteAttached) { win.contentView.removeChildView(wmSiteView); wmSiteAttached = false; win.webContents.focus(); }
+      return { ok: true, visible: false };
+    }
+    ensureWmSite();
+    if (!wmSiteAttached) { win.contentView.addChildView(wmSiteView); wmSiteAttached = true; }
+    const [cw, ch] = win.getContentSize();
+    const x = Math.min(cw, Math.max(0, Math.round(b.x || 0)));
+    const y = Math.min(ch, Math.max(0, Math.round(b.y || 0)));
+    wmSiteView.setBounds({ x, y, width: Math.max(0, Math.min(cw - x, Math.round(b.width || 0))), height: Math.max(0, Math.min(ch - y, Math.round(b.height || 0))) });
+    return { ok: true, visible: true };
+  });
+  // a search, an item number or a walmart.com link -> that page
+  ipcMain.handle('wmsite:go', (_e, { text } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const t = String(text || '').trim();
+    if (!t) return { ok: false, error: 'Type what to search for.' };
+    let url;
+    if (/^https?:\/\//i.test(t)) {
+      if (!wmSiteOk(t)) return { ok: false, error: 'Only walmart.com links open here.' };
+      url = t;
+    } else if (/^\d{6,}$/.test(t)) {
+      url = `${WM_SITE}/ip/${t}`;
+    } else {
+      url = `${WM_SITE}/search?q=${encodeURIComponent(t)}`;
+    }
+    ensureWmSite().webContents.loadURL(url).catch(() => {}); // a slow sub-resource is no failure
+    return { ok: true };
+  });
+  ipcMain.handle('wmsite:nav', (_e, { action } = {}) => {
+    if (!wmSiteView) return { ok: false };
+    const wc = wmSiteView.webContents;
+    if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+    else if (action === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+    else if (action === 'reload') wc.reload();
+    return { ok: true };
+  });
+  // "List this" from the page: only that view may send it, and only an item
+  // number plus what the card showed passes on
+  ipcMain.on('wmsite:pick', (e, d = {}) => {
+    if (!wmSiteView || e.sender !== wmSiteView.webContents) return;
+    const itemId = String(d.itemId || '').replace(/\D/g, '').slice(0, 20);
+    if (!itemId) return;
+    wmSend('wmsite:pick', {
+      itemId,
+      title: String(d.title || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+      price: Number(d.price) > 0 ? Math.round(Number(d.price) * 100) / 100 : 0,
+      image: /^https:\/\//i.test(String(d.image || '')) ? String(d.image).slice(0, 1000) : '',
+    });
+  });
+
+  /* ----- the picked item: UPC + what its page says ----- */
+  // the item's own walmart.com page, read once in a hidden window on the
+  // same session as the tab's view (its robot check, once passed, holds)
+  async function wmReadProductPage(id) {
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true } });
+    let found = { codes: [], blocked: false, page: null };
+    try {
+      await w.loadURL(`${WM_SITE}/ip/${id}`).catch(() => {});
       for (let i = 0; i < 8; i++) {
         found = await w.webContents.executeJavaScript(`(() => {
           const body = document.body ? document.body.innerText : '';
@@ -4374,68 +4462,104 @@ exit 1
           }
           const spec = /\\bUPC\\b[^0-9]{0,24}(\\d{8,14})/i.exec(body);
           if (spec) add(spec[1]);
-          return { codes, blocked, ready: !!(document.getElementById('__NEXT_DATA__') || codes.length) };
-        })()`, true).catch(() => ({ codes: [], blocked: false, ready: false }));
+          const meta = (p) => { const m = document.querySelector('meta[property="' + p + '"]'); return m ? m.content : ''; };
+          return { codes, blocked, ready: !!(document.getElementById('__NEXT_DATA__') || codes.length),
+            page: { json: json.map(t => t.slice(0, 3000000)), body: body.slice(0, 200000), title: meta('og:title') || ((document.querySelector('h1') || {}).innerText || ''), image: meta('og:image') } };
+        })()`, true).catch(() => ({ codes: [], blocked: false, ready: false, page: null }));
         if (found.codes.length || found.blocked || found.ready) break;
         await new Promise(r => setTimeout(r, 750));
       }
     } finally {
       w.destroy();
     }
-    if (found.blocked && !found.codes.length) {
-      return { ok: false, error: 'Walmart.com asked to check this computer is not a robot, so the page could not be read. Open View on Walmart, scroll to Specifications and copy the UPC from there.' };
-    }
-    try {
-      const c = wmClient();
-      for (const code of found.codes.slice(0, 6)) {
+    return found;
+  }
+  ipcMain.handle('walmart:itemDetails', async (_e, { itemId } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick a Walmart item first.' };
+    const c = wmClient();
+    // the 12-digit UPC first (what the box shows): leading zeros of a 13/14
+    // digit GTIN dropped, the GTIN itself kept as a fallback
+    const twelve = (codes) => [...new Set(codes.flatMap(c => (c.length > 12 && /^0+\d{12}$/.test(c) ? [c.slice(-12), c] : [c])))]
+      .sort((a, b) => (b.length === 12) - (a.length === 12));
+    const prove = async (codes) => {
+      for (const code of twelve(codes).slice(0, 6)) {
         const item = await c.lookupUpc(code).catch(() => null);
-        if (item && String(item.itemId) === id) return { ok: true, upc: code, item, source: 'page' };
+        if (item && String(item.itemId) === id) return { code, item };
       }
+      return null;
+    };
+    try {
+      // the page first: it carries the sellers and the Buy Box holder, and
+      // usually the UPC; Get an item (the seller's own catalog) is the
+      // fallback for the UPC when the page shows none
+      const found = await wmReadProductPage(id);
+      const details = found.page ? wmT.parseProductPage(found.page) : null;
+      let hit = await prove(found.codes);
+      if (!hit) hit = await prove(await c.itemIdentifiers(id).catch(() => []));
+      const api = hit ? hit.item : null;
+      const d = details || {};
+      const out = {
+        ok: true, itemId: id,
+        upc: hit ? hit.code : '',
+        title: d.title || (api && api.title) || '', image: d.image || (api && api.image) || '',
+        brand: d.brand || (api && api.brand) || '', price: d.price || (api && api.price) || 0,
+        rating: d.rating ?? (api && api.reviews ? api.rating : null), reviews: d.reviews ?? (api ? api.reviews : null),
+        sellers: d.sellers ?? null, buyBoxSeller: d.buyBoxSeller || '',
+        blocked: !!found.blocked && !found.page,
+      };
+      if (!out.upc) {
+        out.upcNote = found.blocked
+          ? 'walmart.com asked to check this computer is not a robot, so the page could not be read. Solve the check in the page, then pick the item again, or type the UPC from the box.'
+          : found.codes.length
+            ? `The page lists ${found.codes.length === 1 ? 'a barcode' : 'barcodes'} (${found.codes.slice(0, 3).join(', ')}) but none leads back to item ${id}. Type the UPC from the box.`
+            : "This item's page doesn't show a UPC. Type the one from the box.";
+      }
+      return out;
     } catch (e) {
       return { ok: false, error: e.message };
     }
-    return { ok: false, error: found.codes.length
-      ? `This item's page lists ${found.codes.length === 1 ? 'a barcode' : 'barcodes'} (${found.codes.slice(0, 3).join(', ')}) but none leads back to item ${id} on Walmart — scan the box instead.`
-      : "This item's walmart.com page doesn't show a UPC. Scan the box barcode, or copy it from View on Walmart → Specifications." };
+  });
+  // a UPC typed by hand: proven against the picked item like the page's
+  ipcMain.handle('walmart:upc', async (_e, { upc } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!wmT.idParam(upc)) return { ok: false, error: 'A UPC is 12 digits (8–14 for other barcodes).' };
+    try {
+      return { ok: true, item: await wmClient().lookupUpc(upc) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   });
 
+  /* ----- sending + following uploads ----- */
   ipcMain.handle('walmart:submit', async (_e, { offers } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     const list = (offers || []).map(o => ({
-      sku: String(o.sku || '').trim(), stockItemId: o.stockItemId || '', linnworksBarcode: String(o.linnworksBarcode || ''),
-      itemId: String(o.itemId || ''), title: String(o.title || ''), image: String(o.image || ''), url: String(o.url || ''),
-      upc: String(o.upc || '').replace(/\D/g, ''), price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
+      sku: String(o.sku || '').trim(), itemId: String(o.itemId || ''), title: String(o.title || '').slice(0, 300),
+      image: String(o.image || ''), upc: String(o.upc || '').replace(/\D/g, ''),
+      price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
       condition: String(o.condition || ''), mainImageUrl: String(o.mainImageUrl || '').trim(),
     }));
-    const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
     if (!list.length) return { ok: false, error: 'Nothing to send.' };
-    if (bad) return { ok: false, error: `${bad.sku || 'An offer'} is missing its UPC, price, stock or shipping weight.` };
+    const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
+    if (bad) return { ok: false, error: `${bad.sku || 'A listing'} is missing its SKU, UPC, price, quantity or shipping weight.` };
+    const dupe = list.find((o, i) => list.findIndex(x => x.sku.toUpperCase() === o.sku.toUpperCase()) !== i);
+    if (dupe) return { ok: false, error: `${dupe.sku} is in the batch twice. Each listing needs its own SKU.` };
     // Pre-Owned offers (the owner is approved, 2026-10-22) must carry a photo
     const badCond = list.find(o => !wmT.MATCH_CONDITIONS.includes(o.condition)
       || (o.condition !== 'New' && !/^https:\/\//i.test(o.mainImageUrl)));
     if (badCond) {
       return { ok: false, error: wmT.MATCH_CONDITIONS.includes(badCond.condition)
-        ? `${badCond.sku}: ${badCond.condition} offers need a photo link (https://…).`
+        ? `${badCond.sku}: ${badCond.condition} listings need a photo link (https://…).`
         : `${badCond.sku}: choose its condition.` };
     }
     try {
-      const c = wmClient();
-      const feedId = await c.submitMatchFeed(list);
-      const feed = { feedId, at: new Date().toISOString(), status: 'RECEIVED', items: {}, counts: {}, invSet: {}, offers: list };
+      const feedId = await wmClient().submitMatchFeed(list);
+      const feed = { feedId, at: new Date().toISOString(), status: 'RECEIVED', items: {}, counts: {}, invSet: {}, live: {}, mapped: {}, offers: list };
       wmWriteFeeds([feed, ...wmReadFeeds().filter(f => f.feedId !== feedId)]);
-      // the proven UPC becomes the Linnworks barcode where there was none,
-      // so the next restock lists without a scan — best effort, never blocks
-      const failed = [];
-      const lw = new LinnworksClient(cfg.linnworks);
-      for (const o of list) {
-        if (o.linnworksBarcode || !o.stockItemId) continue;
-        try { await lw.setBarcode(o.stockItemId, o.upc); } catch { failed.push(o.sku); }
-      }
-      return {
-        ok: true, feed,
-        barcodeNote: failed.length ? `Sent to Walmart. Linnworks didn't take the UPC as the barcode for ${failed.join(', ')} — add it there by hand.` : '',
-      };
+      return { ok: true, feed };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -4444,31 +4568,41 @@ exit 1
   ipcMain.handle('walmart:feeds', () => ({ ok: true, feeds: wmReadFeeds() }));
 
   // re-read one upload's per-SKU results; accepted SKUs get their starting
-  // stock once (an offer set up by match has no quantity of its own)
+  // stock once (an offer set up by match has no quantity of its own) and
+  // their live status (published / unpublished, with Walmart's reasons)
   async function wmCheckFeed(feedId) {
     const list = wmReadFeeds();
     const f = list.find(x => x.feedId === feedId);
     if (!f) throw new Error('That upload is not on this computer.');
     const c = wmClient();
-    const st = await c.feedStatus(feedId);
-    f.status = st.status;
-    f.counts = st.counts;
-    f.items = { ...(f.items || {}), ...st.items };
-    f.error = st.feedErrors.join('; ');
+    if (!wmSettled(f)) {
+      const st = await c.feedStatus(feedId);
+      f.status = st.status;
+      f.counts = st.counts;
+      f.items = { ...(f.items || {}), ...st.items };
+      f.error = st.feedErrors.join('; ');
+    }
     f.checkedAt = new Date().toISOString();
     f.invSet = f.invSet || {};
+    f.live = f.live || {};
     for (const o of f.offers) {
-      const s = f.items[o.sku];
-      if (!s || s.status !== 'SUCCESS' || f.invSet[o.sku]) continue;
-      try {
-        await c.setInventory(o.sku, o.qty);
-        f.invSet[o.sku] = true;
-      } catch (e) {
-        s.errors = [...(s.errors || []), `Listed, but the starting stock didn't save (${e.message}) — Linnworks sets it once it links the listing.`];
+      const s = (f.items || {})[o.sku];
+      if (!s || s.status !== 'SUCCESS') continue;
+      if (!f.invSet[o.sku]) {
+        try {
+          await c.setInventory(o.sku, o.qty);
+          f.invSet[o.sku] = true;
+        } catch (e) {
+          s.errors = [...(s.errors || []), `Listed, but the starting stock didn't save (${e.message}). Set it in Seller Center or map it to Linnworks.`];
+          f.invSet[o.sku] = 'failed';
+        }
+      }
+      if ((f.live[o.sku] || {}).published !== 'PUBLISHED') {
+        try { f.live[o.sku] = { ...(await c.itemStatus(o.sku)), at: new Date().toISOString() }; } catch { /* next check */ }
       }
     }
     wmWriteFeeds(list);
-    if (win && !win.isDestroyed()) win.webContents.send('walmart:feed', f);
+    wmSend('walmart:feed', f);
     return f;
   }
 
@@ -4480,24 +4614,24 @@ exit 1
     }
   });
 
-  // the 15-minute check: open uploads under a week old; a finished one says
-  // so once ("3 accepted, 1 not accepted")
+  // the 15-minute check: uploads under a week old that are open or have a
+  // listing not live yet; a finished upload says so once
   async function wmPoll() {
     const cfg = config.load();
     if (cfg.captureOnly || !wmKeys()) return;
     for (const f of wmReadFeeds()) {
-      if (f.notified || Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      if (Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      const waitingLive = f.offers.some(o => ((f.items || {})[o.sku] || {}).status === 'SUCCESS' && ((f.live || {})[o.sku] || {}).published !== 'PUBLISHED');
+      if (f.notified && !waitingLive) continue;
       try {
         const g = await wmCheckFeed(f.feedId);
-        if (!wmSettled(g)) continue;
+        if (!wmSettled(g) || g.notified) continue;
         const sts = g.offers.map(o => ((g.items || {})[o.sku] || {}).status);
         const ok = sts.filter(s => s === 'SUCCESS').length;
         const list = wmReadFeeds();
         const rec = list.find(x => x.feedId === g.feedId);
         if (rec) { rec.notified = true; wmWriteFeeds(list); }
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('app:notice', { message: `Walmart upload finished: ${ok} accepted${sts.length - ok ? `, ${sts.length - ok} not accepted (Stock → Actions → Walmart uploads)` : ''}.` });
-        }
+        wmSend('app:notice', { message: `Walmart upload finished: ${ok} accepted${sts.length - ok ? `, ${sts.length - ok} turned down (Walmart → Uploads)` : ''}.` });
       } catch { /* next round retries */ }
     }
   }
@@ -4505,6 +4639,168 @@ exit 1
     setTimeout(() => wmPoll().catch(() => {}), 60 * 1000);
     setInterval(() => wmPoll().catch(() => {}), 15 * 60 * 1000);
   }
+
+  /* ----- mapping a live listing to Linnworks ----- */
+  // every Walmart channel's downloaded listings in Linnworks (the feed the
+  // Channel mapping screen reads, same 10-minute cache): SKU -> listing
+  async function wmLinnworksListings(force) {
+    const cfg = config.load();
+    const client = new LinnworksClient(cfg.linnworks);
+    const chans = (await client.getMappingChannels()).filter(c => /walmart/i.test(c.source));
+    const bySku = {};
+    for (const ch of chans) {
+      const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+      const hit = mappingCache.get(key);
+      let items = hit && !force && Date.now() - hit.at < 10 * 60 * 1000 ? hit.items : null;
+      if (!items) {
+        items = await client.getChannelItems(ch.id, ch.source, ch.subSource);
+        mappingCache.set(key, { at: Date.now(), items });
+      }
+      for (const it of items) {
+        if (!it.sku) continue;
+        bySku[String(it.sku).toUpperCase()] = { linked: !!it.linked, source: ch.source, subSource: ch.subSource, refId: it.channelRefId || '' };
+      }
+    }
+    return { channels: chans.length, bySku };
+  }
+  // for each sent listing: has Linnworks downloaded it yet, is it linked
+  ipcMain.handle('walmart:mapState', async (_e, { skus, force } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const { channels, bySku } = await wmLinnworksListings(!!force);
+      if (!channels) return { ok: false, error: 'Linnworks has no Walmart channel connected.' };
+      const out = {};
+      for (const s of skus || []) {
+        const r = bySku[String(s).toUpperCase()];
+        out[s] = r ? { state: r.linked ? 'linked' : 'ready', source: r.source, subSource: r.subSource, refId: r.refId } : { state: 'waiting' };
+      }
+      return { ok: true, states: out };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // remember which Linnworks SKU a sent listing was mapped to here, so the
+  // Uploads tab names it before Linnworks' next listing download says so
+  ipcMain.handle('walmart:noteMapped', (_e, { sku, targetSku } = {}) => {
+    const list = wmReadFeeds();
+    for (const f of list) {
+      if (f.offers.some(o => o.sku === sku)) { f.mapped = { ...(f.mapped || {}), [sku]: String(targetSku || '') }; }
+    }
+    wmWriteFeeds(list);
+    return { ok: true };
+  });
+
+  /* ----- Pricing: repricer strategies + the items losing the Buy Box -----
+     Pricing Insights gives every listing's price, Buy Box price and win
+     rate, and its repricer strategy with min / max, in one paged call.
+     Break-even = the listing's cost (the cost store, by the Walmart SKU or
+     the Linnworks SKU it maps to) plus Walmart's referral fee. */
+  const wmFeePct = () => Math.min(50, Math.max(0, Number((config.load().walmartListing || {}).feePct) || 8));
+  ipcMain.handle('walmart:pricing', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const c = wmClient();
+      const [items, strategies] = await Promise.all([c.pricingInsights(), c.strategies()]);
+      syncCosts();
+      const costs = db.costsAll();
+      const map = recoveryChannelMap();
+      for (const it of items) {
+        const k = it.sku.toUpperCase();
+        const row = costs[k] || costs[String(map.get(k) || '').toUpperCase()];
+        it.cost = row && Number(row.cost) > 0 ? Number(row.cost) : null;
+      }
+      return { ok: true, items, strategies, at: new Date().toISOString(), feePct: wmFeePct() };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:saveStrategy', async (_e, s = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!String(s.name || '').trim()) return { ok: false, error: 'Give the strategy a name.' };
+    try {
+      return { ok: true, strategy: await wmClient().saveStrategy(s) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:deleteStrategy', async (_e, { id } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      await wmClient().deleteStrategy(id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // one Save: strategy / min / max moves go up as one repricer feed, typed
+  // prices (items on no strategy) one by one
+  ipcMain.handle('walmart:pricingSave', async (_e, { repricer = [], prices = [] } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const c = wmClient();
+    const out = { ok: true, feedId: '', priced: 0, failed: [] };
+    try {
+      if (repricer.length) {
+        const bad = repricer.find(r => r.strategy && !(Number(r.min) > 0 && Number(r.max) >= Number(r.min)));
+        if (bad) return { ok: false, error: `${bad.sku}: its min must be above 0 and its max at least the min.` };
+        out.feedId = await c.repricerFeed(repricer);
+      }
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    for (const p of prices) {
+      if (!(Number(p.price) > 0)) { out.failed.push(`${p.sku}: no price`); continue; }
+      try { await c.setPrice(p.sku, p.price); out.priced++; } catch (e) { out.failed.push(`${p.sku}: ${e.message}`); }
+    }
+    return out;
+  });
+
+  /* ----- Incentives (owner 2026-10-23: like Seller Center's Incentives page) ----- */
+  ipcMain.handle('walmart:incentives', async () => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const c = wmClient();
+      const [rrReady, rrActive, wfIn, wfOut] = await Promise.all([
+        c.incentives('REDUCED_REFERRAL', 'ELIGIBLE'), c.incentives('REDUCED_REFERRAL', 'ENROLLED'),
+        c.incentives('WALMART_FUNDED', 'ENROLLED'), c.incentives('WALMART_FUNDED', 'ELIGIBLE'),
+      ]);
+      return { ok: true, rrReady, rrActive, wfIn, wfOut, wfAll: (config.load().walmartListing || {}).wfAll || null, at: new Date().toISOString() };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:incentiveEnroll', async (_e, { items = [], enroll } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!items.length) return { ok: false, error: 'Pick at least one item.' };
+    try {
+      return { ok: true, feedId: await wmClient().incentiveEnroll(items, !!enroll) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:wfOpt', async (_e, { skus = [], optIn } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!skus.length) return { ok: false, error: 'Pick at least one item.' };
+    try {
+      return { ok: true, feedId: await wmClient().walmartFundedOpt(skus, !!optIn) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Walmart has no call that reads this setting back, so the last one made
+  // here is remembered (with when: Walmart locks it for 4 hours)
+  ipcMain.handle('walmart:wfAll', async (_e, { on } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const r = await wmClient().walmartFundedAll(!!on);
+      const wfAll = { on: r.on, at: new Date().toISOString() };
+      config.save({ walmartListing: { ...(config.load().walmartListing || {}), wfAll } });
+      return { ok: true, ...r, wfAll };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
 
   /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
 

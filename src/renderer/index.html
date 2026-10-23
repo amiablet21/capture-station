@@ -189,32 +189,62 @@
        Toolbar docked to the sheet as a spreadsheet header band (owner pick
        2026-08-17, mockup B): search + chips left, stats + gaps + actions
        right, the table growing straight out of the band's bottom edge -->
-  <!-- List on Walmart (owner 2026-10-22, approved mockup
-       variants/walmart-api-lister.html; its own tab at the owner's ask):
-       add SKUs from the inventory, search Walmart by name only when asked,
-       confirm the item + UPC, set condition / price / stock, review, send
-       one feed, track it. renderer.js draws steps, body and foot. -->
+  <!-- Walmart tab (owner 2026-10-22 / 23, approved clickable mockup
+       variants/walmart-tab-clickable.html): List (walmart.com shown in a
+       native view over #wlSite, "List this" on each product, any SKU),
+       Uploads (one row per listing: Walmart status + Map to Linnworks),
+       Pricing (repricer strategies, items losing the Buy Box) and
+       Incentives (Seller Center's Incentives page). renderer.js draws them. -->
   <section id="walmartPage" class="wlp" hidden>
     <div class="wlp-card">
       <div class="wl-head">
-        <h2 class="dlg-title">List on Walmart</h2>
+        <h2 class="dlg-title">Walmart</h2>
         <div class="wlp-tabs" role="tablist">
           <button type="button" class="wlp-tab is-on" data-wltab="list">List</button>
-          <button type="button" class="wlp-tab" data-wltab="uploads">Uploads</button>
+          <button type="button" class="wlp-tab" data-wltab="uploads">Uploads<span id="wlUpDot" class="wl-tabdot" hidden></span></button>
+          <button type="button" class="wlp-tab" data-wltab="pricing">Pricing</button>
+          <button type="button" class="wlp-tab" data-wltab="incentives">Incentives</button>
         </div>
         <span id="wlAcct" class="wl-acct"></span>
       </div>
-      <div id="wlAddRow" class="wlp-add">
-        <div class="combo wlp-add-combo">
-          <input id="wlAdd" class="input mono" type="text" placeholder="Add a SKU to list: type its SKU, title or barcode…"
-                 autocomplete="off" spellcheck="false" role="combobox" aria-label="Add a SKU" />
-          <div id="wlAddList" class="combo-list" hidden></div>
+      <div id="wlNoKeys" class="wl-empty" hidden><b>Connect Walmart first.</b> Add your Walmart Marketplace API keys (Client ID and Client secret, made at developer.walmart.com under API Keys) in Settings › Shipping, the same keys Ship with Walmart labels use, then press Test.
+        <div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div></div>
+
+      <!-- List: search opens walmart.com; the offer panel sits beside it -->
+      <div id="wlSecList" class="wl-sec">
+        <form id="wlSearch" class="wl-sbar" autocomplete="off">
+          <button type="button" class="btn-icon" data-wlnav="back" id="wlBack" title="Back" aria-label="Back">‹</button>
+          <button type="button" class="btn-icon" data-wlnav="forward" id="wlFwd" title="Forward" aria-label="Forward">›</button>
+          <button type="button" class="btn-icon" data-wlnav="reload" id="wlReload" title="Reload" aria-label="Reload">↻</button>
+          <input id="wlQ" class="input" type="text" placeholder="Search Walmart, or paste an item number or walmart.com link" spellcheck="false" aria-label="Search Walmart" />
+          <button type="submit" class="btn btn-primary">Search</button>
+          <span id="wlPage" class="wl-pagelbl"></span>
+        </form>
+        <div class="wl-lgrid">
+          <div id="wlSite" class="wl-site"><div id="wlSiteNote" class="wl-site-note"></div></div>
+          <aside id="wlOffer" class="wl-offerp"></aside>
         </div>
-        <span class="wlp-add-hint">Searches your Linnworks inventory. Nothing goes to Walmart until you press Search.</span>
+        <div id="wlTray" class="wl-tray" hidden></div>
       </div>
-      <div id="wlSteps" class="wl-steps"></div>
-      <div id="wlBody" class="wl-body"></div>
-      <div id="wlFoot" class="wl-foot"></div>
+
+      <!-- Uploads: every listing sent from here -->
+      <div id="wlSecUploads" class="wl-sec" hidden>
+        <div class="wl-bar" id="wlUpBar"></div>
+        <div class="wl-scroll" id="wlUpBody"></div>
+      </div>
+
+      <!-- Pricing: repricer strategies and the items losing the Buy Box -->
+      <div id="wlSecPricing" class="wl-sec" hidden>
+        <div class="wl-scroll" id="wlPrBody"></div>
+        <div class="wl-savebar" id="wlPrSave" hidden></div>
+      </div>
+
+      <!-- Incentives: reduced referral fees + Walmart-funded discounts -->
+      <div id="wlSecIncent" class="wl-sec" hidden>
+        <div class="wl-progtabs" id="wlIncProg"></div>
+        <div class="wl-bar" id="wlIncBar"></div>
+        <div class="wl-scroll" id="wlIncBody"></div>
+      </div>
     </div>
   </section>
 
@@ -862,6 +892,55 @@
       <div class="dlg-actions">
         <span class="prh-foot">Every change from every desktop — Revert pushes the old price back</span>
         <button id="prHistClose" class="btn btn-ghost" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Walmart tab: one confirm step for sends, enrollments and opt-outs -->
+  <dialog id="wlConfirm" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="wlCfTitle"></h2>
+      <p class="dlg-note" id="wlCfText"></p>
+      <ul class="wl-cf-list" id="wlCfList"></ul>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost" id="wlCfNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlCfYes"></button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Walmart tab: map a live listing to a Linnworks item -->
+  <dialog id="wlMapDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="wlMapTitle">Map to Linnworks</h2>
+      <p class="dlg-note">Pick the Linnworks item this Walmart listing sells. Linnworks then syncs its stock and links its orders.</p>
+      <div class="combo wl-map-combo">
+        <input id="wlMapQ" class="input mono" type="text" placeholder="Search your Linnworks SKUs…" autocomplete="off" spellcheck="false" role="combobox" aria-label="Linnworks SKU" />
+        <div id="wlMapList" class="combo-list" hidden></div>
+      </div>
+      <div class="wl-map-sugg" id="wlMapSugg"></div>
+      <p class="dlg-note wl-err-t" id="wlMapErr" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost" id="wlMapNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlMapYes" disabled>Link</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Walmart tab: create or edit a repricer strategy -->
+  <dialog id="wlStratDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="wlStTitle">Strategy</h2>
+      <p class="dlg-note">Walmart's repricer moves each item's price by this rule, never below its min or above its max.</p>
+      <div class="ebg-row"><label for="wlStName">Name</label><input id="wlStName" class="input" autocomplete="off" maxlength="120" /></div>
+      <div class="ebg-row"><label for="wlStType">Follow</label><select id="wlStType" class="input"><option value="Buy Box Price">The Buy Box price</option><option value="Competitive Price">The lowest competitor price</option></select></div>
+      <div class="ebg-row"><label for="wlStVal">Beat it by</label><span class="wl-st-amt"><input id="wlStVal" class="input mono" inputmode="decimal" autocomplete="off" /><select id="wlStUnit" class="input"><option value="$">$</option><option value="%">%</option></select></span></div>
+      <p class="dlg-note">0 matches it.</p>
+      <p class="dlg-note wl-err-t" id="wlStErr" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost rn-del" id="wlStDel" hidden>Delete strategy…</button>
+        <button type="button" class="btn btn-ghost" id="wlStNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlStYes">Save</button>
       </div>
     </div>
   </dialog>
