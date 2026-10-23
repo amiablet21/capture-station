@@ -221,6 +221,30 @@ tr.fade td { animation: fade .5s ease; }
 .savebar { display: flex; gap: 8px; align-items: center; padding: 12px 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .savebar .spacer { flex: 1; }
 
+.rp-sum { padding: 0 20px 12px; display: flex; gap: 8px 16px; align-items: baseline; flex-wrap: wrap; }
+.rp-sum b { font-size: 18px; font-weight: 700; color: var(--neg-text); font-variant-numeric: tabular-nums; }
+.rp-sum .of { font-size: 14px; font-weight: 600; }
+.rp-sum .age { font-size: 12px; color: var(--muted); }
+.rp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; padding: 0 20px 14px; }
+.rp-card { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rp-card:hover { border-color: var(--accent); }
+.rp-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--row-on); }
+.rp-card .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-card .c { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rp-card .c b { color: var(--neg-text); }
+.rp-card.add { border-style: dashed; color: var(--accent); font-weight: 600; justify-content: center; align-items: center; }
+.rp-head { display: flex; gap: 10px; align-items: center; padding: 4px 20px 0; flex-wrap: wrap; }
+.rp-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.rp-head span { font-size: 12.5px; color: var(--muted); }
+.mm-in { width: 76px; text-align: right; font-variant-numeric: tabular-nums; padding: 5px 7px; }
+.mm-in.chg, select.chg { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.why { font-size: 12.5px; color: var(--muted); max-width: 300px; }
+.why b { color: var(--text); font-weight: 600; }
+.fix { margin-top: 5px; }
+.win-t { color: var(--pos-text); font-weight: 700; }
+.lose-t { color: var(--neg-text); font-weight: 700; }
+.st-form { padding: 0 20px; display: flex; flex-direction: column; gap: 10px; }
+.st-rule { display: grid; grid-template-columns: 1.6fr 1fr .7fr; gap: 8px; }
 .scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; padding: 16px; z-index: 20; }
 .dlg { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: min(520px, 100%); box-shadow: 0 20px 50px var(--shadow); max-height: 90vh; display: flex; flex-direction: column; }
 .dlg h2 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; margin: 0; padding: 18px 20px 4px; }
@@ -274,8 +298,11 @@ tr.fade td { animation: fade .5s ease; }
 
     <!-- Pricing -->
     <section id="sec-pricing" hidden>
+      <div class="rp-sum" id="rpSum"></div>
+      <div class="rp-cards" id="rpCards"></div>
+      <div class="rp-head" id="rpHead"></div>
       <div class="bar" id="pBar"></div>
-      <div class="tbl-wrap"><table><thead><tr><th>SKU</th><th class="num">Price</th><th>Buy Box</th><th>Repricer</th><th>Incentive</th></tr></thead><tbody id="pBody"></tbody></table></div>
+      <div class="tbl-wrap"><table><thead id="pHead"></thead><tbody id="pBody"></tbody></table></div>
       <div class="savebar" id="pSave" hidden></div>
     </section>
 
@@ -309,6 +336,21 @@ tr.fade td { animation: fade .5s ease; }
     <div class="mapq"><input id="mapQ" type="search" placeholder="Search your Linnworks SKUs" autocomplete="off" aria-label="Search Linnworks SKUs"></div>
     <div class="maplist" id="mapList"></div>
     <div class="foot"><button type="button" class="btn btn-ghost" id="mNo">Cancel</button><button type="button" class="btn btn-primary" id="mYes" disabled>Link</button></div>
+  </div>
+</div>
+<div class="scrim" id="stDlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="stTitle">
+    <h2 id="stTitle">Strategy</h2>
+    <p>Walmart's repricer moves each item's price by this rule, never below its min or above its max.</p>
+    <div class="st-form">
+      <label class="f"><span>Name</span><input id="stName" autocomplete="off"></label>
+      <div class="st-rule">
+        <label class="f"><span>Rule</span><select id="stRule"><option value="beat">Beat the Buy Box by</option><option value="match">Match the Buy Box</option></select></label>
+        <label class="f" id="stAmtWrap"><span>Amount</span><input id="stAmt" class="mono" inputmode="decimal"></label>
+        <label class="f" id="stUnitWrap"><span>In</span><select id="stUnit"><option value="$">$</option><option value="%">%</option></select></label>
+      </div>
+    </div>
+    <div class="foot"><button type="button" class="btn btn-ghost" id="stNo">Cancel</button><button type="button" class="btn btn-primary" id="stYes">Save</button></div>
   </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -348,6 +390,34 @@ const LINN = [
 ];
 const CONDS = ['New', 'Pre-Owned: Like New', 'Pre-Owned: Good', 'Pre-Owned: Fair', 'Remanufactured'];
 
+function genPricing() {
+  // 146 sample listings: 23 losing the Buy Box (owner's own example)
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const models = [['S25', 699, ['128GB', '256GB'], ['NAVY', 'ICYBLUE', 'SILVER']], ['S24', 549, ['128GB', '256GB'], ['BLACK', 'VIOLET']], ['S24FE', 409, ['128GB'], ['MINT', 'GRAPHITE', 'BLUE']],
+    ['S23', 449, ['128GB', '256GB'], ['CREAM', 'BLACK']], ['A15', 142, ['128GB'], ['BLACK', 'BLUE']], ['A25', 219, ['128GB'], ['BLUE', 'BLACK']], ['A35', 299, ['128GB'], ['NAVY', 'LILAC']],
+    ['X110', 124.99, ['64GB', '128GB'], ['GRAY', 'SILVER']], ['X210', 219, ['128GB'], ['SILVER', 'GRAY']], ['ZFLIP6', 899, ['256GB'], ['MINT', 'BLUE']], ['TABS9FE', 399, ['128GB'], ['GRAY', 'MINT']]];
+  const pre = [['', 1], ['OPEN-BOX-', .9], ['USED-', .72]];
+  const skus = [];
+  models.forEach(([m, base, sts, cols]) => sts.forEach((st, si) => cols.forEach(c => pre.forEach(([p, f]) => skus.push({ sku: `${p}${m}-${st}-${c}`, base: Math.round(base * f * (1 + si * .15)) - .01 })))));
+  const plan = [['s1', 86, 14], ['s2', 34, 5], ['s3', 10, 2], ['', 16, 2]];
+  const rows = []; let k = 0;
+  plan.forEach(([st, n, lose]) => {
+    for (let i = 0; i < n; i++) {
+      const x = skus[k++ % skus.length]; const price = x.base;
+      const losing = i < lose;
+      let bb, min, max, why = '';
+      if (!losing) { bb = price; min = Math.round(price * .85); max = Math.round(price * 1.12); }
+      else if (!st) { bb = Math.round(price * (0.93 + rnd() * .04) * 100) / 100; min = 0; max = 0; }
+      else if (i % 3 !== 2) { bb = Math.round(price * (0.9 + rnd() * .05) * 100) / 100; min = Math.round(price * .97); max = Math.round(price * 1.1); }
+      else { bb = Math.round((price + 1 + rnd() * 4) * 100) / 100; min = Math.round(price * .85); max = Math.round(price * 1.1); why = 'other'; }
+      rows.push({ sku: x.sku, price, orig: price, bb, win: !losing, strat: st, stratOrig: st, min, max, minOrig: min, maxOrig: max, why });
+    }
+  });
+  return { sel: 'all', show: 'losing', picked: new Set(), rows, strats: [
+    { id: 's1', name: 'Beat Buy Box by $1', rule: 'beat', amt: 1, unit: '$' },
+    { id: 's2', name: 'Match Buy Box', rule: 'match', amt: 0, unit: '$' },
+    { id: 's3', name: 'Open box: beat by 2%', rule: 'beat', amt: 2, unit: '%' } ], editing: null };
+}
 const SEED = () => ({
   sub: 'list',
   list: { q: 'samsung galaxy', results: null, pick: null, sku: '', cond: 'New', price: '', qty: '', batch: [] },
@@ -361,15 +431,7 @@ const SEED = () => ({
   sentFilter: 'all',
   mapFor: null, mapPick: '', mapQ: '',
   upNew: false,
-  pricing: { filter: 'all', rows: [
-    { sku: 'S25-128GB-NAVY', price: 699, orig: 699, bb: 684.99, rp: 'Beat by $1', rpOrig: 'Beat by $1', inc: 'Lower fee', incSku: 'r1' },
-    { sku: 'S23-128GB-CREAM', price: 449, orig: 449, bb: null, rp: 'Match', rpOrig: 'Match', inc: 'Lower fee', incSku: 'r7' },
-    { sku: 'X110-64GB-GRAY', price: 124.99, orig: 124.99, bb: 119.00, rp: 'None', rpOrig: 'None', inc: 'Lower fee', incSku: 'r6' },
-    { sku: 'A15-128GB-BLACK', price: 142, orig: 142, bb: null, rp: 'None', rpOrig: 'None', inc: 'Lower fee', incSku: 'r2' },
-    { sku: 'OPEN-BOX-S24-256GB-BLACK', price: 529, orig: 529, bb: 519.95, rp: 'Beat by 2%', rpOrig: 'Beat by 2%', inc: '', incSku: '' },
-    { sku: 'S24FE-128GB-MINT', price: 409, orig: 409, bb: null, rp: 'Beat by $1', rpOrig: 'Beat by $1', inc: 'Lower fee', incSku: 'r8' },
-    { sku: 'USED-X110-64GB-GRAY', price: 89, orig: 89, bb: 84.50, rp: 'None', rpOrig: 'None', inc: '', incSku: '' },
-  ] },
+  pricing: genPricing(),
   rrf: [
     { id: 'r1', name: 'Samsung Galaxy S25 128GB Unlocked, Navy', sku: 'S25-128GB-NAVY', itemId: '5310492875', price: 699, target: 689, base: 8, red: 6, inv: 12, exp: 'Nov 30', state: 'ready' },
     { id: 'r2', name: 'Samsung Galaxy A15 128GB Unlocked, Black', sku: 'A15-128GB-BLACK', itemId: '7720419386', price: 142, target: 142, base: 8, red: 5, inv: 31, exp: 'Nov 30', state: 'ready' },
@@ -518,30 +580,87 @@ function renderMap() {
 function closeMap() { S.mapFor = null; $('mapDlg').hidden = true; }
 
 /* ---------- Pricing ---------- */
+const stratOf = (id) => S.pricing.strats.find(x => x.id === id);
+function ruleText(st) { return st.rule === 'match' ? 'Same price as the Buy Box' : st.unit === '$' ? `$${st.amt.toFixed(2)} under the Buy Box` : `${st.amt}% under the Buy Box`; }
+function targetFor(r) {
+  const st = stratOf(r.strat); if (!st) return null;
+  const t = st.rule === 'match' ? r.bb : st.unit === '$' ? r.bb - st.amt : r.bb * (1 - st.amt / 100);
+  return Math.round(t * 100) / 100;
+}
+function diagnose(r) {
+  if (r.win) return { k: 'win' };
+  if (!r.strat) return { k: 'none' };
+  const t = targetFor(r);
+  if (r.min && t < r.min) return { k: 'min', t };
+  if (r.why === 'other') return { k: 'other' };
+  return { k: 'pending', t };
+}
+function changed(r) { return r.strat !== r.stratOrig || r.min !== r.minOrig || r.max !== r.maxOrig || r.price !== r.orig; }
 function renderPricing() {
-  const P = S.pricing;
-  const losing = P.rows.filter(r => r.bb != null).length, inc = P.rows.filter(r => r.inc).length;
-  $('pBar').innerHTML = `<button type="button" class="chip" data-pf="all" aria-pressed="${P.filter === 'all'}">All<b>${P.rows.length}</b></button>
-    <button type="button" class="chip" data-pf="losing" aria-pressed="${P.filter === 'losing'}">Losing Buy Box<b>${losing}</b></button>
-    <button type="button" class="chip" data-pf="inc" aria-pressed="${P.filter === 'inc'}">Has incentive<b>${inc}</b></button>`;
-  const rows = P.rows.filter(r => P.filter === 'all' || (P.filter === 'losing' ? r.bb != null : !!r.inc));
-  $('pBody').innerHTML = rows.map(r => {
-    const i = P.rows.indexOf(r);
-    const incRow = r.incSku && S.rrf.find(x => x.id === r.incSku);
-    const joined = incRow && incRow.state !== 'ready';
-    const incCell = !r.inc ? '<span class="dash">—</span>' : `<div class="inc-cell">${r.inc} ${joined ? '<span class="joined">✓ Joined</span>' : `<button type="button" class="row-btn on" data-join="${r.incSku}">Join</button>`}</div>`;
-    return `<tr><td class="sku">${esc(r.sku)}</td>
-      <td class="num"><input class="p-in ${r.price !== r.orig ? 'chg' : ''}" data-price="${i}" inputmode="decimal" value="${r.price.toFixed(2)}" aria-label="Price for ${esc(r.sku)}"></td>
-      <td>${r.bb == null ? '<span class="yes">Yes</span>' : `<span class="no">No<small>${money(r.bb)} wins</small></span>`}</td>
-      <td><select data-rp="${i}" class="${r.rp !== r.rpOrig ? 'chg' : ''}" aria-label="Repricer for ${esc(r.sku)}">${['None', 'Beat by $1', 'Beat by 2%', 'Match'].map(o => `<option ${o === r.rp ? 'selected' : ''}>${o}</option>`).join('')}</select></td>
-      <td>${incCell}</td></tr>`;
-  }).join('');
+  const P = S.pricing, all = P.rows;
+  const losing = all.filter(r => !r.win);
+  $('rpSum').innerHTML = `<b>${losing.length}</b><span class="of">of ${all.length} items losing the Buy Box</span><span class="age">Walmart data from 14 min ago</span>`;
+  const card = (key, name, list) => `<button type="button" class="rp-card" data-strat="${key}" aria-pressed="${P.sel === key}"><span class="n">${esc(name)}</span><span class="c">${plural(list.length, 'item')} · <b>${list.filter(r => !r.win).length} losing</b></span></button>`;
+  $('rpCards').innerHTML = card('all', 'All items', all) + P.strats.map(st => card(st.id, st.name, all.filter(r => r.strat === st.id))).join('')
+    + card('none', 'No strategy', all.filter(r => !r.strat)) + '<button type="button" class="rp-card add" id="stNew">+ New strategy</button>';
+  const inSel = all.filter(r => P.sel === 'all' || (P.sel === 'none' ? !r.strat : r.strat === P.sel));
+  const st = stratOf(P.sel);
+  $('rpHead').innerHTML = st ? `<h3>${esc(st.name)}</h3><span>${ruleText(st)}, within each item's min – max</span><button type="button" class="linkish" data-editstrat="${st.id}">Edit rule</button>`
+    : `<h3>${P.sel === 'none' ? 'No strategy' : 'All items'}</h3><span>${P.sel === 'none' ? 'Prices stay where you set them' : 'Every Walmart listing'}</span>`;
+  const nLose = inSel.filter(r => !r.win).length;
+  const nPick = [...P.picked].filter(i => inSel.includes(all[i])).length;
+  $('pBar').innerHTML = `<button type="button" class="chip" data-show="losing" aria-pressed="${P.show === 'losing'}">Losing<b>${nLose}</b></button>
+    <button type="button" class="chip" data-show="all" aria-pressed="${P.show === 'all'}">All<b>${inSel.length}</b></button><span class="spacer"></span>
+    ${nPick ? `<span class="prog-pref">Move ${nPick} to <select id="bulkMove" aria-label="Move selected to strategy"><option value="">Pick a strategy…</option>${P.strats.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="-">No strategy</option></select></span>` : ''}`;
+  const rows = inSel.filter(r => P.show === 'all' || !r.win).sort((a, b) => (a.win - b.win));
+  $('pHead').innerHTML = `<tr><th class="ck"></th><th>SKU</th><th class="num">Price</th><th>Buy Box</th><th>Min – max</th><th>Strategy</th><th>Why</th></tr>`;
+  $('pBody').innerHTML = rows.length ? rows.map(r => {
+    const i = all.indexOf(r), d = diagnose(r);
+    const why = d.k === 'win' ? '<span class="win-t">Winning</span>'
+      : d.k === 'none' ? `<div class="why">No repricer, so the price stays at <b>${money(r.price)}</b>.</div><button type="button" class="row-btn fix" data-fixadd="${i}">Add to ${esc(P.strats[0].name)}</button>`
+      : d.k === 'min' ? `<div class="why">Your min <b>${money(r.min)}</b> stops it reaching <b>${money(d.t)}</b>.</div><button type="button" class="row-btn fix" data-fixmin="${i}">Lower min to ${money(Math.floor(d.t))}</button>`
+      : d.k === 'pending' ? `<div class="why">Saved changes let the repricer reach <b>${money(d.t)}</b>.</div>`
+      : `<div class="why">Price is already lowest. Walmart picked another seller, usually for faster delivery.</div>`;
+    const mm = r.strat ? `<input class="mm-in ${r.min !== r.minOrig ? 'chg' : ''}" data-min="${i}" inputmode="decimal" value="${r.min.toFixed(2)}" aria-label="Min for ${esc(r.sku)}"> – <input class="mm-in ${r.max !== r.maxOrig ? 'chg' : ''}" data-max="${i}" inputmode="decimal" value="${r.max.toFixed(2)}" aria-label="Max for ${esc(r.sku)}">` : '<span class="dash">—</span>';
+    return `<tr class="${P.picked.has(i) ? 'sel' : ''} ${r.flash ? 'fade' : ''}"><td class="ck"><input type="checkbox" data-ppick="${i}" aria-label="Select ${esc(r.sku)}" ${P.picked.has(i) ? 'checked' : ''}></td>
+      <td class="sku">${esc(r.sku)}</td><td class="num">${r.strat ? money(r.price) : `<input class="p-in ${r.price !== r.orig ? 'chg' : ''}" data-price="${i}" inputmode="decimal" value="${r.price.toFixed(2)}" aria-label="Price for ${esc(r.sku)}">`}</td>
+      <td>${r.win ? '<span class="yes">You</span>' : `<span class="lose-t">${money(r.bb)}</span>`}</td><td style="white-space:nowrap">${mm}</td>
+      <td><select data-rp="${i}" class="${r.strat !== r.stratOrig ? 'chg' : ''}" aria-label="Strategy for ${esc(r.sku)}">${P.strats.map(x => `<option value="${x.id}" ${x.id === r.strat ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}<option value="" ${!r.strat ? 'selected' : ''}>No strategy</option></select></td>
+      <td>${why}</td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty"><b>Nothing losing here</b>Every item in this group has the Buy Box.</td></tr>`;
+  all.forEach(r => { r.flash = false; });
   renderSave();
 }
 function renderSave() {
-  const ch = S.pricing.rows.filter(r => r.price !== r.orig || r.rp !== r.rpOrig).length;
+  const ch = S.pricing.rows.filter(changed).length;
   $('pSave').hidden = !ch;
-  $('pSave').innerHTML = `<span>${plural(ch, 'change')}</span><span class="spacer"></span><button type="button" class="btn btn-ghost" id="pUndo">Undo</button><button type="button" class="btn btn-primary" id="pSaveBtn">Save to Walmart</button>`;
+  $('pSave').innerHTML = `<span>${plural(ch, 'item')} changed</span><span class="spacer"></span><button type="button" class="btn btn-ghost" id="pUndo">Undo</button><button type="button" class="btn btn-primary" id="pSaveBtn">Save to Walmart</button>`;
+}
+function savePricing() {
+  const P = S.pricing, ch = P.rows.filter(changed);
+  ch.forEach(r => { r.orig = r.price; r.stratOrig = r.strat; r.minOrig = r.min; r.maxOrig = r.max; });
+  P.picked.clear(); renderPricing(); toast(`${plural(ch.length, 'item')} sent to Walmart`);
+  setTimeout(() => {
+    let won = 0;
+    ch.forEach(r => { const d = diagnose(r); if (d.k === 'pending') { r.win = true; r.price = r.orig = d.t; r.flash = true; won++; } });
+    if (S.sub === 'pricing') renderPricing();
+    if (won) toast(`Walmart repriced ${plural(won, 'item')}: now winning the Buy Box`);
+  }, 2500);
+}
+function openStrat(id) {
+  const st = id ? stratOf(id) : { name: '', rule: 'beat', amt: 1, unit: '$' };
+  S.pricing.editing = id || 'new';
+  $('stTitle').textContent = id ? 'Edit strategy' : 'New strategy';
+  $('stName').value = st.name; $('stRule').value = st.rule; $('stAmt').value = st.amt; $('stUnit').value = st.unit;
+  stRuleUi(); $('stDlg').hidden = false; $('stName').focus();
+}
+function stRuleUi() { const m = $('stRule').value === 'match'; $('stAmtWrap').hidden = m; $('stUnitWrap').hidden = m; }
+function saveStrat() {
+  const P = S.pricing, name = $('stName').value.trim(); if (!name) { $('stName').focus(); return; }
+  const v = { name, rule: $('stRule').value, amt: parseFloat($('stAmt').value) || 0, unit: $('stUnit').value };
+  if (P.editing === 'new') { const id = 's' + Date.now(); P.strats.push({ id, ...v }); P.sel = id; toast(`${name} created. Move items into it from the table.`); }
+  else { Object.assign(stratOf(P.editing), v); toast(`${name} updated`); }
+  $('stDlg').hidden = true; renderPricing();
 }
 
 /* ---------- Incentives ---------- */
@@ -693,10 +812,17 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.mapsku) { S.mapPick = t.dataset.mapsku; renderMap(); }
   else if (t.id === 'mYes') { const x = S.sent.find(r => r.id === S.mapFor); x.lw = 'mapped'; x.mappedTo = S.mapPick; x.flash = true; closeMap(); renderUploads(); toast(`${x.sku} mapped to ${x.mappedTo}`); }
   else if (t.id === 'mNo') closeMap();
-  else if (t.dataset.pf) { S.pricing.filter = t.dataset.pf; renderPricing(); }
-  else if (t.dataset.join) { showSub('incentives'); prog = 'rrf'; view.rrf = 'ready'; render(); ask([t.dataset.join]); }
-  else if (t.id === 'pUndo') { S.pricing.rows.forEach(r => { r.price = r.orig; r.rp = r.rpOrig; }); renderPricing(); }
-  else if (t.id === 'pSaveBtn') { const n = S.pricing.rows.filter(r => r.price !== r.orig || r.rp !== r.rpOrig).length; S.pricing.rows.forEach(r => { r.orig = r.price; r.rpOrig = r.rp; }); renderPricing(); toast(`${plural(n, 'change')} sent to Walmart`); }
+  else if (t.dataset.strat) { S.pricing.sel = t.dataset.strat; S.pricing.show = 'losing'; S.pricing.picked.clear(); renderPricing(); }
+  else if (t.dataset.show) { S.pricing.show = t.dataset.show; renderPricing(); }
+  else if (t.dataset.ppick) { const P = S.pricing, i = +t.dataset.ppick; P.picked.has(i) ? P.picked.delete(i) : P.picked.add(i); renderPricing(); }
+  else if (t.dataset.fixmin) { const r = S.pricing.rows[+t.dataset.fixmin]; r.min = Math.floor(targetFor(r)); renderPricing(); }
+  else if (t.dataset.fixadd) { const r = S.pricing.rows[+t.dataset.fixadd]; r.strat = S.pricing.strats[0].id; const tg = targetFor(r); r.min = Math.floor(tg); r.max = Math.round(r.price * 1.1); renderPricing(); }
+  else if (t.dataset.editstrat) openStrat(t.dataset.editstrat);
+  else if (t.id === 'stNew') openStrat(null);
+  else if (t.id === 'stYes') saveStrat();
+  else if (t.id === 'stNo') $('stDlg').hidden = true;
+  else if (t.id === 'pUndo') { S.pricing.rows.forEach(r => { r.price = r.orig; r.strat = r.stratOrig; r.min = r.minOrig; r.max = r.maxOrig; }); renderPricing(); }
+  else if (t.id === 'pSaveBtn') savePricing();
   else if (t.dataset.prog) { prog = t.dataset.prog; picked.clear(); render(); }
   else if (t.dataset.view) { view[prog] = t.dataset.view; picked.clear(); render(); }
   else if (t.dataset.one) ask([t.dataset.one]);
@@ -714,17 +840,23 @@ document.addEventListener('input', (e) => {
   else if (t.id === 'oPrice') { L.price = t.value; $('addBatch').disabled = !offerReady(); }
   else if (t.id === 'oQty') { L.qty = t.value; $('addBatch').disabled = !offerReady(); }
   else if (t.id === 'mapQ') { S.mapQ = t.value; renderMap(); }
-  else if (t.dataset.price) { const r = S.pricing.rows[+t.dataset.price]; const v = parseFloat(t.value); if (v > 0) { r.price = Math.round(v * 100) / 100; t.classList.toggle('chg', r.price !== r.orig); renderSave(); } }
+  else if (t.dataset.price || t.dataset.min || t.dataset.max) {
+    const key = t.dataset.price ? 'price' : t.dataset.min ? 'min' : 'max', r = S.pricing.rows[+(t.dataset.price || t.dataset.min || t.dataset.max)];
+    const v = parseFloat(t.value); if (v > 0) { r[key] = Math.round(v * 100) / 100; t.classList.toggle('chg', r[key] !== r[key === 'price' ? 'orig' : key + 'Orig']); renderSave(); }
+  }
 });
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.id === 'oCond') S.list.cond = t.value;
-  else if (t.dataset.rp) { const r = S.pricing.rows[+t.dataset.rp]; r.rp = t.value; t.classList.toggle('chg', r.rp !== r.rpOrig); renderSave(); }
+  else if (t.dataset.rp !== undefined) { const r = S.pricing.rows[+t.dataset.rp]; r.strat = t.value; if (r.strat && !r.min) { r.min = Math.floor(targetFor(r)); r.max = Math.round(r.price * 1.1); } renderPricing(); }
+  else if (t.id === 'bulkMove' && t.value) { const P = S.pricing, to = t.value === '-' ? '' : t.value; const n = P.picked.size; P.picked.forEach(i => { const r = P.rows[i]; r.strat = to; if (to && !r.min) { r.min = Math.floor(targetFor(r)); r.max = Math.round(r.price * 1.1); } }); P.picked.clear(); renderPricing(); toast(`${plural(n, 'item')} moved. Save to send it to Walmart.`); }
+  else if (t.id === 'stRule') stRuleUi();
+  else if ((t.dataset.min || t.dataset.max || t.dataset.price) && S.sub === 'pricing') renderPricing();
 });
 $('sForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch($('sQ').value); });
 $('confirm').addEventListener('click', (e) => { if (e.target === $('confirm')) closeConfirm(); });
 $('mapDlg').addEventListener('click', (e) => { if (e.target === $('mapDlg')) closeMap(); });
-document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('confirm').hidden) closeConfirm(); if (!$('mapDlg').hidden) closeMap(); });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('confirm').hidden) closeConfirm(); if (!$('mapDlg').hidden) closeMap(); $('stDlg').hidden = true; });
 runSearch(S.list.q);
 showSub('list');
 </script>
