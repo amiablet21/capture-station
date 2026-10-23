@@ -241,6 +241,9 @@ tr.fade td { animation: fade .5s ease; }
 .why { font-size: 12.5px; color: var(--muted); max-width: 300px; }
 .why b { color: var(--text); font-weight: 600; }
 .fix { margin-top: 5px; }
+.loss { font-size: 12px; color: var(--neg-text); font-weight: 600; margin-top: 3px; }
+.row-btn.warn { color: var(--neg-text); border-color: var(--neg-text); }
+.mm-in.below { border-color: var(--neg-text); box-shadow: 0 0 0 3px var(--neg-bg); color: var(--neg-text); }
 .win-t { color: var(--pos-text); font-weight: 700; }
 .lose-t { color: var(--neg-text); font-weight: 700; }
 .st-form { padding: 0 20px; display: flex; flex-direction: column; gap: 10px; }
@@ -410,7 +413,9 @@ function genPricing() {
       else if (!st) { bb = Math.round(price * (0.93 + rnd() * .04) * 100) / 100; min = 0; max = 0; }
       else if (i % 3 !== 2) { bb = Math.round(price * (0.9 + rnd() * .05) * 100) / 100; min = Math.round(price * .97); max = Math.round(price * 1.1); }
       else { bb = Math.round((price + 1 + rnd() * 4) * 100) / 100; min = Math.round(price * .85); max = Math.round(price * 1.1); why = 'other'; }
-      rows.push({ sku: x.sku, price, orig: price, bb, win: !losing, strat: st, stratOrig: st, min, max, minOrig: min, maxOrig: max, why });
+      const cost = Math.round(price * (0.6 + rnd() * 0.3) * 100) / 100;
+      if (min) { min = Math.max(min, Math.ceil(cost / 0.92)); max = Math.max(max, min + 10); }
+      rows.push({ sku: x.sku, price, orig: price, bb, win: !losing, strat: st, stratOrig: st, min, max, minOrig: min, maxOrig: max, why, cost });
     }
   });
   return { sel: 'all', show: 'losing', picked: new Set(), rows, strats: [
@@ -595,6 +600,8 @@ function diagnose(r) {
   if (r.why === 'other') return { k: 'other' };
   return { k: 'pending', t };
 }
+const FEE = 0.08; // Walmart referral fee used for break-even (sample)
+const breakEven = (r) => Math.ceil(r.cost / (1 - FEE) * 100) / 100;
 function changed(r) { return r.strat !== r.stratOrig || r.min !== r.minOrig || r.max !== r.maxOrig || r.price !== r.orig; }
 function renderPricing() {
   const P = S.pricing, all = P.rows;
@@ -618,10 +625,12 @@ function renderPricing() {
     const i = all.indexOf(r), d = diagnose(r);
     const why = d.k === 'win' ? '<span class="win-t">Winning</span>'
       : d.k === 'none' ? `<div class="why">No repricer, so the price stays at <b>${money(r.price)}</b>.</div><button type="button" class="row-btn fix" data-fixadd="${i}">Add to ${esc(P.strats[0].name)}</button>`
-      : d.k === 'min' ? `<div class="why">Your min <b>${money(r.min)}</b> stops it reaching <b>${money(d.t)}</b>.</div><button type="button" class="row-btn fix" data-fixmin="${i}">Lower min to ${money(Math.floor(d.t))}</button>`
+      : d.k === 'min' ? (Math.floor(d.t) >= breakEven(r)
+        ? `<div class="why">Your min <b>${money(r.min)}</b> stops it reaching <b>${money(d.t)}</b>.</div><button type="button" class="row-btn fix" data-fixmin="${i}">Lower min to ${money(Math.floor(d.t))}</button>`
+        : `<div class="why">Your min <b>${money(r.min)}</b> stops it reaching <b>${money(d.t)}</b>.</div><div class="loss">⚠ ${money(d.t)} is below break-even ${money(breakEven(r))} (cost ${money(r.cost)} + 8% fee)</div><button type="button" class="row-btn fix warn" data-fixmin="${i}">Lower anyway to ${money(Math.floor(d.t))}</button>`)
       : d.k === 'pending' ? `<div class="why">Saved changes let the repricer reach <b>${money(d.t)}</b>.</div>`
       : `<div class="why">Price is already lowest. Walmart picked another seller, usually for faster delivery.</div>`;
-    const mm = r.strat ? `<input class="mm-in ${r.min !== r.minOrig ? 'chg' : ''}" data-min="${i}" inputmode="decimal" value="${r.min.toFixed(2)}" aria-label="Min for ${esc(r.sku)}"> – <input class="mm-in ${r.max !== r.maxOrig ? 'chg' : ''}" data-max="${i}" inputmode="decimal" value="${r.max.toFixed(2)}" aria-label="Max for ${esc(r.sku)}">` : '<span class="dash">—</span>';
+    const mm = r.strat ? `<input class="mm-in ${r.min !== r.minOrig ? 'chg' : ''} ${r.min < breakEven(r) ? 'below' : ''}" title="${r.min < breakEven(r) ? `Below break-even ${money(breakEven(r))}` : `Break-even ${money(breakEven(r))}`}" data-min="${i}" inputmode="decimal" value="${r.min.toFixed(2)}" aria-label="Min for ${esc(r.sku)}"> – <input class="mm-in ${r.max !== r.maxOrig ? 'chg' : ''}" data-max="${i}" inputmode="decimal" value="${r.max.toFixed(2)}" aria-label="Max for ${esc(r.sku)}">` : '<span class="dash">—</span>';
     return `<tr class="${P.picked.has(i) ? 'sel' : ''} ${r.flash ? 'fade' : ''}"><td class="ck"><input type="checkbox" data-ppick="${i}" aria-label="Select ${esc(r.sku)}" ${P.picked.has(i) ? 'checked' : ''}></td>
       <td class="sku">${esc(r.sku)}</td><td class="num">${r.strat ? money(r.price) : `<input class="p-in ${r.price !== r.orig ? 'chg' : ''}" data-price="${i}" inputmode="decimal" value="${r.price.toFixed(2)}" aria-label="Price for ${esc(r.sku)}">`}</td>
       <td>${r.win ? '<span class="yes">You</span>' : `<span class="lose-t">${money(r.bb)}</span>`}</td><td style="white-space:nowrap">${mm}</td>
