@@ -18,6 +18,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
+  /* the app's own font files first (works offline / inside the repo) */
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
   :root {
     --canvas: #F7F6F3; --surface: #FFFFFF; --surface-2: #F9F9F8;
     --border: #EAEAEA; --border-soft: rgba(0,0,0,0.06);
@@ -145,6 +148,10 @@
   .stub { opacity: 0.55; }
   .stub .row { display: flex; justify-content: space-between; padding: 8px 18px; border-top: 1px solid var(--border-soft); font-size: 12.5px; }
 
+  .na { display: flex; gap: 12px; align-items: center; padding: 11px 18px; border-top: 1px solid var(--border-soft); }
+  .send.gone { display: none; }
+  .key { transition: background 160ms, color 160ms; }
+  .chip { cursor: pointer; }
   .notes { margin-top: 22px; max-width: 980px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .notes b { color: var(--text); }
 </style>
@@ -225,25 +232,33 @@
       <span class="src" style="margin-left:auto"><span class="dot"></span>Walmart · 2 min ago</span>
     </div>
 
+    <div id="tabNeeds" hidden>
+      <div class="sec"><div class="sec-h"><h3>Needs attention</h3><span class="c">15</span><span class="r">the list you have today, unchanged</span></div>
+        <div class="na"><span class="pill p-neg">Out</span><span class="mono">S25-256GB-ICY-BLUE</span><span class="muted">Out since Oct 20 · 0.7 a day</span></div>
+        <div class="na"><span class="pill p-warn">Low</span><span class="mono">S26-256GB-BLACK</span><span class="muted">3 days left</span></div>
+        <div class="na"><span class="pill p-blue">Fast</span><span class="mono">X210-64GB-GRAY</span><span class="muted">Up 42%</span></div>
+      </div>
+    </div>
+    <div id="tabWfs">
     <!-- 1. Send to WFS -->
     <div class="sec">
       <div class="sec-h"><h3>Send to WFS</h3><span class="c">4</span><span class="r">cover target <b class="mono" style="color:var(--text)">30 days</b> of WFS sales</span></div>
       <div class="send hd"><div>SKU</div><div>30-day WFS sales</div><div>At WFS</div><div>On the way</div><div>In warehouse</div><div>Send</div><div></div></div>
 
-      <div class="send">
+      <div class="send is-added">
         <div class="who"><div class="sku-wm">WM-S26-256-BLK <span class="pill p-neg urg">Out in 2 days</span></div><div class="sku-ln">S26-256GB-BLACK</div>
           <div class="why">Sells 2.1 a day at WFS and rising. 4 left, nothing on the way.</div></div>
         <div class="num">64</div><div class="num">4</div><div class="num zero">0</div><div class="num">38</div>
         <div class="sugg"><input value="60" /><small>30 days' worth</small></div>
-        <div class="keys"><button class="key added">✓ Added</button><button class="key ign">Remove</button></div>
+        <div class="keys"></div>
       </div>
 
-      <div class="send">
+      <div class="send is-added">
         <div class="who"><div class="sku-wm">WM-S25-256-ICY <span class="pill p-neg urg">Out at WFS</span></div><div class="sku-ln">S25-256GB-ICY-BLUE</div>
           <div class="why">Out since Oct 20; sold 0.7 a day before that. Only 14 in the warehouse, so all 14.</div></div>
         <div class="num">22</div><div class="num zero">0</div><div class="num zero">0</div><div class="num">14</div>
         <div class="sugg"><input value="14" /><small>all you have</small></div>
-        <div class="keys"><button class="key added">✓ Added</button><button class="key ign">Remove</button></div>
+        <div class="keys"></div>
       </div>
 
       <div class="send">
@@ -251,7 +266,7 @@
           <div class="why">1.4 a day. 9 at WFS + 12 already on the way covers 15 days.</div></div>
         <div class="num">41</div><div class="num">9</div><div class="num">12</div><div class="num">55</div>
         <div class="sugg"><input value="20" /><small>to 30 days</small></div>
-        <div class="keys"><button class="key send-k">Send →</button><button class="key ign">Ignore</button></div>
+        <div class="keys"></div>
       </div>
 
       <div class="send">
@@ -259,12 +274,12 @@
           <div class="why">0.9 a day. 11 at WFS.</div></div>
         <div class="num">27</div><div class="num">11</div><div class="num zero">0</div><div class="num">23</div>
         <div class="sugg"><input value="20" /><small>to 30 days</small></div>
-        <div class="keys"><button class="key send-k">Send →</button><button class="key ign">Ignore</button></div>
+        <div class="keys"></div>
       </div>
 
-      <div class="sel-bar">2 added · 74 units · next: boxes and weights, Walmart's FedEx quote, labels
+      <div class="sel-bar"><span id="selTxt"></span>
         <button class="btn pri">Create inbound order →</button></div>
-      <div class="foot-link">1 ignored · <a href="#">Undo</a> &nbsp;·&nbsp; A15-64GB-BLACK isn't listed: 30 already on the way cover it</div>
+      <div class="foot-link"><span id="ignTxt"></span>A15-64GB-BLACK isn't listed: 30 already on the way cover it</div>
     </div>
 
     <!-- 2. On the way -->
@@ -316,6 +331,7 @@
         <div class="flow"><span class="box">15<small>received</small></span><span class="arr">→</span><span class="box">15<small>sellable</small></span><span class="arr">→</span><span class="box hl">9<small>Linnworks</small></span></div>
       </div>
     </div>
+    </div>
   </div>
 
   <div class="card stub">
@@ -334,5 +350,53 @@
   <b>Create inbound order</b> would open the next step (boxes, weights, carrier quote, labels), a separate mock if you like this one.
 </div>
 
+<script>
+  // just enough behaviour to click through: Send / Remove / Ignore / Undo
+  // keep the bar's totals true; the two tabs swap
+  const rows = [...document.querySelectorAll('.send:not(.hd)')];
+  let ignored = 0;
+  function draw() {
+    let n = 0, u = 0;
+    for (const r of rows) {
+      const k = r.querySelector('.keys');
+      const on = r.classList.contains('is-added');
+      k.innerHTML = on ? '<button class="key added" data-k="remove">✓ Added</button><button class="key ign" data-k="remove">Remove</button>'
+                       : '<button class="key send-k" data-k="send">Send →</button><button class="key ign" data-k="ignore">Ignore</button>';
+      if (on) { n++; u += Number(r.querySelector('.sugg input').value) || 0; }
+    }
+    document.getElementById('selTxt').textContent = n
+      ? `${n} added · ${u} units · next: boxes and weights, Walmart's FedEx quote, labels`
+      : 'Nothing added yet — press Send on a row';
+    document.querySelector('.sel-bar .btn').disabled = !n;
+    document.getElementById('ignTxt').innerHTML = ignored ? `${ignored} ignored · <a href="#" id="undo">Undo</a> &nbsp;·&nbsp; ` : '';
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-k]');
+    if (b) {
+      const r = b.closest('.send');
+      if (b.dataset.k === 'send') r.classList.add('is-added');
+      if (b.dataset.k === 'remove') r.classList.remove('is-added');
+      if (b.dataset.k === 'ignore') { r.classList.add('gone'); ignored++; }
+      draw();
+      return;
+    }
+    if (e.target.id === 'undo') {
+      e.preventDefault();
+      const g = rows.filter(r => r.classList.contains('gone')).pop();
+      if (g) { g.classList.remove('gone'); ignored--; }
+      draw();
+      return;
+    }
+    const chip = e.target.closest('.card-h .chip');
+    if (chip) {
+      chip.parentElement.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip));
+      const wfs = chip.textContent.trim() === 'WFS';
+      document.getElementById('tabWfs').hidden = !wfs;
+      document.getElementById('tabNeeds').hidden = wfs;
+    }
+  });
+  document.addEventListener('input', (e) => { if (e.target.closest('.sugg')) draw(); });
+  draw();
+</script>
 </body>
 </html>
