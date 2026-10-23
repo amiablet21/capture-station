@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.114 highlights
+
+- **Walmart's request limit no longer blanks Pricing** (owner: "You have exceeded your API calls threshold"). Pricing reads every item page by page, so a large catalog plus a few Refreshes ran past Walmart's per-API limit. Every Walmart call now waits for the next refill when it's under 20 seconds away (twice at most), otherwise says when to try again. Pricing keeps the pages already read when the limit hits part-way, and when Walmart refuses outright it shows the last full answer with its age instead of an error. Opening the Pricing tab again within 15 minutes no longer asks Walmart again.
+
 ## v1.32.113 highlights
 
 - **Click a Walmart result to see it** (owner: "press into each individual listing ... see the prices and the other sellers, but stripped down"). Walmart → List: clicking a result (anywhere but **+ List this**) opens a plain view: photo, the Buy Box price and who holds it, "You list this" with how far over the Buy Box you are, and every seller with condition, shipping and arrival, read from the product page or its Compare all sellers page out of sight. Sellers at your exact price are tagged **Your price**. **← Back to results** returns to the same spot.
