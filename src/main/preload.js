@@ -246,6 +246,8 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('wmsite:layout', b);
   },
   wmsiteGo: (text) => ipcRenderer.invoke('wmsite:go', { text }),
+  walmartSiteSearch: (query, page) => ipcRenderer.invoke('walmart:siteSearch', { query, page }),
+  walmartMine: () => ipcRenderer.invoke('walmart:mine'),
   walmartPricing: () => ipcRenderer.invoke('walmart:pricing'),
   walmartSaveStrategy: (s) => ipcRenderer.invoke('walmart:saveStrategy', s),
   walmartDeleteStrategy: (id) => ipcRenderer.invoke('walmart:deleteStrategy', { id }),

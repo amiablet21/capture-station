@@ -1370,7 +1370,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.stockSetTitle('sid-1', 'A title')`);
     check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    for (const [label, call] of [['wmsite:go', `api.wmsiteGo('galaxy tab a9')`], ['walmart:itemDetails', `api.walmartItemDetails('1735902284')`],
+    for (const [label, call] of [['wmsite:go', `api.wmsiteGo('galaxy tab a9')`], ['walmart:siteSearch', `api.walmartSiteSearch('galaxy tab a9', 1)`], ['walmart:mine', 'api.walmartMine()'], ['walmart:itemDetails', `api.walmartItemDetails('1735902284')`],
       ['walmart:mapState', `api.walmartMapState(['X'])`], ['walmart:pricing', 'api.walmartPricing()'],
       ['walmart:pricingSave', `api.walmartPricingSave([{ sku: 'X', strategy: 'S', min: 1, max: 2 }], [])`],
       ['walmart:saveStrategy', `api.walmartSaveStrategy({ name: 'S' })`], ['walmart:incentives', 'api.walmartIncentives()'],

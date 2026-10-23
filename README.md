@@ -2,6 +2,13 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.111 highlights
+
+- **Walmart → List draws the results itself** (owner: "strip down the look to not slow down the software, essentially just getting the information"; mockup `variants/walmart-lite-results.html`). A search runs walmart.com's own search page out of sight (one hidden window, no images) and only the results come back: item number, title, price, photo, rating and reviews, seller, sponsored, in walmart.com's order, read from the page's data block (product cards as the fallback). The tab draws them as a light grid with paging; hover a product for **+ List this**. Nothing of Walmart's runs on screen, so it doesn't lag and Walmart's redesigns don't break the layout. **Show on walmart.com** still opens the real page (and is where a robot check is passed); **Back to results** returns. A pasted item number or product link picks that item straight away.
+- **Listed by you** (mockup `variants/walmart-listed-badges.html`): products you already sell carry a green badge with your SKU(s) and price, from the listings Linnworks has downloaded (their Walmart item number) plus everything sent from the tab; hovering one offers **+ List another**, and the offer panel says so too.
+- **On walmart.com itself:** the + List this buttons now also appear on sponsored products (they link through a tracking address) and come back when Walmart redraws a card; Cmd/Ctrl + / − / 0 and Cmd/Ctrl + wheel zoom the page (remembered); the page scan only looks at new products, in idle time; a product already on screen is read from the view instead of a second load; hidden reads skip images.
+- **Pricing showed 0 items** on the first live run: Walmart sent the strategies but no Pricing Insights rows. The rows are now looked for anywhere in the answer, then asked SKU by SKU from the catalog (Get all items); failing both, the catalog's prices show with each strategy's item count as Walmart reports it and a note. The raw first answer is kept in `walmart-insights-last.json` (user data folder) for diagnosis.
+
 ## v1.32.110 highlights
 
 The Walmart tab is rebuilt from the approved clickable mockup (`variants/walmart-tab-clickable.html`) into four tabs: **List · Uploads · Pricing · Incentives**.

@@ -12564,6 +12564,8 @@ function wlBlank() {
   return {
     tab: 'list', conn: { configured: false },
     site: { opened: false, loading: false, canGoBack: false, canGoForward: false, page: '' },
+    // results drawn by the app (default) or walmart.com itself ('page')
+    mode: 'lite', lite: null, mine: {}, mineAt: 0,
     pick: null, det: null, detBusy: false, form: null, batch: wlLoadBatch(),
     feeds: null, feedsError: '', maps: {}, mapBusy: false, mapErr: '', upFilter: 'all', upNew: false,
     pr: null, prBusy: false, prErr: '', prSel: 'all', prShow: 'losing', prPicked: new Set(),
@@ -12610,7 +12612,7 @@ function wlSiteSync() {
   wlSiteQueued = true;
   requestAnimationFrame(() => {
     wlSiteQueued = false;
-    const on = activePage === 'walmart' && wl && wl.tab === 'list' && wl.conn.configured && wl.site.opened
+    const on = activePage === 'walmart' && wl && wl.tab === 'list' && wl.conn.configured && wl.mode === 'page' && wl.site.opened
       && !document.querySelector('dialog[open]');
     const r = on ? $('wlSite').getBoundingClientRect() : null;
     if (!on || r.width < 40 || r.height < 40) {
@@ -12631,24 +12633,85 @@ setInterval(() => { if (wlSiteShown) wlSiteSync(); }, 1000);
 
 function wlRenderSiteBar() {
   const s = wl.site;
+  const page = wl.mode === 'page';
+  for (const id of ['wlBack', 'wlFwd', 'wlReload']) $(id).hidden = !page;
+  $('wlToLite').hidden = !page;
   $('wlBack').disabled = !s.canGoBack;
   $('wlFwd').disabled = !s.canGoForward;
-  $('wlReload').disabled = !s.opened;
-  $('wlPage').innerHTML = s.loading ? `${wlSpin}Loading…` : esc(s.page || '');
-  $('wlSiteNote').innerHTML = s.opened
-    ? `${wlSpin}Opening walmart.com…`
-    : '<b>Search above to open Walmart here.</b> Scroll the results and press <b>+ List this</b> on the product you want to sell. Pasting an item number or a walmart.com link opens that product.';
+  $('wlPage').innerHTML = page ? (s.loading ? `${wlSpin}Loading…` : esc(s.page || '')) : '';
+  $('wlSiteNote').hidden = !page;
+  $('wlSiteNote').innerHTML = `${wlSpin}Opening walmart.com…`;
+  $('wlRes').hidden = page;
+}
+
+/* the results, drawn by the app (owner 2026-10-23: "strip down the look") */
+async function wlLiteSearch(query, page) {
+  wl.mode = 'lite';
+  wl.lite = { q: query, page: page || 1, busy: true, items: (wl.lite && wl.lite.q === query) ? wl.lite.items : [], total: 0, maxPage: 0, err: '', blocked: false };
+  wlRenderSiteBar();
+  wlRenderLite();
+  wlSiteSync();
+  const L = wl.lite;
+  const res = await api.walmartSiteSearch(query, L.page).catch(err => ({ ok: false, error: err.message }));
+  if (!wl || wl.lite !== L || (res && res.superseded)) return;
+  L.busy = false;
+  if (!res || !res.ok) { L.err = (res && res.error) || 'Walmart search failed.'; L.blocked = !!(res && res.blocked); L.items = []; }
+  else { L.items = res.items; L.total = res.total; L.maxPage = res.maxPage; }
+  wlRenderLite();
+  $('wlRes').scrollTop = 0;
+}
+
+async function wlLoadMine(force) {
+  if (!force && wl.mineAt && Date.now() - wl.mineAt < 10 * 60000) return;
+  wl.mineAt = Date.now();
+  const res = await api.walmartMine().catch(() => null);
+  if (!wl || !res || !res.ok) return;
+  wl.mine = res.mine || {};
+  if (wl.tab === 'list') { wlRenderLite(); wlRenderOffer(); }
+}
+
+function wlRenderLite() {
+  const L = wl.lite;
+  const box = $('wlRes');
+  if (!L) {
+    box.innerHTML = '<div class="wl-empty"><b>Search Walmart above.</b> The results show here; hover a product and press <b>+ List this</b>. Products you already sell are marked <b>Listed by you</b>. Pasting an item number or a walmart.com link picks that product straight away.</div>';
+    return;
+  }
+  if (L.busy && !L.items.length) { box.innerHTML = `<div class="wl-empty">${wlSpin}Searching walmart.com…</div>`; return; }
+  if (L.err) {
+    box.innerHTML = `<div class="wl-empty ${L.blocked ? '' : 'wl-err'}">${L.blocked ? '<b>walmart.com asked to check this computer is not a robot.</b> Open the page, pass the check there, then search again.' : esc(L.err)}
+      <div class="wl-foot-btns"><button type="button" class="btn btn-secondary" data-wltopage>Show on walmart.com</button></div></div>`;
+    return;
+  }
+  if (!L.items.length) { box.innerHTML = `<div class="wl-empty">Nothing on walmart.com matched “${esc(L.q)}”. Try fewer words, like the model and storage.</div>`; return; }
+  const pickId = wl.pick && wl.pick.itemId;
+  box.innerHTML = `<div class="wl-lr-head"><b>${L.total > L.items.length ? `${L.total.toLocaleString()} results` : wlN(L.items.length, 'result')}</b><span>from walmart.com, same order${L.page > 1 ? ` · page ${L.page}` : ''}</span>${L.busy ? `<span>${wlSpin}</span>` : ''}
+      <a href="#" class="wl-link wl-lr-open" data-wltopage>Show on walmart.com ↗</a></div>
+    <div class="wl-lr-grid">${L.items.map(it => {
+      const mine = wl.mine[it.itemId] || null;
+      const stars = it.rating !== null && it.rating !== undefined ? `<span class="wl-stars"><i class="w${Math.round((Number(it.rating) / 5) * 50) * 2}"></i></span> ${Number(it.rating).toFixed(1)}${it.reviews !== null && it.reviews !== undefined ? ` (${Number(it.reviews).toLocaleString()})` : ''}` : '';
+      return `<div class="wl-lc ${mine ? 'is-mine' : ''} ${pickId === it.itemId ? 'is-on' : ''}">
+        <div class="wl-lc-ph">${/^https:\/\//.test(it.image) ? `<img src="${esc(it.image)}" alt="" loading="lazy" />` : ''}</div>
+        ${it.sponsored ? '<span class="wl-lc-tag">Sponsored</span>' : ''}
+        ${mine ? `<div class="wl-lc-mine">✓ Listed by you${mine.length > 1 ? ` · ${mine.length} listings` : ''}${mine.slice(0, 3).map(m => `<span>${esc(m.sku)}${m.price ? ` · ${wlMoney(m.price)}` : ''}</span>`).join('')}</div>` : ''}
+        <button type="button" class="wl-lc-go ${mine ? 'is-ghost' : ''}" data-wllist="${esc(it.itemId)}">${mine ? '+ List another' : '+ List this'}</button>
+        <div class="wl-lc-p">${it.price ? wlMoney(it.price) : ''}</div>
+        <div class="wl-lc-t" title="${esc(it.title)}">${esc(it.title)}</div>
+        <div class="wl-lc-r">${stars}</div>
+        ${it.seller ? `<div class="wl-lc-s">Sold by ${esc(it.seller)}</div>` : ''}
+      </div>`;
+    }).join('')}</div>
+    <div class="wl-lr-pager">${L.page > 1 ? '<button type="button" class="btn btn-ghost" data-wlpg="-1">‹ Previous</button>' : ''}<span class="wl-muted">Page ${L.page}${L.maxPage ? ` of ${L.maxPage}` : ''}</span>${!L.maxPage || L.page < L.maxPage ? '<button type="button" class="btn btn-ghost" data-wlpg="1">Next ›</button>' : ''}</div>`;
 }
 
 $('wlSearch').addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = $('wlQ').value.trim();
   if (!text) { $('wlQ').focus(); return; }
-  const res = await api.wmsiteGo(text).catch(err => ({ ok: false, error: err.message }));
-  if (!res || !res.ok) { toast((res && res.error) || 'Could not open Walmart.'); return; }
-  wl.site.opened = true;
-  wlRenderSiteBar();
-  wlSiteSync();
+  // an item number or a walmart.com product link: pick it straight away
+  const id = (/^\d{6,}$/.test(text) ? text : (/walmart\.com\/ip\/(?:[^/?#]+\/)?(\d{5,})/i.exec(text) || [])[1]) || '';
+  if (id) { wlPickItem({ itemId: id }); return; }
+  wlLiteSearch(text, 1);
 });
 api.on('wmsite:state', (st) => {
   if (!wl || !st) return;
@@ -12676,6 +12739,7 @@ async function wlPickItem(p, from) {
   wl.det = null;
   wl.detBusy = true;
   wlRenderOffer();
+  if (wl.mode === 'lite') wlRenderLite();
   const pick = wl.pick;
   const res = await api.walmartItemDetails(pick.itemId).catch(err => ({ ok: false, error: err.message }));
   if (!wl || wl.pick !== pick) return;
@@ -12714,7 +12778,7 @@ function wlUpcMsg(f) {
 function wlRenderOffer() {
   const p = wl.pick;
   if (!p) {
-    $('wlOffer').innerHTML = '<div class="wl-empty"><b>Pick a product to list.</b> Press <b>+ List this</b> on it in the Walmart page. You choose the SKU, condition, price and quantity here.</div>';
+    $('wlOffer').innerHTML = '<div class="wl-empty"><b>Pick a product to list.</b> Hover it in the results and press <b>+ List this</b>. You choose the SKU, condition, price and quantity here.</div>';
     return;
   }
   const d = wl.det && wl.det.ok ? wl.det : null;
@@ -12737,6 +12801,7 @@ function wlRenderOffer() {
         <span>item <span class="mono">${esc(p.itemId)}</span> · <a href="#" class="wl-link" data-wlopen="${esc(p.itemId)}">Open its page</a></span></div>
       <button type="button" class="wl-ri-x wl-unpick" data-wlunpick title="Put this item back" aria-label="Put this item back">✕</button></div>
     ${about}
+    ${(wl.mine[p.itemId] || []).length ? `<div class="wl-mine-note">✓ You already list this: ${wl.mine[p.itemId].map(m => `<span class="mono">${esc(m.sku)}</span>${m.price ? ` · ${wlMoney(m.price)}` : ''}`).join(', ')}. A new listing needs a different SKU (e.g. another condition).</div>` : ''}
     <div class="wl-f"><label for="wlFSku">SKU for this listing</label>
       <input id="wlFSku" class="wl-in mono" value="${esc(f.sku)}" placeholder="Any SKU, e.g. S25-128GB-NAVY" autocomplete="off" spellcheck="false" />
       <div class="wl-hint">Any SKU you like. You map it to Linnworks from Uploads once it is live.</div></div>
@@ -12797,6 +12862,8 @@ function wlRenderTray() {
 
 function wlRenderList() {
   wlRenderSiteBar();
+  wlRenderLite();
+  wlLoadMine();
   wlRenderOffer();
   wlRenderTray();
   if (!wl.feeds) api.walmartFeeds().then(r => { if (wl && r && r.ok && !wl.feeds) wl.feeds = r.feeds; }).catch(() => {});
@@ -12877,6 +12944,7 @@ async function wlSendBatch() {
     wlSaveBatch();
     wl.feeds = [res.feed, ...(wl.feeds || []).filter(f => f.feedId !== res.feed.feedId)];
     toast(`Sent ${wlN(b.length, 'listing')} to Walmart.`);
+    wl.mineAt = 0;
     wlShowTab('uploads');
   });
 }
@@ -13413,10 +13481,24 @@ $('walmartPage').addEventListener('click', async (e) => {
   if ((el = hit('[data-wltab]'))) { wlShowTab(el.dataset.wltab); return; }
   if (hit('[data-wlsettings]')) { openSettings(); return; }
   if ((el = hit('[data-wlnav]'))) { api.wmsiteNav(el.dataset.wlnav); return; }
+  if ((el = hit('[data-wllist]'))) {
+    const it = ((wl.lite && wl.lite.items) || []).find(x => x.itemId === el.dataset.wllist);
+    if (it) wlPickItem({ itemId: it.itemId, title: it.title, price: it.price, image: it.image });
+    wlRenderLite();
+    return;
+  }
+  if ((el = hit('[data-wlpg]'))) { if (wl.lite) wlLiteSearch(wl.lite.q, Math.max(1, wl.lite.page + Number(el.dataset.wlpg))); return; }
+  if (hit('[data-wltopage]')) {
+    e.preventDefault();
+    const r = await api.wmsiteGo((wl.lite && wl.lite.q) || $('wlQ').value.trim() || 'walmart').catch(() => null);
+    if (r && r.ok) { wl.mode = 'page'; wl.site.opened = true; wlRenderSiteBar(); wlSiteSync(); }
+    return;
+  }
+  if (hit('[data-wltolite]')) { wl.mode = 'lite'; wlRenderSiteBar(); wlRenderLite(); wlSiteSync(); return; }
   if ((el = hit('[data-wlopen]'))) {
     e.preventDefault();
     const r = await api.wmsiteGo(el.dataset.wlopen).catch(() => null);
-    if (r && r.ok) { wl.site.opened = true; wlShowTab('list'); }
+    if (r && r.ok) { wl.mode = 'page'; wl.site.opened = true; wlShowTab('list'); }
     return;
   }
   // List

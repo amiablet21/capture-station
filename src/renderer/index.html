@@ -216,12 +216,13 @@
           <button type="button" class="btn-icon" data-wlnav="back" id="wlBack" title="Back" aria-label="Back">‹</button>
           <button type="button" class="btn-icon" data-wlnav="forward" id="wlFwd" title="Forward" aria-label="Forward">›</button>
           <button type="button" class="btn-icon" data-wlnav="reload" id="wlReload" title="Reload" aria-label="Reload">↻</button>
-          <input id="wlQ" class="input" type="text" placeholder="Search Walmart, or paste an item number or walmart.com link" spellcheck="false" aria-label="Search Walmart" />
+          <input id="wlQ" class="input" type="text" placeholder="Search Walmart, or paste an item number or walmart.com link to pick it" spellcheck="false" aria-label="Search Walmart" />
           <button type="submit" class="btn btn-primary">Search</button>
+          <button type="button" class="btn btn-ghost" id="wlToLite" data-wltolite hidden>Back to results</button>
           <span id="wlPage" class="wl-pagelbl"></span>
         </form>
         <div class="wl-lgrid">
-          <div id="wlSite" class="wl-site"><div id="wlSiteNote" class="wl-site-note"></div></div>
+          <div id="wlSite" class="wl-site"><div id="wlSiteNote" class="wl-site-note"></div><div id="wlRes" class="wl-res"></div></div>
           <aside id="wlOffer" class="wl-offerp"></aside>
         </div>
         <div id="wlTray" class="wl-tray" hidden></div>

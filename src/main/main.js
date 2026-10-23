@@ -4467,6 +4467,141 @@ exit 1
     });
   });
 
+  /* ----- the List tab's results, read off walmart.com out of sight -----
+     Owner 2026-10-23: "strip down the look to not slow down the software,
+     essentially just getting the information". walmart.com's own search
+     page runs in one hidden window (no images, never shown) on the tab's
+     session; only the results come back — item number, title, price,
+     photo link, rating, reviews, seller, sponsored — in walmart.com's order,
+     and the List tab draws them itself. The page's own data block is read
+     first (it survives redesigns); the product cards are the fallback. */
+  let wmSearchWin = null;
+  let wmSearchSeq = 0;
+  ipcMain.handle('walmart:siteSearch', async (_e, { query, page } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const q = String(query || '').trim();
+    if (!q) return { ok: false, error: 'Type what to search for.' };
+    const pg = Math.max(1, Math.min(25, Math.floor(Number(page) || 1)));
+    const seq = ++wmSearchSeq;
+    if (!wmSearchWin || wmSearchWin.isDestroyed()) {
+      wmSearchWin = new BrowserWindow({ show: false, width: 1280, height: 1600, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    }
+    const wc = wmSearchWin.webContents;
+    try {
+      await wc.loadURL(`${WM_SITE}/search?q=${encodeURIComponent(q)}${pg > 1 ? `&page=${pg}` : ''}`).catch(() => {});
+      let got = null;
+      for (let i = 0; i < 16; i++) {
+        if (seq !== wmSearchSeq) return { ok: false, superseded: true };
+        got = await wc.executeJavaScript(`(${wmReadResults.toString()})()`, true).catch(() => null);
+        if (got && (got.blocked || got.items.length || got.done)) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (seq !== wmSearchSeq) return { ok: false, superseded: true };
+      if (!got) return { ok: false, error: 'walmart.com did not answer. Try again.' };
+      if (got.blocked && !got.items.length) return { ok: false, blocked: true, error: 'walmart.com asked to check this computer is not a robot.' };
+      return { ok: true, query: q, page: pg, total: got.total, maxPage: got.maxPage, items: got.items };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // runs inside the hidden walmart.com page (stringified): results as data
+  function wmReadResults() {
+    const body = document.body ? document.body.innerText : '';
+    const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+    const num = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; };
+    const items = [];
+    const seen = new Set();
+    let total = 0;
+    let maxPage = 0;
+    const nd = document.getElementById('__NEXT_DATA__');
+    if (nd) {
+      let data = null;
+      try { data = JSON.parse(nd.textContent); } catch { /* a page mid-update */ }
+      const walk = (o, depth) => {
+        if (!o || typeof o !== 'object' || depth > 14) return;
+        if (Array.isArray(o)) { for (const v of o) walk(v, depth + 1); return; }
+        const id = String(o.usItemId || '');
+        if (/^\d{5,}$/.test(id) && typeof o.name === 'string' && !seen.has(id)) {
+          seen.add(id);
+          const pi = o.priceInfo || {};
+          const cur = pi.currentPrice || {};
+          items.push({
+            itemId: id, title: o.name.slice(0, 300),
+            price: num(cur.price ?? o.price ?? pi.linePrice),
+            image: String((o.imageInfo && o.imageInfo.thumbnailUrl) || o.image || ''),
+            rating: o.averageRating != null ? Number(o.averageRating) || 0 : null,
+            reviews: o.numberOfReviews != null ? Number(o.numberOfReviews) || 0 : null,
+            seller: String(o.sellerName || ''),
+            sponsored: !!(o.isSponsoredFlag || o.sponsoredProduct || (o.sponsored && o.sponsored !== false)),
+          });
+          return;
+        }
+        if (!total && Number.isFinite(Number(o.aggregatedCount))) total = Number(o.aggregatedCount);
+        if (o.paginationV2 && Number(o.paginationV2.maxPage)) maxPage = Number(o.paginationV2.maxPage);
+        for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v, depth + 1);
+      };
+      if (data) walk(data, 0);
+    }
+    // fallback: the product cards themselves
+    if (!items.length) {
+      const idOf = (h) => { const m = /\/ip\/(?:[^/?#]+\/)?(\d{5,})(?:[/?#&]|$)/.exec(h || ''); return m ? m[1] : ''; };
+      for (const a of document.querySelectorAll('a[href*="/ip/"], a[href*="%2Fip%2F"], a[link-identifier]')) {
+        let id = /^\d{5,}$/.test(a.getAttribute('link-identifier') || '') ? a.getAttribute('link-identifier') : idOf(a.getAttribute('href'));
+        if (!id) { try { id = idOf(decodeURIComponent(a.getAttribute('href') || '')); } catch { /* not encoded */ } }
+        if (!id || seen.has(id)) continue;
+        const card = a.closest('[data-item-id]') || a.parentElement;
+        if (!card) continue;
+        seen.add(id);
+        const text = card.innerText || '';
+        const titles = [...card.querySelectorAll('a')].map(x => (x.getAttribute('aria-label') || x.innerText || '').trim()).sort((x, y) => y.length - x.length);
+        const img = card.querySelector('img');
+        const price = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/.exec(text);
+        const rate = /(\d(?:\.\d)?) out of 5 Stars?\.?\s*([\d,]+) reviews?/i.exec(card.innerHTML.replace(/<[^>]+>/g, ' '));
+        items.push({
+          itemId: id, title: (titles[0] || (img && img.alt) || '').slice(0, 300), price: price ? num(price[1]) : 0,
+          image: img ? (img.getAttribute('src') || '') : '', rating: rate ? Number(rate[1]) : null, reviews: rate ? num(rate[2]) : null,
+          seller: '', sponsored: /\bSponsored\b/.test(text),
+        });
+      }
+    }
+    const done = document.readyState === 'complete' && (!!nd || /no results/i.test(body));
+    return { blocked, items: items.slice(0, 60), total: total || items.length, maxPage, done };
+  }
+  app.on('will-quit', () => { if (wmSearchWin && !wmSearchWin.isDestroyed()) wmSearchWin.destroy(); });
+
+  // what this seller already sells, by Walmart item number: the listings
+  // Linnworks has downloaded (their item number) plus everything sent from
+  // the Walmart tab -> { itemId: [{ sku, price }] } for the "Listed by you" badges
+  ipcMain.handle('walmart:mine', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const mine = {};
+    const add = (id, sku, price) => {
+      const k = String(id || '').replace(/\D/g, '');
+      if (!k || !sku) return;
+      const list = mine[k] || (mine[k] = []);
+      if (!list.some(x => x.sku.toUpperCase() === String(sku).toUpperCase())) list.push({ sku: String(sku), price: Number(price) || 0 });
+    };
+    for (const f of wmReadFeeds()) {
+      for (const o of f.offers) {
+        if (!/ERROR/.test(String(((f.items || {})[o.sku] || {}).status || '').toUpperCase())) add(o.itemId, o.sku, o.price);
+      }
+    }
+    let linnworks = true;
+    try {
+      const c = new LinnworksClient(cfg.linnworks);
+      const chans = (await c.getMappingChannels()).filter(ch => /walmart/i.test(ch.source));
+      for (const ch of chans) {
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        const hit = mappingCache.get(key);
+        let items = hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit.items : null;
+        if (!items) { items = await c.getChannelItems(ch.id, ch.source, ch.subSource); mappingCache.set(key, { at: Date.now(), items }); }
+        for (const it of items) add(it.channelRefId, it.sku, it.price);
+      }
+    } catch { linnworks = false; /* the tab's own uploads still count */ }
+    return { ok: true, mine, linnworks };
+  });
+
   /* ----- the picked item: UPC + what its page says ----- */
   // the item's own walmart.com page, read once in a hidden window on the
   // same session as the tab's view (its robot check, once passed, holds)
