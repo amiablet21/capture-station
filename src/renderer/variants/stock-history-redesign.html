@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stock history — redesign</title>
+<style>
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { color-scheme: only light;
+    --canvas:#F7F6F3; --surface:#FFF; --surface-2:#F9F9F8; --border:#EAEAEA; --border-soft:rgba(0,0,0,0.06); --grid:#F1F0EE;
+    --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#047857; --accent-soft:#E3F2EB; --accent-soft-text:#065F46;
+    --neg-bg:#FDEBEC; --neg-text:#9F2F2D; --pos-bg:#EDF3EC; --pos-text:#346538;
+    --blue-bg:#E1F3FE; --blue:#1F6C9F; --yellow-bg:#FBF3DB; --yellow:#956400;
+    --r-modal:12px; --r-ctl:6px; --r-card:8px;
+    --font:'Geist','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); padding:26px 34px 70px; }
+  h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:26px; max-width:900px; }
+  .sub ol { margin:8px 0 0 18px; }
+  .opt { margin-bottom:54px; }
+  .opt-label { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .opt-label b { font-size:14px; }
+  .opt-label span { font-size:11.5px; color:var(--muted); }
+  .cap { font-size:11.5px; color:var(--muted); margin-top:10px; max-width:860px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  button { font:inherit; color:inherit; }
+
+  /* ---- the dialog shell (same in both options) ---- */
+  .dlg { width:860px; max-width:100%; background:var(--surface); border-radius:var(--r-modal); box-shadow:0 24px 60px rgba(0,0,0,0.12), 0 0 0 1px var(--border-soft); overflow:hidden; display:flex; flex-direction:column; }
+  .hd { padding:20px 24px 0; }
+  .hd-top { display:flex; align-items:center; gap:10px; }
+  .hd-title { font-size:17px; font-weight:650; letter-spacing:-0.02em; }
+  .sku-chip { font-family:var(--mono); font-size:12px; font-weight:500; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:2px 8px; color:var(--text); }
+  .x { margin-left:auto; width:28px; height:28px; border-radius:6px; border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; }
+  .x:hover { background:var(--surface-2); color:var(--text); }
+  .hd-sub { font-size:12px; color:var(--muted); margin-top:3px; }
+  .hd-sub b { color:var(--text); font-weight:600; }
+
+  /* KPI row: four tiles, sparkline in the sales one */
+  .kpis { display:grid; grid-template-columns:1.1fr 1.4fr 1fr 1fr; gap:0; margin:16px 24px 0; border:1px solid var(--border); border-radius:10px; }
+  .kpi { padding:11px 14px 10px; min-width:0; }
+  .kpi + .kpi { border-left:1px solid var(--border-soft); }
+  .kpi-l { font-size:10.5px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--faint); }
+  .kpi-v { font-size:22px; font-weight:650; letter-spacing:-0.02em; line-height:1.25; font-variant-numeric:tabular-nums; }
+  .kpi-s { font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi-v .of { font-size:12px; font-weight:500; color:var(--muted); letter-spacing:0; margin-left:4px; }
+  .kpi-v.cost { color:var(--yellow); }
+  .io { display:flex; gap:12px; align-items:baseline; }
+  .io .pos { color:var(--pos-text); } .io .neg { color:var(--neg-text); }
+  .kpi-row { display:flex; align-items:flex-end; justify-content:space-between; gap:10px; }
+  .spark { display:flex; align-items:flex-end; gap:2px; height:26px; margin-bottom:5px; }
+  .spark i { display:block; width:3px; border-radius:1.5px; background:#D9D7D2; }
+  .spark i.wk { background:var(--neg-text); opacity:.75; }
+  .spark i.z { height:2px !important; background:#ECEBE8; }
+
+  /* filter bar: one row of chips with counts, the who-filter on the right */
+  .bar { display:flex; align-items:center; gap:6px; padding:14px 24px 10px; flex-wrap:wrap; }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-size:12.5px; font-weight:500; cursor:pointer; color:var(--text); }
+  .chip:hover { background:var(--surface-2); }
+  .chip .n { font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .chip.on { background:var(--text); border-color:var(--text); color:#fff; }
+  .chip.on .n { color:rgba(255,255,255,.6); }
+  .dot { width:7px; height:7px; border-radius:999px; flex:0 0 auto; }
+  .d-sold { background:var(--neg-text); } .d-ret { background:var(--pos-text); } .d-edit { background:var(--yellow); } .d-cost { background:#C29B3A; } .d-add { background:var(--blue); }
+  .bar .sp { flex:1; }
+  .who { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px 0 11px; border-radius:var(--r-ctl); border:1px solid var(--border); background:var(--surface); font-size:12.5px; cursor:pointer; }
+  .who svg { width:12px; height:12px; color:var(--faint); }
+
+  /* the list */
+  .list { height:430px; overflow-y:auto; border-top:1px solid var(--border); }
+  .day { position:sticky; top:0; z-index:1; display:flex; align-items:baseline; gap:10px; padding:7px 24px; background:rgba(249,249,248,.96); backdrop-filter:blur(4px); border-bottom:1px solid var(--border-soft); }
+  .day-n { font-size:12px; font-weight:600; }
+  .day-d { font-size:11.5px; color:var(--faint); }
+  .day-sum { margin-left:auto; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; display:flex; gap:10px; }
+  .day-sum .neg { color:var(--neg-text); font-weight:600; } .day-sum .pos { color:var(--pos-text); font-weight:600; }
+
+  /* ===== Option A — ledger rows ===== */
+  .row { display:grid; grid-template-columns:92px 1fr 58px 52px 170px; align-items:center; gap:14px; padding:0 24px; height:40px; border-bottom:1px solid var(--grid); }
+  .row:hover { background:var(--surface-2); }
+  .verb { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; }
+  .what { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:12.5px; }
+  .what .ref { font-family:var(--mono); font-size:12px; color:var(--text); }
+  .what .lbl { color:var(--faint); margin-right:4px; }
+  .what .tag { font-size:11px; font-weight:600; color:var(--yellow); background:var(--yellow-bg); border-radius:999px; padding:1px 7px; margin-left:6px; }
+  .qty { text-align:right; font-family:var(--mono); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .qty.neg { color:var(--neg-text); } .qty.pos { color:var(--pos-text); } .qty.nil { color:var(--faint); font-weight:400; }
+  .time { font-family:var(--mono); font-size:12px; color:var(--faint); text-align:right; }
+  .src { display:flex; align-items:center; gap:7px; justify-content:flex-end; min-width:0; font-size:12px; font-weight:600; white-space:nowrap; }
+  .mk { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--blue); background:var(--blue-bg); border-radius:5px; padding:2px 7px; }
+  .mk::before { content:""; width:6px; height:6px; border-radius:2px; background:#FFC220; box-shadow:0 0 0 1.5px #0071DC; }
+  .pc { display:inline-flex; align-items:center; gap:6px; color:var(--text); font-weight:500; font-size:12px; }
+  .pc svg { width:13px; height:13px; color:var(--faint); flex:0 0 auto; }
+  .av { width:20px; height:20px; border-radius:999px; background:#E7E4F5; color:#5B4BA0; font-size:9.5px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .pair { position:relative; }
+  .pair::before { content:""; position:absolute; left:27px; top:calc(50% + 7px); height:26px; border-left:1.5px dashed #D9C690; }
+  .row.is-hide { display:none; }
+
+  /* ===== Option B — timeline, sales folded ===== */
+  .tl { position:relative; padding:4px 0 12px; }
+  .ev { position:relative; display:grid; grid-template-columns:26px 1fr auto; gap:12px; padding:9px 24px 9px 24px; align-items:start; }
+  .ev::before { content:""; position:absolute; left:36px; top:0; bottom:0; border-left:1.5px solid var(--grid); }
+  .ev:first-child::before { top:20px; }
+  .node { position:relative; z-index:1; width:24px; height:24px; border-radius:999px; display:flex; align-items:center; justify-content:center; background:var(--surface); border:1.5px solid var(--border); }
+  .node svg { width:12px; height:12px; }
+  .n-sold { border-color:#F0C9CA; color:var(--neg-text); background:var(--neg-bg); }
+  .n-ret { border-color:#C9DEC7; color:var(--pos-text); background:var(--pos-bg); }
+  .n-edit { border-color:#EADCB0; color:var(--yellow); background:var(--yellow-bg); }
+  .ev-main { min-width:0; padding-top:2px; }
+  .ev-t { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ev-t .q { font-family:var(--mono); font-weight:650; }
+  .ev-t .q.neg { color:var(--neg-text); } .ev-t .q.pos { color:var(--pos-text); }
+  .ev-m { font-size:12px; color:var(--muted); margin-top:1px; }
+  .ev-m .ref { font-family:var(--mono); color:var(--text); font-size:11.5px; }
+  .ev-r { text-align:right; padding-top:3px; display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+  .ev-r .time { font-size:11.5px; }
+  .fold { border:none; background:none; cursor:pointer; color:var(--muted); font-size:12px; display:inline-flex; align-items:center; gap:4px; padding:0; margin-left:2px; }
+  .fold:hover { color:var(--accent); }
+  .fold svg { width:10px; height:10px; transition:transform .15s; }
+  .fold[aria-expanded=true] svg { transform:rotate(90deg); }
+  .orders { display:none; margin-top:7px; border:1px solid var(--border-soft); border-radius:8px; overflow:hidden; max-width:420px; }
+  .orders.open { display:block; }
+  .orders div { display:flex; justify-content:space-between; gap:16px; padding:5px 10px; font-size:12px; border-top:1px solid var(--grid); }
+  .orders div:first-child { border-top:none; }
+  .orders .mono { font-size:11.5px; }
+  .orders .t { color:var(--faint); }
+  .ev.linked .ev-m .link { color:var(--yellow); font-weight:500; }
+  .ev.is-hide { display:none; }
+
+  .note { font-size:11.5px; color:var(--faint); }
+  .why { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; max-width:860px; margin-top:14px; }
+  .why div { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--muted); }
+  .why b { display:block; color:var(--text); font-size:12.5px; margin-bottom:2px; }
+</style>
+</head>
+<body>
+
+<h1>Stock history — redesign</h1>
+<div class="sub">
+  Same data the dialog has today (the logged changes plus 30 days of Linnworks sales), laid out so you can read it faster. What changes from the current one:
+  <ol>
+    <li><b>A signed quantity column.</b> Today every row says "1 unit" and you work out the direction from the pill colour. Here it's <span style="color:var(--neg-text);font-weight:600">−1</span> or <span style="color:var(--pos-text);font-weight:600">+1</span>, lined up so you can scan it.</li>
+    <li><b>Grouped by day.</b> The date shows once in a sticky header with that day's in/out total, not on every row.</li>
+    <li><b>Filter chips with counts</b> (Sold 63 · Returned 2 · Edited 1) replace the "All actions" dropdown, so you see the mix before you click.</li>
+    <li><b>Better tiles.</b> "Last touched" moves into the subtitle. Its tile becomes <i>Sold · 30 days</i> with a daily sparkline, and <i>Out · 7 days</i> shows in and out together.</li>
+    <li><b>Lighter labels.</b> A coloured dot and a normal-case word instead of a big all-caps pill. The colour still carries the meaning, with less shouting.</li>
+  </ol>
+</div>
+
+<!-- ============================ OPTION A ============================ -->
+<div class="opt">
+  <div class="opt-label"><b>A · Day ledger</b><span>every line kept, one row each, read like a bank statement</span></div>
+  <div class="dlg" id="dlgA">
+    <div class="hd">
+      <div class="hd-top">
+        <span class="hd-title">Stock history</span>
+        <span class="sku-chip">X210-128GB-GRAY</span>
+        <button class="x" title="Close">✕</button>
+      </div>
+      <div class="hd-sub">6 changes logged · 63 sold in 30 days · last touched by <b>RETURNS-ROOM-PC</b> (MA) today 15:16</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-l">In stock</div><div class="kpi-v">900</div><div class="kpi-s">898 available · 2 in orders</div></div>
+      <div class="kpi"><div class="kpi-l">Sold · 30 days</div>
+        <div class="kpi-row"><div class="kpi-v">63</div><div class="spark" data-spark></div></div><div class="kpi-s">≈ 2.1 a day · 14 months of cover</div></div>
+      <div class="kpi"><div class="kpi-l">7 days</div><div class="kpi-v io"><span class="neg">−16</span><span class="pos">+2</span></div><div class="kpi-s">out · in</div></div>
+      <div class="kpi"><div class="kpi-l">Cost</div><div class="kpi-v cost">$170.00</div><div class="kpi-s">was no cost · 10/12</div></div>
+    </div>
+    <div class="bar" data-bar>
+      <button class="chip on" data-f="all">All <span class="n">69</span></button>
+      <button class="chip" data-f="sold"><span class="dot d-sold"></span>Sold <span class="n">63</span></button>
+      <button class="chip" data-f="ret"><span class="dot d-ret"></span>Returned <span class="n">2</span></button>
+      <button class="chip" data-f="edit"><span class="dot d-edit"></span>Edited <span class="n">1</span></button>
+      <button class="chip" data-f="cost"><span class="dot d-cost"></span>Cost <span class="n">1</span></button>
+      <span class="sp"></span>
+      <button class="who">Everyone <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div class="list" id="listA"></div>
+  </div>
+  <div class="cap">Hover a row and the edit / delete icons show at the end, as they do now. The edit that takes back the 10/22 return sits right under it, with a dashed link, so the pair reads as one story.</div>
+</div>
+
+<!-- ============================ OPTION B ============================ -->
+<div class="opt">
+  <div class="opt-label"><b>B · Timeline, sales folded</b><span>your team's changes up front, a burst of marketplace sales becomes one line</span></div>
+  <div class="dlg" id="dlgB">
+    <div class="hd">
+      <div class="hd-top">
+        <span class="hd-title">Stock history</span>
+        <span class="sku-chip">X210-128GB-GRAY</span>
+        <button class="x" title="Close">✕</button>
+      </div>
+      <div class="hd-sub">6 changes logged · 63 sold in 30 days · last touched by <b>RETURNS-ROOM-PC</b> (MA) today 15:16</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-l">In stock</div><div class="kpi-v">900</div><div class="kpi-s">898 available · 2 in orders</div></div>
+      <div class="kpi"><div class="kpi-l">Sold · 30 days</div>
+        <div class="kpi-row"><div class="kpi-v">63</div><div class="spark" data-spark></div></div><div class="kpi-s">≈ 2.1 a day · 14 months of cover</div></div>
+      <div class="kpi"><div class="kpi-l">7 days</div><div class="kpi-v io"><span class="neg">−16</span><span class="pos">+2</span></div><div class="kpi-s">out · in</div></div>
+      <div class="kpi"><div class="kpi-l">Cost</div><div class="kpi-v cost">$170.00</div><div class="kpi-s">was no cost · 10/12</div></div>
+    </div>
+    <div class="bar" data-bar>
+      <button class="chip on" data-f="all">All <span class="n">69</span></button>
+      <button class="chip" data-f="sold"><span class="dot d-sold"></span>Sold <span class="n">63</span></button>
+      <button class="chip" data-f="ret"><span class="dot d-ret"></span>Returned <span class="n">2</span></button>
+      <button class="chip" data-f="edit"><span class="dot d-edit"></span>Edited <span class="n">1</span></button>
+      <button class="chip" data-f="cost"><span class="dot d-cost"></span>Cost <span class="n">1</span></button>
+      <span class="sp"></span>
+      <button class="who">Everyone <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div class="list" id="listB"></div>
+  </div>
+  <div class="cap">The 13 rows in your screenshot become 7 here, and the two returns no longer get buried among the sales. Click "5 orders" to open the order numbers inline. When you filter by Sold, every order shows unfolded.</div>
+</div>
+
+<div class="why">
+  <div><b>Pick A if…</b>you mostly use this to check a single order number or line, and want everything visible without clicking.</div>
+  <div><b>Pick B if…</b>you mostly open it to ask "who changed this stock and why". Sales are context, so they fold away.</div>
+  <div><b>Either way</b>the tiles, chips and day headers are the same, so we can ship those first and choose the row style after.</div>
+</div>
+
+<script>
+// ---- sample data, from the 10/23 screenshot ----
+const PC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+const days = [
+  { n:'Today', d:'Thu 10/23', ev:[
+    { k:'ret',  q:+1, ref:'129128325854123', lbl:'PO#', t:'15:16', pc:'RETURNS-ROOM-PC', by:'MA' },
+    { k:'sold', q:-1, ref:'129129615998899', lbl:'Order#', t:'10:32', mk:'Walmart' },
+  ]},
+  { n:'Yesterday', d:'Wed 10/22', ev:[
+    { k:'sold', q:-1, ref:'129129614583536', lbl:'Order#', t:'16:36', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129597456481', lbl:'Order#', t:'16:36', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129612814339', lbl:'Order#', t:'16:35', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129613002556', lbl:'Order#', t:'16:35', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129613285754', lbl:'Order#', t:'16:35', mk:'Walmart' },
+    { k:'edit', q:-1, ref:'129127563052857', lbl:'PO#', t:'10:49', pc:'RETURNS-ROOM-PC', by:'MA', note:'return taken back', pair:true },
+    { k:'ret',  q:+1, ref:'129127563052857', lbl:'PO#', t:'10:49', pc:'RETURNS-ROOM-PC', by:'MA' },
+  ]},
+  { n:'Tue 10/21', d:'', ev:[
+    { k:'sold', q:-1, ref:'129129596236352', lbl:'Order#', t:'17:38', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129593281865', lbl:'Order#', t:'17:36', mk:'Walmart' },
+    { k:'sold', q:-1, ref:'129129594329194', lbl:'Order#', t:'17:36', mk:'Walmart' },
+  ]},
+  { n:'Mon 10/20', d:'', ev:[
+    { k:'sold', q:-1, ref:'129129387379353', lbl:'Order#', t:'15:48', mk:'Walmart' },
+    { k:'sold', q:-2, ref:'129129371120874', lbl:'Order#', t:'11:02', mk:'Walmart' },
+  ]},
+  { n:'Sun 10/12', d:'', ev:[
+    { k:'cost', q:null, t:'09:14', pc:'IMRAN-MACBOOK-PRO', by:'IM', note:'no cost → <b style="color:var(--text)">$170.00</b>' },
+  ]},
+];
+const VERB = { sold:'Sold', ret:'Returned', edit:'Edited', cost:'Cost' };
+const DOT = { sold:'d-sold', ret:'d-ret', edit:'d-edit', cost:'d-cost' };
+const sgn = q => q === null ? '—' : (q > 0 ? '+' : '−') + Math.abs(q);
+const qcls = q => q === null ? 'nil' : q < 0 ? 'neg' : 'pos';
+const who = e => e.mk ? `<span class="mk">${e.mk}</span>` : `<span class="pc">${PC}${e.pc}</span><span class="av" title="${e.by}">${e.by}</span>`;
+function daySum(d) {
+  let o = 0, i = 0; d.ev.forEach(e => { if (e.q < 0) o += -e.q; else if (e.q > 0) i += e.q; });
+  return `${o ? `<span class="neg">−${o}</span>` : ''}${i ? `<span class="pos">+${i}</span>` : ''}${!o && !i ? '<span>no stock change</span>' : ''}`;
+}
+
+// ---- Option A ----
+document.getElementById('listA').innerHTML = days.map(d => `
+  <div class="day"><span class="day-n">${d.n}</span><span class="day-d">${d.d}</span><span class="day-sum">${daySum(d)}</span></div>
+  ${d.ev.map(e => `<div class="row ${e.pair ? 'pair' : ''}" data-k="${e.k}">
+    <span class="verb"><span class="dot ${DOT[e.k]}"></span>${VERB[e.k]}</span>
+    <span class="what">${e.ref ? `<span class="lbl">${e.lbl}</span><span class="ref">${e.ref}</span>` : ''}${e.note ? `${e.ref ? ' · ' : ''}${e.note}` : ''}</span>
+    <span class="qty ${qcls(e.q)}">${sgn(e.q)}</span>
+    <span class="time">${e.t}</span>
+    <span class="src">${who(e)}</span>
+  </div>`).join('')}`).join('');
+
+// ---- Option B: runs of sales on the same day fold into one event ----
+const ICO = {
+  sold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+  ret:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
+  cost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M16.5 7.5c-.7-1.2-2.4-2-4.5-2-2.7 0-4.5 1.3-4.5 3.2 0 4.4 9 2.2 9 6.6 0 1.9-1.9 3.2-4.5 3.2-2.2 0-4-.9-4.7-2.2"/></svg>',
+};
+const NODE = { sold:'n-sold', ret:'n-ret', edit:'n-edit', cost:'n-edit' };
+let fid = 0;
+function evB(e) {
+  if (e.group) {
+    const g = e.group, n = g.reduce((s, x) => s - x.q, 0), id = 'f' + (++fid);
+    const span = g.length > 1 ? `${g[g.length - 1].t}–${g[0].t}` : g[0].t;
+    return `<div class="ev" data-k="sold">
+      <span class="node n-sold">${ICO.sold}</span>
+      <div class="ev-main">
+        <div class="ev-t"><span class="q neg">−${n}</span> sold on Walmart
+          ${g.length > 1 ? `<button class="fold" aria-expanded="false" data-fold="${id}">${g.length} orders <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 5l7 7-7 7"/></svg></button>` : ''}</div>
+        <div class="ev-m">${g.length > 1 ? '' : `Order# <span class="ref">${g[0].ref}</span>`}</div>
+        ${g.length > 1 ? `<div class="orders" id="${id}">${g.map(x => `<div><span class="mono">${x.ref}</span><span class="t mono">${x.t}</span></div>`).join('')}</div>` : ''}
+      </div>
+      <div class="ev-r"><span class="time">${span}</span><span class="mk">Walmart</span></div>
+    </div>`;
+  }
+  const title = e.k === 'ret' ? `<span class="q pos">+${e.q}</span> returned to stock`
+    : e.k === 'edit' ? `<span class="q neg">${sgn(e.q)}</span> return taken back`
+    : `Cost set to $170.00`;
+  const meta = e.k === 'edit' ? `PO# <span class="ref">${e.ref}</span> · <span class="link">undoes the return below</span>`
+    : e.k === 'cost' ? 'was no cost'
+    : `PO# <span class="ref">${e.ref}</span>`;
+  return `<div class="ev ${e.k === 'edit' ? 'linked' : ''}" data-k="${e.k}">
+    <span class="node ${NODE[e.k]}">${ICO[e.k]}</span>
+    <div class="ev-main"><div class="ev-t">${title}</div><div class="ev-m">${meta}</div></div>
+    <div class="ev-r"><span class="time">${e.t}</span><span class="src">${who(e)}</span></div>
+  </div>`;
+}
+function foldDay(ev) {
+  const out = []; let run = null;
+  for (const e of ev) {
+    if (e.k === 'sold') { if (!run) { run = { group: [] }; out.push(run); } run.group.push(e); }
+    else { run = null; out.push(e); }
+  }
+  return out;
+}
+document.getElementById('listB').innerHTML = days.map(d => `
+  <div class="day"><span class="day-n">${d.n}</span><span class="day-d">${d.d}</span><span class="day-sum">${daySum(d)}</span></div>
+  <div class="tl">${foldDay(d.ev).map(evB).join('')}</div>`).join('');
+document.getElementById('listB').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-fold]'); if (!b) return;
+  const open = b.getAttribute('aria-expanded') !== 'true';
+  b.setAttribute('aria-expanded', String(open));
+  document.getElementById(b.dataset.fold).classList.toggle('open', open);
+});
+
+// ---- 30-day sales sparkline (last 7 days darker) ----
+const sold = [1,3,2,0,4,2,1,3,2,2,0,1,3,4,2,1,2,3,0,2,1,3,2,1,2,3,1,3,5,1];
+document.querySelectorAll('[data-spark]').forEach(s => {
+  s.innerHTML = sold.map((v, i) => `<i class="${i >= 23 ? 'wk' : ''} ${v ? '' : 'z'}" style="height:${Math.max(2, v / 5 * 26)}px" title="${v} sold"></i>`).join('');
+});
+
+// ---- chips filter the list they sit above ----
+document.querySelectorAll('.dlg').forEach(dlg => {
+  dlg.querySelector('[data-bar]').addEventListener('click', ev => {
+    const c = ev.target.closest('.chip'); if (!c) return;
+    dlg.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c));
+    const f = c.dataset.f;
+    dlg.querySelectorAll('.list [data-k]').forEach(r => r.classList.toggle('is-hide', f !== 'all' && r.dataset.k !== f));
+    if (f === 'sold') dlg.querySelectorAll('.orders').forEach(o => o.classList.add('open'));
+    dlg.querySelectorAll('.day').forEach(h => {
+      let n = h.nextElementSibling, any = false;
+      const rows = n && n.classList.contains('tl') ? [...n.children] : (() => { const a = []; while (n && !n.classList.contains('day')) { a.push(n); n = n.nextElementSibling; } return a; })();
+      any = rows.some(r => !r.classList.contains('is-hide'));
+      h.style.display = any ? '' : 'none';
+      if (h.nextElementSibling && h.nextElementSibling.classList.contains('tl')) h.nextElementSibling.style.display = any ? '' : 'none';
+    });
+  });
+});
+</script>
+</body>
+</html>
