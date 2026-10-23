@@ -1968,6 +1968,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
           const ui = await exec(`(async () => {
             const tr = document.querySelector('#rowsBody tr[data-id="${wRow.id}"]'); const b = tr && tr.querySelector('.os-btn');
             if (!b) return { btn: false };
+            // as in real use: the Orders list already knows the line's items
+            state.orderMeta = { ...(state.orderMeta || {}), '108829451230774': { items: [{ sku: 'X133-128GB-GRAY', qty: 1, lineTotal: 189.99 }] } };
             b.click(); await new Promise(r => setTimeout(r, 900));
             const d = document.getElementById('osDrawer');
             const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
@@ -2001,7 +2003,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
           check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
           check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
           check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
-            /Deliver by10\/22\/2026/.test(ui.deliver) && /Ordered10\/20\/2026/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
+            /Deliver byThu 10\/22/.test(ui.deliver) && /Ordered10\/20/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
           const lr = await exec(`(async () => {
             state = await api.getState(); render();
             const tr = document.querySelector('#rowsBody tr[data-id="${eRow.id}"]');

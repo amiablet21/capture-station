@@ -295,15 +295,17 @@
       <span class="osd-mk" id="osdCh"></span>
       <span class="osd-po mono" id="osdPo"></span>
       <button class="btn-icon osd-ic" id="osdCopy" type="button" title="Copy the order number"></button>
-      <span class="osd-due" id="osdDue" hidden></span>
       <span class="osd-ago" id="osdAgo"></span>
       <button class="btn-icon osd-ic osd-x" id="osdClose" type="button" title="Close (Esc)">✕</button>
     </div>
     <div class="osd-b">
       <div class="osd-col">
         <section class="osd-bx"><div class="osd-t">Customer</div><div id="osAddr"></div></section>
-        <section class="osd-bx"><div class="osd-t">Order</div><div class="osd-dates" id="osdDates"></div></section>
-        <section class="osd-bx"><div class="osd-t" id="osdItemsT">Item</div><div id="osdItems"></div></section>
+        <section class="osd-bx">
+          <div class="osd-t">Order <span class="osd-due" id="osdDue" hidden></span></div>
+          <div class="osd-tiles" id="osdDates"></div>
+          <div class="osd-items" id="osdItems"></div>
+        </section>
       </div>
       <div class="osd-col">
         <section class="osd-bx">
@@ -315,10 +317,9 @@
           </div>
           <div class="osd-pk2">
             <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
-            <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
           </div>
-          <div class="osd-pk2">
-            <div></div>
+          <div class="osd-pk2 osd-refs">
+            <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
             <label class="os-f"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
           </div>
         </section>

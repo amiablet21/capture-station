@@ -14719,6 +14719,9 @@ function osFillDrawer(row) {
   const dsp = meta.despatchBy ? new Date(meta.despatchBy) : null;
   if (dsp && !Number.isNaN(dsp.getTime()) && dsp.getFullYear() > 2010) os.shipBy = `${dsp.getFullYear()}-${String(dsp.getMonth() + 1).padStart(2, '0')}-${String(dsp.getDate()).padStart(2, '0')}`;
   osShowDeliver();
+  // a fresh Reference #2 before the items fill it in
+  $('osRef2').value = '';
+  os.ref2Auto = '';
   osRenderCustomer(meta.customer ? { name: meta.customer.name, company: meta.customer.company, lines: meta.customer.address || [], phone: meta.customer.phone } : null);
   osRenderItems((meta.items || []).map(i => ({ sku: i.sku || i.channelSku || '', title: i.title || '', qty: i.qty || 1, total: Number(i.lineTotal) || 0, img: i.img || '' })));
   const boxes = ((sp.info && sp.info.boxes) || []);
@@ -14730,8 +14733,6 @@ function osFillDrawer(row) {
   osApplyBox();
   $('osWt').value = '';
   $('osVal').value = '';
-  $('osRef2').value = '';
-  os.ref2Auto = '';
   $('osPkTag').innerHTML = '';
   $('osdSum').innerHTML = '';
   osRenderRates();
@@ -14739,10 +14740,9 @@ function osFillDrawer(row) {
 
 function osRenderCustomer(c) {
   if (!c || !(c.name || (c.lines || []).length)) { $('osAddr').innerHTML = '<span class="osd-dim">Loading…</span>'; return; }
-  const ini = String(c.name || c.company || '?').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const copy = (v) => `<button type="button" class="btn-icon" data-copy="${esc(v)}" title="Copy">${ICONS.copy}</button>`;
   const lines = (c.lines || []).filter(Boolean);
-  $('osAddr').innerHTML = `<div class="osd-who"><div class="osd-av">${esc(ini)}</div><div><b>${esc(c.name || c.company)}</b>${c.name && c.company ? `<span>${esc(c.company)}</span>` : ''}</div></div>`
+  $('osAddr').innerHTML = `<div class="osd-who"><b>${esc(c.name || c.company)}</b>${c.name && c.company ? `<span>${esc(c.company)}</span>` : ''}</div>`
     + (lines.length ? `<div class="osd-ln">${OSD_PIN}<div class="v">${lines.map(esc).join('<br>')}</div>${copy(lines.join('\n'))}</div>` : '')
     + (c.phone ? `<div class="osd-ln">${OSD_PHONE}<div class="v mono">${esc(c.phone)}</div>${copy(c.phone)}</div>` : '');
 }
@@ -14764,16 +14764,14 @@ function osRenderItems(items) {
   const n = items.reduce((a, it) => a + (Number(it.qty) || 1), 0);
   const ref2 = $('osRef2');
   if (os && (!ref2.value.trim() || ref2.value === os.ref2Auto)) { os.ref2Auto = osRef2Default(items); ref2.value = os.ref2Auto; }
-  $('osdItemsT').textContent = items.length > 1 || n > 1 ? `Items · ${n}` : 'Item';
+  $('osdItems').dataset.n = String(n);
   $('osdItems').innerHTML = items.length ? items.map(it => `<div class="osd-it">
       <div class="osd-ph">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" />` : ICONS.box}</div>
-      <div style="min-width:0"><div class="osd-it-t">${esc(it.title || it.sku)}</div>${it.title && it.sku ? `<div class="osd-it-s">${esc(it.sku)}</div>` : ''}</div>
+      <div class="osd-it-m">${it.title ? `<div class="osd-it-t">${esc(it.title)}</div>` : ''}${it.sku ? `<div class="osd-it-s">${esc(it.sku)}</div>` : ''}</div>
       <div class="osd-it-r"><div class="q">×${Number(it.qty) || 1}</div>${it.total > 0 ? `<div class="p">${spMoney(it.total)}</div>` : ''}</div>
     </div>`).join('') : '<span class="osd-dim">Loading…</span>';
 }
 
-const OSD_CAL = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z"/></svg>';
-const OSD_TRUCK = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M255.42,117l-14-35A15.93,15.93,0,0,0,226.58,72H192V64a8,8,0,0,0-8-8H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H49a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,255.42,117ZM192,88h34.58l9.6,24H192ZM32,72H176v64H32ZM80,208a16,16,0,1,1,16-16A16,16,0,0,1,80,208Zm81-24H111a32,32,0,0,0-62,0H32V152H176v12.31A32.11,32.11,0,0,0,161,184Zm31,24a16,16,0,1,1,16-16A16,16,0,0,1,192,208Zm48-24H223a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>';
 const OSD_PIN = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></svg>';
 const OSD_PHONE = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46ZM176,208A128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.56L168.89,152l47,21.05h0s.08,0,.11,0A40.21,40.21,0,0,1,176,208Z"/></svg>';
 
@@ -14781,9 +14779,13 @@ const OSD_PHONE = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="t
 // the marketplace shows them; the deliver-by date also decides Late rates
 function osShowDeliver() {
   const el = $('osdDates');
-  const day = (iso) => (iso ? `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}` : '—');
-  el.innerHTML = os ? [['Ordered', os.orderedOn, OSD_CAL], ['Ship by', os.shipBy, ICONS.box], ['Deliver by', os.deliverBy, OSD_TRUCK, true]]
-    .map(([l, v, ic, key]) => `<div class="osd-date${key && v ? ' is-key' : ''}${v ? '' : ' is-none'}">${ic}<span>${l}</span><b>${esc(day(v))}</b></div>`).join('') : '';
+  const day = (iso, wk) => {
+    if (!iso) return '—';
+    const md = `${iso.slice(5, 7)}/${iso.slice(8, 10)}`;
+    return wk ? `${new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })} ${md}` : md;
+  };
+  el.innerHTML = os ? [['Ordered', os.orderedOn], ['Ship by', os.shipBy], ['Deliver by', os.deliverBy, true]]
+    .map(([l, v, key]) => `<div class="osd-tile${key && v ? ' is-key' : ''}${v ? '' : ' is-none'}"><span>${l}</span><b>${esc(day(v, key))}</b></div>`).join('') : '';
 }
 
 function osApplyBox() {
