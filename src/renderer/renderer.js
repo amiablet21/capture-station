@@ -6444,6 +6444,8 @@ function shSaleEvent(l) {
 const SH_LINK_REASONS = new Set(['edit-qty', 'edit-sku', 'deleted']);
 const SH_EDITABLE = new Set(['bulk-add', 'bulk-set', 'set', 'new-sku', 'revert', 'correction', 'other', 'dropship', 'substitution']);
 function shDayShort(d) { return d ? `${+String(d).slice(5, 7)}/${+String(d).slice(8, 10)}` : ''; }
+// a row's date: 10/23 this year, 10/23/2025 before it
+function shDayYear(d) { return String(d).slice(0, 4) === String(new Date().getFullYear()) ? shDayShort(d) : retDateUS(d); }
 
 
 // one name per computer: the stock history holds the same machine as typed
@@ -6479,7 +6481,7 @@ function shWhat(e, withSku) {
     : `<span class="mono">${esc(v)}</span>`;
   const isSale = e.reason === 'sale';
   const refLabel = isSale ? 'Order#' : (e.reason === 'wfs' || e.reason === 'dropship') ? 'Ref' : 'PO#';
-  const ref = e.ref ? ` <span class="sh-dim">(${refLabel}: ${esc(e.ref)})</span>` : '';
+  const ref = e.ref ? `<span class="sh-ref">${refLabel} <span class="mono">${esc(e.ref)}</span></span>` : '';
   const ordered = /ordered (\S+)/.exec(e.note || '');
   const units = withSku ? `${n} × ` : `${n} unit${n === 1 ? '' : 's'} `;
   if (e.delta === null || e.delta === undefined) {
@@ -6546,8 +6548,8 @@ function shRowHtml(e, withSku, clickable) {
   return `<div class="history-item sh-line ${isLink ? 'is-linked' : ''} ${deleted ? 'is-deleted' : ''}" data-gid="${esc(e.gid || '')}" title="${esc(title)}">
     <button type="button" class="sh-act ${A.cls} ${clickable ? '' : 'is-static'}" data-act="${act}" title="${clickable ? `Show only ${A.word.toLowerCase()}` : A.word}">${A.word}</button>
     <span class="sh-text">${shWhat(e, withSku)}</span>${tools}
-    <span class="sh-when mono">${retDateUS(e.day)} <span class="sh-dim">${fmtTime(e.created_at)}</span></span>
-    <span class="sh-pc ${isSale ? 'is-ext' : ''}" title="${esc(isSale ? `Sold on ${who}` : `Computer: ${e.computer || 'unknown'}${e.by ? ` · by ${e.by}` : ''}`)}">${isSale ? ICON_CART : ICONS.monitor}${esc(who)}${e.by ? ` <span class="sh-ini">${esc(e.by)}</span>` : ''}</span>
+    <span class="sh-when mono" title="${esc(retDateUS(e.day))}">${shDayYear(e.day)}<span class="sh-dim">${fmtTime(e.created_at)}</span></span>
+    <span class="sh-pc ${isSale ? 'is-ext' : ''}" title="${esc(isSale ? `Sold on ${who}` : `Computer: ${e.computer || 'unknown'}${e.by ? ` · by ${e.by}` : ''}`)}">${isSale ? ICON_CART : ICONS.monitor}<span class="sh-pc-name">${esc(who)}</span>${e.by ? `<span class="sh-ini">${esc(e.by)}</span>` : ''}</span>
   </div>`;
 }
 

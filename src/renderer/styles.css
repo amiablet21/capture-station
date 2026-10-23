@@ -4939,6 +4939,13 @@ th:last-child > .col-grip { right: 0; }
 .dlg-sh .sh-list.sh-empty { display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12.5px; }
 .dlg-sh #stockHistBody > :not(.sh-list) { flex: 0 0 auto; }
 .dlg-sh .sales-head { align-items: center; }
+/* the SKU as a chip next to the title, the subtitle a touch darker */
+.dlg-sh .sales-sku { font-size: 12px; font-weight: 500; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 2px 8px; line-height: 1.4; }
+.dlg-sh .sales-sub { color: var(--muted); margin: 4px 0 14px; }
+.dlg-sh .sales-strip { margin: 2px 0 16px; border-radius: 10px; }
+.dlg-sh .sales-stat { padding: 12px 16px; }
+.dlg-sh .sales-stat .v { font-size: 22px; font-variant-numeric: tabular-nums; }
+.dlg-sh .sales-stat .s { margin-top: 1px; }
 .sh-x { margin-left: auto; margin-right: -6px; align-self: flex-start; }
 .sh-x:hover { background: var(--surface-2); }
 .sh-x:focus-visible { outline: none; } /* the dialog focuses it on open - no ring */
@@ -4946,13 +4953,17 @@ th:last-child > .col-grip { right: 0; }
 .sh-strip { grid-template-columns: repeat(4, 1fr); }
 .sh-strip .v.is-pos { color: var(--pos-text); }
 .sh-strip .v.is-neg { color: var(--neg-text); }
-.sh-strip .v.is-name { font-size: 14px; }
+.sh-strip .v.is-name { font-size: 14px; line-height: 1.35; padding: 3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* one line per change: pill · what · when · who */
 .sh-list { height: auto; max-height: 56vh; }
 #hsList { height: 56vh; }
-.sh-line { align-items: center; gap: 14px; padding: 9px 14px; line-height: 1.4; font-size: 13px; min-width: 0; }
-.sh-act { width: 92px; flex: 0 0 auto; display: inline-flex; justify-content: center; font-family: var(--font); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; border: none; padding: 3px 0; border-radius: 999px; cursor: pointer; color: var(--muted); background: var(--surface-2); line-height: 1.3; }
+.sh-list .history-day { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.sh-list .history-day > .history-item { border: none; border-radius: 0; border-top: 1px solid var(--border-soft); }
+.sh-list .history-day > .history-item:first-of-type { border-top: none; }
+.sh-line { align-items: center; gap: 14px; padding: 10px 16px; line-height: 1.4; font-size: 13px; min-width: 0; transition: background-color 120ms; }
+.sh-line:hover { background: var(--surface-2); }
+.sh-act { width: 84px; flex: 0 0 auto; display: inline-flex; justify-content: center; font-family: var(--font); font-size: 10px; font-weight: 650; letter-spacing: 0.07em; border: none; padding: 3px 0; border-radius: 6px; cursor: pointer; color: var(--muted); background: var(--surface-2); line-height: 1.3; }
 .sh-act:hover { filter: brightness(0.96); }
 .sh-act.is-static { cursor: default; }
 .act-sold, .act-removed { color: var(--neg-text); background: var(--neg-bg); }
@@ -4998,11 +5009,17 @@ th:last-child > .col-grip { right: 0; }
 .sh-line .sh-sku:hover { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 3px; }
 .sh-line .sh-arrow { color: var(--faint); margin: 0 2px; }
 .sh-line .sh-dim { color: var(--muted); }
-.sh-line .sh-when { flex: 0 0 auto; width: 138px; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
-.sh-line .sh-pc { flex: 0 0 auto; width: 150px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.sh-line .sh-ref { color: var(--faint); font-size: 12px; margin-left: 6px; }
+.sh-line .sh-ref .mono { color: var(--muted); font-size: 12px; }
+.sh-line .sh-when { flex: 0 0 auto; width: 104px; text-align: right; font-size: 12px; color: var(--faint); white-space: nowrap; }
+.sh-line .sh-when .sh-dim { color: var(--text); margin-left: 4px; }
+/* who: icon · name (ellipsis at the END, never clipping the first letter)
+   · initials in a small round badge */
+.sh-line .sh-pc { flex: 0 0 auto; width: 200px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; min-width: 0; }
+.sh-line .sh-pc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sh-line .sh-pc svg { width: 14px; height: 14px; color: var(--faint); flex: 0 0 auto; }
 .sh-line .sh-pc.is-ext { color: var(--muted); }
-.sh-line .sh-ini { font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.sh-line .sh-ini { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-soft-text); font-size: 10px; font-weight: 650; letter-spacing: 0.02em; }
 
 /* filters: search + multi-select dropdowns in the condition-button style */
 .sh-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
