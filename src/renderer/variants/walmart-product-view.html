@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · product view — mockup</title>
+<!--
+  Owner 2026-10-23: "for the click a product to see it, can you make it look
+  better please, can be more simplified and nicer". Clicking a search result
+  opens this in place of the results; the listing form stays on the right.
+  Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .win { width: 1180px; margin: 24px auto; background: var(--surface); border: 1px solid #D9D8D3; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.10); display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 640px; }
+  .main { padding: 18px 32px 32px; background: var(--canvas); }
+  .back { font: 500 12.5px var(--font); color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; }
+  .back:hover { color: var(--text); }
+
+  .hero { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 32px; align-items: center; margin: 22px 0 30px; }
+  .ph { aspect-ratio: 1; border-radius: 16px; background: #fff; border: 1px solid var(--border); display: grid; place-items: center; }
+  .ph i { width: 62%; height: 46%; border-radius: 8px; background: linear-gradient(135deg, #3A3F4A, #8E95A8 60%, #C9CCD6); box-shadow: 0 6px 16px rgba(0,0,0,.18); }
+  h1 { font-size: 20px; line-height: 1.35; font-weight: 600; margin: 0; max-width: 560px; }
+  .sub { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .sub .dot { width: 3px; height: 3px; border-radius: 9px; background: var(--faint); }
+  .price { margin-top: 20px; display: flex; align-items: baseline; gap: 10px; }
+  .price b { font-size: 30px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .price span { font-size: 13px; color: var(--muted); }
+  .go { margin-top: 18px; font: 600 14px var(--font); color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 11px 26px; cursor: pointer; box-shadow: 0 4px 12px rgba(30,58,102,.22); }
+
+  .sellers { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .sh { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .sh b { font-size: 13.5px; }
+  .sh span { font-size: 12px; color: var(--muted); }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .who { font-size: 13.5px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .p { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+  .pill { font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+  .pill.bb { background: var(--pos-bg); color: var(--pos-text); }
+  .pill.you { background: var(--accent); color: #fff; }
+  .pill.used { background: #F3EFE6; color: #7A5B1E; }
+  .row.is-you { background: #F4F7FC; box-shadow: inset 3px 0 0 var(--accent); }
+  .row.is-you .p small { display: block; font-size: 11px; font-weight: 500; color: var(--neg-text); }
+
+  .side { border-left: 1px solid var(--border); padding: 22px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+  .side b { color: var(--text); }
+</style></head>
+<body>
+
+<div class="win">
+  <div class="main">
+    <button class="back">← Back to results</button>
+
+    <div class="hero">
+      <div class="ph"><i></i></div>
+      <div>
+        <h1>Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</h1>
+        <div class="sub"><span class="wl-stars"><i class="w84"></i></span>4.2 · 12 reviews<span class="dot"></span>Samsung<span class="dot"></span>Item 5129928603</div>
+        <div class="price"><b>$209.99</b><span>Buy Box · HotDeals</span></div>
+        <button class="go">+ List this</button>
+      </div>
+    </div>
+
+    <div class="sellers">
+      <div class="sh"><b>5 sellers</b><span>from $161.00</span></div>
+      <div class="row">
+        <div><div class="who">HotDeals <span class="pill bb">Buy Box</span></div><div class="meta">New · Free shipping · arrives Tue</div></div>
+        <div class="p">$209.99</div>
+      </div>
+      <div class="row is-you">
+        <div><div class="who">You <span class="pill you">Your listing</span></div><div class="meta">New · Free shipping · arrives Wed</div></div>
+        <div class="p">$212.50<small>$2.51 over</small></div>
+      </div>
+      <div class="row">
+        <div><div class="who">Walmart.com</div><div class="meta">New · Free shipping · arrives Mon</div></div>
+        <div class="p">$219.00</div>
+      </div>
+      <div class="row">
+        <div><div class="who">TechDeals Direct <span class="pill used">Restored</span></div><div class="meta">+$5.99 shipping · arrives Fri</div></div>
+        <div class="p">$174.00</div>
+      </div>
+      <div class="row">
+        <div><div class="who">Gadget Outlet <span class="pill used">Pre-Owned</span></div><div class="meta">Free shipping · arrives Thu</div></div>
+        <div class="p">$161.00</div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="side"><b>Listing form stays here.</b><br>Press <b>+ List this</b> and it fills in as it does now.</aside>
+</div>
+
+</body>
+</html>

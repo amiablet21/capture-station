@@ -1,5 +1,12 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, clipboard, nativeImage, dialog, shell, WebContentsView, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, dialog, shell, WebContentsView, session } = require('electron');
+// every IPC handler is also kept here, so the browser version of the app
+// (webserve.js, owner 2026-10-20) runs the very same code as this window
+const ipcHandlers = new Map();
+{
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, fn) => { ipcHandlers.set(channel, fn); return handle(channel, fn); };
+}
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -9,8 +16,13 @@ const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
+const ups = require('./ups');
+const walmart = require('./walmart');
+const webserve = require('./webserve');
 const returnsImport = require('./returns-import');
 const retsync = require('./retsync');
+const recovery = require('./recovery');
+const wfsrecv = require('./wfsrecv');
 const presence = require('./presence');
 // in-place updates (owner 2026-10-08: "why can't it update within itself?")
 // — electron-updater downloads the new NSIS build in the background and
@@ -34,6 +46,7 @@ let runUnlistedScanShared = async () => unlistedCache; // bound to registerIpc's
 let pendingNotice = ''; // startup housekeeping message, shown once the UI is up
 let retsyncMissed = 0; // foreign shared-returns changes found at boot, toasted once
 const mappingCache = new Map(); // channel key -> { at, items } (10-min TTL)
+let wmSiteZoomHook = null; // set in registerIpc: the Walmart tab's walmart.com view takes the menu's zoom
 let lastClipboardText = null; // null = not primed yet; prime with current content on start
 let currentRowId = null;
 const undoStack = []; // { type: 'createRow'|'setTracking'|'addSerial', rowId, prev? }
@@ -129,6 +142,7 @@ function buildState() {
     orderUrlTemplates: cfg.orderUrlTemplates || {},
     returnUrlTemplates: cfg.returnUrlTemplates || {},
     shipCutoff: cfg.shipCutoff || '16:00',
+    rowLabels: rowLabelsFor(cfg),
     locations: {
       primaryId: cfg.linnworks.locationId || '',
       primaryName: cfg.linnworks.locationName || '',
@@ -137,6 +151,16 @@ function buildState() {
         && (cfg.stockRouting || {}).fallbackLocationId !== cfg.linnworks.locationId,
     },
   };
+}
+
+// order line -> the live label made for it here (Reprint / Void on the line)
+function rowLabelsFor(cfg) {
+  if (cfg.captureOnly || !(cfg.pages && cfg.pages.ship)) return {};
+  try {
+    const out = {};
+    for (const l of db.shipLabelsForRows()) out[l.row_id] = { id: l.id, tracking: l.tracking };
+    return out;
+  } catch { return {}; }
 }
 
 function pushState() {
@@ -843,7 +867,9 @@ function writeReturnsCsv() {
     const folder = csvFolder();
     fs.mkdirSync(folder, { recursive: true });
     const lines = ['date,order_number,source,customer,tracking,sku,condition,target_sku,qty,price,received_by,note,unmatched,dispute_settlement'];
-    for (const r of db.listReturns(1000).slice().reverse()) {
+    // every return, not the newest 1000: past that the oldest silently
+    // fell off the CSV (owner 2026-10-22; the returns room logs ~30 a day)
+    for (const r of db.listReturns(1e9).slice().reverse()) {
       // a PO-only return has no item lines: one placeholder row keeps it in the CSV
       const its = r.items.length ? r.items : [{ sku: '', condition: '', targetSku: '', qty: '', price: null, note: '' }];
       for (const it of its) {
@@ -1255,10 +1281,14 @@ function buildMarketUrl(cfg, channel, po, kind) {
   const ch = String(channel || '').toLowerCase();
   // kind 'case': po carries the dispute case number, and there is no
   // fallback — a case number means nothing to the order-search pages
+  // kind 'txn': the marketplace's payments / transactions search for the
+  // PO (Recovery's PO# menu); no fallback to the order page either
   const tpl = String(kind === 'case'
     ? (cfg.caseUrlTemplates || {})[ch] || ''
-    : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
-      || (cfg.orderUrlTemplates || {})[ch] || ''
+    : kind === 'txn'
+      ? (cfg.txnUrlTemplates || {})[ch] || ''
+      : (kind === 'return' ? (cfg.returnUrlTemplates || {})[ch] : '')
+        || (cfg.orderUrlTemplates || {})[ch] || ''
   ).trim();
   if (!tpl || !/^https:\/\//i.test(tpl)) return '';
   if (kind === 'case') return tpl.replace('{case}', encodeURIComponent(String(po)));
@@ -1479,6 +1509,53 @@ function listingPriceHistory({ sales: rawSales, log, days, curPrice, limit }) {
     since: last ? { units: since, perDay: perDay(since, lastT, now), prevPerDay: prev ? prev.perDay : null } : null,
     cur: Number(curPrice) || 0,
   };
+}
+
+/* ---- saved packages (owner 2026-10-20): the box, weight and size an item
+   ships in, remembered for the next time it ships. Keyed by the item, or by
+   the exact mix of items on a multi-item order ("A15-64GB-BLACK×2 +
+   CHG-25W-USBC"). Kept here and in the shared folder, so every desktop has
+   them; not in Linnworks, whose weight units belong to its own shipping
+   rules. Newest save for a key wins. */
+function shipPkgPath() { return path.join(app.getPath('userData'), 'ship-packages.json'); }
+function loadShipPkgs() {
+  try { const j = JSON.parse(fs.readFileSync(shipPkgPath(), 'utf8')); return Array.isArray(j) ? j : []; }
+  catch { return []; }
+}
+function shipPkgKey(items) {
+  const parts = (items || []).filter(it => it && it.sku)
+    .map(it => `${String(it.sku).trim().toUpperCase()}${(Number(it.quantity ?? it.qty) || 1) > 1 ? `×${Number(it.quantity ?? it.qty)}` : ''}`);
+  return parts.sort().join(' + ');
+}
+function shipPkgKeyClean(key) { return String(key || '').trim().toUpperCase().slice(0, 400); }
+function shipPkgClean(pkg) {
+  const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const p = { box: String((pkg && pkg.box) || '').slice(0, 60), weight: n(pkg && pkg.weight), length: n(pkg && pkg.length), width: n(pkg && pkg.width), height: n(pkg && pkg.height) };
+  return p.weight > 0 ? p : null;
+}
+function shipPkgLog(key, pkg) {
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    station: retsync.stationName() || 'this desktop',
+    key, pkg,
+  };
+  try { fs.writeFileSync(shipPkgPath(), JSON.stringify([entry, ...loadShipPkgs()].slice(0, 5000))); } catch { /* best effort */ }
+  try { retsync.appendAux('shippkgs', entry); } catch { /* offline: local copy stands */ }
+  return entry;
+}
+function shipPkgState() {
+  const seen = new Set();
+  const out = {};
+  const stamp = {};
+  let aux = [];
+  try { aux = retsync.readAux('shippkgs'); } catch { aux = []; }
+  for (const e of [...aux, ...loadShipPkgs()]) {
+    if (!e || !e.id || !e.key || !e.pkg || seen.has(e.id)) continue;
+    seen.add(e.id);
+    if (!stamp[e.key] || String(e.ts) > stamp[e.key]) { stamp[e.key] = String(e.ts); out[e.key] = e.pkg; }
+  }
+  return out;
 }
 
 /* ---- variation groups (owner 2026-09-18): condition SKUs (OPEN-BOX-…,
@@ -1985,11 +2062,6 @@ async function startClaims() {
   try {
     claimsRun = await claims.start({
       dir,
-      // eBay lister QR capture: raw shots per draft SKU, swept after 14 days
-      listingDir: path.join(app.getPath('documents'), 'Capture Station', 'listing photos'),
-      onListingUpload: ({ sku, file }) => {
-        if (win && !win.isDestroyed()) win.webContents.send('ebay:photoUploaded', { sku, file });
-      },
       port: 0, // ephemeral — the QR carries the port, nobody types the URL
       // tap chips on the phone: today's received returns, newest first
       listToday: () => {
@@ -2327,6 +2399,23 @@ function registerIpc() {
     }
   });
 
+  // the item's title, edited beside its SKU (owner 2026-10-22)
+  ipcMain.handle('stock:setTitle', async (_e, { stockItemId, title }) => {
+    invCacheClear();
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!stockItemId) return { ok: false, error: 'Missing stock item id.' };
+    const next = String(title || '').replace(/\s+/g, ' ').trim();
+    if (next.length > 255) return { ok: false, error: 'Titles are 255 characters at most.' };
+    try {
+      await new LinnworksClient(cfg.linnworks).setTitle(stockItemId, next);
+      skuImageCache = { at: 0, map: null, skus: null, promise: null };
+      return { ok: true, title: next };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('stock:deleteSku', async (_e, { stockItemId, sku }) => {
     invCacheClear();
     const cfg = config.load();
@@ -2483,6 +2572,7 @@ function registerIpc() {
       }
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] }; // links change what is unlisted
+      recordMappingRow('mapped', { sku: targetSku, channelSku, source, subSource });
       // Retro-link check (owner 2026-08-14): whether Linnworks attaches a NEW
       // link to open orders that already carried this channel SKU was an open
       // question — so it is verified per-mapping instead of assumed. Their
@@ -2523,7 +2613,7 @@ function registerIpc() {
       return { ok: false, error: e.message };
     }
   });
-  ipcMain.handle('mapping:unlink', async (_e, { rowId }) => {
+  ipcMain.handle('mapping:unlink', async (_e, { rowId, sku, channelSku, source, subSource }) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!rowId) return { ok: false, error: 'This listing carries no link id — rescan the channel in Linnworks.' };
@@ -2532,6 +2622,7 @@ function registerIpc() {
       await client.unlinkChannelSku(rowId);
       mappingCache.clear();
       unlistedCache = { at: 0, skus: null, detail: null, channels: [] };
+      recordMappingRow('unmapped', { sku, channelSku, source, subSource });
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3011,20 +3102,6 @@ function registerIpc() {
     priceGroupLog({ op: 'ignore', parent: p, child: c });
     pricingCache = { at: 0, data: null };
     return { ok: true };
-  });
-
-  // copy a lister photo (edited pixels) onto the OS clipboard — paste it
-  // straight into eBay's photo box instead of exporting files (owner
-  // 2026-09-18). OS clipboards hold ONE image, so it is per-photo.
-  ipcMain.handle('util:copyImage', (_e, { path: p, dataUrl } = {}) => {
-    try {
-      const img = dataUrl ? nativeImage.createFromDataURL(String(dataUrl)) : nativeImage.createFromPath(String(p || ''));
-      if (!img || img.isEmpty()) return { ok: false, error: 'Could not read the image.' };
-      clipboard.writeImage(img);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
   });
 
   /* ---------- in-app updater (owner 2026-09-18: "instead of needing to go
@@ -3555,12 +3632,52 @@ exit 1
     pushState();
     return { ok: true, folder: filePaths[0] };
   });
-  ipcMain.handle('config:get', () => config.load());
+  // saved keys never travel to the window (owner 2026-10-20: "Saved ✓ ·
+  // Replace", not the key): the renderer gets has* flags, and a save that
+  // leaves a key out keeps the stored one
+  function publicConfig(cfg) {
+    const out = structuredClone(cfg);
+    const lw = out.linnworks || {};
+    lw.hasApplicationSecret = !!lw.applicationSecret; lw.hasToken = !!lw.token;
+    lw.applicationSecret = ''; lw.token = '';
+    for (const a of (out.ups && out.ups.accounts) || []) {
+      a.hasClientId = !!a.clientId; a.hasClientSecret = !!a.clientSecret;
+      a.clientId = ''; a.clientSecret = '';
+    }
+    const w = out.walmart || (out.walmart = {});
+    w.hasClientId = !!w.clientId; w.hasClientSecret = !!w.clientSecret;
+    w.clientId = ''; w.clientSecret = '';
+    return out;
+  }
+  ipcMain.handle('config:get', () => publicConfig(config.load()));
   ipcMain.handle('config:set', (_e, patch) => {
-    const cfg = config.save(patch || {});
+    patch = patch || {};
+    // the UPS account list is saved whole: carry each stored key over
+    // unless the patch brings a replacement
+    if (patch.ups && Array.isArray(patch.ups.accounts)) {
+      const cur = config.load().ups.accounts;
+      patch.ups.accounts = patch.ups.accounts.map((a, i) => {
+        const was = cur.find(c => c.id === a.id) || cur[i] || {};
+        const keep = { ...a };
+        for (const f of ['clientId', 'clientSecret']) if (!keep[f]) keep[f] = was[f] || '';
+        delete keep.hasClientId; delete keep.hasClientSecret;
+        return keep;
+      });
+    }
+    if (patch.walmart) {
+      for (const f of ['clientId', 'clientSecret']) if (!patch.walmart[f]) delete patch.walmart[f];
+      delete patch.walmart.hasClientId; delete patch.walmart.hasClientSecret;
+    }
+    if (patch.linnworks) {
+      for (const f of ['applicationSecret', 'token']) if (!patch.linnworks[f]) delete patch.linnworks[f];
+      delete patch.linnworks.hasApplicationSecret; delete patch.linnworks.hasToken;
+    }
+    const wasWebOn = !!(config.load().web || {}).enabled; // load() is the live object save() changes
+    const cfg = config.save(patch);
     if (patch && patch.returnsSync) startRetSync(); // folder/station changed
+    if (patch.web && patch.web.enabled !== undefined && !!patch.web.enabled !== wasWebOn) startWeb();
     pushState();
-    return cfg;
+    return publicConfig(cfg);
   });
   ipcMain.handle('csv:export', () => exportCsv());
   ipcMain.handle('channelSkus:export', (_e, { channel, condition } = {}) => exportChannelSkus(channel, condition));
@@ -3568,7 +3685,14 @@ exit 1
   ipcMain.handle('salesStock:export', () => exportSalesStock());
   ipcMain.handle('linnworks:test', async (_e, creds) => {
     try {
-      const result = await testConnection(creds || config.load().linnworks);
+      // a key left blank in Settings means the saved one
+      const saved = config.load().linnworks;
+      const c = creds || {};
+      const result = await testConnection({
+        applicationId: c.applicationId || saved.applicationId,
+        applicationSecret: c.applicationSecret || saved.applicationSecret,
+        token: c.token || saved.token,
+      });
       return { ok: true, ...result };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3693,7 +3817,7 @@ exit 1
         if (!k || Number.isNaN(ts)) return;
         if (!arrived.has(k) || ts > arrived.get(k)) arrived.set(k, ts);
       };
-      for (const r of db.listReturns(1000)) {
+      for (const r of db.listReturns(1e9)) { // all of them: a SKU's last return may be old
         const ts = Date.parse(r.created_at);
         for (const it of r.items || []) bump(it.targetSku || it.sku, ts);
       }
@@ -4161,268 +4285,901 @@ exit 1
     return { ok: true };
   });
 
-  /* ---------- eBay lister ---------- */
+  /* ---------- Walmart tab: list, uploads (owner 2026-10-22 / 23) ----------
+     Approved clickable mockup: variants/walmart-tab-clickable.html.
+     List: the search bar opens walmart.com itself in a view inside the tab
+     (its own session, never the Seller Center pane's); a "List this" button
+     on every product sends its item number here. The picked item's page is
+     read once for its UPC (proven through the API: only a UPC that leads
+     back to that item number is used), sellers, Buy Box holder and rating.
+     The owner types ANY SKU for the listing: nothing is read from or written
+     to Linnworks while listing (owner 2026-10-23). Uploads: one MP_ITEM_MATCH
+     feed per batch, kept in userData/walmart-feeds.json (newest first, last
+     50); a 15-minute check settles open uploads, sets each accepted SKU's
+     starting stock once, reads whether it is live, and says when an upload
+     finishes. Once Linnworks has downloaded a live listing it can be mapped
+     to a Linnworks item from the Uploads tab (same link call as Channel
+     mapping). */
+  const wmT = walmart; // the shared Walmart client module
+  const wmClient = () => new wmT.WalmartClient(config.load().walmart || {});
+  const wmKeys = () => { const w = config.load().walmart || {}; return !!(w.clientId && w.clientSecret); };
+  const wmFeedsPath = () => path.join(app.getPath('userData'), 'walmart-feeds.json');
+  const wmReadFeeds = () => { try { return JSON.parse(fs.readFileSync(wmFeedsPath(), 'utf8')) || []; } catch { return []; } };
+  const wmWriteFeeds = (list) => fs.writeFileSync(wmFeedsPath(), JSON.stringify(list.slice(0, 50), null, 2), 'utf8');
+  const wmSettled = (f) => f.offers.every(o => wmT.isFinal(((f.items || {})[o.sku] || {}).status)) || f.status === 'ERROR';
+  const wmSend = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 
-  // eBay 403s plain fetches (bot detection), so the listing page is read by a
-  // real hidden Chromium window on the marketplace session (the seller's own
-  // cookies ride along) and the specifics come straight off the DOM.
-  async function fetchEbayListingDom(itemId) {
-    const w = new BrowserWindow({
-      show: false, width: 1100, height: 900,
-      webPreferences: { partition: PANE_PARTITION, sandbox: true },
-    });
+  ipcMain.handle('walmart:status', () => {
+    const l = config.load().walmartListing || {};
+    return { configured: wmKeys(), shipWeightLb: Number(l.shipWeightLb) || 1, feePct: Number(l.feePct) || 8 };
+  });
+
+  /* ----- walmart.com inside the tab ----- */
+  const WM_SITE_PARTITION = 'persist:walmart-site';
+  const WM_SITE = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only
+  const wmSiteOk = (u) => {
     try {
-      await w.loadURL(`https://www.ebay.com/itm/${encodeURIComponent(itemId)}`);
-      await new Promise(r => setTimeout(r, 4000)); // lazy sections settle
-      // specifics live in dl dt/dd pairs (verified live 2026-08-12); the
-      // category id rides the deepest breadcrumb /b/ link
-      return await w.webContents.executeJavaScript(`(() => {
-        const specs = {};
-        // seller-view rows (Views, Buyer ID, timings, shipping blocks) are
-        // page furniture, not item specifics — keep them out of the card
-        const junk = /^(condition|views|buyer id|duration|start time|end time|item number|bids|payments|shipping|returns|pickup|located in|seller|item location|quantity|sold|watchers)$/i;
-        document.querySelectorAll('dl').forEach(dl => {
-          const dts = [...dl.querySelectorAll('dt')];
-          const dds = [...dl.querySelectorAll('dd')];
-          dts.forEach((dt, i) => {
-            const k = dt.innerText.trim().replace(/:$/, '');
-            const v = (dds[i] ? dds[i].innerText : '').replace(/\\s*Read more[\\s\\S]*$/i, '').trim();
-            if (k && v && !junk.test(k) && !specs[k]) specs[k] = v;
+      const url = new URL(u);
+      if (process.env.CAPTURE_WALMART_SITE && url.origin === new URL(WM_SITE).origin) return true;
+      return url.protocol === 'https:' && (url.hostname === 'walmart.com' || url.hostname.endsWith('.walmart.com'));
+    } catch { return false; }
+  };
+  const wmSiteSession = () => {
+    const ses = session.fromPartition(WM_SITE_PARTITION);
+    // present as the Chrome build this is: walmart.com distrusts Electron
+    ses.setUserAgent(ses.getUserAgent()
+      .replace(/\sElectron\/\S+/i, '')
+      .replace(/\s(?:capture[- ]?station|Capture ?Station|dws[- ]?stock)\/\S+/i, ''));
+    return ses;
+  };
+  // the "List this" buttons: CSS from here (the page's own CSP can't refuse it)
+  const WM_SITE_CSS = `
+    .dws-list { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 50; opacity: 0;
+      font: 600 13px/1 system-ui, sans-serif; color: #fff; background: #1E3A66; border: none; border-radius: 999px;
+      padding: 9px 16px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25); transition: opacity .12s; white-space: nowrap; }
+    [data-dws-card]:hover .dws-list, .dws-list:focus { opacity: 1; }
+    .dws-list:hover { background: #152B4E; }
+    #dws-list-page { position: fixed; top: auto; left: auto; right: 24px; bottom: 24px; transform: none; opacity: 1; font-size: 15px; padding: 13px 22px; }`;
+  let wmSiteView = null;
+  let wmSiteAttached = false;
+  function wmSiteState() {
+    if (!wmSiteView) return;
+    const wc = wmSiteView.webContents;
+    let page = '';
+    try {
+      const u = new URL(wc.getURL());
+      const id = /\/ip\/(?:[^/]+\/)?(\d{5,})/.exec(u.pathname);
+      page = id ? `item ${id[1]}` : u.searchParams.get('q') ? `search: ${u.searchParams.get('q')}` : u.hostname.replace(/^www\./, '');
+    } catch { /* about:blank */ }
+    wmSend('wmsite:state', {
+      page, loading: wc.isLoading(),
+      canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(),
+    });
+  }
+  function ensureWmSite() {
+    if (wmSiteView) return wmSiteView;
+    wmSiteSession();
+    wmSiteView = new WebContentsView({
+      webPreferences: {
+        partition: WM_SITE_PARTITION,
+        preload: path.join(__dirname, 'wmsite-preload.js'),
+        contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false,
+      },
+    });
+    const wc = wmSiteView.webContents;
+    wc.on('dom-ready', () => wc.insertCSS(WM_SITE_CSS).catch(() => {}));
+    // Cmd/Ctrl + / - / 0 and Cmd/Ctrl + wheel zoom walmart.com itself
+    // (owner 2026-10-23), remembered across restarts
+    wc.on('did-navigate', () => wc.setZoomFactor(Number((config.load().walmartListing || {}).siteZoom) || 1));
+    wc.on('zoom-changed', (_e, dir) => wmSiteZoom(dir === 'in' ? 'in' : 'out'));
+    wc.on('before-input-event', (e, input) => {
+      if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
+      const dir = input.key === '=' || input.key === '+' ? 'in' : input.key === '-' ? 'out' : input.key === '0' ? 'reset' : '';
+      if (dir) { e.preventDefault(); wmSiteZoom(dir); }
+    });
+    // walmart.com only: anything else opens in the real browser
+    wc.on('will-navigate', (e, u) => {
+      if (wmSiteOk(u)) return;
+      e.preventDefault();
+      if (/^https?:\/\//i.test(u)) shell.openExternal(u).catch(() => {});
+    });
+    wc.setWindowOpenHandler(({ url }) => {
+      if (wmSiteOk(url)) wc.loadURL(url).catch(() => {});
+      else if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => {});
+      return { action: 'deny' };
+    });
+    wc.on('context-menu', (_e, params) => {
+      const items = [];
+      if (params.isEditable) items.push({ role: 'cut', enabled: params.editFlags.canCut }, { role: 'copy', enabled: params.editFlags.canCopy }, { role: 'paste', enabled: params.editFlags.canPaste });
+      else if ((params.selectionText || '').trim()) items.push({ role: 'copy' });
+      if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+    });
+    for (const ev of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) wc.on(ev, wmSiteState);
+    return wmSiteView;
+  }
+  let wmZoomSave = null;
+  function wmSiteZoom(dir) {
+    if (!wmSiteView) return;
+    const wc = wmSiteView.webContents;
+    const cur = wc.getZoomFactor();
+    const f = Math.round(Math.min(3, Math.max(0.3, dir === 'reset' ? 1 : dir === 'in' ? cur * 1.1 : cur / 1.1)) * 100) / 100;
+    wc.setZoomFactor(f);
+    clearTimeout(wmZoomSave);
+    wmZoomSave = setTimeout(() => config.save({ walmartListing: { ...(config.load().walmartListing || {}), siteZoom: f } }), 400);
+  }
+  // the app menu's Zoom In / Out / Actual Size act on walmart.com while it
+  // has the keyboard (on a Mac the menu sees Cmd + before the page does)
+  wmSiteZoomHook = (dir) => {
+    if (!wmSiteView || !wmSiteAttached || !wmSiteView.webContents.isFocused()) return false;
+    wmSiteZoom(dir);
+    return true;
+  };
+  // the renderer owns the geometry (and hides the view while a dialog is
+  // open: a native view always draws above the page)
+  ipcMain.handle('wmsite:layout', (_e, b = {}) => {
+    if (!win || win.isDestroyed()) return { ok: false };
+    if (!b.visible || config.load().captureOnly) {
+      if (wmSiteView && wmSiteAttached) { win.contentView.removeChildView(wmSiteView); wmSiteAttached = false; win.webContents.focus(); }
+      return { ok: true, visible: false };
+    }
+    ensureWmSite();
+    if (!wmSiteAttached) { win.contentView.addChildView(wmSiteView); wmSiteAttached = true; }
+    const [cw, ch] = win.getContentSize();
+    const x = Math.min(cw, Math.max(0, Math.round(b.x || 0)));
+    const y = Math.min(ch, Math.max(0, Math.round(b.y || 0)));
+    wmSiteView.setBounds({ x, y, width: Math.max(0, Math.min(cw - x, Math.round(b.width || 0))), height: Math.max(0, Math.min(ch - y, Math.round(b.height || 0))) });
+    return { ok: true, visible: true };
+  });
+  // a search, an item number or a walmart.com link -> that page
+  ipcMain.handle('wmsite:go', (_e, { text } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const t = String(text || '').trim();
+    if (!t) return { ok: false, error: 'Type what to search for.' };
+    let url;
+    if (/^https?:\/\//i.test(t)) {
+      if (!wmSiteOk(t)) return { ok: false, error: 'Only walmart.com links open here.' };
+      url = t;
+    } else if (/^\d{6,}$/.test(t)) {
+      url = `${WM_SITE}/ip/${t}`;
+    } else {
+      url = `${WM_SITE}/search?q=${encodeURIComponent(t)}`;
+    }
+    ensureWmSite().webContents.loadURL(url).catch(() => {}); // a slow sub-resource is no failure
+    return { ok: true };
+  });
+  ipcMain.handle('wmsite:nav', (_e, { action } = {}) => {
+    if (!wmSiteView) return { ok: false };
+    const wc = wmSiteView.webContents;
+    if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+    else if (action === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+    else if (action === 'reload') wc.reload();
+    return { ok: true };
+  });
+  // "List this" from the page: only that view may send it, and only an item
+  // number plus what the card showed passes on
+  ipcMain.on('wmsite:pick', (e, d = {}) => {
+    if (!wmSiteView || e.sender !== wmSiteView.webContents) return;
+    const itemId = String(d.itemId || '').replace(/\D/g, '').slice(0, 20);
+    if (!itemId) return;
+    wmSend('wmsite:pick', {
+      itemId,
+      title: String(d.title || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+      price: Number(d.price) > 0 ? Math.round(Number(d.price) * 100) / 100 : 0,
+      image: /^https:\/\//i.test(String(d.image || '')) ? String(d.image).slice(0, 1000) : '',
+    });
+  });
+
+  /* ----- the List tab's results, read off walmart.com out of sight -----
+     Owner 2026-10-23: "strip down the look to not slow down the software,
+     essentially just getting the information". walmart.com's own search
+     page runs in one hidden window (no images, never shown) on the tab's
+     session; only the results come back — item number, title, price,
+     photo link, rating, reviews, seller, sponsored — in walmart.com's order,
+     and the List tab draws them itself. The page's own data block is read
+     first (it survives redesigns); the product cards are the fallback. */
+  let wmSearchWin = null;
+  let wmSearchSeq = 0;
+  ipcMain.handle('walmart:siteSearch', async (_e, { query, page } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const q = String(query || '').trim();
+    if (!q) return { ok: false, error: 'Type what to search for.' };
+    const pg = Math.max(1, Math.min(25, Math.floor(Number(page) || 1)));
+    const seq = ++wmSearchSeq;
+    if (!wmSearchWin || wmSearchWin.isDestroyed()) {
+      wmSearchWin = new BrowserWindow({ show: false, width: 1280, height: 1600, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    }
+    const wc = wmSearchWin.webContents;
+    try {
+      await wc.loadURL(`${WM_SITE}/search?q=${encodeURIComponent(q)}${pg > 1 ? `&page=${pg}` : ''}`).catch(() => {});
+      let got = null;
+      for (let i = 0; i < 16; i++) {
+        if (seq !== wmSearchSeq) return { ok: false, superseded: true };
+        got = await wc.executeJavaScript(`(${wmReadResults.toString()})()`, true).catch(() => null);
+        if (got && (got.blocked || got.items.length || got.done)) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (seq !== wmSearchSeq) return { ok: false, superseded: true };
+      if (!got) return { ok: false, error: 'walmart.com did not answer. Try again.' };
+      if (got.blocked && !got.items.length) return { ok: false, blocked: true, error: 'walmart.com asked to check this computer is not a robot.' };
+      return { ok: true, query: q, page: pg, total: got.total, maxPage: got.maxPage, items: got.items };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // runs inside the hidden walmart.com page (stringified): results as data
+  function wmReadResults() {
+    const body = document.body ? document.body.innerText : '';
+    const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+    const num = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; };
+    const items = [];
+    const seen = new Set();
+    let total = 0;
+    let maxPage = 0;
+    const nd = document.getElementById('__NEXT_DATA__');
+    if (nd) {
+      let data = null;
+      try { data = JSON.parse(nd.textContent); } catch { /* a page mid-update */ }
+      // a product's colour / size options carry their own usItemId and a
+      // name like "Gray" (owner 2026-10-23: "why do some of the boxes just
+      // say Gray?"): never descend into them, and only take an entry with
+      // the price or photo block a result tile has
+      const VARIANTS = /^(variantList|variants|variantCriteria|variantsMap|swatches|swatchList|colors)$/i;
+      const walk = (o, depth) => {
+        if (!o || typeof o !== 'object' || depth > 14) return;
+        if (Array.isArray(o)) { for (const v of o) walk(v, depth + 1); return; }
+        const id = String(o.usItemId || '');
+        if (/^\d{5,}$/.test(id) && typeof o.name === 'string' && (o.__typename === 'Product' || o.priceInfo || o.imageInfo) && !seen.has(id)) {
+          seen.add(id);
+          const pi = o.priceInfo || {};
+          const cur = pi.currentPrice || {};
+          items.push({
+            itemId: id, title: o.name.slice(0, 300),
+            price: num(cur.price ?? o.price ?? pi.linePrice),
+            image: String((o.imageInfo && o.imageInfo.thumbnailUrl) || o.image || ''),
+            rating: o.averageRating != null ? Number(o.averageRating) || 0 : null,
+            reviews: o.numberOfReviews != null ? Number(o.numberOfReviews) || 0 : null,
+            seller: String(o.sellerName || ''),
+            sponsored: !!(o.isSponsoredFlag || o.sponsoredProduct || (o.sponsored && o.sponsored !== false)),
           });
-        });
-        const h1 = document.querySelector('h1');
-        const title = (h1 ? h1.innerText.trim() : document.title.replace(/\\s*\\|\\s*eBay\\s*$/i, '')).trim();
-        const priceEl = document.querySelector('.x-price-primary');
-        const priceM = ((priceEl && priceEl.innerText) || '').match(/([\\d,]+\\.?\\d*)/);
-        let categoryId = '';
-        for (const a of [...document.querySelectorAll('a[href*="/b/"]')].reverse()) {
-          const m = String(a.href).match(/\\/(\\d{3,8})\\//);
-          if (m) { categoryId = m[1]; break; }
+          return;
         }
-        return {
-          title,
-          price: priceM ? Number(priceM[1].replace(/,/g, '')) : 0,
-          categoryId,
-          specs,
-        };
-      })()`, true);
+        if (!total && Number.isFinite(Number(o.aggregatedCount))) total = Number(o.aggregatedCount);
+        if (o.paginationV2 && Number(o.paginationV2.maxPage)) maxPage = Number(o.paginationV2.maxPage);
+        for (const [k, v] of Object.entries(o)) if (v && typeof v === 'object' && !VARIANTS.test(k)) walk(v, depth + 1);
+      };
+      if (data) walk(data, 0);
+    }
+    // fallback: the product cards themselves
+    if (!items.length) {
+      const idOf = (h) => { const m = /\/ip\/(?:[^/?#]+\/)?(\d{5,})(?:[/?#&]|$)/.exec(h || ''); return m ? m[1] : ''; };
+      for (const a of document.querySelectorAll('a[href*="/ip/"], a[href*="%2Fip%2F"], a[link-identifier]')) {
+        let id = /^\d{5,}$/.test(a.getAttribute('link-identifier') || '') ? a.getAttribute('link-identifier') : idOf(a.getAttribute('href'));
+        if (!id) { try { id = idOf(decodeURIComponent(a.getAttribute('href') || '')); } catch { /* not encoded */ } }
+        if (!id || seen.has(id)) continue;
+        const card = a.closest('[data-item-id]') || a.parentElement;
+        if (!card) continue;
+        seen.add(id);
+        const text = card.innerText || '';
+        const titles = [...card.querySelectorAll('a')].map(x => (x.getAttribute('aria-label') || x.innerText || '').trim()).sort((x, y) => y.length - x.length);
+        const img = card.querySelector('img');
+        const price = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/.exec(text);
+        const rate = /(\d(?:\.\d)?) out of 5 Stars?\.?\s*([\d,]+) reviews?/i.exec(card.innerHTML.replace(/<[^>]+>/g, ' '));
+        items.push({
+          itemId: id, title: (titles[0] || (img && img.alt) || '').slice(0, 300), price: price ? num(price[1]) : 0,
+          image: img ? (img.getAttribute('src') || '') : '', rating: rate ? Number(rate[1]) : null, reviews: rate ? num(rate[2]) : null,
+          seller: '', sponsored: /\bSponsored\b/.test(text),
+        });
+      }
+    }
+    const done = document.readyState === 'complete' && (!!nd || /no results/i.test(body));
+    return { blocked, items: items.slice(0, 60), total: total || items.length, maxPage, done };
+  }
+  app.on('will-quit', () => { if (wmSearchWin && !wmSearchWin.isDestroyed()) wmSearchWin.destroy(); });
+
+  // what this seller already sells, by Walmart item number: the listings
+  // Linnworks has downloaded (their item number) plus everything sent from
+  // the Walmart tab -> { itemId: [{ sku, price }] } for the "Listed by you" badges
+  ipcMain.handle('walmart:mine', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const mine = {};
+    const add = (id, sku, price) => {
+      const k = String(id || '').replace(/\D/g, '');
+      if (!k || !sku) return;
+      const list = mine[k] || (mine[k] = []);
+      if (!list.some(x => x.sku.toUpperCase() === String(sku).toUpperCase())) list.push({ sku: String(sku), price: Number(price) || 0 });
+    };
+    for (const f of wmReadFeeds()) {
+      for (const o of f.offers) {
+        if (!/ERROR/.test(String(((f.items || {})[o.sku] || {}).status || '').toUpperCase())) add(o.itemId, o.sku, o.price);
+      }
+    }
+    let linnworks = true;
+    try {
+      const c = new LinnworksClient(cfg.linnworks);
+      const chans = (await c.getMappingChannels()).filter(ch => /walmart/i.test(ch.source));
+      for (const ch of chans) {
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        const hit = mappingCache.get(key);
+        let items = hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit.items : null;
+        if (!items) { items = await c.getChannelItems(ch.id, ch.source, ch.subSource); mappingCache.set(key, { at: Date.now(), items }); }
+        for (const it of items) add(it.channelRefId, it.sku, it.price);
+      }
+    } catch { linnworks = false; /* the tab's own uploads still count */ }
+    return { ok: true, mine, linnworks };
+  });
+
+  /* ----- the picked item: UPC + what its page says ----- */
+  // the item's own walmart.com page, read once in a hidden window on the
+  // same session as the tab's view (its robot check, once passed, holds)
+  // kept 3 minutes: the product view reads a page, then "List this" on it
+  // reads the same page again
+  const wmPageCache = new Map();
+  async function wmReadProductPage(id) {
+    const hit = wmPageCache.get(id);
+    if (hit && Date.now() - hit.at < 3 * 60000) return hit.found;
+    const found = await wmReadProductPageNow(id);
+    if (found.page && !found.blocked) {
+      wmPageCache.set(id, { at: Date.now(), found });
+      if (wmPageCache.size > 20) wmPageCache.delete(wmPageCache.keys().next().value);
+    }
+    return found;
+  }
+  // any other walmart.com page's JSON (the "Compare all sellers" page),
+  // read the same way, out of sight with images off
+  async function wmReadPageJson(url) {
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    try {
+      await w.loadURL(url).catch(() => {});
+      for (let i = 0; i < 8; i++) {
+        const r = await w.webContents.executeJavaScript(`(() => {
+          const body = document.body ? document.body.innerText : '';
+          const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+          const nd = document.getElementById('__NEXT_DATA__');
+          const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => x.textContent).concat(nd ? nd.textContent : '');
+          return { blocked, ready: !!nd, json: json.map(t => t.slice(0, 3000000)) };
+        })()`, true).catch(() => ({ blocked: false, ready: false, json: [] }));
+        if (r.blocked || r.ready) return r;
+        await new Promise(res => setTimeout(res, 750));
+      }
+      return { blocked: false, ready: false, json: [] };
     } finally {
       w.destroy();
     }
   }
-
-  // Public catalog title lookup: an eBay search resolves a UPC (or a model
-  // query) to the product's full marketing title — independent of the
-  // seller's own listings. First real result tile wins.
-  ipcMain.handle('listing:titleLookup', async (_e, { upc, query }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    const q = String(upc || '').trim() || String(query || '').trim();
-    if (!q) return { ok: false, error: 'No UPC on the item and nothing to search with.' };
-    const w = new BrowserWindow({
-      show: false, width: 1100, height: 900,
-      webPreferences: { partition: PANE_PARTITION, sandbox: true },
-    });
+  async function wmReadProductPageNow(id) {
+    // the item's page is already on screen ("List this item" on it): read
+    // that one, no second load
+    const onScreen = wmSiteView && new RegExp(`/ip/(?:[^/]+/)?${id}(?:[/?#]|$)`).test(wmSiteView.webContents.getURL());
+    // otherwise a hidden window without images (faster, lighter)
+    const w = onScreen ? null : new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { session: wmSiteSession(), sandbox: true, contextIsolation: true, javascript: true, images: false } });
+    const wc = onScreen ? wmSiteView.webContents : w.webContents;
+    let found = { codes: [], blocked: false, page: null };
     try {
-      await w.loadURL(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}`);
-      await new Promise(r => setTimeout(r, 3000)); // result tiles settle
-      const title = await w.webContents.executeJavaScript(`(() => {
-        const bad = /^(shop on ebay|results matching|tell us what)/i;
-        for (const el of document.querySelectorAll('.s-item__title, .s-card__title')) {
-          const t = el.innerText.replace(/^New listing\\s*/i, '').trim();
-          if (t && !bad.test(t) && t.length > 15) return t;
+      if (w) await w.loadURL(`${WM_SITE}/ip/${id}`).catch(() => {});
+      for (let i = 0; i < 8; i++) {
+        found = await wc.executeJavaScript(`(() => {
+          const body = document.body ? document.body.innerText : '';
+          const blocked = /robot or human|press (?:&|and) hold|verify (?:you are|you're) (?:a )?human|access denied/i.test(document.title + ' ' + body.slice(0, 2000));
+          const codes = [];
+          const add = (c) => { c = String(c || '').replace(/\\D/g, ''); if (c.length >= 8 && c.length <= 14 && !codes.includes(c)) codes.push(c); };
+          const json = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => x.textContent)
+            .concat((document.getElementById('__NEXT_DATA__') || {}).textContent || '');
+          for (const t of json) {
+            const re = /"(?:upc|productUpc|gtin|gtin8|gtin12|gtin13|gtin14)"\\s*:\\s*"?(\\d{8,14})"?/g;
+            for (let m = re.exec(t); m; m = re.exec(t)) add(m[1]);
+          }
+          const spec = /\\bUPC\\b[^0-9]{0,24}(\\d{8,14})/i.exec(body);
+          if (spec) add(spec[1]);
+          const meta = (p) => { const m = document.querySelector('meta[property="' + p + '"]'); return m ? m.content : ''; };
+          return { codes, blocked, ready: !!(document.getElementById('__NEXT_DATA__') || codes.length),
+            page: { json: json.map(t => t.slice(0, 3000000)), body: body.slice(0, 200000), title: meta('og:title') || ((document.querySelector('h1') || {}).innerText || ''), image: meta('og:image') } };
+        })()`, true).catch(() => ({ codes: [], blocked: false, ready: false, page: null }));
+        if (found.codes.length || found.blocked || found.ready) break;
+        await new Promise(r => setTimeout(r, 750));
+      }
+    } finally {
+      if (w) w.destroy();
+    }
+    return found;
+  }
+  // a clicked search result, plain (owner 2026-10-23: "press into each
+  // individual listing ... see the prices and the other sellers, but
+  // stripped down"): the page's own details plus every seller's offer,
+  // from the "Compare all sellers" page when the product page shows fewer.
+  // `myPrices` (this seller's prices for the item) mark the offers at one
+  // of them: a price match, not proof the offer is theirs
+  ipcMain.handle('walmart:productView', async (_e, { itemId, myPrices = [] } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick a Walmart item first.' };
+    try {
+      const found = await wmReadProductPage(id);
+      if (found.blocked) return { ok: false, blocked: true, error: 'walmart.com asked to check this computer is not a robot.' };
+      if (!found.page) return { ok: false, error: 'walmart.com did not answer. Try again.' };
+      const d = wmT.parseProductPage(found.page);
+      let offers = wmT.parseOffers(found.page.json, id);
+      // the product page often names only the Buy Box seller (owner
+      // 2026-10-23: "1 seller"): the Compare all sellers page unless the
+      // page says there is just the one
+      let more = null;
+      if (d.sellers !== 1 && offers.length < (d.sellers || 2)) {
+        more = await wmReadPageJson(`${WM_SITE}/product/${id}/sellers`).catch(() => null);
+        if (more && more.json.length) {
+          const all = wmT.parseOffers(found.page.json.concat(more.json), id);
+          if (all.length > offers.length) offers = all;
         }
-        return '';
-      })()`, true);
-      if (!title) return { ok: false, error: 'No catalog match for that search.' };
-      return { ok: true, title };
+      }
+      // what the page held, for when a view looks wrong
+      try {
+        fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-product-last.json'), JSON.stringify({ at: new Date().toISOString(), itemId: id,
+          page: found.page.json.map(t => t.slice(0, 1500000)), sellersPage: more ? more.json.map(t => t.slice(0, 1500000)) : null }));
+      } catch { /* diagnosis only */ }
+      const variants = wmT.parseVariantSet(found.page.json, id);
+      const same = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+      for (const o of offers) {
+        o.buyBox = same(o.seller, d.buyBoxSeller);
+        o.atMyPrice = myPrices.some(p => Math.abs(Number(p) - o.price) < 0.005);
+      }
+      const rank = (c) => (/^new$/i.test(c) || !c ? 0 : 1);
+      offers.sort((a, b) => b.buyBox - a.buyBox || rank(a.condition) - rank(b.condition) || a.price - b.price);
+      // the Buy Box offer's own price is the Buy Box price (the page's
+      // first "price" can be another figure: $229.99 shown beside a $209.99
+      // Buy Box offer, owner 2026-10-23)
+      const bb = offers.find(o => o.buyBox && d.price && Math.abs(o.price - d.price) < 0.005) || offers.find(o => o.buyBox);
+      for (const o of offers) o.buyBox = o === bb;
+      if (bb) d.price = bb.price;
+      offers.sort((a, b) => b.buyBox - a.buyBox || rank(a.condition) - rank(b.condition) || a.price - b.price);
+      return { ok: true, ...d, offers, variants, sellers: Math.max(d.sellers || 0, offers.length) || null };
     } catch (e) {
       return { ok: false, error: e.message };
-    } finally {
-      w.destroy();
+    }
+  });
+  ipcMain.handle('walmart:itemDetails', async (_e, { itemId } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const id = String(itemId || '').replace(/\D/g, '');
+    if (!id) return { ok: false, error: 'Pick a Walmart item first.' };
+    const c = wmClient();
+    // the 12-digit UPC first (what the box shows): leading zeros of a 13/14
+    // digit GTIN dropped, the GTIN itself kept as a fallback
+    const twelve = (codes) => [...new Set(codes.flatMap(c => (c.length > 12 && /^0+\d{12}$/.test(c) ? [c.slice(-12), c] : [c])))]
+      .sort((a, b) => (b.length === 12) - (a.length === 12));
+    const prove = async (codes) => {
+      for (const code of twelve(codes).slice(0, 6)) {
+        const item = await c.lookupUpc(code).catch(() => null);
+        if (item && String(item.itemId) === id) return { code, item };
+      }
+      return null;
+    };
+    try {
+      // the page first: it carries the sellers and the Buy Box holder, and
+      // usually the UPC; Get an item (the seller's own catalog) is the
+      // fallback for the UPC when the page shows none
+      const found = await wmReadProductPage(id);
+      const details = found.page ? wmT.parseProductPage(found.page) : null;
+      let hit = await prove(found.codes);
+      if (!hit) hit = await prove(await c.itemIdentifiers(id).catch(() => []));
+      const api = hit ? hit.item : null;
+      const d = details || {};
+      const out = {
+        ok: true, itemId: id,
+        upc: hit ? hit.code : '',
+        title: d.title || (api && api.title) || '', image: d.image || (api && api.image) || '',
+        brand: d.brand || (api && api.brand) || '', price: d.price || (api && api.price) || 0,
+        rating: d.rating ?? (api && api.reviews ? api.rating : null), reviews: d.reviews ?? (api ? api.reviews : null),
+        sellers: d.sellers ?? null, buyBoxSeller: d.buyBoxSeller || '',
+        blocked: !!found.blocked && !found.page,
+      };
+      if (!out.upc) {
+        out.upcNote = found.blocked
+          ? 'walmart.com asked to check this computer is not a robot, so the page could not be read. Solve the check in the page, then pick the item again, or type the UPC from the box.'
+          : found.codes.length
+            ? `The page lists ${found.codes.length === 1 ? 'a barcode' : 'barcodes'} (${found.codes.slice(0, 3).join(', ')}) but none leads back to item ${id}. Type the UPC from the box.`
+            : "This item's page doesn't show a UPC. Type the one from the box.";
+      }
+      return out;
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // a UPC typed by hand: proven against the picked item like the page's
+  ipcMain.handle('walmart:upc', async (_e, { upc } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!wmT.idParam(upc)) return { ok: false, error: 'A UPC is 12 digits (8–14 for other barcodes).' };
+    try {
+      return { ok: true, item: await wmClient().lookupUpc(upc) };
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
   });
 
-  // Copy the item specifics off the seller's own LIVE listing of the base
-  // model: base SKU -> eBay link record (channelRefId = the item number) ->
-  // public listing page -> "About this item" table. The renderer caches the
-  // result per model in config.ebayModelCards, so this runs once per family.
-  ipcMain.handle('ebay:specs', async (_e, { baseSku }) => {
+  /* ----- sending + following uploads ----- */
+  ipcMain.handle('walmart:submit', async (_e, { offers } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = (offers || []).map(o => ({
+      sku: String(o.sku || '').trim(), itemId: String(o.itemId || ''), title: String(o.title || '').slice(0, 300),
+      image: String(o.image || ''), upc: String(o.upc || '').replace(/\D/g, ''),
+      price: Number(o.price), qty: Math.floor(Number(o.qty)), shipLb: Number(o.shipLb),
+      condition: String(o.condition || ''), mainImageUrl: String(o.mainImageUrl || '').trim(),
+    }));
+    if (!list.length) return { ok: false, error: 'Nothing to send.' };
+    const bad = list.find(o => !o.sku || !wmT.toGtin14(o.upc) || !(o.price > 0) || !(o.shipLb > 0) || !(o.qty >= 0));
+    if (bad) return { ok: false, error: `${bad.sku || 'A listing'} is missing its SKU, UPC, price, quantity or shipping weight.` };
+    const dupe = list.find((o, i) => list.findIndex(x => x.sku.toUpperCase() === o.sku.toUpperCase()) !== i);
+    if (dupe) return { ok: false, error: `${dupe.sku} is in the batch twice. Each listing needs its own SKU.` };
+    // Pre-Owned offers (the owner is approved, 2026-10-22) must carry a photo
+    const badCond = list.find(o => !wmT.MATCH_CONDITIONS.includes(o.condition)
+      || (o.condition !== 'New' && !/^https:\/\//i.test(o.mainImageUrl)));
+    if (badCond) {
+      return { ok: false, error: wmT.MATCH_CONDITIONS.includes(badCond.condition)
+        ? `${badCond.sku}: ${badCond.condition} listings need a photo link (https://…).`
+        : `${badCond.sku}: choose its condition.` };
+    }
     try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const channels = await client.getMappingChannels();
-      const eb = channels.find(ch => /ebay/i.test(ch.source));
-      if (!eb) return { ok: false, error: 'No eBay channel in Linnworks.' };
-      const key = `${eb.id}|${eb.source}|${eb.subSource}`;
-      let items = mappingCache.get(key)?.items;
-      if (!items || Date.now() - mappingCache.get(key).at > 10 * 60 * 1000) {
-        items = await client.getChannelItems(eb.id, eb.source, eb.subSource);
+      const feedId = await wmClient().submitMatchFeed(list);
+      const feed = { feedId, at: new Date().toISOString(), status: 'RECEIVED', items: {}, counts: {}, invSet: {}, live: {}, mapped: {}, offers: list };
+      wmWriteFeeds([feed, ...wmReadFeeds().filter(f => f.feedId !== feedId)]);
+      return { ok: true, feed };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('walmart:feeds', () => ({ ok: true, feeds: wmReadFeeds() }));
+
+  // re-read one upload's per-SKU results; accepted SKUs get their starting
+  // stock once (an offer set up by match has no quantity of its own) and
+  // their live status (published / unpublished, with Walmart's reasons)
+  async function wmCheckFeed(feedId) {
+    const list = wmReadFeeds();
+    const f = list.find(x => x.feedId === feedId);
+    if (!f) throw new Error('That upload is not on this computer.');
+    const c = wmClient();
+    if (!wmSettled(f)) {
+      const st = await c.feedStatus(feedId);
+      f.status = st.status;
+      f.counts = st.counts;
+      f.items = { ...(f.items || {}), ...st.items };
+      f.error = st.feedErrors.join('; ');
+    }
+    f.checkedAt = new Date().toISOString();
+    f.invSet = f.invSet || {};
+    f.live = f.live || {};
+    for (const o of f.offers) {
+      const s = (f.items || {})[o.sku];
+      if (!s || s.status !== 'SUCCESS') continue;
+      if (!f.invSet[o.sku]) {
+        try {
+          await c.setInventory(o.sku, o.qty);
+          f.invSet[o.sku] = true;
+        } catch (e) {
+          s.errors = [...(s.errors || []), `Listed, but the starting stock didn't save (${e.message}). Set it in Seller Center or map it to Linnworks.`];
+          f.invSet[o.sku] = 'failed';
+        }
+      }
+      if ((f.live[o.sku] || {}).published !== 'PUBLISHED') {
+        try { f.live[o.sku] = { ...(await c.itemStatus(o.sku)), at: new Date().toISOString() }; } catch { /* next check */ }
+      }
+    }
+    wmWriteFeeds(list);
+    wmSend('walmart:feed', f);
+    return f;
+  }
+
+  ipcMain.handle('walmart:feedCheck', async (_e, { feedId } = {}) => {
+    try {
+      return { ok: true, feed: await wmCheckFeed(feedId) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // the 15-minute check: uploads under a week old that are open or have a
+  // listing not live yet; a finished upload says so once
+  async function wmPoll() {
+    const cfg = config.load();
+    if (cfg.captureOnly || !wmKeys()) return;
+    for (const f of wmReadFeeds()) {
+      if (Date.now() - new Date(f.at).getTime() > 7 * 86400000) continue;
+      const waitingLive = f.offers.some(o => ((f.items || {})[o.sku] || {}).status === 'SUCCESS' && ((f.live || {})[o.sku] || {}).published !== 'PUBLISHED');
+      if (f.notified && !waitingLive) continue;
+      try {
+        const g = await wmCheckFeed(f.feedId);
+        if (!wmSettled(g) || g.notified) continue;
+        const sts = g.offers.map(o => ((g.items || {})[o.sku] || {}).status);
+        const ok = sts.filter(s => s === 'SUCCESS').length;
+        const list = wmReadFeeds();
+        const rec = list.find(x => x.feedId === g.feedId);
+        if (rec) { rec.notified = true; wmWriteFeeds(list); }
+        wmSend('app:notice', { message: `Walmart upload finished: ${ok} accepted${sts.length - ok ? `, ${sts.length - ok} turned down (Walmart → Uploads)` : ''}.` });
+      } catch { /* next round retries */ }
+    }
+  }
+  if (!IS_TEST_RUN) {
+    setTimeout(() => wmPoll().catch(() => {}), 60 * 1000);
+    setInterval(() => wmPoll().catch(() => {}), 15 * 60 * 1000);
+  }
+
+  /* ----- mapping a live listing to Linnworks ----- */
+  // every Walmart channel's downloaded listings in Linnworks (the feed the
+  // Channel mapping screen reads, same 10-minute cache): SKU -> listing
+  async function wmLinnworksListings(force) {
+    const cfg = config.load();
+    const client = new LinnworksClient(cfg.linnworks);
+    const chans = (await client.getMappingChannels()).filter(c => /walmart/i.test(c.source));
+    const bySku = {};
+    for (const ch of chans) {
+      const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+      const hit = mappingCache.get(key);
+      let items = hit && !force && Date.now() - hit.at < 10 * 60 * 1000 ? hit.items : null;
+      if (!items) {
+        items = await client.getChannelItems(ch.id, ch.source, ch.subSource);
         mappingCache.set(key, { at: Date.now(), items });
       }
-      const want = String(baseSku).trim().toUpperCase();
-      const hit = items.find(i => String(i.sku).trim().toUpperCase() === want && i.channelRefId);
-      if (!hit) return { ok: false, error: `No live eBay listing found for ${baseSku}.` };
-      const parsed = await fetchEbayListingDom(hit.channelRefId);
-      if (!parsed || !Object.keys(parsed.specs || {}).length) {
-        return { ok: false, error: 'Could not read the specifics off the listing page.' };
+      for (const it of items) {
+        if (!it.sku) continue;
+        bySku[String(it.sku).toUpperCase()] = { linked: !!it.linked, source: ch.source, subSource: ch.subSource, refId: it.channelRefId || '' };
       }
-      return { ok: true, itemId: String(hit.channelRefId), ...parsed };
-    } catch (e) {
-      return { ok: false, error: e.message };
     }
-  });
-
-  // QR for the lister's Photos row: the phone page is locked to the draft SKU
-  ipcMain.handle('ebay:qr', async (_e, { sku }) => {
-    if (!claimsRun || !claimsRun.listingUrl) return { ok: false, error: 'The upload server is not running — restart the app.' };
-    if (!String(sku || '').trim()) return { ok: false, error: 'Type a SKU first.' };
-    try {
-      const url = claimsRun.listingUrl(sku);
-      const qr = await require('qrcode').toDataURL(url, { margin: 1, width: 300, color: { dark: '#2f3437', light: '#ffffff' } });
-      return { ok: true, url, qr };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('ebay:photosPick', async () => {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Listing photos',
-      properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
-    });
-    return { ok: true, files: r.canceled ? [] : r.filePaths };
-  });
-
-  // Export: host the chosen photos on the Linnworks item (eBay's CSV upload
-  // fetches PicURL over the internet), build the CSV, save where the user
-  // picks. Nothing touches eBay until they upload the file in Seller Hub.
-  // photos land on the Linnworks item (hosted URLs), and the description's
-  // {{PHOTO_GALLERY}} placeholder becomes the two-column grid of them —
-  // shared by the CSV export and the Linnworks-native publish below
-  async function hostEbayMedia(client, listing, photoPaths) {
-    let picUrls = [];
-    if (photoPaths && photoPaths.length) {
-      let stockItemId = listing.stockItemId;
-      if (!stockItemId) stockItemId = await client.findStockItemIdBySku(listing.sku).catch(() => null);
-      if (!stockItemId) throw new Error(`${listing.sku} is not in Linnworks yet - create the SKU first so the photos have a home.`);
-      // entries are plain paths (untouched photos) or {dataUrl, name}
-      // (baked in the editor — the EDITED pixels are what eBay gets)
-      const files = photoPaths.map((p, i) => {
-        if (p && typeof p === 'object' && p.dataUrl) {
-          const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-          if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-          return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-        }
-        const fp = typeof p === 'object' ? p.path : p;
-        return {
-          buffer: fs.readFileSync(fp),
-          name: path.basename(fp),
-          mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-        };
-      });
-      picUrls = await client.addItemImages(stockItemId, files);
-    }
-    // two-column grid (owner pick 2026-08-13); a single photo stays full width
-    const gallery = picUrls.length
-      ? `<h3>Photos</h3><div style="${picUrls.length > 1 ? 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' : ''}">${picUrls.map(u => `<img src="${u}" style="max-width:100%;width:100%;border-radius:4px;" alt="" />`).join('')}</div>`
-      : '';
-    const description = String(listing.description || '').replace('{{PHOTO_GALLERY}}', gallery);
-    return { picUrls, description };
+    return { channels: chans.length, bySku };
   }
-
-  ipcMain.handle('ebay:export', async (_e, { listing, photoPaths }) => {
+  // for each sent listing: has Linnworks downloaded it yet, is it linked
+  ipcMain.handle('walmart:mapState', async (_e, { skus, force } = {}) => {
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     try {
-      const { buildEbayCsv } = require('./ebaycsv.js');
-      const client = new LinnworksClient(cfg.linnworks);
-      const { picUrls, description } = await hostEbayMedia(client, listing, photoPaths);
-      const csv = buildEbayCsv([{ ...listing, description, picUrls }], cfg.ebayProfiles || {});
-      const stamp = new Date();
-      const name = `eBay-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.csv`;
-      const r = await dialog.showSaveDialog(win, {
-        title: 'Save the eBay upload file',
-        defaultPath: path.join(app.getPath('downloads'), name),
-        filters: [{ name: 'CSV', extensions: ['csv'] }],
-      });
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(r.filePath, '﻿' + csv, 'utf8'); // BOM: Seller Hub reads UTF-8 reliably
-      return { ok: true, path: r.filePath, picCount: picUrls.length };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  /* ---------- Linnworks-native eBay publishing (owner 2026-09-16) ----------
-     "rework the listings tab based on what linnworks does": instead of the
-     Seller Hub CSV round-trip, ask Linnworks to list directly through its
-     stored eBay authorization. Configurators (made once in Linnworks' UI)
-     carry the shared settings including the eBay CONDITION, so the app maps
-     each of its four conditions to a configurator. The CSV export stays as
-     the fallback. */
-  ipcMain.handle('ebay:lwConfigs', async () => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      return { ok: true, configs: await client.getEbayConfigurators(), saved: cfg.ebayLw || {} };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('ebay:lwPublish', async (_e, { listing, photoPaths, configId, subSource }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!configId) return { ok: false, error: 'Pick a Linnworks configurator for this condition first.' };
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      let stockItemId = listing.stockItemId || await client.findStockItemIdBySku(listing.sku).catch(() => null);
-      if (!stockItemId) return { ok: false, error: `${listing.sku} is not in Linnworks.` };
-      const { description } = await hostEbayMedia(client, { ...listing, stockItemId }, photoPaths);
-      const tpls = await client.createEbayTemplates({ configId, subSource, inventoryItemIds: [stockItemId] });
-      const tpl = tpls.find(t => t.InventoryItemId === stockItemId) || tpls[0];
-      if (!tpl) return { ok: false, error: 'Linnworks returned no template — check the configurator and that the eBay channel is enabled.' };
-      if (tpl.ErrorMessage) return { ok: false, error: `Linnworks template error: ${tpl.ErrorMessage}` };
-      // the form's values overlay whatever the configurator + item produced
-      if (listing.title) tpl.Title = String(listing.title).slice(0, 80);
-      if (description) tpl.Description = description;
-      const qty = Number(listing.qty) || 0;
-      if (qty > 0) tpl.AvailableQuantity = qty;
-      const price = Number(listing.price) || 0;
-      if (price > 0) {
-        tpl.Price = tpl.Price || { StartPrice: 0, ReservePrice: 0, BINPrice: 0, AutoAccept: 0, AutoDecline: 0, OriginalRetailPrice: 0 };
-        tpl.Price.StartPrice = price;
-        tpl.Price.BINPrice = price;
+      const { channels, bySku } = await wmLinnworksListings(!!force);
+      if (!channels) return { ok: false, error: 'Linnworks has no Walmart channel connected.' };
+      const out = {};
+      for (const s of skus || []) {
+        const r = bySku[String(s).toUpperCase()];
+        out[s] = r ? { state: r.linked ? 'linked' : 'ready', source: r.source, subSource: r.subSource, refId: r.refId } : { state: 'waiting' };
       }
-      const have = new Map((tpl.Attributes || []).map(a => [String(a.AttrName || '').toLowerCase(), a]));
-      for (const [name, value] of Object.entries(listing.specs || {})) {
-        if (!String(value || '').trim()) continue;
-        const hit = have.get(String(name).toLowerCase());
-        if (hit) hit.Value = String(value);
-        else (tpl.Attributes = tpl.Attributes || []).push({ AttrName: name, Value: String(value), IsUserDefined: true, IsRequired: false });
+      return { ok: true, states: out };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // remember which Linnworks SKU a sent listing was mapped to here, so the
+  // Uploads tab names it before Linnworks' next listing download says so
+  ipcMain.handle('walmart:noteMapped', (_e, { sku, targetSku } = {}) => {
+    const list = wmReadFeeds();
+    for (const f of list) {
+      if (f.offers.some(o => o.sku === sku)) { f.mapped = { ...(f.mapped || {}), [sku]: String(targetSku || '') }; }
+    }
+    wmWriteFeeds(list);
+    return { ok: true };
+  });
+
+  /* ----- Pricing: repricer strategies + the items losing the Buy Box -----
+     Pricing Insights gives every listing's price, Buy Box price and win
+     rate, and its repricer strategy with min / max, in one paged call.
+     Break-even = the listing's cost (the cost store, by the Walmart SKU or
+     the Linnworks SKU it maps to) plus Walmart's referral fee. */
+  const wmFeePct = () => Math.min(50, Math.max(0, Number((config.load().walmartListing || {}).feePct) || 8));
+  // each item's cost (break-even) and the fee, added to a Pricing answer
+  function wmPricingCosts(items) {
+    syncCosts();
+    const costs = db.costsAll();
+    const map = recoveryChannelMap();
+    for (const it of items) {
+      const k = it.sku.toUpperCase();
+      const row = costs[k] || costs[String(map.get(k) || '').toUpperCase()];
+      it.cost = row && Number(row.cost) > 0 ? Number(row.cost) : null;
+    }
+    return { items, feePct: wmFeePct() };
+  }
+  // which strategy each item is on, from Walmart's Item report: asked for
+  // when Pricing opens (at most twice a day), checked every 4 minutes until
+  // Walmart has made it, then kept in walmart-repricer-map.json and sent to
+  // the page ({ at, items: { SKU: { strategy, min, max, status } } } or
+  // { pendingSince } / { error })
+  const wmRepFile = () => path.join(app.getPath('userData'), 'walmart-repricer-map.json');
+  const wmRepRead = () => { try { return JSON.parse(fs.readFileSync(wmRepFile(), 'utf8')); } catch { return {}; } };
+  const wmRepWrite = (st) => { try { fs.writeFileSync(wmRepFile(), JSON.stringify(st)); } catch { /* next time */ } };
+  const wmRepPublic = (st) => ({ at: st.at || '', items: st.items || null, pendingSince: st.requestId ? st.requestedAt : '', error: st.error || '' });
+  let wmRepTimer = null;
+  async function wmRepricerReport(force) {
+    const st = wmRepRead();
+    const c = wmClient();
+    try {
+      if (st.requestId) {
+        const status = await c.reportStatus(st.requestId);
+        if (status === 'READY') {
+          let buf = await c.reportFile(st.requestId);
+          if (buf[0] === 0x50 && buf[1] === 0x4b) {
+            const z = require('./shipfile.js').readZip(buf);
+            const name = [...z.entries.keys()].find(n => /\.csv$/i.test(n)) || [...z.entries.keys()][0];
+            buf = z.read(name);
+          }
+          const rows = require('./shipfile.js').parseCsv(buf.toString('utf8').replace(/^\uFEFF/, ''));
+          const items = wmT.parseRepricerReport(rows);
+          const next = items ? { at: new Date().toISOString(), items } : { at: st.at || '', items: st.items || null, error: "Walmart's item report had no Repricer Strategy column." };
+          wmRepWrite(next);
+          wmSend('walmart:repricer', wmRepPublic(next));
+          return;
+        }
+        if (/ERROR|FAIL/.test(status)) {
+          const next = { at: st.at || '', items: st.items || null, error: 'Walmart could not make the item report. It will be asked for again next time Pricing opens.' };
+          wmRepWrite(next);
+          wmSend('walmart:repricer', wmRepPublic(next));
+          return;
+        }
+        // still being made: look again in 4 minutes (a request older than
+        // 3 hours is given up and asked again)
+        if (Date.now() - new Date(st.requestedAt).getTime() > 3 * 3600 * 1000) { wmRepWrite({ at: st.at || '', items: st.items || null }); return wmRepricerReport(true); }
+        clearTimeout(wmRepTimer);
+        wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000);
+        return;
       }
-      await client.processEbayListings([tpl], 'Create');
-      return { ok: true, templateId: tpl.TemplateId, subSource: subSource || '' };
+      if (!force && st.items && Date.now() - new Date(st.at).getTime() < 12 * 3600 * 1000) return;
+      const requestId = await c.requestItemReport();
+      const next = { at: st.at || '', items: st.items || null, requestId, requestedAt: new Date().toISOString() };
+      wmRepWrite(next);
+      wmSend('walmart:repricer', wmRepPublic(next));
+      clearTimeout(wmRepTimer);
+      wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000);
+    } catch (e) {
+      // the limit or a hiccup: try again in 4 minutes while one is pending
+      if (st.requestId) { clearTimeout(wmRepTimer); wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000); }
+      else { wmRepWrite({ ...st, error: `The item report could not be asked for: ${e.message}` }); }
+    }
+  }
+  ipcMain.handle('walmart:repricerReport', async () => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    await wmRepricerReport(true).catch(() => {});
+    return { ok: true, repricer: wmRepPublic(wmRepRead()) };
+  });
+  ipcMain.handle('walmart:pricing', async () => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const c = wmClient();
+      const cacheFile = path.join(app.getPath('userData'), 'walmart-pricing-cache.json');
+      let cached = null;
+      try { cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch { /* none yet */ }
+      // Walmart's request limit: the last good answer, marked as old
+      const fromCache = (e) => {
+        if (!e.rateLimited || !cached || !Array.isArray(cached.items)) throw e;
+        return { ...cached, items: cached.items.map(x => ({ ...x })), stale: true, staleWhy: e.message };
+      };
+      let first, strategies;
+      try {
+        [first, strategies] = await Promise.all([c.pricingInsights(), c.strategies().catch(e => { if (e.rateLimited && cached) return cached.strategies || []; throw e; })]);
+      } catch (e) {
+        const old = fromCache(e);
+        return { ok: true, ...old, repricer: wmRepPublic(wmRepRead()), ...wmPricingCosts(old.items) };
+      }
+      const partial = !!c.insightsPartial;
+      let items = first;
+      let source = 'insights';
+      // nothing back (the owner's first run, 2026-10-23): ask again SKU by
+      // SKU from the catalog; failing that, show the catalog's prices alone
+      if (!items.length) {
+        const catalog = await c.allItems().catch(() => []);
+        const skus = catalog.filter(x => x.published !== 'UNPUBLISHED').map(x => x.sku);
+        items = skus.length ? await c.insightsBySku(skus.slice(0, 2000)).catch(() => []) : [];
+        source = 'insights-sku';
+        if (!items.length) {
+          source = 'catalog';
+          items = catalog.map(x => wmT.parseInsight({ sku: x.sku, itemName: x.title, currentPrice: x.price }));
+        }
+      }
+      // the raw first answer, for when the numbers look wrong
+      try { fs.writeFileSync(path.join(app.getPath('userData'), 'walmart-insights-last.json'), JSON.stringify({ at: new Date().toISOString(), source, rows: items.length, strategies: c.lastStrategies, first: c.lastInsights }, null, 2).slice(0, 400000)); } catch { /* diagnosis only */ }
+      const at = new Date().toISOString();
+      if (!partial) { try { fs.writeFileSync(cacheFile, JSON.stringify({ items, strategies, source, at })); } catch { /* the cache is optional */ } }
+      if (!items.some(it => it.strategy) && strategies.some(x => x.count > 0)) wmRepricerReport().catch(() => {});
+      return { ok: true, items, strategies, source, at, partial, repricer: wmRepPublic(wmRepRead()), ...wmPricingCosts(items) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:saveStrategy', async (_e, s = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!String(s.name || '').trim()) return { ok: false, error: 'Give the strategy a name.' };
+    try {
+      return { ok: true, strategy: await wmClient().saveStrategy(s) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:deleteStrategy', async (_e, { id } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      await wmClient().deleteStrategy(id);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // one Save: strategy / min / max moves go up as one repricer feed, typed
+  // prices (items on no strategy) one by one
+  ipcMain.handle('walmart:pricingSave', async (_e, { repricer = [], prices = [] } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const c = wmClient();
+    const out = { ok: true, feedId: '', priced: 0, failed: [] };
+    try {
+      if (repricer.length) {
+        const bad = repricer.find(r => r.strategy && !(Number(r.min) > 0 && Number(r.max) >= Number(r.min)));
+        if (bad) return { ok: false, error: `${bad.sku}: its min must be above 0 and its max at least the min.` };
+        out.feedId = await c.repricerFeed(repricer);
+      }
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    for (const p of prices) {
+      if (!(Number(p.price) > 0)) { out.failed.push(`${p.sku}: no price`); continue; }
+      try { await c.setPrice(p.sku, p.price); out.priced++; } catch (e) { out.failed.push(`${p.sku}: ${e.message}`); }
+    }
+    return out;
+  });
+
+  /* ----- Incentives (owner 2026-10-23: like Seller Center's Incentives page) ----- */
+  ipcMain.handle('walmart:incentives', async () => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const c = wmClient();
+      const [rrReady, rrActive, wfIn, wfOut] = await Promise.all([
+        c.incentives('REDUCED_REFERRAL', 'ELIGIBLE'), c.incentives('REDUCED_REFERRAL', 'ENROLLED'),
+        c.incentives('WALMART_FUNDED', 'ENROLLED'), c.incentives('WALMART_FUNDED', 'ELIGIBLE'),
+      ]);
+      return { ok: true, rrReady, rrActive, wfIn, wfOut, wfAll: (config.load().walmartListing || {}).wfAll || null, at: new Date().toISOString() };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // the slow extras for the Incentives tables, asked after the table shows:
+  // each SKU's own listed price (the price before a Walmart-funded discount,
+  // which Walmart's incentives answer leaves out) and its last-90-day sales
+  // from the Orders API (kept 3 hours: it pages through every order)
+  let wmSalesCache = null;
+  ipcMain.handle('walmart:incentiveExtras', async (_e, { fresh } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const c = wmClient();
+    const out = { ok: true, prices: {}, sales: null, salesErr: '' };
+    try {
+      for (const it of await c.allItems()) if (it.price !== null) out.prices[it.sku.toUpperCase()] = it.price;
+    } catch (e) { out.pricesErr = e.message; }
+    try {
+      if (fresh || !wmSalesCache || Date.now() - wmSalesCache.at > 3 * 3600 * 1000) wmSalesCache = { at: Date.now(), sales: await c.salesBySku(90) };
+      out.sales = wmSalesCache.sales;
+    } catch (e) { out.salesErr = e.message; }
+    return out;
+  });
+  ipcMain.handle('walmart:incentiveEnroll', async (_e, { items = [], enroll } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!items.length) return { ok: false, error: 'Pick at least one item.' };
+    try {
+      return { ok: true, feedId: await wmClient().incentiveEnroll(items, !!enroll) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('walmart:wfOpt', async (_e, { skus = [], optIn } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (!skus.length) return { ok: false, error: 'Pick at least one item.' };
+    try {
+      return { ok: true, feedId: await wmClient().walmartFundedOpt(skus, !!optIn) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  // Walmart has no call that reads this setting back, so the last one made
+  // here is remembered (with when: Walmart locks it for 4 hours)
+  ipcMain.handle('walmart:wfAll', async (_e, { on } = {}) => {
+    if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    try {
+      const r = await wmClient().walmartFundedAll(!!on);
+      const wfAll = { on: r.on, at: new Date().toISOString() };
+      config.save({ walmartListing: { ...(config.load().walmartListing || {}), wfAll } });
+      return { ok: true, ...r, wfAll };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
 
-  ipcMain.handle('ebay:lwStatus', async (_e, { templateId, subSource }) => {
-    const cfg = config.load();
-    try {
-      const client = new LinnworksClient(cfg.linnworks);
-      const t = (await client.getEbayTemplates({ templateIds: [templateId], subSource }))[0];
-      if (!t) return { ok: true, status: 'UNKNOWN', error: '', listingIds: [] };
-      return { ok: true, status: String(t.Status || ''), error: t.ErrorMessage || '', listingIds: t.ListingIds || [] };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
   /* ---------- Overview tab: orders + money cards (approved design v2) ---------- */
 
   // Order series come straight from SQLite (cheap, always fresh); the three
@@ -4456,6 +5213,8 @@ exit 1
         overviewCache = { at: Date.now(), money: m, promise: null };
         try { fs.writeFileSync(overviewCachePath(), JSON.stringify({ at: overviewCache.at, money: m, v: 2 })); } catch { /* best effort */ }
         console.log(`[overview] money pass done in ${Math.round((Date.now() - t0) / 1000)}s`);
+        // the months behind "Was selling" follow, one walk per missing month
+        refreshOverviewMonths(cfg).catch(() => { /* next pass retries */ });
         return m;
       })
       .catch(e => {
@@ -4466,6 +5225,59 @@ exit 1
         throw e;
       });
     return overviewCache.promise;
+  }
+
+  // "Was selling" (owner 2026-10-14: "used to sell minimum 10 units a
+  // month, now out of stock"): units per SKU for each of the last six
+  // COMPLETED months, read once from Linnworks' processed orders (a month
+  // never changes once it is over) and kept on disk; the current month
+  // comes from the money pass. Filled behind the money pass, one month per
+  // Linnworks walk, so the Overview never waits on it.
+  const OVERVIEW_MONTHS_BACK = 6;
+  let overviewMonths = { months: {}, promise: null };
+  const overviewMonthsPath = () => path.join(app.getPath('userData'), 'overview-months.json');
+  try {
+    const j = JSON.parse(fs.readFileSync(overviewMonthsPath(), 'utf8'));
+    if (j && j.months && j.v === 1) overviewMonths = { months: j.months, promise: null };
+  } catch { /* no months yet */ }
+  const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // the last N completed months, oldest first
+  function completedMonths(n = OVERVIEW_MONTHS_BACK) {
+    const now = new Date(); const out = [];
+    for (let i = n; i >= 1; i--) out.push(ymOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+    return out;
+  }
+  function refreshOverviewMonths(cfg) {
+    if (overviewMonths.promise) return overviewMonths.promise;
+    const missing = completedMonths().filter((ym) => !overviewMonths.months[ym]);
+    if (!missing.length) return Promise.resolve(overviewMonths.months);
+    overviewMonths.promise = (async () => {
+      const client = new LinnworksClient(cfg.linnworks);
+      for (const ym of missing.slice().reverse()) { // newest first: the months that matter most land first
+        const [y, m] = ym.split('-').map(Number);
+        const from = new Date(y, m - 1, 1); const to = new Date(y, m, 1);
+        const t0 = Date.now();
+        const lines = await client.listProcessedLines(from.toISOString(), new Date(to.getTime() - 1).toISOString());
+        const bySku = {}; const last = {};
+        const credit = (sku, qty, processedOn) => {
+          const k = String(sku || '').toUpperCase(); if (!k) return;
+          bySku[k] = (bySku[k] || 0) + (qty || 0);
+          const ts = Date.parse(processedOn) || 0; if (ts > (last[k] || 0)) last[k] = ts;
+        };
+        for (const l of lines) {
+          credit(l.sku, l.qty, l.processedOn);
+          for (const c of l.children || []) credit(c.sku, (l.qty || 1) * (c.qty || 1), l.processedOn); // a composite's sale is its children's too
+        }
+        overviewMonths.months[ym] = { bySku, last, at: Date.now() };
+        // keep a year, drop the rest
+        for (const k of Object.keys(overviewMonths.months)) if (k < ymOf(new Date(new Date().getFullYear(), new Date().getMonth() - 12, 1))) delete overviewMonths.months[k];
+        try { fs.writeFileSync(overviewMonthsPath(), JSON.stringify({ months: overviewMonths.months, v: 1 })); } catch { /* best effort */ }
+        console.log(`[overview] month ${ym}: ${lines.length} lines in ${Math.round((Date.now() - t0) / 1000)}s`);
+      }
+      overviewMonths.promise = null;
+      return overviewMonths.months;
+    })().catch((e) => { overviewMonths.promise = null; console.log(`[overview] months pass failed: ${e.message}`); throw e; });
+    return overviewMonths.promise;
   }
 
   // Month/Year curves come from Linnworks' PROCESSED ORDERS, not the app's
@@ -4749,7 +5561,12 @@ exit 1
     const dayIdx = {};
     for (let i = 0; i < WINDOW_DAYS; i++) dayIdx[db.localDay(new Date(nowTs - (WINDOW_DAYS - 1 - i) * 86400000))] = i;
     const chanKey = (src) => /walmart/i.test(src) ? 'walmart' : /ebay/i.test(src) ? 'ebay' : /temu/i.test(src) ? 'temu' : 'other';
-    for (const l of sales.lines) {
+    // a composite line also credits each child item with the units its
+    // sale took from the shelf (owner 2026-10-14): the tablet's pace counts
+    // the case listing's sales, so Buy now orders tablets for both
+    const childLines = [];
+    for (const l of sales.lines) for (const c of l.children || []) childLines.push({ ...l, sku: c.sku, qty: (l.qty || 1) * (c.qty || 1), revenue: 0, channelSku: '', viaComposite: l.sku });
+    for (const l of [...sales.lines, ...childLines]) {
       const k = String(l.sku).toUpperCase();
       if (!k) continue;
       const s = stats[k] = stats[k] || { qty: 0, revenue: 0, last: 0, channels: new Set(), recent: 0, prior: 0, wfsQty: 0, wfs7: 0, wfsCh: {}, series: new Array(WINDOW_DAYS).fill(0), split: { walmart: 0, ebay: 0, temu: 0, other: 0 } };
@@ -4775,6 +5592,8 @@ exit 1
     }
     const pads = {};
     for (const it of items) if (it.dsPad) pads[String(it.sku).toUpperCase()] = true;
+    const composites = {};
+    for (const it of items) if (it.isComposite) composites[String(it.sku).toUpperCase()] = true;
     const lead = Number((cfg.reorder || {}).leadTimeDays) || 7;
     const missed = [];
     const buy = [];
@@ -4891,7 +5710,7 @@ exit 1
       const onHand = avail + atWfs;
       const daysLeft = perDay > 0 ? Math.floor(onHand / perDay) : 9999;
       stock.push({
-        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty,
+        sku: it.sku, title: it.title || '', avail, atWfs, sold30: s.qty, composite: !!composites[k],
         perDay: Math.round(perDay * 100) / 100, recent: s.recent, prior: s.prior,
         daysLeft, outOn: fmtDay(nowTs + daysLeft * 86400000), last: s.last ? fmtDay(s.last) : '', lastTs: s.last,
         series: s.series, split: s.split, padded: !!pads[k],
@@ -4920,6 +5739,16 @@ exit 1
       low: low.slice(0, 40),
       lowCount: low.length,
       coverDays: cover,
+      // "Was selling" (owner 2026-10-14): every item's shelf + WFS level so a
+      // SKU with no sale in 30 days still has a row, this month's units so
+      // far, and each SKU's last sale in the window
+      inv: items.filter((it) => !pads[String(it.sku).toUpperCase()] && !it.isComposite).map((it) => {
+        const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+        const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+        return { sku: it.sku, title: it.title || '', avail: Math.max(0, Number(home.available) || 0), atWfs: wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0 };
+      }),
+      monthNow: (() => { const m = {}; const ym = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}`; for (const l of sales.lines) { const d = new Date(Date.parse(l.processedOn) || 0); if (`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` !== ym) continue; const k = String(l.sku).toUpperCase(); if (k) m[k] = (m[k] || 0) + (l.qty || 0); } return m; })(),
+      lastSale: Object.fromEntries(Object.entries(stats).filter(([, st]) => st.last).map(([k, st]) => [k, st.last])),
     };
   }
 
@@ -5028,6 +5857,8 @@ exit 1
       // reorder, so they never show as out or on watch (owner 2026-10-08
       // asked what a "Watch · Out of stock" row meant — these were most of them)
       if (r.padded) continue;
+      // a composite holds no stock of its own: its children carry its sales
+      if (r.composite) continue;
       const pr = r.recent / 14;
       const pp = r.prior / 16;
       const isFast = r.recent >= 3 && (pp > 0 ? pr / pp >= 1.2 : true);
@@ -5045,15 +5876,81 @@ exit 1
       if (ig && kind !== 'watch' && !(r.perDay > ig.pace * 1.5)) { ignored.push(row); continue; }
       ({ out, low, fast, watch })[kind].push(row);
     }
+    // Buy now (owner 2026-10-13: "which products to buy that sell at least
+    // one a day and are running low"): any queued SKU at the Hot pace or
+    // better with under the target days on hand, out-of-stock sellers
+    // included, soonest-out first; the quantity covers the target at today's
+    // pace less what is on hand at the warehouse and WFS
+    // Buy now scans every selling SKU, not only the queue: under the unit
+    // floor (Settings, 50 by default) OR under the target days on hand, at
+    // the set pace or better (1 a day by default); the quantity brings it to
+    // the larger of the floor and the target's worth of sales
+    const target = lead + cover;
+    const buyUnits = Number((cfg.reorder || {}).buyUnits ?? 50);
+    const buyPace = Number((cfg.reorder || {}).buyPace ?? 1);
+    const buy = [];
+    for (const r of (money && money.stock) || []) {
+      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded || r.composite) continue;
+      const onHand = Math.max(0, (r.avail || 0) + (r.atWfs || 0));
+      if (!(r.perDay >= buyPace && buyPace > 0) && !(buyPace <= 0 && r.sold30 > 0)) continue;
+      if (!(onHand <= buyUnits || onHand <= 0 || r.daysLeft <= target)) continue;
+      const kind = onHand <= 0 ? 'out' : r.daysLeft <= lead ? 'low' : r.daysLeft <= target ? 'watch' : 'stock';
+      const want = Math.max(Math.ceil(r.perDay * target), buyUnits);
+      const row = { ...r, kind, pct: 0, buyQty: Math.max(0, want - onHand), onHand };
+      const queued = [...out, ...low, ...fast, ...watch].find(x => x.sku === r.sku);
+      if (queued) { row.kind = queued.kind; row.pct = queued.pct; row.faster = queued.faster; }
+      buy.push(row);
+    }
+    buy.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // selling fast: the fastest sellers first (owner 2026-10-08)
     fast.sort((a, b) => b.perDay - a.perDay || b.pct - a.pct);
     watch.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    // Was selling (owner 2026-10-14): every SKU whose best three of the last
+    // six completed months average at least 5 units (the slider's floor; the
+    // page filters higher), with its month-by-month units, its last sale
+    // and what is on hand — the page decides between "out of stock" and
+    // "not selling" and applies the slider
+    const was = [];
+    const wasMonths = completedMonths();
+    const monthsHeld = wasMonths.filter((ym) => overviewMonths.months[ym]);
+    const nowYm = ymOf(new Date());
+    if (money && Array.isArray(money.inv) && monthsHeld.length) {
+      const nowTs = Date.now();
+      const fmtDay = (ts) => { const d = new Date(ts); return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()}`; };
+      const stockBySku = new Map(((money && money.stock) || []).map((r) => [String(r.sku).toUpperCase(), r]));
+      for (const it of money.inv) {
+        const k = String(it.sku).toUpperCase();
+        if (db.conditionOfSku(it.sku) || mappedCond.has(k)) continue;
+        const units = wasMonths.map((ym) => { const mo = overviewMonths.months[ym]; return mo ? (mo.bySku[k] || 0) : null; });
+        const known = units.filter((u) => u !== null);
+        if (!known.length) continue;
+        const best = known.slice().sort((a, b) => b - a).slice(0, 3);
+        const pace = Math.round(best.reduce((a, b) => a + b, 0) / best.length);
+        if (pace < 5) continue;
+        let lastTs = (money.lastSale || {})[k] || 0;
+        for (const ym of wasMonths) { const mo = overviewMonths.months[ym]; if (mo && mo.last[k] > lastTs) lastTs = mo.last[k]; }
+        const daysSince = lastTs ? Math.max(0, Math.floor((nowTs - lastTs) / 86400000)) : null;
+        const onHand = Math.max(0, (it.avail || 0) + (it.atWfs || 0));
+        const sr = stockBySku.get(k);
+        // the months that carried the pace, as "Jun – Aug"
+        const hi = units.map((u, i) => (u !== null && u >= pace * 0.6 ? i : -1)).filter((i) => i >= 0);
+        const mon = (ym) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(ym.slice(5, 7)) - 1];
+        const range = hi.length ? (hi[0] === hi[hi.length - 1] ? mon(wasMonths[hi[0]]) : `${mon(wasMonths[hi[0]])} – ${mon(wasMonths[hi[hi.length - 1]])}`) : '';
+        was.push({
+          sku: it.sku, title: it.title || '', avail: it.avail || 0, atWfs: it.atWfs || 0, onHand, pace, range,
+          months: [...wasMonths, nowYm], units: [...units, (money.monthNow || {})[k] || 0],
+          lastTs, last: lastTs ? fmtDay(lastTs) : '', daysSince, recent: sr ? sr.recent : 0, sold30: sr ? sr.sold30 : 0,
+        });
+      }
+      was.sort((a, b) => b.pace - a.pace);
+    }
     return {
-      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored,
-      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length },
-      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
+      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
+      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
+      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1, buyUnits, buyPace,
+      was, wasMonths: [...wasMonths, nowYm], wasReady: monthsHeld.length === wasMonths.length && !!(money && money.inv), wasHeld: monthsHeld.length, wasBusy: !!overviewMonths.promise,
     };
   }
 
@@ -5327,112 +6224,6 @@ exit 1
       });
     }
   }, 15000);
-
-  /* ---------- Temu lister: template intake + workbook export ---------- */
-
-  const temuTemplatePath = () => path.join(app.getPath('userData'), 'temu-template.xlsx');
-
-  ipcMain.handle('temu:state', () => {
-    const cfg = config.load();
-    return {
-      ok: true,
-      hasTemplate: fs.existsSync(temuTemplatePath()),
-      template: cfg.temuTemplate || null,
-      profiles: cfg.temuProfiles || {},
-      packages: cfg.temuPackages || {},
-      titles: cfg.temuTitles || {},
-    };
-  });
-
-  // a typed title teaches the model family: stored with {storage}/{color}
-  // tokens so every sibling SKU fills it in for itself
-  ipcMain.handle('temu:titles', (_e, { model, title }) => {
-    const cfg = config.load();
-    const all = { ...(cfg.temuTitles || {}) };
-    if (String(title || '').trim()) all[String(model).toUpperCase()] = String(title).trim();
-    else delete all[String(model).toUpperCase()];
-    config.save({ temuTitles: all });
-    return { ok: true };
-  });
-
-  // The seller downloads Temu's category template once; the app keeps a copy
-  // in userData and writes every export into a fresh copy of it.
-  ipcMain.handle('temu:template', async () => {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Pick the Temu upload template (downloaded from Seller Central)',
-      defaultPath: app.getPath('downloads'),
-      properties: ['openFile'],
-      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
-    });
-    if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-    try {
-      const { readTemplate } = require('./temuxlsx.js');
-      const info = readTemplate(r.filePaths[0]); // throws when it is not a Temu template
-      fs.copyFileSync(r.filePaths[0], temuTemplatePath());
-      config.save({ temuTemplate: { name: path.basename(r.filePaths[0]), savedAt: new Date().toISOString() } });
-      return { ok: true, name: path.basename(r.filePaths[0]), columns: info.columns.length };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('temu:packages', (_e, { model, pack }) => {
-    const cfg = config.load();
-    const all = { ...(cfg.temuPackages || {}) };
-    if (pack) all[String(model).toUpperCase()] = pack;
-    config.save({ temuPackages: all });
-    return { ok: true };
-  });
-
-  // Export: host each variation's photos on its Linnworks item (Temu fetches
-  // image URLs over the internet, same as eBay's PicURL), fill the template
-  // copy, save to Documents. Nothing touches Temu until the seller uploads
-  // the workbook in Seller Central.
-  ipcMain.handle('temu:export', async (_e, { products }) => {
-    const cfg = config.load();
-    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
-    if (!fs.existsSync(temuTemplatePath())) return { ok: false, error: 'Pick the Temu template file first (gear button).' };
-    try {
-      const { fillWorkbook } = require('./temuxlsx.js');
-      const client = new LinnworksClient(cfg.linnworks);
-      for (const prod of products || []) {
-        for (const v of prod.variations || []) {
-          const paths = v.photoPaths || [];
-          if (!paths.length) { v.images = v.images || []; continue; }
-          let stockItemId = v.stockItemId;
-          if (!stockItemId) stockItemId = await client.findStockItemIdBySku(v.sku).catch(() => null);
-          if (!stockItemId) return { ok: false, error: `${v.sku} is not in Linnworks - photos need a home item.` };
-          const files = paths.map((p, i) => {
-            if (p && typeof p === 'object' && p.dataUrl) {
-              const m = String(p.dataUrl).match(/^data:(image\/[a-z]+);base64,(.+)$/i);
-              if (!m) throw new Error(`photo ${i + 1}: unreadable edited image`);
-              return { buffer: Buffer.from(m[2], 'base64'), name: p.name || `photo-${i + 1}.jpg`, mime: m[1] };
-            }
-            const fp = typeof p === 'object' ? p.path : p;
-            return {
-              buffer: fs.readFileSync(fp),
-              name: path.basename(fp),
-              mime: /\.png$/i.test(fp) ? 'image/png' : /\.webp$/i.test(fp) ? 'image/webp' : 'image/jpeg',
-            };
-          });
-          v.images = await client.addItemImages(stockItemId, files);
-        }
-      }
-      const out = fillWorkbook(temuTemplatePath(), products, cfg.temuProfiles || {});
-      const stamp = new Date();
-      const name = `Temu-upload-${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}.xlsx`;
-      const r = await dialog.showSaveDialog(win, {
-        title: 'Save the Temu upload workbook',
-        defaultPath: path.join(app.getPath('downloads'), name),
-        filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
-      });
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(r.filePath, out);
-      return { ok: true, path: r.filePath };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
 
   // Inline log editing: one UNIT of one return record. Record-level fields
   // (PO#, date, customer, tracking) apply to the whole record; SKU/condition
@@ -5743,22 +6534,18 @@ exit 1
   // shipments, each row wearing the station that logged it (owner
   // 2026-09-16: "see which user did what"); local SQLite stays this
   // station's own storage, other stations' shipments come from the fold
-  ipcMain.handle('wfs:list', () => {
-    const st = retsync.stationName() || '';
-    const mine = db.listWfsShipments().map(s => ({ ...s, station: st, mine: true }));
-    if (!retsync.enabled()) return mine;
-    retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
-      .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
-    const foreign = retsync.readAux('wfs')
-      .filter(e => e.station !== st)
-      .map(e => ({ id: `${e.station}:${e.id}`, created_at: String(e.ts || ''), note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
-    return mine.concat(foreign)
-      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-      .slice(0, 200);
-  });
+  ipcMain.handle('wfs:list', () => wfsShipmentsAll(200, 200));
+  // id: this station's shipment id, or a shipment key "STATION:id" from
+  // wfsShipmentsAll; the mark is kept locally when the shipment is ours and
+  // sent to the shared folder so every desktop sees it
   ipcMain.handle('wfs:received', (_e, { id, received }) => {
-    db.markWfsReceived(Number(id), received !== false);
-    return { ok: true };
+    const k = wfsrecv.parseKey(id, retsync.stationName() || '');
+    if (!Number.isFinite(k.id)) return { ok: false, error: 'Unknown shipment.' };
+    const at = received !== false ? new Date().toISOString() : '';
+    if (k.own) db.setWfsReceivedAt(k.id, at);
+    else if (!retsync.enabled()) return { ok: false, error: 'Turn on Sync to mark another desktop\'s shipment.' };
+    retsync.appendAux('wfsrecv', { key: k.key, receivedAt: at, ts: Date.now() });
+    return { ok: true, receivedAt: at };
   });
   ipcMain.handle('overview:wfsIgnore', (_e, { sku, pace }) => {
     if (!sku) return { ok: false, error: 'Missing SKU.' };
@@ -5979,6 +6766,525 @@ exit 1
       pw.destroy();
     }
   });
+  /* ---- Ship tab (owner 2026-10-19): UPS labels from a PO# or a typed
+     address, rated on BOTH companies' UPS accounts side by side; the PO#
+     is always Ref 1, the declared value is the owner's call ---- */
+  const shipOff = () => { const c = config.load(); return c.captureOnly || !(c.pages && c.pages.ship); };
+  const upsReady = (a) => !!(a && a.clientId && a.clientSecret && a.accountNumber);
+  const upsName = (a) => String(a.name || '').trim() || `UPS account ${String(a.id).toUpperCase()}`;
+  const shipParty = (x) => {
+    const out = {};
+    for (const f of ['name', 'company', 'line1', 'line2', 'city', 'state', 'zip', 'phone', 'email']) out[f] = String((x && x[f]) || '').trim().slice(0, 120);
+    return out;
+  };
+  const shipPkg = (p) => ({
+    weight: Math.max(0, Number(p && p.weight) || 0),
+    length: Math.max(0, Number(p && p.length) || 0),
+    width: Math.max(0, Number(p && p.width) || 0),
+    height: Math.max(0, Number(p && p.height) || 0),
+  });
+  // everything a rate or a label needs, checked up front so UPS errors are
+  // only ever about UPS
+  function shipInput(payload) {
+    const cfg = config.load();
+    const u = cfg.ups || {};
+    const kind = payload && payload.kind === 'return' ? 'return' : 'ship';
+    const other = shipParty(payload && payload.party);
+    const pkg = shipPkg(payload && payload.pkg);
+    const p0 = ups.addressProblem(u.shipFrom);
+    if (p0) return { error: `Ship-from address: ${p0.toLowerCase()} (Settings › Shipping).` };
+    if (kind === 'return') {
+      const p1 = ups.addressProblem(u.returnTo);
+      if (p1) return { error: `Return address: ${p1.toLowerCase()} (Settings › Shipping).` };
+    }
+    const p2 = ups.addressProblem(other);
+    if (p2) return { error: `${kind === 'return' ? 'Their' : 'Ship-to'} address: ${p2.toLowerCase()}.` };
+    if (!(pkg.weight > 0)) return { error: 'Enter the weight.' };
+    if (pkg.weight > 150) return { error: 'UPS takes up to 150 lb per package.' };
+    return { cfg, u, input: { kind, shipFrom: u.shipFrom, returnTo: u.returnTo, other, pkg, value: Math.max(0, Number(payload && payload.value) || 0) } };
+  }
+
+  ipcMain.handle('ship:info', () => {
+    const u = config.load().ups || {};
+    return {
+      ok: true,
+      test: !!u.test,
+      printer: u.printer || '',
+      boxes: u.boxes || [],
+      shipFrom: u.shipFrom || {},
+      returnTo: u.returnTo || {},
+      shipFromProblem: ups.addressProblem(u.shipFrom),
+      returnToProblem: ups.addressProblem(u.returnTo),
+      accounts: (u.accounts || []).map(a => ({ id: a.id, name: upsName(a), ready: upsReady(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() })),
+    };
+  });
+
+  ipcMain.handle('ship:lookup', async (_e, { ref } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const reference = String(ref || '').trim();
+    if (!reference) return { ok: false, error: 'Enter a PO#.' };
+    try {
+      const cfg = config.load();
+      const order = await new LinnworksClient(cfg.linnworks).findOrderForLabel(reference,
+        [cfg.linnworks.locationId, (cfg.stockRouting || {}).fallbackLocationId]);
+      if (!order) return { ok: false, notFound: true, error: `No Linnworks order found for ${reference}.` };
+      const country = String(order.party.country || '').trim();
+      if (country && !/^(us|usa|united states( of america)?)$/i.test(country)) {
+        return { ok: false, error: `${reference} ships to ${country}; the Ship tab makes US labels only.` };
+      }
+      order.party.state = ups.stateCode(order.party.state);
+      return { ok: true, order };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:rates', async (_e, payload) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const prep = shipInput(payload);
+    if (prep.error) return { ok: false, error: prep.error };
+    if (!(prep.u.accounts || []).some(upsReady)) return { ok: false, error: 'No UPS account is set up yet (Settings › Shipping).' };
+    return { ok: true, test: !!prep.u.test, accounts: await upsRatesAll(prep) };
+  });
+
+  // every UPS account at once; one failing never hides the other's rates
+  async function upsRatesAll(prep) {
+    return Promise.all((prep.u.accounts || []).map(async (a) => {
+      const head = { id: a.id, name: upsName(a), tail: String(a.accountNumber || '').slice(-4).toUpperCase() };
+      if (!upsReady(a)) return { ...head, ok: false, notSet: true, error: 'Not set up — add it in Settings › Shipping.' };
+      try {
+        return { ...head, ok: true, rates: await new ups.UpsClient(a, { test: !!prep.u.test }).rates(prep.input) };
+      } catch (e) {
+        return { ...head, ok: false, error: e.message };
+      }
+    }));
+  }
+
+  // buy one UPS label and keep it (with its image) in ship_labels
+  async function upsBuyLabel(prep, acct, { serviceCode, serviceName, reference, reference2, fromPo, source, price, rowId }) {
+    const res = await new ups.UpsClient(acct, { test: !!prep.u.test }).ship({ ...prep.input, serviceCode, reference, reference2 });
+    const { pkg } = prep.input;
+    return db.shipLabelAdd({
+      kind: prep.input.kind, reference, fromPo: !!fromPo, source,
+      accountId: acct.id, accountName: upsName(acct), serviceCode,
+      serviceName: ups.SERVICE_NAMES[serviceCode] || String(serviceName || `UPS service ${serviceCode}`),
+      tracking: res.tracking, shipmentId: res.shipmentId, carrier: 'UPS', rowId,
+      cost: res.charge ?? (Number.isFinite(Number(price)) ? Number(price) : null),
+      value: prep.input.value, weight: pkg.weight,
+      dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
+      partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
+      labelGif: res.labelGif, test: !!prep.u.test,
+    });
+  }
+
+  ipcMain.handle('ship:create', async (_e, payload) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const prep = shipInput(payload);
+    if (prep.error) return { ok: false, error: prep.error };
+    const acct = (prep.u.accounts || []).find(a => a.id === (payload && payload.accountId));
+    if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › Shipping).' };
+    const serviceCode = String((payload && payload.serviceCode) || '').replace(/\D/g, '').slice(0, 3);
+    if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
+    const reference = String((payload && payload.reference) || '').trim().slice(0, 35);
+    const reference2 = String((payload && payload.reference2) || '').trim().slice(0, 35);
+    try {
+      const label = await upsBuyLabel(prep, acct, {
+        serviceCode, serviceName: payload && payload.serviceName, reference, reference2,
+        fromPo: payload && payload.fromPo, source: payload && payload.source, price: payload && payload.price,
+      });
+      if (payload && payload.saveAddress) { try { db.shipAddrSave(prep.input.other); } catch { /* the label matters more */ } }
+      if (payload && payload.addressId) { try { db.shipAddrTouch(payload.addressId); } catch { /* best effort */ } }
+      const { label_gif: gif, ...row } = label;
+      return { ok: true, label: row, gif, size: ups.gifSize(gif) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:list', (_e, { days } = {}) => {
+    const n = Math.max(0, Math.min(3650, Number(days) || 0));
+    const since = n ? db.localDay(new Date(Date.now() - n * 86400000)) : db.localDay();
+    return { ok: true, labels: db.shipLabelList({ sinceDay: since }) };
+  });
+
+  ipcMain.handle('ship:label', (_e, { id } = {}) => {
+    const l = db.shipLabelGet(id);
+    if (!l) return { ok: false, error: 'Label not found.' };
+    const { label_gif: gif, ...row } = l;
+    return { ok: true, label: row, gif, size: ups.gifSize(gif) };
+  });
+
+  // a 4x6 page holding the label upright: UPS's GIF lies on its side
+  // (wider than tall), so it is turned a quarter clockwise to stand up
+  // paper 'letter' / 'a4' (owner 2026-10-21): the label turned to lie wide
+  // and enlarged to fill the TOP HALF of the sheet, the bottom half blank,
+  // as UPS prints on plain paper. 'label' = the 4x6 label printer. Several
+  // labels print one per page (Ship › Labels › Print selected)
+  function shipLabelHtml(gifs, paper = 'label') {
+    const sheet = paper === 'a4' ? { size: 'A4', w: 8.27, h: 11.69 } : paper === 'letter' ? { size: 'letter', w: 8.5, h: 11 } : null;
+    const one = (gif) => {
+      const info = ups.imageInfo(gif);
+      const wide = info && info.width > info.height;
+      const src = `data:image/${info && info.type === 'png' ? 'png' : 'gif'};base64,${gif}`;
+      if (!sheet) {
+        const img = wide
+          ? 'position:absolute;top:0;left:0;height:4in;width:auto;transform-origin:top left;transform:translateX(4in) rotate(90deg)'
+          : 'display:block;width:4in;height:auto';
+        return `<div class="pg"><img style="${img}" src="${src}"></div>`;
+      }
+      const m = 0.25;
+      const W = sheet.w - 2 * m;
+      const H = sheet.h / 2 - m;
+      const img = wide
+        ? `position:absolute;top:0;left:0;width:${W}in;height:${H}in;object-fit:contain;object-position:left top`
+        : `position:absolute;top:0;left:0;width:${H}in;height:${W}in;object-fit:contain;object-position:right top;transform-origin:top left;transform:translateY(${H}in) rotate(-90deg)`;
+      return `<div class="pg"><div class="half" style="position:absolute;top:${m}in;left:${m}in;width:${W}in;height:${H}in;overflow:hidden"><img style="${img}" src="${src}"></div></div>`;
+    };
+    const page = sheet ? `@page{size:${sheet.size};margin:0}.pg{width:${sheet.w}in;height:${sheet.h}in}` : '@page{size:4in 6in;margin:0}.pg{width:4in;height:6in}';
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${page}html,body{margin:0;padding:0}`
+      + `.pg{position:relative;overflow:hidden;break-after:page}.pg:last-child{break-after:auto}</style></head><body>`
+      + [].concat(gifs).map(one).join('') + '</body></html>';
+  }
+  // a print page goes through a temp file: a data: URL stops at ~2 MB, a
+  // dozen-plus labels in one Print selected job is past that
+  async function loadPrintPage(pw, html) {
+    const file = path.join(app.getPath('temp'), `dws-label-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+    fs.writeFileSync(file, html);
+    try { await pw.loadFile(file); } finally { try { fs.unlinkSync(file); } catch { /* gone */ } }
+  }
+  const printPageSize = (paper) => (paper === 'letter' ? 'Letter' : paper === 'a4' ? 'A4' : { width: 101600, height: 152400 });
+  const printPaper = (paper) => (paper === 'letter' || paper === 'a4' ? paper : 'label');
+  // store: false keeps the label record untouched (the browser download is
+  // read-only); a Walmart image still missing is then fetched but not kept
+  async function shipLabelWindow(id, { store = true, paper = 'label' } = {}) {
+    let l = db.shipLabelGet(id);
+    if (!l) throw new Error('Label not found.');
+    // a Walmart label whose image was not ready at purchase is fetched now
+    if (!l.label_gif && l.account_id === 'wm') {
+      const img = await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking);
+      if (store) { db.shipLabelSetImage(l.id, img); l = db.shipLabelGet(id); } else l = { ...l, label_gif: img };
+    }
+    if (!l.label_gif) throw new Error('The carrier sent no image for this label.');
+    const pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
+    await loadPrintPage(pw, shipLabelHtml(l.label_gif, paper));
+    return { pw, label: l };
+  }
+
+  // Download PDF in the browser (owner 2026-10-20, for the assistant that
+  // answers Walmart messages): an EXISTING label as a 4x6 PDF, by id,
+  // tracking or PO#. Read-only: never buys, re-creates, voids or edits a
+  // label; a voided label is not served.
+  labelPdfFor = async ({ id, tracking, po } = {}) => {
+    let l = null;
+    if (id) l = db.shipLabelGet(Number(id));
+    else if (tracking || po) l = db.shipLabelFind({ tracking, reference: po });
+    else return { ok: false, status: 400, error: 'Say which label: id, tracking or po.' };
+    if (!l) return { ok: false, status: 404, error: `No label found for ${id ? `#${id}` : tracking || po}.` };
+    if (l.voided_at) return { ok: false, status: 410, error: `The label ${l.tracking} was voided.` };
+    let pw = null;
+    try {
+      ({ pw } = await shipLabelWindow(l.id, { store: false }));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      const ref = String(l.reference || l.tracking).replace(/[^\w.-]+/g, '_');
+      return { ok: true, pdf, filename: `${l.kind === 'return' ? 'return' : 'label'}-${ref}.pdf` };
+    } catch (e) {
+      return { ok: false, status: 502, error: `The PDF could not be made: ${e.message}` };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  };
+
+  // printer / paper picked in the print popup (owner 2026-10-20: label
+  // printer or plain paper, any printer); left out = Settings' printer, 4x6
+  ipcMain.handle('ship:print', async (_e, { id, printer: pick, paper } = {}) => {
+    let pw = null;
+    try {
+      const printer = pick !== undefined ? String(pick || '') : String((config.load().ups || {}).printer || '');
+      ({ pw } = await shipLabelWindow(id, { paper: printPaper(paper) }));
+      // a named printer prints straight away; otherwise the system print
+      // dialog asks which printer
+      const ok = await new Promise((resolve, reject) => {
+        pw.webContents.print({
+          silent: !!printer, deviceName: printer || undefined, printBackground: true,
+          margins: { marginType: 'none' }, pageSize: printPageSize(printPaper(paper)),
+        }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
+      });
+      return { ok: true, printed: ok };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  // Print selected (owner 2026-10-21): several labels from Ship › Labels in
+  // one print job, one label per page; voided labels are skipped
+  ipcMain.handle('ship:printMany', async (_e, { ids, printer: pick, paper } = {}) => {
+    let pw = null;
+    try {
+      const printer = pick !== undefined ? String(pick || '') : String((config.load().ups || {}).printer || '');
+      const gifs = [];
+      let skipped = 0;
+      for (const id of [...new Set((ids || []).map(Number))].slice(0, 200)) {
+        let l = db.shipLabelGet(id);
+        if (!l || l.voided_at) { skipped++; continue; }
+        if (!l.label_gif && l.account_id === 'wm') {
+          try { db.shipLabelSetImage(l.id, await new walmart.WalmartClient(config.load().walmart).downloadLabel(l.carrier, l.tracking)); l = db.shipLabelGet(id); } catch { /* counted below */ }
+        }
+        if (l.label_gif) gifs.push(l.label_gif); else skipped++;
+      }
+      if (!gifs.length) return { ok: false, error: 'None of those labels can be printed.' };
+      pw = new BrowserWindow({ show: false, width: 400, height: 600, webPreferences: { sandbox: true, contextIsolation: true } });
+      await loadPrintPage(pw, shipLabelHtml(gifs, printPaper(paper)));
+      const ok = await new Promise((resolve, reject) => {
+        pw.webContents.print({
+          silent: !!printer, deviceName: printer || undefined, printBackground: true,
+          margins: { marginType: 'none' }, pageSize: printPageSize(printPaper(paper)),
+        }, (success, reason) => (success || reason === 'cancelled' ? resolve(success) : reject(new Error(reason || 'Print failed'))));
+      });
+      return { ok: true, printed: ok, count: gifs.length, skipped };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  ipcMain.handle('ship:pdf', async (_e, { id } = {}) => {
+    let pw = null;
+    try {
+      const l = db.shipLabelGet(id);
+      if (!l) return { ok: false, error: 'Label not found.' };
+      const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}.pdf`;
+      const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
+      ({ pw } = await shipLabelWindow(id));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      fs.writeFileSync(pick.filePath, pdf);
+      shell.showItemInFolder(pick.filePath);
+      return { ok: true, path: pick.filePath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      if (pw) pw.destroy();
+    }
+  });
+
+  ipcMain.handle('ship:void', async (_e, { id } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const l = db.shipLabelGet(id);
+    if (!l) return { ok: false, error: 'Label not found.' };
+    if (l.voided_at) return { ok: true, label: l };
+    try {
+      if (l.account_id === 'wm') {
+        await new walmart.WalmartClient(config.load().walmart).discard(l.carrier, l.tracking);
+      } else {
+        const u = config.load().ups || {};
+        const acct = (u.accounts || []).find(a => a.id === l.account_id);
+        if (!upsReady(acct)) return { ok: false, error: `The ${l.account_name} account is no longer set up, so UPS can't be asked to void it.` };
+        // a label bought on the test servers is voided there too
+        await new ups.UpsClient(acct, { test: !!l.test }).void(l.shipment_id || l.tracking);
+      }
+      const { label_gif: _g, ...row } = db.shipLabelVoid(id);
+      // the order it filled gets its tracking back off, unless already processed
+      const orderRow = l.row_id ? db.getRow(l.row_id) : null;
+      if (orderRow && orderRow.tracking === l.tracking && orderRow.status !== 'synced') {
+        db.setTracking(orderRow.id, '', '');
+        pushState();
+      }
+      return { ok: true, label: row };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  /* ---- Ship from the Orders line (owner 2026-10-20): one rate list mixing
+     Ship with Walmart (Walmart orders) with both UPS accounts; the label's
+     tracking lands on the row, Process stays a separate press ---- */
+  const wmReady = () => { const w = config.load().walmart || {}; return !!(w.clientId && w.clientSecret); };
+  const wmOrders = new Map(); // po -> Walmart order (lines + ship-to), per session
+
+  async function wmOrder(po) {
+    if (!wmOrders.has(po)) wmOrders.set(po, await new walmart.WalmartClient(config.load().walmart).order(po));
+    return wmOrders.get(po);
+  }
+  function orderRowFor(rowId) {
+    const row = db.getRow(Number(rowId));
+    if (!row) return { error: 'That order is no longer on the list.' };
+    if (row.tracking) return { error: 'This order already has tracking.' };
+    if (row.status === 'synced') return { error: 'This order is already processed.' };
+    return { row };
+  }
+
+  ipcMain.handle('orderShip:savePkg', (_e, { key, pkg } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const k = shipPkgKeyClean(key);
+    const p = shipPkgClean(pkg);
+    if (!k) return { ok: false, error: 'No items to save the package for.' };
+    if (!p) return { ok: false, error: 'Enter the weight first.' };
+    shipPkgLog(k, p);
+    return { ok: true, key: k, saved: p };
+  });
+
+  ipcMain.handle('orderShip:prep', async (_e, { rowId } = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const { row, error } = orderRowFor(rowId);
+    if (error) return { ok: false, error };
+    try {
+      const cfg = config.load();
+      const order = await new LinnworksClient(cfg.linnworks).findOrderForLabel(row.order_number,
+        [cfg.linnworks.locationId, (cfg.stockRouting || {}).fallbackLocationId]);
+      if (!order) return { ok: false, error: `No Linnworks order found for ${row.order_number}.` };
+      order.party.state = ups.stateCode(order.party.state);
+      const key = shipPkgKey(order.items);
+      const imgs = skuImageCache.map || {}; // only when already loaded: never hold the drawer up for it
+      return {
+        ok: true, po: row.order_number, channel: row.channel, party: order.party, value: order.total,
+        items: order.items.map(it => ({ ...it, img: imgs[it.sku] || '' })),
+        walmart: row.channel === 'walmart' && wmReady(),
+        key, saved: key ? shipPkgState()[key] || null : null,
+        orderedOn: order.orderedOn || '', deliverBy: order.deliverBy || '', shipBy: order.shipBy || '',
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('orderShip:rates', async (_e, payload = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const { row, error } = orderRowFor(payload.rowId);
+    if (error) return { ok: false, error };
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    if (prep.error) return { ok: false, error: prep.error };
+    const jobs = [upsRatesAll(prep)];
+    const useWm = row.channel === 'walmart' && wmReady();
+    let dates = null; // Walmart's own order dates, when it is a Walmart order
+    if (useWm) {
+      jobs.push((async () => {
+        try {
+          const order = await wmOrder(row.order_number);
+          dates = { orderedOn: order.orderedOn || '', shipBy: order.shipBy || '', deliverBy: order.deliverBy || '' }; // what Walmart promised the buyer
+          return { id: 'wm', name: 'Walmart', ok: true, rates: await new walmart.WalmartClient(config.load().walmart).estimates({ order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom }) };
+        } catch (e) {
+          return { id: 'wm', name: 'Walmart', ok: false, error: e.message };
+        }
+      })());
+    }
+    const [upsSources, wmSource] = await Promise.all(jobs);
+    return { ok: true, test: !!prep.u.test, dates, sources: [...(wmSource ? [wmSource] : []), ...upsSources] };
+  });
+
+  ipcMain.handle('orderShip:create', async (_e, payload = {}) => {
+    if (shipOff()) return { ok: false, error: 'Ship is off on this station (Settings › General).' };
+    const { row, error } = orderRowFor(payload.rowId);
+    if (error) return { ok: false, error };
+    const prep = shipInput({ kind: 'ship', party: payload.party, pkg: payload.pkg, value: payload.value });
+    if (prep.error) return { ok: false, error: prep.error };
+    try {
+      let label;
+      if (payload.via === 'wm') {
+        if (row.channel !== 'walmart' || !wmReady()) return { ok: false, error: 'Walmart labels are for Walmart orders, with the Walmart keys set.' };
+        const client = new walmart.WalmartClient(config.load().walmart);
+        const order = await wmOrder(row.order_number);
+        const bought = await client.createLabel({
+          order, pkg: prep.input.pkg, shipFrom: prep.u.shipFrom, returnTo: prep.u.returnTo,
+          carrierName: String(payload.carrier || ''), serviceType: String(payload.code || ''),
+        });
+        let image = '';
+        try { image = await client.downloadLabel(bought.carrier || payload.carrier, bought.tracking); } catch { /* Reprint fetches it */ }
+        const { pkg } = prep.input;
+        label = db.shipLabelAdd({
+          kind: 'ship', reference: row.order_number, fromPo: true, source: row.channel,
+          accountId: 'wm', accountName: 'Walmart', serviceCode: String(payload.code || ''),
+          serviceName: String(payload.name || bought.service || ''), tracking: bought.tracking, carrier: bought.carrier || String(payload.carrier || ''),
+          cost: Number.isFinite(Number(payload.price)) ? Number(payload.price) : null, value: 0, weight: pkg.weight,
+          dims: pkg.length && pkg.width && pkg.height ? `${pkg.length}x${pkg.width}x${pkg.height}` : '',
+          partyName: prep.input.other.company || prep.input.other.name, party: prep.input.other,
+          labelGif: image, rowId: row.id,
+        });
+      } else {
+        const acct = (prep.u.accounts || []).find(a => a.id === payload.via);
+        if (!upsReady(acct)) return { ok: false, error: 'That UPS account is not set up (Settings › Shipping).' };
+        const serviceCode = String(payload.code || '').replace(/\D/g, '').slice(0, 3);
+        if (!serviceCode) return { ok: false, error: 'Pick a rate first.' };
+        label = await upsBuyLabel(prep, acct, {
+          serviceCode, serviceName: payload.name, reference: row.order_number, reference2: String(payload.reference2 || '').trim().slice(0, 35),
+          fromPo: true, source: row.channel, price: payload.price, rowId: row.id,
+        });
+      }
+      // the tracking lands on the order like a scan; Process stays the owner's press
+      db.setTracking(row.id, label.tracking, classifyTracking(label.tracking) || label.carrier || '');
+      if (currentRowId === row.id) currentRowId = null;
+      pushState();
+      const { label_gif: gif, ...rec } = label;
+      return { ok: true, label: rec, gif, size: ups.imageInfo(gif) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Settings › General › Browser: the link (with its key), whether it runs,
+  // a fresh key (old links stop working), and opening it in the default browser
+  ipcMain.handle('web:info', () => {
+    const cfg = config.load();
+    return { ok: true, enabled: !!cfg.web.enabled, running: !!web.server, error: web.error, url: cfg.web.key ? webUrl(cfg) : '' };
+  });
+  ipcMain.handle('web:newKey', async (e) => {
+    if (e && e.web) return { ok: false, error: 'Make a new link from the desktop app.' };
+    config.save({ web: { key: webserve.newKey() } });
+    if (config.load().web.enabled) await startWeb();
+    return { ok: true, url: webUrl(config.load()) };
+  });
+  ipcMain.handle('web:open', async () => {
+    if (!web.server) return { ok: false, error: web.error || 'Browser access is off.' };
+    await shell.openExternal(webUrl(config.load()));
+    return { ok: true };
+  });
+
+  ipcMain.handle('walmart:test', async (_e, creds = {}) => {
+    try {
+      const saved = config.load().walmart || {};
+      const client = new walmart.WalmartClient({
+        clientId: String(creds.clientId || '').trim() || saved.clientId,
+        clientSecret: String(creds.clientSecret || '').trim() || saved.clientSecret,
+      });
+      await client.token();
+      // which carriers Walmart will sell labels for on this account
+      let carriers = null;
+      try { carriers = await client.carriers(); } catch { /* the keys work; the list is a bonus */ }
+      return { ok: true, carriers };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:addresses', () => ({ ok: true, addresses: db.shipAddrList() }));
+  ipcMain.handle('ship:addressDelete', (_e, { id } = {}) => { db.shipAddrDelete(id); return { ok: true }; });
+
+  // Settings' Test button: a token from UPS proves the client ID, secret
+  // and account number belong together
+  ipcMain.handle('ship:test', async (_e, { account, test } = {}) => {
+    try {
+      // a key left blank in Settings means the saved one
+      const saved = ((config.load().ups || {}).accounts || []).find(x => x.id === (account && account.id)) || {};
+      const pick = (f) => String((account && account[f]) || '').trim() || String(saved[f] || '');
+      const a = { clientId: pick('clientId'), clientSecret: pick('clientSecret'), accountNumber: pick('accountNumber') };
+      await new ups.UpsClient(a, { test: !!test }).token();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ship:printers', async () => {
+    try {
+      const list = await win.webContents.getPrintersAsync();
+      return { ok: true, printers: list.map(p => ({ name: p.name, label: p.displayName || p.name })) };
+    } catch (e) {
+      return { ok: false, error: e.message, printers: [] };
+    }
+  });
+
   // Create a new inventory item, optionally with a starting level at the
   // primary location (via the existing UpdateStockLevelsBySKU delta path).
   ipcMain.handle('stock:createSku', async (_e, payload) => {
@@ -6413,6 +7719,10 @@ exit 1
     if (!sku || !Number.isInteger(n) || n < 0) return { ok: false, error: 'Enter a whole number of 0 or more.' };
     try {
       const client = new LinnworksClient(cfg.linnworks);
+      // a composite holds no stock of its own (owner 2026-10-14): a count
+      // typed on it would sit beside the children's and count twice
+      const me = ((invCache.res && invCache.res.items) || []).find(it => String(it.sku).toUpperCase() === String(sku).toUpperCase());
+      if (me && me.isComposite) return { ok: false, error: `${sku} is a composite: it draws from its parts. Adjust the parts instead.` };
       // the bulk history entry below is this change's one record in the
       // stock history too (skipLog keeps the Linnworks-side recorder quiet)
       const updated = await client.setStockLevel(String(sku), cfg.linnworks.locationId, n, { skipLog: true });
@@ -6742,7 +8052,7 @@ exit 1
   ipcMain.handle('stock:setCost', (_e, { sku, cost, from }) => {
     invCacheClear();
     const cfg = config.load();
-    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › Pages).' };
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › General).' };
     const n = Math.round((Number(cost) || 0) * 100) / 100;
     if (!sku) return { ok: false, error: 'Missing stock item.' };
     if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
@@ -6908,6 +8218,39 @@ exit 1
   });
 }
 
+/* ---------- browser access (owner 2026-10-20) ---------- */
+
+const web = { server: null, error: '' };
+let labelPdfFor = null; // set once the Ship handlers exist: ({ id | tracking | po }) => { ok, pdf, filename } | { ok: false, status, error }
+const webUrl = (cfg) => `http://localhost:${cfg.web.port}/?k=${cfg.web.key}`;
+
+async function startWeb() {
+  await stopWeb();
+  let cfg = config.load();
+  if (!cfg.web || !cfg.web.enabled) { web.error = ''; return; }
+  if (!cfg.web.key) cfg = config.save({ web: { key: webserve.newKey() } });
+  const server = webserve.createServer({
+    port: Number(cfg.web.port) || 47391,
+    getKey: () => config.load().web.key,
+    handlers: ipcHandlers,
+    eventTarget: () => (win && !win.isDestroyed() ? win.webContents : null),
+    labelPdf: (q) => (labelPdfFor ? labelPdfFor(q) : { ok: false, status: 503, error: 'The app is still starting.' }),
+  });
+  try {
+    await server.listen();
+    web.server = server;
+    web.error = '';
+  } catch (e) {
+    web.error = e && e.code === 'EADDRINUSE' ? `Port ${cfg.web.port} is in use by another program.` : String((e && e.message) || e);
+  }
+}
+
+async function stopWeb() {
+  const s = web.server;
+  web.server = null;
+  if (s) await s.close();
+}
+
 /* ---------- window & menu ---------- */
 
 function createWindow() {
@@ -6938,6 +8281,12 @@ function createWindow() {
     } catch { /* best effort */ }
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // everything this window is told, the browser tabs are told too
+  const sendToWindow = win.webContents.send.bind(win.webContents);
+  win.webContents.send = (channel, ...args) => {
+    sendToWindow(channel, ...args);
+    if (web.server) web.server.broadcast(channel, args[0]);
+  };
   wirePaneResync(win);
   // right-click copy/paste menu, standard across the whole app; in-app copies
   // prime the clipboard watcher so they never re-ingest as order captures
@@ -6959,6 +8308,11 @@ function createWindow() {
         click: () => { win.webContents.copy(); lastClipboardText = params.selectionText; } });
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
+  // find in page (owner 2026-10-12: "Ctrl+F / Command+F to search for items"):
+  // Chromium's own find, so matches highlight natively on every page
+  win.webContents.on('found-in-page', (_e, r) => {
+    win.webContents.send('find:result', { matches: r.matches, active: r.activeMatchOrdinal, final: r.finalUpdate });
   });
   win.webContents.on('did-finish-load', () => {
     if (!pendingNotice) return;
@@ -7038,9 +8392,9 @@ function buildMenu() {
         // roles zoomed the page but never told browserLayout, so the native
         // marketplace pane kept its old bounds and overlapped the sheet
         // (owner 2026-09-17, "the split screen for the capture page is broken")
-        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => win && win.webContents.send('ui:zoom', { dir: 'reset' }) },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => win && win.webContents.send('ui:zoom', { dir: 'in' }) },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => win && win.webContents.send('ui:zoom', { dir: 'out' }) },
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('reset')) return; if (win) win.webContents.send('ui:zoom', { dir: 'reset' }); } },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('in')) return; if (win) win.webContents.send('ui:zoom', { dir: 'in' }); } },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => { if (wmSiteZoomHook && wmSiteZoomHook('out')) return; if (win) win.webContents.send('ui:zoom', { dir: 'out' }); } },
       ],
     },
   ];
@@ -7080,6 +8434,20 @@ function stockLogReason(changeSource, meta) {
 let invCacheClearHook = null; // set by registerIpc: drops the Stock page's inventory copy
 // one door for every stock_log write: local db (insert-if-absent by gid),
 // then the shared folder so the other desktops pick the rows up
+// a channel link made or removed (owner 2026-10-23: "see when I unmapped
+// certain things in the history"): a MAPPED / UNMAPPED line on the
+// Linnworks SKU, delta 0 (never a stock move), the listing in data
+function recordMappingRow(kind, { sku, channelSku, source, subSource }) {
+  if (!sku) return;
+  const cfg = config.load();
+  try {
+    recordStockRows([{
+      sku, locationId: (cfg.linnworks && cfg.linnworks.locationId) || '', delta: 0, levelAfter: null,
+      reason: kind, changeSource: 'Capture Station mapping', ref: '', note: '',
+      computer: stockLogComputer(), by: '', data: { channelSku: String(channelSku || ''), source: String(source || ''), subSource: String(subSource || '') },
+    }]);
+  } catch { /* the link itself stands; the history line is best effort */ }
+}
 function recordStockRows(rows, { share = true } = {}) {
   if (typeof invCacheClearHook === 'function') invCacheClearHook(); // the Stock page's minute-old copy is stale now
   const inserted = db.logStockChanges(rows);
@@ -7209,9 +8577,12 @@ app.whenReady().then(() => {
   } catch { /* never block startup on housekeeping */ }
   writeDailyCsv();
   registerIpc();
+  registerRecoveryIpc();
   buildMenu();
   createWindow();
+  startWeb();
   startRetSync();
+  startRecovery();
   syncStockLog(); // fold the bulk-import history + the other desktops' rows into the log
   startClipboardWatcher();
   startStockRouter();
@@ -7239,6 +8610,282 @@ app.whenReady().then(() => {
     require('./e2e-test')({ app, win, db, clipboard: testClipboard });
   }
 });
+
+/* ---------- Recovery: Walmart payment periods vs the Returns log ---------- */
+// docs/recovery/SPEC.md. The engine lives in ./recovery; this is the Electron
+// skin: dialogs, the archive folder under Documents, the shared folder, and
+// the capture-only gate (the page never exists on a capture-only station).
+// the original CSV of every period: in the shared folder (Google Drive /
+// OneDrive) when sync is on, so every desktop and the owner's Drive have
+// it (owner 2026-10-12: "the files I upload are being put in the google
+// drive right?"); else under Documents on this computer
+function recoveryArchiveDir() {
+  const st = retsync.status();
+  if (st.enabled && st.folderOk && st.folder) return path.join(st.folder, 'Walmart Reports');
+  return path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports');
+}
+// every station's WFS shipments, newest first: this station's from SQLite,
+// the others' from the shared folder (wfs:list shows the latest 200;
+// Recovery's WFS Inventory reads them all to count what was sent)
+function wfsShipmentsAll(ownLimit = 100000, limit = Infinity) {
+  const st = retsync.stationName() || '';
+  const mine = db.listWfsShipments(ownLimit).map(s => ({ ...s, key: `${st}:${s.id}`, station: st, mine: true }));
+  if (!retsync.enabled()) return mine;
+  retsync.auxBackfill('wfs', () => db.listWfsShipments(1000).slice().reverse()
+    .map(s => ({ id: s.id, ts: s.created_at, note: s.note, items: s.items })));
+  const foreign = retsync.readAux('wfs')
+    .filter(e => e.station !== st)
+    .map(e => ({ id: `${e.station}:${e.id}`, key: `${e.station}:${e.id}`, created_at: String(e.ts || ''), received_at: '', note: e.note || '', items: Array.isArray(e.items) ? e.items : [], station: e.station, mine: false }));
+  // received marks ride the shared folder (wfsrecv): the newest mark on a
+  // shipment wins on every desktop, and one on this station's own shipment
+  // is written back to SQLite so the local record agrees
+  wfsrecv.applyMarks(mine.concat(foreign), wfsrecv.latestMarks(retsync.readAux('wfsrecv')), (id, at) => db.setWfsReceivedAt(id, at));
+  return mine.concat(foreign)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, limit);
+}
+function startRecovery() {
+  recovery.configure({
+    wfsShipments: () => wfsShipmentsAll(),
+    // Profit groups a SKU's conditions; a listing graded by hand on Returns counts
+    conditionMap: () => db.getConditionMap(),
+    retsync,
+    listReturns: (n) => db.listReturns(n),
+    config,
+    archiveDir: recoveryArchiveDir, // a function: the folder follows the sync setting
+    // every folder a statement may have been archived in, for periods
+    // imported before the folder moved (owner 2026-10-12: a period with no
+    // goods price although its file was uploaded)
+    archiveDirs: () => {
+      const st = retsync.status();
+      return [path.join(app.getPath('documents'), 'Capture Station', 'Walmart Reports'), st.folder ? path.join(st.folder, 'Walmart Reports') : ''];
+    },
+    station: () => stockLogComputer(),
+    stationAliases: () => [os.hostname()],
+    by: () => '',
+    // Profit: costs by inventory SKU, and the Walmart SKU -> inventory SKU
+    // map from the Pricing page's last snapshot (channel mappings)
+    costs: () => { syncCosts(); return db.costsAll(); },
+    channelMap: recoveryChannelMap,
+  });
+  // the dispute digest also goes out at launch (spec §9.1) — quietly, and
+  // only where the page is on; the 20-hour dedupe keeps it from nagging
+  setTimeout(() => {
+    try {
+      const cfg = config.load();
+      if (!cfg.captureOnly && cfg.pages && cfg.pages.recovery && cfg.pages.returns) recovery.sendDigest().catch(() => {});
+    } catch { /* best effort */ }
+  }, 20000);
+}
+// every channel listing's SKU (upper-cased) -> the inventory SKU it maps to,
+// read from pricing-cache.json (written whenever the Pricing page rebuilds)
+function recoveryChannelMap() {
+  const m = new Map();
+  try {
+    const snap = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'pricing-cache.json'), 'utf8'));
+    for (const p of (snap && snap.products) || []) {
+      for (const lines of Object.values(p.channels || {})) {
+        for (const l of lines || []) if (l && l.csku && p.sku) m.set(String(l.csku).toUpperCase(), String(p.sku));
+      }
+    }
+  } catch { /* no snapshot yet: direct SKU matches still work */ }
+  return m;
+}
+const recoveryGate = () => (config.load().captureOnly ? { ok: false, error: 'Capture-only mode.' } : null);
+const recoveryTry = (fn) => { try { return fn(); } catch (e) { return { ok: false, error: e.message }; } };
+const recoveryFile = (label) => String(label || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, '_');
+async function recoverySaveBuffer(title, defaultName, filters, buffer) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, { title, defaultPath: path.join(app.getPath('documents'), defaultName), filters });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(filePath, buffer); return { ok: true, path: filePath }; } catch (e) { return { ok: false, error: e.message }; }
+}
+const XLSX_FILTER = [{ name: 'Excel workbook', extensions: ['xlsx'] }];
+function registerRecoveryIpc() {
+  ipcMain.handle('recovery:state', () => recoveryGate() || recoveryTry(() => recovery.state()));
+  ipcMain.handle('recovery:run', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.runDetail(id)));
+  ipcMain.handle('recovery:summary', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.summary(scope, key)));
+  // Browse…: pick the report; the text comes back so the renderer runs the
+  // same import call a dropped file does
+  ipcMain.handle('recovery:importPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    // several at once (owner 2026-10-12: "bulk add payment reports")
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import Walmart payment-period reports',
+      filters: [{ name: 'Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try {
+      const files = pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') }));
+      return { ok: true, name: files[0].name, text: files[0].text, files };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:import', async (_e, { name, text, force } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const progress = (t) => { if (win && !win.isDestroyed()) win.webContents.send('recovery:progress', { text: t }); };
+    try {
+      return await recovery.importReport({ name, text, force: !!force }, progress);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:removeRun', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeRun(id)));
+  // WFS Inventory: Walmart's Inventory Reconciliation report, per SKU
+  ipcMain.handle('recovery:wfsPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, {
+      title: 'Import WFS Inventory Reconciliation reports',
+      filters: [{ name: 'Inventory Reconciliation report', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, files: pick.filePaths.map((f) => ({ name: path.basename(f), text: fs.readFileSync(f, 'utf8') })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:wfsImport', (_e, { name, text, force } = {}) => recoveryGate() || recoveryTry(() => recovery.importWfsReport({ name, text, force: !!force })));
+  ipcMain.handle('recovery:wfsRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeWfsReport(id)));
+  ipcMain.handle('recovery:wfsInventory', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.wfsInventory(id)));
+  // every station's WFS shipments with their received marks, for the
+  // Not received list on WFS Inventory
+  ipcMain.handle('recovery:wfsShipments', () => recoveryGate() || recoveryTry(() => ({ ok: true, shipments: wfsShipmentsAll() })));
+  ipcMain.handle('recovery:mark', (_e, { po, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.mark(po, action, payload || {})));
+  ipcMain.handle('recovery:exportRun', async (_e, { id } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.runWorkbook(id));
+    if (!wb || wb.ok === false) return wb || { ok: false, error: 'Period not found.' };
+    return recoverySaveBuffer('Save the period workbook', `Reconciliation_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportAudit', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const buf = recoveryTry(() => recovery.auditWorkbook());
+    if (!Buffer.isBuffer(buf)) return buf;
+    return recoverySaveBuffer('Save the audit workbook', 'Returns_Not_Received_Audit.xlsx', XLSX_FILTER, buf);
+  });
+  ipcMain.handle('recovery:exportSummary', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.summaryWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the refund summary', `Returns_Summary_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:exportCsv', async (_e, { pos, label } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const csv = recoveryTry(() => recovery.viewCsv(pos || []));
+    if (typeof csv !== 'string') return csv;
+    return recoverySaveBuffer('Save this list', `Returns_Not_Received_${recoveryFile(label || 'list')}.csv`, [{ name: 'CSV', extensions: ['csv'] }], Buffer.from(csv, 'utf8'));
+  });
+  ipcMain.handle('recovery:profit', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.profit(scope, key)));
+  ipcMain.handle('recovery:statement', (_e, { scope, key } = {}) => recoveryGate() || recoveryTry(() => recovery.statement(scope, key)));
+  ipcMain.handle('recovery:statements', () => recoveryGate() || recoveryTry(() => recovery.statements()));
+  ipcMain.handle('recovery:exportProfit', async (_e, { scope, key } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const wb = recoveryTry(() => recovery.profitWorkbook(scope, key));
+    if (!wb || wb.ok === false) return wb;
+    return recoverySaveBuffer('Save the profit workbook', `Profit_${recoveryFile(wb.label)}.xlsx`, XLSX_FILTER, wb.buffer);
+  });
+  ipcMain.handle('recovery:digestSend', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { return { ok: true, ...(await recovery.sendDigest({ force: true })) }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // "Email me this list": the mailto opens here — app:openExternal only
+  // takes https links, and this one is built from our own rows
+  ipcMain.handle('recovery:mailto', () => {
+    if (recoveryGate()) return recoveryGate();
+    const m = recoveryTry(() => recovery.mailto());
+    if (m && m.ok) shell.openExternal(m.mailto);
+    return m;
+  });
+  // Returns page (owner 2026-10-12: "an option next to Users to download all
+  // the returns"): the whole log as one Excel sheet, one line per item. Not
+  // Recovery-gated — the log exists on every station.
+  // the Buy now list as a workbook: the purchase list to send off
+  ipcMain.handle('overview:exportBuy', async (_e, { rows, target, lead } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Buy now', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Buy', width: 8, kind: 'int' },
+        { header: 'Sales per day', width: 13, kind: 'text' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' }, { header: 'Days left', width: 10, kind: 'int' },
+        { header: 'Sold 30 days', width: 12, kind: 'int' }, { header: 'Status', width: 10, kind: 'text' },
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.buyQty) || 0, String(Number(r.perDay) || 0), Number(r.avail) || 0, Number(r.atWfs) || 0, Number(r.daysLeft) || 0, Number(r.sold30) || 0, { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind] || '']) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Buy now — ${target || ''} days of cover, ${lead || ''} days lead`, `Buy_now_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('overview:exportWas', async (_e, { rows, min, mode, months } = {}) => {
+    try {
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const ms = Array.isArray(months) ? months : [];
+      const buf = buildWorkbookSheets([{ name: 'Was selling', columns: [
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Units a month (best 3 of 6)', width: 14, kind: 'int' },
+        { header: 'Last sale', width: 12, kind: 'text' }, { header: 'Days since', width: 10, kind: 'int' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' },
+        ...ms.map((ym) => ({ header: ym, width: 9, kind: 'int' })),
+      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.pace) || 0, r.last || '', Number(r.daysSince) || 0, Number(r.avail) || 0, Number(r.atWfs) || 0, ...ms.map((_, i) => Number((r.units || [])[i]) || 0)]) }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer(`Was selling — at least ${min || ''} a month, now ${mode === 'idle' ? 'not selling' : 'out of stock'}`, `Was_selling_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('returns:export', async () => {
+    try {
+      const rows = retsync.enabled() ? retsync.list() : db.listReturns(1e9);
+      const day = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? String(iso || '').slice(0, 10) : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`; };
+      const label = (c) => ({ new: 'New', open: 'Open box', used: 'Used', scrap: 'Scrap', damaged: 'Damaged' })[String(c || '').toLowerCase()] || String(c || '');
+      const lines = [];
+      for (const r of rows.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))) {
+        const items = Array.isArray(r.items) && r.items.length ? r.items : [{}];
+        for (const it of items) {
+          lines.push([day(r.created_at), r.order_number || '', r.customer || '', r.tracking || '', it.sku || '', label(it.condition), it.targetSku || '',
+            Number(it.qty) || (it.sku ? 1 : 0), it.price === '' || it.price == null ? '' : Number(String(it.price).replace(/[$,\s]/g, '')) || 0,
+            r.received_by || '', r.station || '', r.source || '', [r.note, it.note].filter(Boolean).join(' · '), r.unmatched ? 'yes' : '']);
+        }
+      }
+      const { buildWorkbookSheets } = require('./xlsxwrite');
+      const buf = buildWorkbookSheets([{ name: 'Returns log', columns: [
+        { header: 'Date received', width: 13, kind: 'text' }, { header: 'PO #', width: 20, kind: 'text' }, { header: 'Customer', width: 24, kind: 'text' },
+        { header: 'Tracking #', width: 22, kind: 'text' }, { header: 'Returned SKU', width: 26, kind: 'text' }, { header: 'Condition', width: 11, kind: 'text' },
+        { header: 'Logged as', width: 30, kind: 'text' }, { header: 'Units', width: 7, kind: 'int' }, { header: 'Price', width: 10, kind: 'money' },
+        { header: 'Received by', width: 12, kind: 'text' }, { header: 'Station', width: 18, kind: 'text' }, { header: 'Source', width: 10, kind: 'text' },
+        { header: 'Note', width: 36, kind: 'text' }, { header: 'Unmatched', width: 10, kind: 'text' },
+      ], rows: lines }]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      return await recoverySaveBuffer('Download the returns log', `Returns_log_${stamp}.xlsx`, XLSX_FILTER, buf);
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  // findNext is Electron's "begin a new session" flag: true for a new text,
+  // false to step through the matches of the current one
+  ipcMain.handle('recovery:markMany', (_e, { list, action, payload } = {}) => recoveryGate() || recoveryTry(() => recovery.markMany(list, action, payload || {})));
+  // a cost typed on the Profit table (owner 2026-10-12: listings whose
+  // Linnworks mapping was removed when they shut down still need a cost).
+  // It is saved under the SKU shown — a Walmart listing or a Linnworks SKU —
+  // in the same cost store the Stock page's Cost column writes, and rides
+  // the shared folder like any other cost; same station gate as that column.
+  ipcMain.handle('recovery:expenseAdd', (_e, rec = {}) => recoveryGate() || recoveryTry(() => recovery.addExpense(rec || {})));
+  ipcMain.handle('recovery:expenseRemove', (_e, { id } = {}) => recoveryGate() || recoveryTry(() => recovery.removeExpense(id)));
+  ipcMain.handle('recovery:setCost', (_e, { sku, cost } = {}) => {
+    if (recoveryGate()) return recoveryGate();
+    const cfg = config.load();
+    if (!(cfg.pages && cfg.pages.cost)) return { ok: false, error: 'Cost is off on this station (Settings › General).' };
+    const k = String(sku || '').trim();
+    const n = Math.round((Number(cost) || 0) * 100) / 100;
+    if (!k) return { ok: false, error: 'Missing SKU.' };
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'Enter a cost of 0 or more.' };
+    try { costPut(k, n); return { ok: true, cost: n }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('recovery:markFile', (_e, { text } = {}) => recoveryGate() || recoveryTry(() => recovery.markFile(text)));
+  ipcMain.handle('recovery:syncStatus', () => recoveryGate() || recoveryTry(() => recovery.syncStatus()));
+  ipcMain.handle('recovery:resync', () => recoveryGate() || recoveryTry(() => recovery.resync()));
+  ipcMain.handle('recovery:markPick', async () => {
+    if (recoveryGate()) return recoveryGate();
+    const pick = await dialog.showOpenDialog(win, { title: 'A file of PO numbers that came back before the Returns log', filters: [{ name: 'CSV or text', extensions: ['csv', 'txt'] }], properties: ['openFile'] });
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+    try { return { ok: true, name: path.basename(pick.filePaths[0]), text: fs.readFileSync(pick.filePaths[0], 'utf8') }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('find:start', (_e, { text, forward, fresh }) => {
+    if (!win || !String(text || '')) return { ok: false };
+    win.webContents.findInPage(String(text), { forward: forward !== false, findNext: !!fresh, matchCase: false });
+    return { ok: true };
+  });
+  ipcMain.handle('find:stop', () => { if (win) win.webContents.stopFindInPage('clearSelection'); return { ok: true }; });
+  ipcMain.handle('recovery:openArchive', async () => {
+    if (recoveryGate()) return recoveryGate();
+    try { fs.mkdirSync(recoveryArchiveDir(), { recursive: true }); await shell.openPath(recoveryArchiveDir()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+}
 
 app.on('window-all-closed', () => app.quit());
 

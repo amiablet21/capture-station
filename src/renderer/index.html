@@ -11,12 +11,18 @@
     <div class="brand"><img class="brand-mark" src="phone-icon.png" alt="DWS Stock" title="DWS Stock" width="30" height="30" /></div>
     <nav class="tabs" id="pageTabs" hidden>
       <button id="tabOverview" class="tab" hidden>Overview</button>
-      <button id="tabCapture" class="tab is-active">Capture</button>
+      <button id="tabCapture" class="tab is-active">Orders</button>
       <button id="tabStock" class="tab">Stock</button>
+      <!-- List on Walmart (owner 2026-10-22): its own tab, not the Unlisted view -->
+      <button id="tabWalmart" class="tab" hidden>Walmart</button>
       <button id="tabPricing" class="tab" hidden>Pricing</button>
       <!-- Returns carries a dropdown: Returns log | Shelf (owner 2026-08-25) -->
       <button id="tabReturns" class="tab" hidden>Returns <span class="tab-caret">▾</span></button>
-      <button id="tabListings" class="tab" hidden>Listings <span class="tab-caret">▾</span></button>
+      <!-- Recovery (2026-10-11): Walmart payment periods checked against the
+           Returns log — opt-in in Settings, needs Returns -->
+      <button id="tabRecovery" class="tab" hidden>Recovery</button>
+      <!-- Ship: UPS labels (owner 2026-10-19, design variants/ups-labels.html) -->
+      <button id="tabShip" class="tab" hidden>Ship</button>
     </nav>
     <!-- Returns tab menu (Returns log | Shelf): an in-app dropdown anchored
          under the tab; a <dialog> so the marketplace pane yields while open -->
@@ -24,8 +30,6 @@
       <button class="tab-menu-item" data-page="returns">Returns log</button>
       <button class="tab-menu-item" data-page="shelf">Shelf</button>
     </dialog>
-    <!-- Listings tab menu (eBay | Temu): same dropdown pattern — replaced
-         the floating pill row (owner picked option A, 2026-09-17) -->
     <!-- Stock page Actions dropdown (anchored under #stockActionsBtn) -->
     <dialog id="stockActionsDlg" class="tab-menu stock-actions-menu">
       <button class="tab-menu-item" data-act="mappings" title="Link marketplace listings to Linnworks items — twin listings included">Mappings</button>
@@ -39,10 +43,6 @@
       <button class="tab-menu-item" data-act="export:walmart" title="Save every mapped Walmart listing to a CSV — inventory SKU, channel SKU, title, condition, listed qty, price, WFS. An active condition chip narrows the file to that slice">Export Walmart SKUs</button>
       <button class="tab-menu-item" data-act="export:ebay" title="Every mapped eBay listing as a CSV (the active condition chip narrows it)">Export eBay SKUs</button>
       <button class="tab-menu-item" data-act="export:temu" title="Every mapped Temu listing as a CSV (the active condition chip narrows it)">Export Temu SKUs</button>
-    </dialog>
-    <dialog id="listingsMenuDlg" class="tab-menu">
-      <button class="tab-menu-item" data-page="ebay">eBay lister</button>
-      <button class="tab-menu-item" data-page="temu">Temu lister</button>
     </dialog>
     <div class="topbar-right">
       <div class="daycount" id="dayCountBox">
@@ -104,14 +104,37 @@
   <!-- toolbar docked onto the sheet as a header band (owner 2026-08-17,
        matching Stock): band + sheet resize and align as ONE column -->
   <div id="capMain" class="cap-main">
-  <div id="findBar" class="cap-band" hidden>
-    <div class="search-field">
-      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
-      <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
-      <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
+  <!-- the Orders page in the Recovery style (owner picked design B,
+       2026-10-14): a head with the channels as sub-tabs and the icon
+       cluster, then one card — search on its head, the table under it -->
+  <div id="capHead" class="rc-head cap-head" hidden>
+    <h1 class="rc-h1">Orders</h1>
+    <nav id="channelChips" class="rc-seg cap-seg" aria-label="Channels" hidden></nav>
+    <div class="cap-head-tools">
+      <div class="search-field">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+        <input id="findInput" class="search-input mono" type="text" placeholder="Search PO#, SKU or tracking" autocomplete="off" spellcheck="false" />
+        <span id="findCount" class="find-count"></span>
+        <button id="findClose" class="search-clear" title="Clear (Esc)" aria-label="Clear search" hidden>✕</button>
+      </div>
+      <div class="cap-icons">
+        <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
+        </button>
+        <button id="ordersRefreshBtn" class="cap-ico" title="Refresh — fetch open orders from Linnworks now (otherwise every 5 minutes)" aria-label="Refresh">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
+        </button>
+        <button id="capHistBtn" class="cap-ico" title="History — every processed order, in this same table; click again for today's live list" aria-label="History">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
+        <button id="bExpand" class="cap-ico" hidden title="Browser — open the marketplace browser pane beside the list" aria-label="Browser">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" aria-hidden="true"><circle cx="128" cy="128" r="94"/><ellipse cx="128" cy="128" rx="42" ry="94"/><path d="M40 100h176M40 156h176"/></svg>
+        </button>
+      </div>
     </div>
-    <span id="findCount" class="find-count"></span>
-    <div id="channelChips" class="channel-chips" hidden></div>
+  </div>
+  <div id="findBar" class="cap-band" hidden>
+    <span class="rc-sec-title rc-sec-title-static cap-band-title"><span id="capBandTitle">History</span> <span id="capBandCount" class="rc-sec-count"></span></span>
     <button id="clearFailedBtn" class="btn btn-ghost" hidden title="Remove rows whose orders are no longer in Linnworks' open orders">Clear failed</button>
     <!-- Capture history mode (owner 2026-09-23): the same table shows processed
          orders; the band swaps its icons for a date range, and the History
@@ -137,20 +160,6 @@
          (owner 2026-09-16: "closer... no borders, cleaner") — one quiet
          cluster: tray = import shipped, arrow = refresh, globe = browser;
          the titles carry the words -->
-    <div class="cap-icons">
-      <button id="shipImportBtn" class="cap-ico" title="Import shipped — upload Walmart's shipped-orders download (Manage Orders → Download); tracking numbers fill onto matching rows automatically" aria-label="Import shipped">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 148v52a12 12 0 0 0 12 12h152a12 12 0 0 0 12-12v-52"/><path d="M128 36v96m0 0-36-36m36 36 36-36"/></svg>
-      </button>
-      <button id="ordersRefreshBtn" class="cap-ico" title="Refresh — fetch open orders from Linnworks now (otherwise every 5 minutes)" aria-label="Refresh">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
-      </button>
-      <button id="capHistBtn" class="cap-ico" title="History — every processed order, in this same table; click again for today's live list" aria-label="History">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>
-      </button>
-      <button id="bExpand" class="cap-ico" hidden title="Browser — open the marketplace browser pane beside the list" aria-label="Browser">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="18" aria-hidden="true"><circle cx="128" cy="128" r="94"/><ellipse cx="128" cy="128" rx="42" ry="94"/><path d="M40 100h176M40 156h176"/></svg>
-      </button>
-    </div>
   </div>
   <main class="rows" id="rowsMain" aria-live="polite">
     <table class="rows-table" id="rowsTable" hidden>
@@ -160,7 +169,6 @@
           <th id="thOrder" class="th-sort" title="Click to flip newest / oldest first">Order #</th>
           <th class="th-items">Items</th>
           <th id="thTracking" class="th-sort" title="Click to group: missing tracking first · added first · off">Tracking</th>
-          <th>Notes</th>
           <th class="th-actions"></th>
         </tr>
       </thead>
@@ -173,13 +181,74 @@
     </div>
   </main>
   </div>
-  <div id="rowsGrip" class="sheet-grip" title="Drag to widen or narrow the list · double-click to reset"></div>
+  <!-- the width grip left (owner 2026-10-14): the list is always full width; the element stays for the handlers -->
+  <div id="rowsGrip" class="sheet-grip" hidden></div>
   </div>
 
   <!-- Stock page: live warehouse inventory with inline level editing.
        Toolbar docked to the sheet as a spreadsheet header band (owner pick
        2026-08-17, mockup B): search + chips left, stats + gaps + actions
        right, the table growing straight out of the band's bottom edge -->
+  <!-- Walmart tab (owner 2026-10-22 / 23, approved clickable mockup
+       variants/walmart-tab-clickable.html): List (walmart.com shown in a
+       native view over #wlSite, "List this" on each product, any SKU),
+       Uploads (one row per listing: Walmart status + Map to Linnworks),
+       Pricing (repricer strategies, items losing the Buy Box) and
+       Incentives (Seller Center's Incentives page). renderer.js draws them. -->
+  <section id="walmartPage" class="wlp" hidden>
+    <div class="wlp-card">
+      <div class="wl-head">
+        <h2 class="dlg-title">Walmart</h2>
+        <div class="wlp-tabs" role="tablist">
+          <button type="button" class="wlp-tab is-on" data-wltab="list">List</button>
+          <button type="button" class="wlp-tab" data-wltab="uploads">Uploads<span id="wlUpDot" class="wl-tabdot" hidden></span></button>
+          <button type="button" class="wlp-tab" data-wltab="pricing">Pricing</button>
+          <button type="button" class="wlp-tab" data-wltab="incentives">Incentives</button>
+        </div>
+        <span id="wlAcct" class="wl-acct"></span>
+      </div>
+      <div id="wlNoKeys" class="wl-empty" hidden><b>Connect Walmart first.</b> Add your Walmart Marketplace API keys (Client ID and Client secret, made at developer.walmart.com under API Keys) in Settings › Shipping, the same keys Ship with Walmart labels use, then press Test.
+        <div class="wl-foot-btns"><button type="button" class="btn btn-primary" data-wlsettings>Open Settings</button></div></div>
+
+      <!-- List: search opens walmart.com; the offer panel sits beside it -->
+      <div id="wlSecList" class="wl-sec">
+        <form id="wlSearch" class="wl-sbar" autocomplete="off">
+          <button type="button" class="btn-icon" data-wlnav="back" id="wlBack" title="Back" aria-label="Back">‹</button>
+          <button type="button" class="btn-icon" data-wlnav="forward" id="wlFwd" title="Forward" aria-label="Forward">›</button>
+          <button type="button" class="btn-icon" data-wlnav="reload" id="wlReload" title="Reload" aria-label="Reload">↻</button>
+          <input id="wlQ" class="input" type="text" placeholder="Search Walmart, or paste an item number or walmart.com link to pick it" spellcheck="false" aria-label="Search Walmart" />
+          <button type="submit" class="btn btn-primary">Search</button>
+          <button type="button" class="btn btn-ghost" id="wlToLite" data-wltolite hidden>Back to results</button>
+          <span id="wlPage" class="wl-pagelbl"></span>
+        </form>
+        <div class="wl-lgrid">
+          <div id="wlSite" class="wl-site"><div id="wlSiteNote" class="wl-site-note"></div><div id="wlRes" class="wl-res"></div></div>
+          <aside id="wlOffer" class="wl-offerp"></aside>
+        </div>
+        <div id="wlTray" class="wl-tray" hidden></div>
+      </div>
+
+      <!-- Uploads: every listing sent from here -->
+      <div id="wlSecUploads" class="wl-sec" hidden>
+        <div class="wl-bar" id="wlUpBar"></div>
+        <div class="wl-scroll" id="wlUpBody"></div>
+      </div>
+
+      <!-- Pricing: repricer strategies and the items losing the Buy Box -->
+      <div id="wlSecPricing" class="wl-sec" hidden>
+        <div class="wl-scroll" id="wlPrBody"></div>
+        <div class="wl-savebar" id="wlPrSave" hidden></div>
+      </div>
+
+      <!-- Incentives: reduced referral fees + Walmart-funded discounts -->
+      <div id="wlSecIncent" class="wl-sec" hidden>
+        <div class="wl-progtabs" id="wlIncProg"></div>
+        <div class="wl-bar" id="wlIncBar"></div>
+        <div class="wl-scroll" id="wlIncBody"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="stockPage" class="stock-page" hidden>
     <div class="stock-sheet-row">
       <div id="stockMain" class="stock-main">
@@ -248,6 +317,180 @@
     <p class="shelf-sum" id="shSum"></p>
   </section>
 
+  <!-- Ship from an Orders line (owner 2026-10-20, variants/ship-drawer.html):
+       a drawer from the right with the customer, the items, the package
+       (saved per item) and every rate; the slide is its only motion -->
+  <div class="osd-scrim" id="osScrim" hidden></div>
+  <aside class="osd" id="osDrawer" aria-hidden="true">
+    <div class="osd-h">
+      <span class="osd-mk" id="osdCh"></span>
+      <span class="osd-po mono" id="osdPo"></span>
+      <button class="btn-icon osd-ic" id="osdCopy" type="button" title="Copy the order number"></button>
+      <span class="osd-due" id="osdDue" hidden></span>
+      <span class="osd-ago" id="osdAgo"></span>
+      <button class="btn-icon osd-ic osd-x" id="osdClose" type="button" title="Close (Esc)">✕</button>
+    </div>
+    <div class="osd-b">
+      <div class="osd-col">
+        <section class="osd-bx"><div class="osd-t">Customer</div><div id="osAddr"></div></section>
+        <section class="osd-bx"><div class="osd-t">Order</div><div class="osd-dates" id="osdDates"></div></section>
+        <section class="osd-bx"><div class="osd-t" id="osdItemsT">Item</div><div id="osdItems"></div></section>
+      </div>
+      <div class="osd-col">
+        <section class="osd-bx">
+          <div class="osd-t">Package <span class="r" id="osPkTag"></span></div>
+          <div class="osd-pk">
+            <label class="os-f"><span>Box</span><select id="osBox" class="input"></select></label>
+            <label class="os-f"><span>Weight (lb)</span><input id="osWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
+            <label class="os-f"><span>Declared value</span><input id="osVal" class="input mono" inputmode="decimal" placeholder="0.00" autocomplete="off" /></label>
+          </div>
+          <div class="osd-pk2">
+            <div class="os-f os-dims"><span>Dimensions (in)</span><div><input id="osDl" class="input mono" /><b>×</b><input id="osDw" class="input mono" /><b>×</b><input id="osDh" class="input mono" /></div></div>
+            <div class="os-f"><span>Reference #1</span><div class="sp-lock mono" id="osdRef"></div></div>
+          </div>
+          <div class="osd-pk2">
+            <div></div>
+            <label class="os-f"><span>Reference #2</span><input id="osRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></label>
+          </div>
+        </section>
+        <section class="osd-bx">
+          <div class="osd-t">Rates <span class="os-chips" id="osChips"></span></div>
+          <div class="osd-rates" id="osRates"></div>
+        </section>
+      </div>
+    </div>
+    <div class="osd-f">
+      <span class="osd-sum" id="osdSum"></span>
+      <span class="os-err" id="osErr"></span>
+      <button class="btn btn-primary" id="osCreate" type="button" disabled>Create label</button>
+    </div>
+  </aside>
+
+  <!-- the print popup after a label is made on an Orders line (owner 2026-10-20) -->
+  <dialog id="osLabelDlg" class="dlg os-dlg">
+    <div class="dlg-body">
+      <div class="sp-done-h"><span class="ok" id="osLabelOk">✓</span><b id="osLabelTitle">Label created</b><span class="trk" id="osLabelTrk"></span></div>
+      <div class="osp-sheet" id="osSheet"><div class="sp-label" id="osLabelImg"></div></div>
+      <div class="osp-fmt" id="osPrintFmt">
+        <button type="button" data-fmt="label">Label 4×6</button>
+        <button type="button" data-fmt="letter">Letter</button>
+        <button type="button" data-fmt="a4">A4</button>
+      </div>
+      <select id="osPrinter" class="input osp-printer"></select>
+      <div class="sp-done-acts">
+        <button class="btn btn-primary" id="osLabelPrint" type="button">Print</button>
+        <button class="btn btn-ghost" id="osLabelClose" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Ship page (owner 2026-10-19, design variants/ups-labels.html): a UPS
+       label from a PO# or a typed address, Ship or Return, rated on both
+       companies' UPS accounts side by side; PO# = Ref 1, value editable -->
+  <section id="shipPage" class="ship-page" hidden>
+    <div id="spBanner" class="sp-banner" hidden></div>
+    <div class="sp-grid">
+      <div class="sp-card">
+        <div class="sp-sec">
+          <div class="sp-h">1 · Start from</div>
+          <div class="sp-seg">
+            <button id="spSrcPo" class="is-on" type="button">A PO#</button>
+            <button id="spSrcMan" type="button">No PO#</button>
+          </div>
+          <div id="spPoPane" class="sp-pane">
+            <input id="spPo" class="sp-po-in mono" placeholder="Paste or scan a PO#, then Enter" autocomplete="off" spellcheck="false" />
+            <div id="spOrder"></div>
+          </div>
+          <div id="spManPane" class="sp-pane" hidden>
+            <div class="sp-book"><span class="sp-book-l">Address book</span><span id="spBook" class="sp-book-list"></span>
+              <button id="spPasteBtn" class="sp-link" type="button">Paste a whole address</button></div>
+            <textarea id="spPaste" class="sp-paste" hidden placeholder="Paste a full address here (name, street, city, state ZIP) and it fills the boxes"></textarea>
+            <div class="sp-mf">
+              <label class="sp-f c2"><span>Name</span><input id="spMName" class="input" autocomplete="off" /></label>
+              <label class="sp-f c2"><span>Company <i>optional</i></span><input id="spMCo" class="input" autocomplete="off" /></label>
+              <label class="sp-f c3"><span>Street</span><input id="spML1" class="input" autocomplete="off" /></label>
+              <label class="sp-f c1"><span>Apt / suite</span><input id="spML2" class="input" autocomplete="off" /></label>
+              <label class="sp-f c2"><span>City</span><input id="spMCity" class="input" autocomplete="off" /></label>
+              <label class="sp-f c1"><span>State</span><input id="spMSt" class="input sp-upper" maxlength="2" autocomplete="off" /></label>
+              <label class="sp-f c1"><span>ZIP</span><input id="spMZip" class="input mono" maxlength="10" autocomplete="off" /></label>
+              <label class="sp-f c2"><span>Phone <i>optional</i></span><input id="spMPh" class="input mono" autocomplete="off" /></label>
+              <label class="sp-f c2"><span>Email <i>optional</i></span><input id="spMEm" class="input" autocomplete="off" /></label>
+            </div>
+            <label class="check sp-save"><input id="spMSave" type="checkbox" /> Save to the address book</label>
+          </div>
+        </div>
+
+        <div class="sp-sec">
+          <div class="sp-h">2 · Type</div>
+          <div class="sp-typerow">
+            <div class="sp-seg">
+              <button id="spKindShip" class="is-on" type="button"><span id="spKindShipT">Ship to customer</span></button>
+              <button id="spKindRet" type="button">Return to us</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp-sec">
+          <div class="sp-h">3 · Addresses <span id="spAddrHint" class="sp-h-r"></span></div>
+          <div class="sp-addrs">
+            <div id="spFrom" class="sp-addr"></div>
+            <div id="spSwap" class="sp-swap"><span>→</span></div>
+            <div id="spTo" class="sp-addr"></div>
+          </div>
+        </div>
+
+        <div class="sp-sec">
+          <div class="sp-h">4 · Package &amp; label</div>
+          <div class="sp-fields">
+            <label class="sp-f"><span>Box</span><select id="spBox" class="input"></select></label>
+            <label class="sp-f"><span>Weight (lb)</span><input id="spWt" class="input mono" inputmode="decimal" placeholder="0.0" autocomplete="off" /></label>
+            <div class="sp-f"><span>Dimensions (in)</span><div class="sp-dims">
+              <input id="spDl" class="input mono" inputmode="numeric" aria-label="Length" /><b>×</b>
+              <input id="spDw" class="input mono" inputmode="numeric" aria-label="Width" /><b>×</b>
+              <input id="spDh" class="input mono" inputmode="numeric" aria-label="Height" /></div></div>
+          </div>
+          <div class="sp-fields two">
+            <div class="sp-f"><span>Reference #1</span>
+              <div id="spRefLock" class="sp-lock mono"><span class="sp-dim">— fills from the PO#</span><small>always the PO#</small></div>
+              <input id="spRefIn" class="input mono" hidden maxlength="35" placeholder="Optional — invoice #, RMA, a note" autocomplete="off" />
+              <small id="spRefHint" class="sp-hint" hidden>Prints on the label as Ref 1</small></div>
+            <div class="sp-f"><span>Declared value ($)</span>
+              <input id="spVal" class="input mono" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+              <small id="spValHint" class="sp-hint">Optional</small></div>
+          </div>
+          <div class="sp-fields two">
+            <div class="sp-f"><span>Reference #2</span>
+              <input id="spRef2" class="input mono" maxlength="35" placeholder="Optional" autocomplete="off" /></div>
+            <label class="sp-f"><span>Marketplace</span>
+              <div class="sp-mkt"><i class="sp-mkt-dot" id="spMktDot"></i><select id="spMkt" class="input">
+                <option value="">None</option><option value="Walmart">Walmart</option><option value="eBay">eBay</option><option value="Temu">Temu</option>
+              </select></div></label>
+          </div>
+        </div>
+      </div>
+
+      <div id="spRates" class="sp-card sp-rates"></div>
+    </div>
+
+    <div class="sp-card sp-log">
+      <div class="sp-log-h">
+        <h4>Labels</h4><span id="spLogSum" class="sp-note"></span>
+        <button id="spPrintSel" class="btn btn-primary sp-print-sel" type="button" hidden>Print selected</button>
+        <div class="sp-chips" id="spLogKind">
+          <button class="is-on" data-k="" type="button">All</button><button data-k="ship" type="button">Ship</button><button data-k="return" type="button">Return</button>
+        </div>
+        <select id="spLogRange" class="input sp-range">
+          <option value="0">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
+        </select>
+      </div>
+      <table class="sp-table">
+        <thead><tr><th class="sel"><input type="checkbox" id="spLogAll" title="Select all" /></th><th>Time</th><th>Reference</th><th>Type</th><th>Service</th><th>Account</th><th>Tracking</th><th class="num">Value</th><th class="num">Cost</th><th></th></tr></thead>
+        <tbody id="spLogBody"></tbody>
+      </table>
+      <div id="spLogEmpty" class="sp-empty">No labels yet today.</div>
+    </div>
+  </section>
+
   <!-- Returns page: spreadsheet worksheet - the entry row looks up the PO#,
        expands to one row per unit, grades redirect stock via the mapping engine -->
   <section id="returnsPage" class="ret-page" hidden>
@@ -261,6 +504,9 @@
       <!-- pending disputes: any return whose note carries "case: <number>"
            stays here, aging, until the note says resolved/closed/won/lost -->
       <div id="retDisputes" class="ret-todo ret-disputes" hidden></div>
+      <!-- entry-row drafts that were cleared, replaced or closed before they
+           were saved: never behind a chip, so a lost return is seen -->
+      <div id="retUnsaved" class="ret-unsaved" hidden></div>
       <!-- RETURNS-2 sheet (2026-09-04): the log owns the page; its first
            row is the launcher — a PO# typed there opens the receive popup
            (2026-09-05, "popup instead of on the line"); the pencil on a
@@ -277,6 +523,10 @@
           <span id="retSyncLine" class="ret-sync-line" hidden></span>
           <!-- refresh is a bare icon like Stock's (owner 2026-09-15: "make
                the refresh button a symbol"); Browser removed the same day -->
+          <!-- the whole log as Excel (owner 2026-10-12: "a download icon next to Users") -->
+          <button id="retExportBtn" class="btn btn-ghost stock-refresh-ico" title="Download the whole returns log as Excel" aria-label="Download the returns log">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,136v64a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V136a16,16,0,0,1,16-16H84a4,4,0,0,1,4,4v16a4,4,0,0,1-4,4H40v48H216V144H172a4,4,0,0,1-4-4V124a4,4,0,0,1,4-4h52A16,16,0,0,1,240,136ZM119.51,157.49a12,12,0,0,0,17,0l48-48a12,12,0,0,0-17-17L140,120V32a12,12,0,0,0-24,0v88L88.49,92.49a12,12,0,0,0-17,17Z"/></svg>
+          </button>
           <button id="retRefreshBtn" class="btn btn-ghost stock-refresh-ico" title="Reload the log and re-scan the listing gaps" aria-label="Refresh">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,56v48a12,12,0,0,1-12,12H172a12,12,0,0,1,0-24h19.1l-10.11-9.25a76,76,0,1,0,2.3,109.84,12,12,0,0,1,17.42,16.5,100,100,0,1,1-3.18-141.11L208,77V56a12,12,0,0,1,24,0Z"/></svg>
           </button>
@@ -288,6 +538,283 @@
       </div>
     </div>
   </section>
+
+  <!-- Recovery: an editorial ledger in two screens (design docs/recovery/design,
+       owner-approved 2026-10-11). Reconcile: drop a Walmart payment-period
+       report, see received / not received / WFS waiting. Not received: every
+       refunded PO that never came back, its dispute window and the payouts. -->
+  <section id="recoveryPage" class="rc-page" hidden>
+    <div class="rc-scroll" id="rcScroll">
+      <div class="rc-main">
+        <div class="rc-head">
+          <h1 class="rc-h1">Recovery</h1>
+          <nav class="rc-subtabs" aria-label="Recovery screens">
+            <button type="button" class="rc-subtab is-active" data-rcsub="import">Import</button>
+            <button type="button" class="rc-subtab" data-rcsub="reconcile">Reconcile <span id="rcNeedCount" class="rc-subtab-count" hidden>0</span></button>
+            <button type="button" class="rc-subtab" data-rcsub="wfs">WFS Inventory</button>
+            <button type="button" class="rc-subtab" data-rcsub="profit">Profit</button>
+          </nav>
+          <button id="rcExportBtn" class="rc-btn rc-btn-outline rc-head-action" type="button" hidden>Export</button>
+        </div>
+
+        <!-- Import (owner 2026-10-12: "an import tab that does not mix with
+             the reconcile tab"): the drop target, then every imported period
+             in one list — the period's home. Reconcile reads one period. -->
+        <div id="rcImport" class="rc-screen">
+          <section class="rc-sec is-open">
+            <div class="rc-sec-head">
+              <span class="rc-sec-title rc-sec-title-static">Import a payment period</span>
+              <div class="rc-sec-tools"><span class="rc-muted rc-small" id="rcImportHint">Seller Center → Payments → the period's reconciliation report (CSV)</span></div>
+            </div>
+            <div class="rc-sec-body rc-import-body">
+              <div class="rc-drop" id="rcDrop">
+                <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></div>
+                <div class="rc-drop-text"><div class="rc-drop-title" id="rcDropTitle">Drop a payment period CSV here</div><div class="rc-drop-sub">One file per period, several files at once is fine · the original is kept in the Walmart Reports folder · a period already imported asks before it is replaced</div></div>
+                <button id="rcBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+              </div>
+              <div class="rc-progress" id="rcProgress" hidden></div>
+              <!-- owner 2026-10-12: returns that came back before the Returns
+                   log existed, marked received in Recovery alone from a file
+                   of PO numbers (any header; an optional date column) -->
+              <div class="rc-drop rc-drop-mark" id="rcMarkDrop">
+                <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></div>
+                <div class="rc-drop-text"><div class="rc-drop-title">Mark received from a file</div><div class="rc-drop-sub">A CSV or text file of PO numbers that came back before the Returns log existed · an optional date column · the Returns sheet is not touched</div></div>
+                <button id="rcMarkBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+              </div>
+              <div class="rc-progress" id="rcMarkProgress" hidden></div>
+            </div>
+          </section>
+          <section class="rc-sec is-open">
+            <div class="rc-sec-head">
+              <span class="rc-sec-title rc-sec-title-static">Imported periods <span class="rc-tab-count" id="rcPeriodCount"></span></span>
+              <div class="rc-sec-tools"><span class="rc-muted rc-small">newest period first · click a period to reconcile it</span></div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-periods" id="rcPeriodsTable"></table></div>
+          </section>
+        </div>
+
+        <div id="rcReconcile" class="rc-screen" hidden>
+          <!-- owner 2026-10-12 ("super barebones, then I will tell you what
+               more to add"): two tabs — every return not back yet (seller,
+               and WFS past its 90 days) and every WFS refund still inside
+               its 90 days — and the seven columns, nothing else -->
+          <section class="rc-table-card" id="rcBucketCard">
+            <div class="rc-tabrow" id="rcBucketTabs"></div>
+            <!-- the applied column filters (owner 2026-10-13) -->
+            <div class="rc-fl-bar" id="rcFilterBar" hidden></div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-reconcile" id="rcBucketTable"></table></div>
+          </section>
+        </div>
+
+        <!-- WFS Inventory (owner 2026-10-15, "barebones"): per SKU, what was
+             shipped to WFS and what Walmart says happened to it in the
+             report's days — the report's own columns, nothing added -->
+        <div id="rcWfs" class="rc-screen" hidden>
+          <div class="rc-toolbar">
+            <div class="rc-wfs-h" id="rcWfsH">WFS units by SKU</div>
+            <!-- owner 2026-10-15: the report in play as a pill like Profit's
+                 date (its menu lists the reports, Import and Remove) and a
+                 small import icon; a file dropped anywhere here imports -->
+            <div class="rc-toolbar-right rc-scopebar" id="rcWfsTools">
+              <button id="rcWfsWhen" class="rc-when" type="button" aria-haspopup="menu" title="Pick a report"><span id="rcWfsWhenLabel"></span><span class="rc-seg-caret"></span></button>
+              <button id="rcWfsImportBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Import an Inventory Reconciliation report (CSV) · or drop it anywhere here" aria-label="Import report">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 19h14"/></svg>
+              </button>
+            </div>
+          </div>
+          <!-- the Inventory Reconciliation import lives here, not on Import
+               (owner 2026-10-15: "so as to not cause any confusion") -->
+          <div class="rc-drop rc-drop-wfs" id="rcWfsDrop">
+            <div class="rc-drop-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></div>
+            <div class="rc-drop-text"><div class="rc-drop-title">Drop the Inventory Reconciliation report here</div><div class="rc-drop-sub">Seller Center → WFS → Reports → Inventory Reconciliation (CSV) · one month or a date range · several files at once is fine · days already imported ask before they are replaced</div></div>
+            <button id="rcWfsBrowseBtn" class="rc-btn rc-btn-outline rc-btn-navy" type="button">Browse…</button>
+          </div>
+          <div class="rc-progress" id="rcWfsProgress" hidden></div>
+          <section class="rc-table-card" id="rcWfsCard">
+            <!-- owner 2026-10-15: the units table, and the shipments logged
+                 to WFS that are not marked received (20 days amber, 30 red) -->
+            <div class="rc-tabrow" id="rcWfsTabs"></div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-wfs" id="rcWfsTable"></table></div>
+            <div class="rc-foot rc-wfs-foot" id="rcWfsFoot"></div>
+          </section>
+        </div>
+
+        <!-- Profit (owner 2026-10-12): what Walmart paid for the orders in a
+             scope against the cost of the units sold -->
+        <div id="rcProfit" class="rc-screen" hidden>
+          <!-- owner 2026-10-12 (Design 3 of three): one segmented scope
+               control whose active segment names the period and opens the
+               picker; a strip of the five totals; where each dollar of sales
+               went; profit by SKU -->
+          <div class="rc-toolbar">
+            <span class="rc-label">Profit on orders</span>
+            <div class="rc-toolbar-right">
+              <div class="rc-scopebar" id="rcProfitScope" role="group" aria-label="Scope"></div>
+              <!-- the eye: blur the dashboard's numbers (owner 2026-10-13: "just the top part") -->
+              <button id="rcBlurBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Hide the dashboard numbers" aria-label="Hide or show the dashboard numbers">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"/></svg>
+              </button>
+            </div>
+          </div>
+          <section class="rc-strip rc-strip-profit" id="rcProfitStrip" hidden></section>
+          <section class="rc-table-card">
+            <div class="rc-tabrow rc-tabrow-list">
+              <div class="rc-tabs" id="rcProfitTabs"></div>
+              <div class="rc-list-tools">
+                <button id="rcExpAddBtn" class="rc-btn rc-btn-outline" type="button" hidden>+ Add expense</button>
+                <!-- owner 2026-10-16: "a button for sort by SKU" — on, the rows go A→Z by SKU with each SKU's conditions stacked under it (New, Open Box, Used, Scrap) -->
+                <button id="rcProfitStackBtn" class="rc-btn rc-btn-outline rc-btn-icon rc-stack-btn" type="button" title="Sort by SKU: A→Z, each SKU's conditions stacked together (New, Open Box, Used, Scrap)" aria-label="Sort by SKU" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"/><path d="M7 11h6"/><path d="M7 16h6"/><path d="M18 5v13"/><path d="M15 15l3 3 3-3"/></svg>
+                </button>
+                <div class="search-field rc-search-field" id="rcProfitSearchWrap"><svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg><input id="rcProfitSearch" class="search-input" type="text" placeholder="Search Linnworks SKU, Walmart SKU or product…" autocomplete="off" spellcheck="false" aria-label="Search" /></div>
+                <!-- owner 2026-10-12: "remove the Download Excel on the top right" — the workbook lives with the table now -->
+                <button id="rcProfitExcelBtn" class="rc-btn rc-btn-outline rc-btn-icon" type="button" title="Download this scope as an Excel workbook" aria-label="Download Excel">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,136v64a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V136a16,16,0,0,1,16-16H84a4,4,0,0,1,4,4v16a4,4,0,0,1-4,4H40v48H216V144H172a4,4,0,0,1-4-4V124a4,4,0,0,1,4-4h52A16,16,0,0,1,240,136ZM119.51,157.49a12,12,0,0,0,17,0l48-48a12,12,0,0,0-17-17L140,120V32a12,12,0,0,0-24,0v88L88.49,92.49a12,12,0,0,0-17,17Z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="rc-table-wrap"><table class="rc-table rc-table-profit" id="rcProfitTable"></table></div>
+            <!-- the statement as Walmart lays it out (owner 2026-10-13: "a 1 to 1 of what I see on Walmart") -->
+            <div class="rc-statement" id="rcStatement" hidden></div>
+            <div class="rc-foot" id="rcProfitFoot"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recovery: row actions and the Export menu share the tab-menu dropdown -->
+  <dialog id="rcMenuDlg" class="tab-menu rc-menu"></dialog>
+  <!-- the case card under a row's flag (owner 2026-10-13) -->
+  <dialog id="rcCasePop" class="tab-menu rc-menu rc-case-pop"></dialog>
+  <!-- a column's filter list under its funnel (owner 2026-10-13) -->
+  <dialog id="rcFilterDlg" class="tab-menu rc-menu rc-fl-menu"></dialog>
+  <!-- a PO# opens on Walmart (owner 2026-10-12: "order page or transaction page") -->
+  <!-- the scope control's picker: periods, months or years -->
+  <dialog id="rcPickDlg" class="tab-menu rc-menu rc-pick-menu"></dialog>
+  <!-- WFS Inventory: the reports, then Import report… and Remove -->
+  <dialog id="rcWfsMenu" class="tab-menu rc-menu rc-pick-menu"></dialog>
+  <dialog id="rcPoDlg" class="tab-menu rc-menu">
+    <button class="tab-menu-item" data-rcgo="order">Order page</button>
+    <button class="tab-menu-item" data-rcgo="return">Return page</button>
+    <button class="tab-menu-item" data-rcgo="txn">Transaction page</button>
+    <div class="tab-menu-sep"></div>
+    <button class="tab-menu-item" data-rcgo="copy">Copy PO #</button>
+  </dialog>
+  <dialog id="rcExportDlg" class="tab-menu rc-menu">
+    <button class="tab-menu-item" data-rcexp="csv">Download CSV (this view)</button>
+    <button class="tab-menu-item" data-rcexp="summary">Download Excel (this scope)</button>
+    <button class="tab-menu-item" data-rcexp="audit">Audit workbook</button>
+    <div class="tab-menu-sep"></div>
+    <button class="tab-menu-item" data-rcexp="mail">Email me this list</button>
+    <button class="tab-menu-item" data-rcexp="digest">Send the cases digest now</button>
+  </dialog>
+  <!-- Open case (optional Walmart case ID) / edit the case ID -->
+  <dialog id="rcCaseDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title" id="rcCaseTitle">Open a case</h2>
+      <p class="dlg-note rc-dlg-po" id="rcCasePo"></p>
+      <label class="field">
+        <span class="field-label">Walmart case ID (optional)</span>
+        <input id="rcCaseId" type="text" class="input mono" placeholder="WM-4471982" autocomplete="off" spellcheck="false" maxlength="40" />
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="rcCaseCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcCaseOk" value="ok" class="btn btn-primary">Open case</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- a payout typed by hand (owner 2026-10-14): case approved, insurance, carrier -->
+  <dialog id="rcPayDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title">Paid out</h2>
+      <p class="dlg-note rc-dlg-po" id="rcPayPo"></p>
+      <div class="rc-pay-grid">
+        <label class="field"><span class="field-label">Amount paid</span><input id="rcPayAmt" type="number" class="input mono" min="0.01" step="0.01" placeholder="0.00" required /></label>
+        <label class="field"><span class="field-label">Paid by</span><select id="rcPayBy" class="input"><option>Walmart</option><option>Shipping protection</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>Other</option></select></label>
+        <label class="field"><span class="field-label">On</span><input id="rcPayOn" type="date" class="input" /></label>
+      </div>
+      <p class="dlg-note" id="rcPayGap"></p>
+      <p class="dlg-note rc-small" id="rcPayNote"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcPayCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcPayOk" value="ok" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- an expense outside Walmart (owner 2026-10-13): labels, packing, supplies… -->
+  <dialog id="rcExpDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title" id="rcExpTitle">Add an expense</h2>
+      <p class="dlg-note">Taken off profit in the period it falls in · an end date spreads it by days · shared with every desktop</p>
+      <div class="settings-row">
+        <label class="field"><span class="field-label">From</span><input id="rcExpDate" type="date" class="input mono" /></label>
+        <label class="field"><span class="field-label">To (optional)</span><input id="rcExpDateTo" type="date" class="input mono" /></label>
+        <label class="field"><span class="field-label">Amount</span><input id="rcExpAmount" type="number" min="0" step="0.01" class="input mono" placeholder="0.00" /></label>
+      </div>
+      <label class="field"><span class="field-label">Category</span><select id="rcExpCat" class="input"></select></label>
+      <label class="field"><span class="field-label">Note (optional)</span><input id="rcExpNote" type="text" class="input" maxlength="200" placeholder="UPS labels, week of Oct 6" autocomplete="off" /></label>
+      <label class="field"><span class="field-label">SKU (optional)</span><input id="rcExpSku" type="text" class="input mono" maxlength="60" placeholder="X210-64GB-GRAY" autocomplete="off" spellcheck="false" /></label>
+      <div class="dlg-actions">
+        <button type="button" id="rcExpCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcExpOk" value="ok" class="btn btn-primary">Add expense</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- Add / edit the note pinned to a PO -->
+  <dialog id="rcNoteDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body">
+      <h2 class="dlg-title">Note</h2>
+      <p class="dlg-note rc-dlg-po" id="rcNotePo"></p>
+      <label class="field">
+        <span class="field-label">Pinned to this PO on every desktop</span>
+        <textarea id="rcNoteText" class="input rc-note-text" rows="3" maxlength="500" placeholder="called rep Jun 20, ref #4471"></textarea>
+      </label>
+      <div class="dlg-actions">
+        <button type="button" id="rcNoteCancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" id="rcNoteOk" value="ok" class="btn btn-primary">Save note</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- Write off / Remove period / Remove item: one confirm -->
+  <dialog id="rcConfirmDlg" class="dlg rc-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="rcConfirmTitle"></h2>
+      <p class="rc-confirm-body" id="rcConfirmBody"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcConfirmCancel" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="rcConfirmOk" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </dialog>
+  <!-- The Settings PIN before the Recovery tab opens (owner 2026-10-20) -->
+  <dialog id="rcCodeDlg" class="dlg rc-dlg">
+    <form method="dialog" class="dlg-body" id="rcCodeForm">
+      <h2 class="dlg-title">Recovery</h2>
+      <label class="field">
+        <span class="field-label">Settings PIN</span>
+        <input id="rcCodeInput" type="password" class="input mono" inputmode="numeric" autocomplete="off" />
+      </label>
+      <p class="dlg-note" id="rcCodeError" hidden>Wrong PIN.</p>
+      <div class="dlg-actions">
+        <!-- Cancel is a plain button: Enter in the field must submit through
+             Open, and implicit submission takes the FIRST submit button -->
+        <button type="button" id="rcCodeCancel" class="btn btn-ghost">Cancel</button>
+        <button value="ok" class="btn btn-primary">Open</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- The duplicate-period prompt (spec §3.3): Re-import / Skip -->
+  <dialog id="rcDupDlg" class="dlg rc-dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title">Already imported</h2>
+      <p class="rc-confirm-body" id="rcDupBody"></p>
+      <div class="dlg-actions">
+        <button type="button" id="rcDupSkip" class="btn btn-ghost">Skip</button>
+        <button type="button" id="rcDupReimport" class="btn btn-primary">Re-import and replace</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Overview: the status queue (design 1a, owner-approved 2026-10-08,
        design_handoff_overview_1a) - three counts, one urgency-ordered list
@@ -370,290 +897,68 @@
     </div>
   </dialog>
 
-  <!-- eBay lister: turn returned condition SKUs into eBay listings; export a
-       Seller Hub CSV (Reports -> Upload). Approved design: variants/ebay-lister.html -->
-  <section id="ebayPage" class="ebay-page" hidden>
-    <!-- marketplace switch moved into the Listings ▾ tab dropdown (owner
-         picked option A, 2026-09-17) -->
-    <!-- three-panel layout (owner reverted the sheet redesign 2026-08-12:
-         "I like the previous design") -->
-    <div class="ebay-cols ebay-cols-pad">
-      <div class="ebay-panel ebay-queue">
-        <div class="ebay-phead">To list on eBay
-          <span class="eb-right">
-            <button id="ebRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the eBay link set">Refresh</button>
-            <button id="ebScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
-          </span>
-        </div>
-        <div id="ebQChips" class="ebay-qchips"></div>
-        <div id="ebQueue" class="ebay-qlist"></div>
-      </div>
-
-      <div class="ebay-panel ebay-form">
-        <div class="ebay-phead">Listing
-          <span class="eb-right">
-            <button id="ebUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-            <button id="ebRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-            <button id="ebDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
-            <button id="ebGear" class="ebay-addbtn eb-ml0" title="Business policy names, location, dispatch time">⚙</button>
-          </span>
-        </div>
-        <div class="ebay-frows">
-          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="ebSku" class="input mono ebay-fin" readonly /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
-            <div><input id="ebTitle" class="input ebay-fin" maxlength="80" /><div class="ebay-fhint"><span id="ebTitleN">0</span>/80 characters</div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Condition</span>
-            <div class="ebay-condrow">
-              <button class="ebay-condbtn" data-cond="new">New</button>
-              <button class="ebay-condbtn" data-cond="openbox">Open Box</button>
-              <button class="ebay-condbtn" data-cond="used">Used</button>
-              <button class="ebay-condbtn" data-cond="scrap">Parts</button>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Version</span>
-            <div><select id="ebVersion" class="input ebay-fin eb-w180">
-              <option value="US">US</option>
-              <option value="Global/International">Global/International</option>
-            </select><div class="ebay-fhint">shown in the listing description only</div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Category</span>
-            <div><input id="ebCategory" class="input mono ebay-fin eb-w110" inputmode="numeric" placeholder="eBay category ID" title="eBay leaf category ID — copied from your live listing of this model, else the store's phone/tablet default; typing one saves it for the model" /><div class="ebay-fhint" id="ebCategoryHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Specifics</span>
-            <div>
-              <div id="ebSpecs" class="ebay-specgrid"></div>
-              <div class="ebay-fhint" id="ebSpecSrc"></div>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
-            <div><input id="ebPrice" class="input mono ebay-fin eb-w110" /><div class="ebay-fhint" id="ebPriceHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="ebQty" class="input mono ebay-fin eb-w70" /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
-            <div id="ebVars" class="ebay-vars"></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
-            <div id="ebShots" class="ebay-shots"></div>
-          </div>
-        </div>
-        <div class="ebay-factions">
-          <button id="ebLwList" class="btn btn-primary" title="List straight to eBay through Linnworks' stored eBay connection — no CSV, no Seller Hub trip">List on eBay</button>
-          <select id="ebLwConfig" class="input eb-lw-config" title="The Linnworks configurator that lists this condition (it carries the eBay category, policies and condition)"></select>
-          <button id="ebExport" class="btn btn-secondary">Export eBay CSV</button>
-          <button id="ebUploadPage" class="ebay-addbtn" title="Seller Hub → Reports → Upload — where the exported file goes">Open eBay upload page</button>
-          <span id="ebExportNote" class="ebay-fhint"></span>
-        </div>
-      </div>
-
-      <div class="ebay-out">
-        <div class="ebay-panel">
-          <div class="ebay-phead">Buyer sees</div>
-          <div id="ebPrev" class="ebay-prev"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Temu lister: fill Temu's own upload workbook from the stock of NEW
-       SKUs (Temu sells new only). Approved design: variants/temu-lister.html -->
-  <section id="temuPage" class="ebay-page" hidden>
-    <div class="ebay-cols ebay-cols-pad">
-      <div class="ebay-panel ebay-queue">
-        <div class="ebay-phead">To list on Temu
-          <span class="eb-right">
-            <button id="tmRefresh" class="ebay-addbtn eb-ml0" title="Re-scan the listing gaps and the Temu link set">Refresh</button>
-            <button id="tmScratch" class="ebay-addbtn eb-ml0" title="Start a blank listing, any SKU">New listing</button>
-          </span>
-        </div>
-        <div id="tmQueue" class="ebay-qlist"></div>
-        <div class="ebay-qfoot">New in-stock SKUs with no Temu listing — Temu sells new only.</div>
-      </div>
-
-      <div class="ebay-panel ebay-form">
-        <div class="ebay-phead">Listing
-          <span class="eb-right">
-            <button id="tmUndo" class="ebay-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-            <button id="tmRedo" class="ebay-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-            <button id="tmDiscard" class="ebay-addbtn eb-ml0" title="Throw this draft away and rebuild it fresh">Discard</button>
-            <button id="tmGear" class="ebay-addbtn eb-ml0" title="Temu template file, title template, export defaults">⚙</button>
-          </span>
-        </div>
-        <div class="ebay-frows">
-          <div class="ebay-frow"><span class="ebay-flabel">SKU</span><input id="tmSku" class="input mono ebay-fin" readonly /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Type</span>
-            <div class="ebay-condrow">
-              <button class="ebay-condbtn" id="tmCatPhone" data-tmcat="phone">Phone</button>
-              <button class="ebay-condbtn" id="tmCatTablet" data-tmcat="tablet">Tablet</button>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Title</span>
-            <div><input id="tmTitle" class="input ebay-fin" maxlength="500" /><div class="ebay-fhint" id="tmTitleHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Brand</span>
-            <div class="tm-two">
-              <select id="tmBrand" class="input ebay-fin"><option>SAMSUNG</option><option>APPLE</option><option value="">(no brand)</option></select>
-              <select id="tmOrigin" class="input ebay-fin"><option>Vietnam</option><option>Mainland China</option><option>South Korea</option><option>India</option><option>United States</option></select>
-            </div>
-            <div class="ebay-fhint tm-hint2">brand · country of origin</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Temu specs</span>
-            <div>
-              <div id="tmSpecs" class="ebay-specgrid"></div>
-              <div class="ebay-fhint">fixed Temu menus — pre-picked, change what's wrong</div>
-            </div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">RAM+ROM</span>
-            <div class="tm-two">
-              <select id="tmRam" class="input ebay-fin"></select>
-              <select id="tmRom" class="input ebay-fin"></select>
-            </div>
-            <div class="ebay-fhint tm-hint2">Temu variation axis — RAM · storage</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Color</span>
-            <div><select id="tmColor" class="input ebay-fin eb-w180"></select>
-            <div class="ebay-fhint" id="tmColorHint"></div></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Price</span>
-            <div class="tm-two">
-              <input id="tmBase" class="input mono ebay-fin eb-w110" placeholder="base" />
-              <input id="tmList" class="input mono ebay-fin eb-w110" placeholder="list" />
-            </div>
-            <div class="ebay-fhint tm-hint2">base (your price) · list (compare-at)</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Qty</span><input id="tmQty" class="input mono ebay-fin eb-w70" /></div>
-          <div class="ebay-frow"><span class="ebay-flabel">Variations</span>
-            <div id="tmVars" class="ebay-vars"></div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Package</span>
-            <div class="tm-pack">
-              <span class="ebay-spec"><label>Weight lb</label><input id="tmWt" class="input mono" /></span>
-              <span class="ebay-spec"><label>Length in</label><input id="tmLen" class="input mono" /></span>
-              <span class="ebay-spec"><label>Width in</label><input id="tmWid" class="input mono" /></span>
-              <span class="ebay-spec"><label>Height in</label><input id="tmHei" class="input mono" /></span>
-            </div>
-            <div class="ebay-fhint tm-hint2" id="tmPackHint">saved per model — reused next time</div>
-          </div>
-          <div class="ebay-frow"><span class="ebay-flabel">Photos</span>
-            <div id="tmShots" class="ebay-shots"></div>
-          </div>
-        </div>
-        <div class="ebay-factions">
-          <button id="tmExport" class="btn btn-primary">Export Temu workbook</button>
-          <button id="tmUploadPage" class="ebay-addbtn" title="Seller Central → Add Products via Upload — where the exported file goes">Open Temu upload page</button>
-          <span id="tmSavedNote" class="ebay-fhint" title="Every change saves into this SKU's draft on its own — come back any time"></span>
-          <span id="tmExportNote" class="ebay-fhint"></span>
-        </div>
-      </div>
-
-      <div class="ebay-out">
-        <div class="ebay-panel">
-          <div class="ebay-phead">Upload sheet<span class="eb-right"><span id="tmSheetN" class="ebay-fhint"></span></span></div>
-          <div id="tmSheet" class="tm-sheet"></div>
-          <div class="tm-sheetnote">Rows write into a copy of Temu's own template workbook. Contribution SKU = your Linnworks SKU, so listings auto-link. Temu recommends 15 or fewer products on the first upload.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Temu lister: template + defaults -->
-  <dialog id="tmGearDialog" class="dlg">
+  <!-- Walmart tab: one confirm step for sends, enrollments and opt-outs -->
+  <dialog id="wlConfirm" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title">Temu export setup</h2>
-      <p class="dlg-note" id="tmTplState"></p>
-      <div class="ebg-row"><label>Template</label><button id="tmTplPick" class="ebay-addbtn eb-m0">Pick the downloaded template file…</button></div>
-      <div class="ebg-row"><label for="tmTitleTpl">Title template</label><input id="tmTitleTpl" class="input" />
-        <p class="dlg-note">tokens: {brand} {model} {storage} {ram} {color} {type} — typing a title on a listing teaches that model its own title</p></div>
-      <div class="ebg-row"><label for="tmShipTpl">Shipping template</label><input id="tmShipTpl" class="input" /></div>
-      <div class="ebg-row"><label for="tmHandling">Handling time</label>
-        <select id="tmHandling" class="input"><option>1 Day</option><option>2 Days</option></select>
-      </div>
+      <h2 class="dlg-title" id="wlCfTitle"></h2>
+      <p class="dlg-note" id="wlCfText"></p>
+      <ul class="wl-cf-list" id="wlCfList"></ul>
       <div class="dlg-actions">
-        <button id="tmGearSave" class="btn btn-primary">Save</button>
-        <button id="tmGearClose" class="btn">Close</button>
+        <button type="button" class="btn btn-ghost" id="wlCfNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlCfYes"></button>
       </div>
     </div>
   </dialog>
 
-  <!-- eBay lister: QR for shooting draft photos on the phone -->
-  <div id="ebQrPop" class="claims-pop ebqr-pop" hidden>
-    <button id="ebQrClose" class="claims-close" title="Close">✕</button>
-    <h4>Listing Photos</h4>
-    <div id="ebQrSku" class="claims-sub"></div>
-    <img id="ebQrImg" class="claims-qr" alt="Scan with the phone" />
-  </div>
-
-  <!-- eBay lister: photo editor (Canva-style; approved design:
-       variants/ebay-photo-editor.html). Edits bake into the exported pixels. -->
-  <dialog id="ebEditDialog" class="dlg ebed-dlg">
-    <div class="ebed-tbar">
-      <span class="ebed-t">Edit photos</span>
-      <span class="ebed-sub"><span id="ebedN">1</span> of <span id="ebedM">1</span></span>
-      <span class="ebed-hist">
-        <button id="ebedUndo" class="ebed-histbtn" title="Undo (Ctrl+Z)" disabled>↩</button>
-        <button id="ebedRedo" class="ebed-histbtn" title="Redo (Ctrl+Y)" disabled>↪</button>
-      </span>
-      <button id="ebedDone" class="btn btn-primary">✓ Done</button>
-    </div>
-    <div class="ebed-mid">
-      <div class="ebed-work"><img id="ebedImg" alt="" /></div>
-      <div class="ebed-props">
-        <div class="ebed-grp"><h5>Light</h5>
-          <div class="ebed-sl"><label>Brightness</label><input type="range" id="ebedBright" min="50" max="150" value="100" /><span class="v" id="ebedBrightV">0</span></div>
-          <div class="ebed-sl"><label>Contrast</label><input type="range" id="ebedCon" min="50" max="150" value="100" /><span class="v" id="ebedConV">0</span></div>
-          <div class="ebed-sl"><label>Warmth</label><input type="range" id="ebedWarm" min="-50" max="50" value="0" /><span class="v" id="ebedWarmV">0</span></div>
-        </div>
-        <div class="ebed-grp"><h5>Crop</h5>
-          <div class="ebed-chips">
-            <button class="ebed-chip" data-crop="free">Free</button>
-            <button class="ebed-chip" data-crop="1:1">1:1 eBay</button>
-            <button class="ebed-chip" data-crop="4:3">4:3</button>
-          </div>
-          <div class="ebed-hint">presets crop from the center when the photo is saved</div>
-        </div>
-        <div class="ebed-grp"><h5>Photo</h5>
-          <div class="ebed-btns">
-            <button id="ebedRot" class="ebed-abtn">⟳ Rotate</button>
-            <button id="ebedDel" class="ebed-abtn is-danger">🗑 Remove</button>
-            <button id="ebedMain" class="ebed-abtn is-main">★ Use as main photo</button>
-          </div>
-        </div>
-        <button id="ebedReset" class="ebed-reset">Reset this photo</button>
+  <!-- Walmart tab: map a live listing to a Linnworks item -->
+  <dialog id="wlMapDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="wlMapTitle">Map to Linnworks</h2>
+      <p class="dlg-note">Pick the Linnworks item this Walmart listing sells. Linnworks then syncs its stock and links its orders.</p>
+      <div class="combo wl-map-combo">
+        <input id="wlMapQ" class="input mono" type="text" placeholder="Search your Linnworks SKUs…" autocomplete="off" spellcheck="false" role="combobox" aria-label="Linnworks SKU" />
+        <div id="wlMapList" class="combo-list" hidden></div>
+      </div>
+      <div class="wl-map-sugg" id="wlMapSugg"></div>
+      <p class="dlg-note wl-err-t" id="wlMapErr" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost" id="wlMapNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlMapYes" disabled>Link</button>
       </div>
     </div>
-    <div class="ebed-strip" id="ebedStrip"></div>
+  </dialog>
+
+  <!-- Walmart tab: create or edit a repricer strategy -->
+  <dialog id="wlStratDialog" class="dlg">
+    <div class="dlg-body">
+      <h2 class="dlg-title" id="wlStTitle">Strategy</h2>
+      <p class="dlg-note">Walmart's repricer moves each item's price by this rule, never below its min or above its max.</p>
+      <div class="ebg-row"><label for="wlStName">Name</label><input id="wlStName" class="input" autocomplete="off" maxlength="120" /></div>
+      <div class="ebg-row"><label for="wlStType">Follow</label><select id="wlStType" class="input"><option value="Buy Box Price">The Buy Box price</option><option value="Competitive Price">The lowest competitor price</option></select></div>
+      <div class="ebg-row"><label for="wlStVal">Beat it by</label><span class="wl-st-amt"><input id="wlStVal" class="input mono" inputmode="decimal" autocomplete="off" /><select id="wlStUnit" class="input"><option value="$">$</option><option value="%">%</option></select></span></div>
+      <p class="dlg-note">0 matches it.</p>
+      <p class="dlg-note wl-err-t" id="wlStErr" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost rn-del" id="wlStDel" hidden>Delete strategy…</button>
+        <button type="button" class="btn btn-ghost" id="wlStNo">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wlStYes">Save</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- rename a Linnworks SKU: the item survives, only the string changes -->
   <dialog id="renameDialog" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title">Rename SKU</h2>
+      <h2 class="dlg-title">Edit item</h2>
       <p class="dlg-note mono" id="rnOld" style="margin-bottom:10px"></p>
-      <div class="ebg-row"><label for="rnNew">New SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
-      <p class="dlg-note">Stock, history and channel links follow the item automatically. Marketplace listings keep their own channel SKUs — future auto-linking matches the new name.</p>
+      <div class="ebg-row"><label for="rnNew">SKU</label><input id="rnNew" class="input mono" autocomplete="off" spellcheck="false" /></div>
+      <div class="ebg-row"><label for="rnTitle">Title</label><input id="rnTitle" class="input" autocomplete="off" maxlength="255" placeholder="No title in Linnworks" /></div>
+      <p class="dlg-note">A new SKU: stock, history and channel links follow the item automatically; marketplace listings keep their own channel SKUs and future auto-linking matches the new name. The title is the Linnworks item title.</p>
       <p class="dlg-note" id="rnErr" style="color:var(--neg-text)" hidden></p>
       <div class="dlg-actions">
         <button id="rnDelete" class="btn btn-ghost rn-del" title="Delete this SKU from Linnworks — opens the delete confirmation with the blast radius (stock lost, linked listings left unsynced)">Delete SKU…</button>
         <button id="rnCancel" class="btn btn-ghost">Cancel</button>
-        <button id="rnSave" class="btn btn-primary">Rename</button>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- eBay lister settings: business policy names live on the eBay account -->
-  <dialog id="ebGearDialog" class="dlg ebg-dlg">
-    <div class="dlg-body">
-      <h2 class="dlg-title">eBay listing settings</h2>
-      <div class="ebg-row"><label for="ebgShip">Shipping policy name</label><input id="ebgShip" class="input" placeholder="e.g. Standard shipping" /></div>
-      <div class="ebg-row"><label for="ebgRet">Return policy name</label><input id="ebgRet" class="input" placeholder="e.g. 30 day returns" /></div>
-      <div class="ebg-row"><label for="ebgPay">Payment policy name</label><input id="ebgPay" class="input" placeholder="e.g. eBay Payments" /></div>
-      <div class="ebg-row"><label for="ebgLoc">Item location</label><input id="ebgLoc" class="input" placeholder="e.g. Brooklyn, NY" /></div>
-      <div class="ebg-row"><label for="ebgDisp">Dispatch time (days)</label><input id="ebgDisp" class="input mono" type="number" min="0" value="1" style="width:90px" /></div>
-      <p class="dlg-note">The three names must match your eBay business policies exactly — the CSV references them by name.
-        <button id="ebgOpen" class="ebay-addbtn" style="margin-left:6px">Open them on eBay</button></p>
-      <div class="dlg-actions">
-        <button id="ebgCancel" class="btn btn-ghost">Cancel</button>
-        <button id="ebgSave" class="btn btn-primary">Save</button>
+        <button id="rnSave" class="btn btn-primary">Save</button>
       </div>
     </div>
   </dialog>
@@ -809,62 +1114,68 @@
     <div class="dlg-actions"><button id="phoneClose" class="btn btn-secondary">Close</button></div>
   </dialog>
 
-  <dialog id="settingsDialog" class="dlg dlg-wide">
-    <div class="dlg-body">
+  <!-- owner 2026-10-20 (variants/settings-organized.html): six groups in a
+       sidebar, one on screen at a time -->
+  <dialog id="settingsDialog" class="dlg dlg-settings">
+    <div class="set-wrap">
+    <nav class="set-nav" id="setNav">
       <h2 class="dlg-title">Settings</h2>
-
-      <h3 class="dlg-section">Mode</h3>
-      <div class="settings-row">
-        <label class="check"><input id="setCaptureOnly" type="checkbox" /> Capture only, no Linnworks syncing from this station</label>
-      </div>
-      <div class="settings-row">
-        <span class="field-label">Daily CSV saved to</span>
-        <span id="setCsvFolder" class="test-result mono"></span>
-        <button id="chooseCsvBtn" class="btn btn-ghost">Change folder</button>
-      </div>
-
+      <button type="button" data-p="general"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Z"/></svg>General</button>
+      <button type="button" data-p="linnworks"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M137.54,186.36a8,8,0,0,1,0,11.31l-9.94,10A56,56,0,0,1,48.38,128.4L72.5,104.28A56,56,0,0,1,149.31,102a8,8,0,1,1-10.64,12,40,40,0,0,0-54.85,1.63L59.7,139.72a40,40,0,0,0,56.58,56.58l9.94-9.94A8,8,0,0,1,137.54,186.36Zm70.08-138a56.08,56.08,0,0,0-79.22,0l-9.94,9.95a8,8,0,0,0,11.32,11.31l9.94-9.94a40,40,0,0,1,56.58,56.58L172.18,140.4A40,40,0,0,1,117.33,142,8,8,0,1,0,106.69,154a56,56,0,0,0,76.81-2.26l24.12-24.12A56.08,56.08,0,0,0,207.62,48.38Z"/></svg>Linnworks</button>
+      <button type="button" data-p="shipping"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M255.42,117l-14-35A15.93,15.93,0,0,0,226.58,72H192V64a8,8,0,0,0-8-8H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H49a32,32,0,0,0,62,0h50a32,32,0,0,0,62,0h17a16,16,0,0,0,16-16V120A7.94,7.94,0,0,0,255.42,117ZM192,88h34.58l9.6,24H192ZM32,72H176v64H32ZM80,208a16,16,0,1,1,16-16A16,16,0,0,1,80,208Zm112,0a16,16,0,1,1,16-16A16,16,0,0,1,192,208Zm48-24H223a32.06,32.06,0,0,0-31-24V128h48Z"/></svg>Shipping</button>
+      <button type="button" data-p="stock"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44L128,120,47.66,76ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z"/></svg>Stock</button>
+      <button type="button" data-p="returns"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M232,144a64.07,64.07,0,0,1-64,64H80a8,8,0,0,1,0-16h88a48,48,0,0,0,0-96H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,45.66L51.31,80H168A64.07,64.07,0,0,1,232,144Z"/></svg>Returns</button>
+      <button type="button" data-p="advanced"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M69.12,94.15,28.5,128l40.62,33.85a8,8,0,1,1-10.24,12.29l-48-40a8,8,0,0,1,0-12.29l48-40a8,8,0,0,1,10.24,12.3Zm176,27.7-48-40a8,8,0,1,0-10.24,12.3L227.5,128l-40.62,33.85a8,8,0,1,0,10.24,12.29l48-40a8,8,0,0,0,0-12.29ZM162.73,32.48a8,8,0,0,0-10.25,4.79l-64,176a8,8,0,0,0,4.79,10.26A8.14,8.14,0,0,0,96,224a8,8,0,0,0,7.52-5.27l64-176A8,8,0,0,0,162.73,32.48Z"/></svg>Advanced</button>
+    </nav>
+    <div class="set-pane" id="setPane">
+      <section class="set-sec" data-p="general" hidden>
+        <div class="set-h">General</div>
       <h3 class="dlg-section">Pages on this station</h3>
-      <div class="settings-row">
+      <div class="set-pages">
         <label class="check"><input id="setPageOverview" type="checkbox" /> Overview</label>
         <label class="check"><input id="setPageStock" type="checkbox" /> Stock</label>
         <label class="check"><input id="setPagePricing" type="checkbox" /> Pricing</label>
         <label class="check"><input id="setPageHistory" type="checkbox" /> History</label>
         <label class="check"><input id="setPageReturns" type="checkbox" /> Returns</label>
-        <label class="check"><input id="setPageListings" type="checkbox" /> Listings</label>
+        <label class="check"><input id="setPageRecovery" type="checkbox" /> Recovery</label>
         <label class="check"><input id="setPageWholesale" type="checkbox" /> Wholesale</label>
         <label class="check"><input id="setPageCost" type="checkbox" /> Cost</label>
+        <label class="check"><input id="setPageShip" type="checkbox" /> Ship</label>
+        <label class="check"><input id="setPageWalmart" type="checkbox" /> Walmart</label>
       </div>
-      <p class="dlg-note">Capture is always on. Capture-only mode overrides these and shows Capture alone. A returns-only station: tick Returns, untick the rest, set a Settings PIN so it stays that way.</p>
+      <p class="dlg-note">Capture is always on. Recovery needs Returns; Walmart needs Stock.</p>
 
-      <h3 class="dlg-section">Receiving</h3>
+      <h3 class="dlg-section">Mode</h3>
       <div class="settings-row">
-        <span class="field-label">Session files saved to</span>
-        <span id="setRecvFolder" class="test-result mono"></span>
-        <button id="chooseRecvBtn" class="btn btn-ghost">Change folder</button>
+        <label class="check"><input id="setCaptureOnly" type="checkbox" /> Capture only (no Linnworks from this station)</label>
       </div>
-      <label class="field">
-        <span class="field-label">Make.com webhook URL (optional, receives each finished session)</span>
-        <input id="setRecvWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
-      </label>
-      <label class="field">
-        <span class="field-label">Low-stock webhook URL (optional, one alert per SKU crossing below its minimum)</span>
-        <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
-      </label>
-
-      <h3 class="dlg-section">Shared folder</h3>
+      <h3 class="dlg-section">Settings PIN · also opens Recovery</h3>
       <div class="settings-row">
-        <span class="field-label">Shared DWS Stock folder</span>
-        <span id="setRetSyncFolder" class="test-result mono"></span>
-        <button id="chooseRetSyncBtn" class="btn btn-ghost">Change folder</button>
-        <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
+        <input id="setPin" type="password" class="input input-time mono" inputmode="numeric" autocomplete="off" placeholder="unchanged" />
+        <label class="check"><input id="setPinClear" type="checkbox" /> Remove PIN</label>
       </div>
-      <label class="field">
-        <span class="field-label">This station's name (stamped on everything it logs)</span>
-        <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
-      </label>
-      <p class="dlg-note">Point every desktop at the SAME folder inside Google Drive, OneDrive or a network share (set it to mirror / be available offline) and they all share one log of returns and WFS shipments — more record types join the same folder over time. Each station writes only its own files, so the sync service can never conflict; a change from another desktop lands in ~10–60 seconds. Renaming the folder later? Re-pick it here on every desktop afterward.</p>
 
-      <h3 class="dlg-section">Linnworks</h3>
+      <h3 class="dlg-section">Daily CSV</h3>
+      <div class="settings-row">
+        <span id="setCsvFolder" class="test-result mono"></span>
+        <button id="chooseCsvBtn" class="btn btn-ghost">Change</button>
+      </div>
+
+      <h3 class="dlg-section">Browser</h3>
+      <div class="settings-row">
+        <label class="check"><input id="setWebOn" type="checkbox" /> Open the app in a browser on this computer</label>
+      </div>
+      <div class="settings-row web-row" id="setWebRow">
+        <span id="setWebUrl" class="web-url mono"></span>
+        <button id="setWebCopy" class="btn btn-ghost" type="button">Copy link</button>
+        <button id="setWebOpen" class="btn btn-ghost" type="button">Open</button>
+        <button id="setWebNew" class="btn btn-ghost" type="button">New link</button>
+      </div>
+      <p class="dlg-note" id="setWebNote"></p>
+      </section>
+      <section class="set-sec" data-p="linnworks" hidden>
+        <div class="set-h">Linnworks</div>
+      <h3 class="dlg-section">Connection</h3>
       <div class="grid2">
         <label class="field">
           <span class="field-label">Application ID</span>
@@ -886,47 +1197,162 @@
         </label>
       </div>
       <div class="settings-row">
-        <button id="testConnBtn" class="btn btn-secondary">Test connection</button>
+        <button id="testConnBtn" class="btn btn-secondary">Test</button>
         <span id="testConnResult" class="test-result"></span>
       </div>
 
+
       <h3 class="dlg-section">Sync</h3>
       <div class="settings-row">
-        <label class="check"><input id="setDryRun" type="checkbox" /> Dry run, log actions without writing to Linnworks</label>
+        <label class="check"><input id="setDryRun" type="checkbox" /> Dry run (log only, nothing written)</label>
       </div>
       <div class="settings-row">
-        <label class="check"><input id="setRouting" type="checkbox" /> Move open orders with no available stock to</label>
+        <label class="check"><input id="setRouting" type="checkbox" /> Move orders with no stock to</label>
         <select id="setFallbackLoc" class="input input-inline">
           <option value="">Not selected, test connection first</option>
         </select>
       </div>
       <div class="settings-row">
-        <span class="field-label">Carrier cutoff (24h) — "Due today" turns red as it nears</span>
+        <span class="field-label">Carrier cutoff (24h)</span>
         <input id="setShipCutoff" type="text" class="input input-time mono" placeholder="16:00" autocomplete="off" spellcheck="false" />
       </div>
+      </section>
+      <section class="set-sec" data-p="shipping" hidden>
+        <div class="set-h">Shipping</div>
+      <h3 class="dlg-section">UPS accounts</h3>
+      <p class="dlg-note">One app per company on developer.ups.com (Authorization, Rating, Shipping).</p>
+      <div class="ups-accts">
+        <div class="ups-acct" data-acct="0">
+          <label class="field"><span class="field-label">Name</span><input id="setUpsName0" type="text" class="input" placeholder="Digital World Shop" autocomplete="off" /></label>
+          <label class="field"><span class="field-label">UPS account #</span><input id="setUpsAcct0" type="text" class="input mono" maxlength="10" autocomplete="off" spellcheck="false" /></label>
+          <label class="field"><span class="field-label">Client ID</span><input id="setUpsId0" type="password" class="input mono" autocomplete="off" /></label>
+          <label class="field"><span class="field-label">Client secret</span><input id="setUpsSecret0" type="password" class="input mono" autocomplete="off" /></label>
+          <div class="settings-row"><button class="btn btn-secondary ups-test" data-i="0" type="button">Test</button><span id="setUpsRes0" class="test-result"></span></div>
+        </div>
+        <div class="ups-acct" data-acct="1">
+          <label class="field"><span class="field-label">Name</span><input id="setUpsName1" type="text" class="input" placeholder="Second company" autocomplete="off" /></label>
+          <label class="field"><span class="field-label">UPS account #</span><input id="setUpsAcct1" type="text" class="input mono" maxlength="10" autocomplete="off" spellcheck="false" /></label>
+          <label class="field"><span class="field-label">Client ID</span><input id="setUpsId1" type="password" class="input mono" autocomplete="off" /></label>
+          <label class="field"><span class="field-label">Client secret</span><input id="setUpsSecret1" type="password" class="input mono" autocomplete="off" /></label>
+          <div class="settings-row"><button class="btn btn-secondary ups-test" data-i="1" type="button">Test</button><span id="setUpsRes1" class="test-result"></span></div>
+        </div>
+      </div>
+      <h3 class="dlg-section">Walmart</h3>
+      <p class="dlg-note">Seller Center › API Key Management.</p>
+      <div class="grid2">
+        <label class="field"><span class="field-label">Client ID</span><input id="setWmId" type="password" class="input mono" autocomplete="off" /></label>
+        <label class="field"><span class="field-label">Client secret</span><input id="setWmSecret" type="password" class="input mono" autocomplete="off" /></label>
+      </div>
+      <div class="settings-row"><button id="setWmTest" class="btn btn-secondary" type="button">Test</button><span id="setWmRes" class="test-result"></span></div>
 
+      <h3 class="dlg-section">Addresses</h3>
+      <div class="ups-addrs">
+        <div class="ups-addr" data-addr="shipFrom">
+          <div class="ups-addr-h">Ship-from (the warehouse)</div>
+          <input class="input" data-f="company" placeholder="Company" autocomplete="off" />
+          <input class="input" data-f="name" placeholder="Contact name" autocomplete="off" />
+          <input class="input" data-f="line1" placeholder="Street" autocomplete="off" />
+          <input class="input" data-f="line2" placeholder="Suite / unit (optional)" autocomplete="off" />
+          <div class="ups-csz"><input class="input" data-f="city" placeholder="City" autocomplete="off" /><input class="input" data-f="state" placeholder="ST" maxlength="2" autocomplete="off" /><input class="input mono" data-f="zip" placeholder="ZIP" maxlength="10" autocomplete="off" /></div>
+          <input class="input mono" data-f="phone" placeholder="Phone" autocomplete="off" />
+          <input class="input" data-f="email" placeholder="Email (optional)" autocomplete="off" />
+        </div>
+        <div class="ups-addr" data-addr="returnTo">
+          <div class="ups-addr-h">Return address (where returns go) <button id="setUpsSame" class="sp-link" type="button">same as ship-from</button></div>
+          <input class="input" data-f="company" placeholder="Company" autocomplete="off" />
+          <input class="input" data-f="name" placeholder="Attn: Returns" autocomplete="off" />
+          <input class="input" data-f="line1" placeholder="Street" autocomplete="off" />
+          <input class="input" data-f="line2" placeholder="Suite / unit (optional)" autocomplete="off" />
+          <div class="ups-csz"><input class="input" data-f="city" placeholder="City" autocomplete="off" /><input class="input" data-f="state" placeholder="ST" maxlength="2" autocomplete="off" /><input class="input mono" data-f="zip" placeholder="ZIP" maxlength="10" autocomplete="off" /></div>
+          <input class="input mono" data-f="phone" placeholder="Phone" autocomplete="off" />
+        </div>
+      </div>
+      <h3 class="dlg-section">Printing</h3>
+      <div class="settings-row">
+        <span class="field-label">Label printer</span>
+        <select id="setUpsPrinter" class="input input-inline"><option value="">Ask every time</option></select>
+      </div>
+      <div class="settings-row">
+        <label class="check"><input id="setUpsTest" type="checkbox" /> Test mode (UPS test servers, nothing charged)</label>
+      </div>
+      </section>
+      <section class="set-sec" data-p="stock" hidden>
+        <div class="set-h">Stock</div>
       <h3 class="dlg-section">Reorder points</h3>
       <div class="settings-row">
-        <label class="check"><input id="setReorderSuggest" type="checkbox" /> Suggest minimum levels from sales velocity</label>
+        <label class="check"><input id="setReorderSuggest" type="checkbox" /> Suggest minimums from sales</label>
       </div>
-      <p class="dlg-note">Recomputed from processed orders: velocity × lead time × 1.5. Suggestions appear beside the Min column on the Stock page.</p>
       <div class="settings-row">
-        <label class="check"><input id="setReorderAuto" type="checkbox" /> Apply them automatically (nightly)</label>
+        <label class="check"><input id="setReorderAuto" type="checkbox" /> Apply them nightly</label>
       </div>
-      <p class="dlg-note">Writes a new Min only when it differs by more than 20% from the current one, and posts a one-line summary. Turn on once the suggestions have earned your trust.</p>
       <div class="settings-row">
-        <span class="field-label">Supplier lead time (days)</span>
+        <span class="field-label">Lead time (days)</span>
         <input id="setLeadDays" type="number" min="1" step="1" class="input input-time mono" />
         <span class="field-label">Buy coverage (days)</span>
         <input id="setCoverDays" type="number" min="1" step="1" class="input input-time mono" />
       </div>
+      <!-- the Overview's Buy now cut (owner 2026-10-13: "buy if we have less than 30-50 units left") -->
       <div class="settings-row">
-        <span class="field-label">Settings PIN (empty = no PIN)</span>
-        <input id="setPin" type="password" class="input input-time mono" inputmode="numeric" autocomplete="off" placeholder="unchanged" />
-        <label class="check"><input id="setPinClear" type="checkbox" /> Remove PIN</label>
+        <span class="field-label">Buy now when under (units)</span>
+        <input id="setBuyUnits" type="number" min="0" step="1" class="input input-time mono" />
+        <span class="field-label">and selling at least (a day)</span>
+        <input id="setBuyPace" type="number" min="0" step="0.1" class="input input-time mono" />
       </div>
+      <h3 class="dlg-section">Receiving</h3>
+      <div class="settings-row">
+        <span class="field-label">Session files</span>
+        <span id="setRecvFolder" class="test-result mono"></span>
+        <button id="chooseRecvBtn" class="btn btn-ghost">Change</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Webhook (optional)</span>
+        <input id="setRecvWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
+      <h3 class="dlg-section">Low-stock alerts</h3>
+      <label class="field">
+        <span class="field-label">Webhook (optional)</span>
+        <input id="setLowWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
+      </section>
+      <section class="set-sec" data-p="returns" hidden>
+        <div class="set-h">Returns</div>
+      <h3 class="dlg-section">Shared folder</h3>
+      <div class="settings-row">
+        <span class="field-label">Shared DWS Stock folder</span>
+        <span id="setRetSyncFolder" class="test-result mono"></span>
+        <button id="chooseRetSyncBtn" class="btn btn-ghost">Change</button>
+        <button id="clearRetSyncBtn" class="btn btn-ghost">Turn off</button>
+      </div>
+      <label class="field">
+        <span class="field-label">This station</span>
+        <input id="setRetSyncStation" type="text" class="input mono" placeholder="FRONT-DESK" maxlength="24" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="dlg-note">The same folder on every desktop (Google Drive, OneDrive or a network share).</p>
+      <!-- what the shared folder holds for Recovery (owner 2026-10-14: off the Import screen, into Settings) -->
+      <div class="rc-sync" id="rcSyncPanel" hidden></div>
 
-      <h3 class="dlg-section">Patterns, one per line as name = regex</h3>
+      <h3 class="dlg-section">Recovery</h3>
+      <label class="field">
+        <span class="field-label">Alert email</span>
+        <input id="setRcEmail" type="text" class="input" placeholder="you@example.com" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span class="field-label">Webhook (optional)</span>
+        <input id="setRcWebhook" type="text" class="input mono" placeholder="https://hook.us1.make.com/…" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span class="field-label">Walmart transaction link ({po} = the PO#)</span>
+        <input id="setRcTxnUrl" type="text" class="input mono" placeholder="https://seller.walmart.com/payments/…{po}" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="settings-row">
+        <span class="field-label">Imported Walmart reports</span>
+        <span id="setRcArchive" class="test-result mono">Documents\Capture Station\Walmart Reports</span>
+        <button id="openRcArchiveBtn" class="btn btn-ghost" type="button">Open folder</button>
+      </div>
+      </section>
+      <section class="set-sec" data-p="advanced" hidden>
+        <div class="set-h">Advanced</div>
+      <h3 class="dlg-section">Patterns · one per line, name = regex</h3>
       <div class="grid2">
         <label class="field">
           <span class="field-label">Order numbers, channel = regex</span>
@@ -937,8 +1363,9 @@
           <textarea id="setTrackingPatterns" class="input mono" rows="4"></textarea>
         </label>
       </div>
-
-      <div class="dlg-actions">
+      </section>
+    </div>
+      <div class="dlg-actions set-foot">
         <button id="settingsCancel" class="btn btn-ghost">Cancel</button>
         <button id="settingsSave" class="btn btn-primary">Save settings</button>
       </div>
@@ -1680,6 +2107,14 @@
     <img id="claimsQr" class="claims-qr" alt="Scan with the warehouse phone" />
     <button id="claimsFolder" class="claims-openf">📂 Open the folder</button>
     <div id="claimsErr" class="claims-err" hidden></div>
+  </div>
+  <!-- Ctrl+F / Command+F find bar (owner 2026-10-12) — outside every page, so it stays focusable on all of them -->
+  <div id="pageFindBar" class="find-bar" hidden role="search">
+    <input id="pageFindInput" type="text" placeholder="Find on this page…" autocomplete="off" spellcheck="false" aria-label="Find on this page" />
+    <span id="pageFindCount" class="find-count"></span>
+    <button type="button" id="pageFindPrev" class="find-btn" title="Previous (Shift+Enter)" aria-label="Previous match">▴</button>
+    <button type="button" id="pageFindNext" class="find-btn" title="Next (Enter)" aria-label="Next match">▾</button>
+    <button type="button" id="pageFindClose" class="find-btn" title="Close (Esc)" aria-label="Close find">✕</button>
   </div>
   <script src="renderer.js"></script>
 </body>

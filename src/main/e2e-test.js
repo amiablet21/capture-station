@@ -473,6 +473,48 @@ module.exports = async function run({ app, win, db, clipboard }) {
       inlineGot && inlineGot.orderId === 'oid-77' && inlineGot.unmatched === false
         && inlineGot.items[0].price === 149.99 && inlineGot.items[0].settle === 149.99,
       inlineGot);
+    // 24c-unsaved (owner 2026-10-22, returns "disappearing"): a looked-up
+    // draft that a new PO replaces, or that Esc clears, is KEPT on the
+    // unsaved card instead of vanishing; Put back restores it to save
+    await exec(`localStorage.removeItem('retUnsaved'); wsReset();
+      $('wsPo').value = '119888000000001';
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    await exec(`$('wsPo').value = 'PO-NEXT-2';
+      $('wsPo').dispatchEvent(new Event('input', { bubbles: true }));
+      $('wsPo').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(300);
+    let uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('retUnsaved').hidden]`);
+    check('a new PO over a loaded, unsaved return keeps that return on the unsaved card',
+      uns[0].length === 1 && uns[0][0].v.po === '119888000000001' && uns[0][0].v.sku === 'S25-128GB-NAVY'
+        && uns[0][0].orderId === 'oid-77' && /replaced by PO PO-NEXT-2/.test(uns[0][0].why) && uns[1] === false,
+      uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0;`);
+    uns = await exec(`[JSON.parse(localStorage.getItem('retUnsaved') || '[]'), $('wsPo').value + $('ws_sku').value,
+      document.querySelectorAll('#retUnsaved .ret-uns-row').length]`);
+    check('Esc clears the row but keeps the draft (same PO + SKU listed once)',
+      uns[0].length === 1 && /Esc/.test(uns[0][0].why) && uns[1] === '' && uns[2] === 1, uns);
+    await exec(`window.__rvGot2 = null; document.querySelector('#retUnsaved [data-unsput="0"]').click(); 0;`);
+    uns = await exec(`[$('wsPo').value, $('ws_sku').value, ws.orderId, JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('Put back restores the draft, loaded order included, and leaves the card',
+      uns[0] === '119888000000001' && uns[1] === 'S25-128GB-NAVY' && uns[2] === 'oid-77' && uns[3] === 0, uns);
+    await exec(`$('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    for (let w = 0; w < 20 && !(inlineGot = await exec(`window.__rvGot2`)); w++) await sleep(150);
+    check('a put-back draft saves with its order', inlineGot && inlineGot.orderId === 'oid-77'
+      && inlineGot.orderNumber === '119888000000001', inlineGot);
+    // a scan typed while the save runs survives the save's row clear
+    await exec(`window.__rvKeep = rvCreate; window.__rvGot2 = null;
+      rvCreate = async (p) => { window.__rvGot2 = p; await new Promise(r => { window.__rvDone = r; }); return { ok: true, id: 997 }; };
+      wsReset(); $('wsPo').value = 'PO-A'; ws.looked = 'PO-A'; $('ws_sku').value = 'S25-128GB-NAVY';
+      $('ws_sku').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); 0;`);
+    await sleep(100);
+    await exec(`$('wsPo').value = 'PO-B'; $('wsPo').dispatchEvent(new Event('input', { bubbles: true })); window.__rvDone(); 0;`);
+    await sleep(300);
+    uns = await exec(`[window.__rvGot2 && window.__rvGot2.orderNumber, $('wsPo').value, $('ws_sku').value,
+      JSON.parse(localStorage.getItem('retUnsaved') || '[]').length]`);
+    check('a PO typed during a save is kept; the saved cells clear; nothing lands on the card',
+      uns[0] === 'PO-A' && uns[1] === 'PO-B' && uns[2] === '' && uns[3] === 0, uns);
+    await exec(`rvCreate = window.__rvKeep; wsReset(); localStorage.removeItem('retUnsaved'); renderRetUnsaved(); 0;`);
     // the condition pill opens its 4-pill menu right in the row
     await exec(`$('ws_sku').value = 'S25-128GB-NAVY'; wsRenderCond(); document.querySelector('#wsCond').click(); 0;`);
     await sleep(150);
@@ -839,7 +881,7 @@ module.exports = async function run({ app, win, db, clipboard }) {
     // slot proves newest-first (the due seed must not have re-sorted anything)
     check('queue shows due + qty chips (no Due-today filter), newest on top',
       queueBits[0] === true && queueBits[1] === true && queueBits[2] === true
-        && queueBits[3] === '02-12345-67890' && queueBits[4] === false,
+        && queueBits[3] === '02-12345-67890' && queueBits[4] === true, // the "due by" headline left with the Orders restyle (2026-10-14)
       queueBits);
     check('gutter numbers follow display order: top = count, bottom = 1',
       queueBits[5] === '2' && queueBits[6] === '1',
@@ -1083,6 +1125,16 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('stock_log today summary: count 2, last = the hand-set row',
       shToday['SH-TEST-SKU'] && shToday['SH-TEST-SKU'].count === 2 && shToday['SH-TEST-SKU'].lastReason === 'set' && shToday['SH-TEST-SKU'].lastComputer === 'Office',
       shToday['SH-TEST-SKU']);
+    // channel links made / removed land as MAPPED / UNMAPPED lines (owner 2026-10-23);
+    // dated a month back so the History dialog's last-7-days check never sees them
+    db.logStockChanges([
+      { sku: 'sh-map-sku', createdAt: new Date(Date.now() - 30 * 86400000).toISOString(), delta: 0, reason: 'mapped', changeSource: 'Capture Station mapping', computer: 'Office', data: { channelSku: 'WM-TABA9-64', source: 'WALMART', subSource: 'Walmart US' } },
+      { sku: 'sh-map-sku', createdAt: new Date(Date.now() - 29 * 86400000).toISOString(), delta: 0, reason: 'unmapped', changeSource: 'Capture Station mapping', computer: 'Office', data: { channelSku: 'OLD-EBAY-1', source: 'EBAY', subSource: 'EBAY0' } },
+    ]);
+    res = await exec(`api.stockHistory('sh-map-sku').then(r => r.rows.map(e => shRowHtml(e, false, false)).join('|'))`);
+    check('stock history: MAPPED / UNMAPPED lines name the listing and the channel, no stock move',
+      /MAPPED/.test(res) && /linked to<\/span> <span class="mono">WM-TABA9-64<\/span>/.test(res) && /on Walmart \(Walmart US\)/.test(res)
+        && /UNMAPPED/.test(res) && /no longer linked to<\/span> <span class="mono">OLD-EBAY-1<\/span>/.test(res) && /on eBay/.test(res) && !/sh-edit-btn/.test(res), res);
     res = await exec(`api.stockHistory('sh-test-sku')`);
     check('stock:history IPC returns the rows', res && res.ok === true && res.rows.length === 2 && res.rows[0].sku === 'SH-TEST-SKU', res);
     res = await exec(`api.stockHistoryToday()`);
@@ -1130,18 +1182,19 @@ module.exports = async function run({ app, win, db, clipboard }) {
     res = await exec(`({ on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), range: !$('capHistRange').hidden, importHidden: $('shipImportBtn').hidden,
       dayHeads: document.querySelectorAll('#rowsBody tr.cap-day').length, rows: [...document.querySelectorAll('#rowsBody tr.is-hist')].map(tr => tr.querySelector('.order-num').textContent),
       gutter: document.querySelector('#rowsBody tr.is-hist .cell-gutter').className, items: document.querySelector('#rowsBody tr.is-hist .items-stack').textContent.trim(),
-      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cell-notes').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order').textContent.trim() })`);
-    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time in Notes; the band swaps to the range and the History icon lights up',
+      trk: document.querySelector('#rowsBody tr.is-hist .cell-tracking').textContent.trim(), notes: document.querySelector('#rowsBody tr.is-hist .cap-sub').textContent.trim(), poCell: document.querySelector('#rowsBody tr.is-hist .cell-order .order-num').textContent.trim() })`);
+    // the Notes column left with the Orders restyle (owner 2026-10-14): the processed word, station and note ride under the order number
+    check('Capture history mode: the table shows processed orders by day with a green gutter, items, tracking and the processed time under the order number; the band swaps to the range and the History icon lights up',
       res && res.on === true && res.lit === true && res.range === true && res.importHidden === true
         && res.dayHeads >= 1 && res.rows.includes('HIST-ORDER-1') && /st-synced/.test(res.gutter)
-        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /^Processed \d\d:\d\d/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
+        && /SH-TEST-SKU×2/.test(res.items) && res.trk === 'UPS 1Z999HIST' && /Processed \d\d:\d\d/.test(res.notes) && res.poCell === 'HIST-ORDER-1',
       res);
     // the note on a history row is still editable, through the same dialog, onto the same row
     res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); const b = tr.querySelector('[data-act="note"]'); if (!b) return { btn: false }; b.click(); return { btn: true, open: $('notesDialog').open, title: $('notesTitle').textContent }; })()`);
     check('Capture history mode: the note control renders and opens the notes dialog for that order', res && res.btn === true && res.open === true && /HIST-ORDER-1/.test(res.title), res);
     await exec(`$('notesText').value = 'left at side door'; $('notesForm').requestSubmit();`);
     await new Promise(r => setTimeout(r, 500));
-    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); return { saved: (tr.querySelector('.note-text') || {}).textContent || '', pill: (tr.querySelector('.history-status') || {}).textContent || '' }; })()`);
+    res = await exec(`(() => { const tr = [...document.querySelectorAll('#rowsBody tr.is-hist')].find(t => t.textContent.includes('HIST-ORDER-1')); return { saved: (tr.querySelector('.cap-sub-note') || {}).textContent || '', pill: (tr.querySelector('.history-status') || {}).textContent || '' }; })()`);
     check('Capture history mode: the saved note shows on the history row and the Processed pill is untouched', res && res.saved === 'left at side door' && /^Processed \d\d:\d\d$/.test(res.pill) && db.getRow(histRowId).notes === 'left at side door', res);
     res = await exec(`(() => { $('capHistBtn').click(); return { on: capHist.on, lit: $('capHistBtn').classList.contains('is-on'), importShown: !$('shipImportBtn').hidden, hist: document.querySelectorAll('#rowsBody tr.is-hist').length }; })()`);
     check('Capture history mode: clicking the History icon again restores the live list', res && res.on === false && res.lit === false && res.importShown === true && res.hist === 0, res);
@@ -1325,135 +1378,121 @@ module.exports = async function run({ app, win, db, clipboard }) {
     check('mapping:unlink refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
     res = await exec(`api.unparkOrder('119990000000001')`);
     check('orders:unpark refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.stockSetTitle('sid-1', 'A title')`);
+    check('stock:setTitle refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    for (const [label, call] of [['wmsite:go', `api.wmsiteGo('galaxy tab a9')`], ['walmart:siteSearch', `api.walmartSiteSearch('galaxy tab a9', 1)`], ['walmart:mine', 'api.walmartMine()'], ['walmart:itemDetails', `api.walmartItemDetails('1735902284')`],
+      ['walmart:mapState', `api.walmartMapState(['X'])`], ['walmart:pricing', 'api.walmartPricing()'],
+      ['walmart:pricingSave', `api.walmartPricingSave([{ sku: 'X', strategy: 'S', min: 1, max: 2 }], [])`],
+      ['walmart:saveStrategy', `api.walmartSaveStrategy({ name: 'S' })`], ['walmart:incentives', 'api.walmartIncentives()'], ['walmart:incentiveExtras', 'api.walmartIncentiveExtras()'], ['walmart:productView', `api.walmartProductView('1735902284')`],
+      ['walmart:incentiveEnroll', `api.walmartIncentiveEnroll([{ sku: 'X' }], true)`], ['walmart:wfOpt', `api.walmartWfOpt(['X'], false)`],
+      ['walmart:wfAll', 'api.walmartWfAll(false)']]) {
+      res = await exec(call);
+      check(`${label} refused in capture-only mode`, res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    }
+    res = await exec(`api.walmartSubmit([{ sku: 'X', upc: '887276790801', price: 1, qty: 1, shipLb: 1 }])`);
+    check('walmart:submit refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    {
+      // List on Walmart: the API client's pure builders + parsers
+      const w = require('./walmart.js');
+      const feed = w.buildMatchFeed([{ sku: 'X110-64GB-GRAY', upc: '887276790801', price: 116.989, shipLb: 1.2 }]);
+      const it0 = feed.MPItem[0].Item;
+      check('walmart feed: 4.2 match header, GTIN-14 offer, New, rounded price',
+        feed.MPItemFeedHeader.version === '4.2' && feed.MPItemFeedHeader.sellingChannel === 'mpsetupbymatch'
+          && !('businessUnit' in feed.MPItemFeedHeader) && it0.productIdentifiers.productIdType === 'GTIN'
+          && it0.productIdentifiers.productId === '00887276790801' && it0.price === 116.99
+          && it0.ShippingWeight === 1.2 && it0.condition === 'New' && it0.sku === 'X110-64GB-GRAY', feed);
+      const po = w.buildMatchFeed([{ sku: 'USED-X', upc: '887276790801', price: 89, shipLb: 1, condition: 'Pre-Owned: Good', mainImageUrl: 'https://img/x.jpg' },
+        { sku: 'NEW-X', upc: '887276790801', price: 99, shipLb: 1, condition: 'New', mainImageUrl: 'https://img/x.jpg' }]).MPItem;
+      check('walmart feed: a Pre-Owned offer carries its condition and photo, New carries no photo',
+        po[0].Item.condition === 'Pre-Owned: Good' && po[0].Item.mainImageUrl === 'https://img/x.jpg'
+          && po[1].Item.condition === 'New' && !('mainImageUrl' in po[1].Item)
+          && w.MATCH_CONDITIONS.includes('Pre-Owned: Fair') && !w.MATCH_CONDITIONS.includes('Open Box'), po);
+      check('walmart ids: 12 -> upc, 13 -> ean, 14 -> gtin, 11 widened, junk refused',
+        w.idParam('887276790801').param === 'upc' && w.idParam('8806094912345').param === 'ean'
+          && w.idParam('00887276790801').param === 'gtin' && w.idParam('87276790801').value === '087276790801'
+          && w.idParam('123') === null && w.toGtin14('12') === '', null);
+      const ns = w.normalizeSearch({ items: [{ itemId: 5, title: 'T', brand: 'B', price: { amount: '9.68', currency: 'USD' }, images: [{ url: 'https://i/x.jpg' }], customerRating: '4.7', properties: { numReviews: '198' } }, { itemId: '6', title: 'U' }] });
+      check('walmart search: string price, rating and review count read, missing ones are 0, page URL, {} is no match',
+        ns.length === 2 && ns[0].price === 9.68 && ns[1].price === 0 && ns[0].url === 'https://www.walmart.com/ip/5'
+          && ns[0].rating === 4.7 && ns[0].reviews === 198 && ns[1].rating === 0 && ns[1].reviews === 0
+          && ns[0].image === 'https://i/x.jpg' && w.normalizeSearch({}).length === 0, ns);
+      const st = w.parseFeedStatus({ feedStatus: 'PROCESSED', itemsReceived: 2, itemsSucceeded: 1, itemsFailed: 1,
+        itemDetails: { itemIngestionStatus: [
+          { sku: 'A', ingestionStatus: 'SUCCESS', wpid: 'W1', ingestionErrors: null },
+          { sku: 'B', ingestionStatus: 'DATA_ERROR', wpid: null, ingestionErrors: { ingestionError: [{ type: 'DATA_ERROR', code: 'E1', field: 'price', description: 'too low' }] } },
+        ] } });
+      check('walmart feed status: per-SKU state, readable errors, settled states',
+        st.status === 'PROCESSED' && st.items.A.status === 'SUCCESS' && st.items.B.errors[0] === 'price: too low'
+          && st.counts.failed === 1 && w.isFinal('DATA_ERROR') && w.isFinal('SUCCESS') && !w.isFinal('INPROGRESS'), st);
+      check('walmart errors: JSON error lists read as one line',
+        w.errorText({ errors: { error: [{ code: 'X', description: 'Bad SKU' }] } }, 400) === 'Bad SKU', null);
+      // Walmart tab (owner 2026-10-23): pricing, repricer, incentives, the product page
+      const ins = w.parseInsight({ sku: 'A', itemName: 'Tab', currentPrice: 124.99, buyBoxBasePrice: 119, buyBoxWinRate: '12.5', repricerStrategyName: 'Beat by $1', repricerMinPrice: 120, repricerMaxPrice: 150, competitorPrice: null });
+      check('walmart pricing insights: price, Buy Box, win rate (a percentage string), strategy, min / max',
+        ins.price === 124.99 && ins.bbPrice === 119 && ins.winRate === 12.5 && ins.strategy === 'Beat by $1' && ins.min === 120 && ins.max === 150
+          && ins.competitor === null && w.parseInsight({ sku: 'B', buyBoxWinRate: null }).winRate === null && w.parseInsight({}) === null, ins);
+      const stp = w.parseStrategy({ repricerStrategy: 'Open box 2%', strategyCollectionId: 'c1', enabled: true, assignedCount: 10, strategies: [{ strategyType: 'Buy Box Price', adjustmentType: 'PERCENTAGE', adjustmentValue: 2 }] });
+      const stb = w.buildStrategy({ name: 'Beat by $1', type: 'Buy Box Price', unit: '$', value: 1 });
+      check('walmart repricer strategy: read (name, id, count, % rule) and built (UNIT adjustment, flags off)',
+        stp.id === 'c1' && stp.name === 'Open box 2%' && stp.count === 10 && stp.unit === '%' && stp.value === 2
+          && stb.repricerStrategy === 'Beat by $1' && stb.strategies[0].strategyType === 'Buy Box Price' && stb.strategies[0].adjustmentType === 'UNIT'
+          && stb.strategies[0].adjustmentValue === 1 && stb.enableRepricerForPromotion === false, { stp, stb });
+      const rf = w.buildRepricerFeed([{ sku: 'A', strategy: 'Beat by $1', min: 99.999, max: 150 }, { sku: 'B', strategy: '' }]);
+      check('walmart repricer feed: items by strategy NAME with min / max; no strategy = the reserved take-out name',
+        rf.ItemFeedHeader.sellingChannel === 'repricerstrategy' && rf.Item[0].Strategy.repricerStrategy === 'Beat by $1'
+          && rf.Item[0].Strategy.minimumSellerAllowedPrice === 100 && rf.Item[0].Strategy.maximumSellerAllowedPrice === 150
+          && rf.Item[1].Strategy.repricerStrategy === w.NO_STRATEGY && !('minimumSellerAllowedPrice' in rf.Item[1].Strategy), rf);
+      const inc = w.parseIncentive({ skuId: 'S1', itemId: 649861121, productName: 'P', currentPrice: 20.5, targetPrice: 20, baseReferralFee: 8, reducedReferralFee: 7, incentiveType: 'REDUCED_REFERRAL', incentiveStatus: 'NEW', inventoryCount: '200', expirationDate: '1660805999000', incentiveId: 'i1', productUrl: 'https://www.walmart.com/ip/649861121' });
+      const offers = w.parseOffers([
+        JSON.stringify({ '@type': 'Product', offers: { price: 119, seller: { name: 'Walmart.com' } } }),
+        JSON.stringify({ props: { pageProps: { initialData: { data: { product: { usItemId: '1735902284', priceInfo: { currentPrice: { price: 119 } }, sellerDisplayName: 'Walmart.com', conditionV2: { name: 'New' }, shippingOption: { shipPrice: { price: 0 } }, deliveryDate: 'Tue, Oct 28',
+          allOffers: [{ sellerDisplayName: 'Gadget Outlet', priceInfo: { currentPrice: { priceString: '$89.00' } }, conditionV2: { name: 'Pre-Owned: Good' }, shippingOption: { shipPrice: { price: 5.99 } } }] },
+          similarItems: [{ usItemId: '9999999999', priceInfo: { currentPrice: { price: 12.99 } }, sellerName: 'CaseCo' }] } } } } }),
+      ], '1735902284');
+      check('walmart product view: every seller offer read by shape, ld+json copy folded in, other items skipped',
+        offers.length === 2 && offers[0].seller === 'Walmart.com' && offers[0].condition === 'New' && offers[0].ship === 0 && offers[0].arrives === 'Tue, Oct 28'
+          && offers[1].price === 89 && offers[1].condition === 'Pre-Owned: Good' && offers[1].ship === 5.99, offers);
+      const soonMs = Date.now() + 3 * 86400000;
+      const vpage = JSON.stringify({ product: { usItemId: '20944924919', priceInfo: { currentPrice: { price: 209.99 } }, sellerDisplayName: 'HotDeals', conditionV2: { code: 1 }, deliveryDate: '+058781-05-04T01:35:57.000-04:00',
+        variantCriteria: [{ name: 'Color', variantList: [{ name: 'Gray', id: 'c-gray', products: ['20944924919', '20944924920'] }, { name: 'Silver', id: 'c-silver', products: ['30000000001'] }] }, { name: 'Capacity', variantList: [{ name: '64 GB', id: 'k-64', products: ['20944924919', '30000000001'] }, { name: '128 GB', id: 'k-128', products: ['20944924920'] }] }],
+        variantsMap: { 20944924919: { usItemId: '20944924919', variants: ['c-gray', 'k-64'], priceInfo: { currentPrice: { price: 209.99 } }, availabilityStatus: 'IN_STOCK' }, 20944924920: { usItemId: '20944924920', variants: ['c-gray', 'k-128'], priceInfo: { currentPrice: { price: 259 } }, deliveryDate: String(soonMs) }, 30000000001: { variants: ['c-silver', 'k-64'], availabilityStatus: 'OUT_OF_STOCK' } } },
+        other: { sellerName: 'Other', priceInfo: { currentPrice: { price: 215 } }, deliveryDate: String(soonMs) } });
+      const vo = w.parseOffers([vpage], '20944924919');
+      const vv = w.parseVariants([vpage], '20944924919');
+      check('walmart product view: condition code 1 reads New, a junk arrival date is dropped, a real one reads as a day, other versions listed with price and stock',
+        vo[0].condition === 'New' && vo[0].arrives === '' && /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}$/.test(vo[1].arrives)
+          && vv.length === 3 && vv[0].current && vv[0].labels.join('/') === 'Gray/64 GB' && vv[1].price === 259 && vv[2].itemId === '30000000001' && vv[2].inStock === false, { vo, vv });
+      const rep = w.parseRepricerReport(require('./shipfile.js').parseCsv('\uFEFFSKU,Product Name,Repricer Strategy,Minimum Seller Allowed Price,Maximum Seller Allowed Price,Repricer Status\nX230-A,"Tab, gray",IMRAN BUY BOX,199.00,289.00,Active\nX230-B,Tab,,,,\n'.replace(/^\uFEFF/, '')));
+      const vs = w.parseVariantSet([vpage], '20944924919');
+      check('walmart pricing: the Item report gives each SKU its strategy and min / max; versions come back as Walmart\'s axes',
+        JSON.stringify(rep) === JSON.stringify({ 'X230-A': { strategy: 'IMRAN BUY BOX', min: 199, max: 289, status: 'Active' } })
+          && vs.axes.map(a => `${a.name}:${a.values.join('/')}`).join(' ') === 'Color:Gray/Silver Capacity:64 GB/128 GB' && vs.list[2].dims.join('/') === 'Silver/64 GB', { rep, vs });
+      const sales = w.addOrderSales({}, [
+        { orderLines: { orderLine: [
+          { item: { sku: 'x230-a' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 224.8 } }, { chargeType: 'SHIPPING', chargeAmount: { amount: 5 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Shipped' }] } },
+          { item: { sku: 'X230-A' }, orderLineQuantity: { amount: '1' }, charges: { charge: [{ chargeType: 'PRODUCT', chargeAmount: { amount: 259 } }] }, orderLineStatuses: { orderLineStatus: [{ status: 'Cancelled' }] } },
+        ] } },
+        { orderLines: { orderLine: { item: { sku: 'X230-A' }, orderLineQuantity: { amount: '2' }, charges: { charge: { chargeType: 'PRODUCT', chargeAmount: { amount: 449.6 } } } } } },
+      ]);
+      check('walmart incentives: 90-day sales add PRODUCT charges per SKU, skip cancelled lines and shipping',
+        JSON.stringify(sales) === JSON.stringify({ 'X230-A': { gmv: 674.4, units: 3 } }), sales);
+      const ef = w.buildIncentiveFeed([{ sku: 'S1', incentiveId: 'i1' }], true);
+      const wf = w.buildWalmartFundedFeed(['S1'], false);
+      check('walmart incentives: skuId read, epoch-ms dates as days, enroll Y with the incentive id, Walmart-funded Opt-out',
+        inc.sku === 'S1' && inc.itemId === '649861121' && inc.target === 20 && inc.reducedFee === 7 && inc.stock === 200 && /^2022-08-1[78]$/.test(inc.expires)
+          && ef.ProgramActionFeedHeader.feedType === 'INCENTIVE_ENROLLMENT' && ef.ProgramAction[0].Programs.IncentivesEnrollment.referralFeeIncentiveEnrollment === 'Y'
+          && ef.ProgramAction[0].Programs.IncentivesEnrollment.incentiveId === 'i1'
+          && wf.ProgramAction[0].Programs.WalmartFundedIncentivesEnrollment.walmartFundedIncentivesEnrollment === 'Opt-out', { inc, ef, wf });
+      const pg = w.parseProductPage({ json: ['{"@type":"Product","brand":{"@type":"Brand","name":"SAMSUNG"},"aggregateRating":{"ratingValue":"4.6","reviewCount":"2341"}}', '{"product":{"currentPrice":{"price":119,"priceString":"$119.00"},"sellerDisplayName":"Walmart.com","additionalOfferCount":13}}'], body: 'More seller options (13)', title: 'Galaxy Tab A9', image: 'https://i5.walmartimages.com/x.jpg' });
+      check('walmart product page: sellers, Buy Box holder, price, rating, brand; nothing found = unknown, not 0',
+        pg.sellers === 14 && pg.buyBoxSeller === 'Walmart.com' && pg.price === 119 && pg.rating === 4.6 && pg.reviews === 2341 && pg.brand === 'SAMSUNG'
+          && w.parseProductPage({}).sellers === null && w.parseProductPage({}).rating === null, pg);
+      const is = w.parseItemStatus({ ItemResponse: [{ sku: 'A', publishedStatus: 'UNPUBLISHED', lifecycleStatus: 'ACTIVE', unpublishedReasons: { reason: ['No price was found for this listing.'] } }], totalItems: 1 });
+      check('walmart item status: published / unpublished with Walmart\'s reasons',
+        is.published === 'UNPUBLISHED' && is.reasons[0] === 'No price was found for this listing.' && w.parseItemStatus({ publishedStatus: 'PUBLISHED' }).published === 'PUBLISHED', is);
+      check('walmart errors: the repricer\'s errorMessage reads as the error', w.errorText({ status: 'BAD_REQUEST', errorMessage: 'Error(s) : Strategy name is duplicate' }, 400) === 'Error(s) : Strategy name is duplicate', null);
+    }
 
-    // 43. eBay lister: refusals + the pure CSV/description builders
-    res = await exec(`api.ebaySpecs('X133-64GB-GRAY')`);
-    check('ebay:specs refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.ebayExport({ sku: 'X' }, [])`);
-    check('ebay:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    res = await exec(`api.temuExport([{ sku: 'X' }])`);
-    check('temu:export refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
-    {
-      const ecsv = require('./ebaycsv.js');
-      const desc = ecsv.buildDescription({ title: 'Tab A9+', cond: 'used', specs: { Brand: 'Samsung', 'Screen Size': '8.7 in' } });
-      check('ebay description: store template + condition block + spec rows',
-        desc.includes('WIRELESS') && desc.includes('USED') && desc.includes('8.7 in')
-          && desc.includes('#2361EB') && desc.includes('Wall charger not included'), desc.length);
-      const scrapDesc = ecsv.buildDescription({ title: 'T', cond: 'scrap', specs: {} });
-      check('ebay description: scrap block, no charger line',
-        scrapDesc.includes('FOR PARTS OR REPAIR') && scrapDesc.includes('sold as-is') && !scrapDesc.includes('Wall charger'), null);
-      const csv1 = ecsv.buildEbayCsv([{
-        sku: 'USED-X133-64GB-GRAY', categoryId: '171485', title: 'Tab, "quoted"', cond: 'used',
-        specs: { Brand: 'Samsung', Model: 'X133' }, picUrls: ['http://a/1.jpg', 'http://a/2.jpg'],
-        description: '<d>', price: '99.99', qty: 2,
-      }], { shipping: 'Ship1', returns: 'Ret1', payment: 'Pay1', location: 'Brooklyn, NY', dispatchDays: 1 });
-      const l1 = csv1.trim().split('\n');
-      check('ebay csv: header carries C: columns + profile columns',
-        l1[0].includes('C:Brand') && l1[0].includes('C:Model') && l1[0].includes('ShippingProfileName'), l1[0]);
-      check('ebay csv: row has condition id, piped pics, quoted title, profiles',
-        l1.length === 2 && l1[1].includes(',3000,') && l1[1].includes('http://a/1.jpg|http://a/2.jpg')
-          && l1[1].includes('"Tab, ""quoted"""') && l1[1].includes('Ship1') && l1[1].includes('FixedPrice'), l1[1]);
-      const csv2 = ecsv.buildEbayCsv([{
-        sku: 'USED-S26-ULTRA', categoryId: '9355', title: 'S26 Ultra', cond: 'used',
-        specs: { Brand: 'Samsung', 'Storage Capacity': '512GB', Color: 'Black' }, picUrls: [], description: 'd', price: '899.99', qty: 2,
-        variations: [
-          { sku: 'USED-S26-ULTRA-512GB-BLACK', storage: '512GB', color: 'Black', price: '899.99', qty: 2 },
-          { sku: 'USED-S26-ULTRA-256GB-GRAY', details: 'Storage=256GB;Color=Gray', price: '799.99', qty: 1 }, // old-style payload still reads
-        ],
-      }], {});
-      const l2 = csv2.trim().split('\n');
-      check('ebay csv: variation listing = parent + child rows with own SKUs',
-        l2.length === 4 && !l2[1].includes('Variation')
-          && l2[2].includes('USED-S26-ULTRA-512GB-BLACK') && l2[2].includes('Variation') && l2[2].includes('Storage Capacity=512GB|Color=Black')
-          && l2[3].includes('Storage Capacity=256GB|Color=Gray') && l2[3].includes('799.99'), l2.length);
-      // eBay's upload syntax: the parent lists every value per specific, pipe
-      // between specifics — and a varying specific never doubles as an item
-      // specific on the parent (the rejected 2026-09-28 upload)
-      check('ebay csv: parent row carries all variation values, no clashing item specifics',
-        l2[1].includes('Storage Capacity=512GB;256GB|Color=Black;Gray') && l2[1].includes(',Samsung,,,'), l2[1]);
-      const parsed = ecsv.parseEbayPage(`<meta property="og:title" content="Samsung Tab A9+ | eBay">
-        {"categoryId":"171485","price":"119.99"}
-        <div class="ux-labels-values__labels"><span>Brand</span></div><div class="ux-labels-values__values"><span>Samsung</span></div>
-        <div class="ux-labels-values__labels"><span>Screen Size</span></div><div class="ux-labels-values__values"><span>8.7 in</span></div>`);
-      check('ebay page parser: title, category, price, specifics',
-        parsed.title === 'Samsung Tab A9+' && parsed.categoryId === '171485' && parsed.price === 119.99
-          && parsed.specs.Brand === 'Samsung' && parsed.specs['Screen Size'] === '8.7 in', parsed);
-    }
-    {
-      // Temu workbook writer: pure pieces + a zip round-trip
-      const tx = require('./temuxlsx.js');
-      check('temu color map: nearest allowed color',
-        tx.temuColorFor('GRAPHITE') === 'Black' && tx.temuColorFor('Silver Shadow') === 'White'
-          && tx.temuColorFor('ICY-BLUE') === 'Blue' && tx.temuColorFor('unknowncolor') === 'Black', null);
-      check('temu column letters', tx._internal.colLetter(0) === 'A' && tx._internal.colLetter(27) === 'AB'
-        && tx._internal.colLetter(302) === 'KQ', tx._internal.colLetter(302));
-      const cols = [
-        { idx: 0, name: 'Category', key: 't_1_Category' },
-        { idx: 1, name: 'Product Name', key: 't_1_Product Name' },
-        { idx: 2, name: 'Contribution Goods', key: 't_1_Contribution Goods' },
-        { idx: 3, name: 'Contribution SKU', key: 't_1_Contribution SKU' },
-        { idx: 4, name: '318 - Operating System', key: 't_3_Property:318' },
-        { idx: 5, name: 'Variation Theme', key: 't_4_Variation Theme' },
-        { idx: 6, name: 'RAM+ROM', key: 't_4_Sale Property:75557797' },
-        { idx: 7, name: 'Color', key: 't_4_Sale Property:1001' },
-        { idx: 8, name: 'Quantity', key: 't_4_Custom Spec:15998553' }, // the theme axis DECOY
-        { idx: 9, name: 'SKU Images URL', key: 't_6_SKU Images URL' },
-        { idx: 10, name: 'Quantity', key: 't_6_Quantity' },
-        { idx: 11, name: 'Base Price - USD', key: 't_6_Base Price - USD' },
-        { idx: 12, name: 'California Proposition 65 Warning Type', key: 't_8_Governance Property:1000000001' },
-      ];
-      const rows = tx.buildRows(cols, [{
-        category: '24388', name: 'Phone', variationTheme: 'Color × RAM+ROM',
-        specs: { 318: 'Android' },
-        variations: [{ sku: 'R640-BLACK-US', goods: 'R640-BLACK-US', color: 'Black', ramrom: '8GB+256GB', qty: '9', base: '99.99', images: ['http://i/1.jpg'] }],
-      }], {});
-      const r0 = rows[0];
-      check('temu rows: right columns, decoy Quantity untouched, prop65 by name',
-        rows.length === 1 && r0.get(0) === '24388' && r0.get(4) === 'Android' && r0.get(6) === '8GB+256GB'
-          && r0.get(7) === 'Black' && !r0.has(8) && r0.get(10) === '9' && r0.get(12) === 'No Warning Applicable', [...r0.entries()]);
-      // zip round-trip: store-method fixture -> rebuild with a replacement -> re-read
-      const mkEntry = (name, body) => {
-        const nb = Buffer.from(name), db = Buffer.from(body);
-        const lh = Buffer.alloc(30);
-        lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0, 6); lh.writeUInt16LE(0, 8);
-        lh.writeUInt32LE(tx._internal.crc32(db), 14); lh.writeUInt32LE(db.length, 18); lh.writeUInt32LE(db.length, 22);
-        lh.writeUInt16LE(nb.length, 26);
-        return { nb, db, lh };
-      };
-      const ents = [mkEntry('a.xml', '<a>1</a>'), mkEntry('b.xml', '<b>2</b>')];
-      const chunks = []; const cds = []; let zoff = 0;
-      for (const e of ents) {
-        chunks.push(e.lh, e.nb, e.db);
-        const cdh = Buffer.alloc(46);
-        cdh.writeUInt32LE(0x02014b50, 0); cdh.writeUInt16LE(0, 10);
-        cdh.writeUInt32LE(tx._internal.crc32(e.db), 16); cdh.writeUInt32LE(e.db.length, 20); cdh.writeUInt32LE(e.db.length, 24);
-        cdh.writeUInt16LE(e.nb.length, 28); cdh.writeUInt32LE(zoff, 42);
-        cds.push(cdh, e.nb);
-        zoff += 30 + e.nb.length + e.db.length;
-      }
-      const cdBuf = Buffer.concat(cds);
-      const eo = Buffer.alloc(22);
-      eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(2, 8); eo.writeUInt16LE(2, 10);
-      eo.writeUInt32LE(cdBuf.length, 12); eo.writeUInt32LE(zoff, 16);
-      const fixture = Buffer.concat([...chunks, cdBuf, eo]);
-      const rebuilt = tx._internal.rebuildZip(fixture, new Map([['b.xml', '<b>CHANGED</b>']]));
-      const re = tx._internal.zipEntries(rebuilt);
-      check('temu zip rebuild: untouched part identical, replaced part swapped',
-        tx._internal.zipReadText(rebuilt, re, 'a.xml') === '<a>1</a>'
-          && tx._internal.zipReadText(rebuilt, re, 'b.xml') === '<b>CHANGED</b>', re.map(e => e.name));
-      // real-template smoke: only on machines that have the download
-      const tpl = path.join(require('os').homedir(), 'Downloads', 'TEMU_CELL-PHONES_TABLETS.xlsx');
-      if (fs.existsSync(tpl)) {
-        const out = tx.fillWorkbook(tpl, [{
-          category: '4080', name: 'Smoke tablet', variationTheme: 'RAM+ROM × Color', specs: { 318: 'Android' },
-          variations: [{ sku: 'SMOKE-1', goods: 'SMOKE-1', color: 'Black', ramrom: '4GB+64GB', qty: '1', base: '1.00', list: '2.00', weightLb: '1', lenIn: '1', widIn: '1', heiIn: '1', images: [] }],
-        }], {});
-        const oe = tx._internal.zipEntries(out);
-        const sheet = tx._internal.zipReadText(out, oe, tx.readTemplate(tpl).sheetPath);
-        check('temu real template: row 5 filled, token row untouched',
-          sheet.includes('SMOKE-1') && sheet.includes('prohibit any operation'), out.length);
-      }
-    }
     const prevLookup2 = await exec('recvLookup');
     await exec(`
       chmap.local = true;
@@ -1784,31 +1823,8 @@ module.exports = async function run({ app, win, db, clipboard }) {
       await crun.close();
     }
 
-    // 44. eBay lister QR capture: the /lup + /lphoto listing routes
+    // 44. claim photos: EXIF orientation parser
     {
-      const claims = require('./claims.js');
-      const cpath = require('path');
-      const ldir = cpath.join(app.getPath('userData'), 'listing-photos-test');
-      const lrun = await claims.start({
-        dir: cpath.join(app.getPath('userData'), 'claim-photos-test2'),
-        listingDir: ldir, port: 0,
-      });
-      const lbase = `http://127.0.0.1:${lrun.port}`;
-      const jpeg2 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0)]);
-      let lres = await fetch(`${lbase}/lup?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`);
-      check('listing photos: phone page carries the draft SKU',
-        lres.status === 200 && (await lres.text()).includes('OPEN-BOX-TEST-64GB-GRAY'), lres.status);
-      lres = await fetch(`${lbase}/lphoto?t=WRONG&sku=X`, { method: 'POST', body: jpeg2 });
-      check('listing photos: bad token rejected', lres.status === 403, lres.status);
-      const lup = await (await fetch(`${lbase}/lphoto?t=${lrun.token}&sku=OPEN-BOX-TEST-64GB-GRAY`, { method: 'POST', body: jpeg2 })).json();
-      check('listing photos: file lands in the per-SKU folder',
-        lup.ok && /^OPEN-BOX-TEST-64GB-GRAY_1\.(png|jpg)$/.test(lup.name)
-          && fs.existsSync(cpath.join(ldir, 'OPEN-BOX-TEST-64GB-GRAY', lup.name)), lup);
-      const lurl = lrun.listingUrl('OPEN-BOX-TEST-64GB-GRAY');
-      check('listing photos: QR url carries route, token and sku',
-        lurl.includes('/lup?t=') && lurl.includes('sku=OPEN-BOX-TEST-64GB-GRAY'), lurl);
-      await lrun.close();
-
       // EXIF orientation parser: a handcrafted JPEG APP1 with Orientation=6
       const exif = Buffer.concat([
         Buffer.from([0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x20]),
@@ -1822,6 +1838,468 @@ module.exports = async function run({ app, win, db, clipboard }) {
       check('claims: EXIF orientation tag parsed (sideways phone photos)',
         claimsT.jpegOrientation(exif) === 6 && claimsT.jpegOrientation(Buffer.from([0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x04, 0, 0])) === 1,
         claimsT.jpegOrientation(exif));
+    }
+
+    // 40. Recovery (2026-10-11): the §11 fixture through parse -> reconcile ->
+    // classify -> store -> tracker on a throwaway db (src/main/recovery/selftest.js),
+    // then the Electron skin: capture-only refuses, the tab is opt-in and off
+    await require('./recovery/selftest')(check);
+    res = await exec('api.recoveryState()');
+    check('recovery:state refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    res = await exec(`api.recoveryImport('x.csv', 'a,b', false)`);
+    check('recovery:import refused in capture-only mode', res && res.ok === false && /capture-only/i.test(res.error || ''), res);
+    const rcUi = await exec(`[$('tabRecovery').hidden, !!$('recoveryPage'), $('recoveryPage').hidden, typeof enterRecovery, !!$('setPageRecovery'), !!$('setRcEmail'), !!$('setRcWebhook')]`);
+    check('recovery: tab hidden until ticked, page section present, settings fields present',
+      rcUi[0] === true && rcUi[1] === true && rcUi[2] === true && rcUi[3] === 'function' && rcUi[4] && rcUi[5] && rcUi[6], rcUi);
+    const rcCfg = await exec('api.getConfig()');
+    check('recovery: config defaults — page off, email and webhook empty',
+      rcCfg && rcCfg.pages && rcCfg.pages.recovery === false && rcCfg.recovery && rcCfg.recovery.email === '' && rcCfg.recovery.webhookUrl === '', rcCfg && rcCfg.recovery);
+    check('recovery: PO# menu — Walmart transaction link template carries {po}',
+      rcCfg && rcCfg.txnUrlTemplates && /^https:\/\/seller\.walmart\.com\/.*\{po\}/.test(rcCfg.txnUrlTemplates.walmart), rcCfg && rcCfg.txnUrlTemplates);
+    const rcTables = db.open().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'wm_%' ORDER BY name").all().map(r => r.name);
+    check('recovery: schema tables created', JSON.stringify(rcTables) === JSON.stringify(['wm_expenses', 'wm_items', 'wm_ledger', 'wm_lines', 'wm_marks', 'wm_orders', 'wm_payouts', 'wm_refunds', 'wm_runs', 'wm_tombstones']), rcTables);
+    // Ship tab (owner 2026-10-19): UPS labels against a fake UPS — both
+    // accounts rated side by side, a return label bought, listed, voided
+    {
+      const http = require('node:http');
+      const upsMod = require('./ups');
+      const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.from([0x78, 0x05, 0x20, 0x03]), Buffer.alloc(20)]).toString('base64');
+      const upsSeen = [];
+      const fake = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => {
+          upsSeen.push({ url: req.url, method: req.method, body });
+          res.setHeader('Content-Type', 'application/json');
+          if (req.url === '/security/v1/oauth/token') {
+            const id = Buffer.from(String(req.headers.authorization || '').replace(/^Basic /, ''), 'base64').toString();
+            return res.end(JSON.stringify({ access_token: `TOK-${id.split(':')[0]}`, expires_in: '3600' }));
+          }
+          const b = String(req.headers.authorization || '').endsWith('-B'); // the second account
+          if (req.url.startsWith('/api/rating/')) {
+            return res.end(JSON.stringify({ RateResponse: { RatedShipment: [
+              { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '15.00' }, NegotiatedRateCharges: { TotalCharge: { MonetaryValue: b ? '9.10' : '10.40' } } },
+              { Service: { Code: '02' }, TotalCharges: { MonetaryValue: b ? '24.00' : '23.50' } },
+              // UPS can answer a service twice (a dearer Saturday-delivery Ground)
+              { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '19.00' }, NegotiatedRateCharges: { TotalCharge: { MonetaryValue: b ? '13.10' : '14.40' } } },
+            ] } }));
+          }
+          if (req.url.endsWith('/ship')) {
+            return res.end(JSON.stringify({ ShipmentResponse: { ShipmentResults: {
+              ShipmentIdentificationNumber: '1ZE2E0000000000001',
+              NegotiatedRateCharges: { TotalCharge: { MonetaryValue: '9.10' } },
+              PackageResults: [{ TrackingNumber: '1ZE2E0000000000001', ShippingLabel: { GraphicImage: gif } }],
+            } } }));
+          }
+          if (req.url.includes('/void/cancel/')) return res.end(JSON.stringify({ VoidShipmentResponse: { SummaryResult: { Status: { Code: '1' } } } }));
+          // the fake Walmart (Ship with Walmart) on the same server
+          if (req.url === '/v3/token') return res.end(JSON.stringify({ access_token: 'WMTOK', expires_in: 900 }));
+          if (req.url.startsWith('/v3/orders/')) return res.end(JSON.stringify({ order: { purchaseOrderId: '108829451230774',
+            orderDate: new Date(2026, 9, 20, 9).getTime(), shippingInfo: { estimatedDeliveryDate: new Date(2026, 9, 22, 14).getTime(), estimatedShipDate: new Date(2026, 9, 20, 18).getTime(), postalAddress: { name: 'Maria Delgado', address1: '4120 W Belmont Ave', city: 'Chicago', state: 'IL', postalCode: '60641' } },
+            orderLines: { orderLine: [{ lineNumber: '1', item: { sku: 'WM-X133', productName: 'Galaxy' }, orderLineQuantity: { amount: '1' } }] } } }));
+          if (req.url === '/v3/shipping/labels/shipping-estimates') return res.end(JSON.stringify({ data: { estimates: [
+            { name: 'USPS_GROUND_ADVANTAGE', displayName: 'USPS Ground Advantage', carrierName: 'USPS', estimatedRate: { amount: 5.5 } },
+            { name: 'UPS_GROUND', displayName: 'UPS Ground', carrierName: 'UPS', estimatedRate: { amount: 8.4 }, deliveryDate: '2026-10-23T23:59:00Z' },
+            { name: 'FEDEX_2_DAY', displayName: 'FedEx 2Day', carrierName: 'FedEx', estimatedRate: { amount: 11.8 } } ] } }));
+          if (req.url === '/v3/shipping/labels' && req.method === 'POST') return res.end(JSON.stringify({ data: { trackingNo: '1Z9WM0000000000077', carrierName: 'UPS', carrierServiceType: 'UPS Ground' } }));
+          if (req.url === '/v3/shipping/labels/carriers') return res.end(JSON.stringify([{ carrierId: '1000', shortName: 'FedEx', carrierName: 'FedEx' }, { carrierId: '1001', shortName: 'USPS', carrierName: 'USPS' }]));
+          if (req.url.startsWith('/v3/shipping/labels/carriers/')) {
+            if (req.method === 'DELETE') return res.end(JSON.stringify({ data: 'true' }));
+            res.setHeader('Content-Type', 'image/png');
+            return res.end(Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 4, 176, 0, 0, 7, 8]), Buffer.alloc(200)]));
+          }
+          res.statusCode = 404; res.end('{}');
+        });
+      });
+      await new Promise(r => fake.listen(0, '127.0.0.1', r));
+      upsMod.UpsClient.testHost = `http://127.0.0.1:${fake.address().port}`;
+      try {
+        check('ship: tab hidden until ticked', await exec(`document.getElementById('tabShip').hidden`) === true);
+        const addr = (company, line2) => ({ company, name: 'Shipping', phone: '201-555-0100', line1: '100 Commerce Dr', line2, city: 'Fairfield', state: 'NJ', zip: '07004' });
+        await exec(`api.setConfig(${JSON.stringify({
+          captureOnly: false,
+          pages: { ship: true },
+          ups: {
+            accounts: [
+              { id: 'a', name: 'Digital World Shop', accountNumber: 'aaa111', clientId: 'ID-A', clientSecret: 'S-A' },
+              { id: 'b', name: 'Company Two', accountNumber: 'bbb222', clientId: 'ID-B', clientSecret: 'S-B' },
+            ],
+            shipFrom: addr('Digital World Shop', ''),
+            returnTo: addr('DWS Returns', 'Dock 2'),
+          },
+        })}).then(() => refresh())`);
+        await sleep(300);
+        check('ship: tab shows once ticked', await exec(`document.getElementById('tabShip').hidden`) === false);
+        const info = await exec('api.shipInfo()');
+        check('ship: both accounts ready, addresses complete',
+          info.ok && info.accounts.length === 2 && info.accounts.every(a => a.ready) && !info.shipFromProblem && !info.returnToProblem, info);
+        // saved keys never come back to the window, and a save without them keeps them
+        let pub = await exec('api.getConfig()');
+        check('keys: config read carries no UPS keys, only saved flags',
+          pub.ups.accounts.every(a => a.clientId === '' && a.clientSecret === '' && a.hasClientId && a.hasClientSecret), pub.ups.accounts);
+        await exec(`api.setConfig({ ups: { accounts: [{ id: 'a', name: 'Digital World Shop', accountNumber: 'aaa111', clientId: '', clientSecret: '' }, { id: 'b', name: 'Company Two', accountNumber: 'bbb222' }] }, linnworks: { applicationSecret: 'LW-SECRET', token: 'LW-TOKEN' } })`);
+        const kept = (await exec('api.shipInfo()')).accounts.every(a => a.ready);
+        const back = await exec(`api.setConfig({ linnworks: { applicationSecret: '', token: '' } })`);
+        pub = await exec('api.getConfig()');
+        check('keys: a save without keys keeps them; Linnworks keys stay hidden too',
+          kept && pub.linnworks.applicationSecret === '' && pub.linnworks.token === '' && pub.linnworks.hasApplicationSecret && pub.linnworks.hasToken
+            && back.linnworks.token === '' && !JSON.stringify(pub).includes('LW-SECRET') && !JSON.stringify(pub).includes('S-A'), pub.linnworks);
+        const shown = await exec(`(async () => { await openSettings(); const r = { inputHidden: $('setUpsSecret0').hidden, saved: !$('setUpsSecret0').nextElementSibling.hidden && /Saved/.test($('setUpsSecret0').nextElementSibling.textContent), value: $('setUpsSecret0').value, lw: $('setToken').hidden }; $('settingsDialog').close(); return r; })()`);
+        check('keys: Settings shows "Saved" instead of the key', shown.inputHidden && shown.saved && shown.value === '' && shown.lw, shown);
+        const cust = { name: 'Maria Delgado', line1: '4120 W Belmont Ave', line2: 'Apt 2', city: 'Chicago', state: 'IL', zip: '60641' };
+        let r = await exec(`api.shipRates(${JSON.stringify({ kind: 'ship', party: { ...cust, zip: '606' }, pkg: { weight: 1 } })})`);
+        check('ship: a bad ZIP is caught before UPS is asked', !r.ok && /zip/i.test(r.error), r);
+        r = await exec(`api.shipRates(${JSON.stringify({ kind: 'ship', party: cust, pkg: { weight: 0 } })})`);
+        check('ship: no weight, no rates', !r.ok && /weight/i.test(r.error), r);
+        r = await exec(`api.shipRates(${JSON.stringify({ kind: 'return', party: cust, pkg: { weight: 1.1, length: 8, width: 6, height: 4 }, value: 189.99 })})`);
+        const ra = r.ok && r.accounts.find(a => a.id === 'a');
+        const rb = r.ok && r.accounts.find(a => a.id === 'b');
+        check('ship: both accounts rated side by side (negotiated price wins)',
+          ra && rb && ra.ok && rb.ok && ra.rates[0].price === 10.4 && rb.rates[0].price === 9.1 && rb.rates[0].code === '03', r);
+        check('ship: a service UPS answers twice shows once, at its standard price',
+          ra && rb && ra.rates.filter(x => x.code === '03').length === 1 && rb.rates.filter(x => x.code === '03').length === 1 && ra.rates.length === 2, ra && ra.rates);
+        const rateBody = JSON.parse(upsSeen.filter(x => x.url.startsWith('/api/rating/')).pop().body).RateRequest.Shipment;
+        check('ship: a return is rated from the customer to our return address',
+          rateBody.ShipFrom.Name === 'Maria Delgado' && rateBody.ShipTo.Name === 'DWS Returns', rateBody.ShipTo);
+        const made = await exec(`api.shipCreate(${JSON.stringify({
+          accountId: 'b', serviceCode: '03', kind: 'return', party: cust, pkg: { weight: 1.1 }, value: 189.99,
+          reference: '108829451230774', fromPo: true, source: 'WALMART', description: 'Return X133-128GB-GRAY',
+        })})`);
+        check('ship: return label bought on the second account',
+          made.ok && made.label.tracking === '1ZE2E0000000000001' && made.label.kind === 'return' && made.label.account_name === 'Company Two'
+            && made.label.cost === 9.1 && made.gif === gif && made.size && made.size.width === 1400, made.ok ? made.label : made);
+        const shipBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
+        check('ship: the PO# is Ref 1, PRL return service, value declared, no product on the label',
+          shipBody.Package[0].ReferenceNumber[0].Value === '108829451230774' && shipBody.ReturnService.Code === '9'
+            && shipBody.Package[0].Description === 'Merchandise return' && shipBody.Description === 'Merchandise return'
+            && !JSON.stringify(shipBody).includes('X133')
+            && shipBody.Package[0].PackageServiceOptions.DeclaredValue.MonetaryValue === '189.99' && shipBody.Shipper.ShipperNumber === 'BBB222', shipBody);
+        const typed = await exec(`api.shipCreate(${JSON.stringify({
+          accountId: 'a', serviceCode: '02', kind: 'ship', party: { ...cust, company: 'TechHub' }, pkg: { weight: 6 }, value: 0,
+          reference: 'INV-2304', reference2: 'RMA-77', fromPo: false, saveAddress: true,
+        })})`);
+        const typedBody = JSON.parse(upsSeen.filter(x => x.url.endsWith('/ship')).pop().body).ShipmentRequest.Shipment;
+        const mk = await exec(`(async () => {
+          $('spMkt').value = 'eBay'; $('spMkt').dispatchEvent(new Event('change'));
+          const out = { picked: sp.mkt, dot: $('spMktDot').className };
+          sp.log = [{ id: 9001, created_at: new Date().toISOString(), kind: 'ship', reference: 'X-1', from_po: 1, source: 'TEMU', service_name: 'UPS Ground', account_name: 'A', tracking: '1ZX', value: 0, cost: 1 }];
+          spRenderLog(); out.tag = (document.querySelector('#spLogBody tr[data-id="9001"] .sp-mk') || {}).textContent || '';
+          spSetMkt(''); await spLoadLog();
+          return out; })()`);
+        check('ship: the Marketplace dropdown picks Walmart / eBay / Temu, and the list tags each label', mk.picked === 'eBay' && /is-ebay/.test(mk.dot) && mk.tag === 'Temu', mk);
+        check('ship: an optional Reference #2 prints under Ref 1', JSON.stringify(typedBody.Package[0].ReferenceNumber) === JSON.stringify([{ Value: 'INV-2304' }, { Value: 'RMA-77' }]), typedBody.Package[0].ReferenceNumber);
+        check('ship: label with no PO# saves the address', typed.ok && typed.label.from_po === 0
+          && (await exec('api.shipAddresses()')).addresses.some(x => x.company === 'TechHub'), typed);
+        let list = await exec('api.shipList(0)');
+        check('ship: today\'s list carries both labels, newest first, no images',
+          list.ok && list.labels.length === 2 && list.labels[0].reference === 'INV-2304' && !('label_gif' in list.labels[0]), list.labels && list.labels.length);
+        const v = await exec(`api.shipVoid(${made.label.id})`);
+        list = await exec('api.shipList(0)');
+        check('ship: void reaches UPS and marks the label',
+          v.ok && upsSeen.some(x => x.method === 'DELETE' && x.url.endsWith('/1ZE2E0000000000001'))
+            && list.labels.find(l => l.id === made.label.id).voided_at, v);
+        await exec(`showPage('ship')`);
+        await sleep(600);
+        check('ship: page opens with the labels list',
+          await exec(`!document.getElementById('shipPage').hidden && document.querySelectorAll('#spLogBody tr').length === 2`), null);
+        const disk = JSON.parse(fs.readFileSync(require('node:path').join(app.getPath('userData'), 'config.json'), 'utf8'));
+        check('ship: UPS secrets never sit in config.json in plain text (when the OS can encrypt)',
+          !disk.upsEnc || disk.ups.accounts.every(a => !a.clientSecret && !a.clientId), disk.ups && disk.ups.accounts);
+
+        // Ship from the Orders line (owner 2026-10-20): Walmart + both UPS
+        // accounts in one list; the label's tracking lands on the row
+        const wmMod = require('./walmart');
+        wmMod.WalmartClient.testHost = upsMod.UpsClient.testHost;
+        const lwMod = require('./linnworks');
+        const realFind = lwMod.LinnworksClient.prototype.findOrderForLabel;
+        lwMod.LinnworksClient.prototype.findOrderForLabel = async (ref) => ({ reference: ref, source: 'WALMART', status: 'open', total: 189.99,
+          items: [{ sku: 'X133-128GB-GRAY', quantity: 1 }], party: { ...cust, phone: '', email: '', country: 'United States' } });
+        try {
+          await exec(`api.setConfig({ walmart: { clientId: 'WCID', clientSecret: 'WSEC' } })`);
+          const wt = await exec(`api.walmartTest({})`);
+          check('walmart: Test logs in and lists the carriers Walmart sells labels for', wt.ok && Array.isArray(wt.carriers) && wt.carriers.join(',') === 'FedEx,USPS', wt);
+          const wRow = db.createRow({ channel: 'walmart', orderNumber: '108829451230774', origin: '' });
+          const eRow = db.createRow({ channel: 'ebay', orderNumber: '21-13542-88761', origin: '' });
+          let r = await exec(`api.orderShipPrep(${wRow.id})`);
+          check('order ship: a Walmart line preps with the Linnworks address and Walmart on', r.ok && r.walmart === true && r.party.city === 'Chicago' && r.value === 189.99, r);
+          const pkg = { weight: 1.1, length: 8, width: 6, height: 4 };
+          r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: wRow.id, party: cust, pkg, value: 189.99 })})`);
+          const wm = r.ok && r.sources.find(x => x.id === 'wm');
+          check('order ship: one list from Walmart and both UPS accounts, USPS never offered',
+            r.ok && r.sources.map(x => x.id).join(',') === 'wm,a,b' && wm.ok && wm.rates.map(x => x.code).join(',') === 'UPS_GROUND,FEDEX_2_DAY', r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: wRow.id, via: 'wm', code: 'UPS_GROUND', name: 'UPS Ground', carrier: 'UPS', price: 8.4, party: cust, pkg, value: 189.99 })})`);
+          let rowNow = db.getRow(wRow.id);
+          check('order ship: a Walmart label fills the row\'s tracking, image kept, not processed',
+            r.ok && rowNow.tracking === '1Z9WM0000000000077' && rowNow.carrier === 'UPS' && rowNow.status !== 'synced' && r.size && r.size.type === 'png' && r.label.account_name === 'Walmart', { r: r.ok ? r.label : r, rowNow });
+          const wmLabel = r.label;
+          r = await exec(`api.orderShipRates(${JSON.stringify({ rowId: eRow.id, party: cust, pkg, value: 129 })})`);
+          check('order ship: an eBay line shows only the UPS accounts', r.ok && r.sources.map(x => x.id).join(',') === 'a,b', r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: eRow.id, via: 'b', code: '03', name: 'UPS Ground', price: 9.1, party: cust, pkg, value: 129 })})`);
+          rowNow = db.getRow(eRow.id);
+          check('order ship: a UPS label on the eBay line, the PO# as Ref 1',
+            r.ok && rowNow.tracking === '1ZE2E0000000000001' && r.label.reference === '21-13542-88761' && r.label.row_id === eRow.id, r.ok ? r.label : r);
+          r = await exec(`api.orderShipCreate(${JSON.stringify({ rowId: eRow.id, via: 'b', code: '03', party: cust, pkg })})`);
+          check('order ship: a line with tracking can\'t buy a second label', !r.ok && /already has tracking/.test(r.error), r);
+          r = await exec(`api.shipVoid(${wmLabel.id})`);
+          check('order ship: voiding the Walmart label takes the tracking back off the row',
+            r.ok && upsSeen.some(x => x.method === 'DELETE' && x.url.includes('/v3/shipping/labels/carriers/UPS/trackings/1Z9WM0000000000077')) && db.getRow(wRow.id).tracking === '', r);
+          await exec(`(async () => { showPage('capture'); setCapHist(false); state = await api.getState(); render(); })()`);
+          await sleep(500);
+          const ui = await exec(`(async () => {
+            const tr = document.querySelector('#rowsBody tr[data-id="${wRow.id}"]'); const b = tr && tr.querySelector('.os-btn');
+            if (!b) return { btn: false };
+            b.click(); await new Promise(r => setTimeout(r, 900));
+            const d = document.getElementById('osDrawer');
+            const out = { btn: true, open: d.classList.contains('is-open'), marked: !!document.querySelector('#rowsBody tr.os-open[data-id="${wRow.id}"]'),
+              ref: $('osdRef').textContent === '108829451230774', cust: /Chicago/.test($('osAddr').textContent), items: /X133-128GB-GRAY/.test($('osdItems').textContent) && /×1/.test($('osdItems').textContent),
+              saveBtn: !!$('osPkSave') && $('osPkSave').disabled, noValue: $('osVal').value === '', ref2: $('osRef2').value,
+              ref2Many: osRef2Default([{ sku: 'X133-128GB-GRAY', qty: 2 }, { sku: 'OPEN-BOX-S25-ULTRA-512GB-BLACK', qty: 1 }]) };
+            render(); out.survives = d.classList.contains('is-open') && !!document.querySelector('#rowsBody tr.os-open');
+            const wt = $('osWt'); wt.value = '1.3'; wt.dispatchEvent(new Event('input'));
+            out.saveOn = !!$('osPkSave') && !$('osPkSave').disabled && /Save for this item/.test($('osPkSave').textContent);
+            $('osPkSave').click(); await new Promise(r => setTimeout(r, 300));
+            out.savedTag = /Saved for this item/.test($('osPkTag').textContent);
+            await new Promise(r => setTimeout(r, 2500)); // the rates for the new weight
+            const picked = document.querySelector('#osRates .sp-rate.is-on');
+            out.deliver = $('osdDates').textContent;
+            out.late = [...document.querySelectorAll('#osRates .sp-rate.is-late')].map(x => x.dataset.k);
+            out.pickedLate = !!(picked && picked.classList.contains('is-late'));
+            out.starOnPicked = !!(picked && picked.querySelector('.sp-star'));
+            wt.focus();
+            wt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+            out.escClosed = !d.classList.contains('is-open') && os === null && !document.querySelector('#rowsBody tr.os-open');
+            if (!out.escClosed) osClose();
+            await new Promise(r => setTimeout(r, 400));
+            document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn').click(); await new Promise(r => setTimeout(r, 900));
+            out.refilled = $('osWt').value === '1.3' && /Saved for this item/.test($('osPkTag').textContent);
+            osClose(); return out; })()`);
+          check('order ship: Ship opens the drawer with the customer, the item and Ref 1, and it survives a re-render',
+            ui.btn && ui.open && ui.marked && ui.ref && ui.cust && ui.items && ui.saveBtn && ui.survives, ui);
+          check('order ship: no declared value unless typed', ui.noValue === true, ui);
+          check('order ship: Reference #2 starts as the SKU and units sold, cut to 35 with the count kept',
+            ui.ref2 === 'X133-128GB-GRAY | 1 unit sold' && ui.ref2Many === 'X133-128GB-GRAY, OPE | 3 units sold' && ui.ref2Many.length <= 35, ui);
+          check('order ship: a package saved for the item fills in next time', ui.saveOn && ui.savedTag && ui.refilled, ui);
+          check('order ship: Esc cancels the open drawer', ui.escClosed === true, ui);
+          check('order ship: the Order box shows Walmart\'s ordered / ship-by / deliver-by dates, flags late rates and picks the cheapest on time',
+            /Deliver by10\/22\/2026/.test(ui.deliver) && /Ordered10\/20\/2026/.test(ui.deliver) && ui.late.includes('wm:UPS_GROUND') && !ui.pickedLate && ui.starOnPicked, ui);
+          const lr = await exec(`(async () => {
+            state = await api.getState(); render();
+            const tr = document.querySelector('#rowsBody tr[data-id="${eRow.id}"]');
+            const rp = tr && tr.querySelector('[data-act="lreprint"]'), vd = tr && tr.querySelector('[data-act="lvoid"]');
+            const out = { reprint: !!rp, void: !!vd, otherRow: !!document.querySelector('#rowsBody tr[data-id="${wRow.id}"] [data-act="lreprint"]') };
+            if (!rp) return out;
+            rp.click(); await new Promise(r => setTimeout(r, 600));
+            const dlg = $('osLabelDlg');
+            out.open = dlg.open; out.title = $('osLabelTitle').textContent;
+            out.fmts = [...$('osPrintFmt').querySelectorAll('[data-fmt]')].map(b => b.textContent);
+            $('osPrintFmt').querySelector('[data-fmt="letter"]').click();
+            out.letterOn = $('osPrintFmt').querySelector('[data-fmt="letter"]').classList.contains('is-on') && localStorage.getItem('osPrintFmt') === 'letter'
+              && $('osSheet').classList.contains('is-letter');
+            $('osPrintFmt').querySelector('[data-fmt="a4"]').click();
+            out.a4On = $('osSheet').classList.contains('is-a4') && localStorage.getItem('osPrintFmt') === 'a4';
+            out.printerSel = !!$('osPrinter');
+            dlg.close();
+            $('osPrintFmt').querySelector('[data-fmt="label"]').click();
+            return out; })()`);
+          check('order ship: a line with a label made here offers Reprint and Void; Reprint opens the popup with label printer or paper',
+            lr.reprint && lr.void && !lr.otherRow && lr.open && lr.title === 'Reprint label' && lr.fmts.join('|') === 'Label 4×6|Letter|A4' && lr.letterOn && lr.a4On && lr.printerSel, lr);
+          const many = await exec(`(async () => {
+            sp.logDays = 30; await spLoadLog();
+            const boxes = [...document.querySelectorAll('#spLogBody [data-sel]')].slice(0, 2);
+            boxes.forEach(b => { b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); });
+            const out = { n: boxes.length, btn: !$('spPrintSel').hidden && $('spPrintSel').textContent === 'Print selected · 2' };
+            $('spPrintSel').click(); await new Promise(r => setTimeout(r, 600));
+            out.open = $('osLabelDlg').open; out.title = $('osLabelTitle').textContent; out.ids = $('osLabelDlg').dataset.ids.split(',').length;
+            $('osLabelDlg').close();
+            out.none = await api.shipPrintMany([987654], {});
+            return out; })()`);
+          check('ship: tick labels in the list and Print selected prints them together (unknown labels refused)',
+            many.n === 2 && many.btn && many.open && many.title === 'Print 2 labels' && many.ids === 2 && many.none.ok === false, many);
+          r = await exec(`api.orderShipPrep(${wRow.id})`);
+          check('order ship: the saved package is keyed by the item', r.ok && r.key === 'X133-128GB-GRAY' && r.saved && r.saved.weight === 1.3, r);
+          if (process.env.CAPTURE_E2E_SHOT) {
+            win.setSize(1360, 900);
+            await exec(`(async () => { const b = document.querySelector('#rowsBody tr[data-id="${wRow.id}"] .os-btn'); b.click(); await new Promise(r => setTimeout(r, 700));
+              const w = document.getElementById('osWt'); w.value = '1.1'; w.dispatchEvent(new Event('input')); })()`);
+            await sleep(2200);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship.png'), (await win.webContents.capturePage()).toPNG());
+            await exec(`document.getElementById('osCreate').click()`);
+            await sleep(1800);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship-label.png'), (await win.webContents.capturePage()).toPNG());
+            await exec(`document.getElementById('osLabelDlg').close()`);
+            await sleep(400);
+            fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-order-ship-done.png'), (await win.webContents.capturePage()).toPNG());
+          }
+        } finally {
+          lwMod.LinnworksClient.prototype.findOrderForLabel = realFind;
+          wmMod.WalmartClient.testHost = '';
+        }
+      } finally {
+        upsMod.UpsClient.testHost = '';
+        fake.close();
+      }
+    }
+
+    // Settings in six groups (owner 2026-10-20, variants/settings-organized.html)
+    {
+      const res = await exec(`(async () => {
+        await openSettings('general');
+        const shown = () => [...document.querySelectorAll('#setPane .set-sec')].filter(x => !x.hidden).map(x => x.dataset.p);
+        const out = { groups: [...document.querySelectorAll('#setNav [data-p]')].map(b => b.textContent.trim()), first: shown(), upsHidden: !$('setUpsName0').offsetParent };
+        document.querySelector('#setNav [data-p="shipping"]').click();
+        out.after = shown(); out.on = document.querySelector('#setNav .is-on').dataset.p; out.upsShown = !!$('setUpsName0').offsetParent;
+        $('settingsDialog').close();
+        await openSettings();
+        out.reopened = shown();
+        $('settingsDialog').close();
+        return out;
+      })()`);
+      check('settings: six groups in a sidebar, one on screen, the pick stays for the session',
+        res && res.groups.join() === 'General,Linnworks,Shipping,Stock,Returns,Advanced' && res.first.join() === 'general' && res.upsHidden
+        && res.after.join() === 'shipping' && res.on === 'shipping' && res.upsShown && res.reopened.join() === 'shipping', res);
+    }
+
+    // Browser access (owner 2026-10-20): the whole app at localhost, locked to
+    // this computer, a private key and the page's own origin
+    {
+      const http = require('node:http');
+      const { BrowserWindow } = require('electron');
+      const req = (opts, body) => new Promise((resolve) => {
+        const r = http.request({ host: '127.0.0.1', port: 47391, method: 'GET', ...opts }, (res) => {
+          let data = ''; res.on('data', c => { data += c; }); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+        });
+        r.on('error', (e) => resolve({ status: 0, headers: {}, body: '', error: e.code }));
+        if (body) r.write(body);
+        r.end();
+      });
+      await exec(`api.setConfig({ web: { enabled: true } })`);
+      await sleep(500);
+      const info = await exec('api.webInfo()');
+      const key = (String(info.url).match(/\?k=([0-9a-f]+)/) || [])[1] || '';
+      check('web: switched on, serving a link with a long private key', info.running && key.length === 48 && /^http:\/\/localhost:47391\/\?k=/.test(info.url), info);
+      const host = { Host: 'localhost:47391' };
+      let r = await req({ path: '/', headers: host });
+      check('web: no key, no app', r.status === 401 && !r.body.includes('renderer.js'), r.status);
+      r = await req({ path: '/?k=nope', headers: host });
+      check('web: a wrong key is refused', r.status === 401, r.status);
+      r = await req({ path: `/?k=${key}`, headers: host });
+      const cookie = String((r.headers['set-cookie'] || [])[0] || '').split(';')[0];
+      check('web: the right key becomes a strict, script-proof cookie and a clean address',
+        r.status === 302 && r.headers.location === '/' && /HttpOnly/.test(r.headers['set-cookie']) && /SameSite=Strict/.test(r.headers['set-cookie']), r.headers);
+      r = await req({ path: '/', headers: { ...host, Cookie: cookie } });
+      check('web: with the cookie, the app itself (bridge included)', r.status === 200 && r.body.includes('/web-bridge.js') && r.headers['x-frame-options'] === 'DENY', r.status);
+      r = await req({ path: '/', headers: { Host: 'evil.example:47391', Cookie: cookie } });
+      check('web: a page posing under another host name is refused (DNS rebinding)', r.status === 403, r.status);
+      const call = (ch, origin, body = '[]') => req({ method: 'POST', path: `/ipc/${ch}`, headers: { ...host, Cookie: cookie, 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) } }, body);
+      r = await call('web:info', 'https://evil.example');
+      check('web: actions from another site are refused', r.status === 403, r.status);
+      r = await call('web:info', 'http://localhost:47391');
+      check('web: actions from the page itself run the app\'s own handlers', r.status === 200 && JSON.parse(r.body).value.running === true, r.body);
+      r = await call('web:newKey', 'http://localhost:47391');
+      check('web: a new link can only be made on the desktop', JSON.parse(r.body).value.ok === false, r.body);
+      r = await req({ path: '/..%2fmain%2fmain.js', headers: { ...host, Cookie: cookie } });
+      check('web: nothing outside the app\'s pages is served', r.status === 404, r.status);
+
+      // Download PDF (owner 2026-10-20): an existing label, read-only, behind the key
+      const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const sample = db.shipLabelAdd({ kind: 'return', reference: 'SAMPLE-PO-1001', fromPo: true, accountId: 'a', accountName: 'Sample UPS',
+        serviceCode: '03', serviceName: 'UPS Ground', tracking: '1ZSAMPLE0000000001', cost: 9.1, value: 50, weight: 1, labelGif: PNG1 });
+      const voidedSample = db.shipLabelAdd({ kind: 'ship', reference: 'SAMPLE-PO-1002', fromPo: true, accountId: 'a', accountName: 'Sample UPS',
+        serviceCode: '03', serviceName: 'UPS Ground', tracking: '1ZSAMPLE0000000002', cost: 9.1, labelGif: PNG1 });
+      db.shipLabelVoid(voidedSample.id);
+      const before = JSON.stringify(db.shipLabelGet(sample.id));
+      const labelCount = db.shipLabelList({ limit: 5000 }).length;
+      const pdfOk = (x, name) => x.status === 200 && x.headers['content-type'] === 'application/pdf'
+        && x.headers['content-disposition'] === `attachment; filename="${name}"` && String(x.body).startsWith('%PDF');
+      r = await req({ path: `/labels/${sample.id}/pdf`, headers: { ...host, Cookie: cookie } });
+      check('web: Download PDF serves the existing label as an attachment named return-<PO>.pdf', pdfOk(r, 'return-SAMPLE-PO-1001.pdf'), { status: r.status, headers: r.headers });
+      r = await req({ path: '/labels/pdf?tracking=1zsample0000000001', headers: { ...host, Cookie: cookie } });
+      const byTracking = pdfOk(r, 'return-SAMPLE-PO-1001.pdf');
+      r = await req({ path: '/labels/pdf?po=SAMPLE-PO-1001', headers: { ...host, Cookie: cookie } });
+      check('web: the same PDF by tracking number or by PO#', byTracking && pdfOk(r, 'return-SAMPLE-PO-1001.pdf'), r.status);
+      r = await req({ path: `/labels/${sample.id}/pdf`, headers: host });
+      check('web: Download PDF needs the key like everything else', r.status === 401 && !String(r.body).startsWith('%PDF'), r.status);
+      r = await req({ path: '/labels/pdf?tracking=1ZNOTHERE000000000', headers: { ...host, Cookie: cookie } });
+      const missing = r.status === 404 && /No label found/.test(JSON.parse(r.body).error);
+      r = await req({ path: '/labels/pdf?tracking=1ZSAMPLE0000000002', headers: { ...host, Cookie: cookie } });
+      const voidedByTracking = r.status === 404;
+      r = await req({ path: `/labels/${voidedSample.id}/pdf`, headers: { ...host, Cookie: cookie } });
+      check('web: a missing or voided label answers with a clear error, no file', missing && voidedByTracking && r.status === 410 && /voided/.test(JSON.parse(r.body).error), r.body);
+      r = await req({ method: 'POST', path: `/labels/${sample.id}/pdf`, headers: { ...host, Cookie: cookie, Origin: 'http://localhost:47391' } });
+      check('web: Download PDF is read-only: no POST, and the label and the label count are unchanged',
+        r.status === 405 && JSON.stringify(db.shipLabelGet(sample.id)) === before && db.shipLabelList({ limit: 5000 }).length === labelCount, r.status);
+      // a real browser page: the whole app renders and follows live updates
+      const bw = new BrowserWindow({ show: false, width: 1300, height: 900, webPreferences: { contextIsolation: true, sandbox: true } });
+      const webLog = [];
+      bw.webContents.on('console-message', (...a) => webLog.push(a.map(x => (x && x.message) || x).join(' ').slice(0, 300)));
+      try {
+        await bw.loadURL(info.url);
+        await sleep(2500);
+        const page = await bw.webContents.executeJavaScript(`(async () => {
+          window.__got = 0; api.on('state:changed', () => { window.__got++; });
+          const st = await api.getState();
+          return { web: !!window.__DWS_WEB__, rows: st.rows.length, tabs: !!document.getElementById('tabShip'), url: location.href, rendered: (showPage('capture'), render(), document.querySelectorAll('#rowsBody tr').length), dockHidden: getComputedStyle(document.getElementById('bDock')).display === 'none' };
+        })()`, true);
+        await exec(`api.setConfig({})`); // any change pushes state to every window
+        await sleep(800);
+        const got = await bw.webContents.executeJavaScript('window.__got', true);
+        check('web: the app runs in a browser page, key gone from the address, live updates arrive',
+          page.web && page.rows > 0 && page.tabs && page.rendered === page.rows && page.dockHidden && page.url === 'http://localhost:47391/' && got > 0, { ...page, got, webLog: webLog.filter(l => !/Content Security Policy/.test(l)).slice(0, 8) });
+        // the Labels list's Download PDF link: a real browser download
+        const dlDir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'dws-dl-'));
+        const downloaded = new Promise((resolve) => {
+          bw.webContents.session.once('will-download', (_ev, item) => {
+            const to = path.join(dlDir, item.getFilename());
+            item.setSavePath(to);
+            item.once('done', (_e2, st) => resolve({ state: st, name: item.getFilename(), to }));
+          });
+          setTimeout(() => resolve({ state: 'timeout' }), 8000);
+        });
+        const link = await bw.webContents.executeJavaScript(`(async () => {
+          sp.logDays = 30; await spLoadLog();
+          const a = document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-testid="label-download-pdf"]');
+          const v = document.querySelector('#spLogBody tr[data-id="${voidedSample.id}"] [data-testid="label-download-pdf"]');
+          const text = a ? a.textContent : '';
+          if (a) a.click();
+          return { link: !!a, text, href: a ? a.getAttribute('href') : '', po: a ? a.dataset.po : '', voidedLink: !!v,
+            keeps: !!document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-act="pdf"]') && !!document.querySelector('#spLogBody tr[data-id="${sample.id}"] [data-act="print"]') };
+        })()`, true);
+        const dl = await downloaded;
+        const file = dl.to && fs.existsSync(dl.to) ? fs.readFileSync(dl.to) : Buffer.alloc(0);
+        check('web: Download PDF in Ship › Labels downloads return-<PO>.pdf; Reprint and PDF stay; none on a voided label',
+          link.link && link.text === 'Download PDF' && link.href === `/labels/${sample.id}/pdf` && link.po === 'SAMPLE-PO-1001' && link.keeps && !link.voidedLink
+          && dl.state === 'completed' && dl.name === 'return-SAMPLE-PO-1001.pdf' && file.subarray(0, 4).toString() === '%PDF', { link, dl: { state: dl.state, name: dl.name }, size: file.length });
+        const desk = await exec(`(async () => { sp.logDays = 30; await spLoadLog(); return !!document.querySelector('#spLogBody [data-testid="label-download-pdf"]'); })()`);
+        check('web: the desktop window keeps its own PDF button, no browser link', desk === false, desk);
+      } finally {
+        bw.destroy();
+      }
+      await exec(`api.setConfig({ web: { enabled: false } })`);
+      await sleep(400);
+      r = await req({ path: '/', headers: host });
+      check('web: switched off, nothing is listening', r.status === 0, r);
+    }
+
+    // returns.csv carries every return (it stopped at the newest 1000,
+    // so the oldest fell off once a station passed 1000 — owner 2026-10-22).
+    // Last in the suite: the extra returns would skew the log checks above.
+    {
+      const tag = `CSV-OLDEST-${Date.now()}`;
+      db.createReturn({ orderNumber: tag, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+        items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      for (let n = 0; n < 1000; n++) {
+        db.createReturn({ orderNumber: `CSV-FILL-${n}`, source: '', customer: '', note: '', unmatched: true, tracking: '', receivedBy: '',
+          items: [{ sku: 'CSV-TEST', condition: 'new', targetSku: '', qty: 1, price: 0, note: '' }] });
+      }
+      const wasCaptureOnly = (await exec('api.getConfig()')).captureOnly;
+      await exec(`api.setConfig({ captureOnly: false })`); // returns:create refuses capture-only
+      const made = await exec(`api.returnsCreate({ orderNumber: 'CSV-NEWEST', unmatched: true, items: [] })`);
+      await exec(`api.setConfig(${JSON.stringify({ captureOnly: !!wasCaptureOnly })})`);
+      const folder = (await exec('api.getConfig()')).csvFolder || path.join(app.getPath('documents'), 'Capture Station');
+      const csv = fs.readFileSync(path.join(folder, 'returns.csv'), 'utf8');
+      check('returns.csv keeps every return past 1000 — the oldest and the newest are both in it',
+        made && made.ok && csv.includes(tag) && csv.includes('CSV-NEWEST') && csv.split('\r\n').length - 1 >= db.listReturns(1e9).length,
+        { made, hasOldest: csv.includes(tag), lines: csv.split('\r\n').length - 1, returns: db.listReturns(1e9).length });
     }
 
     console.log(failures === 0 ? 'E2E_ALL_PASS' : `E2E_FAILURES ${failures}`);
