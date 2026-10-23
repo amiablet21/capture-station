@@ -2,6 +2,16 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.115 highlights
+
+- **Walmart product view: other versions and cleaner details** (owner: "why can't I see the other variants?", "the arrival time looks weird").
+  - The product's other versions (colour, storage...) show as chips with their price, stock and "✓ Listed"; clicking one opens that version.
+  - The big price is the Buy Box offer's own price (a page figure like $229.99 was shown beside a $209.99 Buy Box offer).
+  - Walmart's bare condition code 1 reads "New" (it showed as a "1" tag); other bare codes are left out.
+  - Arrival dates read "Tue, Oct 28" and only when they're real and within two months (a garbled timestamp was shown as-is).
+  - The Compare all sellers page is read unless the product page says there's one seller, so more sellers show.
+  - A walmart.com link on the view; the page's JSON is kept in `walmart-product-last.json` for diagnosis.
+
 ## v1.32.114 highlights
 
 - **Walmart's request limit no longer blanks Pricing** (owner: "You have exceeded your API calls threshold"). Pricing reads every item page by page, so a large catalog plus a few Refreshes ran past Walmart's per-API limit. Every Walmart call now waits for the next refill when it's under 20 seconds away (twice at most), otherwise says when to try again. Pricing keeps the pages already read when the limit hits part-way, and when Walmart refuses outright it shows the last full answer with its age instead of an error. Opening the Pricing tab again within 15 minutes no longer asks Walmart again.
