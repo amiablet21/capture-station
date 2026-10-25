@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.116 highlights
+
+- **Walmart Pricing splits items by strategy** (owner: IMRAN BUY BOX showed 144 on Walmart but no items under it). Walmart's Pricing Insights doesn't say which strategy each item is on, so when it comes without one the app asks for Walmart's Item report, which does (Repricer Strategy, min / max allowed price, repricer status). Walmart takes 15–45 minutes to make it; the app checks every 4 minutes, then puts each item under its strategy with its min / max by itself, and keeps the result for 12 hours (`walmart-repricer-map.json`). The note on the page says when it was asked.
+- The page past the last one is no longer requested, so a false "limit reached part-way" no longer shows.
+- Walmart product view: versions laid out as Walmart does, one row per choice ("Capacity: 256GB", "Color: Navy").
+
 ## v1.32.115 highlights
 
 - **Walmart product view: other versions and cleaner details** (owner: "why can't I see the other variants?", "the arrival time looks weird").
