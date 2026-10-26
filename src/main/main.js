@@ -4971,7 +4971,8 @@ exit 1
     return { items, feePct: wmFeePct() };
   }
   // which strategy each item is on, from Walmart's Item report: asked for
-  // when Pricing opens (at most twice a day), checked every 4 minutes until
+  // in the background (at start, then whenever the last one is 12 hours
+  // old) and when Pricing opens, checked every 4 minutes until
   // Walmart has made it, then kept in walmart-repricer-map.json and sent to
   // the page ({ at, items: { SKU: { strategy, min, max, status } } } or
   // { pendingSince } / { error })
@@ -5001,7 +5002,7 @@ exit 1
           return;
         }
         if (/ERROR|FAIL/.test(status)) {
-          const next = { at: st.at || '', items: st.items || null, error: 'Walmart could not make the item report. It will be asked for again next time Pricing opens.' };
+          const next = { at: st.at || '', items: st.items || null, error: 'Walmart could not make the item report. It will be asked for again within the hour.' };
           wmRepWrite(next);
           wmSend('walmart:repricer', wmRepPublic(next));
           return;
@@ -5021,10 +5022,38 @@ exit 1
       clearTimeout(wmRepTimer);
       wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000);
     } catch (e) {
-      // the limit or a hiccup: try again in 4 minutes while one is pending
-      if (st.requestId) { clearTimeout(wmRepTimer); wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000); }
+      // the limit or a hiccup: try again in 4 minutes while one is pending;
+      // one failing for 3 hours is dropped so the next pass asks afresh
+      if (st.requestId && Date.now() - new Date(st.requestedAt).getTime() > 3 * 3600 * 1000) wmRepWrite({ at: st.at || '', items: st.items || null });
+      else if (st.requestId) { clearTimeout(wmRepTimer); wmRepTimer = setTimeout(() => { wmRepricerReport().catch(() => {}); }, 4 * 60000); }
       else { wmRepWrite({ ...st, error: `The item report could not be asked for: ${e.message}` }); }
     }
+  }
+  // background (owner 2026-10-25: "is there no better way" than waiting on
+  // Pricing): shortly after start, then hourly — a pass only asks Walmart
+  // when the map is missing or 12 hours old, or picks up a pending one, so
+  // the report is normally made before Pricing is opened
+  const wmRepBackground = () => {
+    if (config.load().captureOnly || !wmKeys()) return;
+    wmRepricerReport().catch(() => { /* the next pass retries */ });
+  };
+  setTimeout(wmRepBackground, 30000);
+  setInterval(wmRepBackground, 60 * 60000);
+  // the app's own strategy / min / max moves land in the map at once, so
+  // they hold until the next report instead of reverting to the last one
+  function wmRepApplyMoves(moves) {
+    const st = wmRepRead();
+    if (!st.items) return;
+    for (const m of moves) {
+      const k = String(m.sku || '').toUpperCase();
+      if (!k) continue;
+      if (m.strategy && m.strategy !== wmT.NO_STRATEGY) {
+        st.items[k] = { strategy: m.strategy, min: Number(m.min) || null, max: Number(m.max) || null, status: (st.items[k] && st.items[k].status) || '' };
+      } else {
+        delete st.items[k];
+      }
+    }
+    wmRepWrite(st);
   }
   ipcMain.handle('walmart:repricerReport', async () => {
     if (config.load().captureOnly) return { ok: false, error: 'Capture-only mode.' };
@@ -5105,6 +5134,7 @@ exit 1
         const bad = repricer.find(r => r.strategy && !(Number(r.min) > 0 && Number(r.max) >= Number(r.min)));
         if (bad) return { ok: false, error: `${bad.sku}: its min must be above 0 and its max at least the min.` };
         out.feedId = await c.repricerFeed(repricer);
+        wmRepApplyMoves(repricer);
       }
     } catch (e) {
       return { ok: false, error: e.message };

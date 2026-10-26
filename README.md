@@ -2,6 +2,12 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.117 highlights
+
+- **Walmart strategies are ready before Pricing opens** (owner: "is there no better way of doing this?"). The app asks Walmart for its item report in the background, 30 seconds after start and then whenever the last one is 12 hours old (checked hourly), so the 15–45 minute wait happens while the app is open anyway, not while you look at Pricing. Until a new one arrives the last report is used.
+- Strategy, min and max changes saved from Pricing are kept straight away, so they hold until the next report instead of snapping back to the old one.
+- A report request that keeps failing for 3 hours is dropped and asked for again, instead of retrying forever behind the "asked at" note.
+
 ## v1.32.116 highlights
 
 - **Walmart Pricing splits items by strategy** (owner: IMRAN BUY BOX showed 144 on Walmart but no items under it). Walmart's Pricing Insights doesn't say which strategy each item is on, so when it comes without one the app asks for Walmart's Item report, which does (Repricer Strategy, min / max allowed price, repricer status). Walmart takes 15–45 minutes to make it; the app checks every 4 minutes, then puts each item under its strategy with its min / max by itself, and keeps the result for 12 hours (`walmart-repricer-map.json`). The note on the page says when it was asked.
