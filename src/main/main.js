@@ -4314,6 +4314,51 @@ exit 1
     return { configured: wmKeys(), shipWeightLb: Number(l.shipWeightLb) || 1, feePct: Number(l.feePct) || 8 };
   });
 
+  /* ----- WFS inbound shipments (owner 2026-10-27): the Overview's Sent to
+     WFS tab. One card per shipping plan, as Seller Center's Shipping Plans
+     page draws them, each with its shipments and their channel SKUs. The
+     read is cached 10 minutes; Refresh forces it. ----- */
+  let wfsPlans = { at: 0, plans: null, error: '', promise: null };
+  async function readWfsPlans() {
+    const client = wmClient();
+    const ships = await client.inboundShipments({ limit: 50 });
+    ships.sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    // cancelled plans never show; the rest age off once closed and old
+    const open = ships.filter(s => !/cancel/i.test(s.status)).slice(0, 12);
+    for (const s of open) {
+      try { s.items = s.id ? await client.inboundShipmentItems(s.id) : []; } catch { s.items = []; }
+    }
+    const byPlan = new Map();
+    for (const s of open) {
+      const key = s.orderId || s.id;
+      if (!byPlan.has(key)) byPlan.set(key, { plan: key, created: s.created, shipments: [] });
+      byPlan.get(key).shipments.push(s);
+    }
+    return [...byPlan.values()];
+  }
+  ipcMain.handle('wfs:plans', async (_e, { force } = {}) => {
+    if (IS_DEMO) {
+      // the review boot shows the layout without touching Walmart
+      const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+      return { ok: true, at: Date.now(), plans: [
+        { plan: 'HOT-1793127280517', created: day(0), shipments: [{ id: '3841479WFB', orderId: 'HOT-1793127280517', status: 'Awaiting transit', created: day(0), eta: day(-2), shipTo: 'PHL5s · Greencastle, US', carrier: 'WFS-FedEx', tracking: '271932441398', unitsExpected: 16, unitsReceived: 0, items: [{ sku: 'X230-256GB-GRAY-WM', desc: 'Demo tablet 256GB Gray', expected: 10, received: 0 }, { sku: 'SM-X133-64GB-GREY', desc: 'Demo tablet 64GB Grey', expected: 6, received: 0 }] }] },
+        { plan: 'HOT-1793126974814', created: day(3), shipments: [{ id: '3841288WFB', orderId: 'HOT-1793126974814', status: 'Receiving in progress', created: day(3), eta: day(1), shipTo: 'PHL5s · Greencastle, US', carrier: 'WFS-FedEx', tracking: '', unitsExpected: 24, unitsReceived: 15, items: [{ sku: 'X400-128GB-GRAY-WM', desc: 'Demo tablet 128GB Gray', expected: 24, received: 15 }] }] },
+      ] };
+    }
+    if (!wmKeys()) return { ok: false, needsKeys: true };
+    const fresh = wfsPlans.plans && Date.now() - wfsPlans.at < 10 * 60000;
+    if (fresh && !force) return { ok: true, at: wfsPlans.at, plans: wfsPlans.plans };
+    if (!wfsPlans.promise) {
+      wfsPlans.promise = readWfsPlans()
+        .then((plans) => { wfsPlans = { at: Date.now(), plans, error: '', promise: null }; })
+        .catch((e) => { wfsPlans = { ...wfsPlans, error: (e && e.message) || 'Walmart did not answer.', promise: null }; });
+    }
+    await wfsPlans.promise;
+    if (!wfsPlans.plans) return { ok: false, error: wfsPlans.error || 'Walmart did not answer.' };
+    // stale-but-served: a failed refresh keeps the last read on screen
+    return { ok: true, at: wfsPlans.at, plans: wfsPlans.plans, error: wfsPlans.error };
+  });
+
   /* ----- walmart.com inside the tab ----- */
   const WM_SITE_PARTITION = 'persist:walmart-site';
   const WM_SITE = process.env.CAPTURE_WALMART_SITE || 'https://www.walmart.com'; // a stand-in in test runs only

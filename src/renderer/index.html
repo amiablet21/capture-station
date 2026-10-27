@@ -822,18 +822,26 @@
   <section id="overviewPage" class="ov-page" hidden>
     <div class="ov-sheet-row">
     <div class="ov-wrap" id="ovWrap">
-      <div class="ov-head"><h1>Overview</h1><span class="ov-date" id="ovDate"></span>
-        <span class="ov-updated" id="ovUpdated"></span>
+      <!-- the Recovery-style menu (owner 2026-10-27): one screen at a time -->
+      <div class="rc-head ov-menuhead"><h1 class="rc-h1">Overview</h1><span class="ov-date" id="ovDate" hidden></span>
+        <nav class="rc-subtabs" aria-label="Overview screens">
+          <button type="button" class="rc-subtab is-active" data-ovtab="attn">Needs attention <span id="ovNAttn" class="rc-subtab-count" hidden>0</span></button>
+          <button type="button" class="rc-subtab" data-ovtab="wfs">Sent to WFS <span id="ovNWfs" class="rc-subtab-count" hidden>0</span></button>
+          <button type="button" class="rc-subtab" data-ovtab="buy">What to buy <span id="ovNBuy" class="rc-subtab-count" hidden>0</span></button>
+          <button type="button" class="rc-subtab" data-ovtab="sold">Sold today</button>
+        </nav>
+        <span class="ov-headright"><span class="ov-updated" id="ovUpdated"></span>
         <button id="ovPhoneBtn" class="ov-refresh ov-phone" hidden title="Use this dashboard on your phone — scan a QR code" aria-label="Phone">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18h2"/></svg></button>
         <button id="ovRefreshBtn" class="ov-refresh" title="Refresh the numbers now" aria-label="Refresh">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button></span>
       </div>
       <div id="ovBanner" class="ovq-banner" hidden></div>
       <div id="ovTop" class="ovq-top"></div>
-      <div class="ovq-body">
+      <div class="ovq-body" id="ovBody">
         <div class="ovq-card" id="ovList"></div>
-        <div class="ovq-card" id="ovSold"></div>
+        <div class="ovq-card" id="ovSold" hidden></div>
+        <div id="ovWfs" class="ovq-wfswrap" hidden></div>
       </div>
     </div>
     </div>

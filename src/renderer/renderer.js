@@ -13826,8 +13826,11 @@ const ovN = (n) => Number(n || 0).toLocaleString();
 function enterOverview() {
   const d = new Date();
   $('ovDate').textContent = `${OV_WDAYS[d.getDay()]}, ${OV_MONTHS[d.getMonth()]} ${d.getDate()}`;
+  ovApplyTab();
   ovRenderAll();
   ovFetch();
+  // warm the Sent to WFS tab (and its count) from the 10-minute cache
+  ovWfsFetch();
 }
 
 // the main process answers within seconds (the 30-day sales walk runs behind
@@ -13903,6 +13906,7 @@ function ovRenderAll() {
   ovRenderTop();
   ovRenderList();
   ovRenderSold();
+  ovRenderTabs();
   ovTicker();
 }
 
@@ -14045,11 +14049,12 @@ function ovRenderList() {
   const buyMode = ovFilter === 'buy';
   const wasMode = ovFilter === 'was';
   // one label whatever the chip, so the chips never shift (owner 2026-10-13)
-  const label = ovLoading() ? 'Getting stock levels ready' : ovClear() && !buyMode && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const label = ovLoading() ? 'Getting stock levels ready' : buyMode ? 'Buy now' : ovClear() && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
   const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
   const nWas = ovWasRows(p).length;
-  const chips = p && p.ready ? `<div class="ovq-filter">${[['all', 'All'], ['buy', 'Buy now'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast'], ['was', 'Was selling']].map(([k, t]) =>
-    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'buy' ? `<b>${nBuy}</b>` : k === 'was' ? `<b>${nWas}</b>` : ''}</button>`).join('')}</div>` : '';
+  // Buy now left the chips for its own menu tab (owner 2026-10-27)
+  const chips = p && p.ready && !buyMode ? `<div class="ovq-filter">${[['all', 'All'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast'], ['was', 'Was selling']].map(([k, t]) =>
+    `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'was' ? `<b>${nWas}</b>` : ''}</button>`).join('')}</div>` : '';
   const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : wasMode ? 'best 3 of the last 6 months, averaged' : `Lead time ${lead} days · target ${lead + cover} days on hand`;
   const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
@@ -14235,12 +14240,148 @@ for (const id of ['ovList', 'ovSold']) {
 }
 
 $('tabOverview').addEventListener('click', () => showPage('overview'));
+/* ----- the Overview menu (owner 2026-10-27): Needs attention, Sent to
+   WFS, What to buy and Sold today as Recovery-style sub-tabs, one screen
+   at a time. Sent to WFS draws Seller Center's Shipping Plans page from
+   the WFS API, each shipment with the channel SKUs that were sent. ----- */
+let ovTab = 'attn';
+let ovWfs = { plans: null, at: 0, error: '', needsKeys: false, fetching: false };
+let ovWfsQ = '', ovWfsStatus = '', ovWfsQT = null;
+
+function ovApplyTab() {
+  document.querySelectorAll('.ov-menuhead [data-ovtab]').forEach(b => b.classList.toggle('is-active', b.dataset.ovtab === ovTab));
+  $('ovTop').hidden = ovTab !== 'attn';
+  $('ovList').hidden = ovTab !== 'attn' && ovTab !== 'buy';
+  $('ovSold').hidden = ovTab !== 'sold';
+  $('ovWfs').hidden = ovTab !== 'wfs';
+  $('ovBody').classList.toggle('is-sold', ovTab === 'sold');
+}
+document.querySelector('.ov-menuhead .rc-subtabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ovtab]');
+  if (!b || b.dataset.ovtab === ovTab) return;
+  ovTab = b.dataset.ovtab;
+  if (ovTab === 'buy') ovFilter = 'buy';
+  else if (ovFilter === 'buy') ovFilter = 'all';
+  ovOpenSku = null;
+  ovApplyTab();
+  ovRenderList();
+  if (ovTab === 'wfs') { ovRenderWfs(); ovWfsFetch(); }
+});
+
+function ovRenderTabs() {
+  const p = ovPlan();
+  const set = (id, n) => { const el = $(id); el.hidden = !n; el.textContent = String(n || 0); };
+  set('ovNAttn', p && p.counts ? (p.counts.out || 0) + (p.counts.low || 0) : 0);
+  set('ovNBuy', p && p.counts ? p.counts.buy || 0 : 0);
+  set('ovNWfs', ovWfs.plans ? ovWfs.plans.length : 0);
+}
+
+async function ovWfsFetch(force) {
+  if (ovWfs.fetching || !api.wfsPlans) return;
+  ovWfs.fetching = true;
+  try {
+    const r = await api.wfsPlans({ force: !!force });
+    if (r && r.ok) ovWfs = { ...ovWfs, plans: r.plans || [], at: r.at || Date.now(), error: r.error || '', needsKeys: false };
+    else ovWfs = { ...ovWfs, needsKeys: !!(r && r.needsKeys), error: (r && !r.needsKeys && r.error) || '' };
+  } catch (e) { ovWfs = { ...ovWfs, error: (e && e.message) || 'Could not read the shipments.' }; }
+  ovWfs.fetching = false;
+  if (activePage === 'overview' && ovTab === 'wfs') ovRenderWfs();
+  ovRenderTabs();
+}
+
+// a Walmart status like "Receiving in progress" into the chip's color family
+function ovWfsStatusCls(status) {
+  const s = String(status || '').toLowerCase();
+  if (/receiv|closed|delivered/.test(s)) return 'receiving';
+  if (/transit|shipped|awaiting|pending|label/.test(s)) return 'transit';
+  return 'other';
+}
+
+function ovRenderWfs() {
+  const box = $('ovWfs');
+  if (ovWfs.needsKeys) {
+    box.innerHTML = '<div class="sp-note">Sent to WFS reads Walmart’s Fulfillment API with the same key pair as the Walmart tab, and no key is set yet. Add the Client ID and secret, and make sure the key has the Fulfillment permission in Seller Center → API Key Management.</div>';
+    return;
+  }
+  if (!ovWfs.plans) {
+    box.innerHTML = `<div class="sp-note">${ovWfs.error ? esc(ovWfs.error) : 'Reading the shipping plans from Walmart…'}</div>`;
+    return;
+  }
+  const q = ovWfsQ.trim().toLowerCase();
+  const plans = ovWfs.plans.filter(p => {
+    if (ovWfsStatus && !p.shipments.some(s => ovWfsStatusCls(s.status) === ovWfsStatus)) return false;
+    if (!q) return true;
+    return [p.plan, ...p.shipments.flatMap(s => [s.id, ...(s.items || []).map(i => i.sku)])].join(' ').toLowerCase().includes(q);
+  });
+  const units = ovWfs.plans.reduce((a, p) => a + p.shipments.reduce((x, s) => x + Math.max(0, (s.unitsExpected || 0) - (s.unitsReceived || 0)), 0), 0);
+  const bar = `<div class="sp-bar">
+    <input class="sp-search" id="wfsSearch" placeholder="Search by shipment ID or SKU" value="${esc(ovWfsQ)}" />
+    <select class="sp-sel" id="wfsStatusSel">
+      <option value="">All statuses</option>
+      <option value="transit"${ovWfsStatus === 'transit' ? ' selected' : ''}>On the way</option>
+      <option value="receiving"${ovWfsStatus === 'receiving' ? ' selected' : ''}>Receiving / closed</option>
+      <option value="other"${ovWfsStatus === 'other' ? ' selected' : ''}>Other</option>
+    </select>
+    <span class="sp-sub">${ovWfs.plans.length} plan${ovWfs.plans.length === 1 ? '' : 's'} · ${units.toLocaleString()} units on the way${ovWfs.at ? ` · read ${ovTime(ovWfs.at)}` : ''}${ovWfs.error ? ' · the last refresh failed; press Refresh' : ''}</span>
+  </div>`;
+  const cards = plans.map(p => {
+    const first = p.shipments[0] || {};
+    const items = p.shipments.flatMap(s => s.items || []);
+    return `<div class="sp-plan">
+    <div class="sp-head"><span class="pid">Plan ID: <span class="mono">${esc(p.plan)}</span></span>
+      <button type="button" class="sp-view" data-wfsview>View plan</button>
+      <span class="sp-status ${ovWfsStatusCls(first.status)}">${esc(first.status || '—')}</span></div>
+    ${p.created ? `<div class="sp-meta"><span>Created: ${esc(p.created)}</span></div>` : ''}
+    <table class="sp-t"><thead><tr>
+      <th>Shipment ID</th><th>Ship to</th><th>Carrier</th><th>Estimated delivery</th><th class="rr">Shipped units</th><th class="rr">Received units</th><th>Status</th><th></th>
+    </tr></thead><tbody>
+    ${p.shipments.map(s => `<tr>
+      <td class="mono">${esc(s.id || '—')}</td><td>${esc(s.shipTo || '—')}</td><td>${esc(s.carrier || '—')}</td><td>${esc(s.eta || '—')}</td>
+      <td class="rr mono">${(s.unitsExpected || 0).toLocaleString()}</td><td class="rr mono">${(s.unitsReceived || 0).toLocaleString()}</td>
+      <td><span class="sp-chip ${ovWfsStatusCls(s.status)}">${esc(s.status || '—')}</span></td>
+      <td class="rr">${s.tracking ? `<button type="button" class="sp-track" data-wfstrack="${esc(s.tracking)}" data-carrier="${esc(s.carrier || '')}">Track</button>` : ''}</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div class="sp-items">
+      <div class="sp-it h"><span>Channel SKU</span><span>Item</span><span class="u">Units sent</span><span class="u">Received</span></div>
+      ${items.length ? items.map(it => `<div class="sp-it"><span class="ch">${esc(it.sku)}</span><span class="ds">${esc(it.desc || '')}</span><span class="u mono">${(it.expected || 0).toLocaleString()}</span><span class="u mono">${it.received ? it.received.toLocaleString() : '—'}</span></div>`).join('')
+    : '<div class="sp-it"><span class="ds">Walmart did not name the items on this shipment.</span></div>'}
+    </div>
+  </div>`;
+  }).join('');
+  box.innerHTML = bar + (cards || `<div class="sp-note">${ovWfs.plans.length ? 'Nothing matches the search.' : 'No open shipping plans. Plans created in Seller Center show here within 10 minutes.'}</div>`);
+  const se = box.querySelector('#wfsSearch');
+  se.addEventListener('input', () => {
+    ovWfsQ = se.value;
+    clearTimeout(ovWfsQT);
+    ovWfsQT = setTimeout(() => {
+      const at = se.selectionStart;
+      ovRenderWfs();
+      const n = $('ovWfs').querySelector('#wfsSearch');
+      if (n) { n.focus(); try { n.setSelectionRange(at, at); } catch { /* fine */ } }
+    }, 250);
+  });
+  box.querySelector('#wfsStatusSel').addEventListener('change', (e) => { ovWfsStatus = e.target.value; ovRenderWfs(); });
+  box.querySelectorAll('[data-wfsview]').forEach(b => b.addEventListener('click', () => {
+    api.openExternalUrl('https://seller.walmart.com/supply-chain/shipping-plans');
+  }));
+  box.querySelectorAll('[data-wfstrack]').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.wfstrack;
+    const c = String(b.dataset.carrier || '').toLowerCase();
+    const url = /fedex/.test(c) ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`
+      : /ups/.test(c) ? `https://www.ups.com/track?tracknum=${encodeURIComponent(t)}`
+        : /usps/.test(c) ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(t)}`
+          : `https://www.google.com/search?q=${encodeURIComponent(`${b.dataset.carrier || ''} tracking ${t}`)}`;
+    api.openExternalUrl(url);
+  }));
+}
+
 $('ovRefreshBtn').addEventListener('click', async () => {
   const b = $('ovRefreshBtn');
   if (b.classList.contains('is-spinning')) return;
   b.classList.add('is-spinning');
   const started = Date.now();
-  await ovFetch();
+  await (ovTab === 'wfs' ? ovWfsFetch(true) : ovFetch());
   setTimeout(() => b.classList.remove('is-spinning'), Math.max(0, 700 - (Date.now() - started)));
 });
 // (the Phone button left the Overview 2026-09-25; the phone dashboard itself still runs)

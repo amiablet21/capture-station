@@ -1025,8 +1025,71 @@ function parseRepricerReport(rows) {
   return out;
 }
 
+// WFS inbound shipments (owner 2026-10-27, the Overview's "Sent to WFS"
+// tab): Get Inbound Shipments lists every shipping plan's shipment with its
+// status and unit counts; Get Inbound Shipment Items names the channel SKUs
+// on one shipment. Walmart's reference and its older overview pages disagree
+// on the path prefix (/v3/fulfillment/... vs /v3/...), so the client tries
+// the documented one first and falls back once on a 404.
+function parseInboundShipments(body) {
+  const data = (body && (body.payload || body.data || body)) || {};
+  const list = arr(data.shipments || data.inboundShipments || data.data || data.elements);
+  return list.map(s => {
+    const addr = s.shipToAddress || s.destinationAddress || {};
+    const place = [addr.fcName || addr.name, [addr.city, addr.stateCode || addr.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+    return {
+      id: clip(s.shipmentId || s.id, 40),
+      orderId: clip(s.inboundOrderId || s.orderId || s.planId, 40),
+      status: clip(s.status || s.shipmentStatus, 60),
+      created: dayOf(s.createdDtm || s.createdDate || s.creationDate),
+      eta: dayOf(s.expectedDeliveryDtm || s.expectedDeliveryDate || s.estimatedDeliveryDate),
+      shipTo: clip(s.fulfillmentCenterName || place || s.fcName, 90),
+      carrier: clip(s.carrierName || s.carrier, 40),
+      tracking: clip(s.trackingNo || s.trackingNumber, 60),
+      unitsExpected: Number(s.expectedQty ?? s.shippedQty ?? s.shippedUnits ?? s.totalQuantity) || 0,
+      unitsReceived: Number(s.receivedQty ?? s.receivedUnits) || 0,
+    };
+  }).filter(s => s.id || s.orderId);
+}
+
+function parseInboundItems(body) {
+  const data = (body && (body.payload || body.data || body)) || {};
+  const list = arr(data.shipmentItems || data.items || data.data || data.elements);
+  return list.map(it => ({
+    sku: clip(it.sku || it.vendorSku || it.itemSku, 80),
+    desc: clip(it.itemDesc || it.productName || it.description || it.itemDescription, 120),
+    gtin: clip(it.gtin || it.upc, 20),
+    expected: Number(it.expectedQty ?? it.shippedQty ?? it.quantity) || 0,
+    received: Number(it.receivedQty ?? it.receivedUnits) || 0,
+  })).filter(it => it.sku);
+}
+
+WalmartClient.prototype.inboundShipments = async function ({ limit = 50 } = {}) {
+  let body;
+  try {
+    body = await this.call('GET', `/v3/fulfillment/inbound-shipments?limit=${limit}&offset=0`);
+  } catch (e) {
+    if (!/404|not found/i.test(String(e.message))) throw e;
+    body = await this.call('GET', `/v3/inbound-shipments?limit=${limit}&offset=0`);
+  }
+  return parseInboundShipments(body);
+};
+
+WalmartClient.prototype.inboundShipmentItems = async function (shipmentId) {
+  const q = `shipmentId=${encodeURIComponent(shipmentId)}&limit=300&offset=0`;
+  let body;
+  try {
+    body = await this.call('GET', `/v3/fulfillment/inbound-shipment-items?${q}`);
+  } catch (e) {
+    if (!/404|not found/i.test(String(e.message))) throw e;
+    body = await this.call('GET', `/v3/shipment-items?${q}`);
+  }
+  return parseInboundItems(body);
+};
+
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
+  parseInboundShipments, parseInboundItems,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
   idParam, toGtin14, normalizeSearch, buildMatchFeed, parseFeedStatus, isFinal, MATCH_CONDITIONS,
   parseItemStatus, parseProductPage, parseOffers, parseVariants, parseVariantSet,
