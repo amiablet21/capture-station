@@ -14289,6 +14289,13 @@ async function ovWfsFetch(force) {
   ovRenderTabs();
 }
 
+// "2026-10-29" the way Seller Center prints it: "Oct 29, 2026"
+function ovWfsDay(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return iso || '';
+  return `${OV_MONTHS[Number(m[2]) - 1].slice(0, 3)} ${Number(m[3])}, ${m[1]}`;
+}
+
 // a Walmart status like "Receiving in progress" into the chip's color family
 function ovWfsStatusCls(status) {
   const s = String(status || '').toLowerCase();
@@ -14331,12 +14338,12 @@ function ovRenderWfs() {
     <div class="sp-head"><span class="pid">Plan ID: <span class="mono">${esc(p.plan)}</span></span>
       <button type="button" class="sp-view" data-wfsview>View plan</button>
       <span class="sp-status ${ovWfsStatusCls(first.status)}">${esc(first.status || '—')}</span></div>
-    ${p.created ? `<div class="sp-meta"><span>Created: ${esc(p.created)}</span></div>` : ''}
+    ${p.created ? `<div class="sp-meta"><span>Created: ${esc(ovWfsDay(p.created))}</span></div>` : ''}
     <table class="sp-t"><thead><tr>
       <th>Shipment ID</th><th>Ship to</th><th>Carrier</th><th>Estimated delivery</th><th class="rr">Shipped units</th><th class="rr">Received units</th><th>Status</th><th></th>
     </tr></thead><tbody>
     ${p.shipments.map(s => `<tr>
-      <td class="mono">${esc(s.id || '—')}</td><td>${esc(s.shipTo || '—')}</td><td>${esc(s.carrier || '—')}</td><td>${esc(s.eta || '—')}</td>
+      <td class="mono">${esc(s.id || '—')}</td><td>${esc(s.shipTo || '—')}</td><td>${esc(s.carrier || '—')}</td><td>${s.eta ? esc(ovWfsDay(s.eta)) : '—'}</td>
       <td class="rr mono">${(s.unitsExpected || 0).toLocaleString()}</td><td class="rr mono">${(s.unitsReceived || 0).toLocaleString()}</td>
       <td><span class="sp-chip ${ovWfsStatusCls(s.status)}">${esc(s.status || '—')}</span></td>
       <td class="rr">${s.tracking ? `<button type="button" class="sp-track" data-wfstrack="${esc(s.tracking)}" data-carrier="${esc(s.carrier || '')}">Track</button>` : ''}</td>

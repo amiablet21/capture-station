@@ -1031,35 +1031,66 @@ function parseRepricerReport(rows) {
 // on one shipment. Walmart's reference and its older overview pages disagree
 // on the path prefix (/v3/fulfillment/... vs /v3/...), so the client tries
 // the documented one first and falls back once on a 404.
+// Walmart's status enums, worded the way Seller Center's Shipping Plans
+// page shows them (checked against a live account 2026-10-27:
+// AWAITING_DELIVERY draws as "Awaiting transit" there)
+const WFS_STATUS = {
+  AWAITING_DELIVERY: 'Awaiting transit',
+  PENDING_SHIPMENT_DETAILS: 'Needs shipment details',
+  IN_TRANSIT: 'In transit',
+  DELIVERED: 'Delivered',
+  RECEIVING_IN_PROGRESS: 'Receiving in progress',
+  RECEIVING: 'Receiving',
+  CLOSED: 'Closed',
+  CANCELLED: 'Cancelled',
+  CANCELED: 'Cancelled',
+};
+function wfsStatusLabel(raw) {
+  const s = clip(raw, 60);
+  if (!s) return '';
+  if (WFS_STATUS[s]) return WFS_STATUS[s];
+  const t = s.replace(/_/g, ' ').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+// live shape (2026-10-27): { headers: {offset,limit,totalCount},
+// payload: [ { inboundOrderId, shipmentId, shipToAddress:{fcName,city,
+// stateCode,...}, status:"AWAITING_DELIVERY", createdDate,
+// shipmentUnits, receivedUnits, expectedDeliveryDate,
+// updatedExpectedDeliveryDate, trackingNo:[...], carrierName } ] }
 function parseInboundShipments(body) {
   const data = (body && (body.payload || body.data || body)) || {};
-  const list = arr(data.shipments || data.inboundShipments || data.data || data.elements);
+  const list = Array.isArray(data) ? data : arr(data.shipments || data.inboundShipments || data.data || data.elements);
   return list.map(s => {
     const addr = s.shipToAddress || s.destinationAddress || {};
     const place = [addr.fcName || addr.name, [addr.city, addr.stateCode || addr.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
     return {
       id: clip(s.shipmentId || s.id, 40),
       orderId: clip(s.inboundOrderId || s.orderId || s.planId, 40),
-      status: clip(s.status || s.shipmentStatus, 60),
-      created: dayOf(s.createdDtm || s.createdDate || s.creationDate),
-      eta: dayOf(s.expectedDeliveryDtm || s.expectedDeliveryDate || s.estimatedDeliveryDate),
+      status: wfsStatusLabel(s.status || s.shipmentStatus),
+      created: dayOf(s.createdDate || s.createdDtm || s.creationDate),
+      // Walmart revises the ETA after the label is bought; the revised date
+      // is the one Seller Center shows
+      eta: dayOf(s.updatedExpectedDeliveryDate || s.expectedDeliveryDate || s.expectedDeliveryDtm || s.estimatedDeliveryDate),
       shipTo: clip(s.fulfillmentCenterName || place || s.fcName, 90),
       carrier: clip(s.carrierName || s.carrier, 40),
-      tracking: clip(s.trackingNo || s.trackingNumber, 60),
-      unitsExpected: Number(s.expectedQty ?? s.shippedQty ?? s.shippedUnits ?? s.totalQuantity) || 0,
-      unitsReceived: Number(s.receivedQty ?? s.receivedUnits) || 0,
+      tracking: clip(arr(s.trackingNo)[0] || s.trackingNumber, 60),
+      unitsExpected: Number(s.shipmentUnits ?? s.expectedQty ?? s.shippedQty ?? s.shippedUnits ?? s.totalQuantity) || 0,
+      unitsReceived: Number(s.receivedUnits ?? s.receivedQty) || 0,
     };
   }).filter(s => s.id || s.orderId);
 }
 
+// live shape (2026-10-27): payload: [ { inboundOrderId, shipmentId, gtin,
+// sku, itemDesc, itemQty, receivedQty, damagedQty, ... } ]
 function parseInboundItems(body) {
   const data = (body && (body.payload || body.data || body)) || {};
-  const list = arr(data.shipmentItems || data.items || data.data || data.elements);
+  const list = Array.isArray(data) ? data : arr(data.shipmentItems || data.items || data.data || data.elements);
   return list.map(it => ({
     sku: clip(it.sku || it.vendorSku || it.itemSku, 80),
     desc: clip(it.itemDesc || it.productName || it.description || it.itemDescription, 120),
     gtin: clip(it.gtin || it.upc, 20),
-    expected: Number(it.expectedQty ?? it.shippedQty ?? it.quantity) || 0,
+    expected: Number(it.itemQty ?? it.expectedQty ?? it.shippedQty ?? it.quantity) || 0,
     received: Number(it.receivedQty ?? it.receivedUnits) || 0,
   })).filter(it => it.sku);
 }
