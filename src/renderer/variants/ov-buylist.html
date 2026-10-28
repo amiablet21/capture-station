@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Overview — buy list like the Black Friday PDF (mock-up 2026-10-28)</title>
+<head><meta charset="UTF-8" /><title>Overview — What to buy like the Black Friday PDF (mock-up on v1.32.124, 2026-10-28)</title>
 <style>
   /* Mock-up only: the Overview's "Needs attention" card redrawn as the buy-list
      PDF the owner liked (Buy now / Buy next / Then, # SKU Sold/week Left Buy).
@@ -26,19 +26,27 @@
   body { font-family: var(--font); font-size: 13px; line-height: 1.5; background: var(--canvas); color: var(--text); }
   .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-  .topbar { display: flex; justify-content: center; padding: 10px 0 0; }
   .tabs { display: flex; background: #EFEEEA; border-radius: 10px; padding: 3px; gap: 2px; }
   .tab { font-size: 12px; font-weight: 500; color: var(--muted); padding: 5px 14px; border-radius: 8px; }
   .tab.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(47,52,55,.08); }
 
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px 22px 30px; display: flex; flex-direction: column; gap: 14px; }
+  .rc-head { display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid #EAEAEA; padding-bottom: 10px; margin-bottom: 4px; }
+  .rc-h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; }
+  .rc-subtabs { display: flex; gap: 22px; margin-left: 18px; align-items: flex-end; }
+  .rc-subtab { font-size: 12.5px; font-weight: 500; color: #787774; display: flex; align-items: center; gap: 8px; line-height: 1.55; }
+  .rc-subtab.is-active { font-weight: 600; color: #2F3437; padding-bottom: 10px; margin-bottom: -11px; border-bottom: 2px solid #1E3A66; }
+  .rc-subtab-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: #9F2F2D; }
+  .ov-headright { margin-left: auto; align-self: center; display: flex; align-items: center; gap: 10px; }
+  .ov-updated { font-size: 12px; color: var(--faint); }
+  .ov-refresh { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 16px 22px 30px; display: flex; flex-direction: column; gap: 14px; }
   .head { display: flex; align-items: center; gap: 12px; }
   .head h1 { font-size: 15px; font-weight: 600; }
   .head .d { font-size: 11.5px; color: var(--faint); }
   .refresh { margin-left: auto; font: inherit; font-size: 12px; border: 1px solid var(--border); background: #fff; border-radius: var(--r-ctl); padding: 4px 12px; color: var(--muted); }
 
 
-  .body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
+  .body { display: block; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
   .card-h { display: flex; align-items: center; gap: 10px; padding: 13px 18px; flex-wrap: wrap; }
   .card-h .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -76,31 +84,29 @@
   .note { font-size: 12px; color: var(--muted); background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; }
   .note b { color: var(--text); }
   @media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { col.c-rank { width: 30px; } col.c-num { width: 70px; } col.c-buy { width: 62px; } .wrap { padding: 12px 12px 24px; } .sec { padding: 4px 10px 14px; } }
+  @media (max-width: 600px) { .rc-head { flex-wrap: wrap; gap: 10px; } .rc-subtabs { margin-left: 0; gap: 14px; } col.c-rank { width: 30px; } col.c-num { width: 70px; } col.c-buy { width: 62px; } .wrap { padding: 12px 12px 24px; } .sec { padding: 4px 10px 14px; } }
 </style>
 </head>
 <body>
-  <div class="topbar"><div class="tabs"><span class="tab on">Overview</span><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab">History</span></div></div>
   <div class="wrap">
-    <div class="note"><b>Mock-up.</b> The Overview's "Needs attention" list redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. The big counts row is removed. The "What to order" header is removed too, and rows don't open: a SKU simply drops off the list once it's stocked enough. Sold today and Refresh stay as they are today.</div>
+    <div class="note"><b>Mock-up, on the current build (v1.32.124).</b> The Overview's <b>What to buy</b> tab redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. No counts row, no header, rows don't open: a SKU drops off the list once it's stocked enough. Needs attention and Sent to WFS stay as they are.</div>
 
-    <div class="head"><h1>Overview</h1><span class="d">Updated 9:41 AM</span><button class="refresh" type="button">Refresh</button></div>
+    <div class="rc-head">
+      <h1 class="rc-h1">Overview</h1>
+      <nav class="rc-subtabs"><span class="rc-subtab">Needs attention</span><span class="rc-subtab">Sent to WFS</span><span class="rc-subtab is-active">What to buy <span class="rc-subtab-count" id="nbuy"></span></span></nav>
+      <span class="ov-headright"><span class="ov-updated">Updated 9:41 AM</span><span class="ov-refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></span></span>
+    </div>
 
     <div class="body">
       <div class="card">
         <div id="sections"></div>
         <div class="foot">
-          <span class="link">Slow sellers (under 5 a week) →</span>
+          <span class="link">Download this list as Excel</span><span class="link">Slow sellers (under 5 a week) →</span>
           <span class="tot" id="grand"></span>
         </div>
         <p class="how">Sold / week: the best of the last 14, 30 and 60 days' averages. Left: Digital World Shop + WFS (dropship pad not counted). Buy: enough to sell at normal pace until Nov 19, then 10× through Cyber Monday, less what's left and on order, rounded up to 5. A SKU leaves this list by itself as soon as what's left and on order covers it through Black Friday week (Buy reaches 0). A15, T220 and Silver Shadow left out (Settings → Stock).</p>
       </div>
 
-      <div class="card sold">
-        <div class="card-h" style="padding:0"><span class="lbl">Sold today</span></div>
-        <div class="ph">Unchanged — today's card as it is now</div>
-      </div>
-    </div>
   </div>
 
 <script>
@@ -128,6 +134,7 @@
         <tbody>${body}</tbody><tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td class="buy">${fmt(total)}</td></tr></tfoot></table></div>`;
     }).join('');
     document.getElementById('sections').innerHTML = html;
+    document.getElementById('nbuy').textContent = ROWS.length;
     document.getElementById('grand').innerHTML = `All ${ROWS.length} SKUs: <b>${fmt(grand)}</b> units`;
   }
   draw();
