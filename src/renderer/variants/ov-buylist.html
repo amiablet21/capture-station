@@ -43,7 +43,6 @@
   .card-h { display: flex; align-items: center; gap: 10px; padding: 13px 18px; flex-wrap: wrap; }
   .card-h .lbl { font-size: 10.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
   .card-h .sub { margin-left: auto; font-size: 11px; color: var(--faint); }
-  .peak { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 10px; }
 
   .sec { padding: 4px 18px 16px; }
   .sec h2 { font-size: 15px; font-weight: 600; margin-top: 8px; }
@@ -56,8 +55,6 @@
   .s-next thead th { background: var(--sec-next); } .s-then thead th { background: var(--sec-then); }
   th.l, td.l { text-align: left; }
   tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
-  tbody tr { cursor: pointer; }
-  tbody tr:hover td { background: var(--surface-2); }
   td.rank { color: var(--muted); width: 38px; }
   td.sku { font-family: var(--mono); font-size: 12.5px; }
   td.sku .ds { font-family: var(--font); font-size: 10.5px; color: var(--badge-blue-text); background: var(--badge-blue-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
@@ -66,12 +63,6 @@
   tfoot td { padding: 7px 10px; text-align: right; font-weight: 700; border-top: 1.5px solid var(--text); font-variant-numeric: tabular-nums; }
   tfoot td.buy { background: #F2F4F7; }
 
-  /* a row opened: the Overview's existing panel, unchanged */
-  tr.open td { background: var(--surface-2); }
-  tr.panel td { padding: 0; background: var(--surface-2); cursor: default; }
-  .panel-ph { margin: 6px 10px 12px 48px; border: 1.5px dashed var(--border); border-radius: 8px; padding: 14px 16px; color: var(--muted); font-size: 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; }
-  .panel-ph b { color: var(--text); font-weight: 600; }
-  .panel-ph .dismiss { font: inherit; font-size: 11.5px; border: 1px solid var(--border); background: #fff; border-radius: var(--r-ctl); padding: 3px 10px; color: var(--muted); }
 
   .foot { display: flex; align-items: center; gap: 12px; padding: 12px 18px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
   .foot .link { color: var(--accent); }
@@ -91,24 +82,18 @@
 <body>
   <div class="topbar"><div class="tabs"><span class="tab on">Overview</span><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab">History</span></div></div>
   <div class="wrap">
-    <div class="note"><b>Mock-up.</b> The Overview's "Needs attention" list redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. The big counts row is removed. Sold today, Refresh and the row panel (chart, week/month, marketplace split, Dismiss) stay as they are today. Click a row to see where the panel opens.</div>
+    <div class="note"><b>Mock-up.</b> The Overview's "Needs attention" list redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. The big counts row is removed. The "What to order" header is removed too, and rows don't open: a SKU simply drops off the list once it's stocked enough. Sold today and Refresh stay as they are today.</div>
 
     <div class="head"><h1>Overview</h1><span class="d">Updated 9:41 AM</span><button class="refresh" type="button">Refresh</button></div>
 
     <div class="body">
       <div class="card">
-        <div class="card-h">
-          <span class="lbl">What to order</span>
-          <span class="peak">Black Friday · Nov 20 – Nov 30 at 10× · 5+ a week</span>
-          <span class="sub">Lead time 7 days</span>
-        </div>
         <div id="sections"></div>
         <div class="foot">
           <span class="link">Slow sellers (under 5 a week) →</span>
-          <span>Dismissed SKUs show here, with Undo</span>
           <span class="tot" id="grand"></span>
         </div>
-        <p class="how">Sold / week: the best of the last 14, 30 and 60 days' averages. Left: Digital World Shop + WFS (dropship pad not counted). Buy: enough to sell at normal pace until Nov 19, then 10× through Cyber Monday, less what's left and on order, rounded up to 5. A15, T220 and Silver Shadow left out (Settings → Stock).</p>
+        <p class="how">Sold / week: the best of the last 14, 30 and 60 days' averages. Left: Digital World Shop + WFS (dropship pad not counted). Buy: enough to sell at normal pace until Nov 19, then 10× through Cyber Monday, less what's left and on order, rounded up to 5. A SKU leaves this list by itself as soon as what's left and on order covers it through Black Friday week (Buy reaches 0). A15, T220 and Silver Shadow left out (Settings → Stock).</p>
       </div>
 
       <div class="card sold">
@@ -127,7 +112,6 @@
     { cls: 's-then', title: 'Then', why: 'Has stock today, but not enough for Black Friday week', groups: ['Has stock, short for the peak'] },
   ];
   const fmt = (n) => Number(n).toLocaleString('en-US');
-  let open = 'X230-256GB-GRAY';
   function draw() {
     let rank = 0, grand = 0;
     const html = SECTIONS.map((s) => {
@@ -136,9 +120,8 @@
       grand += total;
       const body = rs.map((r) => {
         rank++;
-        const row = `<tr data-sku="${r[0]}" class="${open === r[0] ? 'open' : ''}"><td class="rank">${rank}</td><td class="l sku">${r[0]}${r[1] ? '<span class="ds">Dropship</span>' : ''}</td><td>${r[2]}</td><td class="${r[3] === 0 ? 'left0' : ''}">${fmt(r[3])}</td><td class="buy">${fmt(r[5])}</td></tr>`;
-        const panel = open === r[0] ? `<tr class="panel"><td colspan="5"><div class="panel-ph"><span><b>Today's row panel opens here, unchanged:</b> 30-day sales chart · per day · this week · this month · pace · by marketplace</span><button class="dismiss" type="button">Dismiss for 7 days</button></div></td></tr>` : '';
-        return row + panel;
+        const row = `<tr><td class="rank">${rank}</td><td class="l sku">${r[0]}${r[1] ? '<span class="ds">Dropship</span>' : ''}</td><td>${r[2]}</td><td class="${r[3] === 0 ? 'left0' : ''}">${fmt(r[3])}</td><td class="buy">${fmt(r[5])}</td></tr>`;
+        return row;
       }).join('');
       return `<div class="sec ${s.cls}"><h2>${s.title}</h2><p class="why">${s.why}</p>
         <table><colgroup><col class="c-rank"><col><col class="c-num"><col class="c-num"><col class="c-buy"></colgroup><thead><tr><th>#</th><th class="l">SKU</th><th>Sold / week</th><th>Left</th><th>Buy</th></tr></thead>
@@ -147,12 +130,6 @@
     document.getElementById('sections').innerHTML = html;
     document.getElementById('grand').innerHTML = `All ${ROWS.length} SKUs: <b>${fmt(grand)}</b> units`;
   }
-  document.getElementById('sections').addEventListener('click', (e) => {
-    const tr = e.target.closest('tr[data-sku]');
-    if (!tr) return;
-    open = open === tr.dataset.sku ? null : tr.dataset.sku;
-    draw();
-  });
   draw();
 </script>
 </body>
