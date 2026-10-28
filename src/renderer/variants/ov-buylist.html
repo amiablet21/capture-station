@@ -37,14 +37,6 @@
   .head .d { font-size: 11.5px; color: var(--faint); }
   .refresh { margin-left: auto; font: inherit; font-size: 12px; border: 1px solid var(--border); background: #fff; border-radius: var(--r-ctl); padding: 4px 12px; color: var(--muted); }
 
-  /* the three counts, renamed to the PDF's sections */
-  .counts { display: flex; align-items: baseline; gap: 44px; flex-wrap: wrap; }
-  .counts > div { display: flex; align-items: baseline; gap: 10px; }
-  .counts .n { font-size: 38px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; font-family: var(--mono); }
-  .counts .n.now { color: var(--sec-now); } .counts .n.next { color: var(--sec-next); } .counts .n.then { color: var(--sec-then); }
-  .counts .l { font-size: 14px; }
-  .counts .units { margin-left: auto; color: var(--muted); font-size: 13px; }
-  .counts .units b { color: var(--text); font-family: var(--mono); font-weight: 600; }
 
   .body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
@@ -93,17 +85,15 @@
   .note { font-size: 12px; color: var(--muted); background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 10px 14px; }
   .note b { color: var(--text); }
   @media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { col.c-rank { width: 30px; } col.c-num { width: 70px; } col.c-buy { width: 62px; } .wrap { padding: 12px 12px 24px; } .sec { padding: 4px 10px 14px; } .counts { gap: 20px; } }
+  @media (max-width: 600px) { col.c-rank { width: 30px; } col.c-num { width: 70px; } col.c-buy { width: 62px; } .wrap { padding: 12px 12px 24px; } .sec { padding: 4px 10px 14px; } }
 </style>
 </head>
 <body>
   <div class="topbar"><div class="tabs"><span class="tab on">Overview</span><span class="tab">Capture</span><span class="tab">Stock</span><span class="tab">History</span></div></div>
   <div class="wrap">
-    <div class="note"><b>Mock-up.</b> The Overview's "Needs attention" list redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. The counts row, Sold today, Refresh and the row panel (chart, week/month, marketplace split, Dismiss) stay as they are today. Click a row to see where the panel opens.</div>
+    <div class="note"><b>Mock-up.</b> The Overview's "Needs attention" list redrawn like the Black Friday buy-list PDF. Real numbers from Oct 26. The big counts row is removed. Sold today, Refresh and the row panel (chart, week/month, marketplace split, Dismiss) stay as they are today. Click a row to see where the panel opens.</div>
 
     <div class="head"><h1>Overview</h1><span class="d">Updated 9:41 AM</span><button class="refresh" type="button">Refresh</button></div>
-
-    <div class="counts" id="counts"></div>
 
     <div class="body">
       <div class="card">
@@ -132,18 +122,16 @@
   // [sku, dropship, sold/week, left, group, buy] — tools/linnworks/lw.js buylist, Oct 26
   const ROWS = [["X230-256GB-GRAY",0,23,0,"Out of stock now",435],["S26-ULTRA-512GB-VIOLET",1,14,0,"Out of stock now",260],["X620-128GB-GRAY",0,12,0,"Out of stock now",230],["S26-ULTRA-512GB-BLACK",1,11,0,"Out of stock now",205],["S26-ULTRA-512GB-BLUE",1,19,2,"Runs out within 2 weeks",355],["IPAD-11-128GB-PINK-LTE",0,8.5,1,"Runs out within 2 weeks",165],["S26-256GB-BLACK",1,16,17,"Runs out within 2 weeks",290],["S25-256GB-NAVY",1,5.5,6,"Runs out within 2 weeks",100],["S26-512GB-BLACK",1,6,7,"Runs out within 2 weeks",110],["S26-256GB-BLUE",1,17,25,"Runs out within 2 weeks",295],["S25-ULTRA-512GB-SILVERBLUE",1,8.5,13,"Runs out within 2 weeks",150],["X930-256GB-GRAY",0,5.5,10,"Runs out within 2 weeks",100],["S26-ULTRA-256GB-VIOLET",1,21,43,"Runs out before 2026-11-20",360],["S26-ULTRA-256GB-BLUE",1,6.5,14,"Runs out before 2026-11-20",115],["X230-256GB-SILVER",0,16,39,"Runs out before 2026-11-20",265],["X520-256GB-GRAY",0,9,23,"Runs out before 2026-11-20",150],["X133-128GB-GRAY",0,35,92,"Runs out before 2026-11-20",585],["S26-ULTRA-256GB-BLACK",1,19,63,"Runs out before 2026-11-20",305],["X520-128GB-SILVER",0,18,61,"Runs out before 2026-11-20",285],["X230-128GB-SILVER",0,16,75,"Has stock, short for the peak",230],["X620-128GB-SILVER",0,5,24,"Has stock, short for the peak",75],["X210-64GB-GRAY",0,78,471,"Has stock, short for the peak",1025],["X400-128GB-GRAY",0,75,558,"Has stock, short for the peak",870],["X133-128GB-SILVER",0,8.9,67,"Has stock, short for the peak",105],["X230-128GB-GRAY",0,105,843,"Has stock, short for the peak",1170],["X133-64GB-GRAY",0,161,1515,"Has stock, short for the peak",1560],["X610-128GB-BLACK",0,14,151,"Has stock, short for the peak",120],["X135-128GB-SILVER",0,5.6,71,"Has stock, short for the peak",40],["X236-128GB-GRAY",0,23,310,"Has stock, short for the peak",135],["X135-64GB-GRAY",0,24,331,"Has stock, short for the peak",135],["X620-128GB-BLUE",0,8,134,"Has stock, short for the peak",20],["X135-64GB-SILVER",0,8.6,145,"Has stock, short for the peak",25],["X356-128GB-GREEN",0,5,90,"Has stock, short for the peak",10]];
   const SECTIONS = [
-    { cls: 's-now', title: 'Buy now', why: 'Out of stock, or out within 2 weeks', groups: ['Out of stock now', 'Runs out within 2 weeks'], count: 'now' },
-    { cls: 's-next', title: 'Buy next', why: 'Runs out before Black Friday week starts (Nov 20)', groups: ['Runs out before 2026-11-20'], count: 'next' },
-    { cls: 's-then', title: 'Then', why: 'Has stock today, but not enough for Black Friday week', groups: ['Has stock, short for the peak'], count: 'then' },
+    { cls: 's-now', title: 'Buy now', why: 'Out of stock, or out within 2 weeks', groups: ['Out of stock now', 'Runs out within 2 weeks'] },
+    { cls: 's-next', title: 'Buy next', why: 'Runs out before Black Friday week starts (Nov 20)', groups: ['Runs out before 2026-11-20'] },
+    { cls: 's-then', title: 'Then', why: 'Has stock today, but not enough for Black Friday week', groups: ['Has stock, short for the peak'] },
   ];
   const fmt = (n) => Number(n).toLocaleString('en-US');
   let open = 'X230-256GB-GRAY';
   function draw() {
     let rank = 0, grand = 0;
-    const counts = {};
     const html = SECTIONS.map((s) => {
       const rs = ROWS.filter((r) => s.groups.includes(r[4]));
-      counts[s.count] = rs.length;
       const total = rs.reduce((t, r) => t + r[5], 0);
       grand += total;
       const body = rs.map((r) => {
@@ -157,11 +145,6 @@
         <tbody>${body}</tbody><tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td class="buy">${fmt(total)}</td></tr></tfoot></table></div>`;
     }).join('');
     document.getElementById('sections').innerHTML = html;
-    document.getElementById('counts').innerHTML = `
-      <div><span class="n now">${counts.now}</span><span class="l">buy now</span></div>
-      <div><span class="n next">${counts.next}</span><span class="l">buy next</span></div>
-      <div><span class="n then">${counts.then}</span><span class="l">then</span></div>
-      <span class="units"><b>${fmt(grand)}</b> units to order across <b>${ROWS.length}</b> SKUs</span>`;
     document.getElementById('grand').innerHTML = `All ${ROWS.length} SKUs: <b>${fmt(grand)}</b> units`;
   }
   document.getElementById('sections').addEventListener('click', (e) => {
