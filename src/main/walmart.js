@@ -1095,14 +1095,8 @@ function parseInboundItems(body) {
   })).filter(it => it.sku);
 }
 
-WalmartClient.prototype.inboundShipments = async function ({ limit = 50 } = {}) {
-  let body;
-  try {
-    body = await this.call('GET', `/v3/fulfillment/inbound-shipments?limit=${limit}&offset=0`);
-  } catch (e) {
-    if (!/404|not found/i.test(String(e.message))) throw e;
-    body = await this.call('GET', `/v3/inbound-shipments?limit=${limit}&offset=0`);
-  }
+WalmartClient.prototype.inboundShipments = async function ({ limit = 50, offset = 0 } = {}) {
+  const body = await this.call('GET', `/v3/fulfillment/inbound-shipments?limit=${limit}&offset=${offset}`);
   return parseInboundShipments(body);
 };
 

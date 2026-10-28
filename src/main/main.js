@@ -4321,21 +4321,43 @@ exit 1
   let wfsPlans = { at: 0, plans: null, error: '', promise: null };
   async function readWfsPlans() {
     const client = wmClient();
-    const ships = await client.inboundShipments({ limit: 50 });
+    // the entire history (owner 2026-10-28): page until Walmart runs dry,
+    // capped at 1000 shipments so a huge account stays a handful of calls
+    let ships = [];
+    for (let offset = 0; offset < 1000; offset += 50) {
+      const page = await client.inboundShipments({ limit: 50, offset });
+      ships = ships.concat(page);
+      if (page.length < 50) break;
+    }
     ships.sort((a, b) => String(b.created).localeCompare(String(a.created)));
-    // cancelled plans never show; the rest age off once closed and old
-    const open = ships.filter(s => !/cancel/i.test(s.status)).slice(0, 12);
-    for (const s of open) {
-      try { s.items = s.id ? await client.inboundShipmentItems(s.id) : []; } catch { s.items = []; }
+    // the SKUs ride along for the 15 newest; older shipments load theirs
+    // on demand (wfs:items) — 137 eager item reads would trip the rate limit
+    for (const s of ships.slice(0, 15)) {
+      try { s.items = s.id ? await client.inboundShipmentItems(s.id) : []; } catch { s.items = null; }
     }
     const byPlan = new Map();
-    for (const s of open) {
+    for (const s of ships) {
       const key = s.orderId || s.id;
       if (!byPlan.has(key)) byPlan.set(key, { plan: key, created: s.created, shipments: [] });
       byPlan.get(key).shipments.push(s);
     }
     return [...byPlan.values()];
   }
+  // SKUs for one older shipment, fetched when its plan card asks and kept
+  // on the cached plan so the next render has them
+  ipcMain.handle('wfs:items', async (_e, { shipmentId } = {}) => {
+    if (!wmKeys() || !shipmentId) return { ok: false, error: 'No shipment named.' };
+    try {
+      const items = await wmClient().inboundShipmentItems(String(shipmentId));
+      for (const p of wfsPlans.plans || []) {
+        const s = p.shipments.find(x => x.id === String(shipmentId));
+        if (s) s.items = items;
+      }
+      return { ok: true, shipmentId: String(shipmentId), items };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || 'Walmart did not answer.' };
+    }
+  });
   ipcMain.handle('wfs:plans', async (_e, { force } = {}) => {
     if (IS_DEMO) {
       // the review boot shows the layout without touching Walmart

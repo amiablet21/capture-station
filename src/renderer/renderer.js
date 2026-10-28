@@ -14246,7 +14246,7 @@ $('tabOverview').addEventListener('click', () => showPage('overview'));
    the WFS API, each shipment with the channel SKUs that were sent. ----- */
 let ovTab = 'attn';
 let ovWfs = { plans: null, at: 0, error: '', needsKeys: false, fetching: false };
-let ovWfsQ = '', ovWfsStatus = '', ovWfsQT = null;
+let ovWfsQ = '', ovWfsStatus = '', ovWfsQT = null, ovWfsShown = 25;
 
 function ovApplyTab() {
   document.querySelectorAll('.ov-menuhead [data-ovtab]').forEach(b => b.classList.toggle('is-active', b.dataset.ovtab === ovTab));
@@ -14273,7 +14273,8 @@ function ovRenderTabs() {
   const set = (id, n) => { const el = $(id); el.hidden = !n; el.textContent = String(n || 0); };
   set('ovNAttn', p && p.counts ? (p.counts.out || 0) + (p.counts.low || 0) : 0);
   set('ovNBuy', p && p.counts ? p.counts.buy || 0 : 0);
-  set('ovNWfs', ovWfs.plans ? ovWfs.plans.length : 0);
+  // the badge counts plans still moving, not the whole history
+  set('ovNWfs', ovWfs.plans ? ovWfs.plans.filter(p => p.shipments.some(s => ['transit', 'receiving'].includes(ovWfsStatusCls(s.status)))).length : 0);
 }
 
 async function ovWfsFetch(force) {
@@ -14299,7 +14300,8 @@ function ovWfsDay(iso) {
 // a Walmart status like "Receiving in progress" into the chip's color family
 function ovWfsStatusCls(status) {
   const s = String(status || '').toLowerCase();
-  if (/receiv|closed|delivered/.test(s)) return 'receiving';
+  if (/closed|delivered/.test(s)) return 'closed';
+  if (/receiv/.test(s)) return 'receiving';
   if (/transit|shipped|awaiting|pending|label/.test(s)) return 'transit';
   return 'other';
 }
@@ -14320,20 +14322,29 @@ function ovRenderWfs() {
     if (!q) return true;
     return [p.plan, ...p.shipments.flatMap(s => [s.id, ...(s.items || []).map(i => i.sku)])].join(' ').toLowerCase().includes(q);
   });
-  const units = ovWfs.plans.reduce((a, p) => a + p.shipments.reduce((x, s) => x + Math.max(0, (s.unitsExpected || 0) - (s.unitsReceived || 0)), 0), 0);
+  // "on the way" counts only shipments still moving, not the closed history
+  const moving = (s) => ['transit', 'receiving'].includes(ovWfsStatusCls(s.status));
+  const units = ovWfs.plans.reduce((a, p) => a + p.shipments.reduce((x, s) => x + (moving(s) ? Math.max(0, (s.unitsExpected || 0) - (s.unitsReceived || 0)) : 0), 0), 0);
+  const openN = ovWfs.plans.filter(p => p.shipments.some(moving)).length;
   const bar = `<div class="sp-bar">
     <input class="sp-search" id="wfsSearch" placeholder="Search by shipment ID or SKU" value="${esc(ovWfsQ)}" />
     <select class="sp-sel" id="wfsStatusSel">
       <option value="">All statuses</option>
       <option value="transit"${ovWfsStatus === 'transit' ? ' selected' : ''}>On the way</option>
-      <option value="receiving"${ovWfsStatus === 'receiving' ? ' selected' : ''}>Receiving / closed</option>
-      <option value="other"${ovWfsStatus === 'other' ? ' selected' : ''}>Other</option>
+      <option value="receiving"${ovWfsStatus === 'receiving' ? ' selected' : ''}>Receiving</option>
+      <option value="closed"${ovWfsStatus === 'closed' ? ' selected' : ''}>Closed</option>
     </select>
-    <span class="sp-sub">${ovWfs.plans.length} plan${ovWfs.plans.length === 1 ? '' : 's'} · ${units.toLocaleString()} units on the way${ovWfs.at ? ` · read ${ovTime(ovWfs.at)}` : ''}${ovWfs.error ? ' · the last refresh failed; press Refresh' : ''}</span>
+    <span class="sp-sub">${openN} open · ${ovWfs.plans.length} all time · ${units.toLocaleString()} units on the way${ovWfs.at ? ` · read ${ovTime(ovWfs.at)}` : ''}${ovWfs.error ? ' · the last refresh failed; press Refresh' : ''}</span>
   </div>`;
-  const cards = plans.map(p => {
+  const cards = plans.slice(0, ovWfsShown).map(p => {
     const first = p.shipments[0] || {};
+    const pending = p.shipments.filter(s => !Array.isArray(s.items));
     const items = p.shipments.flatMap(s => s.items || []);
+    const itemRows = pending.length
+      ? `<div class="sp-it"><span class="ds"><button type="button" class="ovq-link" data-wfsload="${esc(pending.map(s => s.id).filter(Boolean).join(','))}">Show the SKUs on this shipment</button></span></div>`
+      : items.length
+        ? items.map(it => `<div class="sp-it"><span class="ch">${esc(it.sku)}</span><span class="ds">${esc(it.desc || '')}</span><span class="u mono">${(it.expected || 0).toLocaleString()}</span><span class="u mono">${it.received ? it.received.toLocaleString() : '—'}</span></div>`).join('')
+        : '<div class="sp-it"><span class="ds">Walmart did not name the items on this shipment.</span></div>';
     return `<div class="sp-plan">
     <div class="sp-head"><span class="pid">Plan ID: <span class="mono">${esc(p.plan)}</span></span>
       <button type="button" class="sp-view" data-wfsview>View plan</button>
@@ -14351,15 +14362,17 @@ function ovRenderWfs() {
     </tbody></table>
     <div class="sp-items">
       <div class="sp-it h"><span>Channel SKU</span><span>Item</span><span class="u">Units sent</span><span class="u">Received</span></div>
-      ${items.length ? items.map(it => `<div class="sp-it"><span class="ch">${esc(it.sku)}</span><span class="ds">${esc(it.desc || '')}</span><span class="u mono">${(it.expected || 0).toLocaleString()}</span><span class="u mono">${it.received ? it.received.toLocaleString() : '—'}</span></div>`).join('')
-    : '<div class="sp-it"><span class="ds">Walmart did not name the items on this shipment.</span></div>'}
+      ${itemRows}
     </div>
   </div>`;
   }).join('');
-  box.innerHTML = bar + (cards || `<div class="sp-note">${ovWfs.plans.length ? 'Nothing matches the search.' : 'No open shipping plans. Plans created in Seller Center show here within 10 minutes.'}</div>`);
+  const more = plans.length > ovWfsShown
+    ? `<div class="sp-more"><button type="button" class="ovq-link" data-wfsmore>Show ${Math.min(25, plans.length - ovWfsShown)} older plans · ${plans.length - ovWfsShown} more</button></div>` : '';
+  box.innerHTML = bar + (cards ? cards + more : `<div class="sp-note">${ovWfs.plans.length ? 'Nothing matches the search.' : 'No shipping plans yet. Plans created in Seller Center show here within 10 minutes.'}</div>`);
   const se = box.querySelector('#wfsSearch');
   se.addEventListener('input', () => {
     ovWfsQ = se.value;
+    ovWfsShown = 25;
     clearTimeout(ovWfsQT);
     ovWfsQT = setTimeout(() => {
       const at = se.selectionStart;
@@ -14368,7 +14381,26 @@ function ovRenderWfs() {
       if (n) { n.focus(); try { n.setSelectionRange(at, at); } catch { /* fine */ } }
     }, 250);
   });
-  box.querySelector('#wfsStatusSel').addEventListener('change', (e) => { ovWfsStatus = e.target.value; ovRenderWfs(); });
+  box.querySelector('#wfsStatusSel').addEventListener('change', (e) => { ovWfsStatus = e.target.value; ovWfsShown = 25; ovRenderWfs(); });
+  const moreBtn = box.querySelector('[data-wfsmore]');
+  if (moreBtn) moreBtn.addEventListener('click', () => { ovWfsShown += 25; ovRenderWfs(); });
+  // SKUs for older shipments load when asked (the newest 15 arrive eagerly)
+  box.querySelectorAll('[data-wfsload]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    b.textContent = 'Reading the SKUs…';
+    const ids = b.dataset.wfsload.split(',').filter(Boolean);
+    const results = await Promise.all(ids.map(id => api.wfsItems(id).catch(() => null)));
+    let failed = false;
+    for (const r of results) {
+      if (!r || !r.ok) { failed = true; continue; }
+      for (const p of ovWfs.plans || []) {
+        const s = p.shipments.find(x => x.id === r.shipmentId);
+        if (s) s.items = r.items;
+      }
+    }
+    if (failed) toast('Walmart did not answer for some shipments — try again.');
+    ovRenderWfs();
+  }));
   box.querySelectorAll('[data-wfsview]').forEach(b => b.addEventListener('click', () => {
     api.openExternalUrl('https://seller.walmart.com/supply-chain/shipping-plans');
   }));

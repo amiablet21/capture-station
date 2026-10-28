@@ -231,6 +231,7 @@ contextBridge.exposeInMainWorld('api', {
   browserPrint: () => ipcRenderer.invoke('browser:print'),
   overviewData: () => ipcRenderer.invoke('overview:data'),
   wfsPlans: (opts) => ipcRenderer.invoke('wfs:plans', opts || {}),
+  wfsItems: (shipmentId) => ipcRenderer.invoke('wfs:items', { shipmentId }),
   overviewExportBuy: (rows, target, lead) => ipcRenderer.invoke('overview:exportBuy', { rows, target, lead }),
   overviewExportWas: (rows, min, mode, months) => ipcRenderer.invoke('overview:exportWas', { rows, min, mode, months }),
   overviewPhone: () => ipcRenderer.invoke('overview:phone'),
