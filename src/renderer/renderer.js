@@ -3929,6 +3929,15 @@ function applyBrowserPane() {
   // compact columns while the sheets share the window with the pane
   document.body.classList.toggle('ret-compact', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
+  // a visible pane with NOTHING loaded (a restart restored it open) used to
+  // attach the native view blank — the black rectangle at boot (owner
+  // 2026-10-28). Load the Walmart home behind the loading screen instead;
+  // while bLoad is active the native view stays detached, so the quiet
+  // ring shows in its place until the page has painted.
+  if (show && !bLoad.active && $('bDomain').textContent === '—') {
+    bShowLoading(`Opening ${channelLabel('walmart')}`);
+    api.browserOpenUrl(MARKET_HOME.walmart).then(res => { if (!res.ok) { bHideLoading(); if (res.error) toast(res.error); } });
+  }
   if (show) {
     // display-clamp only (the saved width survives): a pane remembered from a
     // wide window must never crush the sheet — the band needs room for its
@@ -14251,6 +14260,8 @@ $('tabOverview').addEventListener('click', () => showPage('overview'));
 let ovTab = 'attn';
 let ovWfs = { plans: null, at: 0, error: '', needsKeys: false, fetching: false };
 let ovWfsQ = '', ovWfsStatus = '', ovWfsQT = null, ovWfsShown = 25;
+let ovWfsPlanOpen = null; // plan id whose in-app detail is open
+const ovWfsItemReq = new Set(); // shipment ids with an item read in flight
 
 function ovApplyTab() {
   document.querySelectorAll('.ov-menuhead [data-ovtab]').forEach(b => b.classList.toggle('is-active', b.dataset.ovtab === ovTab));
@@ -14320,6 +14331,12 @@ function ovRenderWfs() {
     box.innerHTML = `<div class="sp-note">${ovWfs.error ? esc(ovWfs.error) : 'Reading the shipping plans from Walmart…'}</div>`;
     return;
   }
+  // View plan opens IN the app (owner 2026-10-28, mock wfs-plan-detail.html)
+  if (ovWfsPlanOpen) {
+    const open = ovWfs.plans.find(x => x.plan === ovWfsPlanOpen);
+    if (open) { ovRenderWfsPlan(box, open); return; }
+    ovWfsPlanOpen = null; // the plan left the read — back to the list
+  }
   const q = ovWfsQ.trim().toLowerCase();
   const plans = ovWfs.plans.filter(p => {
     if (ovWfsStatus && !p.shipments.some(s => ovWfsStatusCls(s.status) === ovWfsStatus)) return false;
@@ -14351,7 +14368,7 @@ function ovRenderWfs() {
         : '<div class="sp-it"><span class="ds">Walmart did not name the items on this shipment.</span></div>';
     return `<div class="sp-plan">
     <div class="sp-head"><span class="pid">Plan ID: <span class="mono">${esc(p.plan)}</span></span>
-      <button type="button" class="sp-view" data-wfsview>View plan</button>
+      <button type="button" class="sp-view" data-wfsview="${esc(p.plan)}">View plan</button>
       <span class="sp-status ${ovWfsStatusCls(first.status)}">${esc(first.status || '—')}</span></div>
     ${p.created ? `<div class="sp-meta"><span>Created: ${esc(ovWfsDay(p.created))}</span></div>` : ''}
     <table class="sp-t"><thead><tr>
@@ -14406,17 +14423,69 @@ function ovRenderWfs() {
     ovRenderWfs();
   }));
   box.querySelectorAll('[data-wfsview]').forEach(b => b.addEventListener('click', () => {
-    ovWfsOpen('https://seller.walmart.com/supply-chain/shipping-plans', 'Opening Shipping Plans');
+    ovWfsPlanOpen = b.dataset.wfsview;
+    ovRenderWfs();
   }));
-  box.querySelectorAll('[data-wfstrack]').forEach(b => b.addEventListener('click', () => {
-    const t = b.dataset.wfstrack;
-    const c = String(b.dataset.carrier || '').toLowerCase();
-    const url = /fedex|fdeg/.test(c) ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`
-      : /ups/.test(c) ? `https://www.ups.com/track?tracknum=${encodeURIComponent(t)}`
-        : /usps/.test(c) ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(t)}`
-          : `https://www.google.com/search?q=${encodeURIComponent(`${b.dataset.carrier || ''} tracking ${t}`)}`;
-    ovWfsOpen(url, `Tracking ${t}`);
-  }));
+  box.querySelectorAll('[data-wfstrack]').forEach(b => b.addEventListener('click', () => ovWfsTrackOpen(b)));
+}
+
+// the carrier's tracking page, in the marketplace pane
+function ovWfsTrackOpen(b) {
+  const t = b.dataset.wfstrack;
+  const c = String(b.dataset.carrier || '').toLowerCase();
+  const url = /fedex|fdeg/.test(c) ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`
+    : /ups/.test(c) ? `https://www.ups.com/track?tracknum=${encodeURIComponent(t)}`
+      : /usps/.test(c) ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(t)}`
+        : `https://www.google.com/search?q=${encodeURIComponent(`${b.dataset.carrier || ''} tracking ${t}`)}`;
+  ovWfsOpen(url, `Tracking ${t}`);
+}
+
+// one plan, opened in place of the list (approved mock 2026-10-28: one
+// quiet card — header, a single line of facts, the SKU table; no timeline)
+function ovRenderWfsPlan(box, p) {
+  // the SKUs for every shipment on an opened plan read themselves
+  for (const s of p.shipments) {
+    if (!s.id || Array.isArray(s.items) || ovWfsItemReq.has(s.id)) continue;
+    ovWfsItemReq.add(s.id);
+    api.wfsItems(s.id).then((r) => {
+      ovWfsItemReq.delete(s.id);
+      if (r && r.ok) {
+        for (const pl of ovWfs.plans || []) {
+          const sh = pl.shipments.find(x => x.id === r.shipmentId);
+          if (sh) sh.items = r.items;
+        }
+      }
+      if (activePage === 'overview' && ovTab === 'wfs' && ovWfsPlanOpen === p.plan) ovRenderWfs();
+    }).catch(() => ovWfsItemReq.delete(s.id));
+  }
+  const many = p.shipments.length > 1;
+  const first = p.shipments[0] || {};
+  const facts = (s) => [
+    p.created ? `Created ${ovWfsDay(p.created)}` : '',
+    [esc(s.carrier || ''), s.tracking ? `<span class="mono">${esc(s.tracking)}</span>` : ''].filter(Boolean).join(' '),
+    s.eta ? `${ovWfsStatusCls(s.status) === 'closed' ? 'delivered' : 'arrives'} ${ovWfsDay(s.eta)}` : '',
+    esc(s.shipTo || ''),
+  ].filter(Boolean).join(' · ');
+  const itemsHtml = (s) => `
+    <div class="pd-it h"><span>Channel SKU</span><span>Item</span><span class="u">Sent</span><span class="u">Received</span></div>
+    ${Array.isArray(s.items)
+    ? (s.items.length
+      ? s.items.map(it => `<div class="pd-it"><span class="ch">${esc(it.sku)}</span><span class="ds">${esc(it.desc || '')}</span><span class="u mono">${(it.expected || 0).toLocaleString()}</span><span class="u mono">${it.received ? it.received.toLocaleString() : '—'}</span></div>`).join('')
+      : '<div class="pd-it"><span class="ds">Walmart did not name the items on this shipment.</span></div>')
+    : '<div class="pd-it"><span class="ds">Reading the SKUs…</span></div>'}`;
+  box.innerHTML = `
+    <div class="pd-crumb"><button type="button" class="pd-back" data-wfsback>← All plans</button><span class="sep">/</span><span class="here mono">${esc(p.plan)}</span></div>
+    <div class="sp-plan pd-plan">
+      <div class="sp-head"><span class="pid">Plan <span class="mono">${esc(p.plan)}</span></span>
+        <span class="sp-status is-snug ${ovWfsStatusCls(first.status)}">${esc(first.status || '—')}</span>
+        ${!many && first.tracking ? `<button type="button" class="sp-track pd-track" data-wfstrack="${esc(first.tracking)}" data-carrier="${esc(first.carrier || '')}">Track</button>` : ''}
+      </div>
+      ${p.shipments.map(s => many
+    ? `<div class="pd-ship"><span class="mono sid">${esc(s.id)}</span><span class="pd-meta is-inline">${facts(s)}</span>${s.tracking ? `<button type="button" class="sp-track sm" data-wfstrack="${esc(s.tracking)}" data-carrier="${esc(s.carrier || '')}">Track</button>` : ''}</div>${itemsHtml(s)}`
+    : `<div class="pd-meta">${facts(s)}</div>${itemsHtml(s)}`).join('')}
+    </div>`;
+  box.querySelector('[data-wfsback]').addEventListener('click', () => { ovWfsPlanOpen = null; ovRenderWfs(); });
+  box.querySelectorAll('[data-wfstrack]').forEach(b => b.addEventListener('click', () => ovWfsTrackOpen(b)));
 }
 
 // WFS links stay inside the app (owner 2026-10-28): the marketplace pane
