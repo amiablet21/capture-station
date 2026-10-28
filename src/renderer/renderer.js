@@ -3905,13 +3905,14 @@ function browserAllowed() {
 }
 
 function applyBrowserPane() {
-  // one native pane, two homes: the dock element relocates between the
-  // Capture list and the Returns sheets depending on the active page
-  const onPage = activePage === 'capture' || activePage === 'returns';
+  // one native pane, three homes: the dock element relocates between the
+  // Capture list, the Returns sheets and the Overview (owner 2026-10-28:
+  // Sent to WFS links open inside the app) depending on the active page
+  const onPage = activePage === 'capture' || activePage === 'returns' || activePage === 'overview';
   const show = bReady && browserAllowed() && bPane.visible && onPage;
-  // Returns docks the pane at PAGE level so it spans the full window height,
-  // not just the sheet row; Capture keeps it inside the list row.
-  const host = activePage === 'returns' ? $('returnsPage') : $('rowsRow');
+  // Returns and Overview dock the pane at PAGE level so it spans the full
+  // window height; Capture keeps it inside the list row.
+  const host = activePage === 'returns' ? $('returnsPage') : activePage === 'overview' ? $('overviewPage') : $('rowsRow');
   const dock = $('bDock');
   const divider = $('bDivider');
   if (host && dock.parentElement !== host) {
@@ -3922,6 +3923,7 @@ function applyBrowserPane() {
   divider.hidden = !show;
   $('rowsRow').classList.toggle('has-browser', show && activePage === 'capture');
   $('returnsPage').classList.toggle('has-browser', show && activePage === 'returns');
+  $('overviewPage').classList.toggle('has-browser', show && activePage === 'overview');
   // compact columns while the sheets share the window with the pane
   document.body.classList.toggle('ret-compact', show && activePage === 'returns');
   $('bExpand').hidden = !(bReady && browserAllowed() && activePage === 'capture' && !bPane.visible);
@@ -14402,17 +14404,34 @@ function ovRenderWfs() {
     ovRenderWfs();
   }));
   box.querySelectorAll('[data-wfsview]').forEach(b => b.addEventListener('click', () => {
-    api.openExternalUrl('https://seller.walmart.com/supply-chain/shipping-plans');
+    ovWfsOpen('https://seller.walmart.com/supply-chain/shipping-plans', 'Opening Shipping Plans');
   }));
   box.querySelectorAll('[data-wfstrack]').forEach(b => b.addEventListener('click', () => {
     const t = b.dataset.wfstrack;
     const c = String(b.dataset.carrier || '').toLowerCase();
-    const url = /fedex/.test(c) ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`
+    const url = /fedex|fdeg/.test(c) ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`
       : /ups/.test(c) ? `https://www.ups.com/track?tracknum=${encodeURIComponent(t)}`
         : /usps/.test(c) ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(t)}`
           : `https://www.google.com/search?q=${encodeURIComponent(`${b.dataset.carrier || ''} tracking ${t}`)}`;
-    api.openExternalUrl(url);
+    ovWfsOpen(url, `Tracking ${t}`);
   }));
+}
+
+// WFS links stay inside the app (owner 2026-10-28): the marketplace pane
+// docks on the Overview like it does on Returns; external browser only in
+// capture-only mode, where the pane is not allowed
+function ovWfsOpen(url, label) {
+  if (!browserAllowed()) { api.openExternalUrl(url); return; }
+  bPane.visible = true;
+  api.setConfig({ browserPane: { visible: true } });
+  applyBrowserPane();
+  bShowLoading(label);
+  api.browserOpenUrl(url).then(res => {
+    if (!res.ok) {
+      bHideLoading();
+      api.openExternalUrl(url); // the pane refused (e.g. hidden path) — outside it goes
+    }
+  });
 }
 
 $('ovRefreshBtn').addEventListener('click', async () => {

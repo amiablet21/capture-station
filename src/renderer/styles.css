@@ -4390,6 +4390,9 @@ th:last-child > .col-grip { right: 0; }
    is left and scroll inside themselves. Short lists keep their natural
    height (max-height, not stretch). */
 .ov-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* the marketplace pane docks here too (owner 2026-10-28): pane left, page right */
+.ov-page.has-browser { flex-direction: row; }
+.ov-page.has-browser .ov-sheet-row { flex: 1 1 auto; min-width: 0; }
 /* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
 .ov-sheet-row { display: flex; justify-content: center; align-items: stretch; flex: 1; min-height: 0; }
 /* the Overview scales with the window like Recovery (owner 2026-10-12) */
