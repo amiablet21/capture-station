@@ -1706,7 +1706,9 @@ $('returnsMenuDlg').addEventListener('click', (e) => {
 // large" — the curve now tops out at the 1.18 first approved, reached
 // around 2150px, and grows more slowly before it)
 function pageScale() {
-  return Math.min(1.18, Math.max(1, 1 + (window.innerWidth - 1280) / 4800));
+  // owner 2026-10-28: "apply the same scale from Recovery for the rest" —
+  // every page sits 1:1 now; the var stays so nothing downstream breaks
+  return 1;
 }
 function applyPageScale() {
   document.documentElement.style.setProperty('--page-scale', pageScale().toFixed(3));

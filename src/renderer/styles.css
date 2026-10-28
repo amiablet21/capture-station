@@ -4395,8 +4395,11 @@ th:last-child > .col-grip { right: 0; }
 .ov-page.has-browser .ov-sheet-row { flex: 1 1 auto; min-width: 0; }
 /* page-width grip mirrors the Stock sheet's: the rail rides the right edge */
 .ov-sheet-row { display: flex; justify-content: center; align-items: stretch; flex: 1; min-height: 0; }
-/* the Overview scales with the window like Recovery (owner 2026-10-12) */
-.ov-wrap { width: 1160px; max-width: calc(100% - 20px); margin: 0; padding: 22px 28px 22px; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; zoom: var(--page-scale, 1); }
+/* Owner 2026-10-28: "apply the same scale from Recovery" — the Overview
+   sits 1:1 like every other page now (no --page-scale zoom; 13px type at
+   its designed size) and wears Recovery's footprint: full width to a
+   1440px cap, centered, 24px side padding. */
+.ov-wrap { width: 100%; max-width: 1440px; margin: 0 auto; padding: 14px 24px 22px; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; }
 .ov-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
 .ov-refresh { align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .ov-refresh:hover { color: var(--text); background: var(--surface-2); }
