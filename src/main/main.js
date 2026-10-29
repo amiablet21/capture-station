@@ -7155,8 +7155,10 @@ exit 1
       const name = `UPS-${l.kind === 'return' ? 'return-' : ''}${(l.reference || l.tracking).replace(/[^\w.-]+/g, '_')}.pdf`;
       const pick = await dialog.showSaveDialog(win, { title: 'Save label as PDF', defaultPath: path.join(app.getPath('downloads'), name), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
       if (pick.canceled || !pick.filePath) return { ok: false, canceled: true };
-      ({ pw } = await shipLabelWindow(id));
-      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: { width: 4, height: 6 }, margins: { marginType: 'none' } });
+      // always A4 (owner 2026-10-29): the label across the top half, the
+      // bottom half blank, the same sheet as the print popup's A4
+      ({ pw } = await shipLabelWindow(id, { paper: 'a4' }));
+      const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: printPageSize('a4'), margins: { marginType: 'none' } });
       fs.writeFileSync(pick.filePath, pdf);
       shell.showItemInFolder(pick.filePath);
       return { ok: true, path: pick.filePath };

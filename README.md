@@ -5,6 +5,9 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 ## v1.32.125 highlights
 
 - **Shipping method by carrier** (Settings › Shipping, sync mode). Process now sets a Linnworks shipping method on the order along with the tracking number, picked per carrier (UPS / USPS / FedEx, as detected from the label). Linnworks tells Walmart and Temu the carrier from the shipping method, and Process used to keep the marketplace's own default method. So labels bought outside the marketplace (your own UPS account, or made elsewhere for Temu) were processed in Linnworks but rejected by the marketplace, and never showed as shipped there. Click Test connection to load your Linnworks shipping methods. Each one must be mapped to its carrier in Linnworks' channel shipping mapping. A carrier left on "Keep the order's method" works as before. Dry run shows which method each order would get.
+- **Marketplace filters on Orders** (owner: "I can't see any filter"): on a station without the Overview page the app opened on Orders with the chip bar (and the History button) hidden until another tab was clicked. It shows from the start now.
+- **History's marketplace chips work** (owner: "the filters are stuck"): picking Walmart / eBay / Temu in History snapped back to All whenever today's list didn't have that marketplace. Each chip now filters History by itself.
+- **PDF saves as A4**: Ship › Labels › PDF always makes an A4 sheet, the label across the top half and the bottom half blank (as the print popup's A4). The browser's Download PDF stays 4x6.
 
 ## v1.32.117 highlights
 
