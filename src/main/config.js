@@ -54,6 +54,11 @@ const DEFAULTS = {
     locationName: '',
   },
   dryRun: true,
+  // Carrier (as detected from the tracking number) -> Linnworks shipping
+  // method set on the order at Process: { UPS: { id, name }, ... }. The
+  // marketplace learns the carrier from the method, so labels bought outside
+  // Walmart/Temu need the right one or the despatch never shows there.
+  carrierServices: {},
   // Route open orders the primary location can't cover to a fallback
   // (dropship) location; move them back when the primary is replenished.
   stockRouting: { enabled: false, fallbackLocationId: '', fallbackLocationName: '' },

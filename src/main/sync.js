@@ -14,7 +14,20 @@ async function testConnection(creds) {
   const client = new LinnworksClient(creds);
   await client.auth();
   const locations = await client.getLocations();
-  return { server: client.session.server, locations };
+  // shipping methods fill the carrier mapping in Settings; a token without
+  // that permission still connects, the mapping just stays empty
+  let postalServices = [];
+  try { postalServices = await client.getPostalServices(); } catch { /* optional */ }
+  return { server: client.session.server, locations, postalServices };
+}
+
+// Settings maps each tracking carrier (UPS / USPS / FedEx, as detected from
+// the label) to a Linnworks shipping method. Empty = keep the order's own.
+function carrierService(carrier) {
+  const map = config.load().carrierServices || {};
+  const key = Object.keys(map).find(k => k.toLowerCase() === String(carrier || '').toLowerCase());
+  const svc = key ? map[key] : null;
+  return svc && svc.id ? svc : null;
 }
 
 // Split a row's serials across the order's item lines by quantity, in item order.
@@ -173,9 +186,15 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   // mismatch notes are meaningless noise unless serials actually exist
   const serialNotes = row.serials.length ? notes : [];
 
+  const svc = row.tracking ? carrierService(row.carrier) : null;
+
   if (dryRun) {
     const plan = [];
-    if (row.tracking) plan.push(`set tracking ${row.tracking}`);
+    if (row.tracking) {
+      plan.push(svc
+        ? `set tracking ${row.tracking} with shipping method "${svc.name}"`
+        : `set tracking ${row.tracking} (shipping method left as is${row.carrier ? `, none set for ${row.carrier} in Settings` : ''})`);
+    }
     if (row.notes) plan.push(`add order note "${row.notes.slice(0, 60)}"`);
     if (assignments.length) {
       plan.push(`attach ${row.serials.length} serial(s) to ${assignments.length} line(s)`);
@@ -189,7 +208,7 @@ async function syncRow(client, row, locationId, dryRun, allLocations) {
   }
 
   if (row.tracking) {
-    await client.setTracking(order.orderId, order.shippingInfo, row.tracking);
+    await client.setTracking(order.orderId, order.shippingInfo, row.tracking, svc && svc.id);
   }
   if (row.notes) {
     await client.addOrderNote(order.orderId, row.notes);

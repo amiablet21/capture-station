@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.31.25 highlights
+
+- **Shipping method by carrier** (Settings › Shipping method by carrier, sync mode). Process now sets a Linnworks shipping method on the order along with the tracking number, picked per carrier (UPS / USPS / FedEx, as detected from the label). Linnworks tells Walmart and Temu the carrier from the shipping method, and Process used to keep the marketplace's own default method. So labels bought outside the marketplace (your own UPS account, or made elsewhere for Temu) were processed in Linnworks but rejected by the marketplace, and never showed as shipped there. Click Test connection to load your Linnworks shipping methods. Each one must be mapped to its carrier in Linnworks' channel shipping mapping. A carrier left on "Keep the order's method" works as before. Dry run shows which method each order would get.
+
 ## v1.31.24 highlights
 
 - **Export SKUs + 30-day sales** (Stock → Actions): every Linnworks SKU with its last 30 days of sales, built for deciding what to buy (and to hand to Claude for a ranked buy list). An Excel workbook with three sheets: **SKUs** (one row per item, worst first: status (Out of stock, Order now, Order soon, On order, Covered, Not selling, Dropship, Not linked), available, in orders, at WFS, on hand, due in, min, units sold over 30 / 14 / 7 days, per day, trend, days left, out-by date, suggested order (lead + cover days of pace, less on hand and due in, rounded up to 5), cost / order cost / margin on a Cost station, average price, revenue, units per channel, units sold from WFS, last sold), **Daily** (units per local day for each SKU that sold) and **About** (the window, the reorder settings and how each figure is worked out). CSV saves the sheets as three files. The sales come from the same cache as the Overview, so a station that has already loaded it exports quickly.
@@ -259,7 +263,7 @@ Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%AP
 3. In the app: Settings > untick Capture only > enter the three values > Test connection > pick the stock location > Save.
 4. **Dry run is ON by default.** Dry-run syncs look up each order (read-only) and log what would happen without writing anything. Turn it off only after a first live test on one order passes.
 
-Sync per row: find open order by channel reference number (`Orders/GetOpenOrders`) -> set tracking (`Orders/SetOrderShippingInfo`, preserves existing postal service/weights) -> process (`Orders/ProcessOrderByOrderOrReferenceId` with `ScansPerformed: true`). Calls are throttled under the 150/min API limit. Failed rows (e.g. order not yet in Linnworks) retry automatically on the next sync. (Serial attachment via `CreateSerialisedValuesForOrderItems` remains in the codebase but is unused since serial tracking was retired.)
+Sync per row: find open order by channel reference number (`Orders/GetOpenOrders`) -> set tracking (`Orders/SetOrderShippingInfo`, preserves weights; the postal service becomes the one Settings maps to the tracking's carrier, else the existing one is kept) -> process (`Orders/ProcessOrderByOrderOrReferenceId` with `ScansPerformed: true`). Calls are throttled under the 150/min API limit. Failed rows (e.g. order not yet in Linnworks) retry automatically on the next sync. (Serial attachment via `CreateSerialisedValuesForOrderItems` remains in the codebase but is unused since serial tracking was retired.)
 
 ## Configurable patterns (Settings)
 

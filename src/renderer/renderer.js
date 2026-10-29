@@ -1262,6 +1262,7 @@ async function openSettings() {
   fsel.innerHTML = sr.fallbackLocationId
     ? `<option value="${esc(sr.fallbackLocationId)}">${esc(sr.fallbackLocationName || sr.fallbackLocationId)}</option>`
     : '<option value="">Not selected, test connection first</option>';
+  renderCarrierServices(cfg, null);
   $('setOrderPatterns').value = patternsToText(cfg.orderPatterns, 'channel');
   $('setTrackingPatterns').value = patternsToText(cfg.trackingPatterns, 'carrier');
   $('setPin').value = '';
@@ -1272,6 +1273,37 @@ async function openSettings() {
 }
 
 $('settingsBtn').addEventListener('click', openSettings);
+
+// one shipping-method dropdown per tracking carrier. services = the list from
+// Test connection; null = not loaded yet, so show just the saved choice.
+function renderCarrierServices(cfg, services) {
+  const box = $('setCarrierServices');
+  const saved = cfg.carrierServices || {};
+  const carriers = [...new Set((cfg.trackingPatterns || []).map(p => p.carrier).filter(Boolean))];
+  box.innerHTML = carriers.map(c => {
+    const cur = saved[c] || {};
+    const opts = services
+      ? services.map(p => `<option value="${esc(p.id)}" data-name="${esc(p.name)}"${p.id === cur.id ? ' selected' : ''}>${esc(p.name)}${p.vendor ? ` (${esc(p.vendor)})` : ''}</option>`).join('')
+      : (cur.id ? `<option value="${esc(cur.id)}" data-name="${esc(cur.name || '')}" selected>${esc(cur.name || cur.id)}</option>` : '');
+    return `<div class="settings-row">
+      <span class="field-label carrier-svc-label">${esc(c)}</span>
+      <select class="input input-inline" data-carrier="${esc(c)}">
+        <option value="">Keep the order's method</option>${opts}
+      </select>
+    </div>`;
+  }).join('');
+}
+
+function carrierServicesPatch() {
+  const out = {};
+  for (const sel of $('setCarrierServices').querySelectorAll('select[data-carrier]')) {
+    const opt = sel.selectedOptions[0];
+    out[sel.dataset.carrier] = sel.value
+      ? { id: sel.value, name: (opt && opt.dataset.name) || '' }
+      : { id: '', name: '' };
+  }
+  return out;
+}
 
 $('testConnBtn').addEventListener('click', async () => {
   const out = $('testConnResult');
@@ -1295,6 +1327,11 @@ $('testConnBtn').addEventListener('click', async () => {
     sel.innerHTML = res.locations.map(l =>
       `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
     if (res.locations.some(l => l.id === prev)) sel.value = prev;
+  }
+  if (res.postalServices && res.postalServices.length) {
+    // keep unsaved picks made before this click
+    const cfg = await api.getConfig();
+    renderCarrierServices({ ...cfg, carrierServices: { ...(cfg.carrierServices || {}), ...carrierServicesPatch() } }, res.postalServices);
   }
 });
 
@@ -1357,6 +1394,7 @@ $('settingsSave').addEventListener('click', async () => {
       locationName: sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '',
     },
     dryRun: $('setDryRun').checked,
+    carrierServices: carrierServicesPatch(),
     shipCutoff: /^\d{1,2}:\d{2}$/.test($('setShipCutoff').value.trim()) ? $('setShipCutoff').value.trim() : '16:00',
     stockRouting: {
       enabled: $('setRouting').checked,
