@@ -428,6 +428,14 @@ function render() {
   }
   $('syncBtn').disabled = !!state.syncRunning;
 
+  // the marketplace chips live in capHead, which only a page switch used to
+  // show: a station without Overview opened on Orders with no filters at all
+  $('capHead').hidden = activePage !== 'capture';
+  // History draws its own rows and chips. It must branch off BEFORE the live
+  // chips below, which reset any chip today's queue doesn't carry to All, so
+  // History's chips did nothing (owner 2026-10-29: "the filters are stuck")
+  if (capHist.on && activePage === 'capture') { renderCapHist(); return; }
+
   // rows table, optionally narrowed by the Ctrl+F finder. Gutter numbers are
   // assigned AFTER sorting/filtering, by display position: top row carries
   // the highest number, bottom row is 1, always contiguous.
@@ -481,7 +489,6 @@ function render() {
 
   // the search lives in the page head now (2026-10-14); the card head below
   // it shows only in History (the range) or when there are failed rows to clear
-  if (capHist.on && activePage === 'capture') { renderCapHist(); return; }
   if (findQuery) {
     const q = findQuery.toLowerCase();
     const itemMatch = (row) => {
