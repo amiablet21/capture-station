@@ -814,6 +814,7 @@ body {
 @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
 
 .settings-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.carrier-svc-label { min-width: 52px; }
 
 .check { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .check input { width: 15px; height: 15px; accent-color: var(--accent); }

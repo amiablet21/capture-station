@@ -243,13 +243,17 @@ class LinnworksClient {
     };
   }
 
-  // Preserve existing shipping fields; only replace the tracking number.
-  async setTracking(orderId, existingShippingInfo, trackingNumber) {
+  // Preserve existing shipping fields; only replace the tracking number -
+  // and the shipping method when postalServiceId is given. Linnworks tells
+  // the marketplace the carrier from the shipping method, so a label bought
+  // off-channel (own UPS account) under the channel's default method reaches
+  // Walmart/Temu with the wrong carrier and the despatch is rejected there.
+  async setTracking(orderId, existingShippingInfo, trackingNumber, postalServiceId) {
     const s = existingShippingInfo || {};
     return this.call('Orders/SetOrderShippingInfo', {
       orderId,
       info: {
-        PostalServiceId: s.PostalServiceId || '00000000-0000-0000-0000-000000000000',
+        PostalServiceId: postalServiceId || s.PostalServiceId || '00000000-0000-0000-0000-000000000000',
         TotalWeight: s.TotalWeight || 0,
         ItemWeight: s.ItemWeight || 0,
         PostageCost: s.PostageCost || 0,
@@ -1041,6 +1045,20 @@ class LinnworksClient {
       },
     });
     return { stockItemId };
+  }
+
+  // Shipping methods ("postal services") for the carrier -> method mapping
+  // in Settings. [{ id, name, vendor }]
+  async getPostalServices() {
+    const data = await this.call('PostalServices/GetPostalServices', {});
+    return (Array.isArray(data) ? data : [])
+      .map(p => ({
+        id: p.pkPostalServiceId || p.id || '',
+        name: p.PostalServiceName || '',
+        vendor: p.Vendor || '',
+      }))
+      .filter(p => p.id && p.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async getLocations() {

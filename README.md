@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.125 highlights
+
+- **Shipping method by carrier** (Settings › Shipping, sync mode). Process now sets a Linnworks shipping method on the order along with the tracking number, picked per carrier (UPS / USPS / FedEx, as detected from the label). Linnworks tells Walmart and Temu the carrier from the shipping method, and Process used to keep the marketplace's own default method. So labels bought outside the marketplace (your own UPS account, or made elsewhere for Temu) were processed in Linnworks but rejected by the marketplace, and never showed as shipped there. Click Test connection to load your Linnworks shipping methods. Each one must be mapped to its carrier in Linnworks' channel shipping mapping. A carrier left on "Keep the order's method" works as before. Dry run shows which method each order would get.
+
 ## v1.32.117 highlights
 
 - **Walmart strategies are ready before Pricing opens** (owner: "is there no better way of doing this?"). The app asks Walmart for its item report in the background, 30 seconds after start and then whenever the last one is 12 hours old (checked hourly), so the 15–45 minute wait happens while the app is open anyway, not while you look at Pricing. Until a new one arrives the last report is used.
@@ -833,7 +837,7 @@ Storage: SQLite (Electron's built-in `node:sqlite`) in the userData folder (`%AP
 3. In the app: Settings > untick Capture only > enter the three values > Test connection > pick the stock location > Save.
 4. **Dry run is ON by default.** Dry-run syncs look up each order (read-only) and log what would happen without writing anything. Turn it off only after a first live test on one order passes.
 
-Sync per row: find open order by channel reference number (`Orders/GetOpenOrders`) -> set tracking (`Orders/SetOrderShippingInfo`, preserves existing postal service/weights) -> process (`Orders/ProcessOrderByOrderOrReferenceId` with `ScansPerformed: true`). Calls are throttled under the 150/min API limit. Failed rows (e.g. order not yet in Linnworks) retry automatically on the next sync. (Serial attachment via `CreateSerialisedValuesForOrderItems` remains in the codebase but is unused since serial tracking was retired.)
+Sync per row: find open order by channel reference number (`Orders/GetOpenOrders`) -> set tracking (`Orders/SetOrderShippingInfo`, preserves weights; the postal service becomes the one Settings maps to the tracking's carrier, else the existing one is kept) -> process (`Orders/ProcessOrderByOrderOrReferenceId` with `ScansPerformed: true`). Calls are throttled under the 150/min API limit. Failed rows (e.g. order not yet in Linnworks) retry automatically on the next sync. (Serial attachment via `CreateSerialisedValuesForOrderItems` remains in the codebase but is unused since serial tracking was retired.)
 
 ## UPS setup (Ship tab)
 
