@@ -16,6 +16,7 @@ const db = require('./db');
 const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
+const { buildBuyPlan } = require('./buyplan');
 const ups = require('./ups');
 const walmart = require('./walmart');
 const webserve = require('./webserve');
@@ -5639,6 +5640,24 @@ exit 1
       }
     );
     if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
+    // What to buy reads two months (owner 2026-10-30, the buy-list PDF): the
+    // best of the 14-, 30- and 60-day paces, so a SKU that sat out of stock
+    // for weeks keeps its real pace. The sales cache already holds days
+    // 1-30, so only days 31-60 are fetched; a failure here keeps the
+    // Overview going on the 30 days alone.
+    const from60 = new Date(to.getTime() - 60 * 86400000);
+    tell({ stage: 'sales', detail: 'days 31–60', frac: 0.86 });
+    const sales60 = await querySales(
+      `${from60.getFullYear()}-${String(from60.getMonth() + 1).padStart(2, '0')}-${String(from60.getDate()).padStart(2, '0')}`,
+      `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`,
+      false
+    ).catch(() => ({ ok: false }));
+    const sold60 = {}; // SKU -> units over 60 days (composite sales credit their children too)
+    for (const l of (sales60 && sales60.ok ? sales60.lines : sales.lines)) {
+      const add = (sku, q) => { const k = String(sku || '').toUpperCase(); if (k) sold60[k] = (sold60[k] || 0) + (Number(q) || 0); };
+      add(l.sku, l.qty);
+      for (const c of l.children || []) add(c.sku, (l.qty || 1) * (c.qty || 1));
+    }
     // per-SKU: 4-week qty, revenue, last sale, channels
     const stats = {};
     const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
@@ -5814,6 +5833,27 @@ exit 1
         order: Math.max(5, Math.ceil(Math.max(0, perDay * (lead + cover) - onHand) / 5) * 5),
       });
     }
+    // What to buy (buyplan.js): every SKU sold in the last 60 days, with its
+    // 14/30/60-day units, what is free at the warehouse and WFS, and what is
+    // due in on purchase orders
+    const buyRows = [];
+    for (const it of items) {
+      const k = String(it.sku).toUpperCase();
+      const s = stats[k];
+      const d30 = s ? s.qty : 0;
+      const d60 = Math.max(sold60[k] || 0, d30);
+      if (!d60) continue;
+      const home = (it.levels || []).find(l => l.locationId === homeLoc) || {};
+      const wfsLvl = wfsLocId ? (it.levels || []).find(l => String(l.locationId || '').toLowerCase() === wfsLocId) : null;
+      buyRows.push({
+        sku: it.sku, title: it.title || '',
+        avail: Math.max(0, Number(home.available) || 0),
+        atWfs: wfsLvl ? Math.max(0, Number(wfsLvl.stockLevel) || 0) : 0,
+        due: Math.max(0, Number(home.due) || 0),
+        d14: s ? s.recent : 0, d30, d60,
+        padded: !!pads[k], composite: !!composites[k],
+      });
+    }
     // 25-row cap instead of the old 5-6 (owner 2026-08-25: "I would like to
     // see more products instead of a selection of like 4") — the drawers
     // scroll; the unit total counts EVERYTHING, listed or not
@@ -5825,8 +5865,9 @@ exit 1
       wfs: wfs.slice(0, 25),
       wfsUnits: wfs.reduce((s, w) => s + w.send, 0),
       leadDays: lead,
-      v: 7, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku · v7: + stock rows (design 1a)
+      v: 8, // v2: + wfsCand / low for the 3-column Overview · v3: every WFS channel SKU per item · v4: + 30-day WFS units · v5: + low.sold30 · v6: + wfsChBySku · v7: + stock rows (design 1a) · v8: + buyRows (60-day What to buy)
       stock,
+      buyRows,
       wfsCand,
       // every item's WFS channel SKUs, best seller first - the WFS shipment
       // sheet fills its Channel SKU column from it (owner 2026-09-25)
@@ -5898,7 +5939,7 @@ exit 1
       historyPending: !hist,
     };
     const sold = live ? live.sold : null;
-    let money = overviewCache.money && overviewCache.money.v === 7 ? overviewCache.money : null;
+    let money = overviewCache.money && overviewCache.money.v === 8 ? overviewCache.money : null;
     const stale = !money || Date.now() - overviewCache.at > OVERVIEW_TTL_MS;
     if (stale && !overviewCache.promise && Date.now() - (overviewCache.failedAt || 0) > OVERVIEW_RETRY_MS) {
       // stale (or missing) money refreshes behind the page; a pass that just
@@ -5973,32 +6014,13 @@ exit 1
       if (ig && kind !== 'watch' && !(r.perDay > ig.pace * 1.5)) { ignored.push(row); continue; }
       ({ out, low, fast, watch })[kind].push(row);
     }
-    // Buy now (owner 2026-10-13: "which products to buy that sell at least
-    // one a day and are running low"): any queued SKU at the Hot pace or
-    // better with under the target days on hand, out-of-stock sellers
-    // included, soonest-out first; the quantity covers the target at today's
-    // pace less what is on hand at the warehouse and WFS
-    // Buy now scans every selling SKU, not only the queue: under the unit
-    // floor (Settings, 50 by default) OR under the target days on hand, at
-    // the set pace or better (1 a day by default); the quantity brings it to
-    // the larger of the floor and the target's worth of sales
-    const target = lead + cover;
-    const buyUnits = Number((cfg.reorder || {}).buyUnits ?? 50);
-    const buyPace = Number((cfg.reorder || {}).buyPace ?? 1);
-    const buy = [];
-    for (const r of (money && money.stock) || []) {
-      if (db.conditionOfSku(r.sku) || mappedCond.has(String(r.sku).toUpperCase()) || r.padded || r.composite) continue;
-      const onHand = Math.max(0, (r.avail || 0) + (r.atWfs || 0));
-      if (!(r.perDay >= buyPace && buyPace > 0) && !(buyPace <= 0 && r.sold30 > 0)) continue;
-      if (!(onHand <= buyUnits || onHand <= 0 || r.daysLeft <= target)) continue;
-      const kind = onHand <= 0 ? 'out' : r.daysLeft <= lead ? 'low' : r.daysLeft <= target ? 'watch' : 'stock';
-      const want = Math.max(Math.ceil(r.perDay * target), buyUnits);
-      const row = { ...r, kind, pct: 0, buyQty: Math.max(0, want - onHand), onHand };
-      const queued = [...out, ...low, ...fast, ...watch].find(x => x.sku === r.sku);
-      if (queued) { row.kind = queued.kind; row.pct = queued.pct; row.faster = queued.faster; }
-      buy.push(row);
-    }
-    buy.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
+    // What to buy (owner 2026-10-30): the Black Friday buy-list PDF as the
+    // tab - Buy now / Buy next / Then, ranked, a SKU leaving the list once
+    // what is left and due in covers it (buyplan.js; settings under Stock)
+    const buyPlan = buildBuyPlan((money && money.buyRows) || [], {
+      leadDays: lead, coverDays: cover, reorder: cfg.reorder || {},
+      isCondition: (sku) => !!db.conditionOfSku(sku) || mappedCond.has(String(sku).toUpperCase()),
+    });
     out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     low.sort((a, b) => a.daysLeft - b.daysLeft || b.perDay - a.perDay);
     // selling fast: the fastest sellers first (owner 2026-10-08)
@@ -6044,9 +6066,9 @@ exit 1
       was.sort((a, b) => b.pace - a.pace);
     }
     return {
-      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buy,
-      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buy.length },
-      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1, buyUnits, buyPace,
+      ready: !!(money && money.stock), rows: [...out, ...low, ...fast], watch, ignored, buyPlan,
+      counts: { out: out.length, low: low.length, fast: fast.length + low.filter(r => r.faster).length, buy: buyPlan.skus },
+      leadDays: lead, coverDays: cover, ignoreDays: w.ignoreDays, hotAt: 1,
       was, wasMonths: [...wasMonths, nowYm], wasReady: monthsHeld.length === wasMonths.length && !!(money && money.inv), wasHeld: monthsHeld.length, wasBusy: !!overviewMonths.promise,
     };
   }
@@ -8894,16 +8916,18 @@ function registerRecoveryIpc() {
   // the returns"): the whole log as one Excel sheet, one line per item. Not
   // Recovery-gated — the log exists on every station.
   // the Buy now list as a workbook: the purchase list to send off
-  ipcMain.handle('overview:exportBuy', async (_e, { rows, target, lead } = {}) => {
+  // What to buy as Excel: the tab's three tables in one sheet, ranked
+  ipcMain.handle('overview:exportBuy', async (_e, { rows, title } = {}) => {
     try {
       const { buildWorkbookSheets } = require('./xlsxwrite');
-      const buf = buildWorkbookSheets([{ name: 'Buy now', columns: [
-        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 44, kind: 'text' }, { header: 'Buy', width: 8, kind: 'int' },
-        { header: 'Sales per day', width: 13, kind: 'text' }, { header: 'On hand', width: 9, kind: 'int' }, { header: 'At WFS', width: 8, kind: 'int' }, { header: 'Days left', width: 10, kind: 'int' },
-        { header: 'Sold 30 days', width: 12, kind: 'int' }, { header: 'Status', width: 10, kind: 'text' },
-      ], rows: (rows || []).map((r) => [r.sku, r.title || '', Number(r.buyQty) || 0, String(Number(r.perDay) || 0), Number(r.avail) || 0, Number(r.atWfs) || 0, Number(r.daysLeft) || 0, Number(r.sold30) || 0, { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch' }[r.kind] || '']) }]);
+      const buf = buildWorkbookSheets([{ name: 'What to buy', columns: [
+        { header: '#', width: 5, kind: 'int' }, { header: 'Section', width: 10, kind: 'text' },
+        { header: 'SKU', width: 30, kind: 'text' }, { header: 'Product', width: 40, kind: 'text' }, { header: 'Dropship', width: 9, kind: 'text' },
+        { header: 'Sold / week', width: 11, kind: 'text' }, { header: 'Left', width: 8, kind: 'int' }, { header: 'Due in', width: 8, kind: 'int' },
+        { header: 'Buy', width: 8, kind: 'int' },
+      ], rows: (rows || []).map((r) => [Number(r.rank) || 0, r.section || '', r.sku, r.title || '', r.dropship ? 'Yes' : '', String(Number(r.week) || 0), Number(r.left) || 0, Number(r.due) || 0, Number(r.buy) || 0]) }]);
       const stamp = new Date().toISOString().slice(0, 10);
-      return await recoverySaveBuffer(`Buy now — ${target || ''} days of cover, ${lead || ''} days lead`, `Buy_now_${stamp}.xlsx`, XLSX_FILTER, buf);
+      return await recoverySaveBuffer(title || 'What to buy', `What_to_buy_${stamp}.xlsx`, XLSX_FILTER, buf);
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('overview:exportWas', async (_e, { rows, min, mode, months } = {}) => {

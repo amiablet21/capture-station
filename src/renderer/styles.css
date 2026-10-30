@@ -4567,7 +4567,6 @@ th:last-child > .col-grip { right: 0; }
 .ovq-fchip.is-on { background: var(--surface); color: #1E3A66; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, 0.1); }
 .ovq-fchip b { font-weight: 500; color: var(--faint); margin-left: 4px; font-variant-numeric: tabular-nums; }
 .ovq-fchip.is-on b { color: #1E3A66; }
-.ovq-row.is-buy { grid-template-columns: 52px minmax(0, 1.4fr) minmax(0, 1fr) 96px 12px; }
 /* Was selling (owner 2026-10-14): the slider bar, the badge, the month bars */
 .ovq-row.is-was { grid-template-columns: 84px minmax(0, 1.2fr) minmax(0, 1.3fr) 150px 12px; cursor: default; }
 .ovq-badge.was { background: #EFEEEA; color: #5A5955; white-space: nowrap; }
@@ -4601,9 +4600,6 @@ th:last-child > .col-grip { right: 0; }
 .ovq-wseg { display: inline-flex; gap: 2px; background: #EFEEEA; border-radius: 8px; padding: 2px; }
 .ovq-wseg button { font-family: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
 .ovq-wseg button.is-on { background: var(--surface); color: #1E3A66; font-weight: 600; box-shadow: 0 1px 3px rgba(47, 52, 55, .1); }
-.ovq-why { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
-.ovq-buycell { text-align: right; }
-.ovq-buy { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
 .ovq-who { min-width: 0; }
 .ovq-skuline { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ovq-sku { font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -6308,3 +6304,33 @@ tr.os-open > td { background: var(--accent-soft); }
 .ret-uns-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-family: inherit; font-size: 11.5px; cursor: pointer; color: var(--text); }
 .ret-uns-btn:hover { border-color: var(--accent); color: var(--accent); }
 .ret-uns-x:hover { border-color: var(--neg-text); color: var(--neg-text); }
+
+/* What to buy (owner 2026-10-30; mock-up variants/ov-buylist.html): the
+   buy-list PDF as the tab — three ranked tables, a coloured head per
+   section, Left at zero in red, Buy on a grey band, a total under each */
+.ovb { padding: 4px 18px 6px; }
+.ovb-sec { padding-bottom: 14px; }
+.ovb-sec h2 { margin: 10px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.ovb-sec .why { margin: 1px 0 8px; font-size: 12px; color: var(--muted); }
+.ovb-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ovb-table col.c-rank { width: 48px; } .ovb-table col.c-num { width: 110px; } .ovb-table col.c-buy { width: 100px; }
+.ovb-table thead th { background: #B00020; color: #fff; font-size: 12px; font-weight: 600; text-align: right; padding: 7px 10px; }
+.ovb-table thead th:first-child { border-radius: 6px 0 0 0; } .ovb-table thead th:last-child { border-radius: 0 6px 0 0; }
+.ovb-next .ovb-table thead th { background: #333333; }
+.ovb-then .ovb-table thead th { background: #5A6B7D; }
+.ovb-slow .ovb-table thead th { background: #8A8F98; }
+.ovb-table th.l, .ovb-table td.l { text-align: left; }
+.ovb-table tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+.ovb-table td.rank { color: var(--muted); }
+.ovb-table td.sku { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ovb-table td.sku [data-ovsku] { cursor: pointer; }
+.ovb-table td.sku [data-ovsku]:hover { text-decoration: underline; }
+.ovb-table td.is-zero { color: var(--neg-text); font-weight: 700; }
+.ovb-table td.buy { font-weight: 700; background: #F2F4F7; }
+.ovb-table tfoot td { padding: 7px 10px; text-align: right; font-weight: 700; border-top: 1.5px solid var(--text); }
+.ovb-table tfoot td.buy { background: #F2F4F7; }
+.ovb-ds { font-family: var(--font); font-size: 10.5px; color: var(--badge-blue-text); background: var(--badge-blue-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+.ovb-tot { margin-left: auto; color: var(--text); }
+.ovb-tot b { font-weight: 600; }
+.ovb-how { margin: 0; padding: 0 18px 14px; font-size: 11.5px; color: var(--faint); max-width: 100ch; line-height: 1.5; }
+@media (max-width: 720px) { .ovb { padding: 4px 10px 6px; } .ovb-table col.c-rank { width: 30px; } .ovb-table col.c-num { width: 70px; } .ovb-table col.c-buy { width: 62px; } }

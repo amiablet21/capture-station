@@ -1345,8 +1345,13 @@ async function openSettings(group) {
   $('setReorderAuto').checked = !!rc.auto;
   $('setLeadDays').value = String(rc.leadTimeDays || 7);
   $('setCoverDays').value = String(rc.coverDays || 21);
-  $('setBuyUnits').value = String(rc.buyUnits ?? 50);
-  $('setBuyPace').value = String(rc.buyPace ?? 1);
+  // What to buy (defaults as src/main/buyplan.js)
+  $('setBuyMinWeek').value = String(rc.buyMinWeek ?? 5);
+  $('setPeakName').value = rc.peakName || 'Black Friday';
+  $('setPeakStart').value = rc.peakStart || '11-20';
+  $('setPeakEnd').value = rc.peakEnd || '11-30';
+  $('setPeakMult').value = String(rc.peakMultiplier ?? 10);
+  $('setBuyExclude').value = rc.buyExclude ?? 'SILVER-?SHADOW|^A15-|T220';
   const sr = cfg.stockRouting || {};
   $('setRouting').checked = !!sr.enabled;
   const fsel = $('setFallbackLoc');
@@ -1514,8 +1519,12 @@ $('settingsSave').addEventListener('click', async () => {
       auto: $('setReorderAuto').checked,
       leadTimeDays: Math.max(1, parseInt($('setLeadDays').value, 10) || 7),
       coverDays: Math.max(1, parseInt($('setCoverDays').value, 10) || 21),
-      buyUnits: Math.max(0, parseInt($('setBuyUnits').value, 10) || 0),
-      buyPace: Math.max(0, Number($('setBuyPace').value) || 0),
+      buyMinWeek: Math.max(0, Number($('setBuyMinWeek').value) || 0),
+      peakName: $('setPeakName').value.trim() || 'Black Friday',
+      peakStart: /^\d{2}-\d{2}$/.test($('setPeakStart').value.trim()) ? $('setPeakStart').value.trim() : '11-20',
+      peakEnd: /^\d{2}-\d{2}$/.test($('setPeakEnd').value.trim()) ? $('setPeakEnd').value.trim() : '11-30',
+      peakMultiplier: Math.max(1, Number($('setPeakMult').value) || 10),
+      buyExclude: $('setBuyExclude').value.trim(),
     },
     orderPatterns: textToPatterns($('setOrderPatterns').value, 'channel'),
     trackingPatterns: textToPatterns($('setTrackingPatterns').value, 'carrier'),
@@ -14036,20 +14045,14 @@ function ovPhrase(r) {
   return `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`;
 }
 
-function ovRowHtml(r, open, hotAt, buy) {
+function ovRowHtml(r, open, hotAt) {
   const badge = { out: 'Out', low: 'Low', fast: 'Fast', watch: 'Watch', stock: 'Stock' }[r.kind] || 'Stock';
   const hot = r.perDay > hotAt ? `<span class="ovq-hot" title="Hot — sells more than ${hotAt} a day">${OV_FLAME}Hot</span>` : '';
-  const p = ovPlan() || {};
-  const target = (p.leadDays || 7) + (p.coverDays || 21);
-  // the Buy now cut adds the pace, what is on hand and the quantity to order
-  const why = buy ? `<div class="ovq-why">${(Number(r.perDay) || 0).toFixed(1)}/day · ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand</div>` : '';
-  const pill = buy ? `<div class="ovq-buycell"><span class="ds-pill ovq-buy ${r.daysLeft <= (p.leadDays || 7) ? 'is-hot' : 'is-warm'}" title="${(Number(r.perDay) || 0).toFixed(1)} a day × ${target} days − ${ovN(Math.max(0, (r.avail || 0) + (r.atWfs || 0)))} on hand">BUY ${ovN(r.buyQty)}</span></div>` : '';
   return `<div class="ovq-item">
-    <div class="ovq-row${open ? ' is-open' : ''}${buy ? ' is-buy' : ''}" data-ovtoggle="${esc(r.sku)}">
+    <div class="ovq-row${open ? ' is-open' : ''}" data-ovtoggle="${esc(r.sku)}">
       <div><span class="ovq-badge ${r.kind}">${badge}</span></div>
       <div class="ovq-who"><div class="ovq-skuline"><span class="ovq-sku mono" data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>${hot}</div><div class="ovq-title">${esc(r.title || '')}</div></div>
-      <div class="ovq-l1">${ovPhrase(r)}${why}</div>
-      ${pill}
+      <div class="ovq-l1">${ovPhrase(r)}</div>
       ${OV_CHEV}
     </div>
     ${open ? ovPanelHtml(r) : ''}
@@ -14099,6 +14102,36 @@ function ovPanelHtml(r) {
   </div></div></div>`;
 }
 
+// What to buy (owner 2026-10-30, approved mock-up variants/ov-buylist.html):
+// the Black Friday buy-list PDF as the tab - Buy now / Buy next / Then,
+// # SKU Sold/week Left Buy, a total under each table. No header and rows
+// don't open: a SKU drops off the list once it is stocked enough.
+let ovBuySlow = false;
+function ovBuyTable(rows, total) {
+  const body = rows.map(r => `<tr><td class="rank mono">${r.rank || ''}</td><td class="l sku mono"><span data-ovsku="${esc(r.sku)}" title="Open in Stock">${esc(r.sku)}</span>${r.dropship ? '<span class="ovb-ds">Dropship</span>' : ''}</td><td class="mono">${r.week}</td><td class="mono${r.left <= 0 ? ' is-zero' : ''}" title="${r.due ? `${ovN(r.due)} more due in on purchase orders` : ''}">${ovN(r.left)}</td><td class="buy mono">${ovN(r.buy)}</td></tr>`).join('');
+  const foot = total ? `<tfoot><tr><td></td><td class="l">Total</td><td></td><td></td><td class="buy mono">${ovN(rows.reduce((t, r) => t + r.buy, 0))}</td></tr></tfoot>` : '';
+  return `<table class="ovb-table"><colgroup><col class="c-rank"><col><col class="c-num"><col class="c-num"><col class="c-buy"></colgroup>
+    <thead><tr><th>#</th><th class="l">SKU</th><th>Sold / week</th><th>Left</th><th>Buy</th></tr></thead><tbody>${body}</tbody>${foot}</table>`;
+}
+function ovBuyHtml(p) {
+  const bp = p.buyPlan || { sections: [], slow: [], skus: 0, units: 0, settings: {} };
+  const st = bp.settings || {};
+  const tables = bp.skus
+    ? bp.sections.map(sec => `<div class="ovb-sec ovb-${sec.key}"><h2>${esc(sec.title)}</h2><p class="why">${esc(sec.why)}</p>${sec.rows.length ? ovBuyTable(sec.rows, true) : '<p class="why">Nothing in this group.</p>'}</div>`).join('')
+    : `<div class="ovq-note">Nothing to buy: every SKU selling ${st.minWeek}+ a week has enough left and due in${st.peakOn ? ` to get through ${esc(st.peakName)} week` : ` for ${st.targetDays} days`}.</div>`;
+  const slow = ovBuySlow && bp.slow.length ? `<div class="ovb-sec ovb-slow"><h2>Slow sellers</h2><p class="why">Out of stock, selling under ${st.minWeek} a week</p>${ovBuyTable(bp.slow, true)}</div>` : '';
+  const foot = `<div class="ovq-foot">
+    ${bp.skus ? '<button class="ovq-link" data-ovbuyxlsx>Download this list as Excel</button>' : ''}
+    ${bp.slow.length ? `<button class="ovq-link" data-ovbuyslow>${ovBuySlow ? 'Hide slow sellers' : `Slow sellers (under ${st.minWeek} a week) →`}</button>` : ''}
+    <span class="ovb-tot">All ${ovN(bp.skus)} SKUs: <b class="mono">${ovN(bp.units)}</b> units</span>
+  </div>`;
+  const buyRule = st.peakOn
+    ? `enough to sell at the normal pace ${st.normalDays ? `until ${esc(st.peakStartLabel)}` : 'now'}, then ${st.peakMultiplier}× that pace through ${esc(st.peakEndLabel)} (${esc(st.peakName)} week)`
+    : `enough for ${st.targetDays} days at today's pace`;
+  const how = `<p class="ovb-how">Sold / week: the best of the last 14, 30 and 60 days' averages. Left: the warehouse + WFS (dropship pad not counted). Buy: ${buyRule}, less what's left and due in on purchase orders, rounded up to 5. A SKU leaves this list as soon as it's stocked enough. Only brand-new SKUs selling ${st.minWeek}+ a week${st.exclude ? `, leaving out ${esc(st.exclude)}` : ''} (Settings › Stock).</p>`;
+  return `<div class="ovb">${tables}${slow}</div>${foot}${how}`;
+}
+
 function ovRenderList() {
   const box = $('ovList');
   const p = ovPlan();
@@ -14107,13 +14140,13 @@ function ovRenderList() {
   const buyMode = ovFilter === 'buy';
   const wasMode = ovFilter === 'was';
   // one label whatever the chip, so the chips never shift (owner 2026-10-13)
-  const label = ovLoading() ? 'Getting stock levels ready' : buyMode ? 'Buy now' : ovClear() && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
+  const label = ovLoading() ? 'Getting stock levels ready' : buyMode ? 'What to buy' : ovClear() && !wasMode ? 'Selling fast — no action needed yet' : 'Needs attention';
   const nBuy = p && p.counts ? p.counts.buy || 0 : 0;
   const nWas = ovWasRows(p).length;
   // Buy now left the chips for its own menu tab (owner 2026-10-27)
   const chips = p && p.ready && !buyMode ? `<div class="ovq-filter">${[['all', 'All'], ['out', 'Out'], ['low', 'Low'], ['fast', 'Fast'], ['was', 'Was selling']].map(([k, t]) =>
     `<button type="button" class="ovq-fchip${ovFilter === k ? ' is-on' : ''}" data-ovfilter="${k}">${t}${k === 'was' ? `<b>${nWas}</b>` : ''}</button>`).join('')}</div>` : '';
-  const sub = buyMode ? `${(p && p.buyPace) || 1}+ a day · under ${(p && p.buyUnits) ?? 50} units or ${lead + cover} days on hand · set in Settings` : wasMode ? 'best 3 of the last 6 months, averaged' : `Lead time ${lead} days · target ${lead + cover} days on hand`;
+  const sub = buyMode ? 'last 60 days of sales' : wasMode ? 'best 3 of the last 6 months, averaged' : `Lead time ${lead} days · target ${lead + cover} days on hand`;
   const head = `<div class="ovq-card-h"><span class="lbl">${label}</span>${chips}<span class="sub">${sub}</span></div>`;
   if (!ovData) { box.innerHTML = `${head}<div class="ovq-note">${ovError ? esc(ovError) : 'Loading…'}</div>`; return; }
   if (ovLoading()) {
@@ -14138,6 +14171,7 @@ function ovRenderList() {
     box.innerHTML = `${head}<div class="ovq-note">Stock levels will show here once Linnworks answers.</div>`;
     return;
   }
+  if (buyMode) { box.innerHTML = ovBuyHtml(p); return; }
   const watch = p.watch || [];
   if (wasMode) {
     const rows = ovWasRows(p);
@@ -14148,20 +14182,16 @@ function ovRenderList() {
   }
   // the watch list expands as more of the SAME rows (owner 2026-10-08:
   // "the same as above but expanded"), not a compact grid
-  const rows = buyMode ? (p.buy || [])
-    : ovFilter === 'all' ? [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])]
+  const rows = ovFilter === 'all' ? [...(ovClear() ? p.rows.filter(r => r.kind === 'fast') : p.rows), ...(ovShowWatch ? watch : [])]
       : p.rows.filter(r => r.kind === ovFilter);
   if (ovOpenSku && !rows.some(r => r.sku === ovOpenSku)) ovOpenSku = null;
-  const empty = buyMode ? 'Nothing sells a unit a day and runs under the target. Nothing to buy.' : ovFilter !== 'all' ? 'Nothing in this group.' : ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.';
+  const empty = ovFilter !== 'all' ? 'Nothing in this group.' : ovClear() ? 'Nothing is selling faster than usual either.' : 'Nothing needs attention.';
   const list = rows.length
-    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1, buyMode)).join('')
+    ? rows.map(r => ovRowHtml(r, r.sku === ovOpenSku, p.hotAt || 1)).join('')
     : `<div class="ovq-note">${empty}</div>`;
   const watchHtml = '';
   const ign = p.ignored || [];
-  const foot = buyMode ? `<div class="ovq-foot">
-    ${rows.length ? '<button class="ovq-link" data-ovbuyxlsx>Download this list as Excel</button>' : '<span></span>'}
-    <span class="ovq-ign">Order quantity = the larger of ${(p && p.buyUnits) ?? 50} units and sales per day × ${lead + cover} days, minus on hand (warehouse + WFS)</span>
-  </div>` : `<div class="ovq-foot">
+  const foot = `<div class="ovq-foot">
     ${watch.length && ovFilter === 'all' ? `<button class="ovq-link" data-ovwatch>${ovShowWatch ? `Hide the ${watch.length} under ${lead + cover} days of cover` : `${watch.length} more under ${lead + cover} days of cover →`}</button>` : '<span></span>'}
     ${ign.length ? `<span class="ovq-ign">${ign.length} ignored for ${p.ignoreDays} days<span class="dot">·</span><button class="ovq-link" data-ovundo>Undo</button></span>` : ''}
   </div>`;
@@ -14268,9 +14298,12 @@ for (const id of ['ovList', 'ovSold']) {
       if (r && r.ok) toast('List saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
       return;
     }
+    if (e.target.closest('[data-ovbuyslow]')) { ovBuySlow = !ovBuySlow; ovRenderList(); return; }
     if (e.target.closest('[data-ovbuyxlsx]')) {
-      const p = ovPlan(); const rows = (p && p.buy) || [];
-      const r = await api.overviewExportBuy(rows.map(x => ({ sku: x.sku, title: x.title, buyQty: x.buyQty, perDay: x.perDay, avail: x.avail, atWfs: x.atWfs, daysLeft: x.daysLeft, sold30: x.sold30, kind: x.kind })), (p.leadDays || 7) + (p.coverDays || 21), p.leadDays || 7).catch(err => ({ ok: false, error: err.message }));
+      const p = ovPlan(); const bp = (p && p.buyPlan) || { sections: [], settings: {} };
+      const rows = bp.sections.flatMap(sec => sec.rows.map(x => ({ rank: x.rank, section: sec.title, sku: x.sku, title: x.title, dropship: x.dropship, week: x.week, left: x.left, due: x.due, buy: x.buy })));
+      const st = bp.settings || {};
+      const r = await api.overviewExportBuy(rows, st.peakOn ? `What to buy — ${st.peakName} ${st.peakStartLabel} – ${st.peakEndLabel} at ${st.peakMultiplier}×` : `What to buy — ${st.targetDays} days of cover`).catch(err => ({ ok: false, error: err.message }));
       if (r && r.ok) toast('Buy list saved'); else if (r && !r.canceled) toast(r.error || 'Could not save the list.', 4000);
       return;
     }

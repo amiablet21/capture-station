@@ -44,7 +44,7 @@ Other files there: `stockimports-<STATION>.jsonl` (the app's bulk-import history
 - **"On hand"** means Digital World Shop available plus WFS.
 - **SKUs:** `MODEL-STORAGE-COLOR` (e.g. `X135-64GB-GRAY`). `OPEN-BOX-`, `USED-` and `SCRAP-` prefixes are graded stock. "Brand new" means none of those. Stock is often moved from a new SKU to its `OPEN-BOX-` twin (a +N and a −N at the same moment); that is not a delivery.
 - **Sales:** prices are ex-tax and before marketplace fees and shipping. Some Temu lines arrive at $0 and are left out of averages.
-- **Buy lists:** pace is the best of the 14, 30 and 60-day averages. The peak multiplier (10× for Black Friday unless told otherwise) applies from the Friday before Thanksgiving week through Cyber Monday. The owner has set aside A15, T220 and Silver Shadow SKUs; pass `--exclude 'SILVER-?SHADOW|^A15-|T220'` unless told otherwise.
+- **Buy lists:** the Overview's What to buy tab (`src/main/buyplan.js`) and `npm run lw -- buylist` use the same rules; change both together. Pace is the best of the 14, 30 and 60-day averages. The peak multiplier (10× for Black Friday unless told otherwise) applies from the Friday before Thanksgiving week through Cyber Monday. The owner has set aside A15, T220 and Silver Shadow SKUs; pass `--exclude 'SILVER-?SHADOW|^A15-|T220'` unless told otherwise.
 
 ## The app
 

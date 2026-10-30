@@ -1303,12 +1303,25 @@
         <span class="field-label">Buy coverage (days)</span>
         <input id="setCoverDays" type="number" min="1" step="1" class="input input-time mono" />
       </div>
-      <!-- the Overview's Buy now cut (owner 2026-10-13: "buy if we have less than 30-50 units left") -->
+      <!-- the Overview's What to buy list (owner 2026-10-30: the Black Friday buy-list PDF) -->
       <div class="settings-row">
-        <span class="field-label">Buy now when under (units)</span>
-        <input id="setBuyUnits" type="number" min="0" step="1" class="input input-time mono" />
-        <span class="field-label">and selling at least (a day)</span>
-        <input id="setBuyPace" type="number" min="0" step="0.1" class="input input-time mono" />
+        <span class="field-label">What to buy lists SKUs selling at least (a week)</span>
+        <input id="setBuyMinWeek" type="number" min="0" step="1" class="input input-time mono" />
+      </div>
+      <div class="settings-row">
+        <span class="field-label">Sales peak</span>
+        <input id="setPeakName" type="text" class="input input-time" placeholder="Black Friday" />
+        <span class="field-label">from (MM-DD)</span>
+        <input id="setPeakStart" type="text" class="input input-time mono" placeholder="11-20" maxlength="5" />
+        <span class="field-label">to</span>
+        <input id="setPeakEnd" type="text" class="input input-time mono" placeholder="11-30" maxlength="5" />
+        <span class="field-label">selling</span>
+        <input id="setPeakMult" type="number" min="1" step="1" class="input input-time mono" />
+        <span class="field-label">× the normal pace</span>
+      </div>
+      <div class="settings-row">
+        <span class="field-label">Leave out SKUs matching</span>
+        <input id="setBuyExclude" type="text" class="input mono" placeholder="SILVER-?SHADOW|^A15-|T220" spellcheck="false" />
       </div>
       <h3 class="dlg-section">Receiving</h3>
       <div class="settings-row">

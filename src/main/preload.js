@@ -232,7 +232,7 @@ contextBridge.exposeInMainWorld('api', {
   overviewData: () => ipcRenderer.invoke('overview:data'),
   wfsPlans: (opts) => ipcRenderer.invoke('wfs:plans', opts || {}),
   wfsItems: (shipmentId) => ipcRenderer.invoke('wfs:items', { shipmentId }),
-  overviewExportBuy: (rows, target, lead) => ipcRenderer.invoke('overview:exportBuy', { rows, target, lead }),
+  overviewExportBuy: (rows, title) => ipcRenderer.invoke('overview:exportBuy', { rows, title }),
   overviewExportWas: (rows, min, mode, months) => ipcRenderer.invoke('overview:exportWas', { rows, min, mode, months }),
   overviewPhone: () => ipcRenderer.invoke('overview:phone'),
   walmartStatus: () => ipcRenderer.invoke('walmart:status'),
