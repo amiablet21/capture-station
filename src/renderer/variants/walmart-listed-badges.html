@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · already-listed badges — mockup</title>
+<!--
+  Owner 2026-10-23: "for items that we already have listed is there anyway
+  to indicate that? Even before clicking into?" + "can I add the items by
+  just hovering over them?". What the app would add on top of walmart.com
+  inside the Walmart tab (the page itself is a neutral stand-in here):
+    - a green "Listed" badge on every product you already sell (your
+      Walmart listings, matched by item number), always visible, with your
+      SKU and price; hovering it offers "+ List another" (a 2nd condition)
+    - "+ List this" appears on hover on every other product
+    - on a product page you already sell, the big button says so
+  Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1180px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 980px; line-height: 1.5; }
+  .frame { width: 1180px; margin: 8px auto 26px; background: #fff; border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.12); font-family: system-ui, sans-serif; }
+  .bar { padding: 10px 16px; background: #F4F4F2; border-bottom: 1px solid #E3E3E0; font-size: 12px; color: #777; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 18px; }
+  .card { position: relative; border-radius: 8px; padding: 10px; }
+  .pic { height: 170px; border-radius: 6px; background: linear-gradient(135deg, #EEF0F4, #DCE2EA); display: grid; place-items: center; color: #9AA3B2; font-size: 12px; }
+  .price { font-size: 22px; font-weight: 800; margin-top: 10px; }
+  .t { font-size: 14px; line-height: 1.35; color: #222; margin-top: 4px; }
+  .rate { font-size: 12px; color: #777; margin-top: 4px; }
+  /* what the app adds */
+  .dws-btn { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); font: 600 13px system-ui, sans-serif; color: #fff; background: #1E3A66; border: none; border-radius: 999px; padding: 9px 16px; box-shadow: 0 4px 14px rgba(0,0,0,.25); white-space: nowrap; }
+  .dws-listed { position: absolute; top: 14px; left: 14px; right: 14px; background: #EDF3EC; color: #346538; border: 1.5px solid #346538; border-radius: 10px; padding: 7px 10px; font: 600 12px system-ui, sans-serif; line-height: 1.35; }
+  .dws-listed b { display: block; font-size: 13px; }
+  .dws-listed span { font-weight: 500; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+  .card.is-listed .pic { opacity: .55; }
+  .card.is-hover { box-shadow: 0 0 0 2px #1E3A66; }
+  .dws-btn.ghost { top: auto; bottom: 108px; background: #fff; color: #1E3A66; border: 1.5px solid #1E3A66; box-shadow: none; }
+  .hoverlabel { position: absolute; top: -10px; right: 10px; font-size: 10.5px; font-weight: 700; color: #1E3A66; background: #E4EAF4; border-radius: 999px; padding: 1px 8px; }
+  /* product page */
+  .pp { display: grid; grid-template-columns: 1fr 360px; gap: 24px; padding: 22px; position: relative; min-height: 360px; }
+  .pp .pic { height: 300px; }
+  .pp h3 { margin: 0 0 8px; font-size: 20px; }
+  .pp-fixed { position: absolute; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .pp-own { background: #EDF3EC; color: #346538; border: 1.5px solid #346538; border-radius: 14px; padding: 10px 16px; font: 600 14px system-ui, sans-serif; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+  .pp-own span { display: block; font: 500 12px 'Geist Mono', monospace; margin-top: 2px; }
+  .pp-btn { font: 600 15px system-ui, sans-serif; color: #fff; background: #1E3A66; border: none; border-radius: 999px; padding: 12px 22px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>1 · Search results: what you already sell is marked</h2>
+  <p>Every product you already list on Walmart gets a green <b>Listed</b> badge with your SKU and price, without clicking in. It's matched by Walmart item number against your own Walmart listings. Hovering any other product shows <b>+ List this</b>; one click adds it. Hovering a listed one offers <b>+ List another</b>, e.g. to add a Pre-Owned listing beside your New one.</p>
+</div>
+<div class="frame">
+  <div class="bar">walmart.com/search?q=samsung+galaxy+tab+a9 · inside the Walmart tab (stand-in page; the real Walmart page shows here)</div>
+  <div class="grid">
+    <div class="card is-listed">
+      <div class="pic">product photo</div>
+      <div class="dws-listed"><b>✓ Listed by you</b><span>X110-64GB-GRAY · $124.99</span></div>
+      <div class="price">$119.00</div>
+      <div class="t">Samsung Galaxy Tab A9 8.7" 64GB Wi-Fi Android Tablet, Graphite</div>
+      <div class="rate">★★★★★ 2,341</div>
+    </div>
+    <div class="card is-hover">
+      <span class="hoverlabel">mouse here</span>
+      <div class="pic">product photo</div>
+      <button class="dws-btn">+ List this</button>
+      <div class="price">$149.00</div>
+      <div class="t">Samsung Galaxy Tab A9 8.7" 128GB Wi-Fi Android Tablet, Graphite</div>
+      <div class="rate">★★★★★ 1,102</div>
+    </div>
+    <div class="card is-listed is-hover">
+      <span class="hoverlabel">mouse here</span>
+      <div class="pic">product photo</div>
+      <div class="dws-listed"><b>✓ Listed by you · 2 listings</b><span>X210-128GB-SILVER · $219.00<br>USED-X210-128GB-SILVER · $169.00</span></div>
+      <button class="dws-btn ghost">+ List another</button>
+      <div class="price">$229.99</div>
+      <div class="t">Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</div>
+      <div class="rate">★★★★☆ 12</div>
+    </div>
+    <div class="card">
+      <div class="pic">product photo</div>
+      <div class="price">$209.99</div>
+      <div class="t">Samsung Galaxy Tab A11+ Widescreen Tablet, 128GB, Silver</div>
+      <div class="rate">★★★★☆ 88</div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <h2>2 · A product page you already sell</h2>
+  <p>The big button in the corner says you already sell it, under which SKU and at what price. <b>+ List another</b> is still there for a second listing in a different condition.</p>
+</div>
+<div class="frame">
+  <div class="bar">walmart.com/ip/…/20944924919 · inside the Walmart tab (stand-in page)</div>
+  <div class="pp">
+    <div class="pic">product photos</div>
+    <div><h3>Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</h3>
+      <div class="price">$229.99</div><div class="rate">Sold by HotDeals · Fulfilled by Walmart</div></div>
+    <div class="pp-fixed">
+      <div class="pp-own">✓ You list this<span>X210-128GB-SILVER · $219.00</span></div>
+      <button class="pp-btn">+ List another</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

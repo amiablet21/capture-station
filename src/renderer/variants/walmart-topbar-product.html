@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Walmart tab · cleaner top + product view — mockup</title>
+<!--
+  Owner 2026-10-23: "can we change how the top bar looks? It looks kind of
+  ugly" and "is it still possible to press into each individual listing? I
+  would like to see the prices and such and the other sellers, but stripped
+  down as you have". 1: the Walmart tab's top (tabs, Pricing summary,
+  strategy row), now vs proposed. 2: clicking a search result opens a plain
+  product view inside the app. Not wired.
+-->
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { overflow: auto; display: block; background: #E9E8E4; height: auto; }
+  .note { max-width: 1180px; margin: 0 auto; padding: 18px 4px 8px; }
+  .note h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0 0 3px; }
+  .note p { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 980px; line-height: 1.5; }
+  .lbl { max-width: 1180px; margin: 10px auto 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .win { width: 1180px; margin: 0 auto 18px; background: var(--surface); border: 1px solid #D9D8D3; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(47,52,55,.10); }
+
+  /* ---- proposed top ---- */
+  .nh { display: flex; align-items: flex-end; gap: 28px; padding: 0 22px; border-bottom: 1px solid var(--border); }
+  .nh h2 { margin: 0; padding: 14px 0 12px; font-size: 15px; font-weight: 700; }
+  .nt { display: flex; gap: 22px; }
+  .nt button { font: 500 13px var(--font); color: var(--muted); background: none; border: none; padding: 14px 0 11px; border-bottom: 2px solid transparent; cursor: pointer; }
+  .nt button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+  .nh .api { margin-left: auto; padding-bottom: 13px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .nh .api i { width: 7px; height: 7px; border-radius: 9px; background: var(--pos-text); }
+  .ns { display: flex; align-items: center; gap: 14px; padding: 16px 22px 6px; }
+  .ns .big { font-size: 26px; font-weight: 700; color: var(--neg-text); font-variant-numeric: tabular-nums; line-height: 1; }
+  .ns .of { font-size: 13.5px; }
+  .ns .of span { color: var(--muted); }
+  .ns .r { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); }
+  .ns .fee { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 10px; }
+  .ns .fee input { width: 34px; font: 600 12px var(--mono); border: none; background: var(--surface-2); border-radius: 999px; text-align: center; padding: 2px; color: var(--text); }
+  .ns .ref { font: 600 12px var(--font); color: var(--accent); background: none; border: none; cursor: pointer; }
+  .sr { display: flex; gap: 6px; padding: 10px 22px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .sr button { font: 500 12.5px var(--font); text-align: left; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 6px 12px 10px; cursor: pointer; white-space: nowrap; }
+  .sr button b { display: block; color: var(--text); font-weight: 600; font-size: 13px; }
+  .sr button em { font-style: normal; color: var(--neg-text); font-weight: 600; }
+  .sr button.on { border-bottom-color: var(--accent); background: #F3F6FB; border-radius: 8px 8px 0 0; }
+  .sr .add { color: var(--accent); font-weight: 600; align-self: center; padding-bottom: 8px; }
+  .body { padding: 14px 22px 20px; font-size: 12.5px; color: var(--muted); }
+  .body h3 { margin: 0 0 2px; font-size: 14px; color: var(--text); }
+
+  /* ---- product view ---- */
+  .pv { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 560px; }
+  .pv-main { padding: 14px 22px 22px; }
+  .back { font: 600 12.5px var(--font); color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; }
+  .pv-top { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 22px; margin-top: 14px; }
+  .pv-ph { height: 200px; border-radius: 10px; background: linear-gradient(135deg, #F1F3F6, #DDE3EC); }
+  .pv-top h3 { margin: 0 0 6px; font-size: 17px; line-height: 1.35; }
+  .pv-meta { font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .pv-bb { margin-top: 14px; display: flex; gap: 26px; }
+  .pv-bb div { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .pv-bb b { display: block; font-size: 20px; color: var(--text); letter-spacing: 0; text-transform: none; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pv-go { margin-top: 16px; }
+  .sel { margin-top: 22px; }
+  .sel h4 { margin: 0 0 8px; font-size: 13px; }
+  .sel h4 span { font-weight: 400; color: var(--muted); }
+  table.s { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.s th { text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.s td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  table.s .num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.s td.num b { font-size: 13.5px; }
+  .tag { font-size: 10.5px; font-weight: 600; border-radius: 4px; padding: 1px 6px; margin-left: 6px; }
+  .tag.bb { background: var(--pos-bg); color: var(--pos-text); }
+  .tag.you { background: var(--accent-soft); color: var(--accent); }
+  tr.you td { background: #F6F8FC; }
+  .aside { border-left: 1px solid var(--border); padding: 18px; font-size: 12.5px; color: var(--muted); }
+  .aside b { color: var(--text); }
+  .hv { font-size: 10.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; margin-left: 8px; }
+</style></head>
+<body>
+
+<div class="note">
+  <h2>1 · The top of the Walmart tab</h2>
+  <p>Now: a grey pill for the tabs, a summary line with everything the same weight, and big boxes for each strategy with cut-off names. Proposed: plain underlined tabs, one clear number, the fee and Refresh tucked to the right, and the strategies as a single row of tabs with their full names. Same idea on List, Uploads and Incentives.</p>
+</div>
+<div class="lbl">Now</div>
+<div class="win">
+  <div class="wl-head"><h2 class="dlg-title">Walmart</h2>
+    <div class="wlp-tabs"><button class="wlp-tab">List</button><button class="wlp-tab">Uploads</button><button class="wlp-tab is-on">Pricing</button><button class="wlp-tab">Incentives</button></div>
+    <span class="wl-acct"><span class="wl-dot"></span>Walmart API</span></div>
+  <div class="wl-rpsum"><b>286</b><span class="of">of 467 items losing the Buy Box</span><span class="wl-muted">Walmart data from just now</span>
+    <label class="wl-muted wl-fee">Fee for break-even <input class="wl-in" value="8">%</label><button class="btn btn-ghost">Refresh</button></div>
+  <div class="wl-rpcards">
+    <button class="wl-rpcard"><span class="n">All items</span><span class="c">467 items · <b>286 losing</b></span></button>
+    <button class="wl-rpcard"><span class="n">Walmart Match Buy Box Price</span><span class="c">0 items · <b>0 losing</b></span></button>
+    <button class="wl-rpcard"><span class="n">Walmart Match Competitive Price</span><span class="c">0 items · <b>0 losing</b></span></button>
+    <button class="wl-rpcard"><span class="n">Walmart Suggested Strategy</span><span class="c">0 items · <b>0 losing</b></span></button>
+    <button class="wl-rpcard is-on"><span class="n">IMRAN BUY BOX</span><span class="c">0 items · <b>0 losing</b></span></button>
+    <button class="wl-rpcard is-add">+ New strategy</button>
+  </div>
+</div>
+
+<div class="lbl">Proposed</div>
+<div class="win">
+  <div class="nh"><h2>Walmart</h2>
+    <div class="nt"><button>List</button><button>Uploads</button><button class="on">Pricing</button><button>Incentives</button></div>
+    <span class="api"><i></i>Connected</span></div>
+  <div class="ns"><span class="big">286</span><span class="of"><b>losing the Buy Box</b> <span>of 467 items</span></span>
+    <span class="r"><span>Updated just now</span><span class="fee">Fee <input value="8">%</span><button class="ref">↻ Refresh</button></span></div>
+  <div class="sr">
+    <button><b>All items</b>467 · <em>286 losing</em></button>
+    <button class="on"><b>IMRAN BUY BOX</b>131 items · <em>38 losing</em></button>
+    <button><b>Walmart Match Buy Box Price</b>0 items</button>
+    <button><b>Walmart Match Competitive Price</b>0 items</button>
+    <button><b>Walmart Suggested Strategy</b>0 items</button>
+    <button class="add">+ New</button>
+  </div>
+  <div class="body"><h3>IMRAN BUY BOX</h3>$0.30 under the Buy Box, within each item's min – max · <a class="wl-link" href="#">Edit rule</a><br><br>(items losing the Buy Box listed here, as now)</div>
+</div>
+
+<div class="note">
+  <h2>2 · Click a product to see it</h2>
+  <p>Clicking a result (anywhere but <b>+ List this</b>) opens it here, plain: price, the Buy Box, rating, and every seller with their price, shipping and condition. You're highlighted if you sell it. <b>‹ Results</b> goes back to where you were. The seller list is read from Walmart's "Compare all sellers" page out of sight; I can't test that against the real walmart.com from here, so it's the part most likely to need a fix after you try it.</p>
+</div>
+<div class="win">
+  <div class="pv">
+    <div class="pv-main">
+      <button class="back">‹ Results for “Samsung Galaxy Tab A9+”</button>
+      <div class="pv-top">
+        <div class="pv-ph"></div>
+        <div>
+          <h3>Samsung Galaxy Tab A9+ 11" Tablet 64GB Gray, Wi-Fi (US Version)</h3>
+          <div class="pv-meta"><span>Item 5129928603</span><span>SAMSUNG</span><span><span class="wl-stars"><i class="w84"></i></span> 4.2 (12 reviews)</span></div>
+          <div class="pv-bb"><div>Buy Box<b>$209.99</b></div><div>Held by<b>HotDeals</b></div><div>Sellers<b>5</b></div></div>
+          <button class="btn btn-primary pv-go">+ List this</button>
+        </div>
+      </div>
+      <div class="sel">
+        <h4>Sellers <span>· by condition, then price</span></h4>
+        <table class="s">
+          <thead><tr><th>Seller</th><th>Condition</th><th class="num">Price</th><th class="num">Shipping</th><th>Arrives</th></tr></thead>
+          <tbody>
+            <tr><td>HotDeals<span class="tag bb">Buy Box</span></td><td>New</td><td class="num"><b>$209.99</b></td><td class="num">Free</td><td>Tue, Oct 28</td></tr>
+            <tr class="you"><td>Your store<span class="tag you">You</span></td><td>New</td><td class="num"><b>$212.50</b></td><td class="num">Free</td><td>Wed, Oct 29</td></tr>
+            <tr><td>Walmart.com</td><td>New</td><td class="num"><b>$219.00</b></td><td class="num">Free</td><td>Mon, Oct 27</td></tr>
+            <tr><td>TechDeals Direct</td><td>Restored</td><td class="num"><b>$174.00</b></td><td class="num">$5.99</td><td>Fri, Oct 31</td></tr>
+            <tr><td>Gadget Outlet</td><td>Pre-Owned: Good</td><td class="num"><b>$161.00</b></td><td class="num">Free</td><td>Thu, Oct 30</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <aside class="aside"><b>The listing form stays here.</b> Press <b>+ List this</b> and it fills in as it does now (SKU, condition, UPC, price, quantity).</aside>
+  </div>
+</div>
+
+</body>
+</html>

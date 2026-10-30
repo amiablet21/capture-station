@@ -404,6 +404,25 @@ function auxBackfill(prefix, events) {
   } catch { /* best effort — the next open retries */ }
 }
 
+// Self-healing seed: a station's own aux file is rebuilt from its own rows
+// whenever it holds fewer lines than the rows it should carry — an append
+// that failed while the folder was unreachable, or marks made before sync
+// was on, reach the other desktops on the next pass (owner 2026-10-13: a
+// file of 600 marks did not show up on the other computers)
+function auxEnsure(prefix, events) {
+  if (!enabled()) return false;
+  const f = path.join(folder, `${prefix}-${station}.jsonl`);
+  try {
+    const rows = typeof events === 'function' ? events() : events;
+    if (!rows || !rows.length) return false;
+    let lines = 0;
+    try { const t = fs.readFileSync(f, 'utf8'); lines = t.split('\n').filter((l) => l.trim()).length; } catch { lines = 0; }
+    if (lines >= rows.length) return false;
+    fs.writeFileSync(f, rows.map(e => JSON.stringify(e)).join('\n') + '\n');
+    return true;
+  } catch { return false; }
+}
+
 // Incremental read of the append-only aux files: `state` remembers how far
 // each file was read, so a pass only parses what other stations appended
 // since. A file that shrank (recreated) is read from the top again.
@@ -441,6 +460,26 @@ function readAuxNew(prefix, state) {
   return out;
 }
 
+// the aux files of a prefix in the shared folder, one per station, with
+// their line counts (owner 2026-10-14: "why did it not save my marks" —
+// the Import screen shows what each desktop has written)
+function auxFiles(prefix) {
+  if (!enabled()) return [];
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(folder)) {
+      const m = f.match(new RegExp(`^${prefix}-([A-Z0-9-]+)\\.jsonl$`));
+      if (!m) continue;
+      const full = path.join(folder, f);
+      let lines = 0; let bytes = 0; let mtime = 0; let readable = true;
+      try { const st = fs.statSync(full); bytes = st.size; mtime = st.mtimeMs; } catch { readable = false; }
+      try { lines = fs.readFileSync(full, 'utf8').split('\n').filter((l) => l.trim()).length; } catch { readable = false; }
+      out.push({ file: f, station: m[1], own: m[1] === station, lines, bytes, mtime, readable });
+    }
+  } catch { /* folder unreachable */ }
+  return out.sort((a, b) => (b.own - a.own) || b.mtime - a.mtime);
+}
+
 function readAux(prefix) {
   if (!enabled()) return [];
   const out = [];
@@ -457,4 +496,4 @@ function readAux(prefix) {
   return out;
 }
 
-module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, readAux, readAuxNew };
+module.exports = { configure, enabled, stationName, gidOf, ownerOf, emitRow, emitPutFor, emitDel, list, getRec, status, rescan, removeStation, appendAux, auxBackfill, auxEnsure, readAux, readAuxNew, auxFiles };
