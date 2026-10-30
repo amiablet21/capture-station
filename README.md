@@ -4,7 +4,7 @@ Windows Electron app for a packing station (formerly Capture Station), built for
 
 ## v1.32.129 highlights
 
-- **Channel SKUs popup redesigned** (owner pick B, without icons or the account line). Click a SKU on the Stock page and its linked listings show as a table: Marketplace · Channel SKU · Price · Listed (the quantity Linnworks tells that listing) · Stock sync as an on/off switch-look, with "3 listings · 1 with sync off" beside the title. Clicking a channel SKU still opens the listing, right-click still copies it, and dead sync-off links still drop out in the background.
+- **Channel SKUs popup redesigned** (owner pick B, without icons or the account line). Click a SKU on the Stock page and its linked listings show as a table: Marketplace · Channel SKU · Price · Listed (the quantity Linnworks tells that listing), with the count of listings beside the title. The old "sync off" tag is gone: on a WFS listing sync is meant to be off, so it only read as a false warning. Clicking a channel SKU still opens the listing, right-click still copies it, and dead sync-off links still drop out in the background.
 
 ## v1.32.127 highlights
 

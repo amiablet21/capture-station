@@ -6336,8 +6336,8 @@ tr.os-open > td { background: var(--accent-soft); }
 @media (max-width: 720px) { .ovb { padding: 4px 10px 6px; } .ovb-table col.c-rank { width: 30px; } .ovb-table col.c-num { width: 70px; } .ovb-table col.c-buy { width: 62px; } }
 
 /* Channel SKUs popup, design B (owner 2026-10-30; variants/chs-popup-v2.html,
-   no marketplace icons, no account line): a table with the listed quantity
-   and a stock-sync switch-look */
+   no marketplace icons, no account line, no sync switch): a table with the
+   listed quantity */
 .chs-head { display: flex; align-items: baseline; gap: 12px; }
 .chs-head .dlg-title { margin-bottom: 12px; }
 .chs-tsku { font-weight: 600; margin-left: 4px; }
@@ -6355,10 +6355,4 @@ tr.os-open > td { background: var(--accent-soft); }
 .chs-table .chs-sku-link::after { content: " ↗"; color: var(--faint); font-weight: 400; }
 .chs-table .chs-sku-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .chs-none { color: var(--faint); }
-.chs-sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
-.chs-sync i { width: 28px; height: 16px; border-radius: 999px; background: #D7D5D0; position: relative; flex: 0 0 auto; }
-.chs-sync i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-.chs-sync.on i { background: #4C9A5B; }
-.chs-sync.on i::after { left: 14px; }
-.chs-sync.off { color: var(--badge-yellow-text); }
 .chs-hint { margin-right: auto; align-self: center; color: var(--muted); font-size: 12px; }

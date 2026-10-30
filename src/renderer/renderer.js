@@ -9319,16 +9319,16 @@ $('sdelGo').addEventListener('click', async () => {
 
 let chsSweep = 0; // invalidates a stale background sweep after a re-open
 
-// the count line beside the title: "3 listings · 1 with sync off"
+// the count line beside the title: "3 listings"
 function chsSummary() {
-  const rows = [...document.querySelectorAll('#chsList .chs-row')];
-  const off = rows.filter(r => r.dataset.off === '1').length;
-  $('chsSum').textContent = rows.length ? `${rows.length} listing${rows.length === 1 ? '' : 's'}${off ? ` · ${off} with sync off` : ''}` : '';
+  const n = document.querySelectorAll('#chsList .chs-row').length;
+  $('chsSum').textContent = n ? `${n} listing${n === 1 ? '' : 's'}` : '';
 }
 
 async function openChannelSkus(sku, stockItemId) {
   // design B (owner 2026-10-30): one table - marketplace, channel SKU,
-  // price, the quantity the listing is told, stock sync
+  // price, the quantity the listing is told. No stock-sync column: on a
+  // WFS listing "off" is correct and only read as a false warning
   $('chsTitle').innerHTML = `Channel SKUs <span class="mono chs-tsku">${esc(sku)}</span>`;
   $('chsSum').textContent = '';
   $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
@@ -9342,9 +9342,9 @@ async function openChannelSkus(sku, stockItemId) {
   $('chsList').innerHTML = res.channels.length === 0
     ? '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>'
     : `<table class="chs-table">
-      <thead><tr><th>Marketplace</th><th>Channel SKU</th><th class="r">Price</th><th class="r">Listed</th><th>Stock sync</th></tr></thead>
+      <thead><tr><th>Marketplace</th><th>Channel SKU</th><th class="r">Price</th><th class="r">Listed</th></tr></thead>
       <tbody>${res.channels.map(c => `
-        <tr class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}" data-off="${c.ignoreSync ? 1 : 0}">
+        <tr class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}">
           <td class="chs-ch" title="${esc(c.subSource)}">${esc(chName(c.source))}</td>
           <td><button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
             data-lref="${esc(c.refId || '')}"
@@ -9353,7 +9353,6 @@ async function openChannelSkus(sku, stockItemId) {
             ? `<span title="${c.priceKind === 'default' ? 'Channel default price stored in Linnworks (no listing-specific price)' : 'Listing price stored in Linnworks'}">$${Number(c.price).toFixed(2)}${c.priceKind === 'default' ? '<span class="chs-price-def">def</span>' : ''}</span>`
             : '<span class="chs-none" title="No price stored in Linnworks for this listing">—</span>'}</td>
           <td class="r mono">${c.listedQuantity != null ? esc(String(c.listedQuantity)) : '<span class="chs-none">—</span>'}</td>
-          <td><span class="chs-sync ${c.ignoreSync ? 'off' : 'on'}" title="${c.ignoreSync ? 'Stock sync is turned off for this listing: stock changes here do not reach it' : 'Stock changes here reach this listing'}"><i></i>${c.ignoreSync ? 'Off' : 'On'}</span></td>
         </tr>`).join('')}</tbody></table>`;
   chsSummary();
   // A SKU renamed or ended ON the channel leaves its old link record behind
