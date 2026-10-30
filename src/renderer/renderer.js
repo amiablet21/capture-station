@@ -9319,8 +9319,18 @@ $('sdelGo').addEventListener('click', async () => {
 
 let chsSweep = 0; // invalidates a stale background sweep after a re-open
 
+// the count line beside the title: "3 listings · 1 with sync off"
+function chsSummary() {
+  const rows = [...document.querySelectorAll('#chsList .chs-row')];
+  const off = rows.filter(r => r.dataset.off === '1').length;
+  $('chsSum').textContent = rows.length ? `${rows.length} listing${rows.length === 1 ? '' : 's'}${off ? ` · ${off} with sync off` : ''}` : '';
+}
+
 async function openChannelSkus(sku, stockItemId) {
-  $('chsTitle').textContent = `Channel SKUs linked to ${sku}`;
+  // design B (owner 2026-10-30): one table - marketplace, channel SKU,
+  // price, the quantity the listing is told, stock sync
+  $('chsTitle').innerHTML = `Channel SKUs <span class="mono chs-tsku">${esc(sku)}</span>`;
+  $('chsSum').textContent = '';
   $('chsList').innerHTML = '<div class="stock-loading"><span class="spinner" aria-label="Loading"></span></div>';
   $('chsDialog').showModal();
   const res = await api.getChannelSkus(stockItemId);
@@ -9328,22 +9338,24 @@ async function openChannelSkus(sku, stockItemId) {
     $('chsList').innerHTML = `<p class="dlg-note">${esc(res.error || 'Could not load channel SKUs.')}</p>`;
     return;
   }
+  const chName = (src) => { const k = String(src || '').toLowerCase(); return channelLabel(k.startsWith('temu') ? 'temu' : k); };
   $('chsList').innerHTML = res.channels.length === 0
     ? '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>'
-    : res.channels.map(c => `
-      <div class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}">
-        <span class="badge badge-${esc((c.source || '').toLowerCase())}">${esc(channelLabel((c.source || '').toLowerCase()))}</span>
-        <span class="chs-sub">${esc(c.subSource)}</span>
-        <button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
-          data-lref="${esc(c.refId || '')}"
-          title="Open this listing on ${esc(channelLabel((c.source || '').toLowerCase()))} (right-click: copy the SKU)">${esc(c.sku)}</button>
-        ${c.price != null
-          ? `<span class="mono chs-price" title="${c.priceKind === 'default'
-              ? 'Channel default price stored in Linnworks (no listing-specific price)'
-              : 'Listing price stored in Linnworks'}">$${Number(c.price).toFixed(2)}${c.priceKind === 'default' ? '<span class="chs-price-def">def</span>' : ''}</span>`
-          : '<span class="chs-price chs-price-none" title="No price stored in Linnworks for this listing">—</span>'}
-        ${c.ignoreSync ? '<span class="history-status st-pending" title="Stock sync is turned off for this listing">sync off</span>' : ''}
-      </div>`).join('');
+    : `<table class="chs-table">
+      <thead><tr><th>Marketplace</th><th>Channel SKU</th><th class="r">Price</th><th class="r">Listed</th><th>Stock sync</th></tr></thead>
+      <tbody>${res.channels.map(c => `
+        <tr class="chs-row" data-sku="${esc(c.sku)}" data-src="${esc(c.source)}" data-sub="${esc(c.subSource)}" data-off="${c.ignoreSync ? 1 : 0}">
+          <td class="chs-ch" title="${esc(c.subSource)}">${esc(chName(c.source))}</td>
+          <td><button class="mono chs-sku chs-sku-link" data-lsku="${esc(c.sku)}" data-lch="${esc((c.source || '').toLowerCase())}"
+            data-lref="${esc(c.refId || '')}"
+            title="Open this listing on ${esc(chName(c.source))} (right-click: copy the SKU)">${esc(c.sku)}</button></td>
+          <td class="r mono">${c.price != null
+            ? `<span title="${c.priceKind === 'default' ? 'Channel default price stored in Linnworks (no listing-specific price)' : 'Listing price stored in Linnworks'}">$${Number(c.price).toFixed(2)}${c.priceKind === 'default' ? '<span class="chs-price-def">def</span>' : ''}</span>`
+            : '<span class="chs-none" title="No price stored in Linnworks for this listing">—</span>'}</td>
+          <td class="r mono">${c.listedQuantity != null ? esc(String(c.listedQuantity)) : '<span class="chs-none">—</span>'}</td>
+          <td><span class="chs-sync ${c.ignoreSync ? 'off' : 'on'}" title="${c.ignoreSync ? 'Stock sync is turned off for this listing: stock changes here do not reach it' : 'Stock changes here reach this listing'}"><i></i>${c.ignoreSync ? 'Off' : 'On'}</span></td>
+        </tr>`).join('')}</tbody></table>`;
+  chsSummary();
   // A SKU renamed or ended ON the channel leaves its old link record behind
   // in Linnworks (owner 2026-09-16). Sweep sync-off rows against the
   // channel's current catalog in the background and drop the ones that are
@@ -9361,6 +9373,7 @@ async function openChannelSkus(sku, stockItemId) {
         if (row.dataset.sku === g.sku && row.dataset.src === g.source && row.dataset.sub === g.subSource) row.remove();
       }
     }
+    chsSummary();
     if (!document.querySelector('#chsList .chs-row')) {
       $('chsList').innerHTML = '<p class="dlg-note">Nothing links here yet - no channel SKU is mapped to this item.</p>';
     }

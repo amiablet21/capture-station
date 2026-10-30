@@ -2037,9 +2037,11 @@
 
   <dialog id="chsDialog" class="dlg">
     <div class="dlg-body">
-      <h2 class="dlg-title" id="chsTitle">Channel SKUs</h2>
+      <!-- design B, no icons or account line (owner 2026-10-30, variants/chs-popup-v2.html) -->
+      <div class="chs-head"><h2 class="dlg-title" id="chsTitle">Channel SKUs</h2><span id="chsSum" class="chs-sum"></span></div>
       <div id="chsList" class="chs-list"></div>
       <div class="dlg-actions">
+        <span class="chs-hint">Click a SKU to open its listing · right-click to copy</span>
         <button id="chsClose" class="btn btn-primary">Close</button>
       </div>
     </div>

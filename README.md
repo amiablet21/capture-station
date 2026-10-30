@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.129 highlights
+
+- **Channel SKUs popup redesigned** (owner pick B, without icons or the account line). Click a SKU on the Stock page and its linked listings show as a table: Marketplace · Channel SKU · Price · Listed (the quantity Linnworks tells that listing) · Stock sync as an on/off switch-look, with "3 listings · 1 with sync off" beside the title. Clicking a channel SKU still opens the listing, right-click still copies it, and dead sync-off links still drop out in the background.
+
 ## v1.32.127 highlights
 
 - **The Overview opens on What to buy** (owner request). The menu is now What to buy, then Sent to WFS. Needs attention left the menu, and with it the big out-of-stock / running-low / selling-fast counts row; its code stays dormant, like Sold today, in case it comes back.
