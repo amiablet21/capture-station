@@ -825,9 +825,10 @@
       <!-- the Recovery-style menu (owner 2026-10-27): one screen at a time -->
       <div class="rc-head ov-menuhead"><h1 class="rc-h1">Overview</h1><span class="ov-date" id="ovDate" hidden></span>
         <nav class="rc-subtabs" aria-label="Overview screens">
-          <button type="button" class="rc-subtab is-active" data-ovtab="attn">Needs attention <span id="ovNAttn" class="rc-subtab-count" hidden>0</span></button>
+          <!-- What to buy first, then Sent to WFS; Needs attention left the menu
+               (owner 2026-10-30) - its renderer stays dormant like Sold today -->
+          <button type="button" class="rc-subtab is-active" data-ovtab="buy">What to buy <span id="ovNBuy" class="rc-subtab-count" hidden>0</span></button>
           <button type="button" class="rc-subtab" data-ovtab="wfs">Sent to WFS <span id="ovNWfs" class="rc-subtab-count" hidden>0</span></button>
-          <button type="button" class="rc-subtab" data-ovtab="buy">What to buy <span id="ovNBuy" class="rc-subtab-count" hidden>0</span></button>
           <!-- Sold today removed from the menu (owner 2026-10-28); ovSold and
                its renderer stay dormant in case it returns -->
         </nav>

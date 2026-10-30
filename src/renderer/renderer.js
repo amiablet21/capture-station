@@ -13843,7 +13843,7 @@ let ovError = ''; // the last fetch's failure, shown in the header
 let ovQuickTimer = null;
 let ovOpenSku = null; // the one expanded row
 let ovShowWatch = false;
-let ovFilter = 'all'; // all | buy | out | low | fast | was (owner 2026-10-13: the Buy now cut; 2026-10-14: Was selling)
+let ovFilter = 'buy'; // the Overview opens on What to buy (owner 2026-10-30) · all | buy | out | low | fast | was (owner 2026-10-13: the Buy now cut; 2026-10-14: Was selling)
 // Was selling (owner 2026-10-14): the slider's monthly minimum and the
 // "and now" choice, kept per computer
 let ovWasMin = (() => { try { const v = Number(localStorage.getItem('ovWasMin')); return v >= 5 ? v : 10; } catch { return 10; } })();
@@ -14335,7 +14335,7 @@ $('tabOverview').addEventListener('click', () => showPage('overview'));
    WFS, What to buy and Sold today as Recovery-style sub-tabs, one screen
    at a time. Sent to WFS draws Seller Center's Shipping Plans page from
    the WFS API, each shipment with the channel SKUs that were sent. ----- */
-let ovTab = 'attn';
+let ovTab = 'buy'; // What to buy | Sent to WFS (Needs attention left the menu 2026-10-30)
 let ovWfs = { plans: null, at: 0, error: '', needsKeys: false, fetching: false };
 let ovWfsQ = '', ovWfsStatus = '', ovWfsQT = null, ovWfsShown = 25;
 let ovWfsPlanOpen = null; // plan id whose in-app detail is open
@@ -14363,8 +14363,7 @@ document.querySelector('.ov-menuhead .rc-subtabs').addEventListener('click', (e)
 
 function ovRenderTabs() {
   const p = ovPlan();
-  const set = (id, n) => { const el = $(id); el.hidden = !n; el.textContent = String(n || 0); };
-  set('ovNAttn', p && p.counts ? (p.counts.out || 0) + (p.counts.low || 0) : 0);
+  const set = (id, n) => { const el = $(id); if (!el) return; el.hidden = !n; el.textContent = String(n || 0); };
   set('ovNBuy', p && p.counts ? p.counts.buy || 0 : 0);
   // the badge counts plans still moving, not the whole history
   set('ovNWfs', ovWfs.plans ? ovWfs.plans.filter(p => p.shipments.some(s => ['transit', 'receiving'].includes(ovWfsStatusCls(s.status)))).length : 0);

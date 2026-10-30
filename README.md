@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.127 highlights
+
+- **The Overview opens on What to buy** (owner request). The menu is now What to buy, then Sent to WFS. Needs attention left the menu, and with it the big out-of-stock / running-low / selling-fast counts row; its code stays dormant, like Sold today, in case it comes back.
+
 ## v1.32.126 highlights
 
 - **What to buy, laid out like the Black Friday buy list** (Overview › What to buy; owner-approved mock-up `variants/ov-buylist.html`). Three ranked tables: **Buy now** (out of stock, or out within 2 weeks), **Buy next** (runs out before the sales peak starts) and **Then** (has stock, but not enough for the peak), each with # · SKU · Sold / week · Left · Buy and a total, the grand total in the footer. Sold / week is the best of the last 14, 30 and 60 days' averages (the Overview now also reads days 31–60 of sales, so a SKU that sat out of stock keeps its real pace). Buy covers the normal pace until the peak and the peak multiplier through it, less what is left (warehouse + WFS) and due in on purchase orders, rounded up to 5. No header and rows don't open: a SKU drops off the list once it is stocked enough. Brand-new SKUs only, dropship SKUs included and tagged, slower sellers behind a "Slow sellers" link. Settings › Stock: the weekly minimum (5), the peak's name, dates and multiplier (Black Friday, 11-20 to 11-30, 10×) and SKUs to leave out (A15, T220, Silver Shadow). After the peak the list falls back to the reorder target (lead + cover days). Download as Excel gives the same ranked list.
