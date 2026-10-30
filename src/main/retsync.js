@@ -37,6 +37,7 @@ const ownerOf = (gid) => String(gid).split(':')[0];
 const saneStation = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
 
 function statePath() { return path.join(userDataDir, 'retsync-state.json'); }
+function pendingPath() { return path.join(userDataDir, 'retsync-pending.jsonl'); }
 function loadState() {
   try { lastSeenTs = Number(JSON.parse(fs.readFileSync(statePath(), 'utf8')).lastSeenTs) || 0; }
   catch { lastSeenTs = 0; }
@@ -61,14 +62,40 @@ function snapOf(row) {
   };
 }
 
+// An append that cannot reach the shared folder (cloud drive not running,
+// network share down — exactly how the stock room lost a day of returns,
+// owner 2026-10-30) waits in userData and lands on the next pass instead
+// of being dropped. The local db stayed right all along; this keeps the
+// shared log right too.
+function queuePending(ev) {
+  try { fs.appendFileSync(pendingPath(), JSON.stringify(ev) + '\n', 'utf8'); }
+  catch { /* both disks failing: nothing left to try */ }
+}
+
+function flushPending() {
+  if (!enabled()) return;
+  let text = '';
+  try { text = fs.readFileSync(pendingPath(), 'utf8'); } catch { return; } // none waiting
+  try {
+    if (text.trim()) {
+      fs.mkdirSync(folder, { recursive: true });
+      fs.appendFileSync(fileFor(station), text.endsWith('\n') ? text : text + '\n', 'utf8');
+      scheduleMirror();
+    }
+    fs.rmSync(pendingPath(), { force: true });
+  } catch { /* folder still unreachable: next pass retries */ }
+}
+
 function appendEvent(ev) {
   if (!enabled()) return;
+  flushPending(); // older stranded events go first
   try {
     fs.mkdirSync(folder, { recursive: true });
     fs.appendFileSync(fileFor(station), JSON.stringify(ev) + '\n', 'utf8');
     scheduleMirror();
   } catch (e) {
-    console.error('[retsync] write failed:', e.message);
+    console.error('[retsync] write failed, queued for retry:', e.message);
+    queuePending(ev);
   }
 }
 
@@ -101,6 +128,35 @@ function backfill() {
     fs.writeFileSync(fileFor(station), lines.length ? lines.join('\n') + '\n' : '', 'utf8');
   } catch (e) {
     console.error('[retsync] backfill failed:', e.message);
+  }
+}
+
+// Self-healing (the cure the aux logs got on 2026-10-13, now for the
+// returns log itself): any local return with no event at all in this
+// station's own file is re-emitted with its original timestamp. Appends
+// lost while the folder was offline reach the other desktops on the next
+// pass instead of never — and a station whose file sat empty (the stock
+// room, 2026-10-30) rebuilds it from its own SQLite without anyone
+// touching files by hand.
+let lastEnsure = 0;
+function ensureOwnReturns() {
+  if (!enabled()) return;
+  try { if (!fs.existsSync(folder)) return; } catch { return; } // offline: don't dump history into the queue
+  const seen = new Set();
+  const collect = (fp) => {
+    let text = '';
+    try { text = fs.readFileSync(fp, 'utf8'); } catch { return; }
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      try { const ev = JSON.parse(line); if (ev && ev.gid) seen.add(ev.gid); } catch { /* torn line */ }
+    }
+  };
+  collect(fileFor(station));
+  collect(pendingPath()); // queued events count — no double emit
+  for (const r of db.listReturns(100000)) {
+    const gid = gidOf(r.id);
+    if (seen.has(gid)) continue;
+    appendEvent({ v: 1, op: 'put', gid, ts: Date.parse(r.created_at) || Date.now(), actor: station, rec: snapOf(r) });
   }
 }
 
@@ -236,6 +292,9 @@ const foldSig = (winners) => {
 // the db, and tell the renderer exactly which returns moved
 function rescan(writeCsv) {
   if (!enabled()) return;
+  try { if (!fs.existsSync(folder)) return; } catch { return; } // drive offline: keep the last good view
+  flushPending();
+  if (Date.now() - lastEnsure > 5 * 60 * 1000) { lastEnsure = Date.now(); ensureOwnReturns(); }
   const winners = fold();
   applyToDb(winners, writeCsv);
   const changes = [];
@@ -328,7 +387,11 @@ function startWatch(writeCsv) {
       watchRetry = setTimeout(() => { startWatch(writeCsv); rescan(writeCsv); }, 30 * 1000);
     });
   } catch (e) {
+    // the folder may simply not be mounted yet (Google Drive / OneDrive not
+    // running): keep knocking every 30s — the moment it appears, the rescan
+    // pulls what the peers wrote and flushes what this station queued
     console.error('[retsync] watch failed:', e.message);
+    watchRetry = setTimeout(() => { startWatch(writeCsv); rescan(writeCsv); }, 30 * 1000);
   }
 }
 
@@ -343,7 +406,20 @@ function configure({ sync, database, userData, changed, writeCsv }) {
   station = saneStation((sync && sync.station) || '');
   if (!enabled()) { lastFoldSig = null; return { enabled: false, missed: 0 }; }
   loadState();
+  let folderUp = false;
+  try { folderUp = fs.existsSync(folder); } catch { folderUp = false; }
+  if (!folderUp) {
+    // booted before the cloud drive mounted: watch-retry below keeps
+    // knocking; a null sig means the first real rescan rebuilds quietly
+    // instead of toasting all of history as new
+    lastFoldSig = null;
+    startWatch(writeCsv);
+    return { enabled: true, missed: 0 };
+  }
   backfill();
+  flushPending();
+  lastEnsure = Date.now();
+  ensureOwnReturns();
   const winners = fold();
   applyToDb(winners, writeCsv);
   lastFoldSig = foldSig(winners);
