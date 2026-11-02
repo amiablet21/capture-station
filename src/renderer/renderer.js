@@ -5402,11 +5402,12 @@ $('stockRefresh').addEventListener('click', () => {
 });
 // Every MAPPED listing on one channel as a CSV — inventory SKU, channel
 // SKU, title, condition, listed qty, price, WFS flag (owner 2026-09-30).
-// The active condition chip narrows the file exactly like it narrows the
-// grid (All = every condition, each row still carries its Condition column).
+// Every condition is in the file whatever chip is active (owner 2026-11-02:
+// "include all the conditions, not just the new"); the Condition column
+// carries each row's slice.
 async function stockExportChannel(channel) {
   const btn = $('stockActionsBtn');
-  const cond = !stockActiveView ? '' : stockActiveView.plain ? 'New' : (stockActiveView.label || '');
+  const cond = '';
   const label = channelLabel(channel);
   btn.disabled = true;
   btn.textContent = 'Exporting…';
