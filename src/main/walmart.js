@@ -265,6 +265,20 @@ class WalmartClient {
     return o;
   }
 
+  // WFS stock, one row per Walmart listing ({ sku, shipNodes: [{ onHandQty,
+  // availToSellQty }] }) - the app's WFS counts come from here, not from
+  // Linnworks' WFS location (owner 2026-11-05, see wfscount.js)
+  async wfsInventory() {
+    const out = [];
+    for (let offset = 0; offset < 30000; offset += 300) {
+      const body = await this.call('GET', `/v3/fulfillment/inventory?limit=300&offset=${offset}`);
+      const page = arr(body && body.payload && body.payload.inventory);
+      out.push(...page);
+      if (page.length < 300) break;
+    }
+    return out;
+  }
+
   async estimates(input) {
     return parseEstimates(await this.call('POST', '/v3/shipping/labels/shipping-estimates', buildEstimateRequest(input)));
   }

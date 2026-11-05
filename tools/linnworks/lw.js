@@ -19,7 +19,8 @@
 //                                ranked buy list for a sales peak (Black Friday by default)
 //
 // Credentials come from LINNWORKS_APP_ID / LINNWORKS_APP_SECRET /
-// LINNWORKS_TOKEN; the stock location from LINNWORKS_LOCATION (a name or an
+// LINNWORKS_TOKEN (and WALMART_CLIENT_ID / WALMART_CLIENT_SECRET for WFS
+// counts straight from Walmart); the stock location from LINNWORKS_LOCATION (a name or an
 // id, default "Digital World Shop"). Times print in US Eastern: Linnworks
 // keeps UTC, the business runs on New York time.
 
@@ -27,6 +28,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { LinnworksClient } = require('../../src/main/linnworks.js');
+const { WalmartClient } = require('../../src/main/walmart.js');
+const { wfsByItem, applyWfs } = require('../../src/main/wfscount.js');
 
 const TZ = 'America/New_York';
 const NOT_NEW = /OPEN[\s-]?BOX|USED|SCRAP|REFURB/i;
@@ -86,8 +89,21 @@ function table(rows, head) {
   return [line(all[0]), w.map(n => '-'.repeat(n)).join('  '), ...all.slice(1).map(line)].join('\n');
 }
 
+// WFS levels come from Walmart itself when WALMART_CLIENT_ID and
+// WALMART_CLIENT_SECRET are set, like the app (src/main/wfscount.js):
+// Linnworks' own WFS count flips between linked listings every 15 minutes
 async function inventory(c) {
   const items = await c.listInventory();
+  if (process.env.WALMART_CLIENT_ID && process.env.WALMART_CLIENT_SECRET) {
+    try {
+      const wm = new WalmartClient({ clientId: process.env.WALMART_CLIENT_ID, clientSecret: process.env.WALMART_CLIENT_SECRET });
+      const catalog = [];
+      for (const ch of (await c.getMappingChannels()).filter(x => /walmart/i.test(x.source))) catalog.push(...await c.getChannelItems(ch.id, ch.source, ch.subSource));
+      applyWfs(items, wfsByItem(await wm.wfsInventory(), catalog));
+    } catch (e) {
+      process.stderr.write(`WFS from Walmart failed (${e.message}); using Linnworks' WFS counts.\n`);
+    }
+  }
   return { items, bySku: new Map(items.map(it => [String(it.sku).toUpperCase(), it])) };
 }
 

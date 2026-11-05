@@ -40,7 +40,7 @@ Other files there: `stockimports-<STATION>.jsonl` (the app's bulk-import history
 ## How the business reads the numbers
 
 - **Times:** say them in **US Eastern** (America/New_York). Linnworks stores UTC; the tool converts.
-- **Locations:** **Digital World Shop** is the real warehouse stock. **WFS FULFILLED** is units at Walmart's warehouse; they only sell on Walmart, and the Walmart sync rewrites them every 15 minutes, so ignore WFS in duplicate checks. **DropShip** holds dropship pad quantities, not real units. **Default** is empty.
+- **Locations:** **Digital World Shop** is the real warehouse stock. **WFS FULFILLED** is units at Walmart's warehouse; they only sell on Walmart, and the Walmart sync rewrites them every 15 minutes, so ignore WFS in duplicate checks. When a SKU is linked to several Walmart listings, Linnworks' WFS count flips between them (X230-256GB-GRAY: 21, 0, 21...). The app and `lw` read WFS counts from Walmart's own fulfillment inventory instead, summed over every linked listing (`src/main/wfscount.js`; `lw` needs `WALMART_CLIENT_ID` and `WALMART_CLIENT_SECRET`). **DropShip** holds dropship pad quantities, not real units. **Default** is empty.
 - **"On hand"** means Digital World Shop available plus WFS.
 - **SKUs:** `MODEL-STORAGE-COLOR` (e.g. `X135-64GB-GRAY`). `OPEN-BOX-`, `USED-` and `SCRAP-` prefixes are graded stock. "Brand new" means none of those. Stock is often moved from a new SKU to its `OPEN-BOX-` twin (a +N and a −N at the same moment); that is not a delivery.
 - **Sales:** prices are ex-tax and before marketplace fees and shipping. Some Temu lines arrive at $0 and are left out of averages.

@@ -17,6 +17,7 @@ const { runSync, testConnection, isRunning } = require('./sync');
 const { runRouting } = require('./router');
 const { LinnworksClient, setStockLogHook } = require('./linnworks');
 const { buildBuyPlan } = require('./buyplan');
+const { wfsByItem, applyWfs } = require('./wfscount');
 const ups = require('./ups');
 const walmart = require('./walmart');
 const webserve = require('./webserve');
@@ -299,6 +300,45 @@ function attachCosts(items) {
     const c = costs[String(it.sku || '').toUpperCase()];
     it.cost = c ? Number(c.cost) || 0 : 0;
   }
+  return items;
+}
+
+// WFS counts from Walmart itself (owner 2026-11-05; why in wfscount.js).
+// Walmart's WFS stock is one quick call; the Linnworks listing links that
+// say which item each Walmart listing belongs to take seconds, so they ride
+// mappingCache for up to 30 minutes. Any failure leaves Linnworks' numbers.
+const WFS_TTL_MS = 2 * 60 * 1000;
+let wfsTruth = { at: 0, byItem: null, promise: null };
+function walmartWfsByItem(cfg) {
+  const w = cfg.walmart || {};
+  if (!w.clientId || !w.clientSecret) return Promise.resolve(null);
+  if (Date.now() - wfsTruth.at < WFS_TTL_MS) return Promise.resolve(wfsTruth.byItem);
+  if (wfsTruth.promise) return wfsTruth.promise;
+  wfsTruth.promise = (async () => {
+    let byItem = wfsTruth.byItem; // a failed read keeps the last good counts
+    try {
+      const rows = await new walmart.WalmartClient(w).wfsInventory();
+      const c = new LinnworksClient(cfg.linnworks);
+      const catalog = [];
+      for (const ch of (await c.getMappingChannels()).filter(x => /walmart/i.test(x.source))) {
+        const key = `${ch.id}|${ch.source}|${ch.subSource}`;
+        const hit = mappingCache.get(key);
+        let items = hit && Date.now() - hit.at < 30 * 60 * 1000 ? hit.items : null;
+        if (!items) { items = await c.getChannelItems(ch.id, ch.source, ch.subSource); mappingCache.set(key, { at: Date.now(), items }); }
+        catalog.push(...items);
+      }
+      byItem = wfsByItem(rows, catalog);
+    } catch { /* retried after WFS_TTL_MS */ }
+    wfsTruth = { at: Date.now(), byItem, promise: null };
+    return byItem;
+  })();
+  return wfsTruth.promise;
+}
+// the inventory list with each item's WFS level set from Walmart; the
+// Walmart read runs alongside the Linnworks one
+async function withWalmartWfs(cfg, itemsPromise) {
+  const [items, byItem] = await Promise.all([itemsPromise, walmartWfsByItem(cfg).catch(() => null)]);
+  applyWfs(items, byItem);
   return items;
 }
 
@@ -1221,7 +1261,7 @@ async function exportSalesStock() {
     });
     if (!sales.ok) throw new Error(sales.error || 'sales unavailable');
     tell({ stage: 'inventory' });
-    const items = attachCosts(await new LinnworksClient(cfg.linnworks).listInventory());
+    const items = attachCosts(await withWalmartWfs(cfg, new LinnworksClient(cfg.linnworks).listInventory()));
     tell({ stage: 'write' });
     const withCost = !!(cfg.pages && cfg.pages.cost);
     const data = buildSalesExport(items, sales.lines, {
@@ -3760,7 +3800,7 @@ exit 1
     const run = (async () => {
       try {
         const client = new LinnworksClient(cfg.linnworks);
-        const items = attachCosts(await client.listInventory());
+        const items = attachCosts(await withWalmartWfs(cfg, client.listInventory()));
         // fresh levels for free: run the low-stock crossing check on them
         runLowStockCheck(items).catch(() => { /* silent */ });
         inheritConditionImages(client, items).catch(() => { /* silent */ });
@@ -5662,7 +5702,7 @@ exit 1
     const stats = {};
     const label = (src) => /walmart/i.test(src) ? 'Walmart' : /ebay/i.test(src) ? 'eBay' : /temu/i.test(src) ? 'Temu' : src;
     tell({ stage: 'inventory', detail: '', frac: 0.88 });
-    const items = await client.listInventory();
+    const items = await withWalmartWfs(cfg, client.listInventory());
     tell({ stage: 'pace', detail: `${items.length.toLocaleString()} SKUs`, frac: 0.96, inventoryCount: items.length });
     const homeLoc = cfg.linnworks.locationId;
     // the Walmart-fed WFS location: sales despatched from it are WFS sales
@@ -6181,7 +6221,7 @@ exit 1
       return { ok: true, items: phoneStockCache.items };
     }
     const client = new LinnworksClient(cfg.linnworks);
-    const items = await client.listInventory();
+    const items = await withWalmartWfs(cfg, client.listInventory());
     const homeId = cfg.linnworks.locationId;
     const out = items.map(it => {
       const home = (it.levels || []).find(l => l.locationId === homeId) || {};
