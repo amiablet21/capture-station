@@ -2,6 +2,10 @@
 
 Windows Electron app for a packing station (formerly Capture Station), built for reselling on Walmart, eBay and Temu with labels bought on the marketplace sites. Captures order number + tracking (clipboard or USB scanner), pushes completed captures to Linnworks (set tracking, attach notes, process/despatch), and gives the warehouse a live stock view. SQLite storage, daily CSV mirrors, fully silent; all feedback is visual.
 
+## v1.32.131 highlights
+
+- **WFS counts come straight from Walmart** (owner 2026-11-05). When a SKU is linked to several Walmart listings, Linnworks' WFS count flipped between them every 15 minutes (X230-256GB-GRAY showed 21, then 0, then 21), so the WFS tab and What to buy disagreed depending on when they loaded. The app now reads Walmart's own WFS stock and adds up every listing linked to the SKU (X610-128GB-BLACK: 97 + 97 = 194). The WFS tab, What to buy, the phone stock view and the sales export all use it. SKUs with no linked WFS listing, stations without Walmart keys, and any failed Walmart read keep Linnworks' number.
+
 ## v1.32.129 highlights
 
 - **Channel SKUs popup redesigned** (owner pick B, without icons or the account line). Click a SKU on the Stock page and its linked listings show as a table: Marketplace · Channel SKU · Price · Listed (the quantity Linnworks tells that listing), with the count of listings beside the title. The old "sync off" tag is gone: on a WFS listing sync is meant to be off, so it only read as a false warning. Clicking a channel SKU still opens the listing, right-click still copies it, and dead sync-off links still drop out in the background.
