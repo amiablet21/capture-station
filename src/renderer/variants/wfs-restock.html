@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Stock › WFS — send to Walmart (mock-up, 2026-11-05)</title>
+<style>
+  /* Mock-up only: the Stock page's WFS view ranked by Walmart's own WFS
+     inventory health report (GET /v3/report/wfs/getInventoryHealthReport:
+     days of supply, predicted out-of-stock date, forecast, suggested units),
+     one row per Linnworks SKU summed over its Walmart listings; a click opens
+     the SKU's sales and shipping history. Real data, Nov 5 2026. */
+  @font-face { font-family: 'Geist'; src: url('../fonts/Geist-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  @font-face { font-family: 'Geist Mono'; src: url('../fonts/GeistMono-Variable.woff2') format('woff2-variations'); font-weight: 100 900; }
+  :root { --canvas:#F7F6F3; --surface:#fff; --surface-2:#F9F9F8; --border:#EAEAEA; --text:#2F3437; --muted:#787774; --faint:#A5A29C;
+    --accent:#1E3A66; --neg:#9F2F2D; --neg-bg:#FDEBEC; --blue-bg:#E1F3FE; --blue:#1F6C9F; --yel-bg:#FBF3DB; --yel:#956400; --green-bg:#EDF3EC; --green:#346538;
+    --font:'Geist','Segoe UI Variable','Segoe UI',sans-serif; --mono:'Geist Mono','Cascadia Mono',monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); font-size:13px; line-height:1.5; background:var(--canvas); color:var(--text); }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .wrap { max-width:1500px; margin:0 auto; padding:16px 22px 40px; }
+  .nav { display:flex; justify-content:center; margin-bottom:14px; }
+  .tabs { display:flex; background:#EFEEEA; border-radius:10px; padding:3px; gap:2px; }
+  .tab { font-size:12px; font-weight:500; color:var(--muted); padding:5px 14px; border-radius:8px; }
+  .tab.on { background:#fff; color:var(--text); font-weight:600; box-shadow:0 1px 3px rgba(47,52,55,.08); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+  .bar1 { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--border); }
+  .search { width:240px; border:1px solid var(--border); border-radius:999px; padding:5px 12px; color:var(--faint); font-size:12px; }
+  .chips { display:flex; gap:2px; background:#EFEEEA; border-radius:8px; padding:2px; }
+  .chip0 { font-size:11.5px; color:var(--muted); padding:3px 9px; border-radius:6px; }
+  .chip0.on { background:#fff; color:var(--text); font-weight:600; }
+  .src { margin-left:auto; font-size:11.5px; color:var(--faint); }
+  .sum { display:flex; gap:22px; padding:14px 18px 4px; }
+  .sum div { display:flex; flex-direction:column; }
+  .sum b { font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  .sum span { font-size:11.5px; color:var(--muted); }
+  .sum .now b { color:#B00020; }
+  .sec { padding:6px 18px 14px; }
+  .sec h2 { font-size:15px; font-weight:600; margin-top:10px; display:flex; align-items:center; gap:8px; }
+  .sec .cnt { font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:500; }
+  .sec .why { font-size:12px; color:var(--muted); margin:1px 0 8px; }
+  table.t { width:100%; border-collapse:collapse; table-layout:fixed; }
+  col.c-rk { width:44px; } col.c-n { width:96px; } col.c-d { width:96px; } col.c-w { width:130px; } col.c-p { width:170px; } col.c-x { width:12px; }
+  .t > thead > tr > th { font-size:11.5px; font-weight:600; color:#fff; text-align:left; padding:8px 10px; }
+  .t > thead.now th { background:#B00020; } .t > thead.soon th { background:#333; } .t > thead.ok th { background:#5A6B7D; } .t > thead.idle th { background:#8A8F98; }
+  .t > thead > tr > th:first-child { border-radius:4px 0 0 0; } .t > thead > tr > th:last-child { border-radius:0 4px 0 0; }
+  .t > tbody > tr > td { padding:9px 10px; border-bottom:1px solid var(--border); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .r { text-align:right; }
+  .rk { color:var(--muted); text-align:right; }
+  tr.row { cursor:pointer; } tr.row:hover > td { background:var(--surface-2); }
+  tr.row.open > td { background:#F3F5F9; border-bottom-color:transparent; }
+  .caret { display:inline-block; width:14px; color:var(--faint); font-size:10px; }
+  .tag { margin-left:8px; font-size:10.5px; color:var(--blue); background:var(--blue-bg); border-radius:4px; padding:1px 6px; }
+  .neg { color:var(--neg); font-weight:600; }
+  .faint { color:var(--faint); }
+  .walmart { color:var(--muted); }
+  .pace b { font-size:13.5px; }
+  .cap { display:block; font-size:10.5px; color:var(--yel); }
+  tr.det > td { background:#F3F5F9; border-bottom:1px solid var(--border); padding:0 10px 14px; white-space:normal; }
+  .det-in { display:flex; flex-direction:column; gap:12px; padding-top:2px; }
+  .det-grid { display:grid; grid-template-columns: 1.1fr 1fr; gap:12px; }
+  .panel { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .ph { font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+  .ph-sub { text-transform:none; letter-spacing:0; font-weight:400; color:var(--faint); margin-left:8px; font-size:11.5px; }
+  .chart { display:flex; align-items:flex-end; gap:3px; height:66px; border-bottom:1px solid var(--border); }
+  .bar { flex:1; background:#1E3A66; border-radius:2px 2px 0 0; }
+  .bar.zero { background:#E6E4DF; }
+  .axis { display:flex; justify-content:space-between; font-size:10.5px; color:var(--faint); margin-top:4px; }
+  .facts { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px; }
+  .facts div { display:flex; flex-direction:column; }
+  .facts b { font-size:16px; font-weight:600; }
+  .facts span { font-size:11px; color:var(--muted); line-height:1.3; }
+  table.mini { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .mini th { font-size:11px; color:var(--muted); font-weight:500; text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); }
+  .mini td { padding:6px 8px; border-bottom:1px solid #F1F0ED; }
+  .mini th.r, .mini td.r { text-align:right; }
+  .note { font-size:11.5px; color:var(--muted); margin-top:8px; }
+  .chip { font-size:11px; border-radius:999px; padding:1px 8px; }
+  .chip.closed { background:var(--green-bg); color:var(--green); }
+  .chip.transit { background:var(--yel-bg); color:var(--yel); }
+  .chip.receiving { background:var(--blue-bg); color:var(--blue); }
+  .foot { font-size:11.5px; color:var(--faint); padding:4px 18px 16px; }
+</style></head><body><div class="wrap">
+  <div class="nav"><div class="tabs"><span class="tab">Overview</span><span class="tab">Orders</span><span class="tab on">Stock</span><span class="tab">Returns</span><span class="tab">Recovery</span><span class="tab">Ship</span></div></div>
+  <div class="card">
+    <div class="bar1"><span class="search">Search SKU, title or barcode</span>
+      <span class="chips"><span class="chip0">All</span><span class="chip0">New</span><span class="chip0">Open Box</span><span class="chip0">Used</span><span class="chip0">Scrap</span><span class="chip0 on">WFS</span><span class="chip0">DropShip · 49</span></span>
+      <span class="src">Walmart's WFS inventory health report · read 2:14 PM</span></div>
+    <div class="sum">
+      <div class="now"><b class="mono">13</b><span>send now</span></div>
+      <div><b class="mono">6</b><span>send soon</span></div>
+      <div><b class="mono">1,633</b><span>units at WFS</span></div>
+      <div><b class="mono">1,579</b><span>on the way</span></div>
+    </div>
+    <div class="sec">
+    <h2>Send now <span class="cnt">13</span></h2><div class="why">Walmart says these run out within 2 weeks, counting what is already on the way</div>
+    <table class="t"><colgroup><col class="c-rk"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-d"><col class="c-w"><col class="c-p"><col class="c-n"><col class="c-x"></colgroup>
+    <thead class="now"><tr><th class="r">#</th><th>SKU</th><th class="r">At WFS</th><th class="r">On the way</th><th class="r">Sold 30d</th><th class="r">Days left</th><th>Runs out</th><th class="r">Walmart suggests</th><th class="r">4 weeks at your pace</th><th class="r">At warehouse</th><th></th></tr></thead>
+    <tbody><tr class="row">
+      <td class="rk mono">1</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X230-256GB-SILVER</span></td>
+      <td class="r mono">0</td>
+      <td class="r mono">60</td>
+      <td class="r mono">10</td>
+      <td class="r mono ">23</td>
+      <td class="neg">Out now</td>
+      <td class="r mono walmart">284</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">3</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">2</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X620-128GB-GRAY</span></td>
+      <td class="r mono">0</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">20</td>
+      <td class="r mono neg">0</td>
+      <td class="neg">Out now</td>
+      <td class="r mono walmart">139</td>
+      <td class="r pace"><b class="mono">60</b></td>
+      <td class="r mono ">150</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">3</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X133-128GB-GRAY</span></td>
+      <td class="r mono">0</td>
+      <td class="r mono">40</td>
+      <td class="r mono">40</td>
+      <td class="r mono neg">5</td>
+      <td class="neg">Out now</td>
+      <td class="r mono walmart">820</td>
+      <td class="r pace"><b class="mono">75</b><span class="cap">only 34 here</span></td>
+      <td class="r mono ">34</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">4</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X520-128GB-SILVER</span></td>
+      <td class="r mono">0</td>
+      <td class="r mono">20</td>
+      <td class="r mono">34</td>
+      <td class="r mono neg">5</td>
+      <td class="neg">Out now</td>
+      <td class="r mono walmart">179</td>
+      <td class="r pace"><b class="mono">55</b><span class="cap">only 52 here</span></td>
+      <td class="r mono ">52</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">5</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X230-128GB-GRAY</span><span class="tag">2 listings</span></td>
+      <td class="r mono">0</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">195</td>
+      <td class="r mono neg">0</td>
+      <td class="neg">Out now</td>
+      <td class="r mono walmart">2,515</td>
+      <td class="r pace"><b class="mono">325</b></td>
+      <td class="r mono ">795</td>
+      <td></td>
+    </tr><tr class="row open">
+      <td class="rk mono">6</td>
+      <td class="sku"><span class="caret">▾</span><span class="mono">X400-128GB-GRAY</span></td>
+      <td class="r mono">82</td>
+      <td class="r mono">45</td>
+      <td class="r mono">159</td>
+      <td class="r mono neg">2</td>
+      <td class="">Nov 7</td>
+      <td class="r mono walmart">2,300</td>
+      <td class="r pace"><b class="mono">110</b></td>
+      <td class="r mono ">314</td>
+      <td></td>
+    </tr><tr class="det"><td></td><td colspan="10"><div class="det-in">
+    <div class="det-grid">
+      <div class="panel">
+        <div class="ph">Sold at WFS · last 30 days</div>
+        <div class="chart"><div class="bar" style="height:11px" title="3 sold"></div><div class="bar" style="height:45px" title="12 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar zero" style="height:2px" title="0 sold"></div><div class="bar" style="height:8px" title="2 sold"></div><div class="bar" style="height:30px" title="8 sold"></div><div class="bar" style="height:45px" title="12 sold"></div><div class="bar" style="height:64px" title="17 sold"></div><div class="bar" style="height:53px" title="14 sold"></div><div class="bar" style="height:64px" title="17 sold"></div><div class="bar" style="height:26px" title="7 sold"></div><div class="bar" style="height:60px" title="16 sold"></div><div class="bar" style="height:41px" title="11 sold"></div><div class="bar" style="height:30px" title="8 sold"></div><div class="bar" style="height:38px" title="10 sold"></div><div class="bar" style="height:53px" title="14 sold"></div><div class="bar" style="height:34px" title="9 sold"></div></div>
+        <div class="axis"><span>Oct 7</span><span>Out of stock Oct 9 – Oct 22</span><span>Today</span></div>
+        <div class="facts">
+          <div><b class="mono">88</b><span>last 7 days</span></div>
+          <div><b class="mono">159</b><span>last 30 days</span></div>
+          <div><b class="mono">1,746</b><span>Walmart forecast Oct 31 – Nov 27</span></div>
+          <div><b class="mono">681</b><span>Walmart forecast Nov 28 – Dec 25</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph">Walmart listings for this SKU</div>
+        <table class="mini"><thead><tr><th>Walmart SKU</th><th class="r">At WFS</th><th class="r">On the way</th><th class="r">Sold 30d</th><th class="r">Days left</th><th>Runs out</th></tr></thead><tbody><tr><td class="mono">X400-128GB-BLACK-INTL-VER</td><td class="r mono">82</td><td class="r mono">45</td><td class="r mono">159</td><td class="r mono">2</td><td>Nov 7</td></tr></tbody></table>
+        <p class="note">Each listing has its own stock at Walmart. Send to the listing that is running out.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Shipping history <span class="ph-sub">11 shipments · 165 units since Oct 24</span></div>
+      <table class="mini"><thead><tr><th>Created</th><th>Shipment</th><th>Ship to</th><th class="r">Sent</th><th class="r">Received</th><th>Status</th><th></th></tr></thead><tbody><tr><td>Nov 3</td><td class="mono">4231592WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">—</td><td><span class="chip transit">Awaiting transit</span></td><td>Arrives Nov 6</td></tr><tr><td>Nov 3</td><td class="mono">4231509WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">—</td><td><span class="chip transit">Awaiting transit</span></td><td>Arrives Nov 6</td></tr><tr><td>Nov 3</td><td class="mono">4231400WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">—</td><td><span class="chip transit">Awaiting transit</span></td><td>Arrives Nov 6</td></tr><tr><td>Nov 2</td><td class="mono">4158521WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Nov 2</td><td class="mono">4158451WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Nov 2</td><td class="mono">4158381WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Oct 28</td><td class="mono">3904397WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Oct 28</td><td class="mono">3903903WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Oct 28</td><td class="mono">3903251WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Oct 28</td><td class="mono">3902908WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr><tr><td>Oct 28</td><td class="mono">3902575WFB</td><td>IND3 · Mccordsville, IN</td><td class="r mono">15</td><td class="r mono">15</td><td><span class="chip closed">Closed</span></td><td></td></tr></tbody></table>
+    </div>
+  </div></td></tr><tr class="row">
+      <td class="rk mono">7</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X610-128GB-BLACK</span><span class="tag">2 listings</span></td>
+      <td class="r mono">193</td>
+      <td class="r mono">20</td>
+      <td class="r mono">69</td>
+      <td class="r mono neg">3</td>
+      <td class="">Nov 8</td>
+      <td class="r mono walmart">1,692</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">29</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">8</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X230-128GB-SILVER</span></td>
+      <td class="r mono">48</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">8</td>
+      <td class="r mono neg">3</td>
+      <td class="">Nov 8</td>
+      <td class="r mono walmart">1,192</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">48</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">9</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X406-128GB-GRAY</span></td>
+      <td class="r mono">33</td>
+      <td class="r mono">40</td>
+      <td class="r mono">7</td>
+      <td class="r mono neg">5</td>
+      <td class="">Nov 10</td>
+      <td class="r mono walmart">1,202</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">15</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">10</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X520-128GB-GRAY</span><span class="tag">2 listings</span></td>
+      <td class="r mono">22</td>
+      <td class="r mono">20</td>
+      <td class="r mono">41</td>
+      <td class="r mono neg">5</td>
+      <td class="">Nov 10</td>
+      <td class="r mono walmart">214</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">393</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">11</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X620-128GB-SILVER</span></td>
+      <td class="r mono">15</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">16</td>
+      <td class="r mono neg">7</td>
+      <td class="">Nov 12</td>
+      <td class="r mono walmart">114</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">4</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">12</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X210-64GB-GRAY</span><span class="tag">2 listings</span></td>
+      <td class="r mono">3</td>
+      <td class="r mono">210</td>
+      <td class="r mono">209</td>
+      <td class="r mono neg">9</td>
+      <td class="">Nov 14</td>
+      <td class="r mono walmart">1,053</td>
+      <td class="r pace"><b class="mono">95</b></td>
+      <td class="r mono ">353</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">13</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X230-256GB-GRAY</span></td>
+      <td class="r mono">21</td>
+      <td class="r mono">60</td>
+      <td class="r mono">41</td>
+      <td class="r mono neg">13</td>
+      <td class="">Nov 18</td>
+      <td class="r mono walmart">263</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono faint">0</td>
+      <td></td>
+    </tr></tbody></table></div><div class="sec">
+    <h2>Send soon <span class="cnt">6</span></h2><div class="why">2 to 4 weeks of stock left at Walmart</div>
+    <table class="t"><colgroup><col class="c-rk"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-d"><col class="c-w"><col class="c-p"><col class="c-n"><col class="c-x"></colgroup>
+    <thead class="soon"><tr><th class="r">#</th><th>SKU</th><th class="r">At WFS</th><th class="r">On the way</th><th class="r">Sold 30d</th><th class="r">Days left</th><th>Runs out</th><th class="r">Walmart suggests</th><th class="r">4 weeks at your pace</th><th class="r">At warehouse</th><th></th></tr></thead>
+    <tbody><tr class="row">
+      <td class="rk mono">14</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X306-128GB-GREEN</span></td>
+      <td class="r mono">45</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">5</td>
+      <td class="r mono ">18</td>
+      <td class="">Nov 23</td>
+      <td class="r mono walmart">269</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">62</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">15</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X520-128GB-BLUE</span><span class="tag">2 listings</span></td>
+      <td class="r mono">65</td>
+      <td class="r mono">20</td>
+      <td class="r mono">5</td>
+      <td class="r mono ">19</td>
+      <td class="">Nov 24</td>
+      <td class="r mono walmart">54</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">61</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">16</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X133-64GB-SILVER</span></td>
+      <td class="r mono">171</td>
+      <td class="r mono">76</td>
+      <td class="r mono">91</td>
+      <td class="r mono ">20</td>
+      <td class="">Nov 25</td>
+      <td class="r mono walmart">415</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">424</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">17</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X620-128GB-BLUE</span><span class="tag">2 listings</span></td>
+      <td class="r mono">52</td>
+      <td class="r mono">40</td>
+      <td class="r mono">35</td>
+      <td class="r mono ">22</td>
+      <td class="">Nov 27</td>
+      <td class="r mono walmart">159</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">113</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">18</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X133-64GB-GRAY</span></td>
+      <td class="r mono">261</td>
+      <td class="r mono">567</td>
+      <td class="r mono">460</td>
+      <td class="r mono ">27</td>
+      <td class="">Dec 2</td>
+      <td class="r mono walmart">841</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">1,079</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">19</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X210-128GB-GRAY</span></td>
+      <td class="r mono">62</td>
+      <td class="r mono">128</td>
+      <td class="r mono">18</td>
+      <td class="r mono ">28</td>
+      <td class="">Dec 3</td>
+      <td class="r mono walmart">177</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">646</td>
+      <td></td>
+    </tr></tbody></table></div><div class="sec">
+    <h2>Stocked <span class="cnt">6</span></h2><div class="why">Over 4 weeks of stock at Walmart</div>
+    <table class="t"><colgroup><col class="c-rk"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-d"><col class="c-w"><col class="c-p"><col class="c-n"><col class="c-x"></colgroup>
+    <thead class="ok"><tr><th class="r">#</th><th>SKU</th><th class="r">At WFS</th><th class="r">On the way</th><th class="r">Sold 30d</th><th class="r">Days left</th><th>Runs out</th><th class="r">Walmart suggests</th><th class="r">4 weeks at your pace</th><th class="r">At warehouse</th><th></th></tr></thead>
+    <tbody><tr class="row">
+      <td class="rk mono">20</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X135-64GB-SILVER</span></td>
+      <td class="r mono">83</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">43</td>
+      <td class="r mono ">30</td>
+      <td class="">Dec 5</td>
+      <td class="r mono walmart">68</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">46</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">21</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X135-64GB-GRAY</span></td>
+      <td class="r mono">116</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">43</td>
+      <td class="r mono ">34</td>
+      <td class="">Dec 9</td>
+      <td class="r mono walmart">71</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">191</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">22</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X400-128GB-GRAY-CASE</span></td>
+      <td class="r mono">117</td>
+      <td class="r mono">15</td>
+      <td class="r mono">3</td>
+      <td class="r mono ">59</td>
+      <td class="">Jan 3, 2027</td>
+      <td class="r mono walmart"><span class="faint">—</span></td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">314</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">23</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X400-128GB-RED</span></td>
+      <td class="r mono">117</td>
+      <td class="r mono">28</td>
+      <td class="r mono">15</td>
+      <td class="r mono ">71</td>
+      <td class="">Jan 15, 2027</td>
+      <td class="r mono walmart"><span class="faint">—</span></td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono faint">0</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">24</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X400-128GB-SILVER</span></td>
+      <td class="r mono">78</td>
+      <td class="r mono"><span class="faint">—</span></td>
+      <td class="r mono">2</td>
+      <td class="r mono ">94</td>
+      <td class="">Feb 7, 2027</td>
+      <td class="r mono walmart"><span class="faint">—</span></td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">60</td>
+      <td></td>
+    </tr><tr class="row">
+      <td class="rk mono">25</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X400-256GB-RED</span></td>
+      <td class="r mono">19</td>
+      <td class="r mono">40</td>
+      <td class="r mono">4</td>
+      <td class="r mono ">367</td>
+      <td class="">Nov 7, 2027</td>
+      <td class="r mono walmart"><span class="faint">—</span></td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono faint">0</td>
+      <td></td>
+    </tr></tbody></table></div><div class="sec">
+    <h2>Not selling <span class="cnt">1</span></h2><div class="why">At WFS or on the way, but no sales in 30 days</div>
+    <table class="t"><colgroup><col class="c-rk"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-d"><col class="c-w"><col class="c-p"><col class="c-n"><col class="c-x"></colgroup>
+    <thead class="idle"><tr><th class="r">#</th><th>SKU</th><th class="r">At WFS</th><th class="r">On the way</th><th class="r">Sold 30d</th><th class="r">Days left</th><th>Runs out</th><th class="r">Walmart suggests</th><th class="r">4 weeks at your pace</th><th class="r">At warehouse</th><th></th></tr></thead>
+    <tbody><tr class="row">
+      <td class="rk mono">26</td>
+      <td class="sku"><span class="caret">▸</span><span class="mono">X236-128GB-GRAY</span><span class="tag">2 listings</span></td>
+      <td class="r mono">30</td>
+      <td class="r mono">150</td>
+      <td class="r mono">0</td>
+      <td class="r mono ">—</td>
+      <td class="">—</td>
+      <td class="r mono walmart">2,335</td>
+      <td class="r pace"><span class="faint">—</span></td>
+      <td class="r mono ">106</td>
+      <td></td>
+    </tr></tbody></table></div>
+    <div class="foot">Days left and Runs out are Walmart's own, from its forecast. "4 weeks at your pace" is what tops the SKU up to 28 days at its real WFS sales (Walmart's own rule: send 4 weeks whenever under 2). Click a row for its sales and shipping history.</div>
+  </div>
+</div></body></html>
