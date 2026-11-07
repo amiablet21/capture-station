@@ -12,8 +12,8 @@
   warning and ask you to convert it to WFS. After converting it, you will then
   be able to create a shipment to WFS." + "I want to be able to see ... a
   button to see the most recent shipments".
-    A  a WFS key in the row tray (quiet like DS; ?tray=icon for a box icon
-       instead, owner 2026-11-07 "make it more discreet") opens a popover:
+    A  a WFS key in the row tray, now Walmart's spark (owner 2026-11-07;
+       ?tray=spark-grey | text | icon for the other takes) opens a popover:
        pick the Walmart listing (always, even with one) → not WFS? warn →
        convert in place → shipment (units / per box / arrive by) →
        Create shipment (opens the WFS shipment, variants/wfs-api-flow.html)
@@ -120,6 +120,15 @@
      Tinted only on hover or while its popup is open */
   .tray-wfs { font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted); border:none; background:none; border-radius:6px; padding:3px 7px; cursor:pointer; }
   .tray-wfs:hover, .tray-wfs.on, .bi.tray-wfs-i.on { background:var(--accent-soft); color:var(--accent-soft-text); }
+  /* Walmart spark option (owner 2026-11-07: "can you make the Walmart logo in
+     there"). spark = always Walmart yellow; spark-grey = grey at rest, yellow
+     on hover / while the popup is open. The real build should use Walmart's
+     own logo file, not this hand-drawn stand-in */
+  .bi.wm { color:#FFC220; }
+  .bi.wm svg { width:16px; height:16px; }
+  .bi.wm.grey { color:#B9B6AF; }
+  .bi.wm:hover, .bi.wm.on { background:#FFF4D6; color:#FFC220; }
+  .pop-k .spark { width:12px; height:12px; color:#FFC220; vertical-align:-2px; margin-right:4px; }
 
   /* ---------- popover (anchored to the WFS key) ---------- */
   .pop { position:absolute; z-index:5; width:410px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-modal); box-shadow:0 18px 50px rgba(47,52,55,0.18), 0 2px 6px rgba(47,52,55,0.06); }
@@ -246,6 +255,7 @@ const IC = {
   clock: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M136,80v43.47l36.12,21.67a12,12,0,0,1-12.24,20.64l-42-25.2A12,12,0,0,1,112,130V80a12,12,0,0,1,24,0Zm-8-52A100,100,0,0,0,43.4,74.3l-.08-.07L28,58.31V40a12,12,0,0,0-24,0V88a12,12,0,0,0,12,12H64a12,12,0,0,0,0-24H41.83L60.24,56.2A76,76,0,1,1,52,128a12,12,0,0,0-24,0A100,100,0,1,0,128,28Z"/></svg>',
   pencil: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.170A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"/></svg>',
   trash: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></svg>',
+  spark: '<svg class="spark" viewBox="0 0 24 24" fill="currentColor"><defs><path id="pt" d="M11.2 9.4 L10.35 3.3 A1.65 1.65 0 0 1 13.65 3.3 L12.8 9.4 A0.8 0.8 0 0 1 11.2 9.4 Z"/></defs><use href="#pt"/><use href="#pt" transform="rotate(60 12 12)"/><use href="#pt" transform="rotate(120 12 12)"/><use href="#pt" transform="rotate(180 12 12)"/><use href="#pt" transform="rotate(240 12 12)"/><use href="#pt" transform="rotate(300 12 12)"/></svg>',
   box: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.170a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.150ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>',
   arrow: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>',
   warn: '<svg viewBox="0 0 256 256" fill="currentColor"><path d="M240.26,186.1,152.81,34.23h0a28.74,28.74,0,0,0-49.62,0L15.74,186.1a27.45,27.45,0,0,0,0,27.71A28.31,28.31,0,0,0,40.55,228h174.9a28.31,28.31,0,0,0,24.79-14.19A27.45,27.45,0,0,0,240.26,186.1Zm-20.8,15.7a4.46,4.46,0,0,1-4,2.2H40.55a4.46,4.46,0,0,1-4-2.2,3.56,3.56,0,0,1,0-3.73L124,46.2a4.77,4.77,0,0,1,8,0l87.44,151.87A3.56,3.56,0,0,1,219.46,201.8ZM116,136V104a12,12,0,0,1,24,0v32a12,12,0,0,1-24,0Zm28,40a16,16,0,1,1-16-16A16,16,0,0,1,144,176Z"/></svg>',
@@ -272,8 +282,8 @@ const LISTINGS = {
   ],
 };
 
-// ?tray=icon swaps the WFS key's text for a box icon
-const TRAY = new URLSearchParams(location.search).get('tray') === 'icon' ? 'icon' : 'text';
+// the WFS key: ?tray=spark (default, Walmart spark) | spark-grey | text (like DS) | icon (box)
+const TRAY = ['spark', 'spark-grey', 'text', 'icon'].includes(new URLSearchParams(location.search).get('tray')) ? new URLSearchParams(location.search).get('tray') : 'spark';
 const S = { hover: null, pop: null, row: 'X133-64GB-GRAY', pick: 'X133-64GB-GRAY-WFS', converting: false, converted: false, menu: false, x: 'oct28', draftAdded: false };
 const STEPS = [
   { g: 'A · Row popup' },
@@ -340,7 +350,9 @@ function trayHtml(r) {
   return `<span class="tray">
     <button class="bi" title="Sales history">${IC.chart}</button>
     <button class="bi${r.today ? ' today' : ''}" title="Stock history">${IC.clock}</button>
-    ${TRAY === 'icon'
+    ${TRAY.startsWith('spark')
+      ? `<button class="bi wm${TRAY === 'spark-grey' ? ' grey' : ''}${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.spark}</button>`
+      : TRAY === 'icon'
       ? `<button class="bi tray-wfs-i${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">${IC.box}</button>`
       : `<button class="tray-wfs${open ? ' on' : ''}" data-wfs="${r.sku}" title="Send to WFS…" onclick="openPop('${r.sku}')">WFS</button>`}
     <button class="tray-ds" title="Add to the dropship program">DS</button>
@@ -369,7 +381,7 @@ function openPop(sku) {
 }
 function popHead() {
   const r = ROWS.find(x => x.sku === S.row);
-  return `<div class="pop-h"><div><div class="pop-k">Send to WFS</div><div class="pop-t">${r.sku}</div>
+  return `<div class="pop-h"><div><div class="pop-k">${TRAY.startsWith('spark') ? IC.spark : ''}Send to WFS</div><div class="pop-t">${r.sku}</div>
     <div class="pop-s">${r.title} · ${r.home.toLocaleString()} at warehouse · ${r.wfs} at WFS</div></div>
     <button class="pop-x" onclick="S.pop=null;render()">✕</button></div>`;
 }
