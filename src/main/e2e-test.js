@@ -2249,7 +2249,22 @@ module.exports = async function run({ app, win, db, clipboard }) {
               await sleep(200);
               await exec(`(() => { const u = document.querySelector('[data-wxunits]'); u.value = '30'; u.dispatchEvent(new Event('input', { bubbles: true })); u.dispatchEvent(new Event('change', { bubbles: true })); })()`);
               await sleep(150);
-              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-ship.png'), (await win.webContents.capturePage()).toPNG());
+              // Packing wants the box size and weight before Distribution
+              await exec(`document.querySelector('#wfsxRight [data-wx="toDist"]').click()`);
+              await sleep(100);
+              const packMsg = await exec(`({ step: WX.step, msg: (document.querySelector('#wfsxRight .wfsx-msg') || {}).textContent || '' })`);
+              await exec(`(() => { const set = (k, v) => { const i = document.querySelector('#wfsxRight [data-wxbox="' + k + '"]'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); };
+                set('l', '17'); set('w', '22'); set('h', '13'); set('lb', '24.5'); document.querySelector('#wfsxRight [data-wxprep="LABEL"]').click(); })()`);
+              await sleep(100);
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-pack.png'), (await win.webContents.capturePage()).toPNG());
+              await exec(`document.querySelector('#wfsxRight [data-wx="toDist"]').click()`);
+              await sleep(100);
+              await exec(`document.querySelector('#wfsxRight [data-wxits="1"]').click()`);
+              await sleep(100);
+              const dist = await exec(`({ step: WX.step, its: WX.its, on: (document.querySelector('#wfsxRight .wfsx-dopt.is-on b') || {}).textContent || '' })`);
+              check('wfs packing: Continue holds until the box size and weight are in, then Distribution offers ITS',
+                packMsg.step === 'pack' && /box size/i.test(packMsg.msg) && dist.step === 'dist' && dist.its === true && /Inventory Transfer/.test(dist.on), { packMsg, dist });
+              if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-dist.png'), (await win.webContents.capturePage()).toPNG());
               await exec(`document.querySelector('#wfsxRight [data-wx="create"]').click()`);
               await sleep(150);
               const asks = await exec(`({ confirm: !!document.querySelector('#wfsxRight .wfsx-confirm'), btn: document.querySelector('#wfsxRight [data-wx="create"]').textContent })`);
@@ -2262,7 +2277,11 @@ module.exports = async function run({ app, win, db, clipboard }) {
               const done = await exec(`({ step: WX && WX.step, ids: [...document.querySelectorAll('#wfsxRight .wfsx-made b')].map(b => b.textContent) })`);
               check('wfs send: the inbound order goes to Walmart for the picked listing, the shipment Walmart made is shown',
                 !!order && order.orderItems[0].sku === 'wxconv' && order.orderItems[0].itemQty === 30 && order.orderItems[0].vendorPackQty === 3
-                && order.orderItems[0].productId === '00195949183522' && /^\d{5}/.test(order.returnAddress.postalCode) && done.step === 'done' && done.ids.join(',') === '4400777WFB', { order, done });
+                && order.orderItems[0].productId === '00195949183522' && /^\d{5}/.test(order.returnAddress.postalCode) && done.step === 'carrier' && done.ids.join(',') === '4400777WFB', { order, done });
+              const sum = order && order.shippingSummary && order.shippingSummary.boxes[0];
+              check('wfs send: ITS, the item prep and the boxes (sides longest first) go with the order',
+                !!sum && order.inboundServices.inventoryTransferService === 'Y' && order.orderItems[0].addOnServices[0].serviceType === 'LABEL'
+                && sum.noOfBoxes === 3 && sum.weight === 24.5 && sum.longestSide === 22 && sum.medianSide === 17 && sum.shortestSide === 13 && sum.items[0].unitsPerBox === 10, order);
               check('wfs send: the units come off the warehouse in Linnworks under the item\'s own SKU',
                 moved.some(m => m.sku === 'WX-TAB' && m.delta === -30), moved);
               if (process.env.CAPTURE_E2E_SHOT) fs.writeFileSync(process.env.CAPTURE_E2E_SHOT.replace(/\.png$/i, '-wfsx-done.png'), (await win.webContents.capturePage()).toPNG());

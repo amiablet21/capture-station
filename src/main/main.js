@@ -4436,6 +4436,10 @@ exit 1
   const wfsxConv = wfsxJson('wfs-conversions.json'); // [{ feedId, channelSku, sku, at, status, errors, checkedAt }]
   const wfsxPrefs = wfsxJson('wfs-convert-prefs.json'); // { family: last convert form }
   const wfsxItemCache = wfsxJson('wfs-shipment-items.json'); // { shipmentId: items } for settled shipments
+  // the last shipment's packing per model ({ family: { perBox, l, w, h, lb,
+  // prep } }) and its distribution choice (its: true = ITS)
+  const wfsxPack = wfsxJson('wfs-pack-prefs.json');
+  const wfsxPackFor = (sku) => { const all = wfsxPack.read() || {}; return { pack: all[wfsxFamily(sku)] || null, its: !!all.__its }; };
   // the next listing of the same tablet (X133 of X133-64GB-GRAY) starts
   // from the last convert form
   const wfsxFamily = (sku) => String(sku || '').toUpperCase().split(/[-_ ]/)[0];
@@ -4495,7 +4499,7 @@ exit 1
     const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
     const base = String(sku || 'DEMO').toUpperCase();
     return {
-      ok: true, demo: true, sold: 84, unknown: 0, returnSet: true,
+      ok: true, demo: true, sold: 84, unknown: 0, returnSet: true, its: true, pack: { perBox: 20, l: 22, w: 17, h: 13, lb: 44, prep: '' },
       listings: [
         { sku: `${base}-WFS`, onWfs: true, atWfs: 260, sold30: 84, conversion: null },
         { sku: base.toLowerCase().replace(/[^a-z0-9]/g, ''), onWfs: false, atWfs: 0, sold30: null, conversion: null },
@@ -4564,7 +4568,7 @@ exit 1
           if (n !== null) { l.onWfs = true; l.atWfs = n; }
         } catch { /* the other signals stand */ }
       }));
-      return { ok: true, listings, shipments, unknown, sold: sold ? sold.q : null, plansError, returnSet: !!wfsxReturnTo(cfg).line1 };
+      return { ok: true, listings, shipments, unknown, sold: sold ? sold.q : null, plansError, returnSet: !!wfsxReturnTo(cfg).line1, ...wfsxPackFor(sku) };
     } catch (e) {
       return { ok: false, error: (e && e.message) || 'Could not read this item.' };
     }
@@ -4652,14 +4656,21 @@ exit 1
     const cfg = config.load();
     if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
     if (!IS_DEMO && !wmKeys()) return { ok: false, error: 'Add the Walmart API keys first (Settings › Shipping).' };
-    const line = { sku: String(p.channelSku || '').trim(), gtin: String(p.gtin || ''), desc: String(p.desc || ''), qty: Number(p.qty), perBox: Number(p.perBox) };
+    const box = p.box || {};
+    const line = { sku: String(p.channelSku || '').trim(), gtin: String(p.gtin || ''), desc: String(p.desc || ''), qty: Number(p.qty), perBox: Number(p.perBox),
+      prep: walmart.WFS_PREP.includes(p.prep) ? p.prep : '', box: { l: Number(box.l), w: Number(box.w), h: Number(box.h), lb: Number(box.lb) } };
     // the GTIN Walmart has on the listing beats the Linnworks barcode
     if (!IS_DEMO && line.sku) {
       try { const facts = await wmClient().itemFacts(line.sku); if (facts.gtin) line.gtin = facts.gtin; if (!line.desc) line.desc = facts.productName; } catch { /* the barcode it is */ }
     }
-    const order = { orderId: `DWS-${Date.now()}`, returnTo: wfsxReturnTo(cfg), arriveBy: String(p.arriveBy || ''), lines: [line] };
+    const order = { orderId: `DWS-${Date.now()}`, returnTo: wfsxReturnTo(cfg), arriveBy: String(p.arriveBy || ''), its: !!p.its, lines: [line] };
     const problems = walmart.inboundProblems(order);
     if (problems.length) return { ok: false, error: problems.join(' ') };
+    // the next shipment of this model starts from these boxes
+    const packs = wfsxPack.read() || {};
+    packs[wfsxFamily(p.sku || line.sku)] = { perBox: line.perBox, ...line.box, prep: line.prep };
+    packs.__its = order.its;
+    wfsxPack.write(packs);
     let shipments;
     try {
       shipments = IS_DEMO
@@ -4678,7 +4689,67 @@ exit 1
       warn = `Created at Walmart, but Linnworks did not take the ${line.qty} units off the warehouse: ${e.message}`;
     }
     wfsPlans.at = 0; // the next read brings the new shipments in
-    return { ok: true, orderId: order.orderId, shipments, boxes: Math.round(line.qty / line.perBox), warn };
+    const from = cfg.ups && cfg.ups.shipFrom ? cfg.ups.shipFrom : {};
+    return {
+      ok: true, orderId: order.orderId, shipments, boxes: Math.round(line.qty / line.perBox), warn, its: order.its,
+      from: [from.line1, [from.city, from.state].filter(Boolean).join(', ')].filter(Boolean).join(' · '),
+      contact: { name: from.name || from.company || '', phone: from.phone || '', email: from.email || '' },
+    };
+  });
+
+  /* Shipping and Review (Seller Center's Shipping, Contact and Review
+     steps): Walmart's preferred carrier quotes a shipment's boxes or
+     pallets, the seller accepts it (Walmart bills the seller), and the
+     carrier's labels come back as a PDF; or the seller's own carrier's
+     tracking goes to Walmart. */
+  const wfsxFrom = (cfg) => (cfg.ups && cfg.ups.shipFrom) || {};
+  ipcMain.handle('wfsx:quote', async (_e, p = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const problems = walmart.quoteProblems(p);
+    if (problems.length) return { ok: false, error: problems.join(' ') };
+    if (IS_DEMO) return { ok: true, quote: { carrier: p.mode === 'PARCEL' ? 'FedEx Ground' : 'Walmart LTL', total: p.mode === 'PARCEL' ? 38.4 : 212.5, transit: '3 business days', expires: 'Nov 14' } };
+    try {
+      return { ok: true, quote: await wmClient().carrierQuote({ ...p, shipFrom: wfsxFrom(cfg) }) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('wfsx:book', async (_e, { shipmentId, mode, quote } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    if (IS_DEMO) return { ok: true, carrier: (quote && quote.carrier) || '' };
+    try {
+      const r = await wmClient().carrierBook(String(shipmentId || ''), { mode, quote });
+      return { ok: true, carrier: r.carrier || (quote && quote.carrier) || '' };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('wfsx:carrierLabels', async (_e, { shipmentId } = {}) => {
+    if (IS_DEMO) return { ok: false, error: 'Labels are not drawn in the demo.' };
+    try {
+      const pdf = await wmClient().carrierLabels(String(shipmentId || ''));
+      const file = path.join(os.tmpdir(), `WFS-carrier-${String(shipmentId).replace(/[^\w-]/g, '')}.pdf`);
+      fs.writeFileSync(file, pdf);
+      const err = await shell.openPath(file);
+      return err ? { ok: false, error: err } : { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('wfsx:tracking', async (_e, { shipmentId, carrier, numbers } = {}) => {
+    const cfg = config.load();
+    if (cfg.captureOnly) return { ok: false, error: 'Capture-only mode.' };
+    const list = (Array.isArray(numbers) ? numbers : []).map(n => String(n).trim()).filter(Boolean).slice(0, 200);
+    if (!list.length) return { ok: false, error: 'Enter the tracking numbers.' };
+    if (IS_DEMO) return { ok: true };
+    try {
+      await wmClient().shipmentTracking(String(shipmentId || ''), String(carrier || ''), list);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   });
 
   // cancel a just-made inbound order and put the units back on the shelf

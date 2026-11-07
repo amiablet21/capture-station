@@ -1149,15 +1149,22 @@ function inboundAddress(a, countryCode = 'US') {
   return out;
 }
 
-// { orderId, returnTo, arriveBy (YYYY-MM-DD), lines: [{ sku, gtin, desc, qty,
-// perBox }] } -> the Create Inbound Shipment body. itemQty is the units,
-// vendorPackQty the boxes and innerPackQty the units in each box, so a line
-// must fill whole boxes (checked by the caller).
-function buildInboundOrder({ orderId, returnTo, arriveBy, lines }, countryCode = 'US') {
-  return {
-    inboundOrderId: clip(orderId, 100),
-    returnAddress: inboundAddress(returnTo || {}, countryCode),
-    orderItems: arr(lines).map(l => ({
+// Walmart's item prep services (Seller Center's "Add prep")
+const WFS_PREP = ['LABEL', 'BAG', 'TAPE', 'WRAP'];
+const boxOk = (b) => b && ['l', 'w', 'h', 'lb'].every(k => Number(b[k]) > 0);
+const r2 = (v) => Math.round(Number(v) * 100) / 100;
+
+// { orderId, returnTo, arriveBy (YYYY-MM-DD), its, lines: [{ sku, gtin,
+// desc, qty, perBox, prep, box: { l, w, h, lb } }] } -> the Create Inbound
+// Shipment body. itemQty is the units, vendorPackQty the boxes and
+// innerPackQty the units in each box, so a line must fill whole boxes
+// (checked by the caller). its picks Inventory Transfer Service ("Y") or
+// distributing it yourself ("N", Walmart's default); prep adds an item prep
+// service; a box size and weight go in the shipping summary, sides sorted
+// longest first the way Walmart asks for them.
+function buildInboundOrder({ orderId, returnTo, arriveBy, its, lines }, countryCode = 'US') {
+  const items = arr(lines).map(l => {
+    const o = {
       productId: toGtin14(l.gtin),
       productType: 'GTIN',
       sku: String(l.sku).slice(0, 50),
@@ -1166,8 +1173,32 @@ function buildInboundOrder({ orderId, returnTo, arriveBy, lines }, countryCode =
       vendorPackQty: Math.round(Number(l.qty) / Number(l.perBox)),
       innerPackQty: Number(l.perBox),
       expectedDeliveryDate: wfsDay(arriveBy),
-    })),
+    };
+    if (WFS_PREP.includes(l.prep)) o.addOnServices = [{ serviceType: l.prep }];
+    return o;
+  });
+  const body = {
+    inboundOrderId: clip(orderId, 100),
+    inboundServices: { inventoryTransferService: its ? 'Y' : 'N' },
+    returnAddress: inboundAddress(returnTo || {}, countryCode),
+    orderItems: items,
   };
+  const boxes = arr(lines).filter(l => boxOk(l.box)).map((l, i) => {
+    const [longest, median, shortest] = [l.box.l, l.box.w, l.box.h].map(Number).sort((a, b) => b - a);
+    return {
+      totalNoOfUnits: Number(l.qty),
+      noOfBoxes: Math.round(Number(l.qty) / Number(l.perBox)),
+      weight: r2(l.box.lb),
+      longestSide: r2(longest),
+      medianSide: r2(median),
+      shortestSide: r2(shortest),
+      weightUnit: 'LB',
+      lengthUnit: 'IN',
+      items: [{ productId: items[i].productId, productType: 'GTIN', sku: items[i].sku, gtin: items[i].productId, unitsPerBox: Number(l.perBox) }],
+    };
+  });
+  if (boxes.length) body.shippingSummary = { boxes };
+  return body;
 }
 
 // what to fix before anything is sent: [] when the order can go
@@ -1183,6 +1214,8 @@ function inboundProblems({ returnTo, arriveBy, lines }) {
     if (!Number.isInteger(qty) || qty < 1) p.push(`${l.sku}: enter the units to send.`);
     else if (!Number.isInteger(per) || per < 1) p.push(`${l.sku}: enter the units in each box.`);
     else if (qty % per) p.push(`${l.sku}: ${qty} units don't fill whole boxes of ${per}. Use ${Math.floor(qty / per) * per || per} or ${Math.ceil(qty / per) * per}.`);
+    if (l.box && !boxOk(l.box)) p.push(`${l.sku}: enter the box size and weight.`);
+    else if (l.box && Number(l.box.lb) > 150) p.push(`${l.sku}: a box can weigh 150 lb at most.`);
   }
   return p;
 }
@@ -1348,6 +1381,27 @@ WalmartClient.prototype.cancelInboundOrder = async function (orderId) {
   if (body && String(body.status || '').toUpperCase() === 'FAIL') throw new WalmartError(errorText(body, 400));
   return true;
 };
+// what a carrier quote still needs: [] when it can be asked for
+function quoteProblems(p) {
+  const out = [];
+  if (!p || !p.shipmentId) return ['No shipment picked.'];
+  if (!['PARCEL', 'LTL', 'FTL'].includes(p.mode)) out.push('Pick small parcel, LTL or FTL.');
+  const boxes = arr(p.boxes);
+  if (!boxes.length) out.push('Enter the boxes.');
+  for (const bx of boxes) {
+    if (!(Number.isInteger(Number(bx.n)) && Number(bx.n) > 0)) { out.push('Enter how many cases.'); break; }
+    if (!['l', 'w', 'h', 'lb'].every(k => Number(bx[k]) > 0)) { out.push('Enter each case\'s size and weight.'); break; }
+    if (p.mode === 'PARCEL' && Number(bx.lb) > 150) { out.push('A small parcel case can weigh 150 lb at most; use LTL.'); break; }
+  }
+  if (p.mode === 'LTL' || p.mode === 'FTL') {
+    if (!(Number(p.pallets) >= 1)) out.push('Enter the pallets.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.ready || ''))) out.push('Pick the pickup day.');
+    const c = p.contact || {};
+    if (!c.name || !c.phone || !c.email) out.push('Enter the pickup contact\'s name, phone and email.');
+  }
+  return out;
+}
+
 // the receiving labels for one shipment's boxes (a 4x6 PDF, one per box)
 WalmartClient.prototype.shipmentLabels = async function (shipmentId, boxes) {
   const body = { shipmentId: String(shipmentId), labelSize: 'X4_6', labelFormat: 'PDF', loadTypes: [{ loadType: 'SINGLE SKU', count: Math.max(1, Math.round(Number(boxes) || 1)) }] };
@@ -1364,6 +1418,13 @@ WalmartClient.prototype.wfsInventoryFor = async function (sku) {
   if (!row) return null;
   return arr(row.shipNodes).reduce((t, n) => t + Math.max(0, Number(n && n.onHandQty) || 0), 0);
 };
+// Walmart's preferred carrier: quote, book, labels; and an own carrier's
+// tracking. Request shapes are being confirmed against Walmart's reference
+// before these go live.
+WalmartClient.prototype.carrierQuote = async function () { throw new WalmartError('Carrier quotes are not switched on yet. Book the carrier in Seller Center for now.'); };
+WalmartClient.prototype.carrierBook = async function () { throw new WalmartError('Booking is not switched on yet. Book the carrier in Seller Center for now.'); };
+WalmartClient.prototype.carrierLabels = async function () { throw new WalmartError('Carrier labels are not switched on yet.'); };
+WalmartClient.prototype.shipmentTracking = async function () { throw new WalmartError('Sending tracking is not switched on yet.'); };
 WalmartClient.prototype.itemFacts = async function (sku) {
   return parseItemFacts(await this.call('GET', `/v3/items/${encodeURIComponent(String(sku))}`));
 };
@@ -1375,7 +1436,7 @@ WalmartClient.prototype.submitConvertFeed = async function (form) {
 
 module.exports = {
   WalmartClient, WalmartError, EXCLUDED,
-  buildInboundOrder, inboundProblems, parseInboundCreate, parseInboundErrors,
+  buildInboundOrder, inboundProblems, parseInboundCreate, parseInboundErrors, WFS_PREP, quoteProblems,
   buildConvertFeed, convertProblems, parseItemFacts, OMNI_WFS_VERSION, WFS_PRODUCT_TYPES, WFS_CONDITIONS,
   parseInboundShipments, parseInboundItems,
   parseOrder, parseEstimates, dayOf, buildEstimateRequest, buildLabelRequest, parseLabel, errorText,
