@@ -301,6 +301,28 @@
   .rh { display:flex; align-items:center; gap:7px; padding:16px 14px 12px 18px; font-size:14px; font-weight:600; }
   .rh svg { width:15px; height:15px; color:var(--spark); }
   .rh .px { margin-left:auto; align-self:center; }
+  /* the shipment step as one aligned form */
+  .sf { border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .sf-r { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 14px; min-height:48px; border-top:1px solid var(--border-soft); }
+  .sf-r:first-child { border-top:none; }
+  .sf-l { font-size:12.5px; color:var(--muted); }
+  .sf-v { display:flex; align-items:center; gap:7px; }
+  .sf-ch { font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--blue); }
+  .sf-v .lnk { font-size:12px; margin-left:6px; }
+  .stp2 { display:inline-flex; align-items:center; height:32px; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .stp2 button { width:30px; height:100%; border:none; background:var(--surface-2); color:var(--muted); font-size:15px; cursor:pointer; }
+  .stp2 button:hover { color:var(--text); background:#F1F0EC; }
+  .stp2 input { width:56px; height:100%; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); text-align:center; font-family:var(--mono); font-size:15px; font-weight:600; color:var(--text); outline:none; }
+  .sf-in { width:58px; height:32px; border:1px solid var(--border); border-radius:8px; padding:0 10px; font-family:var(--mono); font-size:13px; text-align:right; color:var(--text); outline:none; }
+  .sf-in.date { width:126px; font-family:var(--font); text-align:left; }
+  .sf-calc { font-family:var(--mono); font-size:14px; font-weight:600; padding-right:2px; }
+  .after { margin-top:14px; padding:11px 14px 9px; border-radius:12px; background:var(--surface-2); }
+  .after-h { font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); margin-bottom:4px; }
+  .after-r { display:flex; justify-content:space-between; align-items:baseline; padding:3px 0; font-size:12.5px; color:var(--muted); }
+  .after-r small { font-size:11px; color:var(--faint); margin-left:6px; }
+  .after-r .mono { font-size:13.5px; }
+  .after-r em { font-style:normal; color:var(--faint); margin:0 6px; }
+  .after-r b { color:var(--accent); font-weight:700; }
   .conv-row { display:flex; align-items:center; gap:8px; padding:9px 12px; margin-bottom:12px; border-radius:10px; background:#FFF8E6; border:1px solid #F3E3B5; font-size:12px; font-weight:600; color:#5e4100; cursor:pointer; }
   .conv-row .mono { color:var(--blue); }
   .conv-row .chip { margin-left:auto; }
@@ -656,20 +678,23 @@ function convert() {
   setTimeout(() => { S.converting = false; S.converted = true; render(); }, 900);
 }
 function popShip() {
+  // owner 2026-11-07 "this part look ugly": one aligned form (label left,
+  // control right) and a small after-this-shipment summary
   const r = ROWS.find(x => x.sku === S.row);
   const l = selListing();
   const atWfs = l && l.wfs ? l.at : 0;
-  const n = S.units, per = 10;
+  const n = S.units, per = 10, boxes = Math.ceil(n / per);
   return `${popHead(flowSteps().length - 1)}<div class="pb">
-    <div class="into">Into <span class="pill"><span class="st ok"></span><span class="mono">${S.pick}</span></span></div>
-    <div class="qty">
-      <div><div class="stp"><button onclick="S.units=Math.max(${per},S.units-${per});render()">−</button><input value="${n}" /><button onclick="S.units+=${per};render()">+</button></div><div class="qty-l">units</div></div>
-      <div class="qty-r"><span class="ig"><input value="${per}" /><span class="u">per box</span></span><span><b>${Math.ceil(n / per)}</b> boxes · <b>${n}</b> units</span></div>
+    <div class="sf">
+      <div class="sf-r"><span class="sf-l">Listing</span><span class="sf-v"><span class="st ok"></span><span class="sf-ch">${S.pick}</span><a class="lnk" onclick="S.pop='pick';render()">Change</a></span></div>
+      <div class="sf-r"><span class="sf-l">Units</span><span class="sf-v"><span class="stp2"><button onclick="S.units=Math.max(${per},S.units-${per});render()">−</button><input value="${n}" /><button onclick="S.units+=${per};render()">+</button></span></span></div>
+      <div class="sf-r"><span class="sf-l">Units per box</span><span class="sf-v"><input class="sf-in" value="${per}" /></span></div>
+      <div class="sf-r"><span class="sf-l">Boxes</span><span class="sf-v sf-calc">${boxes}</span></div>
+      <div class="sf-r"><span class="sf-l">Arrive at Walmart by</span><span class="sf-v"><input class="sf-in date" value="Nov 18, 2026" /></span></div>
     </div>
-    <div class="date"><span>Arrive at Walmart by</span><span class="ig"><input value="Nov 18, 2026" /></span></div>
-    <div class="arr">
-      <div class="flow"><span>Warehouse</span><b>${r.home.toLocaleString()}<em>→</em><strong>${(r.home - n).toLocaleString()}</strong></b></div>
-      <div class="flow"><span>At WFS, once received</span><b>${atWfs}<em>→</em><strong>${atWfs + n}</strong></b></div>
+    <div class="after"><div class="after-h">After this shipment</div>
+      <div class="after-r"><span>Warehouse</span><span class="mono">${r.home.toLocaleString()}<em>→</em><b>${(r.home - n).toLocaleString()}</b></span></div>
+      <div class="after-r"><span>At WFS<small>once received</small></span><span class="mono">${atWfs}<em>→</em><b>${atWfs + n}</b></span></div>
     </div>
   </div>
   <div class="pf"><button class="tbtn" onclick="S.pop='pick';render()">Back</button><span class="grow"></span>
